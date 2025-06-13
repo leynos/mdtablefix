@@ -31,7 +31,7 @@ jobs:
       - name: Package binary
         id: package
         run: |
-          mkdir dist
+          mkdir -p dist
           cp target/release/mdtablefix dist/mdtablefix-linux
           version="${GITHUB_REF_NAME#v}"
           cd dist
