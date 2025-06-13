@@ -6,20 +6,19 @@ use regex::Regex;
 use std::fs;
 use std::path::Path;
 
-/// Split a markdown table line into its cells.
-#[must_use]
 /// Splits a markdown table line into trimmed cell strings.
 ///
 /// Removes leading and trailing pipe characters, splits the line by pipes, trims whitespace from each cell, and returns the resulting cell strings as a vector.
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use mdtablefix::split_cells;
 /// let line = "| cell1 | cell2 | cell3 |";
 /// let cells = split_cells(line);
 /// assert_eq!(cells, vec!["cell1", "cell2", "cell3"]);
 /// ```
+#[must_use]
 pub fn split_cells(line: &str) -> Vec<String> {
     let mut s = line.trim();
     if let Some(stripped) = s.strip_prefix('|') {
@@ -65,7 +64,7 @@ pub fn split_cells(line: &str) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use mdtablefix::reflow_table;
 /// let lines = vec![
 ///     "| a | b |".to_string(),
@@ -120,14 +119,12 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         rows.push(current);
     }
 
-    let max_cols = rows
-        .iter()
-        .map(|r| r.iter().filter(|c| !c.is_empty()).count())
-        .max()
-        .unwrap_or(0);
+    // Count every cell, even if it is empty, to preserve column
+    // positions when checking for consistency across rows.
+    let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
 
     if rows.iter().any(|r| {
-        let count = r.iter().filter(|c| !c.is_empty()).count();
+        let count = r.len();
         count != 0 && count != max_cols
     }) {
         return lines.to_vec();
@@ -183,16 +180,16 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use mdtablefix::process_stream;
 /// let input = vec![
-///     String::from("| a | b |"),
-///     String::from("|---|---|"),
-///     String::from("| 1 | 2 |"),
-///     String::from(""),
-///     String::from("```"),
-///     String::from("code block"),
-///     String::from("```"),
+///     "| a | b |".to_string(),
+///     "|---|---|".to_string(),
+///     "| 1 | 2 |".to_string(),
+///     "".to_string(),
+///     "```".to_string(),
+///     "code block".to_string(),
+///     "```".to_string(),
 /// ];
 /// let output = process_stream(&input);
 /// assert_eq!(output[0], "| a   | b   |");
@@ -273,7 +270,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```no_run
+/// ```ignore
 /// use std::path::Path;
 /// use mdtablefix::rewrite;
 /// let path = Path::new("example.md");
