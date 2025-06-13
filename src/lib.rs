@@ -57,6 +57,13 @@ pub fn split_cells(line: &str) -> Vec<String> {
 
 /// Formats the cells for a separator row based on column widths.
 fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String> {
+    if sep_cells.len() != widths.len() {
+        // A malformed separator row could cause a panic below when indexing
+        // `widths`. Return the cells unchanged so the caller can decide how to
+        // handle the mismatch gracefully.
+        return sep_cells.to_vec();
+    }
+
     sep_cells
         .iter()
         .enumerate()
@@ -156,7 +163,7 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 
     if !split_within_line {
         if let Some(first_len) = cleaned.first().map(Vec::len) {
-            if cleaned.iter().any(|row| row.len() != first_len) {
+            if cleaned[1..].iter().any(|row| row.len() != first_len) {
                 return lines.to_vec();
             }
         }

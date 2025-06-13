@@ -94,6 +94,10 @@ fn test_reflow_preserves_header(header_table: Vec<String>) {
 
 #[rstest]
 fn test_reflow_handles_escaped_pipes(escaped_pipe_table: Vec<String>) {
+    // The fixture contains a header row followed by a row with an escaped
+    // pipe sequence (`a \| b`). After reflow the escaped pipe becomes a literal
+    // `|` inside the first data cell, so the table has three columns and the
+    // header row is padded to match.
     let expected = vec!["| X     | Y |", "| a | b | 1 |", "| 2     | 3 |"];
     assert_eq!(reflow_table(&escaped_pipe_table), expected);
 }
