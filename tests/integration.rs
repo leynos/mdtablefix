@@ -225,3 +225,31 @@ fn test_uniform_example_two() {
         }
     }
 }
+
+#[test]
+fn test_non_table_lines_unchanged() {
+    let input = vec![
+        "# Title".to_string(),
+        "".to_string(),
+        "Para text.".to_string(),
+        "".to_string(),
+        "| a | b |".to_string(),
+        "| 1 | 22 |".to_string(),
+        "".to_string(),
+        "* bullet".to_string(),
+        "".to_string(),
+    ];
+    let output = process_stream(&input);
+    let expected = vec![
+        "# Title".to_string(),
+        "".to_string(),
+        "Para text.".to_string(),
+        "".to_string(),
+        "| a | b  |".to_string(),
+        "| 1 | 22 |".to_string(),
+        "".to_string(),
+        "* bullet".to_string(),
+        "".to_string(),
+    ];
+    assert_eq!(output, expected);
+}
