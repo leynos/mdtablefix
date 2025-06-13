@@ -38,6 +38,31 @@ fn malformed_table() -> Vec<String> {
     vec!["| A | |".to_string(), "| 1 | 2 | 3 |".to_string()]
 }
 
+#[fixture]
+fn header_table() -> Vec<String> {
+    vec![
+        "| A | B |    |".to_string(),
+        "| --- | --- |".to_string(),
+        "| 1 | 2 |  | 3 | 4 |".to_string(),
+    ]
+}
+
+#[fixture]
+fn escaped_pipe_table() -> Vec<String> {
+    vec![
+        "| X | Y |    |".to_string(),
+        "| a \\| b | 1 |  | 2 | 3 |".to_string(),
+    ]
+}
+
+#[fixture]
+fn indented_table() -> Vec<String> {
+    vec![
+        "  | I | J |    |".to_string(),
+        "  | 1 | 2 |  | 3 | 4 |".to_string(),
+    ]
+}
+
 #[rstest]
 /// Tests that `reflow_table` correctly restructures a broken Markdown table into a well-formed table.
 ///
@@ -62,12 +87,30 @@ fn test_reflow_malformed_returns_original(malformed_table: Vec<String>) {
 }
 
 #[rstest]
+fn test_reflow_preserves_header(header_table: Vec<String>) {
+    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |", "| 3 | 4 |"];
+    assert_eq!(reflow_table(&header_table), expected);
+}
+
+#[rstest]
+fn test_reflow_handles_escaped_pipes(escaped_pipe_table: Vec<String>) {
+    let expected = vec!["| X | Y |", "| a | b | 1 |", "| 2 | 3 |"];
+    assert_eq!(reflow_table(&escaped_pipe_table), expected);
+}
+
+#[rstest]
+fn test_reflow_preserves_indentation(indented_table: Vec<String>) {
+    let expected = vec!["  | I | J |", "  | 1 | 2 |", "  | 3 | 4 |"];
+    assert_eq!(reflow_table(&indented_table), expected);
+}
+
 /// Tests that `process_stream` leaves lines inside code fences unchanged.
 ///
 /// Verifies that both backtick (```) and tilde (~~~) fenced code blocks are ignored by the table processing logic, ensuring their contents are not altered.
+#[rstest]
 fn test_process_stream_ignores_code_fences() {
     let lines = vec![
-        "```".to_string(),
+        "```rust".to_string(),
         "| not | a | table |".to_string(),
         "```".to_string(),
     ];
@@ -123,6 +166,8 @@ fn test_cli_process_file(broken_table: Vec<String>) {
     for line in &broken_table {
         writeln!(f, "{}", line).unwrap();
     }
+    f.flush().unwrap();
+    drop(f);
     Command::cargo_bin("mdtablefix")
         .unwrap()
         .arg(&file_path)
