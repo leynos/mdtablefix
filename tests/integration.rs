@@ -164,7 +164,7 @@ fn test_cli_process_file(broken_table: Vec<String>) {
     let file_path = dir.path().join("sample.md");
     let mut f = File::create(&file_path).unwrap();
     for line in &broken_table {
-        writeln!(f, "{}", line).unwrap();
+        writeln!(f, "{line}").unwrap();
     }
     f.flush().unwrap();
     drop(f);
@@ -192,7 +192,7 @@ fn test_uniform_example_one() {
     let widths: Vec<usize> = output[0]
         .trim_matches('|')
         .split('|')
-        .map(|c| c.len())
+        .map(str::len)
         .collect();
     for row in output {
         let cols: Vec<&str> = row.trim_matches('|').split('|').collect();
@@ -216,7 +216,7 @@ fn test_uniform_example_two() {
     let widths: Vec<usize> = output[0]
         .trim_matches('|')
         .split('|')
-        .map(|c| c.len())
+        .map(str::len)
         .collect();
     for row in output {
         let cols: Vec<&str> = row.trim_matches('|').split('|').collect();
@@ -230,26 +230,26 @@ fn test_uniform_example_two() {
 fn test_non_table_lines_unchanged() {
     let input = vec![
         "# Title".to_string(),
-        "".to_string(),
+        String::new(),
         "Para text.".to_string(),
-        "".to_string(),
+        String::new(),
         "| a | b |".to_string(),
         "| 1 | 22 |".to_string(),
-        "".to_string(),
+        String::new(),
         "* bullet".to_string(),
-        "".to_string(),
+        String::new(),
     ];
     let output = process_stream(&input);
     let expected = vec![
         "# Title".to_string(),
-        "".to_string(),
+        String::new(),
         "Para text.".to_string(),
-        "".to_string(),
+        String::new(),
         "| a | b  |".to_string(),
         "| 1 | 22 |".to_string(),
-        "".to_string(),
+        String::new(),
         "* bullet".to_string(),
-        "".to_string(),
+        String::new(),
     ];
     assert_eq!(output, expected);
 }
