@@ -2,6 +2,8 @@
 //!
 //! Functions here reflow tables that were broken during formatting.
 
+use html5ever::{parse_document, tendril::TendrilSink};
+use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use regex::Regex;
 use std::fs;
 use std::path::Path;
@@ -83,6 +85,92 @@ fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String>
             dashes
         })
         .collect()
+}
+
+fn node_text(handle: &Handle) -> String {
+    let mut text = String::new();
+    collect_text(handle, &mut text);
+    text.trim().to_string()
+}
+
+fn collect_text(handle: &Handle, out: &mut String) {
+    match &handle.data {
+        NodeData::Text { contents } => out.push_str(&contents.borrow()),
+        NodeData::Element { .. } | NodeData::Document => {
+            for child in handle.children.borrow().iter() {
+                collect_text(child, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn find_table(handle: &Handle) -> Option<Handle> {
+    if let NodeData::Element { name, .. } = &handle.data {
+        if name.local.as_ref() == "table" {
+            return Some(handle.clone());
+        }
+    }
+    for child in handle.children.borrow().iter() {
+        if let Some(t) = find_table(child) {
+            return Some(t);
+        }
+    }
+    None
+}
+
+fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
+    if let NodeData::Element { name, .. } = &handle.data {
+        if name.local.as_ref() == "tr" {
+            rows.push(handle.clone());
+        }
+    }
+    for child in handle.children.borrow().iter() {
+        collect_rows(child, rows);
+    }
+}
+
+use html5ever::driver::ParseOpts;
+
+fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
+    let html = lines.join("\n");
+    let opts = ParseOpts::default();
+    let dom: RcDom = parse_document(RcDom::default(), opts).one(html);
+    let Some(table) = find_table(&dom.document) else {
+        return lines.to_vec();
+    };
+    let mut row_handles = Vec::new();
+    collect_rows(&table, &mut row_handles);
+    if row_handles.is_empty() {
+        return lines.to_vec();
+    }
+    let mut out = Vec::new();
+    let mut first_header = false;
+    let mut col_count = 0;
+    for (i, row) in row_handles.iter().enumerate() {
+        let mut cells = Vec::new();
+        let mut header_row = false;
+        for child in row.children.borrow().iter() {
+            if let NodeData::Element { name, .. } = &child.data {
+                if name.local.as_ref() == "td" || name.local.as_ref() == "th" {
+                    if name.local.as_ref() == "th" {
+                        header_row = true;
+                    }
+                    cells.push(node_text(child));
+                }
+            }
+        }
+        if i == 0 {
+            first_header = header_row;
+            col_count = cells.len();
+        }
+        out.push(format!("| {} |", cells.join(" | ")));
+    }
+    if first_header {
+        let sep: Vec<String> = (0..col_count).map(|_| "---".to_string()).collect();
+        out.insert(1, format!("| {} |", sep.join(" | ")));
+    }
+    reflow_table(&out)
 }
 
 /// Reflow a broken markdown table.
@@ -243,8 +331,10 @@ static FENCE_RE: std::sync::LazyLock<Regex> =
 pub fn process_stream(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf = Vec::new();
+    let mut html_buf = Vec::new();
     let mut in_code = false;
     let mut in_table = false;
+    let mut in_html = false;
 
     for line in lines {
         if FENCE_RE.is_match(line) {
@@ -263,6 +353,36 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 
         if in_code {
             out.push(line.trim_end().to_string());
+            continue;
+        }
+
+        if in_html {
+            html_buf.push(line.trim_end().to_string());
+            if line.contains("</table>") {
+                out.extend(html_table_to_markdown(&html_buf));
+                html_buf.clear();
+                in_html = false;
+            }
+            continue;
+        }
+
+        if line.trim_start().starts_with("<table") {
+            if !buf.is_empty() {
+                if in_table {
+                    out.extend(reflow_table(&buf));
+                } else {
+                    out.extend(buf.clone());
+                }
+                buf.clear();
+                in_table = false;
+            }
+            in_html = true;
+            html_buf.push(line.trim_end().to_string());
+            if line.contains("</table>") {
+                out.extend(html_table_to_markdown(&html_buf));
+                html_buf.clear();
+                in_html = false;
+            }
             continue;
         }
 
@@ -292,6 +412,10 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
         } else {
             out.extend(buf);
         }
+    }
+
+    if !html_buf.is_empty() {
+        out.extend(html_table_to_markdown(&html_buf));
     }
 
     out
