@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Lint
+        run: cargo clippy -- -D warnings
+      - name: Test
+        run: cargo test
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+      - name: Run coverage
+        run: cargo tarpaulin --out Xml
+      - name: Upload coverage
+        if: env.CS_ACCESS_TOKEN != ''
+        uses: codecov/codecov-action@v3
+        with:
+          files: cobertura.xml
+          token: ${{ env.CS_ACCESS_TOKEN }}
+
