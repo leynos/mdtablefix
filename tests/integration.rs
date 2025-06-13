@@ -6,6 +6,16 @@ use std::io::Write;
 use tempfile::tempdir;
 
 #[fixture]
+/// Provides a sample Markdown table with broken rows for testing purposes.
+///
+/// The returned vector contains lines representing a table with inconsistent columns, useful for validating table reflow logic.
+///
+/// # Examples
+///
+/// ```
+/// let table = broken_table();
+/// assert_eq!(table[0], "| A | B |    |");
+/// ```
 fn broken_table() -> Vec<String> {
     vec![
         "| A | B |    |".to_string(),
@@ -14,22 +24,47 @@ fn broken_table() -> Vec<String> {
 }
 
 #[fixture]
+/// Returns a vector of strings representing a malformed Markdown table with inconsistent columns.
+///
+/// The returned table has rows with differing numbers of columns, making it invalid for standard Markdown table parsing.
+///
+/// # Examples
+///
+/// ```
+/// let table = malformed_table();
+/// assert_eq!(table, vec![String::from("| A | |"), String::from("| 1 | 2 | 3 |")]);
+/// ```
 fn malformed_table() -> Vec<String> {
     vec!["| A | |".to_string(), "| 1 | 2 | 3 |".to_string()]
 }
 
 #[rstest]
+/// Tests that `reflow_table` correctly restructures a broken Markdown table into a well-formed table.
+///
+/// # Examples
+///
+/// ```
+/// let broken = vec![String::from("| A | B |"), String::from("| 1 | 2 |"), String::from("| 3 | 4 |")];
+/// let expected = vec!["| A | B |", "| 1 | 2 |", "| 3 | 4 |"];
+/// assert_eq!(reflow_table(&broken), expected);
+/// ```
 fn test_reflow_basic(broken_table: Vec<String>) {
     let expected = vec!["| A | B |", "| 1 | 2 |", "| 3 | 4 |"];
     assert_eq!(reflow_table(&broken_table), expected);
 }
 
 #[rstest]
+/// Tests that `reflow_table` returns the original input unchanged when given a malformed Markdown table.
+///
+/// This ensures that the function does not attempt to modify tables with inconsistent columns or structure.
 fn test_reflow_malformed_returns_original(malformed_table: Vec<String>) {
     assert_eq!(reflow_table(&malformed_table), malformed_table);
 }
 
 #[rstest]
+/// Tests that `process_stream` leaves lines inside code fences unchanged.
+///
+/// Verifies that both backtick (```) and tilde (~~~) fenced code blocks are ignored by the table processing logic, ensuring their contents are not altered.
 fn test_process_stream_ignores_code_fences() {
     let lines = vec![
         "```".to_string(),
@@ -48,6 +83,16 @@ fn test_process_stream_ignores_code_fences() {
 }
 
 #[rstest]
+/// Verifies that the CLI fails when the `--in-place` flag is used without specifying a file.
+///
+/// This test ensures that running `mdtablefix --in-place` without a file argument results in a command failure.
+///
+/// # Examples
+///
+/// ```
+/// test_cli_in_place_requires_file();
+/// // The command should fail as no file is provided.
+/// ```
 fn test_cli_in_place_requires_file() {
     Command::cargo_bin("mdtablefix")
         .unwrap()
@@ -57,6 +102,20 @@ fn test_cli_in_place_requires_file() {
 }
 
 #[rstest]
+/// Tests that the CLI processes a file containing a broken Markdown table and outputs the corrected table to stdout.
+///
+/// This test creates a temporary file with a malformed table, runs the `mdtablefix` binary on it, and asserts that the output is the expected fixed table.
+///
+/// # Examples
+///
+/// ```
+/// let broken_table = vec![
+///     "| A | B |".to_string(),
+///     "| 1 | 2 |".to_string(),
+///     "| 3 | 4 |".to_string(),
+/// ];
+/// test_cli_process_file(broken_table);
+/// ```
 fn test_cli_process_file(broken_table: Vec<String>) {
     let dir = tempdir().unwrap();
     let file_path = dir.path().join("sample.md");

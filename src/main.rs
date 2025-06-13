@@ -14,6 +14,26 @@ struct Cli {
     files: Vec<PathBuf>,
 }
 
+/// Entry point for the command-line tool that reflows broken markdown tables.
+///
+/// Parses command-line arguments to determine whether to process files in place, print fixed output to standard output, or read from standard input. Handles file I/O and error propagation as needed.
+///
+/// # Returns
+///
+/// Returns `Ok(())` if all operations complete successfully; otherwise, returns an error if argument validation or file processing fails.
+///
+/// # Examples
+///
+/// ```sh
+/// # Fix tables in a file and print to stdout
+/// mdtablefix myfile.md
+///
+/// # Fix tables in place
+/// mdtablefix --in-place myfile.md
+///
+/// # Fix tables from standard input
+/// cat myfile.md | mdtablefix
+/// ```
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
