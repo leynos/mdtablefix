@@ -37,6 +37,14 @@ fn test_process_stream_ignores_code_fences() {
         "```".to_string(),
     ];
     assert_eq!(process_stream(&lines), lines);
+
+    // Test with tilde-based code fences
+    let tilde_lines = vec![
+        "~~~".to_string(),
+        "| not | a | table |".to_string(),
+        "~~~".to_string(),
+    ];
+    assert_eq!(process_stream(&tilde_lines), tilde_lines);
 }
 
 #[rstest]
