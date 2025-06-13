@@ -94,7 +94,7 @@ fn test_reflow_preserves_header(header_table: Vec<String>) {
 
 #[rstest]
 fn test_reflow_handles_escaped_pipes(escaped_pipe_table: Vec<String>) {
-    let expected = vec!["| X | Y |", "| a | b | 1 |", "| 2 | 3 |"];
+    let expected = vec!["| X     | Y |", "| a | b | 1 |", "| 2     | 3 |"];
     assert_eq!(reflow_table(&escaped_pipe_table), expected);
 }
 

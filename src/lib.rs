@@ -35,9 +35,9 @@ pub fn split_cells(line: &str) -> Vec<String> {
         if ch == '\\' {
             if let Some(&next) = chars.peek() {
                 if next == '|' {
+                    // `\|` escapes the pipe so it becomes part of the cell
                     chars.next();
-                    cells.push(current.trim().to_string());
-                    current.clear();
+                    current.push('|');
                     continue;
                 }
             }
@@ -53,6 +53,29 @@ pub fn split_cells(line: &str) -> Vec<String> {
     }
     cells.push(current.trim().to_string());
     cells
+}
+
+/// Formats the cells for a separator row based on column widths.
+fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String> {
+    sep_cells
+        .iter()
+        .enumerate()
+        .map(|(i, cell)| {
+            let trimmed = cell.trim();
+            let left = trimmed.starts_with(':');
+            let right = trimmed.ends_with(':');
+            let mut dashes = "-".repeat(widths[i].max(3));
+            if left {
+                dashes.remove(0);
+                dashes.insert(0, ':');
+            }
+            if right {
+                dashes.pop();
+                dashes.push(':');
+            }
+            dashes
+        })
+        .collect()
 }
 
 /// Reflow a broken markdown table.
@@ -131,15 +154,12 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         cleaned.push(row);
     }
 
-    if !split_within_line
-        && cleaned
-            .iter()
-            .map(Vec::len)
-            .collect::<std::collections::HashSet<_>>()
-            .len()
-            > 1
-    {
-        return lines.to_vec();
+    if !split_within_line {
+        if let Some(first_len) = cleaned.first().map(Vec::len) {
+            if cleaned.iter().any(|row| row.len() != first_len) {
+                return lines.to_vec();
+            }
+        }
     }
 
     let mut widths = vec![0; max_cols];
@@ -166,25 +186,7 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         while sep_cells.len() < widths.len() {
             sep_cells.push(String::new());
         }
-        let sep_padded: Vec<String> = sep_cells
-            .iter()
-            .enumerate()
-            .map(|(i, cell)| {
-                let trimmed = cell.trim();
-                let left = trimmed.starts_with(':');
-                let right = trimmed.ends_with(':');
-                let mut dashes = "-".repeat(widths[i].max(3));
-                if left {
-                    dashes.remove(0);
-                    dashes.insert(0, ':');
-                }
-                if right {
-                    dashes.pop();
-                    dashes.push(':');
-                }
-                dashes
-            })
-            .collect();
+        let sep_padded = format_separator_cells(&widths, &sep_cells);
         let sep_line_out = format!("{}| {} |", indent, sep_padded.join(" | "));
         if let Some(first) = out.first().cloned() {
             let mut with_sep = vec![first, sep_line_out];
