@@ -175,3 +175,53 @@ fn test_cli_process_file(broken_table: Vec<String>) {
         .success()
         .stdout("| A | B |\n| 1 | 2 |\n| 3 | 4 |\n");
 }
+
+#[test]
+fn test_uniform_example_one() {
+    let input = vec![
+        "| Logical type | PostgreSQL | SQLite notes |".to_string(),
+        "|--------------|-------------------------|---------------------------------------------------------------------------------|".to_string(),
+        "| strings | `TEXT` (or `VARCHAR`) | `TEXT` - SQLite ignores the length specifier anyway |".to_string(),
+        "| booleans | `BOOLEAN DEFAULT FALSE` | declare as `BOOLEAN`; Diesel serialises to 0 / 1 so this is fine |".to_string(),
+        "| integers | `INTEGER` / `BIGINT` | ditto |".to_string(),
+        "| decimals | `NUMERIC` | stored as FLOAT in SQLite; Diesel `Numeric` round-trips, but beware precision |".to_string(),
+        "| blobs / raw | `BYTEA` | `BLOB` |".to_string(),
+    ];
+    let output = reflow_table(&input);
+    assert!(!output.is_empty());
+    let widths: Vec<usize> = output[0]
+        .trim_matches('|')
+        .split('|')
+        .map(|c| c.len())
+        .collect();
+    for row in output {
+        let cols: Vec<&str> = row.trim_matches('|').split('|').collect();
+        for (i, col) in cols.iter().enumerate() {
+            assert_eq!(col.len(), widths[i]);
+        }
+    }
+}
+
+#[test]
+fn test_uniform_example_two() {
+    let input = vec![
+        "| Option | How it works | When to choose it |".to_string(),
+        "|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|".to_string(),
+        "| **B. Pure-Rust migrations** | Implement `diesel::migration::Migration<DB>` in a Rust file (`up.rs` / `down.rs`) and compile with both `features = [\"postgres\", \"sqlite\"]`. The query builder emits backend-specific SQL at runtime. | You prefer the type-checked DSL and can live with slightly slower compile times. |".to_string(),
+        "| **C. Lowest-common-denominator SQL** | Write one `up.sql`/`down.sql` that *already* works on both engines. This demands avoiding SERIAL/IDENTITY, JSONB, `TIMESTAMPTZ`, etc. | Simple schemas, embedded use-case only, you are happy to supply integer primary keys manually. |".to_string(),
+        "| **D. Two separate migration trees** | Maintain `migrations/sqlite` and `migrations/postgres` directories with identical version numbers. Use `embed_migrations!(\"migrations/<backend>\")` to compile the right set. | You ship a single binary with migrations baked in. |".to_string(),
+    ];
+    let output = reflow_table(&input);
+    assert!(!output.is_empty());
+    let widths: Vec<usize> = output[0]
+        .trim_matches('|')
+        .split('|')
+        .map(|c| c.len())
+        .collect();
+    for row in output {
+        let cols: Vec<&str> = row.trim_matches('|').split('|').collect();
+        for (i, col) in cols.iter().enumerate() {
+            assert_eq!(col.len(), widths[i]);
+        }
+    }
+}
