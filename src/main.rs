@@ -8,7 +8,7 @@ use std::path::PathBuf;
 #[command(about = "Reflow broken markdown tables")]
 struct Cli {
     /// Rewrite files in place
-    #[arg(long = "in-place")]
+    #[arg(long = "in-place", requires = "files")]
     in_place: bool,
     /// Markdown files to fix
     files: Vec<PathBuf>,
@@ -36,10 +36,6 @@ struct Cli {
 /// ```
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-
-    if cli.in_place && cli.files.is_empty() {
-        anyhow::bail!("--in-place requires at least one file");
-    }
 
     if cli.files.is_empty() {
         let mut input = String::new();

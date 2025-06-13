@@ -27,14 +27,37 @@ fn split_cells(line: &str) -> Vec<String> {
     if let Some(stripped) = s.strip_suffix('|') {
         s = stripped;
     }
-    s.split('|').map(|c| c.trim().to_string()).collect()
+
+    let mut cells = Vec::new();
+    let mut current = String::new();
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(&next) = chars.peek() {
+                if next == '|' {
+                    current.push('|');
+                    chars.next();
+                    continue;
+                }
+            }
+            current.push(ch);
+            continue;
+        }
+        if ch == '|' {
+            cells.push(current.trim().to_string());
+            current.clear();
+        } else {
+            current.push(ch);
+        }
+    }
+    cells.push(current.trim().to_string());
+    cells
 }
 
 /// Reflow a broken markdown table.
 ///
 /// # Panics
 /// Panics if the internal regex fails to compile.
-#[must_use]
 /// Reflows a broken markdown table into properly aligned rows and columns.
 ///
 /// Takes a slice of strings representing lines of a markdown table, reconstructs the table by splitting and aligning cells, and returns the reflowed table as a vector of strings. If the rows have inconsistent numbers of non-empty columns, the original lines are returned unchanged.
@@ -52,10 +75,24 @@ fn split_cells(line: &str) -> Vec<String> {
 ///     "| c | d |".to_string(),
 /// ]);
 /// ```
+static SENTINEL_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").unwrap());
+static SEP_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
+
+#[must_use]
 pub fn reflow_table(lines: &[String]) -> Vec<String> {
-    let raw = lines.iter().map(|l| l.trim()).collect::<Vec<_>>().join(" ");
-    let sentinel_re = Regex::new(r"\|\s*\|\s*").unwrap();
-    let chunks: Vec<&str> = sentinel_re.split(&raw).collect();
+    if lines.is_empty() {
+        return Vec::new();
+    }
+
+    let indent: String = lines[0].chars().take_while(|c| c.is_whitespace()).collect();
+    let mut trimmed: Vec<String> = lines.iter().map(|l| l.trim().to_string()).collect();
+    let sep_idx = trimmed.iter().position(|l| SEP_RE.is_match(l));
+    let sep_line = sep_idx.map(|idx| trimmed.remove(idx));
+
+    let raw = trimmed.join(" ");
+    let chunks: Vec<&str> = SENTINEL_RE.split(&raw).collect();
     let mut cells = Vec::new();
     for (idx, chunk) in chunks.iter().enumerate() {
         let mut ch = (*chunk).to_string();
@@ -94,22 +131,29 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         return lines.to_vec();
     }
 
-    rows.into_iter()
+    let out: Vec<String> = rows
+        .into_iter()
         .map(|mut r| {
             r.retain(|c| !c.is_empty());
             while r.len() < max_cols {
                 r.push(String::new());
             }
-            format!("| {} |", r.join(" | "))
+            format!("{}| {} |", indent, r.join(" | "))
         })
-        .collect()
+        .collect();
+
+    if let Some(sep) = sep_line {
+        if let Some(first) = out.first().cloned() {
+            let mut with_sep = vec![first, format!("{}{}", indent, sep)];
+            with_sep.extend(out.into_iter().skip(1));
+            return with_sep;
+        }
+        return vec![format!("{}{}", indent, sep)];
+    }
+
+    out
 }
 
-/// Process a stream of markdown lines, reflowing tables.
-///
-/// # Panics
-/// Panics if the regex used for code fences fails to compile.
-#[must_use]
 /// Processes a stream of markdown lines, reflowing tables while preserving code blocks and other content.
 ///
 /// Detects fenced code blocks and avoids modifying their contents. Buffers lines that appear to be part of a markdown table and reflows them when the table ends. Non-table lines and code blocks are output unchanged.
@@ -139,15 +183,18 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 /// assert_eq!(output[5], "code block");
 /// assert_eq!(output[6], "```");
 /// ```
+static FENCE_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"^(```|~~~).*").unwrap());
+
+#[must_use]
 pub fn process_stream(lines: &[String]) -> Vec<String> {
-    let fence_re = Regex::new(r"^(```|~~~)").unwrap();
     let mut out = Vec::new();
     let mut buf = Vec::new();
     let mut in_code = false;
     let mut in_table = false;
 
     for line in lines {
-        if fence_re.is_match(line) {
+        if FENCE_RE.is_match(line) {
             if !buf.is_empty() {
                 if in_table {
                     out.extend(reflow_table(&buf));
