@@ -3,8 +3,8 @@ name: Release Binary
 on:
   push:
     tags:
-      - 'v[0-9]*.[0-9]*.[0-9]*'
-      - 'v[0-9]*.[0-9]*.[0-9]*-*'
+      - 'v[0-9]+\.[0-9]+\.[0-9]+'
+      - 'v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?'
 
 jobs:
   release:
@@ -16,6 +16,16 @@ jobs:
           toolchain: stable
           profile: minimal
           override: true
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
       - name: Build release binary
         run: cargo build --release
       - name: Package binary
