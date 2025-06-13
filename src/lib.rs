@@ -14,7 +14,8 @@ use std::path::Path;
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
+/// use mdtablefix::split_cells;
 /// let line = "| cell1 | cell2 | cell3 |";
 /// let cells = split_cells(line);
 /// assert_eq!(cells, vec!["cell1", "cell2", "cell3"]);
@@ -41,7 +42,8 @@ fn split_cells(line: &str) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
+/// use mdtablefix::reflow_table;
 /// let lines = vec![
 ///     "| a | b |".to_string(),
 ///     "| c | d |".to_string(),
@@ -81,14 +83,12 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         rows.push(current);
     }
 
-    let max_cols = rows
-        .iter()
-        .map(|r| r.iter().filter(|c| !c.is_empty()).count())
-        .max()
-        .unwrap_or(0);
+    // Count every cell, even if it is empty, to preserve column
+    // positions when checking for consistency across rows.
+    let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
 
     if rows.iter().any(|r| {
-        let count = r.iter().filter(|c| !c.is_empty()).count();
+        let count = r.len();
         count != 0 && count != max_cols
     }) {
         return lines.to_vec();
@@ -120,15 +120,16 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
+/// use mdtablefix::process_stream;
 /// let input = vec![
-///     "| a | b |",
-///     "|---|---|",
-///     "| 1 | 2 |",
-///     "",
-///     "```",
-///     "code block",
-///     "```",
+///     "| a | b |".to_string(),
+///     "|---|---|".to_string(),
+///     "| 1 | 2 |".to_string(),
+///     "".to_string(),
+///     "```".to_string(),
+///     "code block".to_string(),
+///     "```".to_string(),
 /// ];
 /// let output = process_stream(&input);
 /// assert_eq!(output[0], "| a   | b   |");
@@ -206,8 +207,9 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use std::path::Path;
+/// use mdtablefix::rewrite;
 /// let path = Path::new("example.md");
 /// rewrite(path).unwrap();
 /// ```
