@@ -35,8 +35,9 @@ pub fn split_cells(line: &str) -> Vec<String> {
         if ch == '\\' {
             if let Some(&next) = chars.peek() {
                 if next == '|' {
-                    current.push('|');
                     chars.next();
+                    cells.push(current.trim().to_string());
+                    current.clear();
                     continue;
                 }
             }
@@ -94,6 +95,7 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 
     let raw = trimmed.join(" ");
     let chunks: Vec<&str> = SENTINEL_RE.split(&raw).collect();
+    let split_within_line = chunks.len() > trimmed.len();
     let mut cells = Vec::new();
     for (idx, chunk) in chunks.iter().enumerate() {
         let mut ch = (*chunk).to_string();
@@ -123,20 +125,21 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
     // positions when checking for consistency across rows.
     let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
 
-    if rows.iter().any(|r| {
-        let count = r.len();
-        count != 0 && count != max_cols
-    }) {
-        return lines.to_vec();
-    }
-
     let mut cleaned = Vec::new();
     for mut row in rows {
         row.retain(|c| !c.is_empty());
-        while row.len() < max_cols {
-            row.push(String::new());
-        }
         cleaned.push(row);
+    }
+
+    if !split_within_line
+        && cleaned
+            .iter()
+            .map(Vec::len)
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            > 1
+    {
+        return lines.to_vec();
     }
 
     let mut widths = vec![0; max_cols];
@@ -146,7 +149,7 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         }
     }
 
-    cleaned
+    let out: Vec<String> = cleaned
         .into_iter()
         .map(|row| {
             let padded: Vec<String> = row
@@ -154,17 +157,41 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
                 .enumerate()
                 .map(|(i, c)| format!("{:<width$}", c, width = widths[i]))
                 .collect();
-            format!("| {} |", padded.join(" | "))
+            format!("{}| {} |", indent, padded.join(" | "))
         })
         .collect();
 
     if let Some(sep) = sep_line {
+        let mut sep_cells: Vec<String> = split_cells(&sep);
+        while sep_cells.len() < widths.len() {
+            sep_cells.push(String::new());
+        }
+        let sep_padded: Vec<String> = sep_cells
+            .iter()
+            .enumerate()
+            .map(|(i, cell)| {
+                let trimmed = cell.trim();
+                let left = trimmed.starts_with(':');
+                let right = trimmed.ends_with(':');
+                let mut dashes = "-".repeat(widths[i].max(3));
+                if left {
+                    dashes.remove(0);
+                    dashes.insert(0, ':');
+                }
+                if right {
+                    dashes.pop();
+                    dashes.push(':');
+                }
+                dashes
+            })
+            .collect();
+        let sep_line_out = format!("{}| {} |", indent, sep_padded.join(" | "));
         if let Some(first) = out.first().cloned() {
-            let mut with_sep = vec![first, format!("{}{}", indent, sep)];
+            let mut with_sep = vec![first, sep_line_out];
             with_sep.extend(out.into_iter().skip(1));
             return with_sep;
         }
-        return vec![format!("{}{}", indent, sep)];
+        return vec![sep_line_out];
     }
 
     out
