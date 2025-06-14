@@ -68,12 +68,13 @@ fn main() -> std::io::Result<()> {
 ## HTML table support
 
 `mdtablefix` recognises simple `<table>` elements embedded in Markdown.
-Those tables are converted to Markdown before the regular reflow logic so
-Markdown and HTML tables are formatted consistently.
+Before the main table reflow runs these HTML tables are converted to Markdown in
+a preprocessing stage handled by `convert_html_tables`.
 
-The crate relies on `html5ever` and `markup5ever_rcdom` to parse the table
-structure. Only basic tables using `<tr>`, `<th>` and `<td>` tags are
-supported, and attributes or tag casing does not affect detection.
+Only basic tables composed of `<tr>`, `<th>` and `<td>` tags are detected, and
+attributes or tag casing do not matter. After conversion the regular reflow
+logic aligns them alongside Markdown tables. See
+[`docs/html-table-support.md`](docs/html-table-support.md) for details.
 
 ## Testing
 
