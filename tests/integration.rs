@@ -64,6 +64,19 @@ fn indented_table() -> Vec<String> {
 }
 
 #[fixture]
+/// Returns a vector of strings representing a simple HTML table with two columns and one data row.
+///
+/// The table includes a header row with columns "A" and "B", and a single data row with values "1" and "2".
+///
+/// # Examples
+///
+/// ```
+/// let html = html_table();
+/// assert_eq!(html[0], "<table>");
+/// assert_eq!(html[1], "<tr><th>A</th><th>B</th></tr>");
+/// assert_eq!(html[2], "<tr><td>1</td><td>2</td></tr>");
+/// assert_eq!(html[3], "</table>");
+/// ```
 fn html_table() -> Vec<String> {
     vec![
         "<table>".to_string(),
@@ -74,6 +87,16 @@ fn html_table() -> Vec<String> {
 }
 
 #[fixture]
+/// Returns a vector of strings representing an HTML table with attributes on the `<table>` tag.
+///
+/// The table contains two columns ("A" and "B") and one data row ("1" and "2"). The opening `<table>` tag includes a `class` attribute.
+///
+/// # Examples
+///
+/// ```
+/// let lines = html_table_with_attrs();
+/// assert_eq!(lines[0], "<table class=\"x\">");
+/// ```
 fn html_table_with_attrs() -> Vec<String> {
     vec![
         "<table class=\"x\">".to_string(),
@@ -84,6 +107,17 @@ fn html_table_with_attrs() -> Vec<String> {
 }
 
 #[fixture]
+/// Returns a vector of strings representing an HTML table with uppercase tags.
+///
+/// The table contains two columns ("A" and "B") and one data row ("1", "2").
+/// This fixture is used to test case-insensitive HTML table parsing.
+///
+/// # Examples
+///
+/// ```
+/// let table = html_table_uppercase();
+/// assert_eq!(table[0], "<TABLE>");
+/// ```
 fn html_table_uppercase() -> Vec<String> {
     vec![
         "<TABLE>".to_string(),
@@ -94,6 +128,16 @@ fn html_table_uppercase() -> Vec<String> {
 }
 
 #[fixture]
+/// Returns a vector of strings representing an HTML table with mixed-case tag names.
+///
+/// The table contains two columns ("A" and "B") and one data row ("1", "2"), with the `<table>` tags written in mixed case for testing case-insensitive parsing.
+///
+/// # Examples
+///
+/// ```
+/// let lines = html_table_mixed_case();
+/// assert_eq!(lines[0], "<TaBlE>");
+/// ```
 fn html_table_mixed_case() -> Vec<String> {
     vec![
         "<TaBlE>".to_string(),
@@ -104,6 +148,20 @@ fn html_table_mixed_case() -> Vec<String> {
 }
 
 #[fixture]
+/// Returns a vector of strings representing two separate Markdown tables, each with two columns, separated by an empty line.
+///
+/// # Examples
+///
+/// ```
+/// let tables = multiple_tables();
+/// assert_eq!(tables, vec![
+///     "| A | B |",
+///     "| 1 | 22 |",
+///     "",
+///     "| X | Y |",
+///     "| 3 | 4 |",
+/// ]);
+/// ```
 fn multiple_tables() -> Vec<String> {
     vec![
         "| A | B |".to_string(),
@@ -160,30 +218,57 @@ fn test_reflow_preserves_indentation(indented_table: Vec<String>) {
 }
 
 #[rstest]
+/// Tests that `process_stream` converts a simple HTML table into a correctly formatted Markdown table.
+///
+/// The test verifies that an HTML table with two columns and one data row is transformed into a Markdown table with headers and a separator row.
 fn test_process_stream_html_table(html_table: Vec<String>) {
     let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(process_stream(&html_table), expected);
 }
 
 #[rstest]
+/// Tests that `process_stream` correctly converts an HTML table with attributes into a Markdown table.
+///
+/// Verifies that attributes in the `<table>` tag are ignored and the resulting Markdown table has the expected header and data rows.
 fn test_process_stream_html_table_with_attrs(html_table_with_attrs: Vec<String>) {
     let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(process_stream(&html_table_with_attrs), expected);
 }
 
 #[rstest]
+/// Tests that `process_stream` correctly converts an HTML table with uppercase tags into a Markdown table.
+///
+/// Verifies that tables with `<TABLE>`, `<TR>`, and `<TD>` tags in uppercase are parsed and converted to the expected Markdown format.
 fn test_process_stream_html_table_uppercase(html_table_uppercase: Vec<String>) {
     let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(process_stream(&html_table_uppercase), expected);
 }
 
 #[rstest]
+/// Tests that `process_stream` correctly converts an HTML table with mixed-case tags into a Markdown table.
+///
+/// Verifies that HTML tables with tag names in mixed case are parsed and converted to Markdown format with headers and data rows.
 fn test_process_stream_html_table_mixed_case(html_table_mixed_case: Vec<String>) {
     let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(process_stream(&html_table_mixed_case), expected);
 }
 
 #[rstest]
+/// Tests that `process_stream` correctly processes multiple Markdown tables separated by blank lines, reflowing each table independently and preserving separation.
+///
+/// # Examples
+///
+/// ```
+/// let input = vec![
+///     "| A | B  |".to_string(),
+///     "| 1 | 22 |".to_string(),
+///     String::new(),
+///     "| X | Y |".to_string(),
+///     "| 3 | 4 |".to_string(),
+/// ];
+/// let output = process_stream(&input);
+/// assert_eq!(output, input);
+/// ```
 fn test_process_stream_multiple_tables(multiple_tables: Vec<String>) {
     let expected = vec![
         "| A | B  |".to_string(),

@@ -211,6 +211,9 @@ fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     out
 }
 
+/// Buffers lines belonging to an HTML table and converts the table to markdown when complete.
+///
+/// Tracks the nesting depth of `<table>` tags using regular expressions. When the depth returns to zero, converts the buffered HTML table to markdown and appends the result to the output. Clears the buffer and updates the HTML state accordingly.
 fn push_html_line(
     line: &str,
     html_buf: &mut Vec<String>,
@@ -262,6 +265,29 @@ static TABLE_END_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"(?i)</table>").unwrap());
 
 #[must_use]
+/// Reflows a markdown table, aligning columns and formatting separator rows.
+///
+/// Takes a slice of strings representing a markdown table, detects the separator row, splits and trims cells, checks for consistent column counts, calculates column widths, and reconstructs the table with properly aligned columns and separator. Returns the original lines unchanged if the table is inconsistent or cannot be reflowed.
+///
+/// # Returns
+///
+/// A vector of strings representing the reflowed markdown table with aligned columns and formatted separator row, or the original lines if reflow is not possible.
+///
+/// # Examples
+///
+/// ```
+/// let lines = vec![
+///     "| Name | Age |",
+///     "|---|---|",
+///     "| Alice | 30 |",
+///     "| Bob | 25 |",
+/// ];
+/// let fixed = reflow_table(&lines);
+/// assert_eq!(fixed[0], "| Name  | Age |");
+/// assert_eq!(fixed[1], "|-------|-----|");
+/// assert_eq!(fixed[2], "| Alice | 30  |");
+/// assert_eq!(fixed[3], "| Bob   | 25  |");
+/// ```
 pub fn reflow_table(lines: &[String]) -> Vec<String> {
     if lines.is_empty() {
         return Vec::new();
@@ -389,6 +415,24 @@ static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(```|~~~).*").unwrap());
 
 #[must_use]
+/// Processes a sequence of markdown lines, reflowing markdown tables and converting embedded HTML tables to markdown.
+///
+/// This function preserves fenced code blocks, detects and reflows markdown tables for proper alignment, and converts HTML `<table>` blocks to markdown format. All other lines are passed through unchanged.
+///
+/// # Examples
+///
+/// ```
+/// let input = vec![
+///     "| Header | Value |".to_string(),
+///     "|--------|-------|".to_string(),
+///     "| a      | 1     |".to_string(),
+///     "",
+///     "<table><tr><td>x</td></tr></table>".to_string(),
+/// ];
+/// let output = process_stream(&input);
+/// assert!(output.iter().any(|line| line.contains("| Header | Value |")));
+/// assert!(output.iter().any(|line| line.contains("| x |")));
+/// ```
 pub fn process_stream(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf = Vec::new();
