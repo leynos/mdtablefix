@@ -2,8 +2,8 @@
 //!
 //! Functions here reflow tables that were broken during formatting.
 
-use html5ever::{parse_document, tendril::TendrilSink};
-use markup5ever_rcdom::{Handle, NodeData, RcDom};
+mod html;
+
 use regex::Regex;
 use std::fs;
 use std::path::Path;
@@ -87,149 +87,6 @@ fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String>
         .collect()
 }
 
-fn node_text(handle: &Handle) -> String {
-    let mut parts = Vec::new();
-    collect_text(handle, &mut parts);
-    parts
-        .join(" ")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn collect_text(handle: &Handle, out: &mut Vec<String>) {
-    match &handle.data {
-        NodeData::Text { contents } => out.push(contents.borrow().to_string()),
-        NodeData::Element { name, .. } => {
-            let tag = name.local.as_ref();
-            if tag.eq_ignore_ascii_case("script")
-                || tag.eq_ignore_ascii_case("style")
-                || tag.eq_ignore_ascii_case("noscript")
-                || tag.eq_ignore_ascii_case("template")
-                || tag.eq_ignore_ascii_case("head")
-            {
-                return;
-            }
-            for child in handle.children.borrow().iter() {
-                collect_text(child, out);
-            }
-        }
-        NodeData::Document => {
-            for child in handle.children.borrow().iter() {
-                collect_text(child, out);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
-    if let NodeData::Element { name, .. } = &handle.data {
-        if name.local.as_ref() == "table" {
-            tables.push(handle.clone());
-        }
-    }
-    for child in handle.children.borrow().iter() {
-        collect_tables(child, tables);
-    }
-}
-
-fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
-    if let NodeData::Element { name, .. } = &handle.data {
-        if name.local.as_ref() == "tr" {
-            rows.push(handle.clone());
-        }
-    }
-    for child in handle.children.borrow().iter() {
-        collect_rows(child, rows);
-    }
-}
-
-use html5ever::driver::ParseOpts;
-
-fn table_node_to_markdown(table: &Handle) -> Vec<String> {
-    let mut row_handles = Vec::new();
-    collect_rows(table, &mut row_handles);
-    if row_handles.is_empty() {
-        return Vec::new();
-    }
-
-    let mut out = Vec::new();
-    let mut first_header = false;
-    let mut col_count = 0;
-    for (i, row) in row_handles.iter().enumerate() {
-        let mut cells = Vec::new();
-        let mut header_row = false;
-        for child in row.children.borrow().iter() {
-            if let NodeData::Element { name, .. } = &child.data {
-                if name.local.as_ref() == "td" || name.local.as_ref() == "th" {
-                    if name.local.as_ref() == "th" {
-                        header_row = true;
-                    }
-                    cells.push(node_text(child));
-                }
-            }
-        }
-        if i == 0 {
-            first_header = header_row;
-            col_count = cells.len();
-        }
-        out.push(format!("| {} |", cells.join(" | ")));
-    }
-    if first_header {
-        let sep: Vec<String> = (0..col_count).map(|_| "---".to_string()).collect();
-        out.insert(1, format!("| {} |", sep.join(" | ")));
-    }
-    reflow_table(&out)
-}
-
-fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
-    let indent: String = lines
-        .first()
-        .map(|l| l.chars().take_while(|c| c.is_whitespace()).collect())
-        .unwrap_or_default();
-    let html: String = lines
-        .iter()
-        .map(|l| l.trim_end())
-        .collect::<Vec<_>>()
-        .join("\n");
-    let opts = ParseOpts::default();
-    let dom: RcDom = parse_document(RcDom::default(), opts).one(html);
-
-    let mut tables = Vec::new();
-    collect_tables(&dom.document, &mut tables);
-    if tables.is_empty() {
-        return lines.to_vec();
-    }
-
-    let mut out = Vec::new();
-    for table in tables {
-        for line in table_node_to_markdown(&table) {
-            out.push(format!("{indent}{line}"));
-        }
-    }
-    out
-}
-
-fn push_html_line(
-    line: &str,
-    html_buf: &mut Vec<String>,
-    html_depth: &mut usize,
-    in_html: &mut bool,
-    out: &mut Vec<String>,
-) {
-    html_buf.push(line.trim_end().to_string());
-    *html_depth += TABLE_START_RE.find_iter(line).count();
-    if TABLE_END_RE.is_match(line) {
-        *html_depth = html_depth.saturating_sub(TABLE_END_RE.find_iter(line).count());
-        if *html_depth == 0 {
-            out.extend(html_table_to_markdown(html_buf));
-            html_buf.clear();
-            *in_html = false;
-        }
-    }
-}
-
 /// Reflow a broken markdown table.
 ///
 /// # Panics
@@ -256,10 +113,6 @@ static SENTINEL_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").unwrap());
 static SEP_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
-static TABLE_START_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"(?i)^<table(?:\s|>|$)").unwrap());
-static TABLE_END_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"(?i)</table>").unwrap());
 
 #[must_use]
 pub fn reflow_table(lines: &[String]) -> Vec<String> {
@@ -388,17 +241,20 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(```|~~~).*").unwrap());
 
+pub(crate) fn is_fence(line: &str) -> bool {
+    FENCE_RE.is_match(line)
+}
+
 #[must_use]
 pub fn process_stream(lines: &[String]) -> Vec<String> {
+    let pre = html::convert_html_tables(lines);
+
     let mut out = Vec::new();
     let mut buf = Vec::new();
-    let mut html_buf = Vec::new();
-    let mut html_depth = 0usize;
     let mut in_code = false;
     let mut in_table = false;
-    let mut in_html = false;
 
-    for line in lines {
+    for line in &pre {
         if FENCE_RE.is_match(line) {
             if !buf.is_empty() {
                 if in_table {
@@ -415,27 +271,6 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 
         if in_code {
             out.push(line.trim_end().to_string());
-            continue;
-        }
-
-        if in_html {
-            push_html_line(line, &mut html_buf, &mut html_depth, &mut in_html, &mut out);
-            continue;
-        }
-
-        if TABLE_START_RE.is_match(line.trim_start()) {
-            if !buf.is_empty() {
-                if in_table {
-                    out.extend(reflow_table(&buf));
-                } else {
-                    out.extend(buf.clone());
-                }
-                buf.clear();
-                in_table = false;
-            }
-            in_html = true;
-            html_depth = 0;
-            push_html_line(line, &mut html_buf, &mut html_depth, &mut in_html, &mut out);
             continue;
         }
 
@@ -456,6 +291,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
             buf.clear();
             in_table = false;
         }
+
         out.push(line.trim_end().to_string());
     }
 
@@ -465,10 +301,6 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
         } else {
             out.extend(buf);
         }
-    }
-
-    if !html_buf.is_empty() {
-        out.extend(html_table_to_markdown(&html_buf));
     }
 
     out
