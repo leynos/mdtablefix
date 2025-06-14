@@ -219,9 +219,9 @@ fn push_html_line(
     out: &mut Vec<String>,
 ) {
     html_buf.push(line.trim_end().to_string());
-    *html_depth += line.matches("<table").count();
-    if line.contains("</table>") {
-        *html_depth = html_depth.saturating_sub(line.matches("</table>").count());
+    *html_depth += TABLE_START_RE.find_iter(line).count();
+    if TABLE_END_RE.is_match(line) {
+        *html_depth = html_depth.saturating_sub(TABLE_END_RE.find_iter(line).count());
         if *html_depth == 0 {
             out.extend(html_table_to_markdown(html_buf));
             html_buf.clear();
@@ -256,6 +256,10 @@ static SENTINEL_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").unwrap());
 static SEP_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
+static TABLE_START_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"(?i)^<table(?:\s|>|$)").unwrap());
+static TABLE_END_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"(?i)</table>").unwrap());
 
 #[must_use]
 pub fn reflow_table(lines: &[String]) -> Vec<String> {
@@ -419,7 +423,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        if line.trim_start().starts_with("<table") {
+        if TABLE_START_RE.is_match(line.trim_start()) {
             if !buf.is_empty() {
                 if in_table {
                     out.extend(reflow_table(&buf));
