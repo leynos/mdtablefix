@@ -345,8 +345,14 @@ fn test_non_table_lines_unchanged() {
     assert_eq!(output, expected);
 }
 
-#[rstest]
-fn test_convert_html_table_basic(html_table: Vec<String>) {
+#[test]
+fn test_convert_html_table_basic() {
+    let html_table = vec![
+        "<table>".to_string(),
+        "<tr><th>A</th><th>B</th></tr>".to_string(),
+        "<tr><td>1</td><td>2</td></tr>".to_string(),
+        "</table>".to_string(),
+    ];
     let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(convert_html_tables(&html_table), expected);
 }
