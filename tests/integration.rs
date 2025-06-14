@@ -84,6 +84,36 @@ fn html_table_with_attrs() -> Vec<String> {
 }
 
 #[fixture]
+fn html_table_with_colspan() -> Vec<String> {
+    vec![
+        "<table>".to_string(),
+        "<tr><th colspan=\"2\">A</th></tr>".to_string(),
+        "<tr><td>1</td><td>2</td></tr>".to_string(),
+        "</table>".to_string(),
+    ]
+}
+
+#[fixture]
+fn html_table_no_header() -> Vec<String> {
+    vec![
+        "<table>".to_string(),
+        "<tr><td>A</td><td>B</td></tr>".to_string(),
+        "<tr><td>1</td><td>2</td></tr>".to_string(),
+        "</table>".to_string(),
+    ]
+}
+
+#[fixture]
+fn html_table_empty() -> Vec<String> {
+    vec!["<table></table>".to_string()]
+}
+
+#[fixture]
+fn html_table_unclosed() -> Vec<String> {
+    vec!["<table>".to_string(), "<tr><td>1</td></tr>".to_string()]
+}
+
+#[fixture]
 fn html_table_uppercase() -> Vec<String> {
     vec![
         "<TABLE>".to_string(),
@@ -364,6 +394,7 @@ fn test_convert_html_table_basic() {
 #[rstest]
 #[case("```")]
 #[case("~~~")]
+#[case("```rust")]
 fn test_convert_html_table_in_text_and_code(#[case] fence: &str) {
     let lines = vec![
         "Intro".to_string(),
@@ -387,4 +418,33 @@ fn test_convert_html_table_in_text_and_code(#[case] fence: &str) {
         "Outro".to_string(),
     ];
     assert_eq!(convert_html_tables(&lines), expected);
+}
+
+#[test]
+fn test_convert_html_table_with_attrs_basic() {
+    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    assert_eq!(convert_html_tables(&html_table_with_attrs()), expected);
+}
+
+#[test]
+fn test_convert_html_table_with_colspan() {
+    let expected = vec!["| A |", "| --- |", "| 1 | 2 |"];
+    assert_eq!(convert_html_tables(&html_table_with_colspan()), expected);
+}
+
+#[test]
+fn test_convert_html_table_no_header() {
+    let expected = vec!["| A | B |", "| 1 | 2 |"];
+    assert_eq!(convert_html_tables(&html_table_no_header()), expected);
+}
+
+#[test]
+fn test_convert_html_table_empty() {
+    assert!(convert_html_tables(&html_table_empty()).is_empty());
+}
+
+#[test]
+fn test_convert_html_table_unclosed_returns_original() {
+    let html = html_table_unclosed();
+    assert_eq!(convert_html_tables(&html), html);
 }
