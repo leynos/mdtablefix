@@ -103,7 +103,21 @@ fn node_text(handle: &Handle) -> String {
 fn collect_text(handle: &Handle, out: &mut Vec<String>) {
     match &handle.data {
         NodeData::Text { contents } => out.push(contents.borrow().to_string()),
-        NodeData::Element { .. } | NodeData::Document => {
+        NodeData::Element { name, .. } => {
+            let tag = name.local.as_ref();
+            if tag.eq_ignore_ascii_case("script")
+                || tag.eq_ignore_ascii_case("style")
+                || tag.eq_ignore_ascii_case("noscript")
+                || tag.eq_ignore_ascii_case("template")
+                || tag.eq_ignore_ascii_case("head")
+            {
+                return;
+            }
+            for child in handle.children.borrow().iter() {
+                collect_text(child, out);
+            }
+        }
+        NodeData::Document => {
             for child in handle.children.borrow().iter() {
                 collect_text(child, out);
             }
