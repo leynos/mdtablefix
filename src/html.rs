@@ -28,7 +28,7 @@ fn node_text(handle: &Handle) -> String {
 }
 
 /// Recursively appends text nodes from `handle` to `out`, tracking whether the
-/// previous character was whitespace.
+/// previous output was whitespace.
 fn collect_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
     match &handle.data {
         NodeData::Text { contents } => {
@@ -91,7 +91,8 @@ fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
     }
 }
 
-/// Converts a `<table>` DOM node into Markdown table lines.
+/// Converts a `<table>` DOM node into Markdown table lines and calls
+/// `reflow_table` so the columns are uniformly padded.
 fn table_node_to_markdown(table: &Handle) -> Vec<String> {
     let mut row_handles = Vec::new();
     collect_rows(table, &mut row_handles);
@@ -127,6 +128,8 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
 }
 
 /// Parses HTML table markup and returns the equivalent Markdown lines.
+///
+/// If no `<table>` elements are present, the input is returned unchanged.
 fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
     let indent: String = lines
         .first()
