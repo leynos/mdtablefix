@@ -1,8 +1,12 @@
 //! Library for fixing markdown tables.
 //!
 //! Functions here reflow tables that were broken during formatting.
+//! The [`convert_html_tables`] helper is re-exported at the crate root so
+//! callers can convert simple HTML tables before reflowing.
 
 mod html;
+
+pub use html::convert_html_tables;
 
 use regex::Regex;
 use std::fs;
