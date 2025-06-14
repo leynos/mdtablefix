@@ -91,9 +91,6 @@ fn node_text(handle: &Handle) -> String {
     let mut parts = Vec::new();
     collect_text(handle, &mut parts);
     parts
-        .into_iter()
-        .filter(|s| !s.trim().is_empty())
-        .collect::<Vec<_>>()
         .join(" ")
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -212,6 +209,25 @@ fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
         }
     }
     out
+}
+
+fn push_html_line(
+    line: &str,
+    html_buf: &mut Vec<String>,
+    html_depth: &mut usize,
+    in_html: &mut bool,
+    out: &mut Vec<String>,
+) {
+    html_buf.push(line.trim_end().to_string());
+    *html_depth += line.matches("<table").count();
+    if line.contains("</table>") {
+        *html_depth = html_depth.saturating_sub(line.matches("</table>").count());
+        if *html_depth == 0 {
+            out.extend(html_table_to_markdown(html_buf));
+            html_buf.clear();
+            *in_html = false;
+        }
+    }
 }
 
 /// Reflow a broken markdown table.
@@ -399,16 +415,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
         }
 
         if in_html {
-            html_buf.push(line.trim_end().to_string());
-            html_depth += line.matches("<table").count();
-            if line.contains("</table>") {
-                html_depth = html_depth.saturating_sub(line.matches("</table>").count());
-                if html_depth == 0 {
-                    out.extend(html_table_to_markdown(&html_buf));
-                    html_buf.clear();
-                    in_html = false;
-                }
-            }
+            push_html_line(line, &mut html_buf, &mut html_depth, &mut in_html, &mut out);
             continue;
         }
 
@@ -423,16 +430,8 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
                 in_table = false;
             }
             in_html = true;
-            html_buf.push(line.trim_end().to_string());
-            html_depth = line.matches("<table").count();
-            if line.contains("</table>") {
-                html_depth = html_depth.saturating_sub(line.matches("</table>").count());
-                if html_depth == 0 {
-                    out.extend(html_table_to_markdown(&html_buf));
-                    html_buf.clear();
-                    in_html = false;
-                }
-            }
+            html_depth = 0;
+            push_html_line(line, &mut html_buf, &mut html_depth, &mut in_html, &mut out);
             continue;
         }
 
