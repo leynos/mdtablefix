@@ -88,14 +88,21 @@ fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String>
 }
 
 fn node_text(handle: &Handle) -> String {
-    let mut text = String::new();
-    collect_text(handle, &mut text);
-    text.trim().to_string()
+    let mut parts = Vec::new();
+    collect_text(handle, &mut parts);
+    parts
+        .into_iter()
+        .filter(|s| !s.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
-fn collect_text(handle: &Handle, out: &mut String) {
+fn collect_text(handle: &Handle, out: &mut Vec<String>) {
     match &handle.data {
-        NodeData::Text { contents } => out.push_str(&contents.borrow()),
+        NodeData::Text { contents } => out.push(contents.borrow().to_string()),
         NodeData::Element { .. } | NodeData::Document => {
             for child in handle.children.borrow().iter() {
                 collect_text(child, out);
@@ -105,18 +112,15 @@ fn collect_text(handle: &Handle, out: &mut String) {
     }
 }
 
-fn find_table(handle: &Handle) -> Option<Handle> {
+fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
     if let NodeData::Element { name, .. } = &handle.data {
         if name.local.as_ref() == "table" {
-            return Some(handle.clone());
+            tables.push(handle.clone());
         }
     }
     for child in handle.children.borrow().iter() {
-        if let Some(t) = find_table(child) {
-            return Some(t);
-        }
+        collect_tables(child, tables);
     }
-    None
 }
 
 fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
@@ -132,18 +136,13 @@ fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
 
 use html5ever::driver::ParseOpts;
 
-fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
-    let html = lines.join("\n");
-    let opts = ParseOpts::default();
-    let dom: RcDom = parse_document(RcDom::default(), opts).one(html);
-    let Some(table) = find_table(&dom.document) else {
-        return lines.to_vec();
-    };
+fn table_node_to_markdown(table: &Handle) -> Vec<String> {
     let mut row_handles = Vec::new();
-    collect_rows(&table, &mut row_handles);
+    collect_rows(table, &mut row_handles);
     if row_handles.is_empty() {
-        return lines.to_vec();
+        return Vec::new();
     }
+
     let mut out = Vec::new();
     let mut first_header = false;
     let mut col_count = 0;
@@ -171,6 +170,34 @@ fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
         out.insert(1, format!("| {} |", sep.join(" | ")));
     }
     reflow_table(&out)
+}
+
+fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
+    let indent: String = lines
+        .first()
+        .map(|l| l.chars().take_while(|c| c.is_whitespace()).collect())
+        .unwrap_or_default();
+    let html: String = lines
+        .iter()
+        .map(|l| l.trim_end())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let opts = ParseOpts::default();
+    let dom: RcDom = parse_document(RcDom::default(), opts).one(html);
+
+    let mut tables = Vec::new();
+    collect_tables(&dom.document, &mut tables);
+    if tables.is_empty() {
+        return lines.to_vec();
+    }
+
+    let mut out = Vec::new();
+    for table in tables {
+        for line in table_node_to_markdown(&table) {
+            out.push(format!("{indent}{line}"));
+        }
+    }
+    out
 }
 
 /// Reflow a broken markdown table.
@@ -332,6 +359,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf = Vec::new();
     let mut html_buf = Vec::new();
+    let mut html_depth = 0usize;
     let mut in_code = false;
     let mut in_table = false;
     let mut in_html = false;
@@ -358,10 +386,14 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 
         if in_html {
             html_buf.push(line.trim_end().to_string());
+            html_depth += line.matches("<table").count();
             if line.contains("</table>") {
-                out.extend(html_table_to_markdown(&html_buf));
-                html_buf.clear();
-                in_html = false;
+                html_depth = html_depth.saturating_sub(line.matches("</table>").count());
+                if html_depth == 0 {
+                    out.extend(html_table_to_markdown(&html_buf));
+                    html_buf.clear();
+                    in_html = false;
+                }
             }
             continue;
         }
@@ -378,10 +410,14 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
             }
             in_html = true;
             html_buf.push(line.trim_end().to_string());
+            html_depth = line.matches("<table").count();
             if line.contains("</table>") {
-                out.extend(html_table_to_markdown(&html_buf));
-                html_buf.clear();
-                in_html = false;
+                html_depth = html_depth.saturating_sub(line.matches("</table>").count());
+                if html_depth == 0 {
+                    out.extend(html_table_to_markdown(&html_buf));
+                    html_buf.clear();
+                    in_html = false;
+                }
             }
             continue;
         }
