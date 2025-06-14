@@ -65,6 +65,16 @@ fn main() -> std::io::Result<()> {
 - `process_stream(&[String]) -> Vec<String>` rewrites tables in memory.
 - `rewrite(&Path) -> std::io::Result<()>` updates a Markdown file on disk.
 
+## HTML table support
+
+`mdtablefix` recognises simple `<table>` elements embedded in Markdown.
+Those tables are converted to Markdown before the regular reflow logic so
+Markdown and HTML tables are formatted consistently.
+
+The crate relies on `html5ever` and `markup5ever_rcdom` to parse the table
+structure. Only basic tables using `<tr>`, `<th>` and `<td>` tags are
+supported, and attributes or tag casing do not affect detection.
+
 ## Testing
 
 See `docs/rust-testing-with-rstest-fixtures.md` for notes on how the test suite
