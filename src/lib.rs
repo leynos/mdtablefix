@@ -4,6 +4,8 @@
 
 mod html;
 
+pub use html::convert_html_tables;
+
 use regex::Regex;
 use std::fs;
 use std::path::Path;

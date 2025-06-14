@@ -1,5 +1,5 @@
 use assert_cmd::Command;
-use mdtablefix::{process_stream, reflow_table};
+use mdtablefix::{convert_html_tables, process_stream, reflow_table};
 use rstest::{fixture, rstest};
 use std::fs::File;
 use std::io::Write;
@@ -343,4 +343,36 @@ fn test_non_table_lines_unchanged() {
         String::new(),
     ];
     assert_eq!(output, expected);
+}
+
+#[rstest]
+fn test_convert_html_table_basic(html_table: Vec<String>) {
+    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    assert_eq!(convert_html_tables(&html_table), expected);
+}
+
+#[test]
+fn test_convert_html_table_in_text_and_code() {
+    let lines = vec![
+        "Intro".to_string(),
+        "<table>".to_string(),
+        "<tr><th>A</th><th>B</th></tr>".to_string(),
+        "<tr><td>1</td><td>2</td></tr>".to_string(),
+        "</table>".to_string(),
+        "```".to_string(),
+        "<table><tr><td>x</td></tr></table>".to_string(),
+        "```".to_string(),
+        "Outro".to_string(),
+    ];
+    let expected = vec![
+        "Intro".to_string(),
+        "| A | B |".to_string(),
+        "| --- | --- |".to_string(),
+        "| 1 | 2 |".to_string(),
+        "```".to_string(),
+        "<table><tr><td>x</td></tr></table>".to_string(),
+        "```".to_string(),
+        "Outro".to_string(),
+    ];
+    assert_eq!(convert_html_tables(&lines), expected);
 }
