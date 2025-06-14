@@ -74,3 +74,4 @@ is organised using the [`rstest`](https://crates.io/crates/rstest) crate.
 
 This project is licensed under the ISC license.
 See the [LICENSE](LICENSE) file for details.
+
