@@ -74,6 +74,36 @@ fn html_table() -> Vec<String> {
 }
 
 #[fixture]
+fn html_table_with_attrs() -> Vec<String> {
+    vec![
+        "<table class=\"x\">".to_string(),
+        "<tr><th>A</th><th>B</th></tr>".to_string(),
+        "<tr><td>1</td><td>2</td></tr>".to_string(),
+        "</table>".to_string(),
+    ]
+}
+
+#[fixture]
+fn html_table_uppercase() -> Vec<String> {
+    vec![
+        "<TABLE>".to_string(),
+        "<tr><th>A</th><th>B</th></tr>".to_string(),
+        "<tr><td>1</td><td>2</td></tr>".to_string(),
+        "</TABLE>".to_string(),
+    ]
+}
+
+#[fixture]
+fn html_table_mixed_case() -> Vec<String> {
+    vec![
+        "<TaBlE>".to_string(),
+        "<tr><th>A</th><th>B</th></tr>".to_string(),
+        "<tr><td>1</td><td>2</td></tr>".to_string(),
+        "</TaBlE>".to_string(),
+    ]
+}
+
+#[fixture]
 fn multiple_tables() -> Vec<String> {
     vec![
         "| A | B |".to_string(),
@@ -133,6 +163,24 @@ fn test_reflow_preserves_indentation(indented_table: Vec<String>) {
 fn test_process_stream_html_table(html_table: Vec<String>) {
     let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(process_stream(&html_table), expected);
+}
+
+#[rstest]
+fn test_process_stream_html_table_with_attrs(html_table_with_attrs: Vec<String>) {
+    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    assert_eq!(process_stream(&html_table_with_attrs), expected);
+}
+
+#[rstest]
+fn test_process_stream_html_table_uppercase(html_table_uppercase: Vec<String>) {
+    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    assert_eq!(process_stream(&html_table_uppercase), expected);
+}
+
+#[rstest]
+fn test_process_stream_html_table_mixed_case(html_table_mixed_case: Vec<String>) {
+    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    assert_eq!(process_stream(&html_table_mixed_case), expected);
 }
 
 #[rstest]

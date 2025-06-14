@@ -8,3 +8,4 @@ consistently.
 The crate `markup5ever_rcdom` provides a minimal DOM which `html5ever` populates
 and which is traversed to extract rows and cells. Only basic tables containing
 `<tr>`, `<th>` and `<td>` elements are supported.
+`mdtablefix` detects table elements regardless of attribute usage or tag case.
