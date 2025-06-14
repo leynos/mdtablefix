@@ -113,10 +113,6 @@ static SENTINEL_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").unwrap());
 static SEP_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
-pub(crate) static TABLE_START_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"(?i)^<table(?:\s|>|$)").unwrap());
-pub(crate) static TABLE_END_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"(?i)</table>").unwrap());
 
 #[must_use]
 pub fn reflow_table(lines: &[String]) -> Vec<String> {
@@ -242,8 +238,12 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 /// assert_eq!(output[5], "code block");
 /// assert_eq!(output[6], "```");
 /// ```
-pub(crate) static FENCE_RE: std::sync::LazyLock<Regex> =
+static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(```|~~~).*").unwrap());
+
+pub(crate) fn is_fence(line: &str) -> bool {
+    FENCE_RE.is_match(line)
+}
 
 #[must_use]
 pub fn process_stream(lines: &[String]) -> Vec<String> {
