@@ -73,7 +73,7 @@ Markdown and HTML tables are formatted consistently.
 
 The crate relies on `html5ever` and `markup5ever_rcdom` to parse the table
 structure. Only basic tables using `<tr>`, `<th>` and `<td>` tags are
-supported, and attributes or tag casing do not affect detection.
+supported, and attributes or tag casing does not affect detection.
 
 ## Testing
 
