@@ -353,7 +353,11 @@ fn test_convert_html_table_basic() {
         "<tr><td>1</td><td>2</td></tr>".to_string(),
         "</table>".to_string(),
     ];
-    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    let expected = vec![
+        "| A | B |".to_string(),
+        "| --- | --- |".to_string(),
+        "| 1 | 2 |".to_string(),
+    ];
     assert_eq!(convert_html_tables(&html_table), expected);
 }
 
@@ -378,6 +382,32 @@ fn test_convert_html_table_in_text_and_code() {
         "```".to_string(),
         "<table><tr><td>x</td></tr></table>".to_string(),
         "```".to_string(),
+        "Outro".to_string(),
+    ];
+    assert_eq!(convert_html_tables(&lines), expected);
+}
+
+#[test]
+fn test_convert_html_table_in_text_and_code_tilde() {
+    let lines = vec![
+        "Intro".to_string(),
+        "<table>".to_string(),
+        "<tr><th>A</th><th>B</th></tr>".to_string(),
+        "<tr><td>1</td><td>2</td></tr>".to_string(),
+        "</table>".to_string(),
+        "~~~".to_string(),
+        "<table><tr><td>x</td></tr></table>".to_string(),
+        "~~~".to_string(),
+        "Outro".to_string(),
+    ];
+    let expected = vec![
+        "Intro".to_string(),
+        "| A | B |".to_string(),
+        "| --- | --- |".to_string(),
+        "| 1 | 2 |".to_string(),
+        "~~~".to_string(),
+        "<table><tr><td>x</td></tr></table>".to_string(),
+        "~~~".to_string(),
         "Outro".to_string(),
     ];
     assert_eq!(convert_html_tables(&lines), expected);
