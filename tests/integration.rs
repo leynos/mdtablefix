@@ -63,6 +63,27 @@ fn indented_table() -> Vec<String> {
     ]
 }
 
+#[fixture]
+fn html_table() -> Vec<String> {
+    vec![
+        "<table>".to_string(),
+        "<tr><th>A</th><th>B</th></tr>".to_string(),
+        "<tr><td>1</td><td>2</td></tr>".to_string(),
+        "</table>".to_string(),
+    ]
+}
+
+#[fixture]
+fn multiple_tables() -> Vec<String> {
+    vec![
+        "| A | B |".to_string(),
+        "| 1 | 22 |".to_string(),
+        String::new(),
+        "| X | Y |".to_string(),
+        "| 3 | 4 |".to_string(),
+    ]
+}
+
 #[rstest]
 /// Tests that `reflow_table` correctly restructures a broken Markdown table into a well-formed table.
 ///
@@ -106,6 +127,24 @@ fn test_reflow_handles_escaped_pipes(escaped_pipe_table: Vec<String>) {
 fn test_reflow_preserves_indentation(indented_table: Vec<String>) {
     let expected = vec!["  | I | J |", "  | 1 | 2 |", "  | 3 | 4 |"];
     assert_eq!(reflow_table(&indented_table), expected);
+}
+
+#[rstest]
+fn test_process_stream_html_table(html_table: Vec<String>) {
+    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    assert_eq!(process_stream(&html_table), expected);
+}
+
+#[rstest]
+fn test_process_stream_multiple_tables(multiple_tables: Vec<String>) {
+    let expected = vec![
+        "| A | B  |".to_string(),
+        "| 1 | 22 |".to_string(),
+        String::new(),
+        "| X | Y |".to_string(),
+        "| 3 | 4 |".to_string(),
+    ];
+    assert_eq!(process_stream(&multiple_tables), expected);
 }
 
 /// Tests that `process_stream` leaves lines inside code fences unchanged.
