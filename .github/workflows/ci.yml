@@ -9,9 +9,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_TERM_COLOR: always
+      CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+      CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
       - name: Format
         run: cargo fmt --all -- --check
       - name: Lint
@@ -23,9 +35,7 @@ jobs:
       - name: Run coverage
         run: cargo tarpaulin --out lcov
       - name: Install CodeScene coverage tool
-        if: secrets.CS_ACCESS_TOKEN
-        env:
-          CODESCENE_CLI_SHA256: ${{ secrets.CODESCENE_CLI_SHA256 }}
+        if: env.CS_ACCESS_TOKEN
         run: |
           set -euo pipefail
           curl -fsSL -o install-cs-coverage-tool.sh https://downloads.codescene.io/enterprise/cli/install-cs-coverage-tool.sh
@@ -35,8 +45,5 @@ jobs:
           bash install-cs-coverage-tool.sh -y
           rm install-cs-coverage-tool.sh
       - name: Upload coverage data to CodeScene
-        if: secrets.CS_ACCESS_TOKEN
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        if: env.CS_ACCESS_TOKEN
         run: cs-coverage upload --format "lcov" --metric "line-coverage" "lcov.info"
-

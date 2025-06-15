@@ -5,6 +5,9 @@ use std::fs::File;
 use std::io::Write;
 use tempfile::tempdir;
 
+#[macro_use]
+mod common;
+
 #[fixture]
 /// Provides a sample Markdown table with broken rows for testing purposes.
 ///
@@ -17,10 +20,7 @@ use tempfile::tempdir;
 /// assert_eq!(table[0], "| A | B |    |");
 /// ```
 fn broken_table() -> Vec<String> {
-    vec![
-        "| A | B |    |".to_string(),
-        "| 1 | 2 |  | 3 | 4 |".to_string(),
-    ]
+    lines_vec!("| A | B |    |", "| 1 | 2 |  | 3 | 4 |",)
 }
 
 #[fixture]
@@ -35,113 +35,97 @@ fn broken_table() -> Vec<String> {
 /// assert_eq!(table, vec![String::from("| A | |"), String::from("| 1 | 2 | 3 |")]);
 /// ```
 fn malformed_table() -> Vec<String> {
-    vec!["| A | |".to_string(), "| 1 | 2 | 3 |".to_string()]
+    lines_vec!("| A | |", "| 1 | 2 | 3 |")
 }
 
 #[fixture]
 fn header_table() -> Vec<String> {
-    vec![
-        "| A | B |    |".to_string(),
-        "| --- | --- |".to_string(),
-        "| 1 | 2 |  | 3 | 4 |".to_string(),
-    ]
+    lines_vec!("| A | B |    |", "| --- | --- |", "| 1 | 2 |  | 3 | 4 |",)
 }
 
 #[fixture]
 fn escaped_pipe_table() -> Vec<String> {
-    vec![
-        "| X | Y |    |".to_string(),
-        "| a \\| b | 1 |  | 2 | 3 |".to_string(),
-    ]
+    lines_vec!("| X | Y |    |", "| a \\| b | 1 |  | 2 | 3 |",)
 }
 
 #[fixture]
 fn indented_table() -> Vec<String> {
-    vec![
-        "  | I | J |    |".to_string(),
-        "  | 1 | 2 |  | 3 | 4 |".to_string(),
-    ]
+    lines_vec!("  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |",)
 }
 
 #[fixture]
 fn html_table() -> Vec<String> {
-    vec![
-        "<table>".to_string(),
-        "<tr><th>A</th><th>B</th></tr>".to_string(),
-        "<tr><td>1</td><td>2</td></tr>".to_string(),
-        "</table>".to_string(),
-    ]
+    lines_vec!(
+        "<table>",
+        "<tr><th>A</th><th>B</th></tr>",
+        "<tr><td>1</td><td>2</td></tr>",
+        "</table>",
+    )
 }
 
 #[fixture]
 fn html_table_with_attrs() -> Vec<String> {
-    vec![
-        "<table class=\"x\">".to_string(),
-        "<tr><th>A</th><th>B</th></tr>".to_string(),
-        "<tr><td>1</td><td>2</td></tr>".to_string(),
-        "</table>".to_string(),
-    ]
+    lines_vec!(
+        "<table class=\"x\">",
+        "<tr><th>A</th><th>B</th></tr>",
+        "<tr><td>1</td><td>2</td></tr>",
+        "</table>",
+    )
 }
 
 #[fixture]
 fn html_table_with_colspan() -> Vec<String> {
-    vec![
-        "<table>".to_string(),
-        "<tr><th colspan=\"2\">A</th></tr>".to_string(),
-        "<tr><td>1</td><td>2</td></tr>".to_string(),
-        "</table>".to_string(),
-    ]
+    lines_vec!(
+        "<table>",
+        "<tr><th colspan=\"2\">A</th></tr>",
+        "<tr><td>1</td><td>2</td></tr>",
+        "</table>",
+    )
 }
 
 #[fixture]
 fn html_table_no_header() -> Vec<String> {
-    vec![
-        "<table>".to_string(),
-        "<tr><td>A</td><td>B</td></tr>".to_string(),
-        "<tr><td>1</td><td>2</td></tr>".to_string(),
-        "</table>".to_string(),
-    ]
+    lines_vec!(
+        "<table>",
+        "<tr><td>A</td><td>B</td></tr>",
+        "<tr><td>1</td><td>2</td></tr>",
+        "</table>",
+    )
 }
 
 #[fixture]
 fn html_table_empty() -> Vec<String> {
-    vec!["<table></table>".to_string()]
+    lines_vec!("<table></table>")
 }
 
 #[fixture]
 fn html_table_unclosed() -> Vec<String> {
-    vec!["<table>".to_string(), "<tr><td>1</td></tr>".to_string()]
+    lines_vec!("<table>", "<tr><td>1</td></tr>")
 }
 
 #[fixture]
 fn html_table_uppercase() -> Vec<String> {
-    vec![
-        "<TABLE>".to_string(),
-        "<tr><th>A</th><th>B</th></tr>".to_string(),
-        "<tr><td>1</td><td>2</td></tr>".to_string(),
-        "</TABLE>".to_string(),
-    ]
+    lines_vec!(
+        "<TABLE>",
+        "<tr><th>A</th><th>B</th></tr>",
+        "<tr><td>1</td><td>2</td></tr>",
+        "</TABLE>",
+    )
 }
 
 #[fixture]
 fn html_table_mixed_case() -> Vec<String> {
-    vec![
-        "<TaBlE>".to_string(),
-        "<tr><th>A</th><th>B</th></tr>".to_string(),
-        "<tr><td>1</td><td>2</td></tr>".to_string(),
-        "</TaBlE>".to_string(),
-    ]
+    lines_vec!(
+        "<TaBlE>",
+        "<tr><th>A</th><th>B</th></tr>",
+        "<tr><td>1</td><td>2</td></tr>",
+        "</TaBlE>",
+    )
 }
 
 #[fixture]
 fn multiple_tables() -> Vec<String> {
-    vec![
-        "| A | B |".to_string(),
-        "| 1 | 22 |".to_string(),
-        String::new(),
-        "| X | Y |".to_string(),
-        "| 3 | 4 |".to_string(),
-    ]
+    lines_vec!("| A | B |", "| 1 | 22 |", "", "| X | Y |", "| 3 | 4 |",)
 }
 
 #[rstest]
@@ -215,13 +199,13 @@ fn test_process_stream_html_table_mixed_case(html_table_mixed_case: Vec<String>)
 
 #[rstest]
 fn test_process_stream_multiple_tables(multiple_tables: Vec<String>) {
-    let expected = vec![
-        "| A | B  |".to_string(),
-        "| 1 | 22 |".to_string(),
+    let expected = lines_vec!(
+        "| A | B  |",
+        "| 1 | 22 |",
         String::new(),
-        "| X | Y |".to_string(),
-        "| 3 | 4 |".to_string(),
-    ];
+        "| X | Y |",
+        "| 3 | 4 |",
+    );
     assert_eq!(process_stream(&multiple_tables), expected);
 }
 
@@ -230,19 +214,11 @@ fn test_process_stream_multiple_tables(multiple_tables: Vec<String>) {
 /// Verifies that both backtick (```) and tilde (~~~) fenced code blocks are ignored by the table processing logic, ensuring their contents are not altered.
 #[rstest]
 fn test_process_stream_ignores_code_fences() {
-    let lines = vec![
-        "```rust".to_string(),
-        "| not | a | table |".to_string(),
-        "```".to_string(),
-    ];
+    let lines = lines_vec!("```rust", "| not | a | table |", "```");
     assert_eq!(process_stream(&lines), lines);
 
     // Test with tilde-based code fences
-    let tilde_lines = vec![
-        "~~~".to_string(),
-        "| not | a | table |".to_string(),
-        "~~~".to_string(),
-    ];
+    let tilde_lines = lines_vec!("~~~", "| not | a | table |", "~~~");
     assert_eq!(process_stream(&tilde_lines), tilde_lines);
 }
 
@@ -295,6 +271,23 @@ fn test_cli_process_file(broken_table: Vec<String>) {
         .assert()
         .success()
         .stdout("| A | B |\n| 1 | 2 |\n| 3 | 4 |\n");
+}
+
+#[test]
+fn test_cli_wrap_option() {
+    let input = "This line is deliberately made much longer than eighty columns so that \
+                 the wrapping algorithm is forced to insert a soft line-break somewhere \
+                 in the middle of the paragraph when the --wrap flag is supplied.";
+    let output = Command::cargo_bin("mdtablefix")
+        .unwrap()
+        .arg("--wrap")
+        .write_stdin(format!("{input}\n"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.lines().count() > 1, "expected wrapped output on multiple lines");
+    assert!(text.lines().all(|l| l.len() <= 80));
 }
 
 #[test]
@@ -424,6 +417,12 @@ fn test_convert_html_table_in_text_and_code(#[case] fence: &str) {
 fn test_convert_html_table_with_attrs_basic() {
     let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(convert_html_tables(&html_table_with_attrs()), expected);
+}
+
+#[test]
+fn test_convert_html_table_uppercase() {
+    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    assert_eq!(convert_html_tables(&html_table_uppercase()), expected);
 }
 
 #[test]

@@ -14,8 +14,10 @@ use std::sync::LazyLock;
 
 use crate::is_fence;
 
+/// Matches the start of an HTML `<table>` tag, ignoring case.
 static TABLE_START_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^<table(?:\s|>|$)").unwrap());
+/// Matches the end of an HTML `</table>` tag, ignoring case.
 static TABLE_END_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)</table>").unwrap());
 
 /// Extracts the text content of a DOM node, collapsing consecutive
@@ -212,8 +214,8 @@ fn push_html_line(
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use mdtablefix::html::html_table_to_markdown;
+/// ```no_run
+/// use mdtablefix::html_table_to_markdown;
 /// let html_lines = vec![
 ///     "<table><tr><th>Header</th></tr><tr><td>Cell</td></tr></table>".to_string()
 /// ];
@@ -260,8 +262,8 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use mdtablefix::html::convert_html_tables;
+/// ```no_run
+/// use mdtablefix::convert_html_tables;
 /// let lines = vec![
 ///     "<table>".to_string(),
 ///     "  <tr><th>Header</th></tr>".to_string(),
