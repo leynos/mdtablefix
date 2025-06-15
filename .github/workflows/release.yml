@@ -11,13 +11,63 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: x86_64
+            target: x86_64-unknown-linux-gnu
+            ext: ""
+          - os: linux
+            arch: aarch64
+            target: aarch64-unknown-linux-gnu
+            ext: ""
+          - os: windows
+            arch: x86_64
+            target: x86_64-pc-windows-msvc
+            ext: ".exe"
+          - os: windows
+            arch: aarch64
+            target: aarch64-pc-windows-msvc
+            ext: ".exe"
+          - os: macos
+            arch: x86_64
+            target: x86_64-apple-darwin
+            ext: ""
+          - os: macos
+            arch: aarch64
+            target: aarch64-apple-darwin
+            ext: ""
+          - os: freebsd
+            arch: x86_64
+            target: x86_64-unknown-freebsd
+            ext: ""
+          - os: freebsd
+            arch: aarch64
+            target: aarch64-unknown-freebsd
+            ext: ""
+          - os: openbsd
+            arch: x86_64
+            target: x86_64-unknown-openbsd
+            ext: ""
+          - os: openbsd
+            arch: aarch64
+            target: aarch64-unknown-openbsd
+            ext: ""
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - uses: actions-rs/toolchain@v1.3.0
         with:
           toolchain: stable
           profile: minimal
           override: true
+      - name: Cache cross binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cross
+          key: cross-v0.2.1-${{ runner.os }}
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross --tag v0.2.1
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -29,12 +79,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
       - name: Build release binary
-        run: cargo build --release
+        run: cross build --release --target ${{ matrix.target }}
+      - name: Prepare artifact
+        run: |
+          mkdir -p artifacts/${{ matrix.os }}-${{ matrix.arch }}
+          cp target/${{ matrix.target }}/release/${{ env.REPO_NAME }}${{ matrix.ext }} \
+            artifacts/${{ matrix.os }}-${{ matrix.arch }}/${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          sha256sum artifacts/${{ matrix.os }}-${{ matrix.arch }}/${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} > \
+            artifacts/${{ matrix.os }}-${{ matrix.arch }}/${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}.sha256
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.REPO_NAME }}
-          path: target/release/${{ env.REPO_NAME }}
+          name: ${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}
+          path: artifacts/${{ matrix.os }}-${{ matrix.arch }}
 
   release:
     needs: build
@@ -44,10 +101,14 @@ jobs:
       - uses: softprops/action-gh-release@v1
         with:
           generate_release_notes: true
-          files: target/release/${{ env.REPO_NAME }}
       - uses: actions/download-artifact@v4
         with:
-          name: ${{ env.REPO_NAME }}
-      - run: gh release upload "${{ github.ref_name }}" ${{ env.REPO_NAME }}
+          path: artifacts
+      - run: |
+          for dir in artifacts/${{ env.REPO_NAME }}-*; do
+            for file in "$dir"/*; do
+              gh release upload "${{ github.ref_name }}" "$file"
+            done
+          done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
