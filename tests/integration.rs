@@ -427,6 +427,12 @@ fn test_convert_html_table_with_attrs_basic() {
 }
 
 #[test]
+fn test_convert_html_table_uppercase() {
+    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    assert_eq!(convert_html_tables(&html_table_uppercase()), expected);
+}
+
+#[test]
 fn test_convert_html_table_with_colspan() {
     let expected = vec!["| A |", "| --- |", "| 1 | 2 |"];
     assert_eq!(convert_html_tables(&html_table_with_colspan()), expected);
