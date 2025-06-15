@@ -279,6 +279,19 @@ fn test_cli_in_place_requires_file() {
 ///     "| 3 | 4 |".to_string(),
 /// ];
 /// test_cli_process_file(broken_table);
+/// Runs the CLI on a file containing a broken Markdown table and asserts the output is the corrected table.
+///
+/// This test creates a temporary file with a malformed Markdown table, invokes the `mdtablefix` CLI on it,
+/// and verifies that the output matches the expected well-formed table.
+///
+/// # Examples
+///
+/// ```
+/// test_cli_process_file(vec![
+///     "| A | B |".to_string(),
+///     "| 1 | 2 |".to_string(),
+///     "| 3 | 4 |".to_string(),
+/// ]);
 /// ```
 fn test_cli_process_file(broken_table: Vec<String>) {
     let dir = tempdir().unwrap();
@@ -298,6 +311,16 @@ fn test_cli_process_file(broken_table: Vec<String>) {
 }
 
 #[test]
+/// Tests that the CLI's `--wrap` option wraps long input lines as expected.
+///
+/// Runs the `mdtablefix` binary with the `--wrap` flag, provides a long line via stdin,
+/// and asserts that the output contains line breaks and the expected text.
+///
+/// # Examples
+///
+/// ```
+/// test_cli_wrap_option();
+/// ```
 fn test_cli_wrap_option() {
     let input = "This line is long enough to require wrapping when the option is enabled.";
     let output = Command::cargo_bin("mdtablefix")
@@ -313,6 +336,9 @@ fn test_cli_wrap_option() {
 }
 
 #[test]
+/// Verifies that `reflow_table` produces a Markdown table with uniform column widths across all rows.
+///
+/// This test checks that each column in the output table has consistent width, ensuring proper alignment after reflow.
 fn test_uniform_example_one() {
     let input = vec![
         "| Logical type | PostgreSQL | SQLite notes |".to_string(),

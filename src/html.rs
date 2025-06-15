@@ -221,6 +221,28 @@ fn push_html_line(
 /// assert!(md_lines[0].starts_with("| Header |"));
 /// ```
 #[doc(hidden)]
+/// Converts HTML tables in the provided lines to Markdown table syntax.
+///
+/// Scans the input lines for HTML `<table>` blocks, including nested tables, and replaces each with an equivalent Markdown table. Lines outside of table blocks are preserved unchanged. If a table block is incomplete at the end of input, its lines are appended as-is.
+///
+/// # Examples
+///
+/// ```no_run
+/// use mdtablefix::html_table_to_markdown;
+///
+/// let lines = vec![
+///     "<table>".to_string(),
+///     "  <tr><th>Header</th></tr>".to_string(),
+///     "  <tr><td>Cell</td></tr>".to_string(),
+///     "</table>".to_string(),
+/// ];
+/// let result = html_table_to_markdown(&lines);
+/// assert_eq!(result, vec![
+///     "| Header |",
+///     "| ------ |",
+///     "| Cell   |",
+/// ]);
+/// ```
 pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf = Vec::new();
