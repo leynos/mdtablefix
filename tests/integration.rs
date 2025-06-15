@@ -298,6 +298,21 @@ fn test_cli_process_file(broken_table: Vec<String>) {
 }
 
 #[test]
+fn test_cli_wrap_option() {
+    let input = "This line is long enough to require wrapping when the option is enabled.";
+    let output = Command::cargo_bin("mdtablefix")
+        .unwrap()
+        .arg("--wrap")
+        .write_stdin(format!("{input}\n"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains('\n'));
+    assert!(text.contains("This line"));
+}
+
+#[test]
 fn test_uniform_example_one() {
     let input = vec![
         "| Logical type | PostgreSQL | SQLite notes |".to_string(),

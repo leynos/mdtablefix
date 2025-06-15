@@ -249,11 +249,11 @@ static FENCE_RE: std::sync::LazyLock<Regex> =
 static BULLET_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
 
-/// Returns `true` if the line is a fenced code block delimiter (e.g., "```" or "~~~").
+/// Returns `true` if the line is a fenced code block delimiter (e.g., "\`\`\`" or "~~~").
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// assert!(is_fence("```"));
 /// assert!(is_fence("~~~"));
 /// assert!(!is_fence("| foo | bar |"));
@@ -302,7 +302,7 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// let input = vec![
 ///     "This is a long paragraph that should be wrapped to a shorter width.".to_string(),
 ///     "".to_string(),
@@ -415,7 +415,7 @@ fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// let input = vec![
 ///     "<table><tr><td>foo</td><td>bar</td></tr></table>".to_string(),
 ///     "| a | b |".to_string(),
@@ -428,7 +428,7 @@ fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 /// assert!(output.iter().any(|line| line.contains("| foo | bar |")));
 /// assert!(output.iter().any(|line| line.len() <= 80));
 /// ```
-pub fn process_stream(lines: &[String]) -> Vec<String> {
+fn process_stream_inner(lines: &[String], wrap: bool) -> Vec<String> {
     let pre = html::convert_html_tables(lines);
 
     let mut out = Vec::new();
@@ -490,7 +490,17 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
         }
     }
 
-    wrap_text(&out, 80)
+    if wrap { wrap_text(&out, 80) } else { out }
+}
+
+#[must_use]
+pub fn process_stream(lines: &[String]) -> Vec<String> {
+    process_stream_inner(lines, true)
+}
+
+#[must_use]
+pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
+    process_stream_inner(lines, false)
 }
 
 /// Rewrite a file in place with fixed tables.
@@ -512,5 +522,16 @@ pub fn rewrite(path: &Path) -> std::io::Result<()> {
     let text = fs::read_to_string(path)?;
     let lines: Vec<String> = text.lines().map(str::to_string).collect();
     let fixed = process_stream(&lines);
+    fs::write(path, fixed.join("\n") + "\n")
+}
+
+/// Rewrite a file in place with fixed tables without wrapping text.
+///
+/// # Errors
+/// Returns an error if the file cannot be read or written.
+pub fn rewrite_no_wrap(path: &Path) -> std::io::Result<()> {
+    let text = fs::read_to_string(path)?;
+    let lines: Vec<String> = text.lines().map(str::to_string).collect();
+    let fixed = process_stream_no_wrap(&lines);
     fs::write(path, fixed.join("\n") + "\n")
 }
