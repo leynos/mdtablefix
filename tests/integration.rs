@@ -461,3 +461,29 @@ fn test_convert_html_table_bold_header() {
         .collect();
     assert_eq!(convert_html_tables(&input), expected);
 }
+
+#[test]
+fn test_logical_type_table_output_matches() {
+    let input: Vec<String> = include_str!("data/logical_type_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/logical_type_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(reflow_table(&input), expected);
+}
+
+#[test]
+fn test_option_table_output_matches() {
+    let input: Vec<String> = include_str!("data/option_table_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/option_table_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(reflow_table(&input), expected);
+}
