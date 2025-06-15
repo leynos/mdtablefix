@@ -220,8 +220,7 @@ fn push_html_line(
 /// let md_lines = html_table_to_markdown(&html_lines);
 /// assert!(md_lines[0].starts_with("| Header |"));
 /// ```
-#[doc(hidden)]
-pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
+pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf = Vec::new();
     let mut depth = 0usize;

@@ -2,7 +2,7 @@ use clap::Parser;
 use mdtablefix::{process_stream, process_stream_no_wrap, rewrite, rewrite_no_wrap};
 use std::fs;
 use std::io::{self, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(about = "Reflow broken markdown tables")]
@@ -15,6 +15,22 @@ struct Cli {
     wrap: bool,
     /// Markdown files to fix
     files: Vec<PathBuf>,
+}
+
+fn process_lines(lines: &[String], wrap: bool) -> Vec<String> {
+    if wrap {
+        process_stream(lines)
+    } else {
+        process_stream_no_wrap(lines)
+    }
+}
+
+fn rewrite_path(path: &Path, wrap: bool) -> std::io::Result<()> {
+    if wrap {
+        rewrite(path)
+    } else {
+        rewrite_no_wrap(path)
+    }
 }
 
 /// Entry point for the command-line tool that reflows broken markdown tables.
@@ -44,30 +60,18 @@ fn main() -> anyhow::Result<()> {
         let mut input = String::new();
         io::stdin().read_to_string(&mut input)?;
         let lines: Vec<String> = input.lines().map(str::to_string).collect();
-        let fixed = if cli.wrap {
-            process_stream(&lines)
-        } else {
-            process_stream_no_wrap(&lines)
-        };
+        let fixed = process_lines(&lines, cli.wrap);
         println!("{}", fixed.join("\n"));
         return Ok(());
     }
 
     for path in cli.files {
         if cli.in_place {
-            if cli.wrap {
-                rewrite(&path)?;
-            } else {
-                rewrite_no_wrap(&path)?;
-            }
+            rewrite_path(&path, cli.wrap)?;
         } else {
             let content = fs::read_to_string(&path)?;
             let lines: Vec<String> = content.lines().map(str::to_string).collect();
-            let fixed = if cli.wrap {
-                process_stream(&lines)
-            } else {
-                process_stream_no_wrap(&lines)
-            };
+            let fixed = process_lines(&lines, cli.wrap);
             println!("{}", fixed.join("\n"));
         }
     }

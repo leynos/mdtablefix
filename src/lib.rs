@@ -7,7 +7,10 @@
 mod html;
 
 #[doc(hidden)]
-pub use html::html_table_to_markdown;
+#[must_use]
+pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
+    html::html_table_to_markdown(lines)
+}
 
 pub use html::convert_html_tables;
 

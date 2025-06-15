@@ -299,7 +299,9 @@ fn test_cli_process_file(broken_table: Vec<String>) {
 
 #[test]
 fn test_cli_wrap_option() {
-    let input = "This line is long enough to require wrapping when the option is enabled.";
+    let input = "This line is deliberately made much longer than eighty columns so that \
+                 the wrapping algorithm is forced to insert a soft line-break somewhere \
+                 in the middle of the paragraph when the --wrap flag is supplied.";
     let output = Command::cargo_bin("mdtablefix")
         .unwrap()
         .arg("--wrap")
@@ -308,8 +310,8 @@ fn test_cli_wrap_option() {
         .unwrap();
     assert!(output.status.success());
     let text = String::from_utf8_lossy(&output.stdout);
-    assert!(text.contains('\n'));
-    assert!(text.contains("This line"));
+    assert!(text.lines().count() > 1, "expected wrapped output on multiple lines");
+    assert!(text.lines().all(|l| l.len() <= 80));
 }
 
 #[test]
