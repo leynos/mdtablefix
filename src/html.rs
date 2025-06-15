@@ -91,6 +91,22 @@ fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
     }
 }
 
+/// Returns `true` if `handle` contains a `<b>` or `<strong>` descendant.
+fn contains_strong(handle: &Handle) -> bool {
+    if let NodeData::Element { name, .. } = &handle.data {
+        let tag = name.local.as_ref();
+        if tag.eq_ignore_ascii_case("strong") || tag.eq_ignore_ascii_case("b") {
+            return true;
+        }
+    }
+    for child in handle.children.borrow().iter() {
+        if contains_strong(child) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Converts a `<table>` DOM node into Markdown table lines and calls
 /// `reflow_table` so the columns are uniformly padded.
 fn table_node_to_markdown(table: &Handle) -> Vec<String> {
@@ -109,7 +125,12 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
         for child in row.children.borrow().iter() {
             if let NodeData::Element { name, .. } = &child.data {
                 if name.local.as_ref() == "td" || name.local.as_ref() == "th" {
-                    all_header &= name.local.as_ref() == "th";
+                    let is_header = if name.local.as_ref() == "th" {
+                        true
+                    } else {
+                        contains_strong(child)
+                    };
+                    all_header &= is_header;
                     cells.push(node_text(child));
                 }
             }
