@@ -19,7 +19,7 @@ use textwrap::fill;
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use mdtablefix::split_cells;
 /// let line = "| cell1 | cell2 | cell3 |";
 /// let cells = split_cells(line);
@@ -102,7 +102,7 @@ fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String>
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use mdtablefix::reflow_table;
 /// let lines = vec![
 ///     "| a | b |".to_string(),
@@ -223,7 +223,7 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use mdtablefix::process_stream;
 /// let input = vec![
 ///     "| a | b |".to_string(),
@@ -249,7 +249,7 @@ static FENCE_RE: std::sync::LazyLock<Regex> =
 static BULLET_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
 
-/// Returns `true` if the line is a fenced code block delimiter (e.g., \`\`\` or `~~~`).
+/// Returns `true` if the line is a fenced code block delimiter (e.g., three backticks or "~~~").
 ///
 /// # Examples
 ///
@@ -505,7 +505,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use std::path::Path;
 /// use mdtablefix::rewrite;
 /// let path = Path::new("example.md");
