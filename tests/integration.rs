@@ -199,13 +199,13 @@ fn test_process_stream_html_table_mixed_case(html_table_mixed_case: Vec<String>)
 
 #[rstest]
 fn test_process_stream_multiple_tables(multiple_tables: Vec<String>) {
-    let expected = vec![
-        "| A | B  |".to_string(),
-        "| 1 | 22 |".to_string(),
+    let expected = lines_vec!(
+        "| A | B  |",
+        "| 1 | 22 |",
         String::new(),
-        "| X | Y |".to_string(),
-        "| 3 | 4 |".to_string(),
-    ];
+        "| X | Y |",
+        "| 3 | 4 |",
+    );
     assert_eq!(process_stream(&multiple_tables), expected);
 }
 
@@ -214,19 +214,11 @@ fn test_process_stream_multiple_tables(multiple_tables: Vec<String>) {
 /// Verifies that both backtick (```) and tilde (~~~) fenced code blocks are ignored by the table processing logic, ensuring their contents are not altered.
 #[rstest]
 fn test_process_stream_ignores_code_fences() {
-    let lines = vec![
-        "```rust".to_string(),
-        "| not | a | table |".to_string(),
-        "```".to_string(),
-    ];
+    let lines = lines_vec!("```rust", "| not | a | table |", "```");
     assert_eq!(process_stream(&lines), lines);
 
     // Test with tilde-based code fences
-    let tilde_lines = vec![
-        "~~~".to_string(),
-        "| not | a | table |".to_string(),
-        "~~~".to_string(),
-    ];
+    let tilde_lines = lines_vec!("~~~", "| not | a | table |", "~~~");
     assert_eq!(process_stream(&tilde_lines), tilde_lines);
 }
 
