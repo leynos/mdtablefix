@@ -853,6 +853,9 @@ Good fixture and test organization mirrors good software design principles. As t
 - **Scope Management (**`#[once]` **vs. Regular):** Make conscious decisions about fixture lifetimes. Use `#[once]` sparingly, only for genuinely expensive, read-only, and safely static resources, being mindful of its "never dropped" nature.12 Prefer regular (per-test) fixtures for test isolation and proper resource management.
 - **Modularity:** Group related fixtures and tests into modules. This improves navigation and understanding of the test suite.
 - **Readability:** Utilize features like `#[from]` for renaming 12 and `#[default]` / `#[with]` for configurable fixtures to enhance the clarity of both fixture definitions and their usage in tests.
+- **Utility Macros:** The integration tests define a `lines_vec!` macro for
+  quickly building `Vec<String>` from string slices. Use it in fixtures to
+  avoid repetitive `.to_string()` calls.
 
 General testing advice, such as keeping tests small and focused and mocking external dependencies 17, also applies and is well-supported by `rstest`'s design.
 
