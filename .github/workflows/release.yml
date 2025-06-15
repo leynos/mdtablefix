@@ -56,11 +56,16 @@ jobs:
             ext: ""
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - uses: actions-rs/toolchain@v1.3.0
         with:
           toolchain: stable
           profile: minimal
           override: true
+      - name: Cache cross binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cross
+          key: cross-v0.2.1-${{ runner.os }}
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross --tag v0.2.1
       - name: Cache cargo registry
@@ -77,14 +82,16 @@ jobs:
         run: cross build --release --target ${{ matrix.target }}
       - name: Prepare artifact
         run: |
-          mkdir -p artifacts
+          mkdir -p artifacts/${{ matrix.os }}-${{ matrix.arch }}
           cp target/${{ matrix.target }}/release/${{ env.REPO_NAME }}${{ matrix.ext }} \
-            artifacts/${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+            artifacts/${{ matrix.os }}-${{ matrix.arch }}/${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          sha256sum artifacts/${{ matrix.os }}-${{ matrix.arch }}/${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} > \
+            artifacts/${{ matrix.os }}-${{ matrix.arch }}/${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}.sha256
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}
-          path: artifacts/${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          path: artifacts/${{ matrix.os }}-${{ matrix.arch }}
 
   release:
     needs: build
@@ -98,8 +105,10 @@ jobs:
         with:
           path: artifacts
       - run: |
-          for file in artifacts/${{ env.REPO_NAME }}-*; do
-            gh release upload "${{ github.ref_name }}" "$file"
+          for dir in artifacts/${{ env.REPO_NAME }}-*; do
+            for file in "$dir"/*; do
+              gh release upload "${{ github.ref_name }}" "$file"
+            done
           done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
