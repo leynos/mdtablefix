@@ -99,7 +99,8 @@ fn contains_strong(handle: &Handle) -> bool {
             return true;
         }
     }
-    handle.children.borrow().iter().any(contains_strong)
+    let children = handle.children.borrow();
+    children.iter().any(contains_strong)
 }
 
 /// Converts a `<table>` DOM node into Markdown table lines and calls
