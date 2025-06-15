@@ -493,6 +493,42 @@ fn test_option_table_output_matches() {
 }
 
 #[test]
+/// Tests that `process_stream` correctly processes a complex Markdown table representing logical types by comparing its output to expected results loaded from a file.
+fn test_process_stream_logical_type_table() {
+    let input: Vec<String> = include_str!("data/logical_type_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/logical_type_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(process_stream(&input), expected);
+}
+
+#[test]
+/// Tests that `process_stream` correctly processes a Markdown table with options, producing the expected output.
+///
+/// Loads input and expected output from test data files, runs `process_stream` on the input, and asserts equality.
+///
+/// # Examples
+///
+/// ```
+/// test_process_stream_option_table();
+/// ```
+fn test_process_stream_option_table() {
+    let input: Vec<String> = include_str!("data/option_table_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/option_table_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(process_stream(&input), expected);
+}
+
+#[test]
 /// Tests that long paragraphs are wrapped at 80 columns by `process_stream`.
 ///
 /// Ensures that a single long paragraph is split into multiple lines, each not exceeding 80 characters.
