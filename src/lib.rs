@@ -253,19 +253,33 @@ pub(crate) fn is_fence(line: &str) -> bool {
     FENCE_RE.is_match(line)
 }
 
-fn flush_paragraph(out: &mut Vec<String>, buf: &[String], indent: &str, width: usize) {
+fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, width: usize) {
     if buf.is_empty() {
         return;
     }
-    let text = buf.join(" ");
-    for line in fill(&text, width - indent.len()).lines() {
-        out.push(format!("{indent}{line}"));
+    let mut segment = String::new();
+    for (text, hard_break) in buf {
+        if !segment.is_empty() {
+            segment.push(' ');
+        }
+        segment.push_str(text);
+        if *hard_break {
+            for line in fill(&segment, width - indent.len()).lines() {
+                out.push(format!("{indent}{line}"));
+            }
+            segment.clear();
+        }
+    }
+    if !segment.is_empty() {
+        for line in fill(&segment, width - indent.len()).lines() {
+            out.push(format!("{indent}{line}"));
+        }
     }
 }
 
 fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
-    let mut buf: Vec<String> = Vec::new();
+    let mut buf: Vec<(String, bool)> = Vec::new();
     let mut indent = String::new();
     let mut in_code = false;
 
@@ -314,8 +328,13 @@ fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             indent.clear();
             let prefix = cap.get(1).unwrap().as_str();
             let rest = cap.get(2).unwrap().as_str().trim();
-            for l in fill(rest, width - prefix.len()).lines() {
-                out.push(format!("{prefix}{l}"));
+            let spaces = " ".repeat(prefix.len());
+            for (i, l) in fill(rest, width - prefix.len()).lines().enumerate() {
+                if i == 0 {
+                    out.push(format!("{prefix}{l}"));
+                } else {
+                    out.push(format!("{spaces}{l}"));
+                }
             }
             continue;
         }
@@ -323,7 +342,19 @@ fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
         if buf.is_empty() {
             indent = line.chars().take_while(|c| c.is_whitespace()).collect();
         }
-        buf.push(line.trim().to_string());
+        let trimmed_end = line.trim_end();
+        let hard_break = line.ends_with("  ")
+            || trimmed_end.ends_with("<br>")
+            || trimmed_end.ends_with("<br/>")
+            || trimmed_end.ends_with("<br />");
+        let text = trimmed_end
+            .trim_end_matches("<br>")
+            .trim_end_matches("<br/>")
+            .trim_end_matches("<br />")
+            .trim_end_matches(' ')
+            .trim_start()
+            .to_string();
+        buf.push((text, hard_break));
     }
 
     flush_paragraph(&mut out, &buf, &indent, width);
@@ -350,12 +381,12 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
                 buf.clear();
             }
             in_code = !in_code;
-            out.push(line.trim_end().to_string());
+            out.push(line.to_string());
             continue;
         }
 
         if in_code {
-            out.push(line.trim_end().to_string());
+            out.push(line.to_string());
             continue;
         }
 
@@ -377,7 +408,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
             in_table = false;
         }
 
-        out.push(line.trim_end().to_string());
+        out.push(line.to_string());
     }
 
     if !buf.is_empty() {

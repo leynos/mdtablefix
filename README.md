@@ -1,7 +1,7 @@
 # mdtablefix
 
 `mdtablefix` reflows Markdown tables so that each column has a uniform width.
-It also wraps paragraphs and list items at 80 columns.
+It also wraps paragraphs and list items to 80 columns.
 The tool ignores fenced code blocks and respects escaped pipes (`\|`),
 making it safe for mixed content.
 

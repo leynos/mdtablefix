@@ -509,8 +509,23 @@ prefix formatting intact."
     ];
     let output = process_stream(&input);
     assert!(output.len() > 1);
+    assert!(output[0].starts_with("- "));
     for line in &output {
         assert!(line.len() <= 80);
-        assert!(line.starts_with("- "));
     }
+    for line in output.iter().skip(1) {
+        assert!(line.starts_with("  "));
+    }
+}
+
+#[test]
+fn test_preserve_hard_line_breaks() {
+    let input = vec![
+        "Line one with break.  ".to_string(),
+        "Line two follows.".to_string(),
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output.len(), 2);
+    assert_eq!(output[0], "Line one with break.");
+    assert_eq!(output[1], "Line two follows.");
 }
