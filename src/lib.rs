@@ -5,6 +5,7 @@
 //! callers can convert simple HTML tables before reflowing.
 
 mod html;
+mod reflow;
 
 pub use html::convert_html_tables;
 
@@ -114,9 +115,7 @@ fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String>
 ///     "| c | d |".to_string(),
 /// ]);
 /// ```
-static SENTINEL_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").unwrap());
-static SEP_RE: std::sync::LazyLock<Regex> =
+pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
 
 #[must_use]
@@ -134,54 +133,15 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
     let sep_idx = trimmed.iter().position(|l| SEP_RE.is_match(l));
     let sep_line = sep_idx.map(|idx| trimmed.remove(idx));
 
-    let raw = trimmed.join(" ");
-    let chunks: Vec<&str> = SENTINEL_RE.split(&raw).collect();
-    let split_within_line = chunks.len() > trimmed.len();
-    let mut cells = Vec::new();
-    for (idx, chunk) in chunks.iter().enumerate() {
-        let mut ch = (*chunk).to_string();
-        if idx != chunks.len() - 1 {
-            ch = ch.trim_end().to_string() + " |ROW_END|";
-        }
-        cells.extend(split_cells(&ch));
-    }
-
-    let mut rows = Vec::new();
-    let mut current = Vec::new();
-    for cell in cells {
-        if cell == "ROW_END" {
-            if !current.is_empty() {
-                rows.push(current);
-                current = Vec::new();
-            }
-        } else {
-            current.push(cell);
-        }
-    }
-    if !current.is_empty() {
-        rows.push(current);
-    }
+    let (rows, split_within_line) = reflow::parse_rows(&trimmed);
 
     // Count every cell, even if it is empty, to preserve column
     // positions when checking for consistency across rows.
     let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
 
-    let mut sep_cells: Option<Vec<String>> = sep_line.as_deref().map(split_cells);
-    let mut sep_row_idx: Option<usize> = None;
-    let sep_invalid = match sep_cells.as_ref() {
-        Some(c) => c.len() != max_cols,
-        None => true,
-    };
-    if sep_invalid && rows.len() > 1 && rows[1].iter().all(|c| SEP_RE.is_match(c)) {
-        sep_cells = Some(rows[1].clone());
-        sep_row_idx = Some(1);
-    }
+    let (sep_cells, sep_row_idx) = reflow::detect_separator(sep_line.as_ref(), &rows, max_cols);
 
-    let mut cleaned = Vec::new();
-    for mut row in rows {
-        row.retain(|c| !c.is_empty());
-        cleaned.push(row);
-    }
+    let cleaned = reflow::clean_rows(rows);
 
     let mut output_rows = cleaned.clone();
     if let Some(idx) = sep_row_idx {
@@ -201,40 +161,11 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         }
     }
 
-    let mut widths = vec![0; max_cols];
-    for row in &cleaned {
-        for (idx, cell) in row.iter().enumerate() {
-            widths[idx] = widths[idx].max(cell.len());
-        }
-    }
+    let widths = reflow::calculate_widths(&cleaned, max_cols);
 
-    let out: Vec<String> = output_rows
-        .into_iter()
-        .map(|row| {
-            let padded: Vec<String> = row
-                .into_iter()
-                .enumerate()
-                .map(|(i, c)| format!("{:<width$}", c, width = widths[i]))
-                .collect();
-            format!("{}| {} |", indent, padded.join(" | "))
-        })
-        .collect();
+    let out = reflow::format_rows(output_rows, &widths, &indent);
 
-    if let Some(mut cells) = sep_cells {
-        while cells.len() < widths.len() {
-            cells.push(String::new());
-        }
-        let sep_padded = format_separator_cells(&widths, &cells);
-        let sep_line_out = format!("{}| {} |", indent, sep_padded.join(" | "));
-        if let Some(first) = out.first().cloned() {
-            let mut with_sep = vec![first, sep_line_out];
-            with_sep.extend(out.into_iter().skip(1));
-            return with_sep;
-        }
-        return vec![sep_line_out];
-    }
-
-    out
+    reflow::insert_separator(out, sep_cells, &widths, &indent)
 }
 
 /// Processes a stream of markdown lines, reflowing tables while preserving code blocks and other content.
