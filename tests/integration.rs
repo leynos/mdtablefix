@@ -448,3 +448,16 @@ fn test_convert_html_table_unclosed_returns_original() {
     let html = html_table_unclosed();
     assert_eq!(convert_html_tables(&html), html);
 }
+
+#[test]
+fn test_convert_html_table_bold_header() {
+    let input: Vec<String> = include_str!("data/bold_header_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/bold_header_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(convert_html_tables(&input), expected);
+}
