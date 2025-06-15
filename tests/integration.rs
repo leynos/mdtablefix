@@ -476,6 +476,10 @@ fn test_logical_type_table_output_matches() {
 }
 
 #[test]
+/// Verifies that reflowing the option table input produces the expected output.
+///
+/// Loads the input and expected output from external files and asserts that the
+/// `reflow_table` function transforms the input table to match the expected result.
 fn test_option_table_output_matches() {
     let input: Vec<String> = include_str!("data/option_table_input.txt")
         .lines()
@@ -489,6 +493,9 @@ fn test_option_table_output_matches() {
 }
 
 #[test]
+/// Tests that long paragraphs are wrapped at 80 columns by `process_stream`.
+///
+/// Ensures that a single long paragraph is split into multiple lines, each not exceeding 80 characters.
 fn test_wrap_paragraph() {
     let input = vec![
         "This is a very long paragraph that should be wrapped at eighty columns \
@@ -518,6 +525,17 @@ fn test_wrap_list_item() {
 }
 
 #[test]
+/// Verifies that short list items are not wrapped or altered by the stream processing logic.
+///
+/// Ensures that a single-line bullet list item remains unchanged after processing.
+///
+/// # Examples
+///
+/// ```
+/// let input = vec!["- short item".to_string()];
+/// let output = process_stream(&input);
+/// assert_eq!(output, input);
+/// ```
 fn test_wrap_short_list_item() {
     let input = vec!["- short item".to_string()];
     let output = process_stream(&input);
@@ -525,6 +543,9 @@ fn test_wrap_short_list_item() {
 }
 
 #[test]
+/// Tests that lines with hard line breaks (trailing spaces) are preserved after processing.
+///
+/// Ensures that the `process_stream` function does not remove or alter lines ending with Markdown hard line breaks.
 fn test_preserve_hard_line_breaks() {
     let input = vec![
         "Line one with break.  ".to_string(),
