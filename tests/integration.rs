@@ -493,6 +493,32 @@ fn test_option_table_output_matches() {
 }
 
 #[test]
+fn test_process_stream_logical_type_table() {
+    let input: Vec<String> = include_str!("data/logical_type_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/logical_type_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(process_stream(&input), expected);
+}
+
+#[test]
+fn test_process_stream_option_table() {
+    let input: Vec<String> = include_str!("data/option_table_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/option_table_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(process_stream(&input), expected);
+}
+
+#[test]
 /// Tests that long paragraphs are wrapped at 80 columns by `process_stream`.
 ///
 /// Ensures that a single long paragraph is split into multiple lines, each not exceeding 80 characters.

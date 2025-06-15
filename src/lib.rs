@@ -464,6 +464,11 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
             continue;
         }
 
+        if in_table && !line.trim().is_empty() {
+            buf.push(line.trim_end().to_string());
+            continue;
+        }
+
         if !buf.is_empty() {
             if in_table {
                 out.extend(reflow_table(&buf));
