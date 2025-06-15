@@ -1,7 +1,8 @@
 # mdtablefix
 
 `mdtablefix` reflows Markdown tables so that each column has a uniform width.
-It also wraps paragraphs and list items to 80 columns.
+It can wrap paragraphs and list items to 80 columns when the `--wrap` option is
+used.
 The tool ignores fenced code blocks and respects escaped pipes (`\|`),
 making it safe for mixed content.
 
@@ -20,10 +21,11 @@ cargo install --path .
 ## Command-line usage
 
 ```bash
-mdtablefix [--in-place] [FILE...]
+mdtablefix [--wrap] [--in-place] [FILE...]
 ```
 
 - With file paths provided, the corrected tables are printed to stdout.
+- Use `--wrap` to also reflow paragraphs and list items to 80 columns.
 - Use `--in-place` to overwrite files.
 - If no files are supplied, input is read from stdin and results are written to stdout.
 

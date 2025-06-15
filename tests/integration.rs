@@ -274,6 +274,23 @@ fn test_cli_process_file(broken_table: Vec<String>) {
 }
 
 #[test]
+fn test_cli_wrap_option() {
+    let input = "This line is deliberately made much longer than eighty columns so that \
+                 the wrapping algorithm is forced to insert a soft line-break somewhere \
+                 in the middle of the paragraph when the --wrap flag is supplied.";
+    let output = Command::cargo_bin("mdtablefix")
+        .unwrap()
+        .arg("--wrap")
+        .write_stdin(format!("{input}\n"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.lines().count() > 1, "expected wrapped output on multiple lines");
+    assert!(text.lines().all(|l| l.len() <= 80));
+}
+
+#[test]
 fn test_uniform_example_one() {
     let input = vec![
         "| Logical type | PostgreSQL | SQLite notes |".to_string(),
