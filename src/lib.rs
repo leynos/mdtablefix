@@ -250,6 +250,28 @@ pub(crate) fn is_fence(line: &str) -> bool {
 }
 
 #[must_use]
+/// Processes a sequence of markdown lines, reflowing tables and preserving code blocks.
+///
+/// Converts simple HTML tables to markdown, detects and reflows markdown tables for consistent alignment, and leaves code blocks and other content unchanged. Table reflow is skipped within fenced code blocks.
+///
+/// # Examples
+///
+/// ```
+/// let input = vec![
+///     "| a | b |",
+///     "|---|---|",
+///     "| 1 | 2 |",
+///     "",
+///     "Some text.",
+///     "```",
+///     "| not | a | table |",
+///     "```",
+/// ].into_iter().map(String::from).collect::<Vec<_>>();
+/// let output = process_stream(&input);
+/// assert!(output.iter().any(|line| line.contains("| a   | b   |")));
+/// assert!(output.iter().any(|line| line == "Some text."));
+/// assert!(output.iter().any(|line| line == "```"));
+/// ```
 pub fn process_stream(lines: &[String]) -> Vec<String> {
     let pre = html::convert_html_tables(lines);
 
