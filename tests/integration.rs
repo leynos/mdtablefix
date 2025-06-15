@@ -286,7 +286,10 @@ fn test_cli_wrap_option() {
         .unwrap();
     assert!(output.status.success());
     let text = String::from_utf8_lossy(&output.stdout);
-    assert!(text.lines().count() > 1, "expected wrapped output on multiple lines");
+    assert!(
+        text.lines().count() > 1,
+        "expected wrapped output on multiple lines"
+    );
     assert!(text.lines().all(|l| l.len() <= 80));
 }
 
