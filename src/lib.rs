@@ -210,7 +210,6 @@ static FENCE_RE: std::sync::LazyLock<Regex> =
 static BULLET_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
 
-
 /// Returns `true` if the line is a fenced code block delimiter (e.g., three backticks or "~~~").
 ///
 /// # Examples
