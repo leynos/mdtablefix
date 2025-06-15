@@ -1,0 +1,6 @@
+| Offset | Size (bytes) | Field               | Meaning                                                                          |
+| -----: | ------------ | ------------------- | -------------------------------------------------------------------------------- |
+| 0      | 4            | **Protocol ID**     | ASCII **"TRTP"** (0x54 52 54 50). Distinguishes Hotline from other TCP services. |
+| 4      | 4            | **Sub-protocol ID** | Application-specific tag (e.g. "CHAT", "FILE"). Can be 0.                        |
+| 8      | 2            | **Version**         | Currently **0x0001**. A server should refuse versions it does not understand.    |
+| 10     | 2            | **Sub-version**     | Application-defined; often used for build/revision numbers.                      |

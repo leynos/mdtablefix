@@ -126,7 +126,11 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
     }
 
     let indent: String = lines[0].chars().take_while(|c| c.is_whitespace()).collect();
-    let mut trimmed: Vec<String> = lines.iter().map(|l| l.trim().to_string()).collect();
+    let mut trimmed: Vec<String> = lines
+        .iter()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.trim_start().starts_with("\\-"))
+        .collect();
     let sep_idx = trimmed.iter().position(|l| SEP_RE.is_match(l));
     let sep_line = sep_idx.map(|idx| trimmed.remove(idx));
 
@@ -162,15 +166,36 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
     // positions when checking for consistency across rows.
     let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
 
+    let mut sep_cells: Option<Vec<String>> = sep_line.as_deref().map(split_cells);
+    let mut sep_row_idx: Option<usize> = None;
+    let sep_invalid = match sep_cells.as_ref() {
+        Some(c) => c.len() != max_cols,
+        None => true,
+    };
+    if sep_invalid && rows.len() > 1 && rows[1].iter().all(|c| SEP_RE.is_match(c)) {
+        sep_cells = Some(rows[1].clone());
+        sep_row_idx = Some(1);
+    }
+
     let mut cleaned = Vec::new();
     for mut row in rows {
         row.retain(|c| !c.is_empty());
         cleaned.push(row);
     }
 
+    let mut output_rows = cleaned.clone();
+    if let Some(idx) = sep_row_idx {
+        if idx < output_rows.len() {
+            output_rows.remove(idx);
+        }
+    }
+
     if !split_within_line {
         if let Some(first_len) = cleaned.first().map(Vec::len) {
-            if cleaned[1..].iter().any(|row| row.len() != first_len) {
+            let mismatch = cleaned[1..]
+                .iter()
+                .any(|row| row.len() != first_len && !row.iter().all(|c| SEP_RE.is_match(c)));
+            if mismatch {
                 return lines.to_vec();
             }
         }
@@ -183,7 +208,7 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         }
     }
 
-    let out: Vec<String> = cleaned
+    let out: Vec<String> = output_rows
         .into_iter()
         .map(|row| {
             let padded: Vec<String> = row
@@ -195,12 +220,11 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         })
         .collect();
 
-    if let Some(sep) = sep_line {
-        let mut sep_cells: Vec<String> = split_cells(&sep);
-        while sep_cells.len() < widths.len() {
-            sep_cells.push(String::new());
+    if let Some(mut cells) = sep_cells {
+        while cells.len() < widths.len() {
+            cells.push(String::new());
         }
-        let sep_padded = format_separator_cells(&widths, &sep_cells);
+        let sep_padded = format_separator_cells(&widths, &cells);
         let sep_line_out = format!("{}| {} |", indent, sep_padded.join(" | "));
         if let Some(first) = out.first().cloned() {
             let mut with_sep = vec![first, sep_line_out];

@@ -1,0 +1,14 @@
+| Month       | Seconds    |
+| ----------- | ---------: |
+| January     | 0          |
+| February    | 2,678,400  |
+| March       | 5,097,600  |
+| April       | 7,776,000  |
+| May         | 10,368,000 |
+| June        | 13,046,400 |
+| July        | 15,638,400 |
+| August      | 18,316,800 |
+| September   | 20,995,200 |
+| October     | 23,587,200 |
+| November    | 26,265,600 |
+| December    | 28,857,600 |
