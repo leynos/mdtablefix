@@ -5,12 +5,8 @@ use std::fs::File;
 use std::io::Write;
 use tempfile::tempdir;
 
-/// Builds a `Vec<String>` from string slices.
-macro_rules! lines_vec {
-    ($($line:expr),* $(,)?) => {
-        vec![$($line.to_string()),*]
-    };
-}
+#[macro_use]
+mod common;
 
 #[fixture]
 /// Provides a sample Markdown table with broken rows for testing purposes.

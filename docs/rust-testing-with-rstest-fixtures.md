@@ -857,6 +857,13 @@ Good fixture and test organization mirrors good software design principles. As t
   quickly building `Vec<String>` from string slices. Use it in fixtures to
   avoid repetitive `.to_string()` calls.
 
+```rust
+#[fixture]
+fn example_table() -> Vec<String> {
+    lines_vec!("a", "b", "c")
+}
+```
+
 General testing advice, such as keeping tests small and focused and mocking external dependencies 17, also applies and is well-supported by `rstest`'s design.
 
 ## IX. `rstest` in Context: Comparison and Considerations
