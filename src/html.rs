@@ -212,7 +212,8 @@ fn push_html_line(
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
+/// use mdtablefix::html::html_table_to_markdown;
 /// let html_lines = vec![
 ///     "<table><tr><th>Header</th></tr><tr><td>Cell</td></tr></table>".to_string()
 /// ];
@@ -259,7 +260,8 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
+/// use mdtablefix::html::convert_html_tables;
 /// let lines = vec![
 ///     "<table>".to_string(),
 ///     "  <tr><th>Header</th></tr>".to_string(),
