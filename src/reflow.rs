@@ -13,6 +13,14 @@ pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
     let raw = trimmed.join(" ");
     let chunks: Vec<&str> = SENTINEL_RE.split(&raw).collect();
     let split_within_line = chunks.len() > trimmed.len();
+
+    let cells = collect_cells(&chunks);
+    let rows = split_into_rows(cells);
+
+    (rows, split_within_line)
+}
+
+fn collect_cells(chunks: &[&str]) -> Vec<String> {
     let mut cells = Vec::new();
     for (idx, chunk) in chunks.iter().enumerate() {
         let mut ch = (*chunk).to_string();
@@ -21,13 +29,16 @@ pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
         }
         cells.extend(split_cells(&ch));
     }
+    cells
+}
+
+fn split_into_rows(cells: Vec<String>) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     let mut current = Vec::new();
     for cell in cells {
         if cell == "ROW_END" {
             if !current.is_empty() {
-                rows.push(current);
-                current = Vec::new();
+                rows.push(std::mem::take(&mut current));
             }
         } else {
             current.push(cell);
@@ -36,7 +47,7 @@ pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
     if !current.is_empty() {
         rows.push(current);
     }
-    (rows, split_within_line)
+    rows
 }
 
 pub(crate) fn clean_rows(rows: Vec<Vec<String>>) -> Vec<Vec<String>> {
@@ -100,13 +111,23 @@ pub(crate) fn detect_separator(
 ) -> (Option<Vec<String>>, Option<usize>) {
     let mut sep_cells: Option<Vec<String>> = sep_line.map(|l| split_cells(l));
     let mut sep_row_idx: Option<usize> = None;
-    let sep_invalid = match sep_cells.as_ref() {
-        Some(c) => c.len() != max_cols,
-        None => true,
-    };
-    if sep_invalid && rows.len() > 1 && rows[1].iter().all(|c| crate::SEP_RE.is_match(c)) {
+
+    let sep_invalid = invalid_separator(sep_cells.as_ref(), max_cols);
+    if sep_invalid && second_row_is_separator(rows) {
         sep_cells = Some(rows[1].clone());
         sep_row_idx = Some(1);
     }
+
     (sep_cells, sep_row_idx)
+}
+
+fn invalid_separator(sep_cells: Option<&Vec<String>>, max_cols: usize) -> bool {
+    match sep_cells {
+        Some(c) => c.len() != max_cols,
+        None => true,
+    }
+}
+
+fn second_row_is_separator(rows: &[Vec<String>]) -> bool {
+    rows.len() > 1 && rows[1].iter().all(|c| crate::SEP_RE.is_match(c))
 }
