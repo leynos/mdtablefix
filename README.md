@@ -1,10 +1,9 @@
 # mdtablefix
 
-`mdtablefix` reflows Markdown tables so that each column has a uniform width.
-It can wrap paragraphs and list items to 80 columns when the `--wrap` option is
-used.
-The tool ignores fenced code blocks and respects escaped pipes (`\|`),
-making it safe for mixed content.
+`mdtablefix` unb0rks and reflows Markdown tables so that each column has a
+uniform width. It can wrap paragraphs and list items to 80 columns when the
+`--wrap` option is used. The tool ignores fenced code blocks and respects
+escaped pipes (`\|`), making it safe for mixed content.
 
 ## Installation
 
@@ -34,21 +33,19 @@ mdtablefix [--wrap] [--in-place] [FILE...]
 Before:
 
 ```markdown
-|Character|Catchphrase|Pizza count|
-|---|---|---|
-|Speedy Cerviche|Here come the Samurai Pizza Cats!|lots|
-|Guido Anchovy|Slice and dice!|tons|
+|Character|Catchphrase|Pizza count| |---|---|---| |Speedy Cerviche|Here
+come the Samurai Pizza Cats!|lots| |Guido Anchovy|Slice and dice!|tons|
 |Polly Esther|Cat fight!|many|
 ```
 
 After running `mdtablefix`:
 
 ```markdown
-| Character       | Catchphrase                         | Pizza count |
-| --------------- | ----------------------------------- | ----------- |
-| Speedy Cerviche | Here come the Samurai Pizza Cats!   | lots        |
-| Guido Anchovy   | Slice and dice!                     | tons        |
-| Polly Esther    | Cat fight!                          | many        |
+| Character       | Catchphrase                       | Pizza count |
+| --------------- | --------------------------------- | ----------- |
+| Speedy Cerviche | Here come the Samurai Pizza Cats! | lots        |
+| Guido Anchovy   | Slice and dice!                   | tons        |
+| Polly Esther    | Cat fight!                        | many        |
 ```
 
 ## Library usage
