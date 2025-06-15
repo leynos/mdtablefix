@@ -1,4 +1,5 @@
 //! Utility helpers shared across integration tests.
+
 /// Build a `Vec<String>` from a list of string slices.
 ///
 /// This macro is primarily used in tests to reduce boilerplate when
