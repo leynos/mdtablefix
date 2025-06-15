@@ -284,7 +284,6 @@ fn test_cli_wrap_option() {
         .write_stdin(format!("{input}\n"))
         .output()
         .unwrap();
-    
     assert!(output.status.success());
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(
