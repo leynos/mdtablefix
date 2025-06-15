@@ -264,6 +264,15 @@ static BULLET_RE: std::sync::LazyLock<Regex> =
 /// assert!(!is_fence("| foo | bar |"));
 /// ```
 #[doc(hidden)]
+/// Returns `true` if the line is a fenced code block delimiter (e.g., triple backticks or tildes).
+///
+/// # Examples
+///
+/// ```
+/// assert!(is_fence("```"));
+/// assert!(is_fence("~~~"));
+/// assert!(!is_fence("    code block"));
+/// ```
 pub fn is_fence(line: &str) -> bool {
     FENCE_RE.is_match(line)
 }
@@ -328,6 +337,32 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
 /// assert_eq!(wrapped[7], "```");
 /// ```
 #[doc(hidden)]
+/// Wraps markdown text lines to a specified width, preserving markdown structure.
+///
+/// This function wraps paragraphs and list items to the given width, while leaving code blocks, tables, headers, and blank lines unchanged. It preserves indentation, bullet or number prefixes for lists, and respects hard line breaks (two spaces or `<br>` tags).
+///
+/// # Parameters
+/// - `lines`: The input markdown lines to wrap.
+/// - `width`: The maximum line width for wrapping.
+///
+/// # Returns
+/// A vector of strings containing the wrapped markdown lines, with structure and formatting preserved.
+///
+/// # Examples
+///
+/// ```
+/// let input = vec![
+///     "This is a long paragraph that should be wrapped to a shorter width.".to_string(),
+///     "".to_string(),
+///     "```".to_string(),
+///     "let x = 42;".to_string(),
+///     "```".to_string(),
+/// ];
+/// let wrapped = wrap_text(&input, 20);
+/// assert!(wrapped[0].len() <= 20);
+/// assert_eq!(wrapped[2], "```");
+/// assert_eq!(wrapped[3], "let x = 42;");
+/// ```
 pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf: Vec<(String, bool)> = Vec::new();
@@ -436,7 +471,9 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 /// let output = process_stream(&input);
 /// assert!(output.iter().any(|line| line.contains("| foo | bar |")));
 /// assert!(output.iter().any(|line| line.len() <= 80));
-/// ```
+/// Processes a stream of markdown lines, converting HTML tables to markdown, reflowing markdown tables, and optionally wrapping text.
+///
+/// Converts simple HTML tables to markdown, detects and reflows markdown tables for consistent formatting, and preserves code blocks. If `wrap` is true, wraps the output text to 80 columns while maintaining markdown structure. Returns the processed lines as a vector of strings.
 fn process_stream_inner(lines: &[String], wrap: bool) -> Vec<String> {
     let pre = html::convert_html_tables(lines);
 
@@ -503,11 +540,39 @@ fn process_stream_inner(lines: &[String], wrap: bool) -> Vec<String> {
 }
 
 #[must_use]
+/// Processes markdown lines, fixing tables and wrapping text to 80 columns.
+///
+/// This function reflows markdown tables, converts HTML tables to markdown, and wraps text while preserving markdown structure such as code blocks and lists.
+///
+/// # Examples
+///
+/// ```
+/// let input = vec![
+///     "| a | b |".to_string(),
+///     "|---|---|".to_string(),
+///     "| 1 | 2 |".to_string(),
+///     "",
+///     "A paragraph that will be wrapped to fit within 80 columns.".to_string(),
+/// ];
+/// let output = process_stream(&input);
+/// assert!(output.iter().any(|line| line.contains("| a | b |")));
+/// ```
 pub fn process_stream(lines: &[String]) -> Vec<String> {
     process_stream_inner(lines, true)
 }
 
 #[must_use]
+/// Processes a stream of markdown lines, fixing tables and converting HTML tables, without wrapping text.
+///
+/// Returns the processed lines as a vector of strings.
+///
+/// # Examples
+///
+/// ```
+/// let input = vec![String::from("| a | b |"), String::from("|-|-|"), String::from("| 1 | 2 |")];
+/// let output = process_stream_no_wrap(&input);
+/// assert_eq!(output, vec![String::from("| a | b |"), String::from("| - | - |"), String::from("| 1 | 2 |")]);
+/// ```
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
     process_stream_inner(lines, false)
 }
@@ -526,6 +591,15 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 /// use mdtablefix::rewrite;
 /// let path = Path::new("example.md");
 /// rewrite(path).unwrap();
+/// Reads a markdown file, fixes tables and wraps text, then writes the updated content back to the same file.
+///
+/// Returns an I/O error if reading or writing the file fails.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::path::Path;
+/// rewrite(Path::new("README.md")).unwrap();
 /// ```
 pub fn rewrite(path: &Path) -> std::io::Result<()> {
     let text = fs::read_to_string(path)?;
@@ -537,6 +611,8 @@ pub fn rewrite(path: &Path) -> std::io::Result<()> {
 /// Rewrite a file in place with fixed tables without wrapping text.
 ///
 /// # Errors
+/// Processes a markdown file at the given path, fixing tables without wrapping text, and overwrites the file with the updated content.
+///
 /// Returns an error if the file cannot be read or written.
 pub fn rewrite_no_wrap(path: &Path) -> std::io::Result<()> {
     let text = fs::read_to_string(path)?;

@@ -36,6 +36,18 @@ struct Cli {
 ///
 /// # Fix tables from standard input
 /// cat myfile.md | mdtablefix
+/// Entry point for the command-line tool that reflows markdown tables and optionally wraps text.
+///
+/// Parses command-line arguments to determine input sources, output behaviour, and whether to wrap text. Processes either standard input or specified files, printing results to standard output or rewriting files in place as requested. Propagates errors from argument parsing, file I/O, and markdown processing.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Run with standard input, wrapping enabled
+/// // $ echo "|a|b|\n|---|---|\n|1|2|" | mdtablefix --wrap
+///
+/// // Run on files, in-place modification
+/// // $ mdtablefix --in-place --wrap file.md
 /// ```
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
