@@ -493,6 +493,32 @@ fn test_option_table_output_matches() {
 }
 
 #[test]
+fn test_month_seconds_table_output_matches() {
+    let input: Vec<String> = include_str!("data/month_seconds_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/month_seconds_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(reflow_table(&input), expected);
+}
+
+#[test]
+fn test_offset_table_output_matches() {
+    let input: Vec<String> = include_str!("data/offset_table_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/offset_table_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(reflow_table(&input), expected);
+}
+
+#[test]
 /// Tests that `process_stream` correctly processes a complex Markdown table representing logical types by comparing its output to expected results loaded from a file.
 fn test_process_stream_logical_type_table() {
     let input: Vec<String> = include_str!("data/logical_type_input.txt")
