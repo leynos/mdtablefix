@@ -6,6 +6,9 @@
 
 mod html;
 
+#[doc(hidden)]
+pub use html::html_table_to_markdown;
+
 pub use html::convert_html_tables;
 
 use regex::Regex;
@@ -19,7 +22,7 @@ use textwrap::fill;
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use mdtablefix::split_cells;
 /// let line = "| cell1 | cell2 | cell3 |";
 /// let cells = split_cells(line);
@@ -102,7 +105,7 @@ fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String>
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use mdtablefix::reflow_table;
 /// let lines = vec![
 ///     "| a | b |".to_string(),
@@ -223,7 +226,7 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use mdtablefix::process_stream;
 /// let input = vec![
 ///     "| a | b |".to_string(),
@@ -253,12 +256,14 @@ static BULLET_RE: std::sync::LazyLock<Regex> =
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// use mdtablefix::is_fence;
 /// assert!(is_fence("```"));
 /// assert!(is_fence("~~~"));
 /// assert!(!is_fence("| foo | bar |"));
 /// ```
-pub(crate) fn is_fence(line: &str) -> bool {
+#[doc(hidden)]
+pub fn is_fence(line: &str) -> bool {
     FENCE_RE.is_match(line)
 }
 
@@ -302,7 +307,8 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// use mdtablefix::wrap_text;
 /// let input = vec![
 ///     "This is a long paragraph that should be wrapped to a shorter width.".to_string(),
 ///     "".to_string(),
@@ -320,7 +326,8 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
 /// assert_eq!(wrapped[6], "let x = 42;");
 /// assert_eq!(wrapped[7], "```");
 /// ```
-fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
+#[doc(hidden)]
+pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf: Vec<(String, bool)> = Vec::new();
     let mut indent = String::new();
@@ -415,7 +422,8 @@ fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// use mdtablefix::process_stream;
 /// let input = vec![
 ///     "<table><tr><td>foo</td><td>bar</td></tr></table>".to_string(),
 ///     "| a | b |".to_string(),
@@ -512,7 +520,7 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
 /// use std::path::Path;
 /// use mdtablefix::rewrite;
 /// let path = Path::new("example.md");

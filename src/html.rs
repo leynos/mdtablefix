@@ -212,14 +212,16 @@ fn push_html_line(
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// use mdtablefix::html_table_to_markdown;
 /// let html_lines = vec![
 ///     "<table><tr><th>Header</th></tr><tr><td>Cell</td></tr></table>".to_string()
 /// ];
 /// let md_lines = html_table_to_markdown(&html_lines);
 /// assert!(md_lines[0].starts_with("| Header |"));
 /// ```
-pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
+#[doc(hidden)]
+pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf = Vec::new();
     let mut depth = 0usize;
@@ -259,7 +261,8 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// use mdtablefix::convert_html_tables;
 /// let lines = vec![
 ///     "<table>".to_string(),
 ///     "  <tr><th>Header</th></tr>".to_string(),
