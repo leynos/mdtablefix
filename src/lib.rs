@@ -249,10 +249,22 @@ static FENCE_RE: std::sync::LazyLock<Regex> =
 static BULLET_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
 
+/// Returns `true` if the line is a fenced code block delimiter (e.g., "```" or "~~~").
+///
+/// # Examples
+///
+/// ```
+/// assert!(is_fence("```"));
+/// assert!(is_fence("~~~"));
+/// assert!(!is_fence("| foo | bar |"));
+/// ```
 pub(crate) fn is_fence(line: &str) -> bool {
     FENCE_RE.is_match(line)
 }
 
+/// Flushes a buffered paragraph to the output, wrapping text to the specified width and applying indentation.
+///
+/// Concatenates buffered lines into a single paragraph, respecting hard line breaks, and writes the wrapped lines to the output vector with the given indentation. Lines are wrapped to the specified width minus the indentation length. Hard breaks in the buffer force a line break at that point.
 fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, width: usize) {
     if buf.is_empty() {
         return;
@@ -277,6 +289,37 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
     }
 }
 
+/// Wraps text lines to a specified width, preserving markdown structure.
+///
+/// Paragraphs and list items are reflowed to the given width, while code blocks, tables, headers, and blank lines are left unchanged. Indentation and bullet/numbered list prefixes are preserved. Hard line breaks (two spaces or `<br>` tags) are respected.
+///
+/// # Parameters
+/// - `lines`: The input lines of markdown text.
+/// - `width`: The maximum line width for wrapping.
+///
+/// # Returns
+/// A vector of strings containing the wrapped and formatted markdown lines.
+///
+/// # Examples
+///
+/// ```
+/// let input = vec![
+///     "This is a long paragraph that should be wrapped to a shorter width.".to_string(),
+///     "".to_string(),
+///     "```".to_string(),
+///     "let x = 42;".to_string(),
+///     "```".to_string(),
+/// ];
+/// let wrapped = wrap_text(&input, 20);
+/// assert_eq!(wrapped[0], "This is a long");
+/// assert_eq!(wrapped[1], "paragraph that should");
+/// assert_eq!(wrapped[2], "be wrapped to a");
+/// assert_eq!(wrapped[3], "shorter width.");
+/// assert_eq!(wrapped[4], "");
+/// assert_eq!(wrapped[5], "```");
+/// assert_eq!(wrapped[6], "let x = 42;");
+/// assert_eq!(wrapped[7], "```");
+/// ```
 fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf: Vec<(String, bool)> = Vec::new();
@@ -362,6 +405,29 @@ fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 }
 
 #[must_use]
+/// Processes a stream of markdown lines, converting HTML tables, reflowing markdown tables, and wrapping text to 80 columns.
+///
+/// Converts simple HTML tables to markdown, reflows markdown tables for consistent alignment, and wraps paragraphs and list items to 80 characters. Preserves code blocks, headers, and special markdown structures.
+///
+/// # Returns
+///
+/// A vector of processed markdown lines with tables fixed and text wrapped.
+///
+/// # Examples
+///
+/// ```
+/// let input = vec![
+///     "<table><tr><td>foo</td><td>bar</td></tr></table>".to_string(),
+///     "| a | b |".to_string(),
+///     "|---|---|".to_string(),
+///     "| 1 | 2 |".to_string(),
+///     "".to_string(),
+///     "A paragraph that will be wrapped to fit within eighty columns. This sentence is intentionally long to demonstrate wrapping.".to_string(),
+/// ];
+/// let output = process_stream(&input);
+/// assert!(output.iter().any(|line| line.contains("| foo | bar |")));
+/// assert!(output.iter().any(|line| line.len() <= 80));
+/// ```
 pub fn process_stream(lines: &[String]) -> Vec<String> {
     let pre = html::convert_html_tables(lines);
 
