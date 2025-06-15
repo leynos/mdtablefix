@@ -13,5 +13,21 @@ The GitHub Actions workflow `release.yml` builds and uploads binaries for:
 Each binary is named using the pattern
 `mdtablefix-<os>-<arch>` with an `.exe` suffix on Windows.
 
-Binaries are uploaded as soon as they are built so they are available from the
+Binaries are uploaded as soon as they are built, so they are available from the
 workflow run while other targets build.
+
+## Workflow details
+
+The `release.yml` workflow defines a matrix of operating system and
+architecture combinations. Each entry includes the target triple used by
+`cross` and a filename extension for Windows. During the build job `cross`
+compiles a release binary for every matrix row.
+
+`cross` is installed from a specific git tag to avoid unexpected behavior from
+its main branch. Each binary is placed in an `artifacts` directory using the
+naming pattern `mdtablefix-<os>-<arch>[.exe]`.
+
+After every build completes the artifact is uploaded so that the GitHub Actions
+interface provides it immediately. Once the matrix has finished the `release`
+job downloads all artifacts and uploads them to the GitHub release using
+`gh release upload`.
