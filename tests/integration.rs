@@ -503,8 +503,7 @@ fn test_wrap_paragraph() {
 #[test]
 fn test_wrap_list_item() {
     let input = vec![
-        "- This bullet item is exceptionally long and must be wrapped to keep \
-prefix formatting intact."
+        r"- This bullet item is exceptionally long and must be wrapped to keep prefix formatting intact."
             .to_string(),
     ];
     let output = process_stream(&input);
@@ -516,6 +515,13 @@ prefix formatting intact."
     for line in output.iter().skip(1) {
         assert!(line.starts_with("  "));
     }
+}
+
+#[test]
+fn test_wrap_short_list_item() {
+    let input = vec!["- short item".to_string()];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
 }
 
 #[test]
