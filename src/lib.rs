@@ -11,6 +11,7 @@ pub use html::convert_html_tables;
 use regex::Regex;
 use std::fs;
 use std::path::Path;
+use textwrap::fill;
 
 /// Splits a markdown table line into trimmed cell strings.
 ///
@@ -245,8 +246,88 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(```|~~~).*").unwrap());
 
+static BULLET_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
+
 pub(crate) fn is_fence(line: &str) -> bool {
     FENCE_RE.is_match(line)
+}
+
+fn flush_paragraph(out: &mut Vec<String>, buf: &[String], indent: &str, width: usize) {
+    if buf.is_empty() {
+        return;
+    }
+    let text = buf.join(" ");
+    for line in fill(&text, width - indent.len()).lines() {
+        out.push(format!("{indent}{line}"));
+    }
+}
+
+fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut buf: Vec<String> = Vec::new();
+    let mut indent = String::new();
+    let mut in_code = false;
+
+    for line in lines {
+        if FENCE_RE.is_match(line) {
+            flush_paragraph(&mut out, &buf, &indent, width);
+            buf.clear();
+            indent.clear();
+            in_code = !in_code;
+            out.push(line.clone());
+            continue;
+        }
+
+        if in_code {
+            out.push(line.clone());
+            continue;
+        }
+
+        if line.trim_start().starts_with('|') || SEP_RE.is_match(line.trim()) {
+            flush_paragraph(&mut out, &buf, &indent, width);
+            buf.clear();
+            indent.clear();
+            out.push(line.clone());
+            continue;
+        }
+
+        if line.trim_start().starts_with('#') {
+            flush_paragraph(&mut out, &buf, &indent, width);
+            buf.clear();
+            indent.clear();
+            out.push(line.clone());
+            continue;
+        }
+
+        if line.trim().is_empty() {
+            flush_paragraph(&mut out, &buf, &indent, width);
+            buf.clear();
+            indent.clear();
+            out.push(String::new());
+            continue;
+        }
+
+        if let Some(cap) = BULLET_RE.captures(line) {
+            flush_paragraph(&mut out, &buf, &indent, width);
+            buf.clear();
+            indent.clear();
+            let prefix = cap.get(1).unwrap().as_str();
+            let rest = cap.get(2).unwrap().as_str().trim();
+            for l in fill(rest, width - prefix.len()).lines() {
+                out.push(format!("{prefix}{l}"));
+            }
+            continue;
+        }
+
+        if buf.is_empty() {
+            indent = line.chars().take_while(|c| c.is_whitespace()).collect();
+        }
+        buf.push(line.trim().to_string());
+    }
+
+    flush_paragraph(&mut out, &buf, &indent, width);
+    out
 }
 
 #[must_use]
@@ -307,7 +388,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
         }
     }
 
-    out
+    wrap_text(&out, 80)
 }
 
 /// Rewrite a file in place with fixed tables.

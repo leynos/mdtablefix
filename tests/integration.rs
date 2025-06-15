@@ -487,3 +487,30 @@ fn test_option_table_output_matches() {
         .collect();
     assert_eq!(reflow_table(&input), expected);
 }
+
+#[test]
+fn test_wrap_paragraph() {
+    let input = vec![
+        "This is a very long paragraph that should be wrapped at eighty columns \
+         so it needs to contain enough words to exceed that limit."
+            .to_string(),
+    ];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    assert!(output.iter().all(|l| l.len() <= 80));
+}
+
+#[test]
+fn test_wrap_list_item() {
+    let input = vec![
+        "- This bullet item is exceptionally long and must be wrapped to keep \
+prefix formatting intact."
+            .to_string(),
+    ];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    for line in &output {
+        assert!(line.len() <= 80);
+        assert!(line.starts_with("- "));
+    }
+}

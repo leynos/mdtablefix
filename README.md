@@ -1,7 +1,8 @@
 # mdtablefix
 
 `mdtablefix` reflows Markdown tables so that each column has a uniform width.
-It ignores fenced code blocks and respects escaped pipes (`\|`),
+It also wraps paragraphs and list items at 80 columns.
+The tool ignores fenced code blocks and respects escaped pipes (`\|`),
 making it safe for mixed content.
 
 ## Installation
@@ -85,4 +86,3 @@ is organised using the [`rstest`](https://crates.io/crates/rstest) crate.
 
 This project is licensed under the ISC license.
 See the [LICENSE](LICENSE) file for details.
-
