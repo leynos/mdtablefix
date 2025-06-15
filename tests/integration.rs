@@ -493,6 +493,7 @@ fn test_option_table_output_matches() {
 }
 
 #[test]
+/// Tests that `process_stream` correctly processes a complex Markdown table representing logical types by comparing its output to expected results loaded from a file.
 fn test_process_stream_logical_type_table() {
     let input: Vec<String> = include_str!("data/logical_type_input.txt")
         .lines()
@@ -506,6 +507,15 @@ fn test_process_stream_logical_type_table() {
 }
 
 #[test]
+/// Tests that `process_stream` correctly processes a Markdown table with options, producing the expected output.
+///
+/// Loads input and expected output from test data files, runs `process_stream` on the input, and asserts equality.
+///
+/// # Examples
+///
+/// ```
+/// test_process_stream_option_table();
+/// ```
 fn test_process_stream_option_table() {
     let input: Vec<String> = include_str!("data/option_table_input.txt")
         .lines()
