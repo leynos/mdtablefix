@@ -476,6 +476,10 @@ fn test_logical_type_table_output_matches() {
 }
 
 #[test]
+/// Verifies that reflowing the option table input produces the expected output.
+///
+/// Loads the input and expected output from external files and asserts that the
+/// `reflow_table` function transforms the input table to match the expected result.
 fn test_option_table_output_matches() {
     let input: Vec<String> = include_str!("data/option_table_input.txt")
         .lines()
@@ -486,4 +490,69 @@ fn test_option_table_output_matches() {
         .map(str::to_string)
         .collect();
     assert_eq!(reflow_table(&input), expected);
+}
+
+#[test]
+/// Tests that long paragraphs are wrapped at 80 columns by `process_stream`.
+///
+/// Ensures that a single long paragraph is split into multiple lines, each not exceeding 80 characters.
+fn test_wrap_paragraph() {
+    let input = vec![
+        "This is a very long paragraph that should be wrapped at eighty columns \
+         so it needs to contain enough words to exceed that limit."
+            .to_string(),
+    ];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    assert!(output.iter().all(|l| l.len() <= 80));
+}
+
+#[test]
+fn test_wrap_list_item() {
+    let input = vec![
+        r"- This bullet item is exceptionally long and must be wrapped to keep prefix formatting intact."
+            .to_string(),
+    ];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    assert!(output[0].starts_with("- "));
+    for line in &output {
+        assert!(line.len() <= 80);
+    }
+    for line in output.iter().skip(1) {
+        assert!(line.starts_with("  "));
+    }
+}
+
+#[test]
+/// Verifies that short list items are not wrapped or altered by the stream processing logic.
+///
+/// Ensures that a single-line bullet list item remains unchanged after processing.
+///
+/// # Examples
+///
+/// ```
+/// let input = vec!["- short item".to_string()];
+/// let output = process_stream(&input);
+/// assert_eq!(output, input);
+/// ```
+fn test_wrap_short_list_item() {
+    let input = vec!["- short item".to_string()];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
+#[test]
+/// Tests that lines with hard line breaks (trailing spaces) are preserved after processing.
+///
+/// Ensures that the `process_stream` function does not remove or alter lines ending with Markdown hard line breaks.
+fn test_preserve_hard_line_breaks() {
+    let input = vec![
+        "Line one with break.  ".to_string(),
+        "Line two follows.".to_string(),
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output.len(), 2);
+    assert_eq!(output[0], "Line one with break.");
+    assert_eq!(output[1], "Line two follows.");
 }

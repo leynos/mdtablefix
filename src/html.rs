@@ -176,7 +176,9 @@ fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
 }
 
 /// Buffers a single line of HTML, updating nesting depth and emitting completed
-/// tables when an end tag is encountered.
+/// Buffers a line of HTML table markup and processes the buffer into Markdown when the table is fully closed.
+///
+/// Tracks the nesting depth of `<table>` tags, appending each line to the buffer. When all opened tables are closed (depth reaches zero), converts the buffered HTML table lines to Markdown and appends them to the output vector. Resets the buffer and updates the HTML state accordingly.
 fn push_html_line(
     line: &str,
     buf: &mut Vec<String>,
@@ -184,7 +186,7 @@ fn push_html_line(
     in_html: &mut bool,
     out: &mut Vec<String>,
 ) {
-    buf.push(line.trim_end().to_string());
+    buf.push(line.to_string());
     *depth += TABLE_START_RE.find_iter(line).count();
     if TABLE_END_RE.is_match(line) {
         *depth = depth.saturating_sub(TABLE_END_RE.find_iter(line).count());
@@ -196,7 +198,27 @@ fn push_html_line(
     }
 }
 
-/// Converts any HTML tables in `lines` to Markdown syntax.
+/// Replaces HTML tables in the provided lines with equivalent Markdown table syntax.
+///
+/// Scans the input lines for HTML `<table>` blocks, converts each detected table to Markdown using `table_lines_to_markdown`, and preserves all other content unchanged. Handles nested tables and maintains original line formatting outside of tables.
+///
+/// # Arguments
+///
+/// * `lines` - A slice of strings representing lines of Markdown, possibly containing HTML tables.
+///
+/// # Returns
+///
+/// A vector of strings with HTML tables replaced by Markdown tables, leaving other lines intact.
+///
+/// # Examples
+///
+/// ```
+/// let html_lines = vec![
+///     "<table><tr><th>Header</th></tr><tr><td>Cell</td></tr></table>".to_string()
+/// ];
+/// let md_lines = html_table_to_markdown(&html_lines);
+/// assert!(md_lines[0].starts_with("| Header |"));
+/// ```
 pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf = Vec::new();
@@ -204,7 +226,7 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 
     for line in lines {
         if depth > 0 || TABLE_START_RE.is_match(line.trim_start()) {
-            buf.push(line.trim_end().to_string());
+            buf.push(line.to_string());
             depth += TABLE_START_RE.find_iter(line).count();
             if TABLE_END_RE.is_match(line) {
                 depth = depth.saturating_sub(TABLE_END_RE.find_iter(line).count());
@@ -216,7 +238,7 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        out.push(line.trim_end().to_string());
+        out.push(line.to_string());
     }
 
     if !buf.is_empty() {
@@ -231,6 +253,22 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 /// Fenced code blocks are left untouched, allowing raw HTML examples to be
 /// documented without modification.
 #[must_use]
+/// Converts HTML tables embedded in Markdown lines to Markdown table syntax.
+///
+/// Scans the input lines, detects HTML table blocks outside of fenced code blocks, and replaces them with equivalent Markdown tables. Fenced code blocks are left unmodified. Handles nested tables and preserves original line formatting outside of tables.
+///
+/// # Examples
+///
+/// ```
+/// let lines = vec![
+///     "<table>".to_string(),
+///     "  <tr><th>Header</th></tr>".to_string(),
+///     "  <tr><td>Cell</td></tr>".to_string(),
+///     "</table>".to_string(),
+/// ];
+/// let result = convert_html_tables(&lines);
+/// assert!(result[0].starts_with("| Header |"));
+/// ```
 pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf = Vec::new();
@@ -246,12 +284,12 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
                 depth = 0;
             }
             in_code = !in_code;
-            out.push(line.trim_end().to_string());
+            out.push(line.to_string());
             continue;
         }
 
         if in_code {
-            out.push(line.trim_end().to_string());
+            out.push(line.to_string());
             continue;
         }
 
@@ -266,7 +304,7 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        out.push(line.trim_end().to_string());
+        out.push(line.to_string());
     }
 
     if !buf.is_empty() {
