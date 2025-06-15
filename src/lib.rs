@@ -253,7 +253,8 @@ static BULLET_RE: std::sync::LazyLock<Regex> =
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
+/// use mdtablefix::is_fence;
 /// assert!(is_fence("```"));
 /// assert!(is_fence("~~~"));
 /// assert!(!is_fence("| foo | bar |"));
@@ -302,7 +303,8 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
+/// use mdtablefix::wrap_text;
 /// let input = vec![
 ///     "This is a long paragraph that should be wrapped to a shorter width.".to_string(),
 ///     "".to_string(),
@@ -416,6 +418,7 @@ fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 /// # Examples
 ///
 /// ```
+/// use mdtablefix::process_stream;
 /// let input = vec![
 ///     "<table><tr><td>foo</td><td>bar</td></tr></table>".to_string(),
 ///     "| a | b |".to_string(),

@@ -32,17 +32,21 @@ mdtablefix [--in-place] [FILE...]
 Before:
 
 ```markdown
-| A|B |  C |
-|---|--|---|
-|1|22|333 |
+|Character|Catchphrase|Pizza count|
+|---|---|---|
+|Speedy Cerviche|Here come the Samurai Pizza Cats!|lots|
+|Guido Anchovy|Slice and dice!|tons|
+|Polly Esther|Cat fight!|many|
 ```
 
 After running `mdtablefix`:
 
 ```markdown
-| A | B  | C   |
-| --- | --- | --- |
-| 1 | 22 | 333 |
+| Character       | Catchphrase                         | Pizza count |
+| --------------- | ----------------------------------- | ----------- |
+| Speedy Cerviche | Here come the Samurai Pizza Cats!   | lots        |
+| Guido Anchovy   | Slice and dice!                     | tons        |
+| Polly Esther    | Cat fight!                          | many        |
 ```
 
 ## Library usage
