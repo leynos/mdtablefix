@@ -99,6 +99,27 @@ fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String>
         .collect()
 }
 
+/// Returns the separator index if it lies within `len`.
+fn sep_index_within(idx: Option<usize>, len: usize) -> Option<usize> {
+    match idx {
+        Some(i) if i < len => Some(i),
+        _ => None,
+    }
+}
+
+/// Returns `true` if rows have mismatched lengths when not split within lines.
+fn rows_mismatched(rows: &[Vec<String>], split_within_line: bool) -> bool {
+    if split_within_line {
+        return false;
+    }
+    let Some(first_len) = rows.first().map(Vec::len) else {
+        return false;
+    };
+    rows.iter()
+        .skip(1)
+        .any(|row| row.len() != first_len && !row.iter().all(|c| SEP_RE.is_match(c)))
+}
+
 /// Reflow a broken markdown table.
 ///
 /// # Panics
@@ -149,19 +170,12 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
     let cleaned = reflow::clean_rows(rows);
 
     let mut output_rows = cleaned.clone();
-    if let Some(idx) = sep_row_idx
-        && idx < output_rows.len()
-    {
+    if let Some(idx) = sep_index_within(sep_row_idx, output_rows.len()) {
         output_rows.remove(idx);
     }
 
-    if !split_within_line && let Some(first_len) = cleaned.first().map(Vec::len) {
-        let mismatch = cleaned[1..]
-            .iter()
-            .any(|row| row.len() != first_len && !row.iter().all(|c| SEP_RE.is_match(c)));
-        if mismatch {
-            return lines.to_vec();
-        }
+    if rows_mismatched(&cleaned, split_within_line) {
+        return lines.to_vec();
     }
 
     let widths = reflow::calculate_widths(&cleaned, max_cols);
@@ -509,4 +523,40 @@ pub fn rewrite_no_wrap(path: &Path) -> std::io::Result<()> {
     let lines: Vec<String> = text.lines().map(str::to_string).collect();
     let fixed = process_stream_no_wrap(&lines);
     fs::write(path, fixed.join("\n") + "\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sep_index_within_bounds() {
+        assert_eq!(sep_index_within(Some(1), 3), Some(1));
+        assert_eq!(sep_index_within(Some(3), 3), None);
+        assert_eq!(sep_index_within(None, 3), None);
+    }
+
+    #[test]
+    fn detect_row_mismatch() {
+        let rows = vec![
+            vec!["a".to_string(), "b".to_string()],
+            vec!["1".to_string(), "2".to_string()],
+        ];
+        assert!(!rows_mismatched(&rows, false));
+
+        let mismatch = vec![
+            vec!["a".to_string(), "b".to_string()],
+            vec!["1".to_string()],
+        ];
+        assert!(rows_mismatched(&mismatch, false));
+
+        let with_sep = vec![
+            vec!["a".to_string(), "b".to_string()],
+            vec!["---".to_string(), "---".to_string()],
+            vec!["1".to_string(), "2".to_string()],
+        ];
+        assert!(!rows_mismatched(&with_sep, false));
+
+        assert!(!rows_mismatched(&mismatch, true));
+    }
 }
