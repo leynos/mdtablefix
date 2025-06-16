@@ -69,11 +69,28 @@ fn collect_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
     }
 }
 
+/// Returns `true` if `handle` is an HTML element with the given tag name.
+fn is_element(handle: &Handle, tag: &str) -> bool {
+    if let NodeData::Element { name, .. } = &handle.data {
+        name.local.as_ref() == tag
+    } else {
+        false
+    }
+}
+
+/// Returns `true` if `handle` represents a `<td>` or `<th>` element.
+fn is_table_cell(handle: &Handle) -> bool {
+    if let NodeData::Element { name, .. } = &handle.data {
+        let tag = name.local.as_ref();
+        tag == "td" || tag == "th"
+    } else {
+        false
+    }
+}
+
 /// Walks the DOM tree collecting `<table>` nodes under `handle`.
 fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
-    if let NodeData::Element { name, .. } = &handle.data
-        && name.local.as_ref() == "table"
-    {
+    if is_element(handle, "table") {
         tables.push(handle.clone());
     }
     for child in handle.children.borrow().iter() {
@@ -83,9 +100,7 @@ fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
 
 /// Collects all `<tr>` nodes beneath `handle`.
 fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
-    if let NodeData::Element { name, .. } = &handle.data
-        && name.local.as_ref() == "tr"
-    {
+    if is_element(handle, "tr") {
         rows.push(handle.clone());
     }
     for child in handle.children.borrow().iter() {
@@ -121,10 +136,8 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
         let mut cells = Vec::new();
         let mut all_header = true;
         for child in row.children.borrow().iter() {
-            if let NodeData::Element { name, .. } = &child.data
-                && (name.local.as_ref() == "td" || name.local.as_ref() == "th")
-            {
-                let is_header = if name.local.as_ref() == "th" {
+            if is_table_cell(child) {
+                let is_header = if is_element(child, "th") {
                     true
                 } else {
                     contains_strong(child)
@@ -322,4 +335,38 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
     }
 
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use html5ever::{driver::ParseOpts, parse_document, tendril::TendrilSink};
+    use markup5ever_rcdom::RcDom;
+
+    use super::*;
+
+    #[test]
+    fn element_detection() {
+        let dom: RcDom = parse_document(RcDom::default(), ParseOpts::default())
+            .one("<table></table>".to_string());
+        let html = dom.document.children.borrow()[0].clone();
+        let body = html.children.borrow()[1].clone();
+        let table = body.children.borrow()[0].clone();
+        assert!(is_element(&table, "table"));
+        assert!(!is_element(&table, "tr"));
+    }
+
+    #[test]
+    fn table_cell_detection() {
+        let dom: RcDom = parse_document(RcDom::default(), ParseOpts::default())
+            .one("<table><tr><th>a</th><td>b</td></tr></table>".to_string());
+        let html = dom.document.children.borrow()[0].clone();
+        let body = html.children.borrow()[1].clone();
+        let table = body.children.borrow()[0].clone();
+        let tbody = table.children.borrow()[0].clone();
+        let tr = tbody.children.borrow()[0].clone();
+        let th = tr.children.borrow()[0].clone();
+        let td = tr.children.borrow()[1].clone();
+        assert!(is_table_cell(&th));
+        assert!(is_table_cell(&td));
+    }
 }
