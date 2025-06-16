@@ -6,11 +6,11 @@
 //! are ignored. The resulting Markdown lines are passed to
 //! `reflow_table` to ensure consistent column widths.
 
-use html5ever::driver::ParseOpts;
-use html5ever::{parse_document, tendril::TendrilSink};
+use std::sync::LazyLock;
+
+use html5ever::{driver::ParseOpts, parse_document, tendril::TendrilSink};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use regex::Regex;
-use std::sync::LazyLock;
 
 use crate::is_fence;
 
@@ -71,10 +71,10 @@ fn collect_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
 
 /// Walks the DOM tree collecting `<table>` nodes under `handle`.
 fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
-    if let NodeData::Element { name, .. } = &handle.data {
-        if name.local.as_ref() == "table" {
-            tables.push(handle.clone());
-        }
+    if let NodeData::Element { name, .. } = &handle.data
+        && name.local.as_ref() == "table"
+    {
+        tables.push(handle.clone());
     }
     for child in handle.children.borrow().iter() {
         collect_tables(child, tables);
@@ -83,10 +83,10 @@ fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
 
 /// Collects all `<tr>` nodes beneath `handle`.
 fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
-    if let NodeData::Element { name, .. } = &handle.data {
-        if name.local.as_ref() == "tr" {
-            rows.push(handle.clone());
-        }
+    if let NodeData::Element { name, .. } = &handle.data
+        && name.local.as_ref() == "tr"
+    {
+        rows.push(handle.clone());
     }
     for child in handle.children.borrow().iter() {
         collect_rows(child, rows);
@@ -121,16 +121,16 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
         let mut cells = Vec::new();
         let mut all_header = true;
         for child in row.children.borrow().iter() {
-            if let NodeData::Element { name, .. } = &child.data {
-                if name.local.as_ref() == "td" || name.local.as_ref() == "th" {
-                    let is_header = if name.local.as_ref() == "th" {
-                        true
-                    } else {
-                        contains_strong(child)
-                    };
-                    all_header &= is_header;
-                    cells.push(node_text(child));
-                }
+            if let NodeData::Element { name, .. } = &child.data
+                && (name.local.as_ref() == "td" || name.local.as_ref() == "th")
+            {
+                let is_header = if name.local.as_ref() == "th" {
+                    true
+                } else {
+                    contains_strong(child)
+                };
+                all_header &= is_header;
+                cells.push(node_text(child));
             }
         }
         if i == 0 {
@@ -179,7 +179,9 @@ fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
 
 /// Appends HTML table lines, tracking `<table>` depth and converting them to Markdown when closed.
 ///
-/// Tracks the nesting depth of `<table>` tags, appending each line to the buffer. When all opened tables are closed (depth reaches zero), converts the buffered HTML table lines to Markdown and appends them to the output vector. Resets the buffer and updates the HTML state accordingly.
+/// Tracks the nesting depth of `<table>` tags, appending each line to the buffer. When all opened
+/// tables are closed (depth reaches zero), converts the buffered HTML table lines to Markdown and
+/// appends them to the output vector. Resets the buffer and updates the HTML state accordingly.
 fn push_html_line(
     line: &str,
     buf: &mut Vec<String>,
@@ -201,7 +203,9 @@ fn push_html_line(
 
 /// Replaces HTML tables in the provided lines with equivalent Markdown table syntax.
 ///
-/// Scans the input lines for HTML `<table>` blocks, converts each detected table to Markdown using `table_lines_to_markdown`, and preserves all other content unchanged. Handles nested tables and maintains original line formatting outside of tables.
+/// Scans the input lines for HTML `<table>` blocks, converts each detected table to Markdown using
+/// `table_lines_to_markdown`, and preserves all other content unchanged. Handles nested tables and
+/// maintains original line formatting outside of tables.
 ///
 /// # Arguments
 ///
@@ -215,9 +219,8 @@ fn push_html_line(
 ///
 /// ```no_run
 /// use mdtablefix::html_table_to_markdown;
-/// let html_lines = vec![
-///     "<table><tr><th>Header</th></tr><tr><td>Cell</td></tr></table>".to_string()
-/// ];
+/// let html_lines =
+///     vec!["<table><tr><th>Header</th></tr><tr><td>Cell</td></tr></table>".to_string()];
 /// let md_lines = html_table_to_markdown(&html_lines);
 /// assert!(md_lines[0].starts_with("| Header |"));
 /// ```
@@ -257,7 +260,9 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 #[must_use]
 /// Converts HTML tables embedded in Markdown lines to Markdown table syntax.
 ///
-/// Scans the input lines, detects HTML table blocks outside of fenced code blocks, and replaces them with equivalent Markdown tables. Fenced code blocks are left unmodified. Handles nested tables and preserves original line formatting outside of tables.
+/// Scans the input lines, detects HTML table blocks outside of fenced code blocks, and replaces
+/// them with equivalent Markdown tables. Fenced code blocks are left unmodified. Handles nested
+/// tables and preserves original line formatting outside of tables.
 ///
 /// # Examples
 ///

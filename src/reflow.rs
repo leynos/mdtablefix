@@ -3,8 +3,9 @@
 // These small utilities break down the steps of `reflow_table` so each
 // piece can be understood and tested independently.
 
-use crate::{format_separator_cells, split_cells};
 use regex::Regex;
+
+use crate::{format_separator_cells, split_cells};
 
 static SENTINEL_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").unwrap());
