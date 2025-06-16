@@ -71,10 +71,10 @@ fn collect_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
 
 /// Walks the DOM tree collecting `<table>` nodes under `handle`.
 fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
-    if let NodeData::Element { name, .. } = &handle.data {
-        if name.local.as_ref() == "table" {
-            tables.push(handle.clone());
-        }
+    if let NodeData::Element { name, .. } = &handle.data
+        && name.local.as_ref() == "table"
+    {
+        tables.push(handle.clone());
     }
     for child in handle.children.borrow().iter() {
         collect_tables(child, tables);
@@ -83,10 +83,10 @@ fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
 
 /// Collects all `<tr>` nodes beneath `handle`.
 fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
-    if let NodeData::Element { name, .. } = &handle.data {
-        if name.local.as_ref() == "tr" {
-            rows.push(handle.clone());
-        }
+    if let NodeData::Element { name, .. } = &handle.data
+        && name.local.as_ref() == "tr"
+    {
+        rows.push(handle.clone());
     }
     for child in handle.children.borrow().iter() {
         collect_rows(child, rows);
@@ -121,16 +121,16 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
         let mut cells = Vec::new();
         let mut all_header = true;
         for child in row.children.borrow().iter() {
-            if let NodeData::Element { name, .. } = &child.data {
-                if name.local.as_ref() == "td" || name.local.as_ref() == "th" {
-                    let is_header = if name.local.as_ref() == "th" {
-                        true
-                    } else {
-                        contains_strong(child)
-                    };
-                    all_header &= is_header;
-                    cells.push(node_text(child));
-                }
+            if let NodeData::Element { name, .. } = &child.data
+                && (name.local.as_ref() == "td" || name.local.as_ref() == "th")
+            {
+                let is_header = if name.local.as_ref() == "th" {
+                    true
+                } else {
+                    contains_strong(child)
+                };
+                all_header &= is_header;
+                cells.push(node_text(child));
             }
         }
         if i == 0 {

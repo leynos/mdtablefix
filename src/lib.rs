@@ -47,13 +47,13 @@ pub fn split_cells(line: &str) -> Vec<String> {
     let mut chars = s.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch == '\\' {
-            if let Some(&next) = chars.peek() {
-                if next == '|' {
-                    // `\|` escapes the pipe so it becomes part of the cell
-                    chars.next();
-                    current.push('|');
-                    continue;
-                }
+            if let Some(&next) = chars.peek()
+                && next == '|'
+            {
+                // `\|` escapes the pipe so it becomes part of the cell
+                chars.next();
+                current.push('|');
+                continue;
             }
             current.push(ch);
             continue;
@@ -149,20 +149,18 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
     let cleaned = reflow::clean_rows(rows);
 
     let mut output_rows = cleaned.clone();
-    if let Some(idx) = sep_row_idx {
-        if idx < output_rows.len() {
-            output_rows.remove(idx);
-        }
+    if let Some(idx) = sep_row_idx
+        && idx < output_rows.len()
+    {
+        output_rows.remove(idx);
     }
 
-    if !split_within_line {
-        if let Some(first_len) = cleaned.first().map(Vec::len) {
-            let mismatch = cleaned[1..]
-                .iter()
-                .any(|row| row.len() != first_len && !row.iter().all(|c| SEP_RE.is_match(c)));
-            if mismatch {
-                return lines.to_vec();
-            }
+    if !split_within_line && let Some(first_len) = cleaned.first().map(Vec::len) {
+        let mismatch = cleaned[1..]
+            .iter()
+            .any(|row| row.len() != first_len && !row.iter().all(|c| SEP_RE.is_match(c)));
+        if mismatch {
+            return lines.to_vec();
         }
     }
 
