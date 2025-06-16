@@ -6,11 +6,11 @@
 //! are ignored. The resulting Markdown lines are passed to
 //! `reflow_table` to ensure consistent column widths.
 
-use html5ever::driver::ParseOpts;
-use html5ever::{parse_document, tendril::TendrilSink};
+use std::sync::LazyLock;
+
+use html5ever::{driver::ParseOpts, parse_document, tendril::TendrilSink};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use regex::Regex;
-use std::sync::LazyLock;
 
 use crate::is_fence;
 
@@ -178,9 +178,12 @@ fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
 }
 
 /// Buffers a single line of HTML, updating nesting depth and emitting completed
-/// Buffers a line of HTML table markup and processes the buffer into Markdown when the table is fully closed.
+/// Buffers a line of HTML table markup and processes the buffer into Markdown when the table is
+/// fully closed.
 ///
-/// Tracks the nesting depth of `<table>` tags, appending each line to the buffer. When all opened tables are closed (depth reaches zero), converts the buffered HTML table lines to Markdown and appends them to the output vector. Resets the buffer and updates the HTML state accordingly.
+/// Tracks the nesting depth of `<table>` tags, appending each line to the buffer. When all opened
+/// tables are closed (depth reaches zero), converts the buffered HTML table lines to Markdown and
+/// appends them to the output vector. Resets the buffer and updates the HTML state accordingly.
 fn push_html_line(
     line: &str,
     buf: &mut Vec<String>,
@@ -202,7 +205,9 @@ fn push_html_line(
 
 /// Replaces HTML tables in the provided lines with equivalent Markdown table syntax.
 ///
-/// Scans the input lines for HTML `<table>` blocks, converts each detected table to Markdown using `table_lines_to_markdown`, and preserves all other content unchanged. Handles nested tables and maintains original line formatting outside of tables.
+/// Scans the input lines for HTML `<table>` blocks, converts each detected table to Markdown using
+/// `table_lines_to_markdown`, and preserves all other content unchanged. Handles nested tables and
+/// maintains original line formatting outside of tables.
 ///
 /// # Arguments
 ///
@@ -216,9 +221,8 @@ fn push_html_line(
 ///
 /// ```no_run
 /// use mdtablefix::html_table_to_markdown;
-/// let html_lines = vec![
-///     "<table><tr><th>Header</th></tr><tr><td>Cell</td></tr></table>".to_string()
-/// ];
+/// let html_lines =
+///     vec!["<table><tr><th>Header</th></tr><tr><td>Cell</td></tr></table>".to_string()];
 /// let md_lines = html_table_to_markdown(&html_lines);
 /// assert!(md_lines[0].starts_with("| Header |"));
 /// ```
@@ -258,7 +262,9 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 #[must_use]
 /// Converts HTML tables embedded in Markdown lines to Markdown table syntax.
 ///
-/// Scans the input lines, detects HTML table blocks outside of fenced code blocks, and replaces them with equivalent Markdown tables. Fenced code blocks are left unmodified. Handles nested tables and preserves original line formatting outside of tables.
+/// Scans the input lines, detects HTML table blocks outside of fenced code blocks, and replaces
+/// them with equivalent Markdown tables. Fenced code blocks are left unmodified. Handles nested
+/// tables and preserves original line formatting outside of tables.
 ///
 /// # Examples
 ///

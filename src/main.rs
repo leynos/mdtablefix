@@ -1,8 +1,11 @@
+use std::{
+    fs,
+    io::{self, Read},
+    path::{Path, PathBuf},
+};
+
 use clap::Parser;
 use mdtablefix::{process_stream, process_stream_no_wrap, rewrite, rewrite_no_wrap};
-use std::fs;
-use std::io::{self, Read};
-use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(about = "Reflow broken markdown tables")]
@@ -35,11 +38,14 @@ fn rewrite_path(path: &Path, wrap: bool) -> std::io::Result<()> {
 
 /// Entry point for the command-line tool that reflows broken markdown tables.
 ///
-/// Parses command-line arguments to determine whether to process files in place, print fixed output to standard output, or read from standard input. Handles file I/O and error propagation as needed.
+/// Parses command-line arguments to determine whether to process files in place, print fixed output
+/// to standard output, or read from standard input. Handles file I/O and error propagation as
+/// needed.
 ///
 /// # Returns
 ///
-/// Returns `Ok(())` if all operations complete successfully; otherwise, returns an error if argument validation or file processing fails.
+/// Returns `Ok(())` if all operations complete successfully; otherwise, returns an error if
+/// argument validation or file processing fails.
 ///
 /// # Examples
 ///

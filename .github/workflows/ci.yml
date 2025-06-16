@@ -25,7 +25,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
       - name: Format
-        run: cargo fmt --all -- --check
+        run: rustup component add rustfmt --toolchain nightly-2025-06-10 && cargo +nightly-2025-06-10 fmt --all -- --check
       - name: Lint
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test

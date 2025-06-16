@@ -1,8 +1,8 @@
+use std::{fs::File, io::Write};
+
 use assert_cmd::Command;
 use mdtablefix::{convert_html_tables, process_stream, reflow_table};
 use rstest::{fixture, rstest};
-use std::fs::File;
-use std::io::Write;
 use tempfile::tempdir;
 
 #[macro_use]
@@ -11,7 +11,8 @@ mod common;
 #[fixture]
 /// Provides a sample Markdown table with broken rows for testing purposes.
 ///
-/// The returned vector contains lines representing a table with inconsistent columns, useful for validating table reflow logic.
+/// The returned vector contains lines representing a table with inconsistent columns, useful for
+/// validating table reflow logic.
 ///
 /// # Examples
 ///
@@ -19,24 +20,24 @@ mod common;
 /// let table = broken_table();
 /// assert_eq!(table[0], "| A | B |    |");
 /// ```
-fn broken_table() -> Vec<String> {
-    lines_vec!("| A | B |    |", "| 1 | 2 |  | 3 | 4 |",)
-}
+fn broken_table() -> Vec<String> { return lines_vec!("| A | B |    |", "| 1 | 2 |  | 3 | 4 |",); }
 
 #[fixture]
 /// Returns a vector of strings representing a malformed Markdown table with inconsistent columns.
 ///
-/// The returned table has rows with differing numbers of columns, making it invalid for standard Markdown table parsing.
+/// The returned table has rows with differing numbers of columns, making it invalid for standard
+/// Markdown table parsing.
 ///
 /// # Examples
 ///
 /// ```
 /// let table = malformed_table();
-/// assert_eq!(table, vec![String::from("| A | |"), String::from("| 1 | 2 | 3 |")]);
+/// assert_eq!(
+///     table,
+///     vec![String::from("| A | |"), String::from("| 1 | 2 | 3 |")]
+/// );
 /// ```
-fn malformed_table() -> Vec<String> {
-    lines_vec!("| A | |", "| 1 | 2 | 3 |")
-}
+fn malformed_table() -> Vec<String> { return lines_vec!("| A | |", "| 1 | 2 | 3 |"); }
 
 #[fixture]
 fn header_table() -> Vec<String> {
@@ -50,7 +51,7 @@ fn escaped_pipe_table() -> Vec<String> {
 
 #[fixture]
 fn indented_table() -> Vec<String> {
-    lines_vec!("  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |",)
+    return lines_vec!("  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |",);
 }
 
 #[fixture]
@@ -94,14 +95,10 @@ fn html_table_no_header() -> Vec<String> {
 }
 
 #[fixture]
-fn html_table_empty() -> Vec<String> {
-    lines_vec!("<table></table>")
-}
+fn html_table_empty() -> Vec<String> { return lines_vec!("<table></table>"); }
 
 #[fixture]
-fn html_table_unclosed() -> Vec<String> {
-    lines_vec!("<table>", "<tr><td>1</td></tr>")
-}
+fn html_table_unclosed() -> Vec<String> { return lines_vec!("<table>", "<tr><td>1</td></tr>"); }
 
 #[fixture]
 fn html_table_uppercase() -> Vec<String> {
@@ -129,12 +126,17 @@ fn multiple_tables() -> Vec<String> {
 }
 
 #[rstest]
-/// Tests that `reflow_table` correctly restructures a broken Markdown table into a well-formed table.
+/// Tests that `reflow_table` correctly restructures a broken Markdown table into a well-formed
+/// table.
 ///
 /// # Examples
 ///
 /// ```
-/// let broken = vec![String::from("| A | B |"), String::from("| 1 | 2 |"), String::from("| 3 | 4 |")];
+/// let broken = vec![
+///     String::from("| A | B |"),
+///     String::from("| 1 | 2 |"),
+///     String::from("| 3 | 4 |"),
+/// ];
 /// let expected = vec!["| A | B |", "| 1 | 2 |", "| 3 | 4 |"];
 /// assert_eq!(reflow_table(&broken), expected);
 /// ```
@@ -144,9 +146,11 @@ fn test_reflow_basic(broken_table: Vec<String>) {
 }
 
 #[rstest]
-/// Tests that `reflow_table` returns the original input unchanged when given a malformed Markdown table.
+/// Tests that `reflow_table` returns the original input unchanged when given a malformed Markdown
+/// table.
 ///
-/// This ensures that the function does not attempt to modify tables with inconsistent columns or structure.
+/// This ensures that the function does not attempt to modify tables with inconsistent columns or
+/// structure.
 fn test_reflow_malformed_returns_original(malformed_table: Vec<String>) {
     assert_eq!(reflow_table(&malformed_table), malformed_table);
 }
@@ -211,7 +215,8 @@ fn test_process_stream_multiple_tables(multiple_tables: Vec<String>) {
 
 /// Tests that `process_stream` leaves lines inside code fences unchanged.
 ///
-/// Verifies that both backtick (```) and tilde (~~~) fenced code blocks are ignored by the table processing logic, ensuring their contents are not altered.
+/// Verifies that both backtick (```) and tilde (~~~) fenced code blocks are ignored by the table
+/// processing logic, ensuring their contents are not altered.
 #[rstest]
 fn test_process_stream_ignores_code_fences() {
     let lines = lines_vec!("```rust", "| not | a | table |", "```");
@@ -225,7 +230,8 @@ fn test_process_stream_ignores_code_fences() {
 #[rstest]
 /// Verifies that the CLI fails when the `--in-place` flag is used without specifying a file.
 ///
-/// This test ensures that running `mdtablefix --in-place` without a file argument results in a command failure.
+/// This test ensures that running `mdtablefix --in-place` without a file argument results in a
+/// command failure.
 ///
 /// # Examples
 ///
@@ -242,9 +248,11 @@ fn test_cli_in_place_requires_file() {
 }
 
 #[rstest]
-/// Tests that the CLI processes a file containing a broken Markdown table and outputs the corrected table to stdout.
+/// Tests that the CLI processes a file containing a broken Markdown table and outputs the corrected
+/// table to stdout.
 ///
-/// This test creates a temporary file with a malformed table, runs the `mdtablefix` binary on it, and asserts that the output is the expected fixed table.
+/// This test creates a temporary file with a malformed table, runs the `mdtablefix` binary on it,
+/// and asserts that the output is the expected fixed table.
 ///
 /// # Examples
 ///
@@ -275,9 +283,9 @@ fn test_cli_process_file(broken_table: Vec<String>) {
 
 #[test]
 fn test_cli_wrap_option() {
-    let input = "This line is deliberately made much longer than eighty columns so that \
-                 the wrapping algorithm is forced to insert a soft line-break somewhere \
-                 in the middle of the paragraph when the --wrap flag is supplied.";
+    let input = "This line is deliberately made much longer than eighty columns so that the \
+                 wrapping algorithm is forced to insert a soft line-break somewhere in the middle \
+                 of the paragraph when the --wrap flag is supplied.";
     let output = Command::cargo_bin("mdtablefix")
         .unwrap()
         .arg("--wrap")
@@ -521,7 +529,8 @@ fn test_offset_table_output_matches() {
 }
 
 #[test]
-/// Tests that `process_stream` correctly processes a complex Markdown table representing logical types by comparing its output to expected results loaded from a file.
+/// Tests that `process_stream` correctly processes a complex Markdown table representing logical
+/// types by comparing its output to expected results loaded from a file.
 fn test_process_stream_logical_type_table() {
     let input: Vec<String> = include_str!("data/logical_type_input.txt")
         .lines()
@@ -535,14 +544,16 @@ fn test_process_stream_logical_type_table() {
 }
 
 #[test]
-/// Tests that `process_stream` correctly processes a Markdown table with options, producing the expected output.
+/// Tests that `process_stream` correctly processes a Markdown table with options, producing the
+/// expected output.
 ///
-/// Loads input and expected output from test data files, runs `process_stream` on the input, and asserts equality.
+/// Loads input and expected output from test data files, runs `process_stream` on the input, and
+/// asserts equality.
 ///
 /// # Examples
 ///
 /// ```
-/// test_process_stream_option_table();
+/// test_process_stream_option_table(); 
 /// ```
 fn test_process_stream_option_table() {
     let input: Vec<String> = include_str!("data/option_table_input.txt")
@@ -559,11 +570,12 @@ fn test_process_stream_option_table() {
 #[test]
 /// Tests that long paragraphs are wrapped at 80 columns by `process_stream`.
 ///
-/// Ensures that a single long paragraph is split into multiple lines, each not exceeding 80 characters.
+/// Ensures that a single long paragraph is split into multiple lines, each not exceeding 80
+/// characters.
 fn test_wrap_paragraph() {
     let input = vec![
-        "This is a very long paragraph that should be wrapped at eighty columns \
-         so it needs to contain enough words to exceed that limit."
+        "This is a very long paragraph that should be wrapped at eighty columns so it needs to \
+         contain enough words to exceed that limit."
             .to_string(),
     ];
     let output = process_stream(&input);
@@ -609,7 +621,8 @@ fn test_wrap_short_list_item() {
 #[test]
 /// Tests that lines with hard line breaks (trailing spaces) are preserved after processing.
 ///
-/// Ensures that the `process_stream` function does not remove or alter lines ending with Markdown hard line breaks.
+/// Ensures that the `process_stream` function does not remove or alter lines ending with Markdown
+/// hard line breaks.
 fn test_preserve_hard_line_breaks() {
     let input = vec![
         "Line one with break.  ".to_string(),
