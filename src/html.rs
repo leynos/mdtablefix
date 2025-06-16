@@ -72,21 +72,14 @@ fn collect_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
 /// Returns `true` if `handle` is an HTML element with the given tag name.
 fn is_element(handle: &Handle, tag: &str) -> bool {
     if let NodeData::Element { name, .. } = &handle.data {
-        name.local.as_ref() == tag
+        name.local.as_ref().eq_ignore_ascii_case(tag)
     } else {
         false
     }
 }
 
 /// Returns `true` if `handle` represents a `<td>` or `<th>` element.
-fn is_table_cell(handle: &Handle) -> bool {
-    if let NodeData::Element { name, .. } = &handle.data {
-        let tag = name.local.as_ref();
-        tag == "td" || tag == "th"
-    } else {
-        false
-    }
-}
+fn is_table_cell(handle: &Handle) -> bool { is_element(handle, "td") || is_element(handle, "th") }
 
 /// Walks the DOM tree collecting `<table>` nodes under `handle`.
 fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
@@ -352,6 +345,7 @@ mod tests {
         let body = html.children.borrow()[1].clone();
         let table = body.children.borrow()[0].clone();
         assert!(is_element(&table, "table"));
+        assert!(is_element(&table, "TABLE"));
         assert!(!is_element(&table, "tr"));
     }
 

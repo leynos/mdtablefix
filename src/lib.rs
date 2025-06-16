@@ -100,7 +100,12 @@ fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String>
 }
 
 /// Returns the separator index if it lies within `len`.
-fn sep_index_within(idx: Option<usize>, len: usize) -> Option<usize> { idx.filter(|&i| i < len) }
+fn sep_index_within(idx: Option<usize>, len: usize) -> Option<usize> {
+    match idx {
+        Some(i) if i < len => Some(i),
+        _ => None,
+    }
+}
 
 /// Returns `true` if rows have mismatched lengths when not split within lines.
 fn rows_mismatched(rows: &[Vec<String>], split_within_line: bool) -> bool {
@@ -110,8 +115,8 @@ fn rows_mismatched(rows: &[Vec<String>], split_within_line: bool) -> bool {
     let Some(first_len) = rows.first().map(Vec::len) else {
         return false;
     };
-    rows[1..]
-        .iter()
+    rows.iter()
+        .skip(1)
         .any(|row| row.len() != first_len && !row.iter().all(|c| SEP_RE.is_match(c)))
 }
 
