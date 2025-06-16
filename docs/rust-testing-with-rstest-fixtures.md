@@ -106,7 +106,6 @@ Add the following lines to your `Cargo.toml` under the `[dev-dependencies]`
 section:
 
 ```toml
-
 [dev-dependencies]
 rstest = "0.18" # Or the latest version available on crates.io
 # rstest_macros may also be needed explicitly depending on usage or version
