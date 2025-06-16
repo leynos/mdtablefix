@@ -9,3 +9,10 @@ Attributes and tag casing are ignored, and complex nested or styled tables are
 not supported. After conversion each HTML table is represented as a Markdown
 table so the usual reflow algorithm can align its columns consistently with the
 rest of the document.
+
+```html
+<table>
+  <tr><th>A</th><th>B</th></tr>
+  <tr><td>1</td><td>2</td></tr>
+</table>
+```
