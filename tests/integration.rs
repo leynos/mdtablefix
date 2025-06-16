@@ -20,7 +20,10 @@ mod common;
 /// let table = broken_table();
 /// assert_eq!(table[0], "| A | B |    |");
 /// ```
-fn broken_table() -> Vec<String> { return lines_vec!("| A | B |    |", "| 1 | 2 |  | 3 | 4 |",); }
+fn broken_table() -> Vec<String> {
+    let lines = lines_vec!("| A | B |    |", "| 1 | 2 |  | 3 | 4 |",);
+    lines
+}
 
 #[fixture]
 /// Returns a vector of strings representing a malformed Markdown table with inconsistent columns.
@@ -37,7 +40,10 @@ fn broken_table() -> Vec<String> { return lines_vec!("| A | B |    |", "| 1 | 2 
 ///     vec![String::from("| A | |"), String::from("| 1 | 2 | 3 |")]
 /// );
 /// ```
-fn malformed_table() -> Vec<String> { return lines_vec!("| A | |", "| 1 | 2 | 3 |"); }
+fn malformed_table() -> Vec<String> {
+    let lines = lines_vec!("| A | |", "| 1 | 2 | 3 |");
+    lines
+}
 
 #[fixture]
 fn header_table() -> Vec<String> {
@@ -51,7 +57,8 @@ fn escaped_pipe_table() -> Vec<String> {
 
 #[fixture]
 fn indented_table() -> Vec<String> {
-    return lines_vec!("  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |",);
+    let lines = lines_vec!("  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |",);
+    lines
 }
 
 #[fixture]
@@ -95,10 +102,16 @@ fn html_table_no_header() -> Vec<String> {
 }
 
 #[fixture]
-fn html_table_empty() -> Vec<String> { return lines_vec!("<table></table>"); }
+fn html_table_empty() -> Vec<String> {
+    let lines = lines_vec!("<table></table>");
+    lines
+}
 
 #[fixture]
-fn html_table_unclosed() -> Vec<String> { return lines_vec!("<table>", "<tr><td>1</td></tr>"); }
+fn html_table_unclosed() -> Vec<String> {
+    let lines = lines_vec!("<table>", "<tr><td>1</td></tr>");
+    lines
+}
 
 #[fixture]
 fn html_table_uppercase() -> Vec<String> {
