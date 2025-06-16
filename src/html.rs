@@ -177,8 +177,7 @@ fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
     out
 }
 
-/// Buffers a single line of HTML, updating nesting depth and emitting completed
-/// Buffers a line of HTML table markup and processes the buffer into Markdown when the table is fully closed.
+/// Appends HTML table lines, tracking `<table>` depth and converting them to Markdown when closed.
 ///
 /// Tracks the nesting depth of `<table>` tags, appending each line to the buffer. When all opened tables are closed (depth reaches zero), converts the buffered HTML table lines to Markdown and appends them to the output vector. Resets the buffer and updates the HTML state accordingly.
 fn push_html_line(
