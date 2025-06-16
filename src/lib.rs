@@ -13,16 +13,16 @@ pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     html::html_table_to_markdown(lines)
 }
 
-pub use html::convert_html_tables;
+use std::{fs, path::Path};
 
+pub use html::convert_html_tables;
 use regex::Regex;
-use std::fs;
-use std::path::Path;
 use textwrap::fill;
 
 /// Splits a markdown table line into trimmed cell strings.
 ///
-/// Removes leading and trailing pipe characters, splits the line by pipes, trims whitespace from each cell, and returns the resulting cell strings as a vector.
+/// Removes leading and trailing pipe characters, splits the line by pipes, trims whitespace from
+/// each cell, and returns the resulting cell strings as a vector.
 ///
 /// # Examples
 ///
@@ -47,13 +47,13 @@ pub fn split_cells(line: &str) -> Vec<String> {
     let mut chars = s.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch == '\\' {
-            if let Some(&next) = chars.peek() {
-                if next == '|' {
-                    // `\|` escapes the pipe so it becomes part of the cell
-                    chars.next();
-                    current.push('|');
-                    continue;
-                }
+            if let Some(&next) = chars.peek()
+                && next == '|'
+            {
+                // `\|` escapes the pipe so it becomes part of the cell
+                chars.next();
+                current.push('|');
+                continue;
             }
             current.push(ch);
             continue;
@@ -105,21 +105,20 @@ fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String>
 /// Panics if the internal regex fails to compile.
 /// Reflows a broken markdown table into properly aligned rows and columns.
 ///
-/// Takes a slice of strings representing lines of a markdown table, reconstructs the table by splitting and aligning cells, and returns the reflowed table as a vector of strings. If the rows have inconsistent numbers of non-empty columns, the original lines are returned unchanged.
+/// Takes a slice of strings representing lines of a markdown table, reconstructs the table by
+/// splitting and aligning cells, and returns the reflowed table as a vector of strings. If the rows
+/// have inconsistent numbers of non-empty columns, the original lines are returned unchanged.
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use mdtablefix::reflow_table;
-/// let lines = vec![
-///     "| a | b |".to_string(),
-///     "| c | d |".to_string(),
-/// ];
+/// let lines = vec!["| a | b |".to_string(), "| c | d |".to_string()];
 /// let fixed = reflow_table(&lines);
-/// assert_eq!(fixed, vec![
-///     "| a | b |".to_string(),
-///     "| c | d |".to_string(),
-/// ]);
+/// assert_eq!(
+///     fixed,
+///     vec!["| a | b |".to_string(), "| c | d |".to_string(),]
+/// );
 /// ```
 pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
@@ -150,20 +149,18 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
     let cleaned = reflow::clean_rows(rows);
 
     let mut output_rows = cleaned.clone();
-    if let Some(idx) = sep_row_idx {
-        if idx < output_rows.len() {
-            output_rows.remove(idx);
-        }
+    if let Some(idx) = sep_row_idx
+        && idx < output_rows.len()
+    {
+        output_rows.remove(idx);
     }
 
-    if !split_within_line {
-        if let Some(first_len) = cleaned.first().map(Vec::len) {
-            let mismatch = cleaned[1..]
-                .iter()
-                .any(|row| row.len() != first_len && !row.iter().all(|c| SEP_RE.is_match(c)));
-            if mismatch {
-                return lines.to_vec();
-            }
+    if !split_within_line && let Some(first_len) = cleaned.first().map(Vec::len) {
+        let mismatch = cleaned[1..]
+            .iter()
+            .any(|row| row.len() != first_len && !row.iter().all(|c| SEP_RE.is_match(c)));
+        if mismatch {
+            return lines.to_vec();
         }
     }
 
@@ -174,9 +171,12 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
     reflow::insert_separator(out, sep_cells, &widths, &indent)
 }
 
-/// Processes a stream of markdown lines, reflowing tables while preserving code blocks and other content.
+/// Processes a stream of markdown lines, reflowing tables while preserving code blocks and other
+/// content.
 ///
-/// Detects fenced code blocks and avoids modifying their contents. Buffers lines that appear to be part of a markdown table and reflows them when the table ends. Non-table lines and code blocks are output unchanged.
+/// Detects fenced code blocks and avoids modifying their contents. Buffers lines that appear to be
+/// part of a markdown table and reflows them when the table ends. Non-table lines and code blocks
+/// are output unchanged.
 ///
 /// # Returns
 ///
@@ -221,13 +221,15 @@ static BULLET_RE: std::sync::LazyLock<Regex> =
 /// assert!(!is_fence("| foo | bar |"));
 /// ```
 #[doc(hidden)]
-pub fn is_fence(line: &str) -> bool {
-    FENCE_RE.is_match(line)
-}
+pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 
-/// Flushes a buffered paragraph to the output, wrapping text to the specified width and applying indentation.
+/// Flushes a buffered paragraph to the output, wrapping text to the specified width and applying
+/// indentation.
 ///
-/// Concatenates buffered lines into a single paragraph, respecting hard line breaks, and writes the wrapped lines to the output vector with the given indentation. Lines are wrapped to the specified width minus the indentation length. Hard breaks in the buffer force a line break at that point.
+/// Concatenates buffered lines into a single paragraph, respecting hard line breaks, and writes the
+/// wrapped lines to the output vector with the given indentation. Lines are wrapped to the
+/// specified width minus the indentation length. Hard breaks in the buffer force a line break at
+/// that point.
 fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, width: usize) {
     if buf.is_empty() {
         return;
@@ -254,7 +256,9 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
 
 /// Wraps text lines to a specified width, preserving markdown structure.
 ///
-/// Paragraphs and list items are reflowed to the given width, while code blocks, tables, headers, and blank lines are left unchanged. Indentation and bullet/numbered list prefixes are preserved. Hard line breaks (two spaces or `<br>` tags) are respected.
+/// Paragraphs and list items are reflowed to the given width, while code blocks, tables, headers,
+/// and blank lines are left unchanged. Indentation and bullet/numbered list prefixes are preserved.
+/// Hard line breaks (two spaces or `<br>` tags) are respected.
 ///
 /// # Parameters
 /// - `lines`: The input lines of markdown text.
@@ -370,9 +374,12 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 }
 
 #[must_use]
-/// Processes a stream of markdown lines, converting HTML tables, reflowing markdown tables, and wrapping text to 80 columns.
+/// Processes a stream of markdown lines, converting HTML tables, reflowing markdown tables, and
+/// wrapping text to 80 columns.
 ///
-/// Converts simple HTML tables to markdown, reflows markdown tables for consistent alignment, and wraps paragraphs and list items to 80 characters. Preserves code blocks, headers, and special markdown structures.
+/// Converts simple HTML tables to markdown, reflows markdown tables for consistent alignment, and
+/// wraps paragraphs and list items to 80 characters. Preserves code blocks, headers, and special
+/// markdown structures.
 ///
 /// # Returns
 ///
@@ -388,7 +395,9 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 ///     "|---|---|".to_string(),
 ///     "| 1 | 2 |".to_string(),
 ///     "".to_string(),
-///     "A paragraph that will be wrapped to fit within eighty columns. This sentence is intentionally long to demonstrate wrapping.".to_string(),
+///     "A paragraph that will be wrapped to fit within eighty columns. This sentence is \
+///      intentionally long to demonstrate wrapping."
+///         .to_string(),
 /// ];
 /// let output = process_stream(&input);
 /// assert!(output.iter().any(|line| line.contains("| foo | bar |")));
@@ -460,9 +469,7 @@ fn process_stream_inner(lines: &[String], wrap: bool) -> Vec<String> {
 }
 
 #[must_use]
-pub fn process_stream(lines: &[String]) -> Vec<String> {
-    process_stream_inner(lines, true)
-}
+pub fn process_stream(lines: &[String]) -> Vec<String> { process_stream_inner(lines, true) }
 
 #[must_use]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
@@ -472,7 +479,8 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 /// Rewrite a file in place with fixed tables.
 ///
 /// # Errors
-/// Reads a markdown file, reflows any broken tables within it, and writes the updated content back to the same file.
+/// Reads a markdown file, reflows any broken tables within it, and writes the updated content back
+/// to the same file.
 ///
 /// Returns an error if the file cannot be read or written.
 ///
@@ -480,6 +488,7 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 ///
 /// ```no_run
 /// use std::path::Path;
+///
 /// use mdtablefix::rewrite;
 /// let path = Path::new("example.md");
 /// rewrite(path).unwrap();
