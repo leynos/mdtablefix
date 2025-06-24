@@ -646,3 +646,16 @@ fn test_preserve_hard_line_breaks() {
     assert_eq!(output[0], "Line one with break.");
     assert_eq!(output[1], "Line two follows.");
 }
+
+#[test]
+fn test_regression_complex_table() {
+    let input: Vec<String> = include_str!("data/regression_table_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/regression_table_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(process_stream(&input), expected);
+}
