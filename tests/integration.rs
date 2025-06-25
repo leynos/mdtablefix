@@ -646,3 +646,21 @@ fn test_preserve_hard_line_breaks() {
     assert_eq!(output[0], "Line one with break.");
     assert_eq!(output[1], "Line two follows.");
 }
+
+#[test]
+/// Tests that `process_stream` preserves complex table formatting without modification.
+///
+/// This regression test ensures that properly formatted complex tables with multiple
+/// columns and detailed content pass through the processing pipeline unchanged,
+/// preventing regressions that might inadvertently alter correct formatting.
+fn test_regression_complex_table() {
+    let input: Vec<String> = include_str!("data/regression_table_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/regression_table_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(process_stream(&input), expected);
+}
