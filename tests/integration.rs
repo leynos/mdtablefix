@@ -804,3 +804,64 @@ fn test_renumber_mult_paragraph_items() {
 
     assert_eq!(renumber_lists(&input), expected);
 }
+
+#[test]
+fn test_wrap_hyphenated_word() {
+    let line = format!("{} extremely-very-long-word end", "A".repeat(60));
+    let output = process_stream(&[line]);
+    assert_eq!(
+        output,
+        vec![
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            "extremely-very-long-word end".to_string(),
+        ]
+    );
+}
+#[test]
+fn test_wrap_multiple_hyphenated_words() {
+    let line = format!("{} foo-bar baz-qux quux-corge end", "A".repeat(60));
+    let output = process_stream(&[line]);
+    assert_eq!(
+        output,
+        vec![
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA foo-bar baz-qux"
+                .to_string(),
+            "quux-corge end".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn test_wrap_hyphenated_word_at_boundary() {
+    let line = format!("{} extremely-very-long-word end", "A".repeat(55));
+    let output = process_stream(&[line]);
+    assert_eq!(
+        output,
+        vec![
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA extremely-very-long-word"
+                .to_string(),
+            "end".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn test_wrap_word_longer_than_width() {
+    let long_word = "a".repeat(90);
+    let output = process_stream(&[long_word.clone()]);
+    assert_eq!(output, vec!["a".repeat(80), "a".repeat(10)]);
+}
+
+#[test]
+fn test_wrap_line_without_hyphenated_words() {
+    let line = format!("{} lorem ipsum dolor sit amet", "A".repeat(60));
+    let output = process_stream(&[line]);
+    assert_eq!(
+        output,
+        vec![
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA lorem ipsum dolor"
+                .to_string(),
+            "sit amet".to_string(),
+        ]
+    );
+}

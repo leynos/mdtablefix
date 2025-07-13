@@ -17,7 +17,7 @@ use std::{fs, path::Path};
 
 pub use html::convert_html_tables;
 use regex::Regex;
-use textwrap::fill;
+use textwrap::{Options, WordSplitter, fill};
 
 /// Splits a markdown table line into trimmed cell strings.
 ///
@@ -258,14 +258,17 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
         }
         segment.push_str(text);
         if *hard_break {
-            for line in fill(&segment, width - indent.len()).lines() {
+            let opts =
+                Options::new(width - indent.len()).word_splitter(WordSplitter::NoHyphenation);
+            for line in fill(&segment, &opts).lines() {
                 out.push(format!("{indent}{line}"));
             }
             segment.clear();
         }
     }
     if !segment.is_empty() {
-        for line in fill(&segment, width - indent.len()).lines() {
+        let opts = Options::new(width - indent.len()).word_splitter(WordSplitter::NoHyphenation);
+        for line in fill(&segment, &opts).lines() {
             out.push(format!("{indent}{line}"));
         }
     }
@@ -358,7 +361,9 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             let prefix = cap.get(1).unwrap().as_str();
             let rest = cap.get(2).unwrap().as_str().trim();
             let spaces = " ".repeat(prefix.len());
-            for (i, l) in fill(rest, width - prefix.len()).lines().enumerate() {
+            let opts =
+                Options::new(width - prefix.len()).word_splitter(WordSplitter::NoHyphenation);
+            for (i, l) in fill(rest, &opts).lines().enumerate() {
                 if i == 0 {
                     out.push(format!("{prefix}{l}"));
                 } else {
@@ -612,5 +617,19 @@ mod tests {
         assert!(!rows_mismatched(&with_sep, false));
 
         assert!(!rows_mismatched(&mismatch, true));
+    }
+
+    #[test]
+    fn wrap_text_preserves_hyphenated_words() {
+        let input = vec!["A word that is very-long-word indeed".to_string()];
+        let wrapped = wrap_text(&input, 20);
+        assert_eq!(
+            wrapped,
+            vec![
+                "A word that is".to_string(),
+                "very-long-word".to_string(),
+                "indeed".to_string(),
+            ]
+        );
     }
 }
