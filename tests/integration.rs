@@ -457,7 +457,7 @@ fn test_convert_html_table_with_colspan() {
 
 #[test]
 fn test_convert_html_table_no_header() {
-    let expected = vec!["| A | B |", "| 1 | 2 |"];
+    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(convert_html_tables(&html_table_no_header()), expected);
 }
 

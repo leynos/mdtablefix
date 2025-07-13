@@ -145,6 +145,10 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
         }
         out.push(format!("| {} |", cells.join(" | ")));
     }
+    if !first_header && row_handles.len() > 1 {
+        // Assume a header row when no header markup is present.
+        first_header = true;
+    }
     if first_header {
         let sep: Vec<String> = (0..col_count).map(|_| "---".to_string()).collect();
         out.insert(1, format!("| {} |", sep.join(" | ")));
