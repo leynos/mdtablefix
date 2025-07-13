@@ -1,7 +1,7 @@
 use std::{fs::File, io::Write};
 
 use assert_cmd::Command;
-use mdtablefix::{convert_html_tables, process_stream, reflow_table};
+use mdtablefix::{convert_html_tables, process_stream, reflow_table, renumber_lists};
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
@@ -663,4 +663,90 @@ fn test_regression_complex_table() {
         .map(str::to_string)
         .collect();
     assert_eq!(process_stream(&input), expected);
+}
+
+#[test]
+fn test_renumber_basic() {
+    let input = vec![
+        "1. first".to_string(),
+        "2. second".to_string(),
+        "7. third".to_string(),
+    ];
+    let expected = vec!["1. first", "2. second", "3. third"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
+fn test_renumber_with_fence() {
+    let input = vec![
+        "1. item".to_string(),
+        "```".to_string(),
+        "code".to_string(),
+        "```".to_string(),
+        "9. next".to_string(),
+    ];
+    let expected = vec![
+        "1. item".to_string(),
+        "```".to_string(),
+        "code".to_string(),
+        "```".to_string(),
+        "2. next".to_string(),
+    ];
+    assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
+fn test_cli_renumber_option() {
+    let output = Command::cargo_bin("mdtablefix")
+        .unwrap()
+        .arg("--renumber")
+        .write_stdin("1. a\n4. b\n")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(text, "1. a\n2. b\n");
+}
+
+#[test]
+fn test_renumber_nested_lists() {
+    let input = vec![
+        "1. first",
+        "    1. sub first",
+        "    3. sub second",
+        "2. second",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect::<Vec<_>>();
+
+    let expected = vec![
+        "1. first",
+        "    1. sub first",
+        "    2. sub second",
+        "2. second",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect::<Vec<_>>();
+
+    assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
+fn test_renumber_mult_paragraph_items() {
+    let input = vec!["1. first", "", "    still first paragraph", "", "2. second"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    let expected = vec!["1. first", "", "    still first paragraph", "", "2. second"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    assert_eq!(renumber_lists(&input), expected);
 }

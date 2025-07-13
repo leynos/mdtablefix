@@ -224,6 +224,9 @@ static FENCE_RE: std::sync::LazyLock<Regex> =
 static BULLET_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
 
+static NUMBERED_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").unwrap());
+
 /// Returns `true` if the line is a fenced code block delimiter (e.g., three backticks or "~~~").
 ///
 /// # Examples
@@ -480,6 +483,57 @@ fn process_stream_inner(lines: &[String], wrap: bool) -> Vec<String> {
     }
 
     if wrap { wrap_text(&out, 80) } else { out }
+}
+
+#[must_use]
+/// Renumbers ordered list items in Markdown text.
+///
+/// Lines matching `^\s*[1-9][0-9]*\.\s+` are renumbered sequentially within
+/// their indentation level. Numbering continues across fenced code blocks
+/// without resetting.
+pub fn renumber_lists(lines: &[String]) -> Vec<String> {
+    let mut out = Vec::with_capacity(lines.len());
+    let mut counters: Vec<(usize, usize)> = Vec::new();
+    let mut in_code = false;
+
+    for line in lines {
+        if FENCE_RE.is_match(line) {
+            in_code = !in_code;
+            out.push(line.clone());
+            continue;
+        }
+
+        if in_code {
+            out.push(line.clone());
+            continue;
+        }
+
+        if let Some(cap) = NUMBERED_RE.captures(line) {
+            let indent = cap.get(1).map_or("", |m| m.as_str());
+            let indent_len = indent.len();
+            while counters.last().is_some_and(|(i, _)| *i > indent_len) {
+                counters.pop();
+            }
+            if counters.last().is_none_or(|(i, _)| *i < indent_len) {
+                counters.push((indent_len, 1));
+            }
+            let idx = counters.len() - 1;
+            let num = counters[idx].1;
+            counters[idx].1 += 1;
+            let spaces = cap.get(3).map_or("", |m| m.as_str());
+            let rest = cap.get(4).map_or("", |m| m.as_str());
+            out.push(format!("{indent}{num}.{spaces}{rest}"));
+            continue;
+        }
+
+        let indent_len = line.chars().take_while(|c| c.is_whitespace()).count();
+        while counters.last().is_some_and(|(i, _)| *i > indent_len) {
+            counters.pop();
+        }
+        out.push(line.clone());
+    }
+
+    out
 }
 
 #[must_use]
