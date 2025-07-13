@@ -1,7 +1,14 @@
 use std::{fs::File, io::Write};
 
 use assert_cmd::Command;
-use mdtablefix::{convert_html_tables, process_stream, reflow_table, renumber_lists};
+use mdtablefix::{
+    THEMATIC_BREAK_LEN,
+    convert_html_tables,
+    format_breaks,
+    process_stream,
+    reflow_table,
+    renumber_lists,
+};
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
@@ -806,62 +813,68 @@ fn test_renumber_mult_paragraph_items() {
 }
 
 #[test]
-fn test_wrap_hyphenated_word() {
-    let line = format!("{} extremely-very-long-word end", "A".repeat(60));
-    let output = process_stream(&[line]);
-    assert_eq!(
-        output,
-        vec![
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
-            "extremely-very-long-word end".to_string(),
-        ]
-    );
-}
-#[test]
-fn test_wrap_multiple_hyphenated_words() {
-    let line = format!("{} foo-bar baz-qux quux-corge end", "A".repeat(60));
-    let output = process_stream(&[line]);
-    assert_eq!(
-        output,
-        vec![
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA foo-bar baz-qux"
-                .to_string(),
-            "quux-corge end".to_string(),
-        ]
-    );
+fn test_format_breaks_basic() {
+    let input = vec!["foo", "***", "bar"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let expected = vec![
+        "foo".to_string(),
+        "_".repeat(THEMATIC_BREAK_LEN),
+        "bar".to_string(),
+    ];
+    assert_eq!(format_breaks(&input), expected);
 }
 
 #[test]
-fn test_wrap_hyphenated_word_at_boundary() {
-    let line = format!("{} extremely-very-long-word end", "A".repeat(55));
-    let output = process_stream(&[line]);
-    assert_eq!(
-        output,
-        vec![
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA extremely-very-long-word"
-                .to_string(),
-            "end".to_string(),
-        ]
-    );
+fn test_format_breaks_ignores_code() {
+    let input = vec!["```", "---", "```"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    assert_eq!(format_breaks(&input), input);
 }
 
 #[test]
-fn test_wrap_word_longer_than_width() {
-    let long_word = "a".repeat(90);
-    let output = process_stream(&[long_word.clone()]);
-    assert_eq!(output, vec!["a".repeat(80), "a".repeat(10)]);
+fn test_format_breaks_mixed_chars() {
+    let input = vec!["-*-*-"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    assert_eq!(format_breaks(&input), input);
 }
 
 #[test]
-fn test_wrap_line_without_hyphenated_words() {
-    let line = format!("{} lorem ipsum dolor sit amet", "A".repeat(60));
-    let output = process_stream(&[line]);
+fn test_format_breaks_with_spaces_and_indent() {
+    let input = vec!["  -  -  -  "]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let expected = vec!["_".repeat(THEMATIC_BREAK_LEN)];
+    assert_eq!(format_breaks(&input), expected);
+}
+
+#[test]
+fn test_format_breaks_with_tabs_and_underscores() {
+    let input = vec!["\t_\t_\t_\t"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let expected = vec!["_".repeat(THEMATIC_BREAK_LEN)];
+    assert_eq!(format_breaks(&input), expected);
+}
+
+#[test]
+fn test_cli_breaks_option() {
+    let output = Command::cargo_bin("mdtablefix")
+        .unwrap()
+        .arg("--breaks")
+        .write_stdin("---\n")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
     assert_eq!(
-        output,
-        vec![
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA lorem ipsum dolor"
-                .to_string(),
-            "sit amet".to_string(),
-        ]
+        String::from_utf8_lossy(&output.stdout),
+        format!("{}\n", "_".repeat(THEMATIC_BREAK_LEN))
     );
 }
