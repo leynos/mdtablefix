@@ -20,5 +20,5 @@ rest of the document.
 The converter checks the first table row for `<th>` cells or for `<strong>` or
 `<b>` tags inside `<td>` elements to decide whether it is a header. If no such
 markers exist and the table contains multiple rows, the first row is still
-treated as the header so the Markdown output includes a separator line. This
+treated as the header, so the Markdown output includes a separator line. This
 last-resort behaviour keeps simple tables readable after conversion.

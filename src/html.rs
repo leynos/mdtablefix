@@ -113,6 +113,24 @@ fn contains_strong(handle: &Handle) -> bool {
     children.iter().any(contains_strong)
 }
 
+/// Extracts cell text from a row and reports whether all cells are header cells.
+fn parse_row(row: &Handle) -> (Vec<String>, bool) {
+    let mut cells = Vec::new();
+    let mut all_header = true;
+    for child in row.children.borrow().iter() {
+        if is_table_cell(child) {
+            let is_header = if is_element(child, "th") {
+                true
+            } else {
+                contains_strong(child)
+            };
+            all_header &= is_header;
+            cells.push(node_text(child));
+        }
+    }
+    (cells, all_header)
+}
+
 /// Converts a `<table>` DOM node into Markdown table lines and calls
 /// `reflow_table` so the columns are uniformly padded.
 fn table_node_to_markdown(table: &Handle) -> Vec<String> {
@@ -122,37 +140,23 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
         return Vec::new();
     }
 
+    let (first_cells, explicit_header) = parse_row(&row_handles[0]);
+    let col_count = first_cells.len();
+    let fallback_header = !explicit_header && row_handles.len() > 1;
+    let has_header = explicit_header || fallback_header;
+
     let mut out = Vec::new();
-    let mut first_header = false;
-    let mut col_count = 0;
-    for (i, row) in row_handles.iter().enumerate() {
-        let mut cells = Vec::new();
-        let mut all_header = true;
-        for child in row.children.borrow().iter() {
-            if is_table_cell(child) {
-                let is_header = if is_element(child, "th") {
-                    true
-                } else {
-                    contains_strong(child)
-                };
-                all_header &= is_header;
-                cells.push(node_text(child));
-            }
-        }
-        if i == 0 {
-            first_header = all_header;
-            col_count = cells.len();
-        }
+    out.push(format!("| {} |", first_cells.join(" | ")));
+    for row in row_handles.iter().skip(1) {
+        let (cells, _) = parse_row(row);
         out.push(format!("| {} |", cells.join(" | ")));
     }
-    if !first_header && row_handles.len() > 1 {
-        // Assume a header row when no header markup is present.
-        first_header = true;
-    }
-    if first_header {
+
+    if has_header {
         let sep: Vec<String> = (0..col_count).map(|_| "---".to_string()).collect();
         out.insert(1, format!("| {} |", sep.join(" | ")));
     }
+
     crate::reflow_table(&out)
 }
 
