@@ -818,10 +818,11 @@ fn test_format_breaks_basic() {
         .into_iter()
         .map(str::to_string)
         .collect::<Vec<_>>();
-    let mut expected = Vec::new();
-    expected.push("foo".to_string());
-    expected.push("_".repeat(THEMATIC_BREAK_LEN));
-    expected.push("bar".to_string());
+    let expected = vec![
+        "foo".to_string(),
+        "_".repeat(THEMATIC_BREAK_LEN),
+        "bar".to_string(),
+    ];
     assert_eq!(format_breaks(&input), expected);
 }
 
