@@ -9,3 +9,17 @@ macro_rules! lines_vec {
         vec![$($line.to_string()),*]
     };
 }
+
+/// Assert common wrapping expectations for list items.
+///
+/// Verifies the number of lines, prefix on the first line, length of all lines,
+/// and indentation of continuation lines.
+pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize) {
+    assert_eq!(output.len(), expected);
+    assert!(output.first().map_or(false, |l| l.starts_with(prefix)));
+    assert!(output.iter().all(|l| l.len() <= 80));
+    let indent = " ".repeat(prefix.len());
+    for line in output.iter().skip(1) {
+        assert!(line.starts_with(&indent));
+    }
+}
