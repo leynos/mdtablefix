@@ -750,3 +750,16 @@ fn test_renumber_mult_paragraph_items() {
 
     assert_eq!(renumber_lists(&input), expected);
 }
+
+#[test]
+fn test_wrap_hyphenated_word() {
+    let line = format!("{} extremely-very-long-word end", "A".repeat(60));
+    let output = process_stream(&[line]);
+    assert_eq!(
+        output,
+        vec![
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            "extremely-very-long-word end".to_string(),
+        ]
+    );
+}
