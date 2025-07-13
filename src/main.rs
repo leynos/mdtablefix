@@ -19,7 +19,7 @@ struct Cli {
     files: Vec<PathBuf>,
 }
 
-#[derive(clap::Args)]
+#[derive(clap::Args, Clone, Copy)]
 struct FormatOpts {
     /// Wrap paragraphs and list items to 80 columns
     #[arg(long = "wrap")]
@@ -32,25 +32,25 @@ struct FormatOpts {
     breaks: bool,
 }
 
-fn process_lines(lines: &[String], wrap: bool, renumber: bool, breaks: bool) -> Vec<String> {
-    let mut out = if wrap {
+fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
+    let mut out = if opts.wrap {
         process_stream(lines)
     } else {
         process_stream_no_wrap(lines)
     };
-    if renumber {
+    if opts.renumber {
         out = renumber_lists(&out);
     }
-    if breaks {
+    if opts.breaks {
         out = format_breaks(&out);
     }
     out
 }
 
-fn rewrite_path(path: &Path, wrap: bool, renumber: bool, breaks: bool) -> std::io::Result<()> {
+fn rewrite_path(path: &Path, opts: FormatOpts) -> std::io::Result<()> {
     let content = fs::read_to_string(path)?;
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
-    let fixed = process_lines(&lines, wrap, renumber, breaks);
+    let fixed = process_lines(&lines, opts);
     fs::write(path, fixed.join("\n") + "\n")
 }
 
@@ -84,18 +84,18 @@ fn main() -> anyhow::Result<()> {
         let mut input = String::new();
         io::stdin().read_to_string(&mut input)?;
         let lines: Vec<String> = input.lines().map(str::to_string).collect();
-        let fixed = process_lines(&lines, cli.opts.wrap, cli.opts.renumber, cli.opts.breaks);
+        let fixed = process_lines(&lines, cli.opts);
         println!("{}", fixed.join("\n"));
         return Ok(());
     }
 
     for path in cli.files {
         if cli.in_place {
-            rewrite_path(&path, cli.opts.wrap, cli.opts.renumber, cli.opts.breaks)?;
+            rewrite_path(&path, cli.opts)?;
         } else {
             let content = fs::read_to_string(&path)?;
             let lines: Vec<String> = content.lines().map(str::to_string).collect();
-            let fixed = process_lines(&lines, cli.opts.wrap, cli.opts.renumber, cli.opts.breaks);
+            let fixed = process_lines(&lines, cli.opts);
             println!("{}", fixed.join("\n"));
         }
     }

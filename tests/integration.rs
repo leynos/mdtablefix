@@ -2,6 +2,7 @@ use std::{fs::File, io::Write};
 
 use assert_cmd::Command;
 use mdtablefix::{
+    THEMATIC_BREAK_LEN,
     convert_html_tables,
     format_breaks,
     process_stream,
@@ -819,7 +820,7 @@ fn test_format_breaks_basic() {
         .collect::<Vec<_>>();
     let mut expected = Vec::new();
     expected.push("foo".to_string());
-    expected.push("_".repeat(70));
+    expected.push("_".repeat(THEMATIC_BREAK_LEN));
     expected.push("bar".to_string());
     assert_eq!(format_breaks(&input), expected);
 }
@@ -834,6 +835,35 @@ fn test_format_breaks_ignores_code() {
 }
 
 #[test]
+fn test_format_breaks_mixed_chars() {
+    let input = vec!["-*-*-"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    assert_eq!(format_breaks(&input), input);
+}
+
+#[test]
+fn test_format_breaks_with_spaces_and_indent() {
+    let input = vec!["  -  -  -  "]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let expected = vec!["_".repeat(THEMATIC_BREAK_LEN)];
+    assert_eq!(format_breaks(&input), expected);
+}
+
+#[test]
+fn test_format_breaks_with_tabs_and_underscores() {
+    let input = vec!["\t_\t_\t_\t"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let expected = vec!["_".repeat(THEMATIC_BREAK_LEN)];
+    assert_eq!(format_breaks(&input), expected);
+}
+
+#[test]
 fn test_cli_breaks_option() {
     let output = Command::cargo_bin("mdtablefix")
         .unwrap()
@@ -844,6 +874,6 @@ fn test_cli_breaks_option() {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
-        format!("{}\n", "_".repeat(70))
+        format!("{}\n", "_".repeat(THEMATIC_BREAK_LEN))
     );
 }
