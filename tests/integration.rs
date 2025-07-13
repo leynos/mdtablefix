@@ -102,6 +102,36 @@ fn html_table_no_header() -> Vec<String> {
 }
 
 #[fixture]
+fn html_table_empty_row() -> Vec<String> {
+    lines_vec!(
+        "<table>",
+        "<tr></tr>",
+        "<tr><td>1</td><td>2</td></tr>",
+        "</table>",
+    )
+}
+
+#[fixture]
+fn html_table_whitespace_header() -> Vec<String> {
+    lines_vec!(
+        "<table>",
+        "<tr><td>  </td><td>  </td></tr>",
+        "<tr><td>1</td><td>2</td></tr>",
+        "</table>",
+    )
+}
+
+#[fixture]
+fn html_table_inconsistent_first_row() -> Vec<String> {
+    lines_vec!(
+        "<table>",
+        "<tr><td>A</td></tr>",
+        "<tr><td>1</td><td>2</td></tr>",
+        "</table>",
+    )
+}
+
+#[fixture]
 fn html_table_empty() -> Vec<String> {
     let lines = lines_vec!("<table></table>");
     lines
@@ -457,8 +487,32 @@ fn test_convert_html_table_with_colspan() {
 
 #[test]
 fn test_convert_html_table_no_header() {
-    let expected = vec!["| A | B |", "| 1 | 2 |"];
+    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(convert_html_tables(&html_table_no_header()), expected);
+}
+
+#[test]
+fn test_convert_html_table_empty_row() {
+    let expected = vec!["| 1 | 2 |", "| --- | --- |"];
+    assert_eq!(convert_html_tables(&html_table_empty_row()), expected);
+}
+
+#[test]
+fn test_convert_html_table_whitespace_header() {
+    let expected = vec!["| --- | --- |", "| --- | --- |", "| 1   | 2   |"];
+    assert_eq!(
+        convert_html_tables(&html_table_whitespace_header()),
+        expected
+    );
+}
+
+#[test]
+fn test_convert_html_table_inconsistent_first_row() {
+    let expected = vec!["| A |", "| --- |", "| 1 | 2 |"];
+    assert_eq!(
+        convert_html_tables(&html_table_inconsistent_first_row()),
+        expected
+    );
 }
 
 #[test]
