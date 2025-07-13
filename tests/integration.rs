@@ -675,6 +675,39 @@ fn test_wrap_list_item() {
 }
 
 #[test]
+fn test_wrap_bullet_with_inline_code() {
+    let input = vec![
+        "- `script`: A multi-line script declared with the YAML `|` block style. The entire block \
+         is passed to an interpreter. If the first line begins with `#!`, Netsuke executes the \
+         script verbatim, respecting the shebang."
+            .to_string(),
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output.len(), 3);
+    assert!(output[0].starts_with("- "));
+    assert!(output[1].starts_with("  "));
+    assert!(output[2].starts_with("  "));
+    assert!(output.iter().all(|l| l.len() <= 80));
+}
+
+#[test]
+fn test_wrap_numbered_with_inline_code() {
+    let input = vec![
+        "1. `script`: A multi-line script declared with the YAML `|` block style. The entire \
+         block is passed to an interpreter. If the first line begins with `#!`, Netsuke executes \
+         the script verbatim, respecting the shebang."
+            .to_string(),
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output.len(), 3);
+    assert!(output[0].starts_with("1. "));
+    for line in output.iter().skip(1) {
+        assert!(line.starts_with("   "));
+    }
+    assert!(output.iter().all(|l| l.len() <= 80));
+}
+
+#[test]
 /// Verifies that short list items are not wrapped or altered by the stream processing logic.
 ///
 /// Ensures that a single-line bullet list item remains unchanged after processing.
