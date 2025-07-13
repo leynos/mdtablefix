@@ -2,8 +2,10 @@
 
 `mdtablefix` unb0rks and reflows Markdown tables so that each column has a
 uniform width. It can wrap paragraphs and list items to 80 columns when the
-`--wrap` option is used. The tool ignores fenced code blocks and respects
-escaped pipes (`\|`), making it safe for mixed content.
+`--wrap` option is used. Hyphenated words are treated as single units during
+wrapping, so `very-long-word` moves to the next line rather than splitting at
+the hyphen. The tool ignores fenced code blocks and respects escaped pipes
+(`\|`), making it safe for mixed content.
 
 ## Installation
 
