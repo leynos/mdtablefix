@@ -20,12 +20,13 @@ cargo install --path .
 ## Command-line usage
 
 ```bash
-mdtablefix [--wrap] [--renumber] [--in-place] [FILE...]
+mdtablefix [--wrap] [--renumber] [--breaks] [--in-place] [FILE...]
 ```
 
 - With file paths provided, the corrected tables are printed to stdout.
 - Use `--wrap` to also reflow paragraphs and list items to 80 columns.
 - Use `--renumber` to rewrite ordered lists with sequential numbering.
+- Use `--breaks` to normalize thematic breaks to 70 underscores.
 - Use `--in-place` to overwrite files.
 - If no files are supplied, input is read from stdin and results are written to stdout.
 

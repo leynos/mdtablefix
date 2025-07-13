@@ -227,6 +227,10 @@ static BULLET_RE: std::sync::LazyLock<Regex> =
 static NUMBERED_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").unwrap());
 
+static THEMATIC_BREAK_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"^[ ]{0,3}((?:[ \t]*\*){3,}|(?:[ \t]*-){3,}|(?:[ \t]*_){3,})[ \t]*$").unwrap()
+});
+
 /// Returns `true` if the line is a fenced code block delimiter (e.g., three backticks or "~~~").
 ///
 /// # Examples
@@ -531,6 +535,33 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             counters.pop();
         }
         out.push(line.clone());
+    }
+
+    out
+}
+
+#[must_use]
+/// Reformat thematic breaks as 70 underscores.
+///
+/// Thematic breaks are lines composed of three or more matching `-`, `_`, or
+/// `*` characters (optionally separated by spaces or tabs) with up to three
+/// leading spaces. Lines inside fenced code blocks are ignored.
+pub fn format_breaks(lines: &[String]) -> Vec<String> {
+    let mut out = Vec::with_capacity(lines.len());
+    let mut in_code = false;
+
+    for line in lines {
+        if FENCE_RE.is_match(line) {
+            in_code = !in_code;
+            out.push(line.clone());
+            continue;
+        }
+
+        if !in_code && THEMATIC_BREAK_RE.is_match(line.trim_end()) {
+            out.push("_".repeat(70));
+        } else {
+            out.push(line.clone());
+        }
     }
 
     out

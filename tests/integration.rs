@@ -1,7 +1,13 @@
 use std::{fs::File, io::Write};
 
 use assert_cmd::Command;
-use mdtablefix::{convert_html_tables, process_stream, reflow_table, renumber_lists};
+use mdtablefix::{
+    convert_html_tables,
+    format_breaks,
+    process_stream,
+    reflow_table,
+    renumber_lists,
+};
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
@@ -803,4 +809,41 @@ fn test_renumber_mult_paragraph_items() {
         .collect::<Vec<_>>();
 
     assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
+fn test_format_breaks_basic() {
+    let input = vec!["foo", "***", "bar"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let mut expected = Vec::new();
+    expected.push("foo".to_string());
+    expected.push("_".repeat(70));
+    expected.push("bar".to_string());
+    assert_eq!(format_breaks(&input), expected);
+}
+
+#[test]
+fn test_format_breaks_ignores_code() {
+    let input = vec!["```", "---", "```"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    assert_eq!(format_breaks(&input), input);
+}
+
+#[test]
+fn test_cli_breaks_option() {
+    let output = Command::cargo_bin("mdtablefix")
+        .unwrap()
+        .arg("--breaks")
+        .write_stdin("---\n")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        format!("{}\n", "_".repeat(70))
+    );
 }
