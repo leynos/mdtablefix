@@ -5,7 +5,7 @@ use std::{
 };
 
 use clap::Parser;
-use mdtablefix::{process_stream, process_stream_no_wrap, rewrite, rewrite_no_wrap};
+use mdtablefix::{process_stream, process_stream_no_wrap, renumber_lists};
 
 #[derive(Parser)]
 #[command(about = "Reflow broken markdown tables")]
@@ -16,24 +16,30 @@ struct Cli {
     /// Wrap paragraphs and list items to 80 columns
     #[arg(long = "wrap")]
     wrap: bool,
+    /// Renumber ordered list items
+    #[arg(long = "renumber")]
+    renumber: bool,
     /// Markdown files to fix
     files: Vec<PathBuf>,
 }
 
-fn process_lines(lines: &[String], wrap: bool) -> Vec<String> {
-    if wrap {
+fn process_lines(lines: &[String], wrap: bool, renumber: bool) -> Vec<String> {
+    let mut out = if wrap {
         process_stream(lines)
     } else {
         process_stream_no_wrap(lines)
+    };
+    if renumber {
+        out = renumber_lists(&out);
     }
+    out
 }
 
-fn rewrite_path(path: &Path, wrap: bool) -> std::io::Result<()> {
-    if wrap {
-        rewrite(path)
-    } else {
-        rewrite_no_wrap(path)
-    }
+fn rewrite_path(path: &Path, wrap: bool, renumber: bool) -> std::io::Result<()> {
+    let content = fs::read_to_string(path)?;
+    let lines: Vec<String> = content.lines().map(str::to_string).collect();
+    let fixed = process_lines(&lines, wrap, renumber);
+    fs::write(path, fixed.join("\n") + "\n")
 }
 
 /// Entry point for the command-line tool that reflows broken markdown tables.
@@ -66,18 +72,18 @@ fn main() -> anyhow::Result<()> {
         let mut input = String::new();
         io::stdin().read_to_string(&mut input)?;
         let lines: Vec<String> = input.lines().map(str::to_string).collect();
-        let fixed = process_lines(&lines, cli.wrap);
+        let fixed = process_lines(&lines, cli.wrap, cli.renumber);
         println!("{}", fixed.join("\n"));
         return Ok(());
     }
 
     for path in cli.files {
         if cli.in_place {
-            rewrite_path(&path, cli.wrap)?;
+            rewrite_path(&path, cli.wrap, cli.renumber)?;
         } else {
             let content = fs::read_to_string(&path)?;
             let lines: Vec<String> = content.lines().map(str::to_string).collect();
-            let fixed = process_lines(&lines, cli.wrap);
+            let fixed = process_lines(&lines, cli.wrap, cli.renumber);
             println!("{}", fixed.join("\n"));
         }
     }
