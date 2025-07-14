@@ -13,7 +13,7 @@ pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     html::html_table_to_markdown(lines)
 }
 
-use std::{fs, path::Path, sync::LazyLock};
+use std::{fs, path::Path};
 
 pub use html::convert_html_tables;
 use regex::Regex;
@@ -226,7 +226,57 @@ static BULLET_RE: std::sync::LazyLock<Regex> =
 static NUMBERED_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").unwrap());
 
-static TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`[^`]*`|\S+|\s+").unwrap());
+fn tokenize_markdown(text: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c.is_whitespace() {
+            let start = i;
+            while i < chars.len() && chars[i].is_whitespace() {
+                i += 1;
+            }
+            tokens.push(chars[start..i].iter().collect());
+        } else if c == '`' {
+            let start = i;
+            let mut delim_len = 0;
+            while i < chars.len() && chars[i] == '`' {
+                i += 1;
+                delim_len += 1;
+            }
+            let mut end = i;
+            while end < chars.len() {
+                if chars[end] == '`' {
+                    let mut j = end;
+                    let mut count = 0;
+                    while j < chars.len() && chars[j] == '`' {
+                        j += 1;
+                        count += 1;
+                    }
+                    if count == delim_len {
+                        end = j;
+                        tokens.push(chars[start..end].iter().collect());
+                        i = end;
+                        break;
+                    }
+                }
+                end += 1;
+            }
+            if end >= chars.len() {
+                tokens.push(chars[start..].iter().collect());
+                break;
+            }
+        } else {
+            let start = i;
+            while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '`' {
+                i += 1;
+            }
+            tokens.push(chars[start..i].iter().collect());
+        }
+    }
+    tokens
+}
 
 /// Width of a normalised thematic break.
 /// The width used when rewriting thematic breaks.
@@ -237,18 +287,24 @@ static THEMATIC_BREAK_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(
 });
 
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
+    use unicode_width::UnicodeWidthStr;
+
     let mut lines = Vec::new();
     let mut current = String::new();
-    for token in TOKEN_RE.find_iter(text).map(|m| m.as_str()) {
-        if current.len() + token.len() <= width {
-            current.push_str(token);
+    let mut current_width = 0;
+    for token in tokenize_markdown(text) {
+        let token_width = UnicodeWidthStr::width(token.as_str());
+        if current_width + token_width <= width {
+            current.push_str(&token);
+            current_width += token_width;
         } else {
             let trimmed = current.trim_end();
             if !trimmed.is_empty() {
                 lines.push(trimmed.to_string());
             }
             current.clear();
-            current.push_str(token.trim_start());
+            current_width = token_width;
+            current.push_str(&token);
         }
     }
     let trimmed = current.trim_end();
