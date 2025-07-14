@@ -221,6 +221,9 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(```|~~~).*").unwrap());
 
+static CODE_SPAN_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"(`+[^`]*`+)").unwrap());
+
 static BULLET_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
 
@@ -248,6 +251,27 @@ static THEMATIC_BREAK_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(
 #[doc(hidden)]
 pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 
+/// Replaces spaces within inline code spans with non-breaking spaces.
+///
+/// Inline code spans are delimited by matching pairs of backticks. This helper
+/// replaces normal spaces inside those spans with `U+00A0` (non-breaking space)
+/// so that the wrapping logic does not split them across lines.
+fn protect_code_span_spaces(text: &str) -> String {
+    CODE_SPAN_RE
+        .replace_all(text, |caps: &regex::Captures| {
+            caps[0].replace(' ', "\u{00A0}")
+        })
+        .into_owned()
+}
+
+fn wrap_segment(seg: &str, indent: &str, width: usize, out: &mut Vec<String>) {
+    let opts = Options::new(width - indent.len()).word_splitter(WordSplitter::NoHyphenation);
+    let protected = protect_code_span_spaces(seg);
+    for line in fill(&protected, &opts).lines() {
+        let restored = line.replace('\u{00A0}', " ");
+        out.push(format!("{indent}{restored}"));
+    }
+}
 /// Flushes a buffered paragraph to the output, wrapping text to the specified width and applying
 /// indentation.
 ///
@@ -255,38 +279,6 @@ pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 /// wrapped lines to the output vector with the given indentation. Lines are wrapped to the
 /// specified width minus the indentation length. Hard breaks in the buffer force a line break at
 /// that point.
-fn replace_spaces_in_code(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-    let mut in_code = false;
-    let mut backticks = 0usize;
-    while let Some(ch) = chars.next() {
-        if ch == '`' {
-            let mut count = 1usize;
-            while matches!(chars.peek(), Some('`')) {
-                chars.next();
-                count += 1;
-            }
-            if in_code && count == backticks {
-                in_code = false;
-            } else if !in_code {
-                in_code = true;
-                backticks = count;
-            }
-            for _ in 0..count {
-                out.push('`');
-            }
-            continue;
-        }
-        if in_code && ch == ' ' {
-            out.push('\u{00A0}');
-        } else {
-            out.push(ch);
-        }
-    }
-    out
-}
-
 fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, width: usize) {
     if buf.is_empty() {
         return;
@@ -298,23 +290,12 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
         }
         segment.push_str(text);
         if *hard_break {
-            let opts =
-                Options::new(width - indent.len()).word_splitter(WordSplitter::NoHyphenation);
-            let protected = replace_spaces_in_code(&segment);
-            for line in fill(&protected, &opts).lines() {
-                let restored = line.replace('\u{00A0}', " ");
-                out.push(format!("{indent}{restored}"));
-            }
+            wrap_segment(&segment, indent, width, out);
             segment.clear();
         }
     }
     if !segment.is_empty() {
-        let opts = Options::new(width - indent.len()).word_splitter(WordSplitter::NoHyphenation);
-        let protected = replace_spaces_in_code(&segment);
-        for line in fill(&protected, &opts).lines() {
-            let restored = line.replace('\u{00A0}', " ");
-            out.push(format!("{indent}{restored}"));
-        }
+        wrap_segment(&segment, indent, width, out);
     }
 }
 
@@ -719,6 +700,42 @@ mod tests {
                 "to `powershell -Command` unless the manifest's `interpreter`".to_string(),
                 "field overrides the setting.".to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn wrap_text_multiple_code_spans() {
+        let input = vec!["combine `foo bar` and `baz qux` in one line".to_string()];
+        let wrapped = wrap_text(&input, 25);
+        assert_eq!(
+            wrapped,
+            vec![
+                "combine `foo bar` and".to_string(),
+                "`baz qux` in one line".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn wrap_text_nested_backticks() {
+        let input = vec!["Use `` `code` `` to quote backticks".to_string()];
+        let wrapped = wrap_text(&input, 20);
+        assert_eq!(
+            wrapped,
+            vec![
+                "Use `` `code` `` to".to_string(),
+                "quote backticks".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn wrap_text_unmatched_backticks() {
+        let input = vec!["This has a `dangling code span.".to_string()];
+        let wrapped = wrap_text(&input, 20);
+        assert_eq!(
+            wrapped,
+            vec!["This has a `dangling".to_string(), "code span.".to_string()]
         );
     }
 }
