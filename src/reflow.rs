@@ -114,7 +114,7 @@ pub(crate) fn detect_separator(
     let mut sep_row_idx: Option<usize> = None;
 
     let sep_invalid = invalid_separator(sep_cells.as_ref(), max_cols);
-    if sep_invalid && second_row_is_separator(rows) {
+    if should_use_second_row_as_separator(sep_invalid, rows) {
         sep_cells = Some(rows[1].clone());
         sep_row_idx = Some(1);
     }
@@ -127,6 +127,10 @@ fn invalid_separator(sep_cells: Option<&Vec<String>>, max_cols: usize) -> bool {
         Some(c) => c.len() != max_cols,
         None => true,
     }
+}
+
+fn should_use_second_row_as_separator(sep_invalid: bool, rows: &[Vec<String>]) -> bool {
+    sep_invalid && second_row_is_separator(rows)
 }
 
 fn second_row_is_separator(rows: &[Vec<String>]) -> bool {

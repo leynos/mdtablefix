@@ -29,6 +29,14 @@ fn node_text(handle: &Handle) -> String {
     out.trim().to_string()
 }
 
+fn is_ignored_tag(tag: &str) -> bool {
+    tag.eq_ignore_ascii_case("script")
+        || tag.eq_ignore_ascii_case("style")
+        || tag.eq_ignore_ascii_case("noscript")
+        || tag.eq_ignore_ascii_case("template")
+        || tag.eq_ignore_ascii_case("head")
+}
+
 /// Recursively appends text nodes from `handle` to `out`, tracking whether the
 /// previous output was whitespace.
 fn collect_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
@@ -47,13 +55,7 @@ fn collect_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
             }
         }
         NodeData::Element { name, .. } => {
-            let tag = name.local.as_ref();
-            if tag.eq_ignore_ascii_case("script")
-                || tag.eq_ignore_ascii_case("style")
-                || tag.eq_ignore_ascii_case("noscript")
-                || tag.eq_ignore_ascii_case("template")
-                || tag.eq_ignore_ascii_case("head")
-            {
+            if is_ignored_tag(name.local.as_ref()) {
                 return;
             }
             for child in handle.children.borrow().iter() {
@@ -101,13 +103,16 @@ fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
     }
 }
 
+fn is_bold_tag(tag: &str) -> bool {
+    tag.eq_ignore_ascii_case("strong") || tag.eq_ignore_ascii_case("b")
+}
+
 /// Returns `true` if `handle` contains a `<b>` or `<strong>` descendant.
 fn contains_strong(handle: &Handle) -> bool {
-    if let NodeData::Element { name, .. } = &handle.data {
-        let tag = name.local.as_ref();
-        if tag.eq_ignore_ascii_case("strong") || tag.eq_ignore_ascii_case("b") {
-            return true;
-        }
+    if let NodeData::Element { name, .. } = &handle.data
+        && is_bold_tag(name.local.as_ref())
+    {
+        return true;
     }
     let children = handle.children.borrow();
     children.iter().any(contains_strong)
