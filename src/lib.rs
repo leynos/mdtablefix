@@ -220,9 +220,6 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(```|~~~).*").unwrap());
 
-static CODE_SPAN_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"(`+[^`]*`+)").unwrap());
-
 static BULLET_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
 
@@ -259,16 +256,17 @@ fn tokenize_markdown(text: &str) -> Vec<String> {
                     }
                     if count == delim_len {
                         end = j;
-                        tokens.push(chars[start..end].iter().collect());
-                        i = end;
                         break;
                     }
                 }
                 end += 1;
             }
             if end >= chars.len() {
-                tokens.push(chars[start..].iter().collect());
-                break;
+                tokens.push(chars[start..start + delim_len].iter().collect());
+                i = start + delim_len;
+            } else {
+                tokens.push(chars[start..end].iter().collect());
+                i = end;
             }
         } else {
             let start = i;
@@ -303,14 +301,19 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         if current_width + token_width <= width {
             current.push_str(&token);
             current_width += token_width;
-        } else {
-            let trimmed = current.trim_end();
-            if !trimmed.is_empty() {
-                lines.push(trimmed.to_string());
-            }
-            current.clear();
-            current_width = token_width;
+            continue;
+        }
+
+        let trimmed = current.trim_end();
+        if !trimmed.is_empty() {
+            lines.push(trimmed.to_string());
+        }
+        current.clear();
+        current_width = 0;
+
+        if !token.chars().all(char::is_whitespace) {
             current.push_str(&token);
+            current_width = token_width;
         }
     }
     let trimmed = current.trim_end();
@@ -338,22 +341,6 @@ pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 /// Inline code spans are delimited by matching pairs of backticks. This helper
 /// replaces normal spaces inside those spans with `U+00A0` (non-breaking space)
 /// so that the wrapping logic does not split them across lines.
-fn protect_code_span_spaces(text: &str) -> String {
-    CODE_SPAN_RE
-        .replace_all(text, |caps: &regex::Captures| {
-            caps[0].replace(' ', "\u{00A0}")
-        })
-        .into_owned()
-}
-
-fn wrap_segment(seg: &str, indent: &str, width: usize, out: &mut Vec<String>) {
-    let opts = Options::new(width - indent.len()).word_splitter(WordSplitter::NoHyphenation);
-    let protected = protect_code_span_spaces(seg);
-    for line in fill(&protected, &opts).lines() {
-        let restored = line.replace('\u{00A0}', " ");
-        out.push(format!("{indent}{restored}"));
-    }
-}
 /// Flushes a buffered paragraph to the output, wrapping text to the specified width and applying
 /// indentation.
 ///

@@ -9,7 +9,6 @@ clap = { version = "4", features = ["derive"] }
 regex = "1"
 html5ever = "0.27"
 markup5ever_rcdom = "0.3"
-textwrap = "^0.16"
 unicode-width = ">=0.1, <0.2"
 
 
