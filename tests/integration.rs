@@ -664,14 +664,21 @@ fn test_wrap_list_item() {
             .to_string(),
     ];
     let output = process_stream(&input);
-    assert!(output.len() > 1);
-    assert!(output[0].starts_with("- "));
-    for line in &output {
-        assert!(line.len() <= 80);
-    }
-    for line in output.iter().skip(1) {
-        assert!(line.starts_with("  "));
-    }
+    common::assert_wrapped_list_item(&output, "- ", 2);
+}
+
+#[rstest]
+#[case("- ", 3)]
+#[case("1. ", 3)]
+#[case("10. ", 3)]
+fn test_wrap_list_items_with_inline_code(#[case] prefix: &str, #[case] expected: usize) {
+    let input = vec![format!(
+        "{prefix}`script`: A multi-line script declared with the YAML `|` block style. The entire \
+         block is passed to an interpreter. If the first line begins with `#!`, Netsuke executes \
+         the script verbatim, respecting the shebang."
+    )];
+    let output = process_stream(&input);
+    common::assert_wrapped_list_item(&output, prefix, expected);
 }
 
 #[test]
