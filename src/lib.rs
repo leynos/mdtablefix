@@ -235,6 +235,9 @@ static THEMATIC_BREAK_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(
     Regex::new(r"^[ ]{0,3}((?:[ \t]*\*){3,}|(?:[ \t]*-){3,}|(?:[ \t]*_){3,})[ \t]*$").unwrap()
 });
 
+static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| "_".repeat(THEMATIC_BREAK_LEN));
+
 /// Returns `true` if the line is a fenced code block delimiter (e.g., three backticks or "~~~").
 ///
 /// # Examples
@@ -567,7 +570,7 @@ pub fn format_breaks(lines: &[String]) -> Vec<String> {
         }
 
         if !in_code && THEMATIC_BREAK_RE.is_match(line.trim_end()) {
-            out.push("_".repeat(THEMATIC_BREAK_LEN));
+            out.push(THEMATIC_BREAK_LINE.clone());
         } else {
             out.push(line.clone());
         }
