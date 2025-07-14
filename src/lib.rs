@@ -13,11 +13,10 @@ pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     html::html_table_to_markdown(lines)
 }
 
-use std::{fs, path::Path};
+use std::{fs, path::Path, sync::LazyLock};
 
 pub use html::convert_html_tables;
 use regex::Regex;
-use textwrap::{Options, WordSplitter, fill};
 
 /// Splits a markdown table line into trimmed cell strings.
 ///
@@ -227,6 +226,8 @@ static BULLET_RE: std::sync::LazyLock<Regex> =
 static NUMBERED_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").unwrap());
 
+static TOKEN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`[^`]*`|\S+|\s+").unwrap());
+
 /// Width of a normalised thematic break.
 /// The width used when rewriting thematic breaks.
 pub const THEMATIC_BREAK_LEN: usize = 70;
@@ -234,6 +235,28 @@ pub const THEMATIC_BREAK_LEN: usize = 70;
 static THEMATIC_BREAK_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     Regex::new(r"^[ ]{0,3}((?:[ \t]*\*){3,}|(?:[ \t]*-){3,}|(?:[ \t]*_){3,})[ \t]*$").unwrap()
 });
+
+fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for token in TOKEN_RE.find_iter(text).map(|m| m.as_str()) {
+        if current.len() + token.len() <= width {
+            current.push_str(token);
+        } else {
+            let trimmed = current.trim_end();
+            if !trimmed.is_empty() {
+                lines.push(trimmed.to_string());
+            }
+            current.clear();
+            current.push_str(token.trim_start());
+        }
+    }
+    let trimmed = current.trim_end();
+    if !trimmed.is_empty() {
+        lines.push(trimmed.to_string());
+    }
+    lines
+}
 
 /// Returns `true` if the line is a fenced code block delimiter (e.g., three backticks or "~~~").
 ///
@@ -266,17 +289,14 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
         }
         segment.push_str(text);
         if *hard_break {
-            let opts =
-                Options::new(width - indent.len()).word_splitter(WordSplitter::NoHyphenation);
-            for line in fill(&segment, &opts).lines() {
+            for line in wrap_preserving_code(&segment, width - indent.len()) {
                 out.push(format!("{indent}{line}"));
             }
             segment.clear();
         }
     }
     if !segment.is_empty() {
-        let opts = Options::new(width - indent.len()).word_splitter(WordSplitter::NoHyphenation);
-        for line in fill(&segment, &opts).lines() {
+        for line in wrap_preserving_code(&segment, width - indent.len()) {
             out.push(format!("{indent}{line}"));
         }
     }
@@ -369,9 +389,10 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             let prefix = cap.get(1).unwrap().as_str();
             let rest = cap.get(2).unwrap().as_str().trim();
             let spaces = " ".repeat(prefix.len());
-            let opts =
-                Options::new(width - prefix.len()).word_splitter(WordSplitter::NoHyphenation);
-            for (i, l) in fill(rest, &opts).lines().enumerate() {
+            for (i, l) in wrap_preserving_code(rest, width - prefix.len())
+                .iter()
+                .enumerate()
+            {
                 if i == 0 {
                     out.push(format!("{prefix}{l}"));
                 } else {

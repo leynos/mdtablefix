@@ -24,4 +24,14 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
     for line in output.iter().skip(1) {
         assert!(line.starts_with(&indent));
     }
+
+    let mut in_code = false;
+    for line in output {
+        let backticks = line.matches('`').count();
+        if backticks % 2 == 1 {
+            assert!(!in_code, "code span split across lines");
+            in_code = !in_code;
+        }
+    }
+    assert!(!in_code, "unclosed code span");
 }

@@ -671,6 +671,7 @@ fn test_wrap_list_item() {
 #[case("- ", 3)]
 #[case("1. ", 3)]
 #[case("10. ", 3)]
+#[case("100. ", 3)]
 fn test_wrap_list_items_with_inline_code(#[case] prefix: &str, #[case] expected: usize) {
     let input = vec![format!(
         "{prefix}`script`: A multi-line script declared with the YAML `|` block style. The entire \
@@ -679,6 +680,18 @@ fn test_wrap_list_items_with_inline_code(#[case] prefix: &str, #[case] expected:
     )];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, prefix, expected);
+}
+
+#[test]
+fn test_wrap_inline_code_boundary() {
+    let input = vec![
+        "- `script`: A multi-line script declared with the YAML `|` block style. The entire block \
+         is passed to an interpreter. If the first line begins with `#!`, Netsuke executes the \
+         script verbatim, respecting the shebang."
+            .to_string(),
+    ];
+    let output = process_stream(&input);
+    common::assert_wrapped_list_item(&output, "- ", 3);
 }
 
 #[test]
