@@ -255,6 +255,38 @@ pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 /// wrapped lines to the output vector with the given indentation. Lines are wrapped to the
 /// specified width minus the indentation length. Hard breaks in the buffer force a line break at
 /// that point.
+fn replace_spaces_in_code(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut in_code = false;
+    let mut backticks = 0usize;
+    while let Some(ch) = chars.next() {
+        if ch == '`' {
+            let mut count = 1usize;
+            while matches!(chars.peek(), Some('`')) {
+                chars.next();
+                count += 1;
+            }
+            if in_code && count == backticks {
+                in_code = false;
+            } else if !in_code {
+                in_code = true;
+                backticks = count;
+            }
+            for _ in 0..count {
+                out.push('`');
+            }
+            continue;
+        }
+        if in_code && ch == ' ' {
+            out.push('\u{00A0}');
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
 fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, width: usize) {
     if buf.is_empty() {
         return;
@@ -268,16 +300,20 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
         if *hard_break {
             let opts =
                 Options::new(width - indent.len()).word_splitter(WordSplitter::NoHyphenation);
-            for line in fill(&segment, &opts).lines() {
-                out.push(format!("{indent}{line}"));
+            let protected = replace_spaces_in_code(&segment);
+            for line in fill(&protected, &opts).lines() {
+                let restored = line.replace('\u{00A0}', " ");
+                out.push(format!("{indent}{restored}"));
             }
             segment.clear();
         }
     }
     if !segment.is_empty() {
         let opts = Options::new(width - indent.len()).word_splitter(WordSplitter::NoHyphenation);
-        for line in fill(&segment, &opts).lines() {
-            out.push(format!("{indent}{line}"));
+        let protected = replace_spaces_in_code(&segment);
+        for line in fill(&protected, &opts).lines() {
+            let restored = line.replace('\u{00A0}', " ");
+            out.push(format!("{indent}{restored}"));
         }
     }
 }
@@ -664,6 +700,24 @@ mod tests {
                 "A word that is".to_string(),
                 "very-long-word".to_string(),
                 "indeed".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn wrap_text_preserves_code_spans() {
+        let input = vec![
+            "with their own escaping rules. On Windows, scripts default to `powershell -Command` \
+             unless the manifest's `interpreter` field overrides the setting."
+                .to_string(),
+        ];
+        let wrapped = wrap_text(&input, 60);
+        assert_eq!(
+            wrapped,
+            vec![
+                "with their own escaping rules. On Windows, scripts default".to_string(),
+                "to `powershell -Command` unless the manifest's `interpreter`".to_string(),
+                "field overrides the setting.".to_string(),
             ]
         );
     }
