@@ -24,4 +24,30 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
     for line in output.iter().skip(1) {
         assert!(line.starts_with(&indent));
     }
+
+    let mut open: Option<usize> = None;
+    for line in output {
+        let chars: Vec<char> = line.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            if chars[i] == '`' {
+                let mut len = 0;
+                while i < chars.len() && chars[i] == '`' {
+                    len += 1;
+                    i += 1;
+                }
+                if let Some(open_len) = open {
+                    if open_len == len {
+                        open = None;
+                    }
+                } else {
+                    open = Some(len);
+                }
+            } else {
+                i += 1;
+            }
+        }
+        assert!(open.is_none(), "code span split across lines");
+    }
+    assert!(open.is_none(), "unclosed code span");
 }

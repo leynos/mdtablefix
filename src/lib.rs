@@ -17,7 +17,6 @@ use std::{fs, path::Path};
 
 pub use html::convert_html_tables;
 use regex::Regex;
-use textwrap::{Options, WordSplitter, fill};
 
 /// Splits a markdown table line into trimmed cell strings.
 ///
@@ -221,14 +220,64 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(```|~~~).*").unwrap());
 
-static CODE_SPAN_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"(`+[^`]*`+)").unwrap());
-
 static BULLET_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
 
 static NUMBERED_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").unwrap());
+
+fn tokenize_markdown(text: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c.is_whitespace() {
+            let start = i;
+            while i < chars.len() && chars[i].is_whitespace() {
+                i += 1;
+            }
+            tokens.push(chars[start..i].iter().collect());
+        } else if c == '`' {
+            let start = i;
+            let mut delim_len = 0;
+            while i < chars.len() && chars[i] == '`' {
+                i += 1;
+                delim_len += 1;
+            }
+            let mut end = i;
+            while end < chars.len() {
+                if chars[end] == '`' {
+                    let mut j = end;
+                    let mut count = 0;
+                    while j < chars.len() && chars[j] == '`' {
+                        j += 1;
+                        count += 1;
+                    }
+                    if count == delim_len {
+                        end = j;
+                        break;
+                    }
+                }
+                end += 1;
+            }
+            if end >= chars.len() {
+                tokens.push(chars[start..start + delim_len].iter().collect());
+                i = start + delim_len;
+            } else {
+                tokens.push(chars[start..end].iter().collect());
+                i = end;
+            }
+        } else {
+            let start = i;
+            while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '`' {
+                i += 1;
+            }
+            tokens.push(chars[start..i].iter().collect());
+        }
+    }
+    tokens
+}
 
 /// Width of a normalised thematic break.
 /// The width used when rewriting thematic breaks.
@@ -240,6 +289,39 @@ static THEMATIC_BREAK_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(
 
 static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| "_".repeat(THEMATIC_BREAK_LEN));
+
+fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
+    use unicode_width::UnicodeWidthStr;
+
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    let mut current_width = 0;
+    for token in tokenize_markdown(text) {
+        let token_width = UnicodeWidthStr::width(token.as_str());
+        if current_width + token_width <= width {
+            current.push_str(&token);
+            current_width += token_width;
+            continue;
+        }
+
+        let trimmed = current.trim_end();
+        if !trimmed.is_empty() {
+            lines.push(trimmed.to_string());
+        }
+        current.clear();
+        current_width = 0;
+
+        if !token.chars().all(char::is_whitespace) {
+            current.push_str(&token);
+            current_width = token_width;
+        }
+    }
+    let trimmed = current.trim_end();
+    if !trimmed.is_empty() {
+        lines.push(trimmed.to_string());
+    }
+    lines
+}
 
 /// Returns `true` if the line is a fenced code block delimiter (e.g., three backticks or "~~~").
 ///
@@ -259,22 +341,6 @@ pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 /// Inline code spans are delimited by matching pairs of backticks. This helper
 /// replaces normal spaces inside those spans with `U+00A0` (non-breaking space)
 /// so that the wrapping logic does not split them across lines.
-fn protect_code_span_spaces(text: &str) -> String {
-    CODE_SPAN_RE
-        .replace_all(text, |caps: &regex::Captures| {
-            caps[0].replace(' ', "\u{00A0}")
-        })
-        .into_owned()
-}
-
-fn wrap_segment(seg: &str, indent: &str, width: usize, out: &mut Vec<String>) {
-    let opts = Options::new(width - indent.len()).word_splitter(WordSplitter::NoHyphenation);
-    let protected = protect_code_span_spaces(seg);
-    for line in fill(&protected, &opts).lines() {
-        let restored = line.replace('\u{00A0}', " ");
-        out.push(format!("{indent}{restored}"));
-    }
-}
 /// Flushes a buffered paragraph to the output, wrapping text to the specified width and applying
 /// indentation.
 ///
@@ -293,12 +359,16 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
         }
         segment.push_str(text);
         if *hard_break {
-            wrap_segment(&segment, indent, width, out);
+            for line in wrap_preserving_code(&segment, width - indent.len()) {
+                out.push(format!("{indent}{line}"));
+            }
             segment.clear();
         }
     }
     if !segment.is_empty() {
-        wrap_segment(&segment, indent, width, out);
+        for line in wrap_preserving_code(&segment, width - indent.len()) {
+            out.push(format!("{indent}{line}"));
+        }
     }
 }
 
@@ -389,9 +459,10 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             let prefix = cap.get(1).unwrap().as_str();
             let rest = cap.get(2).unwrap().as_str().trim();
             let spaces = " ".repeat(prefix.len());
-            let opts =
-                Options::new(width - prefix.len()).word_splitter(WordSplitter::NoHyphenation);
-            for (i, l) in fill(rest, &opts).lines().enumerate() {
+            for (i, l) in wrap_preserving_code(rest, width - prefix.len())
+                .iter()
+                .enumerate()
+            {
                 if i == 0 {
                     out.push(format!("{prefix}{l}"));
                 } else {
