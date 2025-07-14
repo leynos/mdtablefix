@@ -21,6 +21,8 @@
   related code (e.g., models + utilities + fixtures) close together.
 - **Group by feature, not layer.** Colocate views, logic, fixtures, and helpers
   related to a domain concept rather than splitting by type.
+- Comments must use en-GB-oxendict spelling and grammar.
+- Function documentation must include clear examples.
 
 ## Documentation Maintenance
 
@@ -31,6 +33,8 @@
   added/removed, or architectural patterns evolve, **proactively update** the
   relevant file(s) in the `docs/` directory to reflect the latest state. Ensure
   the documentation remains accurate and current.
+- Documentation must use en-GB-oxendict spelling and grammar (with the exception
+  of "license" which is to be left unchanged for community consistency.
 
 ## Change Quality & Committing
 
@@ -94,11 +98,10 @@ This repository is written in Rust and uses Cargo for building and dependency
 management. Contributors should follow these best practices when working on the
 project:
 
-- Run `cargo +nightly-2025-06-10 fmt --all` after any change and before
-  committing. Follow this with `cargo clippy -- -D warnings` and
-  `RUSTFLAGS="-D warnings" cargo test`.
+- Run `make fmt`, `make lint`, and `make test` before committing. These targets
+  wrap `cargo fmt`, `cargo clippy`, and `cargo test` with the appropriate flags.
 - Clippy warnings MUST be disallowed.
-- Fix any warnings emitted during tests in the code itself instead of silencing
+- Fix any warnings emitted during tests in the code itself rather than silencing
   them.
 - Where a function is too long, extract meaningfully named helper functions
   adhering to separation of concerns and CQRS.
@@ -110,17 +113,35 @@ project:
   after making any change.
 - Document public APIs using Rustdoc comments (`///`) so documentation can be
   generated with cargo doc.
+- Every module **must** begin with a module level (`//!`) comment explaining the
+  module's purpose and utility.
 - Prefer immutable data and avoid unnecessary `mut` bindings.
 - Handle errors with the `Result` type instead of panicking where feasible.
 - Use explicit version ranges in `Cargo.toml` and keep dependencies up-to-date.
 - Avoid `unsafe` code unless absolutely necessary and document any usage
   clearly.
+- Place function attributes **after** doc comments.
+- Do not use `return` in single-line functions.
+- Use predicate functions for conditional criteria with more than two branches.
+- Lints must not be silenced except as a **last resort**.
+- Lint rule suppressions must be tightly scoped and include a clear reason.
+- Prefer `expect` over `allow`.
+- Use `rstest` fixtures for shared setup.
+- Replace duplicated tests with `#[rstest(...)]` parameterised cases.
+- Prefer `mockall` for mocks/stubs.
+- Prefer `.expect()` over `.unwrap()`.
 
 ## Markdown Guidance
 
-- Validate Markdown files using `markdownlint`.
-- Validate Markdown Mermaid diagrams using the `nixie` CLI. The tool is
-  already installed; run `nixie` directly instead of using `npx`.
+- Validate Markdown files using `make markdownlint`.
+- Run `make fmt` after any documentation changes to format all Markdown files
+  and fix table markup.
+- Validate Mermaid diagrams in Markdown files by running `make nixie`.
+- Markdown paragraphs and bullet points must be wrapped at 80 columns.
+- Code blocks must be wrapped at 120 columns.
+- Tables and headings must not be wrapped.
+- Use dashes (`-`) for list bullets.
+- Use GitHub-flavoured Markdown footnotes (`[^1]`) for references.
 
 ### Key Takeaway
 
