@@ -762,9 +762,11 @@ mod tests {
     #[test]
     fn wrap_text_does_not_insert_spaces_in_hyphenated_words() {
         let input = vec![
-            "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec tincidunt elit-sed \
-             fermentum congue. Vivamus dictum nulla sed consectetur volutpat."
-                .to_string(),
+            concat!(
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec tincidunt elit-sed ",
+                "fermentum congue. Vivamus dictum nulla sed consectetur volutpat."
+            )
+            .to_string(),
         ];
         let wrapped = wrap_text(&input, 80);
         assert_eq!(
