@@ -608,12 +608,30 @@ fn process_stream_inner(lines: &[String], wrap: bool) -> Vec<String> {
 /// Lines matching `^\s*[1-9][0-9]*\.\s+` are renumbered sequentially within
 /// their indentation level. Numbering continues across fenced code blocks
 /// without resetting.
+///
+/// # Examples
+/// ```
+/// use mdtablefix::renumber_lists;
+///
+/// let lines = vec!["1. foo", "4. bar"]
+///     .into_iter()
+///     .map(str::to_string)
+///     .collect::<Vec<_>>();
+/// assert_eq!(
+///     renumber_lists(&lines),
+///     vec!["1. foo", "2. bar"]
+///         .into_iter()
+///         .map(str::to_string)
+///         .collect::<Vec<_>>()
+/// );
+/// ```
+///
+/// # Panics
+/// Panics if the internal counter stack is empty when a numbered line is
+/// encountered. This indicates a logic error.
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
-    use std::collections::HashMap;
-
     let mut out = Vec::with_capacity(lines.len());
-    let mut stack = Vec::<usize>::new();
-    let mut counters = HashMap::<usize, usize>::new();
+    let mut counters: Vec<(usize, usize)> = Vec::new();
     let mut in_code = false;
 
     for line in lines {
@@ -629,28 +647,26 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
         }
 
         if let Some((indent, sep, rest)) = parse_numbered(line) {
-            while stack.last().is_some_and(|&d| d > indent) {
-                if let Some(d) = stack.pop() {
-                    counters.remove(&d);
+            while counters.last().is_some_and(|(d, _)| *d > indent) {
+                counters.pop();
+            }
+            let current = match counters.last_mut() {
+                Some((d, cnt)) if *d == indent => {
+                    *cnt += 1;
+                    *cnt
                 }
-            }
-
-            if stack.last().is_none_or(|&d| d < indent) {
-                stack.push(indent);
-            }
-
-            let num = counters.entry(indent).or_insert(1);
-            let current = *num;
-            *num += 1;
+                _ => {
+                    counters.push((indent, 1));
+                    1
+                }
+            };
             out.push(format!("{}{}.{}{}", " ".repeat(indent), current, sep, rest));
             continue;
         }
 
         let indent = line.chars().take_while(|c| c.is_whitespace()).count();
-        while stack.last().is_some_and(|&d| d > indent) {
-            if let Some(d) = stack.pop() {
-                counters.remove(&d);
-            }
+        while counters.last().is_some_and(|(d, _)| *d > indent) {
+            counters.pop();
         }
         out.push(line.clone());
     }
