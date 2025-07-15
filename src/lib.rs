@@ -678,8 +678,13 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        let indent_part: String = line.chars().take_while(|c| c.is_whitespace()).collect();
-        let indent = indent_len(&indent_part);
+        // Avoid allocating when just measuring indentation
+        let indent_end = line
+            .char_indices()
+            .find(|&(_, c)| !c.is_whitespace())
+            .map_or_else(|| line.len(), |(i, _)| i);
+        let indent_str = &line[..indent_end];
+        let indent = indent_len(indent_str);
         drop_deeper(indent, &mut counters);
         out.push(line.clone());
     }
