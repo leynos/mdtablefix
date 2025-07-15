@@ -228,15 +228,30 @@ static NUMBERED_RE: std::sync::LazyLock<Regex> =
 
 /// Parses a line beginning with a numbered list marker.
 ///
-/// Returns the indentation length, separator following the number, and the
+/// Returns the indentation prefix, separator following the number, and the
 /// remainder of the line if `line` matches the numbered list pattern.
 #[doc(hidden)]
-fn parse_numbered(line: &str) -> Option<(usize, &str, &str)> {
+fn parse_numbered(line: &str) -> Option<(&str, &str, &str)> {
     let cap = NUMBERED_RE.captures(line)?;
-    let indent = cap.get(1)?.as_str().len();
+    let indent = cap.get(1)?.as_str();
     let sep = cap.get(3)?.as_str();
     let rest = cap.get(4)?.as_str();
     Some((indent, sep, rest))
+}
+
+/// Returns the effective indentation length treating tabs as four spaces.
+#[doc(hidden)]
+fn indent_len(indent: &str) -> usize {
+    indent
+        .chars()
+        .fold(0, |acc, ch| acc + if ch == '\t' { 4 } else { 1 })
+}
+
+#[doc(hidden)]
+fn drop_deeper(indent: usize, counters: &mut Vec<(usize, usize)>) {
+    while counters.last().is_some_and(|(d, _)| *d > indent) {
+        counters.pop();
+    }
 }
 
 fn tokenize_markdown(text: &str) -> Vec<String> {
@@ -646,10 +661,9 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        if let Some((indent, sep, rest)) = parse_numbered(line) {
-            while counters.last().is_some_and(|(d, _)| *d > indent) {
-                counters.pop();
-            }
+        if let Some((indent_str, sep, rest)) = parse_numbered(line) {
+            let indent = indent_len(indent_str);
+            drop_deeper(indent, &mut counters);
             let current = match counters.last_mut() {
                 Some((d, cnt)) if *d == indent => {
                     *cnt += 1;
@@ -660,14 +674,13 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
                     1
                 }
             };
-            out.push(format!("{}{}.{}{}", " ".repeat(indent), current, sep, rest));
+            out.push(format!("{indent_str}{current}.{sep}{rest}"));
             continue;
         }
 
-        let indent = line.chars().take_while(|c| c.is_whitespace()).count();
-        while counters.last().is_some_and(|(d, _)| *d > indent) {
-            counters.pop();
-        }
+        let indent_part: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+        let indent = indent_len(&indent_part);
+        drop_deeper(indent, &mut counters);
         out.push(line.clone());
     }
 
