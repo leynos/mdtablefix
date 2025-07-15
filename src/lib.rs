@@ -776,7 +776,6 @@ mod tests {
                     .to_string(),
             ]
         );
-        assert!(wrapped.iter().all(|line| !line.contains("elit- sed")));
     }
 
     #[test]
