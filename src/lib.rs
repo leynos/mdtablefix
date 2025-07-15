@@ -226,6 +226,34 @@ static BULLET_RE: std::sync::LazyLock<Regex> =
 static NUMBERED_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").unwrap());
 
+/// Parses a line beginning with a numbered list marker.
+///
+/// Returns the indentation prefix, separator following the number, and the
+/// remainder of the line if `line` matches the numbered list pattern.
+#[doc(hidden)]
+fn parse_numbered(line: &str) -> Option<(&str, &str, &str)> {
+    let cap = NUMBERED_RE.captures(line)?;
+    let indent = cap.get(1)?.as_str();
+    let sep = cap.get(3)?.as_str();
+    let rest = cap.get(4)?.as_str();
+    Some((indent, sep, rest))
+}
+
+/// Returns the effective indentation length treating tabs as four spaces.
+#[doc(hidden)]
+fn indent_len(indent: &str) -> usize {
+    indent
+        .chars()
+        .fold(0, |acc, ch| acc + if ch == '\t' { 4 } else { 1 })
+}
+
+#[doc(hidden)]
+fn drop_deeper(indent: usize, counters: &mut Vec<(usize, usize)>) {
+    while counters.last().is_some_and(|(d, _)| *d > indent) {
+        counters.pop();
+    }
+}
+
 fn tokenize_markdown(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = text.chars().collect();
@@ -595,6 +623,27 @@ fn process_stream_inner(lines: &[String], wrap: bool) -> Vec<String> {
 /// Lines matching `^\s*[1-9][0-9]*\.\s+` are renumbered sequentially within
 /// their indentation level. Numbering continues across fenced code blocks
 /// without resetting.
+///
+/// # Examples
+/// ```
+/// use mdtablefix::renumber_lists;
+///
+/// let lines = vec!["1. foo", "4. bar"]
+///     .into_iter()
+///     .map(str::to_string)
+///     .collect::<Vec<_>>();
+/// assert_eq!(
+///     renumber_lists(&lines),
+///     vec!["1. foo", "2. bar"]
+///         .into_iter()
+///         .map(str::to_string)
+///         .collect::<Vec<_>>()
+/// );
+/// ```
+///
+/// # Panics
+/// Panics if the internal counter stack is empty when a numbered line is
+/// encountered. This indicates a logic error.
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
     let mut counters: Vec<(usize, usize)> = Vec::new();
@@ -612,28 +661,26 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        if let Some(cap) = NUMBERED_RE.captures(line) {
-            let indent = cap.get(1).map_or("", |m| m.as_str());
-            let indent_len = indent.len();
-            while counters.last().is_some_and(|(i, _)| *i > indent_len) {
-                counters.pop();
-            }
-            if counters.last().is_none_or(|(i, _)| *i < indent_len) {
-                counters.push((indent_len, 1));
-            }
-            let idx = counters.len() - 1;
-            let num = counters[idx].1;
-            counters[idx].1 += 1;
-            let spaces = cap.get(3).map_or("", |m| m.as_str());
-            let rest = cap.get(4).map_or("", |m| m.as_str());
-            out.push(format!("{indent}{num}.{spaces}{rest}"));
+        if let Some((indent_str, sep, rest)) = parse_numbered(line) {
+            let indent = indent_len(indent_str);
+            drop_deeper(indent, &mut counters);
+            let current = match counters.last_mut() {
+                Some((d, cnt)) if *d == indent => {
+                    *cnt += 1;
+                    *cnt
+                }
+                _ => {
+                    counters.push((indent, 1));
+                    1
+                }
+            };
+            out.push(format!("{indent_str}{current}.{sep}{rest}"));
             continue;
         }
 
-        let indent_len = line.chars().take_while(|c| c.is_whitespace()).count();
-        while counters.last().is_some_and(|(i, _)| *i > indent_len) {
-            counters.pop();
-        }
+        let indent_part: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+        let indent = indent_len(&indent_part);
+        drop_deeper(indent, &mut counters);
         out.push(line.clone());
     }
 

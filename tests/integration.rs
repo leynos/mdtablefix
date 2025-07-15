@@ -840,6 +840,21 @@ fn test_renumber_nested_lists() {
 }
 
 #[test]
+fn test_renumber_tabs_in_indent() {
+    let input = vec!["1. first", "\t1. sub first", "\t5. sub second", "2. second"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    let expected = vec!["1. first", "\t1. sub first", "\t2. sub second", "2. second"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
 fn test_renumber_mult_paragraph_items() {
     let input = vec!["1. first", "", "    still first paragraph", "", "2. second"]
         .into_iter()
