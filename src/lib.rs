@@ -945,4 +945,24 @@ mod tests {
             vec!["This has a `dangling".to_string(), "code span.".to_string()]
         );
     }
+
+    /// Validate that URLs are not broken by re-wrapping paragraphs containing hyperlinks.
+    #[test]
+    fn wrap_text_preserves_links() {
+        let input = vec![
+            "`falcon-pachinko` is an extension library for the".to_string(),
+            "[Falcon](https://falcon.readthedocs.io) web framework. It adds a structured"
+                .to_string(),
+            "approach to asynchronous WebSocket routing and background worker integration."
+                .to_string(),
+        ];
+        let wrapped = wrap_text(&input, 80);
+        let joined = wrapped.join("\n");
+        assert_eq!(joined.matches("https://").count(), 1);
+        assert!(
+            wrapped
+                .iter()
+                .any(|l| l.contains("https://falcon.readthedocs.io"))
+        );
+    }
 }
