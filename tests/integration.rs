@@ -746,17 +746,6 @@ fn test_wrap_footnote_with_inline_code() {
 ///
 /// This regression test ensures that the footnote collection remains
 /// unchanged when passed to `process_stream`.
-///
-/// # Examples
-///
-/// ```
-/// let input = vec![
-///     "[^1]: <https://falcon.readthedocs.io>".to_string(),
-///     "[^2]: <https://asgi.readthedocs.io>".to_string(),
-/// ];
-/// let output = process_stream(&input);
-/// assert_eq!(output, input);
-/// ```
 #[test]
 fn test_wrap_footnote_collection() {
     let input = vec![
@@ -781,14 +770,6 @@ fn test_wrap_footnote_collection() {
 /// Verifies that short list items are not wrapped or altered by the stream processing logic.
 ///
 /// Ensures that a single-line bullet list item remains unchanged after processing.
-///
-/// # Examples
-///
-/// ```
-/// let input = vec!["- short item".to_string()];
-/// let output = process_stream(&input);
-/// assert_eq!(output, input);
-/// ```
 fn test_wrap_short_list_item() {
     let input = vec!["- short item".to_string()];
     let output = process_stream(&input);
