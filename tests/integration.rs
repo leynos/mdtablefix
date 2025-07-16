@@ -742,6 +742,21 @@ fn test_wrap_footnote_with_inline_code() {
     common::assert_wrapped_list_item(&output, "  [^code_note]: ", 2);
 }
 
+/// Checks that a sequence of footnotes is not altered by wrapping.
+///
+/// This regression test ensures that the footnote collection remains
+/// unchanged when passed to `process_stream`.
+///
+/// # Examples
+///
+/// ```
+/// let input = vec![
+///     "[^1]: <https://falcon.readthedocs.io>".to_string(),
+///     "[^2]: <https://asgi.readthedocs.io>".to_string(),
+/// ];
+/// let output = process_stream(&input);
+/// assert_eq!(output, input);
+/// ```
 #[test]
 fn test_wrap_footnote_collection() {
     let input = vec![
