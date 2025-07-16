@@ -761,6 +761,90 @@ fn test_wrap_short_list_item() {
 }
 
 #[test]
+fn test_wrap_blockquote() {
+    let input = vec![
+        "> **Deprecated**: A :class:`WebSocketRouter` and its `add_route` API should be used to \
+         instantiate resources."
+            .to_string(),
+    ];
+    let output = process_stream(&input);
+    assert_eq!(
+        output,
+        vec![
+            "> **Deprecated**: A :class:`WebSocketRouter` and its `add_route` API should be"
+                .to_string(),
+            "> used to instantiate resources.".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn test_wrap_blockquote_nested() {
+    let input = vec![
+        concat!(
+            "> > This nested quote contains enough text to require wrapping so that we ",
+            "can verify multi-level handling."
+        )
+        .to_string(),
+    ];
+    let output = process_stream(&input);
+    common::assert_wrapped_blockquote(&output, "> > ", 2);
+    let joined = output
+        .iter()
+        .map(|l| l.trim_start_matches("> > "))
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert_eq!(joined, input[0].trim_start_matches("> > "));
+}
+
+#[test]
+fn test_wrap_blockquote_with_blank_lines() {
+    let input = vec![
+        concat!(
+            "> The first paragraph in this quote is deliberately long enough to wrap ",
+            "across multiple lines so"
+        )
+        .to_string(),
+        "> demonstrate the behaviour.".to_string(),
+        ">".to_string(),
+        concat!(
+            "> The second paragraph is also extended to trigger wrapping in order to ",
+            "ensure blank lines"
+        )
+        .to_string(),
+        "> are preserved correctly.".to_string(),
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output[3], ">");
+    common::assert_wrapped_blockquote(&output[..3], "> ", 3);
+    common::assert_wrapped_blockquote(&output[4..], "> ", 3);
+}
+
+#[test]
+fn test_wrap_blockquote_extra_whitespace() {
+    let input = vec![
+        ">    Extra spacing should not prevent correct wrapping of this quoted text that exceeds \
+         the line width."
+            .to_string(),
+    ];
+    let output = process_stream(&input);
+    common::assert_wrapped_blockquote(&output, ">    ", 2);
+    let joined = output
+        .iter()
+        .map(|l| l.trim_start_matches(">    "))
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert_eq!(joined, input[0].trim_start_matches(">    "));
+}
+
+#[test]
+fn test_wrap_blockquote_short() {
+    let input = vec!["> short".to_string()];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
+#[test]
 /// Tests that lines with hard line breaks (trailing spaces) are preserved after processing.
 ///
 /// Ensures that the `process_stream` function does not remove or alter lines ending with Markdown
