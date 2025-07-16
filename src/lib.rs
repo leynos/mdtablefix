@@ -912,6 +912,7 @@ mod tests {
             vec!["This has a `dangling".to_string(), "code span.".to_string()]
         );
     }
+    // Regression: issue #76 – wrapping must keep inline links intact
 
     #[test]
     fn wrap_text_preserves_links() {
@@ -923,7 +924,8 @@ mod tests {
                 .to_string(),
         ];
         let wrapped = wrap_text(&input, 80);
-        assert_eq!(wrapped.iter().filter(|l| l.contains("https://")).count(), 1);
+        let joined = wrapped.join("\n");
+        assert_eq!(joined.matches("https://").count(), 1);
         assert!(
             wrapped
                 .iter()
