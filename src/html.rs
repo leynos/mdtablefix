@@ -12,7 +12,7 @@ use html5ever::{driver::ParseOpts, parse_document, tendril::TendrilSink};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use regex::Regex;
 
-use crate::is_fence;
+use crate::wrap::is_fence;
 
 /// Matches the start of an HTML `<table>` tag, ignoring case.
 static TABLE_START_RE: LazyLock<Regex> =
