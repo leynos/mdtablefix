@@ -896,6 +896,21 @@ fn test_renumber_mult_paragraph_items() {
 }
 
 #[test]
+fn test_renumber_table_in_list() {
+    let input = vec!["1. first", "    | A | B |", "    | 1 | 2 |", "5. second"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    let expected = vec!["1. first", "    | A | B |", "    | 1 | 2 |", "2. second"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
 fn test_format_breaks_basic() {
     let input = vec!["foo", "***", "bar"]
         .into_iter()
