@@ -51,3 +51,12 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
     }
     assert!(open.is_none(), "unclosed code span");
 }
+
+/// Assert that every line in a blockquote starts with the given prefix and is at most 80
+/// characters.
+pub fn assert_wrapped_blockquote(output: &[String], prefix: &str, expected: usize) {
+    assert!(!output.is_empty(), "output slice is empty");
+    assert_eq!(output.len(), expected);
+    assert!(output.iter().all(|l| l.starts_with(prefix)));
+    assert!(output.iter().all(|l| l.len() <= 80));
+}

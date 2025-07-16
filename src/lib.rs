@@ -407,18 +407,32 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
     }
 }
 
-fn append_wrapped_with_prefix(out: &mut Vec<String>, prefix: &str, text: &str, width: usize) {
+fn append_wrapped_with_prefix(
+    out: &mut Vec<String>,
+    prefix: &str,
+    text: &str,
+    width: usize,
+    repeat_prefix: bool,
+) {
     use unicode_width::UnicodeWidthStr;
 
     let prefix_width = UnicodeWidthStr::width(prefix);
+    let available = width.saturating_sub(prefix_width).max(1);
     let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
     let indent_width = UnicodeWidthStr::width(indent_str.as_str());
-    let wrapped_indent = format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width));
+    let wrapped_indent = if repeat_prefix {
+        prefix.to_string()
+    } else {
+        format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width))
+    };
 
-    for (i, line) in wrap_preserving_code(text, width - prefix_width)
-        .iter()
-        .enumerate()
-    {
+    let lines = wrap_preserving_code(text, available);
+    if lines.is_empty() {
+        out.push(prefix.to_string());
+        return;
+    }
+
+    for (i, line) in lines.iter().enumerate() {
         if i == 0 {
             out.push(format!("{prefix}{line}"));
         } else {
@@ -427,13 +441,19 @@ fn append_wrapped_with_prefix(out: &mut Vec<String>, prefix: &str, text: &str, w
     }
 }
 
-fn append_wrapped_blockquote(out: &mut Vec<String>, prefix: &str, text: &str, width: usize) {
-    use unicode_width::UnicodeWidthStr;
-
-    let prefix_width = UnicodeWidthStr::width(prefix);
-    for line in wrap_preserving_code(text, width - prefix_width) {
-        out.push(format!("{prefix}{line}"));
-    }
+fn handle_prefix_line(
+    out: &mut Vec<String>,
+    buf: &mut Vec<(String, bool)>,
+    indent: &mut String,
+    width: usize,
+    prefix: &str,
+    rest: &str,
+    repeat_prefix: bool,
+) {
+    flush_paragraph(out, buf, indent, width);
+    buf.clear();
+    indent.clear();
+    append_wrapped_with_prefix(out, prefix, rest, width, repeat_prefix);
 }
 
 /// Wraps text lines to a specified width, preserving markdown structure.
@@ -517,34 +537,25 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
         }
 
         if let Some(cap) = BULLET_RE.captures(line) {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
             let prefix = cap.get(1).unwrap().as_str();
             let rest = cap.get(2).unwrap().as_str();
-            append_wrapped_with_prefix(&mut out, prefix, rest, width);
+            handle_prefix_line(&mut out, &mut buf, &mut indent, width, prefix, rest, false);
             continue;
         }
 
         if let Some(cap) = FOOTNOTE_RE.captures(line) {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
             let indent_part = cap.get(1).unwrap().as_str();
             let label_part = cap.get(2).unwrap().as_str();
             let prefix = format!("{indent_part}{label_part}");
             let rest = cap.get(3).unwrap().as_str();
-            append_wrapped_with_prefix(&mut out, &prefix, rest, width);
+            handle_prefix_line(&mut out, &mut buf, &mut indent, width, &prefix, rest, false);
             continue;
         }
 
         if let Some(cap) = BLOCKQUOTE_RE.captures(line) {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
             let prefix = cap.get(1).unwrap().as_str();
             let rest = cap.get(2).unwrap().as_str();
-            append_wrapped_blockquote(&mut out, prefix, rest, width);
+            handle_prefix_line(&mut out, &mut buf, &mut indent, width, prefix, rest, true);
             continue;
         }
 
