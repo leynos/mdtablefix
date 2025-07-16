@@ -912,7 +912,7 @@ mod tests {
             vec!["This has a `dangling".to_string(), "code span.".to_string()]
         );
     }
-    
+
     /// Validate that URLs are not broken by re-wrapping paragraphs containing hyperlinks.
     #[test]
     fn wrap_text_preserves_links() {
