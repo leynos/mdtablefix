@@ -227,7 +227,7 @@ static NUMBERED_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").unwrap());
 
 static FOOTNOTE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^(\s*)(\[\^[\w-]+\]:\s*)(.*)$").unwrap());
+    std::sync::LazyLock::new(|| Regex::new(r"^(\s*)(\[\^[^]]+\]:\s*)(.*)$").unwrap());
 
 /// Parses a line beginning with a numbered list marker.
 ///
