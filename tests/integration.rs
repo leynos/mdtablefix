@@ -719,9 +719,11 @@ fn test_wrap_multiple_inline_code_spans() {
 #[test]
 fn test_wrap_footnote_multiline() {
     let input = vec![
-        "[^note]: This footnote is sufficiently long to require wrapping across multiple lines so \
-         we can verify indentation."
-            .to_string(),
+        concat!(
+            "[^note]: This footnote is sufficiently long to require wrapping ",
+            "across multiple lines so we can verify indentation."
+        )
+        .to_string(),
     ];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "[^note]: ", 2);
