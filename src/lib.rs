@@ -912,4 +912,22 @@ mod tests {
             vec!["This has a `dangling".to_string(), "code span.".to_string()]
         );
     }
+
+    #[test]
+    fn wrap_text_preserves_links() {
+        let input = vec![
+            "`falcon-pachinko` is an extension library for the".to_string(),
+            "[Falcon](https://falcon.readthedocs.io) web framework. It adds a structured"
+                .to_string(),
+            "approach to asynchronous WebSocket routing and background worker integration."
+                .to_string(),
+        ];
+        let wrapped = wrap_text(&input, 80);
+        assert_eq!(wrapped.iter().filter(|l| l.contains("https://")).count(), 1);
+        assert!(
+            wrapped
+                .iter()
+                .any(|l| l.contains("https://falcon.readthedocs.io"))
+        );
+    }
 }
