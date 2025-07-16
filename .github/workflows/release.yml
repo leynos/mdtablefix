@@ -78,6 +78,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
+      - name: Add release target
+        run: rustup target add ${{ matrix.target }}
       - name: Build release binary
         run: cross +stable build --release --target ${{ matrix.target }}
       - name: Prepare artifact
