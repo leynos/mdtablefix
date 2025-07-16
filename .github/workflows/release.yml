@@ -22,38 +22,38 @@ jobs:
             arch: aarch64
             target: aarch64-unknown-linux-gnu
             ext: ""
-          - os: windows
-            arch: x86_64
-            target: x86_64-pc-windows-msvc
-            ext: ".exe"
-          - os: windows
-            arch: aarch64
-            target: aarch64-pc-windows-msvc
-            ext: ".exe"
-          - os: macos
-            arch: x86_64
-            target: x86_64-apple-darwin
-            ext: ""
-          - os: macos
-            arch: aarch64
-            target: aarch64-apple-darwin
-            ext: ""
-          - os: freebsd
-            arch: x86_64
-            target: x86_64-unknown-freebsd
-            ext: ""
-          - os: freebsd
-            arch: aarch64
-            target: aarch64-unknown-freebsd
-            ext: ""
-          - os: openbsd
-            arch: x86_64
-            target: x86_64-unknown-openbsd
-            ext: ""
-          - os: openbsd
-            arch: aarch64
-            target: aarch64-unknown-openbsd
-            ext: ""
+#          - os: windows
+#            arch: x86_64
+#            target: x86_64-pc-windows-msvc
+#            ext: ".exe"
+#          - os: windows
+#            arch: aarch64
+#            target: aarch64-pc-windows-msvc
+#            ext: ".exe"
+#          - os: macos
+#            arch: x86_64
+#            target: x86_64-apple-darwin
+#            ext: ""
+#          - os: macos
+#            arch: aarch64
+#            target: aarch64-apple-darwin
+#            ext: ""
+#          - os: freebsd
+#            arch: x86_64
+#            target: x86_64-unknown-freebsd
+#            ext: ""
+#          - os: freebsd
+#            arch: aarch64
+#            target: aarch64-unknown-freebsd
+#            ext: ""
+#          - os: openbsd
+#            arch: x86_64
+#            target: x86_64-unknown-openbsd
+#            ext: ""
+#          - os: openbsd
+#            arch: aarch64
+#            target: aarch64-unknown-openbsd
+#            ext: ""
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1.0.7
