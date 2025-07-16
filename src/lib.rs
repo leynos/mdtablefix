@@ -31,6 +31,9 @@ use regex::Regex;
 /// let cells = split_cells(line);
 /// assert_eq!(cells, vec!["cell1", "cell2", "cell3"]);
 /// ```
+fn next_is_pipe(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
+    chars.peek() == Some(&'|')
+}
 #[must_use]
 pub fn split_cells(line: &str) -> Vec<String> {
     let mut s = line.trim();
@@ -46,9 +49,7 @@ pub fn split_cells(line: &str) -> Vec<String> {
     let mut chars = s.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch == '\\' {
-            if let Some(&next) = chars.peek()
-                && next == '|'
-            {
+            if next_is_pipe(&mut chars) {
                 // `\|` escapes the pipe so it becomes part of the cell
                 chars.next();
                 current.push('|');
