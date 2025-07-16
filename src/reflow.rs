@@ -5,7 +5,7 @@
 
 use regex::Regex;
 
-use crate::{format_separator_cells, split_cells};
+use crate::table::{SEP_RE, format_separator_cells, split_cells};
 
 static SENTINEL_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").unwrap());
@@ -134,5 +134,5 @@ fn should_use_second_row_as_separator(sep_invalid: bool, rows: &[Vec<String>]) -
 }
 
 fn second_row_is_separator(rows: &[Vec<String>]) -> bool {
-    rows.len() > 1 && rows[1].iter().all(|c| crate::SEP_RE.is_match(c))
+    rows.len() > 1 && rows[1].iter().all(|c| SEP_RE.is_match(c))
 }
