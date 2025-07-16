@@ -717,6 +717,17 @@ fn test_wrap_multiple_inline_code_spans() {
 }
 
 #[test]
+fn test_wrap_footnote_multiline() {
+    let input = vec![
+        "[^note]: This footnote is sufficiently long to require wrapping across multiple lines so \
+         we can verify indentation."
+            .to_string(),
+    ];
+    let output = process_stream(&input);
+    common::assert_wrapped_list_item(&output, "[^note]: ", 2);
+}
+
+#[test]
 /// Verifies that short list items are not wrapped or altered by the stream processing logic.
 ///
 /// Ensures that a single-line bullet list item remains unchanged after processing.

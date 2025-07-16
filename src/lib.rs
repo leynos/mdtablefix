@@ -226,6 +226,9 @@ static BULLET_RE: std::sync::LazyLock<Regex> =
 static NUMBERED_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").unwrap());
 
+static FOOTNOTE_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"^(\s*\[\^[^\]]+\]:\s*)(.*)").unwrap());
+
 /// Parses a line beginning with a numbered list marker.
 ///
 /// Returns the indentation prefix, separator following the number, and the
@@ -481,6 +484,26 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
         }
 
         if let Some(cap) = BULLET_RE.captures(line) {
+            flush_paragraph(&mut out, &buf, &indent, width);
+            buf.clear();
+            indent.clear();
+            let prefix = cap.get(1).unwrap().as_str();
+            let rest = cap.get(2).unwrap().as_str().trim();
+            let spaces = " ".repeat(prefix.len());
+            for (i, l) in wrap_preserving_code(rest, width - prefix.len())
+                .iter()
+                .enumerate()
+            {
+                if i == 0 {
+                    out.push(format!("{prefix}{l}"));
+                } else {
+                    out.push(format!("{spaces}{l}"));
+                }
+            }
+            continue;
+        }
+
+        if let Some(cap) = FOOTNOTE_RE.captures(line) {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
             indent.clear();
