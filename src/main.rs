@@ -42,7 +42,10 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
         out = renumber_lists(&out);
     }
     if opts.breaks {
-        out = format_breaks(&out);
+        out = format_breaks(&out)
+            .into_iter()
+            .map(std::borrow::Cow::into_owned)
+            .collect();
     }
     out
 }

@@ -1012,54 +1012,49 @@ fn test_renumber_table_in_list() {
 
 #[test]
 fn test_format_breaks_basic() {
-    let input = vec!["foo", "***", "bar"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let input = vec!["foo".to_string(), "***".to_string(), "bar".to_string()];
     let expected = vec![
         "foo".to_string(),
         "_".repeat(THEMATIC_BREAK_LEN),
         "bar".to_string(),
     ];
-    assert_eq!(format_breaks(&input), expected);
+    let result: Vec<String> =
+        format_breaks(&input).into_iter().map(std::borrow::Cow::into_owned).collect();
+    assert_eq!(result, expected);
 }
 
 #[test]
 fn test_format_breaks_ignores_code() {
-    let input = vec!["```", "---", "```"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    assert_eq!(format_breaks(&input), input);
+    let input = vec!["```".to_string(), "---".to_string(), "```".to_string()];
+    let result: Vec<String> =
+        format_breaks(&input).into_iter().map(std::borrow::Cow::into_owned).collect();
+    assert_eq!(result, input);
 }
 
 #[test]
 fn test_format_breaks_mixed_chars() {
-    let input = vec!["-*-*-"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    assert_eq!(format_breaks(&input), input);
+    let input = vec!["-*-*-".to_string()];
+    let result: Vec<String> =
+        format_breaks(&input).into_iter().map(std::borrow::Cow::into_owned).collect();
+    assert_eq!(result, input);
 }
 
 #[test]
 fn test_format_breaks_with_spaces_and_indent() {
-    let input = vec!["  -  -  -  "]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let input = vec!["  -  -  -  ".to_string()];
     let expected = vec!["_".repeat(THEMATIC_BREAK_LEN)];
-    assert_eq!(format_breaks(&input), expected);
+    let result: Vec<String> =
+        format_breaks(&input).into_iter().map(std::borrow::Cow::into_owned).collect();
+    assert_eq!(result, expected);
 }
 
 #[test]
 fn test_format_breaks_with_tabs_and_underscores() {
-    let input = vec!["\t_\t_\t_\t"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let input = vec!["\t_\t_\t_\t".to_string()];
     let expected = vec!["_".repeat(THEMATIC_BREAK_LEN)];
-    assert_eq!(format_breaks(&input), expected);
+    let result: Vec<String> =
+        format_breaks(&input).into_iter().map(std::borrow::Cow::into_owned).collect();
+    assert_eq!(result, expected);
 }
 
 #[test]
