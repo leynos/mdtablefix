@@ -730,6 +730,19 @@ fn test_wrap_footnote_multiline() {
 }
 
 #[test]
+fn test_wrap_footnote_with_inline_code() {
+    let input = vec![
+        concat!(
+            "  [^code_note]: A footnote containing inline `code` that should wrap ",
+            "across multiple lines without breaking the span."
+        )
+        .to_string(),
+    ];
+    let output = process_stream(&input);
+    common::assert_wrapped_list_item(&output, "  [^code_note]: ", 2);
+}
+
+#[test]
 /// Verifies that short list items are not wrapped or altered by the stream processing logic.
 ///
 /// Ensures that a single-line bullet list item remains unchanged after processing.

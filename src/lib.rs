@@ -227,7 +227,7 @@ static NUMBERED_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").unwrap());
 
 static FOOTNOTE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^(\s*\[\^[^\]]+\]:\s*)(.*)").unwrap());
+    std::sync::LazyLock::new(|| Regex::new(r"^(\s*)(\[\^[\w-]+\]:\s*)(.*)$").unwrap());
 
 /// Parses a line beginning with a numbered list marker.
 ///
@@ -403,6 +403,26 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
     }
 }
 
+fn append_wrapped_with_prefix(out: &mut Vec<String>, prefix: &str, text: &str, width: usize) {
+    use unicode_width::UnicodeWidthStr;
+
+    let prefix_width = UnicodeWidthStr::width(prefix);
+    let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
+    let indent_width = UnicodeWidthStr::width(indent_str.as_str());
+    let wrapped_indent = format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width));
+
+    for (i, line) in wrap_preserving_code(text, width - prefix_width)
+        .iter()
+        .enumerate()
+    {
+        if i == 0 {
+            out.push(format!("{prefix}{line}"));
+        } else {
+            out.push(format!("{wrapped_indent}{line}"));
+        }
+    }
+}
+
 /// Wraps text lines to a specified width, preserving markdown structure.
 ///
 /// Paragraphs and list items are reflowed to the given width, while code blocks, tables, headers,
@@ -489,17 +509,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             indent.clear();
             let prefix = cap.get(1).unwrap().as_str();
             let rest = cap.get(2).unwrap().as_str().trim();
-            let spaces = " ".repeat(prefix.len());
-            for (i, l) in wrap_preserving_code(rest, width - prefix.len())
-                .iter()
-                .enumerate()
-            {
-                if i == 0 {
-                    out.push(format!("{prefix}{l}"));
-                } else {
-                    out.push(format!("{spaces}{l}"));
-                }
-            }
+            append_wrapped_with_prefix(&mut out, prefix, rest, width);
             continue;
         }
 
@@ -507,19 +517,11 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
             indent.clear();
-            let prefix = cap.get(1).unwrap().as_str();
-            let rest = cap.get(2).unwrap().as_str().trim();
-            let spaces = " ".repeat(prefix.len());
-            for (i, l) in wrap_preserving_code(rest, width - prefix.len())
-                .iter()
-                .enumerate()
-            {
-                if i == 0 {
-                    out.push(format!("{prefix}{l}"));
-                } else {
-                    out.push(format!("{spaces}{l}"));
-                }
-            }
+            let indent_part = cap.get(1).unwrap().as_str();
+            let label_part = cap.get(2).unwrap().as_str();
+            let prefix = format!("{indent_part}{label_part}");
+            let rest = cap.get(3).unwrap().as_str();
+            append_wrapped_with_prefix(&mut out, &prefix, rest, width);
             continue;
         }
 
