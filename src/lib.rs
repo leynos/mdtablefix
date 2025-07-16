@@ -912,8 +912,8 @@ mod tests {
             vec!["This has a `dangling".to_string(), "code span.".to_string()]
         );
     }
-    // Regression: issue #76 – wrapping must keep inline links intact
-
+    
+    /// Validate that URLs are not broken by re-wrapping paragraphs containing hyperlinks.
     #[test]
     fn wrap_text_preserves_links() {
         let input = vec![
