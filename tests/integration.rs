@@ -761,6 +761,24 @@ fn test_wrap_short_list_item() {
 }
 
 #[test]
+fn test_wrap_blockquote() {
+    let input = vec![
+        "> **Deprecated**: A :class:`WebSocketRouter` and its `add_route` API should be used to \
+         instantiate resources."
+            .to_string(),
+    ];
+    let output = process_stream(&input);
+    assert_eq!(
+        output,
+        vec![
+            "> **Deprecated**: A :class:`WebSocketRouter` and its `add_route` API should be"
+                .to_string(),
+            "> used to instantiate resources.".to_string(),
+        ]
+    );
+}
+
+#[test]
 /// Tests that lines with hard line breaks (trailing spaces) are preserved after processing.
 ///
 /// Ensures that the `process_stream` function does not remove or alter lines ending with Markdown

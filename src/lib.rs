@@ -230,6 +230,9 @@ static NUMBERED_RE: std::sync::LazyLock<Regex> =
 static FOOTNOTE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*)(\[\^[^]]+\]:\s*)(.*)$").unwrap());
 
+static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:>\s*)+)(.*)$").unwrap());
+
 /// Parses a line beginning with a numbered list marker.
 ///
 /// Returns the indentation prefix, separator following the number, and the
@@ -424,6 +427,15 @@ fn append_wrapped_with_prefix(out: &mut Vec<String>, prefix: &str, text: &str, w
     }
 }
 
+fn append_wrapped_blockquote(out: &mut Vec<String>, prefix: &str, text: &str, width: usize) {
+    use unicode_width::UnicodeWidthStr;
+
+    let prefix_width = UnicodeWidthStr::width(prefix);
+    for line in wrap_preserving_code(text, width - prefix_width) {
+        out.push(format!("{prefix}{line}"));
+    }
+}
+
 /// Wraps text lines to a specified width, preserving markdown structure.
 ///
 /// Paragraphs and list items are reflowed to the given width, while code blocks, tables, headers,
@@ -523,6 +535,16 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             let prefix = format!("{indent_part}{label_part}");
             let rest = cap.get(3).unwrap().as_str();
             append_wrapped_with_prefix(&mut out, &prefix, rest, width);
+            continue;
+        }
+
+        if let Some(cap) = BLOCKQUOTE_RE.captures(line) {
+            flush_paragraph(&mut out, &buf, &indent, width);
+            buf.clear();
+            indent.clear();
+            let prefix = cap.get(1).unwrap().as_str();
+            let rest = cap.get(2).unwrap().as_str();
+            append_wrapped_blockquote(&mut out, prefix, rest, width);
             continue;
         }
 
