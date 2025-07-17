@@ -40,12 +40,28 @@ pub fn pop_counters_upto(counters: &mut Vec<(usize, usize)>, indent: usize) {
     }
 }
 
+fn handle_paragraph_restart(line: &str, prev_blank: bool, counters: &mut Vec<(usize, usize)>) {
+    let indent_end = line
+        .char_indices()
+        .find(|&(_, c)| !c.is_whitespace())
+        .map_or_else(|| line.len(), |(i, _)| i);
+    let indent = indent_len(&line[..indent_end]);
+
+    if prev_blank
+        && counters
+            .last()
+            .is_some_and(|(d, _)| indent <= *d && is_plain_paragraph_line(line))
+    {
+        pop_counters_upto(counters, indent);
+    }
+}
+
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
     let mut counters: Vec<(usize, usize)> = Vec::new();
     let mut in_code = false;
-    let mut prev_blank = true;
+    let mut prev_blank = lines.first().is_none_or(|l| l.trim().is_empty());
 
     for line in lines {
         if is_fence(line) {
@@ -85,13 +101,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             .map_or_else(|| line.len(), |(i, _)| i);
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
-        if prev_blank
-            && counters
-                .last()
-                .is_some_and(|(d, _)| indent <= *d && is_plain_paragraph_line(line))
-        {
-            pop_counters_upto(&mut counters, indent);
-        }
+        handle_paragraph_restart(line, prev_blank, &mut counters);
         drop_deeper(indent, &mut counters);
         out.push(line.clone());
         prev_blank = line.trim().is_empty();
