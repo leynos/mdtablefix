@@ -38,6 +38,9 @@ pub mod table;
 pub mod textproc;
 pub mod wrap;
 
+#[cfg(test)]
+pub mod test_utils;
+
 #[deprecated(note = "this function is legacy; use `convert_html_tables` instead")]
 #[must_use]
 pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {

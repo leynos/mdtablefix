@@ -67,13 +67,11 @@ mod tests {
     use std::borrow::Cow;
 
     use super::*;
+    use crate::string_vec;
 
     #[test]
     fn basic_formatting() {
-        let input = vec!["foo", "***", "bar"]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>();
+        let input = string_vec!["foo", "***", "bar"];
         let expected: Vec<Cow<str>> = vec![
             input[0].as_str().into(),
             Cow::Borrowed(THEMATIC_BREAK_LINE.as_str()),
@@ -84,10 +82,7 @@ mod tests {
 
     #[test]
     fn ignores_fenced_code() {
-        let input = vec!["```", "---", "```"]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>();
+        let input = string_vec!["```", "---", "```"];
         let expected: Vec<Cow<str>> = input.iter().map(|s| s.as_str().into()).collect();
         assert_eq!(format_breaks(&input), expected);
     }
