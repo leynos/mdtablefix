@@ -301,30 +301,28 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             indent = line.chars().take_while(|c| c.is_whitespace()).collect();
         }
         let trimmed_end = line.trim_end();
-        let mut hard_break = false;
-        let mut text = trimmed_end
+        let without_br = trimmed_end
             .trim_end_matches("<br>")
             .trim_end_matches("<br/>")
-            .trim_end_matches("<br />")
-            .to_string();
+            .trim_end_matches("<br />");
 
-        if trimmed_end.ends_with("<br>")
-            || trimmed_end.ends_with("<br/>")
-            || trimmed_end.ends_with("<br />")
-        {
-            hard_break = true;
+        let is_trailing_spaces = line.ends_with("  ");
+        let is_html_br = trimmed_end != without_br;
+
+        // Count trailing backslashes to handle escaped pairs correctly
+        let mut backslashes = 0;
+        for ch in without_br.chars().rev() {
+            if ch == '\\' {
+                backslashes += 1;
+            } else {
+                break;
+            }
         }
+        let is_backslash_escape = backslashes % 2 == 1;
 
-        if line.ends_with("  ") {
-            hard_break = true;
-            text = text.trim_end_matches(' ').to_string();
-        }
+        let hard_break = is_trailing_spaces || is_html_br || is_backslash_escape;
 
-        if text.ends_with('\\') && !text.ends_with("\\\\") {
-            hard_break = true;
-        }
-
-        text = text.trim_start().to_string();
+        let text = without_br.trim_start().trim_end_matches(' ').to_string();
 
         buf.push((text, hard_break));
     }

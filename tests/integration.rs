@@ -802,6 +802,30 @@ fn test_wrap_hard_linebreak_backslash() {
 }
 
 #[test]
+fn test_wrap_hard_linebreak_backslash_edge_cases() {
+    let input = vec![
+        String::from("This line ends with two backslashes: \\\\"),
+        String::from("This line ends with a single backslash: \\"),
+        String::from(" \\ "),
+        String::from("\\"),
+        String::from("Text before \\ and after"),
+        String::from("   \\"),
+        String::new(),
+    ];
+    let expected = vec![
+        String::from(
+            "This line ends with two backslashes: \\\\ This line ends with a single backslash:",
+        ),
+        String::from("\\"),
+        String::from("\\"),
+        String::from("\\"),
+        String::from("Text before \\ and after \\"),
+        String::new(),
+    ];
+    assert_eq!(process_stream(&input), expected);
+}
+
+#[test]
 /// Tests that `process_stream` preserves complex table formatting without modification.
 ///
 /// This regression test ensures that properly formatted complex tables with multiple
