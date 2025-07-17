@@ -1,0 +1,26 @@
+1. First item
+
+2. Second item
+
+   Here’s a plain paragraph within the second item
+
+3. Third item
+
+Here's a plain paragraph at a lower indent level
+
+4. Fourth item
+
+| A   | B   |
+| --- | --- |
+| 1   | 2   |
+
+5. Fifth item
+
+6. Sixth item
+
+```js
+// fenced code block at lower indent
+console.log('hello');
+```
+
+7. Seventh item
