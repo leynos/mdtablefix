@@ -1150,7 +1150,7 @@ for maintainability and scalability.
 ```rust
 #[fixture]
 fn example_table() -> Vec<String> {
-    string_vec!("a", "b", "c")
+    string_vec!["a", "b", "c"]
 }
 ```
 
