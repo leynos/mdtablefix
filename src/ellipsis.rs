@@ -3,34 +3,41 @@
 //! This module provides a helper for normalising textual ellipses. It respects
 //! fenced code blocks and inline code spans so that code is left untouched.
 
-use crate::wrap::{is_fence, tokenize_markdown};
+use regex::Regex;
+
+use crate::wrap::{Token, tokenize_markdown};
+
+static DOT_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"\.{3,}").unwrap());
 
 /// Replace `...` with `…` outside code spans and fences.
 #[must_use]
 pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
-    let mut out = Vec::with_capacity(lines.len());
-    let mut in_code = false;
-    for line in lines {
-        if is_fence(line) {
-            in_code = !in_code;
-            out.push(line.clone());
-            continue;
-        }
-        if in_code {
-            out.push(line.clone());
-            continue;
-        }
-        let mut replaced = String::new();
-        for token in tokenize_markdown(line) {
-            if token.starts_with('`') {
-                replaced.push_str(&token);
-            } else {
-                replaced.push_str(&token.replace("...", "…"));
+    let joined = lines.join("\n");
+    let mut out = String::new();
+    for token in tokenize_markdown(&joined) {
+        match token {
+            Token::Text(t) => {
+                let replaced = DOT_RE.replace_all(t, |caps: &regex::Captures<'_>| {
+                    let len = caps[0].len();
+                    let ellipses = "…".repeat(len / 3);
+                    let leftover = ".".repeat(len % 3);
+                    format!("{ellipses}{leftover}")
+                });
+                out.push_str(&replaced);
             }
+            Token::Code(c) => {
+                out.push('`');
+                out.push_str(c);
+                out.push('`');
+            }
+            Token::Fence(f) => {
+                out.push_str(f);
+            }
+            Token::Newline => out.push('\n'),
         }
-        out.push(replaced);
     }
-    out
+    out.split('\n').map(str::to_string).collect()
 }
 
 #[cfg(test)]

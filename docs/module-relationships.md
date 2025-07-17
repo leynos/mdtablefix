@@ -62,10 +62,12 @@ classDiagram
     process ..> html : uses convert_html_tables
     process ..> table : uses reflow_table
     process ..> wrap : uses wrap_text, is_fence
+    process ..> ellipsis : uses replace_ellipsis
     io ..> process : uses process_stream, process_stream_no_wrap
 ```
 
 The `lib` module re-exports the public API from the other modules. The
 `ellipsis` module performs text normalisation. The `process` module provides
-streaming helpers that combine the lower-level functions. The `io` module
-handles filesystem operations, delegating the text processing to `process`.
+streaming helpers that combine the lower-level functions, including ellipsis
+replacement. The `io` module handles filesystem operations, delegating the text
+processing to `process`.

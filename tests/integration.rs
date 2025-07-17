@@ -964,3 +964,33 @@ fn test_cli_ellipsis_option() {
     assert!(output.status.success());
     assert_eq!(String::from_utf8_lossy(&output.stdout), "foo…\n");
 }
+
+#[test]
+fn test_cli_ellipsis_code_span() {
+    let output = Command::cargo_bin("mdtablefix")
+        .unwrap()
+        .arg("--ellipsis")
+        .write_stdin("before `dots...` after\n")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "before `dots...` after\n"
+    );
+}
+
+#[test]
+fn test_cli_ellipsis_fenced_block() {
+    let output = Command::cargo_bin("mdtablefix")
+        .unwrap()
+        .arg("--ellipsis")
+        .write_stdin("```\nlet x = ...;\n```\n")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```\nlet x = ...;\n```\n"
+    );
+}
