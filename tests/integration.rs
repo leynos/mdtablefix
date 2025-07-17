@@ -737,6 +737,28 @@ fn test_wrap_long_inline_code_item() {
 }
 
 #[test]
+fn test_wrap_future_attribute_punctuation() {
+    let input = vec![
+        concat!(
+            "- Test function (`#[awt]`) or a specific `#[future]` argument ",
+            "(`#[future(awt)]`), tells `rstest` to automatically insert `.await` ",
+            "calls for those futures."
+        )
+        .to_string(),
+    ];
+    let output = process_stream(&input);
+    assert_eq!(
+        output,
+        vec![
+            "- Test function (`#[awt]`) or a specific `#[future]` argument".to_string(),
+            "  (`#[future(awt)]`), tells `rstest` to automatically insert `.await` calls for"
+                .to_string(),
+            "  those futures.".to_string(),
+        ]
+    );
+}
+
+#[test]
 fn test_wrap_footnote_multiline() {
     let input = vec![
         concat!(
