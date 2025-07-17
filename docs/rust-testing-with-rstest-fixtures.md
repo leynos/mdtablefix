@@ -493,10 +493,10 @@ fn test_composed_fixture_with_override(#[with("special_")] configured_item: Stri
 
 In this example, `derived_value` depends on `base_value`, and `configured_item`
 depends on `derived_value`. When `test_composed_fixture` requests
-`configured_item`, `rstest` first calls `base_value()`, then
-`derived_value(10)`, and finally `configured_item(20, "item_".to_string())`.
-This hierarchical dependency resolution mirrors good software design principles,
-promoting modularity and maintainability in test setups.
+`configured_item`, `rstest` first calls `base_value()`, then `derived_value(10)`
+, and finally `configured_item(20, "item_".to_string())`. This hierarchical
+dependency resolution mirrors good software design principles, promoting
+modularity and maintainability in test setups.
 
 ### B. Controlling Fixture Initialization: `#[once]` for Shared State
 
@@ -718,8 +718,8 @@ execution of these async tests. By default, `rstest` often uses
 `#[async_std::test]` to annotate the generated async test functions.9 However,
 it is designed to be largely runtime-agnostic and can be integrated with other
 popular async runtimes like Tokio or Actix. This is typically done by adding the
-runtime's specific test attribute (e.g., `#[tokio::test]` or
-`#[actix_rt::test]`) alongside `#[rstest]`.4
+runtime's specific test attribute (e.g., `#[tokio::test]` or `#[actix_rt::test]`
+) alongside `#[rstest]`.4
 
 ```rust
 
@@ -761,9 +761,8 @@ To improve the ergonomics of working with async fixtures and values in tests,
   signature, removing the `impl Future` boilerplate. However, the value still
   needs to be `.await`ed explicitly within the test body or by using `#[awt]`.4
 - `#[awt]` (or `#[future(awt)]`): This attribute, when applied to the entire
-  test function (`#[awt]`) or a specific `#[future]` argument
-  (`#[future(awt)]`), tells `rstest` to automatically insert `.await` calls for
-  those futures.
+  test function (`#[awt]`) or a specific `#[future]` argument (`#[future(awt)]`
+  ), tells `rstest` to automatically insert `.await` calls for those futures.
 
 ```rust
 
@@ -1144,14 +1143,14 @@ for maintainability and scalability.
 - **Readability:** Utilize features like `#[from]` for renaming 12 and
   `#[default]` / `#[with]` for configurable fixtures to enhance the clarity of
   both fixture definitions and their usage in tests.
-- **Utility Macros:** The integration tests define a `lines_vec!` macro for
-  quickly building `Vec<String>` from string slices. Use it in fixtures to avoid
-  repetitive `.to_string()` calls.
+- **Utility Macros:** The integration tests define a `string_vec!` macro for
+  quickly building `Vec<String>` from string-like values. Use it in fixtures to
+  avoid repetitive `.to_string()` calls.
 
 ```rust
 #[fixture]
 fn example_table() -> Vec<String> {
-    lines_vec!("a", "b", "c")
+    string_vec!["a", "b", "c"]
 }
 ```
 
@@ -1187,13 +1186,13 @@ The following table summarizes key differences:
 **Table 1:** `rstest` **vs. Standard Rust** `#[test]` **for Fixture Management
 and Parameterization**
 
-| Feature                                                       | Standard #[test] Approach                                     | rstest Approach                                                                  |
-| ------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Fixture Injection                                             | Manual calls to setup functions within each test.             | Fixture name as argument in #[rstest] function; fixture defined with #[fixture]. |
-| Parameterized Tests (Specific Cases)                          | Loop inside one test, or multiple distinct #[test] functions. | #[case(...)] attributes on #[rstest] function.                                   |
-| Parameterized Tests (Value Combinations)                      | Nested loops inside one test, or complex manual generation.   | #[values(...)] attributes on arguments of #[rstest] function.                    |
-| Async Fixture Setup                                           | Manual async block and .await calls inside test.              | async fn fixtures, with #[future] and #[awt] for ergonomic .awaiting.            |
-| Reusing Parameter Sets                                        | Manual duplication of cases or custom helper macros.          | rstest_reuse crate with #[template] and #[apply] attributes.                     |
+| Feature                                  | Standard #[test] Approach                                     | rstest Approach                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Fixture Injection                        | Manual calls to setup functions within each test.             | Fixture name as argument in #[rstest] function; fixture defined with #[fixture]. |
+| Parameterized Tests (Specific Cases)     | Loop inside one test, or multiple distinct #[test] functions. | #[case(...)] attributes on #[rstest] function.                                   |
+| Parameterized Tests (Value Combinations) | Nested loops inside one test, or complex manual generation.   | #[values(...)] attributes on arguments of #[rstest] function.                    |
+| Async Fixture Setup                      | Manual async block and .await calls inside test.              | async fn fixtures, with #[future] and #[awt] for ergonomic .awaiting.            |
+| Reusing Parameter Sets                   | Manual duplication of cases or custom helper macros.          | rstest_reuse crate with #[template] and #[apply] attributes.                     |
 
 This comparison highlights how `rstest`'s attribute-based, declarative approach
 streamlines common testing patterns, reducing manual effort and improving the
