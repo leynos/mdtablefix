@@ -6,10 +6,12 @@
 //! - `wrap` for paragraph wrapping.
 //! - `lists` for renumbering ordered lists.
 //! - `breaks` for thematic break formatting.
+//! - `ellipsis` for normalising textual ellipses.
 //! - `process` for stream processing.
 //! - `io` for file helpers.
 
 pub mod breaks;
+pub mod ellipsis;
 mod html;
 pub mod io;
 pub mod lists;

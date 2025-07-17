@@ -952,3 +952,15 @@ fn test_cli_breaks_option() {
         format!("{}\n", "_".repeat(THEMATIC_BREAK_LEN))
     );
 }
+
+#[test]
+fn test_cli_ellipsis_option() {
+    let output = Command::cargo_bin("mdtablefix")
+        .unwrap()
+        .arg("--ellipsis")
+        .write_stdin("foo...\n")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "foo…\n");
+}
