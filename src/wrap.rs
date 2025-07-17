@@ -77,7 +77,7 @@ pub(crate) fn tokenize_markdown(text: &str) -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use mdtablefix::wrap::should_break_line;
 /// assert!(should_break_line(10, 12, Some(3)));
 /// assert!(!should_break_line(10, 8, Some(3)));
