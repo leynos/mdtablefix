@@ -6,7 +6,7 @@
 use regex::Regex;
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^(```|~~~).*").unwrap());
+    std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").unwrap());
 
 static BULLET_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
