@@ -70,11 +70,11 @@ pub(crate) fn calculate_widths(rows: &[Vec<String>], max_cols: usize) -> Vec<usi
     widths
 }
 
-pub(crate) fn format_rows(rows: Vec<Vec<String>>, widths: &[usize], indent: &str) -> Vec<String> {
-    rows.into_iter()
+pub(crate) fn format_rows(rows: &[Vec<String>], widths: &[usize], indent: &str) -> Vec<String> {
+    rows.iter()
         .map(|row| {
             let padded: Vec<String> = row
-                .into_iter()
+                .iter()
                 .enumerate()
                 .map(|(i, c)| format!("{:<width$}", c, width = widths[i]))
                 .collect();

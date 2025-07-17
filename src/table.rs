@@ -91,7 +91,15 @@ fn rows_mismatched(rows: &[Vec<String>], split_within_line: bool) -> bool {
 pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
 
-/// Intermediate result from `parse_and_validate`.
+/// Holds the parsed and validated table data.
+///
+/// This is produced by [`parse_and_validate`] and passed to
+/// [`calculate_and_format`].
+///
+/// * `cleaned` - rows after empty cells are removed
+/// * `output_rows` - rows ready for output (separator removed)
+/// * `sep_cells` - optional separator cells for formatting
+/// * `max_cols` - maximum column count across all rows
 struct ParsedTable {
     cleaned: Vec<Vec<String>>,
     output_rows: Vec<Vec<String>>,
@@ -99,11 +107,13 @@ struct ParsedTable {
     max_cols: usize,
 }
 
-/// Returns the leading whitespace of the first line and a vector of trimmed
-/// lines with escaped pipe markers removed.
+/// Extracts the leading whitespace of the first line and returns trimmed lines.
+///
+/// Lines beginning with `\-` are removed after trimming. These lines escape a
+/// leading pipe marker and should not be part of the table.
 fn extract_indent_and_trim(lines: &[String]) -> (String, Vec<String>) {
     let indent: String = lines[0].chars().take_while(|c| c.is_whitespace()).collect();
-    let trimmed: Vec<String> = lines
+    let trimmed = lines
         .iter()
         .map(|l| l.trim().to_string())
         .filter(|l| !l.trim_start().starts_with("\\-"))
@@ -141,7 +151,7 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
 /// Calculates column widths and formats the final table output.
 fn calculate_and_format(
     cleaned: &[Vec<String>],
-    output_rows: Vec<Vec<String>>,
+    output_rows: &[Vec<String>],
     sep_cells: Option<Vec<String>>,
     max_cols: usize,
     indent: &str,
@@ -166,7 +176,7 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 
     calculate_and_format(
         &parsed.cleaned,
-        parsed.output_rows,
+        &parsed.output_rows,
         parsed.sep_cells,
         parsed.max_cols,
         &indent,
