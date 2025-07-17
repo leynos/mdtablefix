@@ -715,6 +715,21 @@ fn test_wrap_multiple_inline_code_spans() {
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "- ", 2);
 }
+#[test]
+fn test_wrap_long_inline_code_item() {
+    let input = vec![
+        concat!(
+            "- `async def on_unhandled(self, ws: WebSocketLike, message: Union[str, bytes])`:",
+            " A fallback handler for messages that are not dispatched by the more specific",
+            " message handlers. This can be used for raw text/binary data or messages that",
+            " don't conform to the expected structured format."
+        )
+        .to_string(),
+    ];
+    let output = process_stream(&input);
+    common::assert_wrapped_list_item(&output, "- ", 4);
+    assert!(output.first().unwrap().ends_with("`:"));
+}
 
 #[test]
 fn test_wrap_footnote_multiline() {
