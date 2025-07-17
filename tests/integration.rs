@@ -191,7 +191,7 @@ fn multiple_tables() -> Vec<String> {
 /// assert_eq!(reflow_table(&broken), expected);
 /// ```
 fn test_reflow_basic(broken_table: Vec<String>) {
-    let expected = vec!["| A | B |", "| 1 | 2 |", "| 3 | 4 |"];
+    let expected = string_vec!["| A | B |", "| 1 | 2 |", "| 3 | 4 |"];
     assert_eq!(reflow_table(&broken_table), expected);
 }
 
@@ -207,7 +207,7 @@ fn test_reflow_malformed_returns_original(malformed_table: Vec<String>) {
 
 #[rstest]
 fn test_reflow_preserves_header(header_table: Vec<String>) {
-    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |", "| 3 | 4 |"];
+    let expected = string_vec!["| A | B |", "| --- | --- |", "| 1 | 2 |", "| 3 | 4 |"];
     assert_eq!(reflow_table(&header_table), expected);
 }
 
@@ -217,37 +217,37 @@ fn test_reflow_handles_escaped_pipes(escaped_pipe_table: Vec<String>) {
     // pipe sequence (`a \| b`). After reflow the escaped pipe becomes a literal
     // `|` inside the first data cell, so the table has three columns and the
     // header row is padded to match.
-    let expected = vec!["| X     | Y |", "| a | b | 1 |", "| 2     | 3 |"];
+    let expected = string_vec!["| X     | Y |", "| a | b | 1 |", "| 2     | 3 |"];
     assert_eq!(reflow_table(&escaped_pipe_table), expected);
 }
 
 #[rstest]
 fn test_reflow_preserves_indentation(indented_table: Vec<String>) {
-    let expected = vec!["  | I | J |", "  | 1 | 2 |", "  | 3 | 4 |"];
+    let expected = string_vec!["  | I | J |", "  | 1 | 2 |", "  | 3 | 4 |"];
     assert_eq!(reflow_table(&indented_table), expected);
 }
 
 #[rstest]
 fn test_process_stream_html_table(html_table: Vec<String>) {
-    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    let expected = string_vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(process_stream(&html_table), expected);
 }
 
 #[rstest]
 fn test_process_stream_html_table_with_attrs(html_table_with_attrs: Vec<String>) {
-    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    let expected = string_vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(process_stream(&html_table_with_attrs), expected);
 }
 
 #[rstest]
 fn test_process_stream_html_table_uppercase(html_table_uppercase: Vec<String>) {
-    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    let expected = string_vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(process_stream(&html_table_uppercase), expected);
 }
 
 #[rstest]
 fn test_process_stream_html_table_mixed_case(html_table_mixed_case: Vec<String>) {
-    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    let expected = string_vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(process_stream(&html_table_mixed_case), expected);
 }
 
@@ -353,14 +353,14 @@ fn test_cli_wrap_option() {
 
 #[test]
 fn test_uniform_example_one() {
-    let input = vec![
-        "| Logical type | PostgreSQL | SQLite notes |".to_string(),
-        "|--------------|-------------------------|---------------------------------------------------------------------------------|".to_string(),
-        "| strings | `TEXT` (or `VARCHAR`) | `TEXT` - SQLite ignores the length specifier anyway |".to_string(),
-        "| booleans | `BOOLEAN DEFAULT FALSE` | declare as `BOOLEAN`; Diesel serialises to 0 / 1 so this is fine |".to_string(),
-        "| integers | `INTEGER` / `BIGINT` | ditto |".to_string(),
-        "| decimals | `NUMERIC` | stored as FLOAT in SQLite; Diesel `Numeric` round-trips, but beware precision |".to_string(),
-        "| blobs / raw | `BYTEA` | `BLOB` |".to_string(),
+    let input = string_vec![
+        "| Logical type | PostgreSQL | SQLite notes |",
+        "|--------------|-------------------------|----------------------------------------------------|",
+        "| strings | `TEXT` (or `VARCHAR`) | `TEXT` - SQLite ignores the length specifier anyway |",
+        "| booleans | `BOOLEAN DEFAULT FALSE` | declare as `BOOLEAN`; Diesel serialises to 0 / 1 so this is fine |",
+        "| integers | `INTEGER` / `BIGINT` | ditto |",
+        "| decimals | `NUMERIC` | stored as FLOAT in SQLite; Diesel `Numeric` round-trips, but beware precision |",
+        "| blobs / raw | `BYTEA` | `BLOB` |",
     ];
     let output = reflow_table(&input);
     assert!(!output.is_empty());
@@ -379,12 +379,12 @@ fn test_uniform_example_one() {
 
 #[test]
 fn test_uniform_example_two() {
-    let input = vec![
-        "| Option | How it works | When to choose it |".to_string(),
-        "|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|".to_string(),
-        "| **B. Pure-Rust migrations** | Implement `diesel::migration::Migration<DB>` in a Rust file (`up.rs` / `down.rs`) and compile with both `features = [\"postgres\", \"sqlite\"]`. The query builder emits backend-specific SQL at runtime. | You prefer the type-checked DSL and can live with slightly slower compile times. |".to_string(),
-        "| **C. Lowest-common-denominator SQL** | Write one `up.sql`/`down.sql` that *already* works on both engines. This demands avoiding SERIAL/IDENTITY, JSONB, `TIMESTAMPTZ`, etc. | Simple schemas, embedded use-case only, you are happy to supply integer primary keys manually. |".to_string(),
-        "| **D. Two separate migration trees** | Maintain `migrations/sqlite` and `migrations/postgres` directories with identical version numbers. Use `embed_migrations!(\"migrations/<backend>\")` to compile the right set. | You ship a single binary with migrations baked in. |".to_string(),
+    let input = string_vec![
+        "| Option | How it works | When to choose it |",
+        "|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|",
+        "| **B. Pure-Rust migrations** | Implement `diesel::migration::Migration<DB>` in a Rust file (`up.rs` / `down.rs`) and compile with both `features = [\"postgres\", \"sqlite\"]`. The query builder emits backend-specific SQL at runtime. | You prefer the type-checked DSL and can live with slightly slower compile times. |",
+        "| **C. Lowest-common-denominator SQL** | Write one `up.sql`/`down.sql` that *already* works on both engines. This demands avoiding SERIAL/IDENTITY, JSONB, `TIMESTAMPTZ`, etc. | Simple schemas, embedded use-case only, you are happy to supply integer primary keys manually. |",
+        "| **D. Two separate migration trees** | Maintain `migrations/sqlite` and `migrations/postgres` directories with identical version numbers. Use `embed_migrations!(\"migrations/<backend>\")` to compile the right set. | You ship a single binary with migrations baked in. |",
     ];
     let output = reflow_table(&input);
     assert!(!output.is_empty());
@@ -403,27 +403,27 @@ fn test_uniform_example_two() {
 
 #[test]
 fn test_non_table_lines_unchanged() {
-    let input = vec![
-        "# Title".to_string(),
+    let input = string_vec![
+        "# Title",
         String::new(),
-        "Para text.".to_string(),
+        "Para text.",
         String::new(),
-        "| a | b |".to_string(),
-        "| 1 | 22 |".to_string(),
+        "| a | b |",
+        "| 1 | 22 |",
         String::new(),
-        "* bullet".to_string(),
+        "* bullet",
         String::new(),
     ];
     let output = process_stream(&input);
-    let expected = vec![
-        "# Title".to_string(),
+    let expected = string_vec![
+        "# Title",
         String::new(),
-        "Para text.".to_string(),
+        "Para text.",
         String::new(),
-        "| a | b  |".to_string(),
-        "| 1 | 22 |".to_string(),
+        "| a | b  |",
+        "| 1 | 22 |",
         String::new(),
-        "* bullet".to_string(),
+        "* bullet",
         String::new(),
     ];
     assert_eq!(output, expected);
@@ -431,17 +431,13 @@ fn test_non_table_lines_unchanged() {
 
 #[test]
 fn test_convert_html_table_basic() {
-    let html_table = vec![
-        "<table>".to_string(),
-        "<tr><th>A</th><th>B</th></tr>".to_string(),
-        "<tr><td>1</td><td>2</td></tr>".to_string(),
-        "</table>".to_string(),
+    let html_table = string_vec![
+        "<table>",
+        "<tr><th>A</th><th>B</th></tr>",
+        "<tr><td>1</td><td>2</td></tr>",
+        "</table>",
     ];
-    let expected = vec![
-        "| A | B |".to_string(),
-        "| --- | --- |".to_string(),
-        "| 1 | 2 |".to_string(),
-    ];
+    let expected = string_vec!["| A | B |", "| --- | --- |", "| 1 | 2 |",];
     assert_eq!(convert_html_tables(&html_table), expected);
 }
 
@@ -450,63 +446,63 @@ fn test_convert_html_table_basic() {
 #[case("~~~")]
 #[case("```rust")]
 fn test_convert_html_table_in_text_and_code(#[case] fence: &str) {
-    let lines = vec![
-        "Intro".to_string(),
-        "<table>".to_string(),
-        "<tr><th>A</th><th>B</th></tr>".to_string(),
-        "<tr><td>1</td><td>2</td></tr>".to_string(),
-        "</table>".to_string(),
-        fence.to_string(),
-        "<table><tr><td>x</td></tr></table>".to_string(),
-        fence.to_string(),
-        "Outro".to_string(),
+    let lines = string_vec![
+        "Intro",
+        "<table>",
+        "<tr><th>A</th><th>B</th></tr>",
+        "<tr><td>1</td><td>2</td></tr>",
+        "</table>",
+        fence,
+        "<table><tr><td>x</td></tr></table>",
+        fence,
+        "Outro",
     ];
-    let expected = vec![
-        "Intro".to_string(),
-        "| A | B |".to_string(),
-        "| --- | --- |".to_string(),
-        "| 1 | 2 |".to_string(),
-        fence.to_string(),
-        "<table><tr><td>x</td></tr></table>".to_string(),
-        fence.to_string(),
-        "Outro".to_string(),
+    let expected = string_vec![
+        "Intro",
+        "| A | B |",
+        "| --- | --- |",
+        "| 1 | 2 |",
+        fence,
+        "<table><tr><td>x</td></tr></table>",
+        fence,
+        "Outro",
     ];
     assert_eq!(convert_html_tables(&lines), expected);
 }
 
 #[test]
 fn test_convert_html_table_with_attrs_basic() {
-    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    let expected = string_vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(convert_html_tables(&html_table_with_attrs()), expected);
 }
 
 #[test]
 fn test_convert_html_table_uppercase() {
-    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    let expected = string_vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(convert_html_tables(&html_table_uppercase()), expected);
 }
 
 #[test]
 fn test_convert_html_table_with_colspan() {
-    let expected = vec!["| A |", "| --- |", "| 1 | 2 |"];
+    let expected = string_vec!["| A |", "| --- |", "| 1 | 2 |"];
     assert_eq!(convert_html_tables(&html_table_with_colspan()), expected);
 }
 
 #[test]
 fn test_convert_html_table_no_header() {
-    let expected = vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
+    let expected = string_vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(convert_html_tables(&html_table_no_header()), expected);
 }
 
 #[test]
 fn test_convert_html_table_empty_row() {
-    let expected = vec!["| 1 | 2 |", "| --- | --- |"];
+    let expected = string_vec!["| 1 | 2 |", "| --- | --- |"];
     assert_eq!(convert_html_tables(&html_table_empty_row()), expected);
 }
 
 #[test]
 fn test_convert_html_table_whitespace_header() {
-    let expected = vec!["| --- | --- |", "| --- | --- |", "| 1   | 2   |"];
+    let expected = string_vec!["| --- | --- |", "| --- | --- |", "| 1   | 2   |"];
     assert_eq!(
         convert_html_tables(&html_table_whitespace_header()),
         expected
@@ -515,7 +511,7 @@ fn test_convert_html_table_whitespace_header() {
 
 #[test]
 fn test_convert_html_table_inconsistent_first_row() {
-    let expected = vec!["| A |", "| --- |", "| 1 | 2 |"];
+    let expected = string_vec!["| A |", "| --- |", "| 1 | 2 |"];
     assert_eq!(
         convert_html_tables(&html_table_inconsistent_first_row()),
         expected
@@ -647,10 +643,9 @@ fn test_process_stream_option_table() {
 /// Ensures that a single long paragraph is split into multiple lines, each not exceeding 80
 /// characters.
 fn test_wrap_paragraph() {
-    let input = vec![
+    let input = string_vec![
         "This is a very long paragraph that should be wrapped at eighty columns so it needs to \
          contain enough words to exceed that limit."
-            .to_string(),
     ];
     let output = process_stream(&input);
     assert!(output.len() > 1);
@@ -659,9 +654,8 @@ fn test_wrap_paragraph() {
 
 #[test]
 fn test_wrap_list_item() {
-    let input = vec![
+    let input = string_vec![
         r"- This bullet item is exceptionally long and must be wrapped to keep prefix formatting intact."
-            .to_string(),
     ];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "- ", 2);
@@ -673,7 +667,7 @@ fn test_wrap_list_item() {
 #[case("10. ", 3)]
 #[case("100. ", 3)]
 fn test_wrap_list_items_with_inline_code(#[case] prefix: &str, #[case] expected: usize) {
-    let input = vec![format!(
+    let input = string_vec![format!(
         "{prefix}`script`: A multi-line script declared with the YAML `|` block style. The entire \
          block is passed to an interpreter. If the first line begins with `#!`, Netsuke executes \
          the script verbatim, respecting the shebang."
@@ -684,11 +678,10 @@ fn test_wrap_list_items_with_inline_code(#[case] prefix: &str, #[case] expected:
 
 #[test]
 fn test_wrap_preserves_inline_code_spans() {
-    let input = vec![
+    let input = string_vec![
         "- `script`: A multi-line script declared with the YAML `|` block style. The entire block \
          is passed to an interpreter. If the first line begins with `#!`, Netsuke executes the \
          script verbatim, respecting the shebang."
-            .to_string(),
     ];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "- ", 3);
@@ -696,10 +689,9 @@ fn test_wrap_preserves_inline_code_spans() {
 
 #[test]
 fn test_wrap_multi_backtick_code() {
-    let input = vec![
+    let input = string_vec![
         "- ``cmd`` executes ```echo``` output with ``json`` format and prints results to the \
          console"
-            .to_string(),
     ];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "- ", 2);
@@ -707,10 +699,9 @@ fn test_wrap_multi_backtick_code() {
 
 #[test]
 fn test_wrap_multiple_inline_code_spans() {
-    let input = vec![
+    let input = string_vec![
         "- Use `foo` and `bar` inside ``baz`` for testing with additional commentary to exceed \
          wrapping width"
-            .to_string(),
     ];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "- ", 2);
@@ -718,26 +709,20 @@ fn test_wrap_multiple_inline_code_spans() {
 
 #[test]
 fn test_wrap_footnote_multiline() {
-    let input = vec![
-        concat!(
-            "[^note]: This footnote is sufficiently long to require wrapping ",
-            "across multiple lines so we can verify indentation."
-        )
-        .to_string(),
-    ];
+    let input = string_vec![concat!(
+        "[^note]: This footnote is sufficiently long to require wrapping ",
+        "across multiple lines so we can verify indentation."
+    )];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "[^note]: ", 2);
 }
 
 #[test]
 fn test_wrap_footnote_with_inline_code() {
-    let input = vec![
-        concat!(
-            "  [^code_note]: A footnote containing inline `code` that should wrap ",
-            "across multiple lines without breaking the span."
-        )
-        .to_string(),
-    ];
+    let input = string_vec![concat!(
+        "  [^code_note]: A footnote containing inline `code` that should wrap ",
+        "across multiple lines without breaking the span."
+    )];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "  [^code_note]: ", 2);
 }
@@ -768,38 +753,33 @@ fn test_wrap_footnote_collection() {
 ///
 /// Ensures that a single-line bullet list item remains unchanged after processing.
 fn test_wrap_short_list_item() {
-    let input = vec!["- short item".to_string()];
+    let input = string_vec!["- short item"];
     let output = process_stream(&input);
     assert_eq!(output, input);
 }
 
 #[test]
 fn test_wrap_blockquote() {
-    let input = vec![
+    let input = string_vec![
         "> **Deprecated**: A :class:`WebSocketRouter` and its `add_route` API should be used to \
          instantiate resources."
-            .to_string(),
     ];
     let output = process_stream(&input);
     assert_eq!(
         output,
         vec![
-            "> **Deprecated**: A :class:`WebSocketRouter` and its `add_route` API should be"
-                .to_string(),
-            "> used to instantiate resources.".to_string(),
+            "> **Deprecated**: A :class:`WebSocketRouter` and its `add_route` API should be",
+            "> used to instantiate resources.",
         ]
     );
 }
 
 #[test]
 fn test_wrap_blockquote_nested() {
-    let input = vec![
-        concat!(
-            "> > This nested quote contains enough text to require wrapping so that we ",
-            "can verify multi-level handling."
-        )
-        .to_string(),
-    ];
+    let input = string_vec![concat!(
+        "> > This nested quote contains enough text to require wrapping so that we ",
+        "can verify multi-level handling."
+    )];
     let output = process_stream(&input);
     common::assert_wrapped_blockquote(&output, "> > ", 2);
     let joined = output
@@ -812,20 +792,18 @@ fn test_wrap_blockquote_nested() {
 
 #[test]
 fn test_wrap_blockquote_with_blank_lines() {
-    let input = vec![
+    let input = string_vec![
         concat!(
             "> The first paragraph in this quote is deliberately long enough to wrap ",
             "across multiple lines so"
-        )
-        .to_string(),
-        "> demonstrate the behaviour.".to_string(),
-        ">".to_string(),
+        ),
+        "> demonstrate the behaviour.",
+        ">",
         concat!(
             "> The second paragraph is also extended to trigger wrapping in order to ",
             "ensure blank lines"
-        )
-        .to_string(),
-        "> are preserved correctly.".to_string(),
+        ),
+        "> are preserved correctly.",
     ];
     let output = process_stream(&input);
     assert_eq!(output[3], ">");
@@ -835,10 +813,9 @@ fn test_wrap_blockquote_with_blank_lines() {
 
 #[test]
 fn test_wrap_blockquote_extra_whitespace() {
-    let input = vec![
+    let input = string_vec![
         ">    Extra spacing should not prevent correct wrapping of this quoted text that exceeds \
          the line width."
-            .to_string(),
     ];
     let output = process_stream(&input);
     common::assert_wrapped_blockquote(&output, ">    ", 2);
@@ -852,7 +829,7 @@ fn test_wrap_blockquote_extra_whitespace() {
 
 #[test]
 fn test_wrap_blockquote_short() {
-    let input = vec!["> short".to_string()];
+    let input = string_vec!["> short"];
     let output = process_stream(&input);
     assert_eq!(output, input);
 }
@@ -863,10 +840,7 @@ fn test_wrap_blockquote_short() {
 /// Ensures that the `process_stream` function does not remove or alter lines ending with Markdown
 /// hard line breaks.
 fn test_preserve_hard_line_breaks() {
-    let input = vec![
-        "Line one with break.  ".to_string(),
-        "Line two follows.".to_string(),
-    ];
+    let input = string_vec!["Line one with break.  ", "Line two follows.",];
     let output = process_stream(&input);
     assert_eq!(output.len(), 2);
     assert_eq!(output[0], "Line one with break.");
@@ -893,31 +867,15 @@ fn test_regression_complex_table() {
 
 #[test]
 fn test_renumber_basic() {
-    let input = vec![
-        "1. first".to_string(),
-        "2. second".to_string(),
-        "7. third".to_string(),
-    ];
+    let input = string_vec!["1. first", "2. second", "7. third",];
     let expected = string_vec!["1. first", "2. second", "3. third"];
     assert_eq!(renumber_lists(&input), expected);
 }
 
 #[test]
 fn test_renumber_with_fence() {
-    let input = vec![
-        "1. item".to_string(),
-        "```".to_string(),
-        "code".to_string(),
-        "```".to_string(),
-        "9. next".to_string(),
-    ];
-    let expected = vec![
-        "1. item".to_string(),
-        "```".to_string(),
-        "code".to_string(),
-        "```".to_string(),
-        "2. next".to_string(),
-    ];
+    let input = string_vec!["1. item", "```", "code", "```", "9. next",];
+    let expected = string_vec!["1. item", "```", "code", "```", "2. next",];
     assert_eq!(renumber_lists(&input), expected);
 }
 
@@ -983,11 +941,7 @@ fn test_renumber_table_in_list() {
 #[test]
 fn test_format_breaks_basic() {
     let input = string_vec!["foo", "***", "bar"];
-    let expected = vec![
-        "foo".to_string(),
-        "_".repeat(THEMATIC_BREAK_LEN),
-        "bar".to_string(),
-    ];
+    let expected = string_vec!["foo", "_".repeat(THEMATIC_BREAK_LEN), "bar",];
     let result: Vec<String> = format_breaks(&input)
         .into_iter()
         .map(std::borrow::Cow::into_owned)
