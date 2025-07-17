@@ -10,6 +10,19 @@ macro_rules! lines_vec {
     };
 }
 
+/// Expands to a `Vec<String>` with one element per line of the file.
+///
+/// Example:
+/// ```
+/// let input: Vec<String> = include_lines!("data/bold_header_input.txt"); 
+/// ```
+macro_rules! include_lines {
+    ($path:literal $(,)?) => {{
+        const _TXT: &str = include_str!($path);
+        _TXT.lines().map(str::to_owned).collect()
+    }};
+}
+
 /// Assert common wrapping expectations for list items.
 ///
 /// Verifies the number of lines, prefix on the first line, length of all lines,

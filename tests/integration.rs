@@ -487,27 +487,15 @@ fn test_convert_html_table_unclosed_returns_original() {
 
 #[test]
 fn test_convert_html_table_bold_header() {
-    let input: Vec<String> = include_str!("data/bold_header_input.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
-    let expected: Vec<String> = include_str!("data/bold_header_expected.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let input: Vec<String> = include_lines!("data/bold_header_input.txt");
+    let expected: Vec<String> = include_lines!("data/bold_header_expected.txt");
     assert_eq!(convert_html_tables(&input), expected);
 }
 
 #[test]
 fn test_logical_type_table_output_matches() {
-    let input: Vec<String> = include_str!("data/logical_type_input.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
-    let expected: Vec<String> = include_str!("data/logical_type_expected.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let input: Vec<String> = include_lines!("data/logical_type_input.txt");
+    let expected: Vec<String> = include_lines!("data/logical_type_expected.txt");
     assert_eq!(reflow_table(&input), expected);
 }
 
@@ -517,40 +505,22 @@ fn test_logical_type_table_output_matches() {
 /// Loads the input and expected output from external files and asserts that the
 /// `reflow_table` function transforms the input table to match the expected result.
 fn test_option_table_output_matches() {
-    let input: Vec<String> = include_str!("data/option_table_input.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
-    let expected: Vec<String> = include_str!("data/option_table_expected.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let input: Vec<String> = include_lines!("data/option_table_input.txt");
+    let expected: Vec<String> = include_lines!("data/option_table_expected.txt");
     assert_eq!(reflow_table(&input), expected);
 }
 
 #[test]
 fn test_month_seconds_table_output_matches() {
-    let input: Vec<String> = include_str!("data/month_seconds_input.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
-    let expected: Vec<String> = include_str!("data/month_seconds_expected.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let input: Vec<String> = include_lines!("data/month_seconds_input.txt");
+    let expected: Vec<String> = include_lines!("data/month_seconds_expected.txt");
     assert_eq!(reflow_table(&input), expected);
 }
 
 #[test]
 fn test_offset_table_output_matches() {
-    let input: Vec<String> = include_str!("data/offset_table_input.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
-    let expected: Vec<String> = include_str!("data/offset_table_expected.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let input: Vec<String> = include_lines!("data/offset_table_input.txt");
+    let expected: Vec<String> = include_lines!("data/offset_table_expected.txt");
     assert_eq!(reflow_table(&input), expected);
 }
 
@@ -558,14 +528,8 @@ fn test_offset_table_output_matches() {
 /// Tests that `process_stream` correctly processes a complex Markdown table representing logical
 /// types by comparing its output to expected results loaded from a file.
 fn test_process_stream_logical_type_table() {
-    let input: Vec<String> = include_str!("data/logical_type_input.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
-    let expected: Vec<String> = include_str!("data/logical_type_expected.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let input: Vec<String> = include_lines!("data/logical_type_input.txt");
+    let expected: Vec<String> = include_lines!("data/logical_type_expected.txt");
     assert_eq!(process_stream(&input), expected);
 }
 
@@ -576,14 +540,8 @@ fn test_process_stream_logical_type_table() {
 /// Loads input and expected output from test data files, runs `process_stream` on the input, and
 /// asserts equality.
 fn test_process_stream_option_table() {
-    let input: Vec<String> = include_str!("data/option_table_input.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
-    let expected: Vec<String> = include_str!("data/option_table_expected.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let input: Vec<String> = include_lines!("data/option_table_input.txt");
+    let expected: Vec<String> = include_lines!("data/option_table_expected.txt");
     assert_eq!(process_stream(&input), expected);
 }
 
@@ -843,14 +801,8 @@ fn test_preserve_hard_line_breaks() {
 /// columns and detailed content pass through the processing pipeline unchanged,
 /// preventing regressions that might inadvertently alter correct formatting.
 fn test_regression_complex_table() {
-    let input: Vec<String> = include_str!("data/regression_table_input.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
-    let expected: Vec<String> = include_str!("data/regression_table_expected.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let input: Vec<String> = include_lines!("data/regression_table_input.txt");
+    let expected: Vec<String> = include_lines!("data/regression_table_expected.txt");
     assert_eq!(process_stream(&input), expected);
 }
 
@@ -929,14 +881,8 @@ fn test_renumber_table_in_list() {
 
 #[test]
 fn test_renumber_restart_after_paragraph() {
-    let input: Vec<String> = include_str!("data/renumber_paragraph_restart_input.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
-    let expected: Vec<String> = include_str!("data/renumber_paragraph_restart_expected.txt")
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let input: Vec<String> = include_lines!("data/renumber_paragraph_restart_input.txt");
+    let expected: Vec<String> = include_lines!("data/renumber_paragraph_restart_expected.txt");
     assert_eq!(renumber_lists(&input), expected);
 }
 
