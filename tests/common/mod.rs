@@ -19,7 +19,7 @@ macro_rules! lines_vec {
 macro_rules! include_lines {
     ($path:literal $(,)?) => {{
         const _TXT: &str = include_str!($path);
-        _TXT.lines().map(|l| l.to_owned()).collect::<Vec<String>>()
+        _TXT.lines().map(str::to_owned).collect()
     }};
 }
 
