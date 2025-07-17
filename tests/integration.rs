@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write};
+use std::{borrow::Cow, fs::File, io::Write};
 
 use assert_cmd::Command;
 use mdtablefix::{
@@ -653,6 +653,28 @@ fn test_wrap_long_inline_code_item() {
 }
 
 #[test]
+fn test_wrap_future_attribute_punctuation() {
+    let input = vec![
+        concat!(
+            "- Test function (`#[awt]`) or a specific `#[future]` argument ",
+            "(`#[future(awt)]`), tells `rstest` to automatically insert `.await` ",
+            "calls for those futures."
+        )
+        .to_string(),
+    ];
+    let output = process_stream(&input);
+    assert_eq!(
+        output,
+        vec![
+            "- Test function (`#[awt]`) or a specific `#[future]` argument".to_string(),
+            "  (`#[future(awt)]`), tells `rstest` to automatically insert `.await` calls for"
+                .to_string(),
+            "  those futures.".to_string(),
+        ]
+    );
+}
+
+#[test]
 fn test_wrap_footnote_multiline() {
     let input = lines_vec![concat!(
         "[^note]: This footnote is sufficiently long to require wrapping ",
@@ -899,33 +921,39 @@ fn test_renumber_restart_after_paragraph() {
 #[test]
 fn test_format_breaks_basic() {
     let input = lines_vec!["foo", "***", "bar"];
-    let expected = lines_vec!["foo", "_".repeat(THEMATIC_BREAK_LEN), "bar"];
+    let expected: Vec<Cow<str>> = vec![
+        input[0].as_str().into(),
+        Cow::Owned("_".repeat(THEMATIC_BREAK_LEN)),
+        input[2].as_str().into(),
+    ];
     assert_eq!(format_breaks(&input), expected);
 }
 
 #[test]
 fn test_format_breaks_ignores_code() {
     let input = lines_vec!["```", "---", "```"];
-    assert_eq!(format_breaks(&input), input);
+    let expected: Vec<Cow<str>> = input.iter().map(|s| s.as_str().into()).collect();
+    assert_eq!(format_breaks(&input), expected);
 }
 
 #[test]
 fn test_format_breaks_mixed_chars() {
     let input = lines_vec!["-*-*-"];
-    assert_eq!(format_breaks(&input), input);
+    let expected: Vec<Cow<str>> = input.iter().map(|s| s.as_str().into()).collect();
+    assert_eq!(format_breaks(&input), expected);
 }
 
 #[test]
 fn test_format_breaks_with_spaces_and_indent() {
     let input = lines_vec!["  -  -  -  "];
-    let expected = lines_vec!["_".repeat(THEMATIC_BREAK_LEN)];
+    let expected: Vec<Cow<str>> = vec![Cow::Owned("_".repeat(THEMATIC_BREAK_LEN))];
     assert_eq!(format_breaks(&input), expected);
 }
 
 #[test]
 fn test_format_breaks_with_tabs_and_underscores() {
     let input = lines_vec!["\t_\t_\t_\t"];
-    let expected = lines_vec!["_".repeat(THEMATIC_BREAK_LEN)];
+    let expected: Vec<Cow<str>> = vec![Cow::Owned("_".repeat(THEMATIC_BREAK_LEN))];
     assert_eq!(format_breaks(&input), expected);
 }
 

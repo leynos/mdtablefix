@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     fs,
     io::{self, Read},
     path::{Path, PathBuf},
@@ -42,7 +43,10 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
         out = renumber_lists(&out);
     }
     if opts.breaks {
-        out = format_breaks(&out);
+        out = format_breaks(&out)
+            .into_iter()
+            .map(Cow::into_owned)
+            .collect();
     }
     out
 }
