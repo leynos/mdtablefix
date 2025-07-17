@@ -1,5 +1,7 @@
 //! Thematic break formatting utilities.
 
+use std::borrow::Cow;
+
 use regex::Regex;
 
 use crate::wrap::is_fence;
@@ -14,21 +16,21 @@ static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| "_".repeat(THEMATIC_BREAK_LEN));
 
 #[must_use]
-pub fn format_breaks(lines: &[String]) -> Vec<String> {
+pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     let mut out = Vec::with_capacity(lines.len());
     let mut in_code = false;
 
     for line in lines {
         if is_fence(line) {
             in_code = !in_code;
-            out.push(line.clone());
+            out.push(Cow::Borrowed(line.as_str()));
             continue;
         }
 
         if !in_code && THEMATIC_BREAK_RE.is_match(line.trim_end()) {
-            out.push(THEMATIC_BREAK_LINE.clone());
+            out.push(Cow::Owned(THEMATIC_BREAK_LINE.clone()));
         } else {
-            out.push(line.clone());
+            out.push(Cow::Borrowed(line.as_str()));
         }
     }
 
@@ -37,6 +39,8 @@ pub fn format_breaks(lines: &[String]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use super::*;
 
     #[test]
@@ -45,10 +49,10 @@ mod tests {
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>();
-        let expected = vec![
-            "foo".to_string(),
-            "_".repeat(THEMATIC_BREAK_LEN),
-            "bar".to_string(),
+        let expected: Vec<Cow<str>> = vec![
+            input[0].as_str().into(),
+            Cow::Owned("_".repeat(THEMATIC_BREAK_LEN)),
+            input[2].as_str().into(),
         ];
         assert_eq!(format_breaks(&input), expected);
     }
@@ -59,6 +63,7 @@ mod tests {
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>();
-        assert_eq!(format_breaks(&input), input);
+        let expected: Vec<Cow<str>> = input.iter().map(|s| s.as_str().into()).collect();
+        assert_eq!(format_breaks(&input), expected);
     }
 }
