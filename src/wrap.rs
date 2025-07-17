@@ -301,17 +301,31 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             indent = line.chars().take_while(|c| c.is_whitespace()).collect();
         }
         let trimmed_end = line.trim_end();
-        let hard_break = line.ends_with("  ")
-            || trimmed_end.ends_with("<br>")
-            || trimmed_end.ends_with("<br/>")
-            || trimmed_end.ends_with("<br />");
-        let text = trimmed_end
+        let mut hard_break = false;
+        let mut text = trimmed_end
             .trim_end_matches("<br>")
             .trim_end_matches("<br/>")
             .trim_end_matches("<br />")
-            .trim_end_matches(' ')
-            .trim_start()
             .to_string();
+
+        if trimmed_end.ends_with("<br>")
+            || trimmed_end.ends_with("<br/>")
+            || trimmed_end.ends_with("<br />")
+        {
+            hard_break = true;
+        }
+
+        if line.ends_with("  ") {
+            hard_break = true;
+            text = text.trim_end_matches(' ').to_string();
+        }
+
+        if text.ends_with('\\') && !text.ends_with("\\\\") {
+            hard_break = true;
+        }
+
+        text = text.trim_start().to_string();
+
         buf.push((text, hard_break));
     }
 

@@ -795,6 +795,13 @@ fn test_preserve_hard_line_breaks() {
 }
 
 #[test]
+fn test_wrap_hard_linebreak_backslash() {
+    let input: Vec<String> = include_lines!("data/hard_linebreak_input.txt");
+    let expected: Vec<String> = include_lines!("data/hard_linebreak_expected.txt");
+    assert_eq!(process_stream(&input), expected);
+}
+
+#[test]
 /// Tests that `process_stream` preserves complex table formatting without modification.
 ///
 /// This regression test ensures that properly formatted complex tables with multiple

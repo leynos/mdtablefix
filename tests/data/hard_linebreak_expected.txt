@@ -1,0 +1,4 @@
+Scenarios live under `tests/features/`. Step implementations in `tests` share \
+a common `World` struct that uses `figment::Jail` for isolation. Each scenario
+demonstration example \
+executes asynchronously with `tokio`.
