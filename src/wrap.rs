@@ -70,17 +70,62 @@ pub(crate) fn tokenize_markdown(text: &str) -> Vec<String> {
     tokens
 }
 
+/// Determine if the current line should break at the last whitespace.
+///
+/// Returns `true` if `current_width` exceeds `width` and a whitespace split
+/// position is available.
+///
+/// # Examples
+///
+/// ```ignore
+/// use mdtablefix::wrap::should_break_line;
+/// assert!(should_break_line(10, 12, Some(3)));
+/// assert!(!should_break_line(10, 8, Some(3)));
+/// ```
+fn should_break_line(width: usize, current_width: usize, last_split: Option<usize>) -> bool {
+    current_width > width && last_split.is_some()
+}
+
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
 
     let mut lines = Vec::new();
     let mut current = String::new();
     let mut current_width = 0;
+    let mut last_split: Option<usize> = None;
     for token in tokenize_markdown(text) {
         let token_width = UnicodeWidthStr::width(token.as_str());
         if current_width + token_width <= width {
             current.push_str(&token);
             current_width += token_width;
+            if token.chars().all(char::is_whitespace) {
+                last_split = Some(current.len());
+            }
+            continue;
+        }
+
+        if should_break_line(width, current_width + token_width, last_split) {
+            let pos = last_split.unwrap();
+            let line = current[..pos].to_string();
+            let mut rest = current[pos..].trim_start().to_string();
+            let trimmed = line.trim_end();
+            if !trimmed.is_empty() {
+                lines.push(trimmed.to_string());
+            }
+            rest.push_str(&token);
+            current = rest;
+            current_width = UnicodeWidthStr::width(current.as_str());
+            last_split = if token.chars().all(char::is_whitespace) {
+                Some(current.len())
+            } else {
+                None
+            };
+            if current_width > width {
+                lines.push(current.trim_end().to_string());
+                current.clear();
+                current_width = 0;
+                last_split = None;
+            }
             continue;
         }
 
@@ -326,8 +371,8 @@ mod tests {
             wrapped,
             vec![
                 "with their own escaping rules. On Windows, scripts default".to_string(),
-                "to `powershell -Command` unless the manifest's `interpreter`".to_string(),
-                "field overrides the setting.".to_string(),
+                "to `powershell -Command` unless the manifest's".to_string(),
+                "`interpreter` field overrides the setting.".to_string(),
             ]
         );
     }
@@ -364,7 +409,7 @@ mod tests {
         let wrapped = wrap_text(&input, 20);
         assert_eq!(
             wrapped,
-            vec!["This has a `dangling".to_string(), "code span.".to_string()]
+            vec!["This has a".to_string(), "`dangling code span.".to_string()]
         );
     }
 
