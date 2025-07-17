@@ -20,20 +20,14 @@ mod common;
 ///
 /// The returned vector contains lines representing a table with inconsistent columns, useful for
 /// validating table reflow logic.
-fn broken_table() -> Vec<String> {
-    let lines = lines_vec!["| A | B |    |", "| 1 | 2 |  | 3 | 4 |"];
-    lines
-}
+fn broken_table() -> Vec<String> { return lines_vec!["| A | B |    |", "| 1 | 2 |  | 3 | 4 |"]; }
 
 #[fixture]
 /// Returns a vector of strings representing a malformed Markdown table with inconsistent columns.
 ///
 /// The returned table has rows with differing numbers of columns, making it invalid for standard
 /// Markdown table parsing.
-fn malformed_table() -> Vec<String> {
-    let lines = lines_vec!["| A | |", "| 1 | 2 | 3 |"];
-    lines
-}
+fn malformed_table() -> Vec<String> { return lines_vec!["| A | |", "| 1 | 2 | 3 |"]; }
 
 #[fixture]
 fn header_table() -> Vec<String> {
@@ -47,8 +41,7 @@ fn escaped_pipe_table() -> Vec<String> {
 
 #[fixture]
 fn indented_table() -> Vec<String> {
-    let lines = lines_vec!["  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |"];
-    lines
+    return lines_vec!["  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |"];
 }
 
 #[fixture]
@@ -122,16 +115,10 @@ fn html_table_inconsistent_first_row() -> Vec<String> {
 }
 
 #[fixture]
-fn html_table_empty() -> Vec<String> {
-    let lines = lines_vec!["<table></table>"];
-    lines
-}
+fn html_table_empty() -> Vec<String> { return lines_vec!["<table></table>"]; }
 
 #[fixture]
-fn html_table_unclosed() -> Vec<String> {
-    let lines = lines_vec!["<table>", "<tr><td>1</td></tr>"];
-    lines
-}
+fn html_table_unclosed() -> Vec<String> { return lines_vec!["<table>", "<tr><td>1</td></tr>"]; }
 
 #[fixture]
 fn html_table_uppercase() -> Vec<String> {
@@ -224,13 +211,7 @@ fn test_process_stream_html_table_mixed_case(html_table_mixed_case: Vec<String>)
 
 #[rstest]
 fn test_process_stream_multiple_tables(multiple_tables: Vec<String>) {
-    let expected = lines_vec![
-        "| A | B  |",
-        "| 1 | 22 |",
-        String::new(),
-        "| X | Y |",
-        "| 3 | 4 |",
-    ];
+    let expected = lines_vec!["| A | B  |", "| 1 | 22 |", "", "| X | Y |", "| 3 | 4 |",];
     assert_eq!(process_stream(&multiple_tables), expected);
 }
 
