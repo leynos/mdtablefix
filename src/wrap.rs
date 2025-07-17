@@ -431,4 +431,23 @@ mod tests {
                 .any(|l| l.contains("https://falcon.readthedocs.io"))
         );
     }
+
+    #[test]
+    fn wrap_text_respects_backslash_linebreaks() {
+        let input = vec![
+            "Scenarios live under `tests/features/`. Step implementations in `tests` share \\"
+                .to_string(),
+            "a common `World` struct that uses `figment::Jail` for isolation. Each scenario \\"
+                .to_string(),
+            "executes asynchronously with `tokio`.".to_string(),
+        ];
+        let expected = vec![
+            "Scenarios live under `tests/features/`. Step implementations in `tests` share \\"
+                .to_string(),
+            "a common `World` struct that uses `figment::Jail` for isolation. Each scenario"
+                .to_string(),
+            "\\ executes asynchronously with `tokio`.".to_string(),
+        ];
+        assert_eq!(wrap_text(&input, 80), expected);
+    }
 }
