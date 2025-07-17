@@ -70,6 +70,22 @@ pub(crate) fn tokenize_markdown(text: &str) -> Vec<String> {
     tokens
 }
 
+/// Determine if the current line should break at the last whitespace.
+///
+/// Returns `true` if `current_width` exceeds `width` and a whitespace split
+/// position is available.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::wrap::should_break_line;
+/// assert!(should_break_line(10, 12, Some(3)));
+/// assert!(!should_break_line(10, 8, Some(3)));
+/// ```
+fn should_break_line(width: usize, current_width: usize, last_split: Option<usize>) -> bool {
+    current_width > width && last_split.is_some()
+}
+
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
 
@@ -88,7 +104,8 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             continue;
         }
 
-        if let Some(pos) = last_split {
+        if should_break_line(width, current_width + token_width, last_split) {
+            let pos = last_split.unwrap();
             let line = current[..pos].to_string();
             let mut rest = current[pos..].trim_start().to_string();
             let trimmed = line.trim_end();
