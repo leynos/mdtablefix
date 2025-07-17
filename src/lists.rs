@@ -33,6 +33,13 @@ fn is_plain_paragraph_line(line: &str) -> bool {
         .is_some_and(char::is_alphanumeric)
 }
 
+#[doc(hidden)]
+pub fn pop_counters_upto(counters: &mut Vec<(usize, usize)>, indent: usize) {
+    while counters.last().is_some_and(|(d, _)| *d >= indent) {
+        counters.pop();
+    }
+}
+
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
@@ -83,9 +90,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
                 .last()
                 .is_some_and(|(d, _)| indent <= *d && is_plain_paragraph_line(line))
         {
-            while counters.last().is_some_and(|(d, _)| *d >= indent) {
-                counters.pop();
-            }
+            pop_counters_upto(&mut counters, indent);
         }
         drop_deeper(indent, &mut counters);
         out.push(line.clone());
