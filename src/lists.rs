@@ -33,7 +33,14 @@ fn is_plain_paragraph_line(line: &str) -> bool {
         .is_some_and(char::is_alphanumeric)
 }
 
-#[doc(hidden)]
+/// Remove counters deeper than or equal to `indent`.
+///
+/// ```
+/// use mdtablefix::lists::pop_counters_upto;
+/// let mut counters = vec![(0usize, 1usize), (4, 2), (8, 3)];
+/// pop_counters_upto(&mut counters, 4);
+/// assert_eq!(counters, vec![(0, 1)]);
+/// ```
 pub fn pop_counters_upto(counters: &mut Vec<(usize, usize)>, indent: usize) {
     while counters.last().is_some_and(|(d, _)| *d >= indent) {
         counters.pop();
