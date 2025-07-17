@@ -15,6 +15,17 @@ macro_rules! lines_vec {
     };
 }
 
+/// Collect a list of string-like values into a `Vec<String>`.
+///
+/// Useful for building small inline datasets without verbose `.to_string()`
+/// calls.
+#[expect(unused_macros, reason = "macros are optional helpers across modules")]
+macro_rules! string_vec {
+    ( $($elem:expr),* $(,)? ) => {
+        vec![ $( ::std::string::ToString::to_string(&$elem) ),* ]
+    };
+}
+
 /// Expands to a `Vec<String>` with one element per line of the file.
 ///
 /// Example:
