@@ -1011,6 +1011,19 @@ fn test_renumber_table_in_list() {
 }
 
 #[test]
+fn test_renumber_restart_after_paragraph() {
+    let input: Vec<String> = include_str!("data/renumber_paragraph_restart_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/renumber_paragraph_restart_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
 fn test_format_breaks_basic() {
     let input = vec!["foo", "***", "bar"]
         .into_iter()
