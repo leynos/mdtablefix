@@ -728,7 +728,12 @@ fn test_wrap_long_inline_code_item() {
     ];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "- ", 4);
-    assert!(output.first().expect("output should not be empty").ends_with("`:"));
+    assert!(
+        output
+            .first()
+            .expect("output should not be empty")
+            .ends_with("`:")
+    );
 }
 
 #[test]
