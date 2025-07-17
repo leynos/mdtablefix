@@ -28,7 +28,7 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         }
 
         if !in_code && THEMATIC_BREAK_RE.is_match(line.trim_end()) {
-            out.push(Cow::Owned(THEMATIC_BREAK_LINE.clone()));
+            out.push(Cow::Borrowed(THEMATIC_BREAK_LINE.as_str()));
         } else {
             out.push(Cow::Borrowed(line.as_str()));
         }
@@ -51,7 +51,7 @@ mod tests {
             .collect::<Vec<_>>();
         let expected: Vec<Cow<str>> = vec![
             input[0].as_str().into(),
-            Cow::Owned("_".repeat(THEMATIC_BREAK_LEN)),
+            Cow::Borrowed(THEMATIC_BREAK_LINE.as_str()),
             input[2].as_str().into(),
         ];
         assert_eq!(format_breaks(&input), expected);
