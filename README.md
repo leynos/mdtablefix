@@ -4,8 +4,8 @@
 uniform width. It can wrap paragraphs and list items to 80 columns when the
 `--wrap` option is used. Hyphenated words are treated as single units during
 wrapping, so `very-long-word` moves to the next line rather than splitting at
-the hyphen. The tool ignores fenced code blocks and respects escaped pipes (`\|
-`), making it safe for mixed content.
+the hyphen. The tool ignores fenced code blocks and respects escaped pipes
+(`\|`), making it safe for mixed content.
 
 ## Installation
 
@@ -87,6 +87,9 @@ Only basic tables composed of `<tr>`, `<th>` and `<td>` tags are detected, and
 attributes or tag casing do not matter. After conversion the regular reflow
 logic aligns them alongside Markdown tables. See [`docs/html-table-support.md`]
 (docs/html-table-support.md) for details.
+
+For an overview of how the crate's modules fit together, see
+[`docs/module-relationships.md`](docs/module-relationships.md).
 
 ## Testing
 
