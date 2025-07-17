@@ -27,7 +27,7 @@ compiles a release binary for every matrix row.
 
 `cross` is installed from a specific git tag to avoid unexpected behavior from
 its main branch. Each binary is placed in an `artifacts/<os>-<arch>` directory
-using the naming pattern `mdtablefix-<os>-<arch>[.exe]`. A SHA-256 checksum is
+using the naming pattern `mdtablefix-<os>-<arch>[.exe]`. An SHA-256 checksum is
 written alongside each binary for download verification.
 
 After every build completes, the artifact is uploaded so that the GitHub
