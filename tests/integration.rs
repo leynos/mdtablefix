@@ -20,15 +20,8 @@ mod common;
 ///
 /// The returned vector contains lines representing a table with inconsistent columns, useful for
 /// validating table reflow logic.
-///
-/// # Examples
-///
-/// ```
-/// let table = broken_table();
-/// assert_eq!(table[0], "| A | B |    |");
-/// ```
 fn broken_table() -> Vec<String> {
-    let lines = lines_vec!["| A | B |    |", "| 1 | 2 |  | 3 | 4 |",];
+    let lines = lines_vec!["| A | B |    |", "| 1 | 2 |  | 3 | 4 |"];
     lines
 }
 
@@ -37,16 +30,6 @@ fn broken_table() -> Vec<String> {
 ///
 /// The returned table has rows with differing numbers of columns, making it invalid for standard
 /// Markdown table parsing.
-///
-/// # Examples
-///
-/// ```
-/// let table = malformed_table();
-/// assert_eq!(
-///     table,
-///     lines_vec![String::from("| A | |"), String::from("| 1 | 2 | 3 |")]
-/// );
-/// ```
 fn malformed_table() -> Vec<String> {
     let lines = lines_vec!["| A | |", "| 1 | 2 | 3 |"];
     lines
@@ -54,17 +37,17 @@ fn malformed_table() -> Vec<String> {
 
 #[fixture]
 fn header_table() -> Vec<String> {
-    lines_vec!["| A | B |    |", "| --- | --- |", "| 1 | 2 |  | 3 | 4 |",]
+    lines_vec!["| A | B |    |", "| --- | --- |", "| 1 | 2 |  | 3 | 4 |"]
 }
 
 #[fixture]
 fn escaped_pipe_table() -> Vec<String> {
-    lines_vec!["| X | Y |    |", "| a \\| b | 1 |  | 2 | 3 |",]
+    lines_vec!["| X | Y |    |", "| a \\| b | 1 |  | 2 | 3 |"]
 }
 
 #[fixture]
 fn indented_table() -> Vec<String> {
-    let lines = lines_vec!["  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |",];
+    let lines = lines_vec!["  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |"];
     lines
 }
 
@@ -172,24 +155,12 @@ fn html_table_mixed_case() -> Vec<String> {
 
 #[fixture]
 fn multiple_tables() -> Vec<String> {
-    lines_vec!["| A | B |", "| 1 | 22 |", "", "| X | Y |", "| 3 | 4 |",]
+    lines_vec!["| A | B |", "| 1 | 22 |", "", "| X | Y |", "| 3 | 4 |"]
 }
 
 #[rstest]
 /// Tests that `reflow_table` correctly restructures a broken Markdown table into a well-formed
 /// table.
-///
-/// # Examples
-///
-/// ```
-/// let broken = lines_vec![
-///     String::from("| A | B |"),
-///     String::from("| 1 | 2 |"),
-///     String::from("| 3 | 4 |"),
-/// ];
-/// let expected = lines_vec!["| A | B |", "| 1 | 2 |", "| 3 | 4 |"];
-/// assert_eq!(reflow_table(&broken), expected);
-/// ```
 fn test_reflow_basic(broken_table: Vec<String>) {
     let expected = lines_vec!["| A | B |", "| 1 | 2 |", "| 3 | 4 |"];
     assert_eq!(reflow_table(&broken_table), expected);
@@ -282,13 +253,6 @@ fn test_process_stream_ignores_code_fences() {
 ///
 /// This test ensures that running `mdtablefix --in-place` without a file argument results in a
 /// command failure.
-///
-/// # Examples
-///
-/// ```
-/// test_cli_in_place_requires_file();
-/// // The command should fail as no file is provided.
-/// ```
 fn test_cli_in_place_requires_file() {
     Command::cargo_bin("mdtablefix")
         .unwrap()
@@ -303,13 +267,6 @@ fn test_cli_in_place_requires_file() {
 ///
 /// This test creates a temporary file with a malformed table, runs the `mdtablefix` binary on it,
 /// and asserts that the output is the expected fixed table.
-///
-/// # Examples
-///
-/// ```
-/// let broken_table = lines_vec!["| A | B |", "| 1 | 2 |", "| 3 | 4 |",];
-/// test_cli_process_file(broken_table);
-/// ```
 fn test_cli_process_file(broken_table: Vec<String>) {
     let dir = tempdir().unwrap();
     let file_path = dir.path().join("sample.md");
@@ -433,7 +390,7 @@ fn test_convert_html_table_basic() {
         "<tr><td>1</td><td>2</td></tr>",
         "</table>",
     ];
-    let expected = lines_vec!["| A | B |", "| --- | --- |", "| 1 | 2 |",];
+    let expected = lines_vec!["| A | B |", "| --- | --- |", "| 1 | 2 |"];
     assert_eq!(convert_html_tables(&html_table), expected);
 }
 
@@ -615,12 +572,6 @@ fn test_process_stream_logical_type_table() {
 ///
 /// Loads input and expected output from test data files, runs `process_stream` on the input, and
 /// asserts equality.
-///
-/// # Examples
-///
-/// ```
-/// test_process_stream_option_table(); 
-/// ```
 fn test_process_stream_option_table() {
     let input: Vec<String> = include_str!("data/option_table_input.txt")
         .lines()
@@ -709,7 +660,7 @@ fn test_wrap_long_inline_code_item() {
         " A fallback handler for messages that are not dispatched by the more specific",
         " message handlers. This can be used for raw text/binary data or messages that",
         " don't conform to the expected structured format."
-    ),];
+    )];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "- ", 4);
     assert!(
@@ -725,7 +676,7 @@ fn test_wrap_footnote_multiline() {
     let input = lines_vec![concat!(
         "[^note]: This footnote is sufficiently long to require wrapping ",
         "across multiple lines so we can verify indentation."
-    ),];
+    )];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "[^note]: ", 2);
 }
@@ -735,7 +686,7 @@ fn test_wrap_footnote_with_inline_code() {
     let input = lines_vec![concat!(
         "  [^code_note]: A footnote containing inline `code` that should wrap ",
         "across multiple lines without breaking the span."
-    ),];
+    )];
     let output = process_stream(&input);
     common::assert_wrapped_list_item(&output, "  [^code_note]: ", 2);
 }
@@ -792,7 +743,7 @@ fn test_wrap_blockquote_nested() {
     let input = lines_vec![concat!(
         "> > This nested quote contains enough text to require wrapping so that we ",
         "can verify multi-level handling."
-    ),];
+    )];
     let output = process_stream(&input);
     common::assert_wrapped_blockquote(&output, "> > ", 2);
     let joined = output
@@ -853,7 +804,7 @@ fn test_wrap_blockquote_short() {
 /// Ensures that the `process_stream` function does not remove or alter lines ending with Markdown
 /// hard line breaks.
 fn test_preserve_hard_line_breaks() {
-    let input = lines_vec!["Line one with break.  ", "Line two follows.",];
+    let input = lines_vec!["Line one with break.  ", "Line two follows."];
     let output = process_stream(&input);
     assert_eq!(output.len(), 2);
     assert_eq!(output[0], "Line one with break.");
@@ -880,15 +831,15 @@ fn test_regression_complex_table() {
 
 #[test]
 fn test_renumber_basic() {
-    let input = lines_vec!["1. first", "2. second", "7. third",];
+    let input = lines_vec!["1. first", "2. second", "7. third"];
     let expected = lines_vec!["1. first", "2. second", "3. third"];
     assert_eq!(renumber_lists(&input), expected);
 }
 
 #[test]
 fn test_renumber_with_fence() {
-    let input = lines_vec!["1. item", "```", "code", "```", "9. next",];
-    let expected = lines_vec!["1. item", "```", "code", "```", "2. next",];
+    let input = lines_vec!["1. item", "```", "code", "```", "9. next"];
+    let expected = lines_vec!["1. item", "```", "code", "```", "2. next"];
     assert_eq!(renumber_lists(&input), expected);
 }
 
@@ -967,7 +918,7 @@ fn test_renumber_restart_after_paragraph() {
 #[test]
 fn test_format_breaks_basic() {
     let input = lines_vec!["foo", "***", "bar"];
-    let expected = lines_vec!["foo", "_".repeat(THEMATIC_BREAK_LEN), "bar",];
+    let expected = lines_vec!["foo", "_".repeat(THEMATIC_BREAK_LEN), "bar"];
     assert_eq!(format_breaks(&input), expected);
 }
 
