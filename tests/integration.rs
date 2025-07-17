@@ -803,25 +803,23 @@ fn test_wrap_hard_linebreak_backslash() {
 
 #[test]
 fn test_wrap_hard_linebreak_backslash_edge_cases() {
-    let input = vec![
-        String::from("This line ends with two backslashes: \\\\"),
-        String::from("This line ends with a single backslash: \\"),
-        String::from(" \\ "),
-        String::from("\\"),
-        String::from("Text before \\ and after"),
-        String::from("   \\"),
-        String::new(),
-    ];
-    let expected = vec![
-        String::from(
-            "This line ends with two backslashes: \\\\ This line ends with a single backslash:",
-        ),
-        String::from("\\"),
-        String::from("\\"),
-        String::from("\\"),
-        String::from("Text before \\ and after \\"),
-        String::new(),
-    ];
+    let input = lines_vec!(
+        "This line ends with two backslashes: \\\\",
+        "This line ends with a single backslash: \\",
+        " \\ ",
+        "\\",
+        "Text before \\ and after",
+        "   \\",
+        "",
+    );
+    let expected = lines_vec!(
+        "This line ends with two backslashes: \\\\ This line ends with a single backslash:",
+        "\\",
+        "\\",
+        "\\",
+        "Text before \\ and after \\",
+        "",
+    );
     assert_eq!(process_stream(&input), expected);
 }
 
