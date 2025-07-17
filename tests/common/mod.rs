@@ -16,7 +16,6 @@ macro_rules! lines_vec {
 /// ```
 /// let input: Vec<String> = include_lines!("data/bold_header_input.txt"); 
 /// ```
-#[macro_export]
 macro_rules! include_lines {
     ($path:literal $(,)?) => {{
         const _TXT: &str = include_str!($path);
