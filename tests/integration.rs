@@ -887,6 +887,19 @@ fn test_renumber_restart_after_paragraph() {
 }
 
 #[test]
+fn test_renumber_restart_after_formatting_paragraph() {
+    let input: Vec<String> = include_str!("data/renumber_formatting_paragraph_input.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = include_str!("data/renumber_formatting_paragraph_expected.txt")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
 fn test_format_breaks_basic() {
     let input = lines_vec!["foo", "***", "bar"];
     let expected: Vec<Cow<str>> = vec![
