@@ -230,6 +230,28 @@ fn test_process_stream_ignores_code_fences() {
 }
 
 #[rstest]
+fn test_process_stream_ignores_indented_fences() {
+    let lines = lines_vec!(
+        "   ```javascript",
+        "   socket.onmessage = function(event) {",
+        "       const message = JSON.parse(event.data);",
+        "       switch(message.type) {",
+        "           case \"serverNewMessage\":",
+        "               // Display message.payload.user and message.payload.text",
+        "               break;",
+        "           case \"serverUserJoined\":",
+        "               // Update user list with message.payload.user",
+        "               break;",
+        "           // Handle other message types...",
+        "       }",
+        "   };",
+        "",
+        "   ```",
+    );
+    assert_eq!(process_stream(&lines), lines);
+}
+
+#[rstest]
 /// Verifies that the CLI fails when the `--in-place` flag is used without specifying a file.
 ///
 /// This test ensures that running `mdtablefix --in-place` without a file argument results in a
