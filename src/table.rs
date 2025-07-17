@@ -91,44 +91,86 @@ fn rows_mismatched(rows: &[Vec<String>], split_within_line: bool) -> bool {
 pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
 
+/// Intermediate result from `parse_and_validate`.
+struct ParsedTable {
+    cleaned: Vec<Vec<String>>,
+    output_rows: Vec<Vec<String>>,
+    sep_cells: Option<Vec<String>>,
+    max_cols: usize,
+}
+
+/// Returns the leading whitespace of the first line and a vector of trimmed
+/// lines with escaped pipe markers removed.
+fn extract_indent_and_trim(lines: &[String]) -> (String, Vec<String>) {
+    let indent: String = lines[0].chars().take_while(|c| c.is_whitespace()).collect();
+    let trimmed: Vec<String> = lines
+        .iter()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.trim_start().starts_with("\\-"))
+        .collect();
+    (indent, trimmed)
+}
+
+/// Removes and return the first separator line detected in `lines`.
+fn extract_separator_line(lines: &mut Vec<String>) -> Option<String> {
+    let sep_idx = lines.iter().position(|l| SEP_RE.is_match(l));
+    sep_idx.map(|idx| lines.remove(idx))
+}
+
+/// Parses table rows and validates column consistency.
+fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<ParsedTable> {
+    let (rows, split_within_line) = crate::reflow::parse_rows(trimmed);
+    let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
+    let (sep_cells, sep_row_idx) = crate::reflow::detect_separator(sep_line, &rows, max_cols);
+    let cleaned = crate::reflow::clean_rows(rows);
+    if rows_mismatched(&cleaned, split_within_line) {
+        return None;
+    }
+    let mut output_rows = cleaned.clone();
+    if let Some(idx) = sep_index_within(sep_row_idx, output_rows.len()) {
+        output_rows.remove(idx);
+    }
+    Some(ParsedTable {
+        cleaned,
+        output_rows,
+        sep_cells,
+        max_cols,
+    })
+}
+
+/// Calculates column widths and formats the final table output.
+fn calculate_and_format(
+    cleaned: &[Vec<String>],
+    output_rows: Vec<Vec<String>>,
+    sep_cells: Option<Vec<String>>,
+    max_cols: usize,
+    indent: &str,
+) -> Vec<String> {
+    let widths = crate::reflow::calculate_widths(cleaned, max_cols);
+    let out = crate::reflow::format_rows(output_rows, &widths, indent);
+    crate::reflow::insert_separator(out, sep_cells, &widths, indent)
+}
+
 #[must_use]
 pub fn reflow_table(lines: &[String]) -> Vec<String> {
     if lines.is_empty() {
         return Vec::new();
     }
 
-    let indent: String = lines[0].chars().take_while(|c| c.is_whitespace()).collect();
-    let mut trimmed: Vec<String> = lines
-        .iter()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.trim_start().starts_with("\\-"))
-        .collect();
-    let sep_idx = trimmed.iter().position(|l| SEP_RE.is_match(l));
-    let sep_line = sep_idx.map(|idx| trimmed.remove(idx));
+    let (indent, mut trimmed) = extract_indent_and_trim(lines);
+    let sep_line = extract_separator_line(&mut trimmed);
 
-    let (rows, split_within_line) = crate::reflow::parse_rows(&trimmed);
-
-    let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
-
-    let (sep_cells, sep_row_idx) =
-        crate::reflow::detect_separator(sep_line.as_ref(), &rows, max_cols);
-
-    let cleaned = crate::reflow::clean_rows(rows);
-
-    let mut output_rows = cleaned.clone();
-    if let Some(idx) = sep_index_within(sep_row_idx, output_rows.len()) {
-        output_rows.remove(idx);
-    }
-
-    if rows_mismatched(&cleaned, split_within_line) {
+    let Some(parsed) = parse_and_validate(&trimmed, sep_line.as_ref()) else {
         return lines.to_vec();
-    }
+    };
 
-    let widths = crate::reflow::calculate_widths(&cleaned, max_cols);
-
-    let out = crate::reflow::format_rows(output_rows, &widths, &indent);
-
-    crate::reflow::insert_separator(out, sep_cells, &widths, &indent)
+    calculate_and_format(
+        &parsed.cleaned,
+        parsed.output_rows,
+        parsed.sep_cells,
+        parsed.max_cols,
+        &indent,
+    )
 }
 
 #[cfg(test)]
