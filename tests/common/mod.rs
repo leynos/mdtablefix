@@ -1,12 +1,12 @@
 //! Utility helpers shared across integration tests.
 
-/// Build a `Vec<String>` from a list of string slices.
+/// Collect a list of string-like values into a `Vec<String>`.
 ///
-/// This macro is primarily used in tests to reduce boilerplate when
-/// constructing example tables or other collections of lines.
-macro_rules! lines_vec {
-    ($($line:expr),* $(,)?) => {
-        vec![$($line.to_string()),*]
+/// Useful for building small inline datasets without verbose `.to_string()`
+/// calls.
+macro_rules! string_vec {
+    ( $($elem:expr),* $(,)? ) => {
+        vec![ $( ::std::string::ToString::to_string(&$elem) ),* ]
     };
 }
 

@@ -40,11 +40,13 @@ pub fn format_breaks(lines: &[String]) -> Vec<std::borrow::Cow<'_, str>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::string_vec;
 
     #[test]
     fn basic_formatting() {
-        let input = string_vec!["foo", "***", "bar"];
+        let input = vec!["foo", "***", "bar"]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
         let expected = vec![
             "foo".to_string(),
             "_".repeat(THEMATIC_BREAK_LEN),
@@ -59,7 +61,10 @@ mod tests {
 
     #[test]
     fn ignores_fenced_code() {
-        let input = string_vec!["```", "---", "```"];
+        let input = vec!["```", "---", "```"]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
         let result: Vec<String> = format_breaks(&input)
             .into_iter()
             .map(std::borrow::Cow::into_owned)

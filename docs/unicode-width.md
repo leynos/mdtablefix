@@ -1,7 +1,7 @@
 # Unicode Width Handling
 
-`mdtablefix` wraps paragraphs and list items while respecting the display width of
-Unicode characters. The `unicode-width` crate is used to compute the width of
+`mdtablefix` wraps paragraphs and list items while respecting the display width
+of Unicode characters. The `unicode-width` crate is used to compute the width of
 strings when deciding where to break lines. This prevents emojis or other
 multi-byte characters from causing unexpected wraps or truncation.
 

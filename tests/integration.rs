@@ -14,8 +14,6 @@ use tempfile::tempdir;
 
 #[macro_use]
 mod common;
-#[macro_use]
-mod test_utils;
 
 #[fixture]
 /// Provides a sample Markdown table with broken rows for testing purposes.
@@ -30,7 +28,7 @@ mod test_utils;
 /// assert_eq!(table[0], "| A | B |    |");
 /// ```
 fn broken_table() -> Vec<String> {
-    let lines = lines_vec!("| A | B |    |", "| 1 | 2 |  | 3 | 4 |",);
+    let lines = string_vec!("| A | B |    |", "| 1 | 2 |  | 3 | 4 |",);
     lines
 }
 
@@ -50,29 +48,29 @@ fn broken_table() -> Vec<String> {
 /// );
 /// ```
 fn malformed_table() -> Vec<String> {
-    let lines = lines_vec!("| A | |", "| 1 | 2 | 3 |");
+    let lines = string_vec!("| A | |", "| 1 | 2 | 3 |");
     lines
 }
 
 #[fixture]
 fn header_table() -> Vec<String> {
-    lines_vec!("| A | B |    |", "| --- | --- |", "| 1 | 2 |  | 3 | 4 |",)
+    string_vec!("| A | B |    |", "| --- | --- |", "| 1 | 2 |  | 3 | 4 |",)
 }
 
 #[fixture]
 fn escaped_pipe_table() -> Vec<String> {
-    lines_vec!("| X | Y |    |", "| a \\| b | 1 |  | 2 | 3 |",)
+    string_vec!("| X | Y |    |", "| a \\| b | 1 |  | 2 | 3 |",)
 }
 
 #[fixture]
 fn indented_table() -> Vec<String> {
-    let lines = lines_vec!("  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |",);
+    let lines = string_vec!("  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |",);
     lines
 }
 
 #[fixture]
 fn html_table() -> Vec<String> {
-    lines_vec!(
+    string_vec!(
         "<table>",
         "<tr><th>A</th><th>B</th></tr>",
         "<tr><td>1</td><td>2</td></tr>",
@@ -82,7 +80,7 @@ fn html_table() -> Vec<String> {
 
 #[fixture]
 fn html_table_with_attrs() -> Vec<String> {
-    lines_vec!(
+    string_vec!(
         "<table class=\"x\">",
         "<tr><th>A</th><th>B</th></tr>",
         "<tr><td>1</td><td>2</td></tr>",
@@ -92,7 +90,7 @@ fn html_table_with_attrs() -> Vec<String> {
 
 #[fixture]
 fn html_table_with_colspan() -> Vec<String> {
-    lines_vec!(
+    string_vec!(
         "<table>",
         "<tr><th colspan=\"2\">A</th></tr>",
         "<tr><td>1</td><td>2</td></tr>",
@@ -102,7 +100,7 @@ fn html_table_with_colspan() -> Vec<String> {
 
 #[fixture]
 fn html_table_no_header() -> Vec<String> {
-    lines_vec!(
+    string_vec!(
         "<table>",
         "<tr><td>A</td><td>B</td></tr>",
         "<tr><td>1</td><td>2</td></tr>",
@@ -112,7 +110,7 @@ fn html_table_no_header() -> Vec<String> {
 
 #[fixture]
 fn html_table_empty_row() -> Vec<String> {
-    lines_vec!(
+    string_vec!(
         "<table>",
         "<tr></tr>",
         "<tr><td>1</td><td>2</td></tr>",
@@ -122,7 +120,7 @@ fn html_table_empty_row() -> Vec<String> {
 
 #[fixture]
 fn html_table_whitespace_header() -> Vec<String> {
-    lines_vec!(
+    string_vec!(
         "<table>",
         "<tr><td>  </td><td>  </td></tr>",
         "<tr><td>1</td><td>2</td></tr>",
@@ -132,7 +130,7 @@ fn html_table_whitespace_header() -> Vec<String> {
 
 #[fixture]
 fn html_table_inconsistent_first_row() -> Vec<String> {
-    lines_vec!(
+    string_vec!(
         "<table>",
         "<tr><td>A</td></tr>",
         "<tr><td>1</td><td>2</td></tr>",
@@ -142,19 +140,19 @@ fn html_table_inconsistent_first_row() -> Vec<String> {
 
 #[fixture]
 fn html_table_empty() -> Vec<String> {
-    let lines = lines_vec!("<table></table>");
+    let lines = string_vec!("<table></table>");
     lines
 }
 
 #[fixture]
 fn html_table_unclosed() -> Vec<String> {
-    let lines = lines_vec!("<table>", "<tr><td>1</td></tr>");
+    let lines = string_vec!("<table>", "<tr><td>1</td></tr>");
     lines
 }
 
 #[fixture]
 fn html_table_uppercase() -> Vec<String> {
-    lines_vec!(
+    string_vec!(
         "<TABLE>",
         "<tr><th>A</th><th>B</th></tr>",
         "<tr><td>1</td><td>2</td></tr>",
@@ -164,7 +162,7 @@ fn html_table_uppercase() -> Vec<String> {
 
 #[fixture]
 fn html_table_mixed_case() -> Vec<String> {
-    lines_vec!(
+    string_vec!(
         "<TaBlE>",
         "<tr><th>A</th><th>B</th></tr>",
         "<tr><td>1</td><td>2</td></tr>",
@@ -174,7 +172,7 @@ fn html_table_mixed_case() -> Vec<String> {
 
 #[fixture]
 fn multiple_tables() -> Vec<String> {
-    lines_vec!("| A | B |", "| 1 | 22 |", "", "| X | Y |", "| 3 | 4 |",)
+    string_vec!("| A | B |", "| 1 | 22 |", "", "| X | Y |", "| 3 | 4 |",)
 }
 
 #[rstest]
@@ -255,7 +253,7 @@ fn test_process_stream_html_table_mixed_case(html_table_mixed_case: Vec<String>)
 
 #[rstest]
 fn test_process_stream_multiple_tables(multiple_tables: Vec<String>) {
-    let expected = lines_vec!(
+    let expected = string_vec!(
         "| A | B  |",
         "| 1 | 22 |",
         String::new(),
@@ -271,11 +269,11 @@ fn test_process_stream_multiple_tables(multiple_tables: Vec<String>) {
 /// processing logic, ensuring their contents are not altered.
 #[rstest]
 fn test_process_stream_ignores_code_fences() {
-    let lines = lines_vec!("```rust", "| not | a | table |", "```");
+    let lines = string_vec!("```rust", "| not | a | table |", "```");
     assert_eq!(process_stream(&lines), lines);
 
     // Test with tilde-based code fences
-    let tilde_lines = lines_vec!("~~~", "| not | a | table |", "~~~");
+    let tilde_lines = string_vec!("~~~", "| not | a | table |", "~~~");
     assert_eq!(process_stream(&tilde_lines), tilde_lines);
 }
 
@@ -750,7 +748,7 @@ fn test_wrap_footnote_with_inline_code() {
 /// unchanged when passed to `process_stream`.
 #[test]
 fn test_wrap_footnote_collection() {
-    let input = vec![
+    let input = string_vec![
         "[^1]: <https://falcon.readthedocs.io>",
         "[^2]: <https://asgi.readthedocs.io>",
         "[^3]: <https://www.starlette.io>",
@@ -759,10 +757,7 @@ fn test_wrap_footnote_collection() {
         "[^6]: <https://channels.readthedocs.io/en/stable/topics/consumers.html>",
         "[^7]: <https://fastapi.tiangolo.com/advanced/websockets/>",
         "[^8]: <https://websockets.readthedocs.io>",
-    ]
-    .into_iter()
-    .map(str::to_string)
-    .collect::<Vec<_>>();
+    ];
 
     let output = process_stream(&input);
     assert_eq!(output, input);
@@ -903,10 +898,7 @@ fn test_renumber_basic() {
         "2. second".to_string(),
         "7. third".to_string(),
     ];
-    let expected = vec!["1. first", "2. second", "3. third"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let expected = string_vec!["1. first", "2. second", "3. third"];
     assert_eq!(renumber_lists(&input), expected);
 }
 
@@ -944,70 +936,46 @@ fn test_cli_renumber_option() {
 
 #[test]
 fn test_renumber_nested_lists() {
-    let input = vec![
+    let input = string_vec![
         "1. first",
         "    1. sub first",
         "    3. sub second",
         "2. second",
-    ]
-    .into_iter()
-    .map(str::to_string)
-    .collect::<Vec<_>>();
+    ];
 
-    let expected = vec![
+    let expected = string_vec![
         "1. first",
         "    1. sub first",
         "    2. sub second",
         "2. second",
-    ]
-    .into_iter()
-    .map(str::to_string)
-    .collect::<Vec<_>>();
+    ];
 
     assert_eq!(renumber_lists(&input), expected);
 }
 
 #[test]
 fn test_renumber_tabs_in_indent() {
-    let input = vec!["1. first", "\t1. sub first", "\t5. sub second", "2. second"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let input = string_vec!["1. first", "\t1. sub first", "\t5. sub second", "2. second"];
 
-    let expected = vec!["1. first", "\t1. sub first", "\t2. sub second", "2. second"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let expected = string_vec!["1. first", "\t1. sub first", "\t2. sub second", "2. second"];
 
     assert_eq!(renumber_lists(&input), expected);
 }
 
 #[test]
 fn test_renumber_mult_paragraph_items() {
-    let input = vec!["1. first", "", "    still first paragraph", "", "2. second"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let input = string_vec!["1. first", "", "    still first paragraph", "", "2. second"];
 
-    let expected = vec!["1. first", "", "    still first paragraph", "", "2. second"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let expected = string_vec!["1. first", "", "    still first paragraph", "", "2. second"];
 
     assert_eq!(renumber_lists(&input), expected);
 }
 
 #[test]
 fn test_renumber_table_in_list() {
-    let input = vec!["1. first", "    | A | B |", "    | 1 | 2 |", "5. second"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let input = string_vec!["1. first", "    | A | B |", "    | 1 | 2 |", "5. second"];
 
-    let expected = vec!["1. first", "    | A | B |", "    | 1 | 2 |", "2. second"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let expected = string_vec!["1. first", "    | A | B |", "    | 1 | 2 |", "2. second"];
 
     assert_eq!(renumber_lists(&input), expected);
 }
