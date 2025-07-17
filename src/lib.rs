@@ -18,6 +18,9 @@ mod reflow;
 pub mod table;
 pub mod wrap;
 
+#[cfg(test)]
+pub mod test_utils;
+
 #[doc(hidden)]
 #[must_use]
 pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {

@@ -40,25 +40,30 @@ pub fn format_breaks(lines: &[String]) -> Vec<std::borrow::Cow<'_, str>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::string_vec;
 
     #[test]
     fn basic_formatting() {
-        let input = vec!["foo".to_string(), "***".to_string(), "bar".to_string()];
+        let input = string_vec!["foo", "***", "bar"];
         let expected = vec![
             "foo".to_string(),
             "_".repeat(THEMATIC_BREAK_LEN),
             "bar".to_string(),
         ];
-        let result: Vec<String> =
-            format_breaks(&input).into_iter().map(std::borrow::Cow::into_owned).collect();
+        let result: Vec<String> = format_breaks(&input)
+            .into_iter()
+            .map(std::borrow::Cow::into_owned)
+            .collect();
         assert_eq!(result, expected);
     }
 
     #[test]
     fn ignores_fenced_code() {
-        let input = vec!["```".to_string(), "---".to_string(), "```".to_string()];
-        let result: Vec<String> =
-            format_breaks(&input).into_iter().map(std::borrow::Cow::into_owned).collect();
+        let input = string_vec!["```", "---", "```"];
+        let result: Vec<String> = format_breaks(&input)
+            .into_iter()
+            .map(std::borrow::Cow::into_owned)
+            .collect();
         assert_eq!(result, input);
     }
 }
