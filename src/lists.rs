@@ -4,6 +4,9 @@ use regex::Regex;
 
 use crate::wrap::is_fence;
 
+/// Characters that mark formatted text at the start of a line.
+const FORMATTING_CHARS: [char; 3] = ['*', '_', '`'];
+
 fn parse_numbered(line: &str) -> Option<(&str, &str, &str)> {
     static NUMBERED_RE: std::sync::LazyLock<Regex> =
         std::sync::LazyLock::new(|| Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").unwrap());
@@ -28,7 +31,7 @@ fn drop_deeper(indent: usize, counters: &mut Vec<(usize, usize)>) {
 
 fn is_plain_paragraph_line(line: &str) -> bool {
     line.trim_start()
-        .trim_start_matches(|c: char| ['*', '_', '`'].contains(&c))
+        .trim_start_matches(|c: char| FORMATTING_CHARS.contains(&c))
         .chars()
         .next()
         .is_some_and(char::is_alphanumeric)
