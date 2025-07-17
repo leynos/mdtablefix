@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write};
+use std::{borrow::Cow, fs::File, io::Write};
 
 use assert_cmd::Command;
 use mdtablefix::{
@@ -1049,10 +1049,10 @@ fn test_format_breaks_basic() {
         .into_iter()
         .map(str::to_string)
         .collect::<Vec<_>>();
-    let expected = vec![
-        "foo".to_string(),
-        "_".repeat(THEMATIC_BREAK_LEN),
-        "bar".to_string(),
+    let expected: Vec<Cow<str>> = vec![
+        input[0].as_str().into(),
+        Cow::Owned("_".repeat(THEMATIC_BREAK_LEN)),
+        input[2].as_str().into(),
     ];
     assert_eq!(format_breaks(&input), expected);
 }
@@ -1063,7 +1063,8 @@ fn test_format_breaks_ignores_code() {
         .into_iter()
         .map(str::to_string)
         .collect::<Vec<_>>();
-    assert_eq!(format_breaks(&input), input);
+    let expected: Vec<Cow<str>> = input.iter().map(|s| s.as_str().into()).collect();
+    assert_eq!(format_breaks(&input), expected);
 }
 
 #[test]
@@ -1072,7 +1073,8 @@ fn test_format_breaks_mixed_chars() {
         .into_iter()
         .map(str::to_string)
         .collect::<Vec<_>>();
-    assert_eq!(format_breaks(&input), input);
+    let expected: Vec<Cow<str>> = input.iter().map(|s| s.as_str().into()).collect();
+    assert_eq!(format_breaks(&input), expected);
 }
 
 #[test]
@@ -1081,7 +1083,7 @@ fn test_format_breaks_with_spaces_and_indent() {
         .into_iter()
         .map(str::to_string)
         .collect::<Vec<_>>();
-    let expected = vec!["_".repeat(THEMATIC_BREAK_LEN)];
+    let expected: Vec<Cow<str>> = vec![Cow::Owned("_".repeat(THEMATIC_BREAK_LEN))];
     assert_eq!(format_breaks(&input), expected);
 }
 
@@ -1091,7 +1093,7 @@ fn test_format_breaks_with_tabs_and_underscores() {
         .into_iter()
         .map(str::to_string)
         .collect::<Vec<_>>();
-    let expected = vec!["_".repeat(THEMATIC_BREAK_LEN)];
+    let expected: Vec<Cow<str>> = vec![Cow::Owned("_".repeat(THEMATIC_BREAK_LEN))];
     assert_eq!(format_breaks(&input), expected);
 }
 
