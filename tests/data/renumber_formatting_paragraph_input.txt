@@ -1,0 +1,30 @@
+When pytest-forked creates child processes, Slipcover's enhanced capabilities
+ensure that:
+
+1. Each forked child process independently collects coverage data for the tests
+   it executes.
+
+1. This data is temporarily stored.
+
+1. Upon completion of all tests, the main Slipcover process aggregates the
+   coverage data from all child processes into a single, unified dataset.
+
+1. The final coverage report is generated from this aggregated data.
+
+**Practical Guide to Using Slipcover with** `pytest-forked`**:**
+<!-- markdownlint-disable MD029 -->
+
+1. **Prerequisites**:
+
+   - Slipcover v1.0.4+
+
+   - Pytest
+
+   - `pytest-forked`
+
+   `bash pip install --upgrade slipcover pytest pytest-forked`
+
+   *Note:* `pytest-forked` *relies on the* `fork()` *system call, making it
+   suitable for Unix-like systems (Linux, macOS).* 
+
+1. Command Invocation:

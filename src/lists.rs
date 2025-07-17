@@ -28,6 +28,7 @@ fn drop_deeper(indent: usize, counters: &mut Vec<(usize, usize)>) {
 
 fn is_plain_paragraph_line(line: &str) -> bool {
     line.trim_start()
+        .trim_start_matches(|c: char| ['*', '_', '`'].contains(&c))
         .chars()
         .next()
         .is_some_and(char::is_alphanumeric)
