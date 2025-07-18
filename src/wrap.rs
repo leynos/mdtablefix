@@ -301,19 +301,22 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             indent = line.chars().take_while(|c| c.is_whitespace()).collect();
         }
         let trimmed_end = line.trim_end();
-        let without_br = trimmed_end
+        let text_without_html_breaks = trimmed_end
             .trim_end_matches("<br>")
             .trim_end_matches("<br/>")
             .trim_end_matches("<br />");
 
         let is_trailing_spaces = line.ends_with("  ");
-        let is_html_br = trimmed_end != without_br;
-        let backslash_count = without_br.chars().rev().take_while(|&c| c == '\\').count();
+        let is_html_br = trimmed_end != text_without_html_breaks;
+        let backslash_count = trimmed_end.chars().rev().take_while(|&c| c == '\\').count();
         let is_backslash_escape = backslash_count % 2 == 1;
 
         let hard_break = is_trailing_spaces || is_html_br || is_backslash_escape;
 
-        let text = without_br.trim_start().trim_end_matches(' ').to_string();
+        let text = text_without_html_breaks
+            .trim_start()
+            .trim_end_matches(' ')
+            .to_string();
 
         buf.push((text, hard_break));
     }
