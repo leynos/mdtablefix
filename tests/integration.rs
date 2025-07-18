@@ -674,6 +674,20 @@ fn test_wrap_footnote_with_inline_code() {
     common::assert_wrapped_list_item(&output, "  [^code_note]: ", 2);
 }
 
+#[test]
+fn test_wrap_angle_bracket_url() {
+    let input = lines_vec![concat!(
+        "[^5]: Given When Then - Martin Fowler, accessed on 14 July 2025, ",
+        "<https://martinfowler.com/bliki/GivenWhenThen.html>"
+    )];
+    let expected = lines_vec![
+        "[^5]: Given When Then - Martin Fowler, accessed on 14 July 2025,",
+        "      <https://martinfowler.com/bliki/GivenWhenThen.html>",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
 /// Checks that a sequence of footnotes is not altered by wrapping.
 ///
 /// This regression test ensures that the footnote collection remains
