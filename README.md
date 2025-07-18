@@ -32,8 +32,9 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--in-place] [FILE...]
   `--renumber`.
 - Use `--breaks` to normalize thematic breaks to a line of 70 underscores
   (configurable via the `THEMATIC_BREAK_LEN` constant).
-- Use `--ellipsis` to replace sequences of three dots with the ellipsis
-  character.
+- Use `--ellipsis` to replace groups of three consecutive dots with the
+  ellipsis character. Longer runs are processed left-to-right so leftover dots
+  remain unchanged.
 - Use `--in-place` to overwrite files.
 - If no files are supplied, input is read from stdin and results are written
   to stdout.

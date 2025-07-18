@@ -1,7 +1,9 @@
 //! Replace sequences of three dots with the ellipsis character.
 //!
-//! This module provides a helper for normalising textual ellipses. It respects
-//! fenced code blocks and inline code spans so that code is left untouched.
+//! Groups of three consecutive dots become a single Unicode ellipsis. Longer
+//! runs are processed left-to-right so trailing dots that do not form a
+//! complete triple remain. Fenced code blocks and inline code spans are left
+//! untouched.
 
 use regex::Regex;
 
@@ -13,6 +15,9 @@ static DOT_RE: std::sync::LazyLock<Regex> =
 /// Replace `...` with `…` outside code spans and fences.
 #[must_use]
 pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
+    if lines.is_empty() {
+        return Vec::new();
+    }
     let joined = lines.join("\n");
     let mut out = String::new();
     for token in tokenize_markdown(&joined) {
@@ -69,6 +74,32 @@ mod tests {
     fn replaces_long_sequences() {
         let input = vec![".... ..... ...... .......".to_string()];
         let expected = vec!["…. ….. …… …….".to_string()];
+        assert_eq!(replace_ellipsis(&input), expected);
+    }
+
+    #[test]
+    fn handles_empty_input() {
+        let input: Vec<String> = Vec::new();
+        let expected: Vec<String> = Vec::new();
+        assert_eq!(replace_ellipsis(&input), expected);
+    }
+
+    #[test]
+    fn handles_multiple_fenced_blocks() {
+        let input = vec![
+            "text...".to_string(),
+            "```".to_string(),
+            "code...".to_string(),
+            "```".to_string(),
+            "more text...".to_string(),
+        ];
+        let expected = vec![
+            "text…".to_string(),
+            "```".to_string(),
+            "code...".to_string(),
+            "```".to_string(),
+            "more text…".to_string(),
+        ];
         assert_eq!(replace_ellipsis(&input), expected);
     }
 }
