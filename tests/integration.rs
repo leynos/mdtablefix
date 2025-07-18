@@ -674,6 +674,10 @@ fn test_wrap_footnote_with_inline_code() {
     common::assert_wrapped_list_item(&output, "  [^code_note]: ", 2);
 }
 
+/// Tests that footnotes with angle-bracketed URLs are wrapped correctly.
+///
+/// Verifies that when a footnote line contains a URL enclosed in angle brackets,
+/// the URL is moved to a new indented line beneath the footnote text.
 #[test]
 fn test_wrap_angle_bracket_url() {
     let input = lines_vec![concat!(
