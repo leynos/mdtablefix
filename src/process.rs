@@ -1,13 +1,14 @@
 //! High-level Markdown stream processing.
 
 use crate::{
+    ellipsis::replace_ellipsis,
     html::convert_html_tables,
     table::reflow_table,
     wrap::{self, wrap_text},
 };
 
 #[must_use]
-pub fn process_stream_inner(lines: &[String], wrap: bool) -> Vec<String> {
+pub fn process_stream_inner(lines: &[String], wrap: bool, ellipsis: bool) -> Vec<String> {
     let pre = convert_html_tables(lines);
 
     let mut out = Vec::new();
@@ -69,15 +70,24 @@ pub fn process_stream_inner(lines: &[String], wrap: bool) -> Vec<String> {
         }
     }
 
-    if wrap { wrap_text(&out, 80) } else { out }
+    let mut out = if wrap { wrap_text(&out, 80) } else { out };
+    if ellipsis {
+        out = replace_ellipsis(&out);
+    }
+    out
 }
 
 #[must_use]
-pub fn process_stream(lines: &[String]) -> Vec<String> { process_stream_inner(lines, true) }
+pub fn process_stream(lines: &[String]) -> Vec<String> { process_stream_inner(lines, true, false) }
 
 #[must_use]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
-    process_stream_inner(lines, false)
+    process_stream_inner(lines, false, false)
+}
+
+#[must_use]
+pub fn process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool) -> Vec<String> {
+    process_stream_inner(lines, wrap, ellipsis)
 }
 
 #[cfg(test)]

@@ -32,6 +32,10 @@ classDiagram
         +format_breaks()
         +THEMATIC_BREAK_LEN
     }
+    class ellipsis {
+        <<module>>
+        +replace_ellipsis()
+    }
     class process {
         <<module>>
         +process_stream()
@@ -47,19 +51,23 @@ classDiagram
     lib --> wrap
     lib --> lists
     lib --> breaks
+    lib --> ellipsis
     lib --> process
     lib --> io
     html ..> wrap : uses is_fence
     table ..> reflow : uses parse_rows, etc.
     lists ..> wrap : uses is_fence
     breaks ..> wrap : uses is_fence
+    ellipsis ..> wrap : uses tokenize_markdown
     process ..> html : uses convert_html_tables
     process ..> table : uses reflow_table
     process ..> wrap : uses wrap_text, is_fence
+    process ..> ellipsis : uses replace_ellipsis
     io ..> process : uses process_stream, process_stream_no_wrap
 ```
 
 The `lib` module re-exports the public API from the other modules. The
-`process` module provides streaming helpers that combine the lower-level
-functions. The `io` module handles filesystem operations, delegating the text
+`ellipsis` module performs text normalisation. The `process` module provides
+streaming helpers that combine the lower-level functions, including ellipsis
+replacement. The `io` module handles filesystem operations, delegating the text
 processing to `process`.

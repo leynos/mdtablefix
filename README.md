@@ -22,7 +22,7 @@ cargo install --path .
 ## Command-line usage
 
 ```bash
-mdtablefix [--wrap] [--renumber] [--breaks] [--in-place] [FILE...]
+mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--in-place] [FILE...]
 ```
 
 - With file paths provided, the corrected tables are printed to stdout.
@@ -32,6 +32,9 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--in-place] [FILE...]
   `--renumber`.
 - Use `--breaks` to normalize thematic breaks to a line of 70 underscores
   (configurable via the `THEMATIC_BREAK_LEN` constant).
+- Use `--ellipsis` to replace groups of three consecutive dots with the
+  ellipsis character. Longer runs are processed left-to-right, so leftover dots
+  remain unchanged.
 - Use `--in-place` to overwrite files.
 - If no files are supplied, input is read from stdin and results are written
   to stdout.
@@ -62,19 +65,25 @@ The crate exposes helper functions so you can integrate the table reflow logic
 in your own project.
 
 ```rust
-use mdtablefix::{process_stream, rewrite};
+use mdtablefix::{process_stream_opts, rewrite};
 use std::path::Path;
 
 fn main() -> std::io::Result<()> {
     let lines = vec!["|A|B|".to_string(), "|1|2|".to_string()];
-    let fixed = process_stream(&lines);
+    let fixed = process_stream_opts(
+        &lines,
+        /* wrap = */ true,
+        /* ellipsis = */ true,
+    );
     println!("{}", fixed.join("\n"));
     rewrite(Path::new("table.md"))?;
     Ok(())
 }
 ```
 
-- `process_stream(&[String]) -> Vec<String>` rewrites tables in memory.
+- `process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool) ->
+  Vec<String>` rewrites tables in memory with optional wrapping and ellipsis
+  replacement.
 - `rewrite(&Path) -> std::io::Result<()>` updates a Markdown file on disk.
 
 ## HTML table support

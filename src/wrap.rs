@@ -17,7 +17,20 @@ static FOOTNOTE_RE: std::sync::LazyLock<Regex> =
 static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:>\s*)+)(.*)$").unwrap());
 
-pub(crate) fn tokenize_markdown(text: &str) -> Vec<String> {
+/// Markdown token emitted by [`tokenize_markdown`].
+#[derive(Debug, PartialEq)]
+pub enum Token<'a> {
+    /// Line within a fenced code block, including the fence itself.
+    Fence(&'a str),
+    /// Inline code span without surrounding backticks.
+    Code(&'a str),
+    /// Plain text outside code regions.
+    Text(&'a str),
+    /// Line break separating tokens.
+    Newline,
+}
+
+fn tokenize_inline(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = text.chars().collect();
     let mut i = 0;
@@ -70,6 +83,46 @@ pub(crate) fn tokenize_markdown(text: &str) -> Vec<String> {
     tokens
 }
 
+/// Tokenise Markdown into fences, inline code and plain text.
+pub(crate) fn tokenize_markdown(input: &str) -> Vec<Token<'_>> {
+    let mut out = Vec::new();
+    let mut in_fence = false;
+    for line in input.split_inclusive('\n') {
+        let trimmed = line.trim_end_matches('\n');
+        if FENCE_RE.is_match(trimmed) {
+            out.push(Token::Fence(trimmed));
+            out.push(Token::Newline);
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            out.push(Token::Fence(trimmed));
+            out.push(Token::Newline);
+            continue;
+        }
+        let mut rest = trimmed;
+        while let Some(pos) = rest.find('`') {
+            if pos > 0 {
+                out.push(Token::Text(&rest[..pos]));
+            }
+            if let Some(end) = rest[pos + 1..].find('`') {
+                out.push(Token::Code(&rest[pos + 1..pos + 1 + end]));
+                rest = &rest[pos + end + 2..];
+            } else {
+                out.push(Token::Text(&rest[pos..]));
+                rest = "";
+                break;
+            }
+        }
+        if !rest.is_empty() {
+            out.push(Token::Text(rest));
+        }
+        out.push(Token::Newline);
+    }
+    out.pop();
+    out
+}
+
 /// Determine if the current line should break at the last whitespace.
 ///
 /// Returns `true` if `current_width` exceeds `width` and a whitespace split
@@ -93,7 +146,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut current = String::new();
     let mut current_width = 0;
     let mut last_split: Option<usize> = None;
-    for token in tokenize_markdown(text) {
+    for token in tokenize_inline(text) {
         let token_width = UnicodeWidthStr::width(token.as_str());
         if current_width + token_width <= width {
             current.push_str(&token);
