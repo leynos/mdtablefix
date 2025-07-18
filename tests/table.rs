@@ -263,26 +263,26 @@ fn test_uniform_example_two() {
 fn test_non_table_lines_unchanged() {
     let input = lines_vec![
         "# Title",
-        String::new(),
+        "",
         "Para text.",
-        String::new(),
+        "",
         "| a | b |",
         "| 1 | 22 |",
-        String::new(),
+        "",
         "* bullet",
-        String::new(),
+        "",
     ];
     let output = process_stream(&input);
     let expected = lines_vec![
         "# Title",
-        String::new(),
+        "",
         "Para text.",
-        String::new(),
+        "",
         "| a | b  |",
         "| 1 | 22 |",
-        String::new(),
+        "",
         "* bullet",
-        String::new(),
+        "",
     ];
     assert_eq!(output, expected);
 }
