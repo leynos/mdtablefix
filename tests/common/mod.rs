@@ -4,6 +4,7 @@
 ///
 /// This macro is primarily used in tests to reduce boilerplate when
 /// constructing example tables or other collections of lines.
+#[allow(unused_macros)]
 macro_rules! lines_vec {
     ($($line:expr),* $(,)?) => {
         vec![$($line.to_string()),*]
@@ -16,6 +17,7 @@ macro_rules! lines_vec {
 /// ```
 /// let input: Vec<String> = include_lines!("data/bold_header_input.txt"); 
 /// ```
+#[allow(unused_macros)]
 macro_rules! include_lines {
     ($path:literal $(,)?) => {{
         const _TXT: &str = include_str!($path);
@@ -27,6 +29,7 @@ macro_rules! include_lines {
 ///
 /// Verifies the number of lines, prefix on the first line, length of all lines,
 /// and indentation of continuation lines.
+#[allow(dead_code)]
 pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize) {
     assert!(expected > 0, "expected line count must be positive");
     assert!(!output.is_empty(), "output slice is empty");
@@ -67,6 +70,7 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
 
 /// Assert that every line in a blockquote starts with the given prefix and is at most 80
 /// characters.
+#[allow(dead_code)]
 pub fn assert_wrapped_blockquote(output: &[String], prefix: &str, expected: usize) {
     assert!(!output.is_empty(), "output slice is empty");
     assert_eq!(output.len(), expected);
