@@ -70,16 +70,20 @@ use std::path::Path;
 
 fn main() -> std::io::Result<()> {
     let lines = vec!["|A|B|".to_string(), "|1|2|".to_string()];
-    let fixed = process_stream_opts(&lines, true, true);
+    let fixed = process_stream_opts(
+        &lines,
+        /* wrap = */ true,
+        /* ellipsis = */ true,
+    );
     println!("{}", fixed.join("\n"));
     rewrite(Path::new("table.md"))?;
     Ok(())
 }
 ```
 
-- `process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool) -> \
-   Vec<String>` rewrites tables in memory with optional wrapping and ellipsis
-   replacement.
+- `process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool) ->
+  Vec<String>` rewrites tables in memory with optional wrapping and ellipsis
+  replacement.
 - `rewrite(&Path) -> std::io::Result<()>` updates a Markdown file on disk.
 
 ## HTML table support

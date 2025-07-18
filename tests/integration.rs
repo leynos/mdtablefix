@@ -994,3 +994,15 @@ fn test_cli_ellipsis_fenced_block() {
         "```\nlet x = ...;\n```\n"
     );
 }
+
+#[test]
+fn test_cli_ellipsis_long_sequence() {
+    let output = Command::cargo_bin("mdtablefix")
+        .unwrap()
+        .arg("--ellipsis")
+        .write_stdin("wait....\n")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "wait….\n");
+}
