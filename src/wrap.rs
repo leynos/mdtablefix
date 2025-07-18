@@ -308,7 +308,12 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 
         let is_trailing_spaces = line.ends_with("  ");
         let is_html_br = trimmed_end != text_without_html_breaks;
-        let backslash_count = trimmed_end.chars().rev().take_while(|&c| c == '\\').count();
+        let backslash_count = line
+            .trim_end()
+            .chars()
+            .rev()
+            .take_while(|&c| c == '\\')
+            .count();
         let is_backslash_escape = backslash_count % 2 == 1;
 
         let hard_break = is_trailing_spaces || is_html_br || is_backslash_escape;
