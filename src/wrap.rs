@@ -72,6 +72,36 @@ fn tokenize_inline(text: &str) -> Vec<String> {
                 tokens.push(chars[start..end].iter().collect());
                 i = end;
             }
+        } else if c == '[' || (c == '!' && i + 1 < chars.len() && chars[i + 1] == '[') {
+            let start = i;
+            if c == '!' {
+                i += 1;
+            }
+            if i < chars.len() && chars[i] == '[' {
+                i += 1;
+                while i < chars.len() && chars[i] != ']' {
+                    i += 1;
+                }
+                if i < chars.len() && chars[i] == ']' {
+                    i += 1;
+                    if i < chars.len() && chars[i] == '(' {
+                        i += 1;
+                        let mut depth = 1;
+                        while i < chars.len() && depth > 0 {
+                            if chars[i] == '(' {
+                                depth += 1;
+                            } else if chars[i] == ')' {
+                                depth -= 1;
+                            }
+                            i += 1;
+                        }
+                        tokens.push(chars[start..i].iter().collect());
+                        continue;
+                    }
+                }
+            }
+            i = start + 1;
+            tokens.push(chars[start..i].iter().collect());
         } else {
             let start = i;
             while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '`' {
