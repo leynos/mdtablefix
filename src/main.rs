@@ -21,7 +21,10 @@ struct Cli {
 }
 
 #[derive(clap::Args, Clone, Copy)]
-#[allow(clippy::struct_excessive_bools)] // CLI exposes four independent flags
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "CLI exposes four independent flags"
+)]
 struct FormatOpts {
     /// Wrap paragraphs and list items to 80 columns
     #[arg(long = "wrap")]

@@ -1,9 +1,13 @@
 //! Utility helpers shared across integration tests.
+#![allow(unfulfilled_lint_expectations)]
+
+use rstest::fixture;
 
 /// Build a `Vec<String>` from a list of string slices.
 ///
 /// This macro is primarily used in tests to reduce boilerplate when
 /// constructing example tables or other collections of lines.
+#[expect(unused_macros, reason = "macros are optional helpers across modules")]
 macro_rules! lines_vec {
     ($($line:expr),* $(,)?) => {
         vec![$($line.to_string()),*]
@@ -16,6 +20,7 @@ macro_rules! lines_vec {
 /// ```
 /// let input: Vec<String> = include_lines!("data/bold_header_input.txt"); 
 /// ```
+#[expect(unused_macros, reason = "macros are optional helpers across modules")]
 macro_rules! include_lines {
     ($path:literal $(,)?) => {{
         const _TXT: &str = include_str!($path);
@@ -27,6 +32,12 @@ macro_rules! include_lines {
 ///
 /// Verifies the number of lines, prefix on the first line, length of all lines,
 /// and indentation of continuation lines.
+///
+/// # Panics
+///
+/// Panics if the output slice is empty, expected count is zero, or if the lines
+/// do not meet the asserted conditions.
+#[expect(dead_code, reason = "helper used selectively across modules")]
 pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize) {
     assert!(expected > 0, "expected line count must be positive");
     assert!(!output.is_empty(), "output slice is empty");
@@ -67,9 +78,24 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
 
 /// Assert that every line in a blockquote starts with the given prefix and is at most 80
 /// characters.
+///
+/// # Panics
+///
+/// Panics if the output slice is empty or the prefix is missing from any line.
+#[expect(dead_code, reason = "helper used selectively across modules")]
 pub fn assert_wrapped_blockquote(output: &[String], prefix: &str, expected: usize) {
     assert!(!output.is_empty(), "output slice is empty");
     assert_eq!(output.len(), expected);
     assert!(output.iter().all(|l| l.starts_with(prefix)));
     assert!(output.iter().all(|l| l.len() <= 80));
+}
+
+/// Fixture representing a simple broken table.
+#[expect(dead_code, reason = "helper used selectively across modules")]
+#[fixture]
+pub fn broken_table() -> Vec<String> {
+    vec![
+        "| A | B |    |".to_string(),
+        "| 1 | 2 |  | 3 | 4 |".to_string(),
+    ]
 }
