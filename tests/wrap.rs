@@ -424,3 +424,21 @@ fn test_cli_wrap_option() {
     );
     assert!(text.lines().all(|l| l.len() <= 80));
 }
+
+/// Ensures that links are not split across lines when wrapping paragraphs.
+#[test]
+fn test_wrap_paragraph_with_link() {
+    let input = lines_vec![concat!(
+        "**Wireframe** is an experimental Rust library that simplifies building",
+        " servers and clients for custom binary protocols. The design borrows ",
+        "heavily from [Actix Web](https://actix.rs/) to provide a familiar, ",
+        "declarative API for routing, extractors, and middleware."
+    )];
+    let output = process_stream(&input);
+    assert!(
+        output
+            .iter()
+            .any(|line| line.contains("[Actix Web](https://actix.rs/)")),
+        "link should not be broken across lines"
+    );
+}
