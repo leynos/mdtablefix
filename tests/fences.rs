@@ -19,8 +19,15 @@ fn compresses_indented_backticks() {
 }
 
 #[test]
+fn compresses_tilde_fences() {
+    let input = lines_vec!["~~~~rust", "code", "~~~~"];
+    let out = compress_fences(&input);
+    assert_eq!(out, lines_vec!["```rust", "code", "```"]);
+}
+
+#[test]
 fn leaves_other_lines_untouched() {
-    let input = lines_vec!["~~~", "``text``"];
+    let input = lines_vec!["~~", "``text``"];
     let out = compress_fences(&input);
     assert_eq!(out, input);
 }

@@ -33,6 +33,6 @@ pub use fences::{attach_orphan_specifiers, compress_fences};
 pub use html::convert_html_tables;
 pub use io::{rewrite, rewrite_no_wrap};
 pub use lists::renumber_lists;
-pub use process::{process_stream, process_stream_no_wrap, process_stream_opts};
+pub use process::{Options, process_stream, process_stream_no_wrap, process_stream_opts};
 pub use table::{reflow_table, split_cells};
 pub use wrap::{is_fence, wrap_text};
