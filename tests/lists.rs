@@ -64,11 +64,11 @@ fn restart_after_formatting_paragraph() {
 #[test]
 fn test_cli_renumber_option() {
     let output = Command::cargo_bin("mdtablefix")
-        .unwrap()
+        .expect("Failed to create cargo command for mdtablefix")
         .arg("--renumber")
         .write_stdin("1. a\n4. b\n")
         .output()
-        .unwrap();
+        .expect("Failed to execute mdtablefix command");
     assert!(output.status.success());
     let text = String::from_utf8_lossy(&output.stdout);
     assert_eq!(text, "1. a\n2. b\n");

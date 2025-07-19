@@ -55,14 +55,18 @@ fn test_format_breaks_mixed_chars_excessive_length() {
     assert_eq!(format_breaks(&input), expected);
 }
 
+/// Tests the CLI `--breaks` option to ensure thematic breaks are normalised.
+///
+/// Provides a single line of hyphens and asserts the output is the standard
+/// underscore-based thematic break.
 #[test]
 fn test_cli_breaks_option() {
     let output = Command::cargo_bin("mdtablefix")
-        .unwrap()
+        .expect("Failed to create cargo command for mdtablefix")
         .arg("--breaks")
         .write_stdin("---\n")
         .output()
-        .unwrap();
+        .expect("Failed to execute mdtablefix command");
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),

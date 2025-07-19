@@ -328,17 +328,21 @@ fn test_wrap_hard_linebreak_backslash_edge_cases() {
     assert_eq!(process_stream(&input), expected);
 }
 
+/// Tests that the CLI `--wrap` option enables wrapping functionality.
+///
+/// Verifies that when the `--wrap` flag is provided, the CLI tool wraps
+/// long lines at 80 characters and produces multi-line output.
 #[test]
 fn test_cli_wrap_option() {
     let input = "This line is deliberately made much longer than eighty columns so that the \
                  wrapping algorithm is forced to insert a soft line-break somewhere in the middle \
                  of the paragraph when the --wrap flag is supplied.";
     let output = Command::cargo_bin("mdtablefix")
-        .unwrap()
+        .expect("Failed to create cargo command for mdtablefix")
         .arg("--wrap")
         .write_stdin(format!("{input}\n"))
         .output()
-        .unwrap();
+        .expect("Failed to execute mdtablefix command");
     assert!(output.status.success());
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(

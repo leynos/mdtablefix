@@ -9,10 +9,14 @@ use rstest::{fixture, rstest};
 mod prelude;
 
 #[fixture]
-fn broken_table() -> Vec<String> { return lines_vec!["| A | B |    |", "| 1 | 2 |  | 3 | 4 |"]; }
+fn broken_table() -> Vec<String> {
+    lines_vec!["| A | B |    |", "| 1 | 2 |  | 3 | 4 |"]
+}
 
 #[fixture]
-fn malformed_table() -> Vec<String> { return lines_vec!["| A | |", "| 1 | 2 | 3 |"]; }
+fn malformed_table() -> Vec<String> {
+    lines_vec!["| A | |", "| 1 | 2 | 3 |"]
+}
 
 #[fixture]
 fn header_table() -> Vec<String> {
@@ -26,7 +30,7 @@ fn escaped_pipe_table() -> Vec<String> {
 
 #[fixture]
 fn indented_table() -> Vec<String> {
-    return lines_vec!["  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |"];
+    lines_vec!["  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |"]
 }
 
 #[fixture]
@@ -100,10 +104,14 @@ fn html_table_inconsistent_first_row() -> Vec<String> {
 }
 
 #[fixture]
-fn html_table_empty() -> Vec<String> { return lines_vec!["<table></table>"]; }
+fn html_table_empty() -> Vec<String> {
+    lines_vec!["<table></table>"]
+}
 
 #[fixture]
-fn html_table_unclosed() -> Vec<String> { return lines_vec!["<table>", "<tr><td>1</td></tr>"]; }
+fn html_table_unclosed() -> Vec<String> {
+    lines_vec!["<table>", "<tr><td>1</td></tr>"]
+}
 
 #[fixture]
 fn html_table_uppercase() -> Vec<String> {

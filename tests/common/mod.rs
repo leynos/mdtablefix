@@ -4,7 +4,7 @@
 ///
 /// This macro is primarily used in tests to reduce boilerplate when
 /// constructing example tables or other collections of lines.
-#[allow(unused_macros)]
+#[allow(unused_macros)] // macros are optional helpers across modules
 #[macro_export]
 macro_rules! lines_vec {
     ($($line:expr),* $(,)?) => {
@@ -18,7 +18,7 @@ macro_rules! lines_vec {
 /// ```
 /// let input: Vec<String> = include_lines!("data/bold_header_input.txt"); 
 /// ```
-#[allow(unused_macros)]
+#[allow(unused_macros)] // macros are optional helpers across modules
 #[macro_export]
 macro_rules! include_lines {
     ($path:literal $(,)?) => {{
@@ -36,7 +36,7 @@ macro_rules! include_lines {
 ///
 /// Panics if the output slice is empty, expected count is zero, or if the lines
 /// do not meet the asserted conditions.
-#[allow(dead_code)]
+#[allow(dead_code)] // helper used selectively across modules
 pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize) {
     assert!(expected > 0, "expected line count must be positive");
     assert!(!output.is_empty(), "output slice is empty");
@@ -81,7 +81,7 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
 /// # Panics
 ///
 /// Panics if the output slice is empty or the prefix is missing from any line.
-#[allow(dead_code)]
+#[allow(dead_code)] // helper used selectively across modules
 pub fn assert_wrapped_blockquote(output: &[String], prefix: &str, expected: usize) {
     assert!(!output.is_empty(), "output slice is empty");
     assert_eq!(output.len(), expected);
