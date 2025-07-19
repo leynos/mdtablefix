@@ -2,9 +2,9 @@
 
 use mdtablefix::{lists::pop_counters_upto, renumber_lists};
 
+#[macro_use]
 mod prelude;
 use prelude::*;
-use rstest::rstest;
 
 #[test]
 fn pop_counters_removes_deeper_levels() {

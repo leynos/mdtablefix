@@ -6,6 +6,7 @@ use std::borrow::Cow;
 
 use mdtablefix::{THEMATIC_BREAK_LEN, format_breaks};
 
+#[macro_use]
 mod prelude;
 use prelude::*;
 

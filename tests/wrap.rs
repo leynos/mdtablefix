@@ -11,8 +11,8 @@
 //! - CLI `--wrap` option functionality
 
 use mdtablefix::process_stream;
-use rstest::rstest;
 
+#[macro_use]
 mod prelude;
 use prelude::*;
 #[test]
@@ -44,7 +44,7 @@ fn test_wrap_list_item() {
         r"- This bullet item is exceptionally long and must be wrapped to keep prefix formatting intact.",
     ];
     let output = process_stream(&input);
-    common::assert_wrapped_list_item(&output, "- ", 2);
+    assert_wrapped_list_item(&output, "- ", 2);
 }
 
 #[rstest]
@@ -59,7 +59,7 @@ fn test_wrap_list_items_with_inline_code(#[case] prefix: &str, #[case] expected:
          the script verbatim, respecting the shebang."
     )];
     let output = process_stream(&input);
-    common::assert_wrapped_list_item(&output, prefix, expected);
+    assert_wrapped_list_item(&output, prefix, expected);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn test_wrap_preserves_inline_code_spans() {
          script verbatim, respecting the shebang.",
     ];
     let output = process_stream(&input);
-    common::assert_wrapped_list_item(&output, "- ", 3);
+    assert_wrapped_list_item(&output, "- ", 3);
 }
 
 /// Tests that multi-backtick code spans are preserved during wrapping.
@@ -84,7 +84,7 @@ fn test_wrap_multi_backtick_code() {
          console",
     ];
     let output = process_stream(&input);
-    common::assert_wrapped_list_item(&output, "- ", 2);
+    assert_wrapped_list_item(&output, "- ", 2);
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn test_wrap_multiple_inline_code_spans() {
          wrapping width",
     ];
     let output = process_stream(&input);
-    common::assert_wrapped_list_item(&output, "- ", 2);
+    assert_wrapped_list_item(&output, "- ", 2);
 }
 #[test]
 fn test_wrap_long_inline_code_item() {
@@ -105,7 +105,7 @@ fn test_wrap_long_inline_code_item() {
         " don't conform to the expected structured format."
     )];
     let output = process_stream(&input);
-    common::assert_wrapped_list_item(&output, "- ", 4);
+    assert_wrapped_list_item(&output, "- ", 4);
     assert!(
         output
             .first()
@@ -143,7 +143,7 @@ fn test_wrap_footnote_multiline() {
         "across multiple lines so we can verify indentation."
     )];
     let output = process_stream(&input);
-    common::assert_wrapped_list_item(&output, "[^note]: ", 2);
+    assert_wrapped_list_item(&output, "[^note]: ", 2);
 }
 
 #[test]
@@ -153,7 +153,7 @@ fn test_wrap_footnote_with_inline_code() {
         "across multiple lines without breaking the span."
     )];
     let output = process_stream(&input);
-    common::assert_wrapped_list_item(&output, "  [^code_note]: ", 2);
+    assert_wrapped_list_item(&output, "  [^code_note]: ", 2);
 }
 
 /// Tests that footnotes with angle-bracketed URLs are wrapped correctly.
@@ -232,7 +232,7 @@ fn test_wrap_blockquote_nested() {
         "can verify multi-level handling."
     )];
     let output = process_stream(&input);
-    common::assert_wrapped_blockquote(&output, "> > ", 2);
+    assert_wrapped_blockquote(&output, "> > ", 2);
     let joined = output
         .iter()
         .map(|l| l.trim_start_matches("> > "))
@@ -248,7 +248,7 @@ fn test_wrap_blockquote_mixed_indentation() {
          indentation handling."
     ];
     let output = process_stream(&input);
-    common::assert_wrapped_blockquote(&output, "> \t> \t", 2);
+    assert_wrapped_blockquote(&output, "> \t> \t", 2);
     let joined = output
         .iter()
         .map(|l| l.trim_start_matches("> \t> \t"))
@@ -274,8 +274,8 @@ fn test_wrap_blockquote_with_blank_lines() {
     ];
     let output = process_stream(&input);
     assert_eq!(output[3], ">");
-    common::assert_wrapped_blockquote(&output[..3], "> ", 3);
-    common::assert_wrapped_blockquote(&output[4..], "> ", 3);
+    assert_wrapped_blockquote(&output[..3], "> ", 3);
+    assert_wrapped_blockquote(&output[4..], "> ", 3);
 }
 
 #[test]
@@ -285,7 +285,7 @@ fn test_wrap_blockquote_extra_whitespace() {
          the line width.",
     ];
     let output = process_stream(&input);
-    common::assert_wrapped_blockquote(&output, ">    ", 2);
+    assert_wrapped_blockquote(&output, ">    ", 2);
     let joined = output
         .iter()
         .map(|l| l.trim_start_matches(">    "))

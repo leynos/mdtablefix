@@ -1,11 +1,12 @@
 //! Utility helpers shared across integration tests.
 
+use rstest::fixture;
+
 /// Build a `Vec<String>` from a list of string slices.
 ///
 /// This macro is primarily used in tests to reduce boilerplate when
 /// constructing example tables or other collections of lines.
 #[allow(unused_macros)] // macros are optional helpers across modules
-#[macro_export]
 macro_rules! lines_vec {
     ($($line:expr),* $(,)?) => {
         vec![$($line.to_string()),*]
@@ -19,7 +20,6 @@ macro_rules! lines_vec {
 /// let input: Vec<String> = include_lines!("data/bold_header_input.txt"); 
 /// ```
 #[allow(unused_macros)] // macros are optional helpers across modules
-#[macro_export]
 macro_rules! include_lines {
     ($path:literal $(,)?) => {{
         const _TXT: &str = include_str!($path);
@@ -87,4 +87,14 @@ pub fn assert_wrapped_blockquote(output: &[String], prefix: &str, expected: usiz
     assert_eq!(output.len(), expected);
     assert!(output.iter().all(|l| l.starts_with(prefix)));
     assert!(output.iter().all(|l| l.len() <= 80));
+}
+
+/// Fixture representing a simple broken table.
+#[allow(dead_code)]
+#[fixture]
+pub fn broken_table() -> Vec<String> {
+    vec![
+        "| A | B |    |".to_string(),
+        "| 1 | 2 |  | 3 | 4 |".to_string(),
+    ]
 }

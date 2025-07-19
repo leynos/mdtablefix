@@ -4,15 +4,10 @@
 //! `process_stream` behaviour.
 
 use mdtablefix::{convert_html_tables, process_stream, reflow_table};
-use rstest::{fixture, rstest};
 
+#[macro_use]
 mod prelude;
-
-#[fixture]
-fn broken_table() -> Vec<String> {
-    let lines = lines_vec!["| A | B |    |", "| 1 | 2 |  | 3 | 4 |"];
-    lines
-}
+use prelude::*;
 
 #[fixture]
 fn malformed_table() -> Vec<String> {

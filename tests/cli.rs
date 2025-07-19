@@ -8,19 +8,11 @@
 
 use std::{fs::File, io::Write};
 
-use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
+#[macro_use]
 mod prelude;
 use prelude::*;
-
-#[fixture]
-fn broken_table() -> Vec<String> {
-    vec![
-        "| A | B |    |".to_string(),
-        "| 1 | 2 |  | 3 | 4 |".to_string(),
-    ]
-}
 
 /// Verifies that the CLI fails when the `--in-place` flag is used without specifying a file.
 ///
