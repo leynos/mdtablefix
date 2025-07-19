@@ -2,6 +2,7 @@
 
 use crate::{
     ellipsis::replace_ellipsis,
+    fences::{attach_orphan_specifiers, compress_fences},
     footnotes::convert_footnotes,
     html::convert_html_tables,
     table::reflow_table,
@@ -13,9 +14,17 @@ pub fn process_stream_inner(
     lines: &[String],
     wrap: bool,
     ellipsis: bool,
+    fences: bool,
     footnotes: bool,
 ) -> Vec<String> {
-    let pre = convert_html_tables(lines);
+    let lines = if fences {
+        let tmp = compress_fences(lines);
+        attach_orphan_specifiers(&tmp)
+    } else {
+        lines.to_vec()
+    };
+
+    let pre = convert_html_tables(&lines);
 
     let mut out = Vec::new();
     let mut buf = Vec::new();
@@ -101,9 +110,10 @@ pub fn process_stream_opts(
     lines: &[String],
     wrap: bool,
     ellipsis: bool,
+    fences: bool,
     footnotes: bool,
 ) -> Vec<String> {
-    process_stream_inner(lines, wrap, ellipsis, footnotes)
+    process_stream_inner(lines, wrap, ellipsis, fences, footnotes)
 }
 
 #[cfg(test)]

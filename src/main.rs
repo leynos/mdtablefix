@@ -38,6 +38,9 @@ struct FormatOpts {
     /// Replace "..." with the ellipsis character
     #[arg(long = "ellipsis")]
     ellipsis: bool,
+    /// Normalise fence delimiters to three backticks
+    #[arg(long = "fences")]
+    fences: bool,
     /// Convert bare numeric references and the final numbered list to
     /// Markdown footnote links
     #[arg(long = "footnotes")]
@@ -45,7 +48,7 @@ struct FormatOpts {
 }
 
 fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
-    let mut out = process_stream_opts(lines, opts.wrap, opts.ellipsis, opts.footnotes);
+    let mut out = process_stream_opts(lines, opts.wrap, opts.ellipsis, opts.fences, opts.footnotes);
     if opts.renumber {
         out = renumber_lists(&out);
     }

@@ -26,7 +26,7 @@ cargo install --path .
 ## Command-line usage
 
 ```bash
-mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--footnotes] [--in-place] [FILE...]
+mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes] [--in-place] [FILE...]
 ```
 
 - When one or more file paths are provided, the corrected tables are printed to
@@ -46,6 +46,9 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--footnotes] [--in-pla
 - Use `--ellipsis` to replace groups of three dots (`...`) with the ellipsis
   character (`…`). Longer runs are processed left-to-right, so any leftover
   dots are preserved.
+
+- Use `--fences` to normalise code block delimiters to three backticks before
+  other processing.
 
 - Use `--footnotes` to convert bare numeric references and the final numbered
   list into GitHub-flavoured footnote links.
@@ -120,6 +123,7 @@ fn main() -> std::io::Result<()> {
         &lines,
         /* wrap = */ true,
         /* ellipsis = */ true,
+        /* fences = */ true,
         /* footnotes = */ false,
     );
     println!("{}", fixed.join("\n"));
@@ -128,9 +132,9 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
-- `process_stream_opts(lines, wrap, ellipsis, footnotes) -> Vec<String>`
-  rewrites tables in memory, with optional paragraph wrapping, ellipsis
-  substitution, and footnote conversion.
+- `process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool, fences:
+  bool, footnotes: bool) -> Vec<String>` rewrites tables in memory, with optional paragraph
+  wrapping, ellipsis substitution and fence normalisation.
 
 - `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on
   disk in-place.

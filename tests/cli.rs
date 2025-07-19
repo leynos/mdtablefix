@@ -134,6 +134,54 @@ fn test_cli_ellipsis_multiple_sequences() {
     );
 }
 
+/// Tests that the `--fences` option normalises backtick fences.
+#[test]
+fn test_cli_fences_option() {
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--fences")
+        .write_stdin("````rust\nfn main() {}\n````\n")
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```rust\nfn main() {}\n```\n"
+    );
+}
+
+/// Ensures fence normalisation runs before other processing.
+#[test]
+fn test_cli_fences_before_ellipsis() {
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .args(["--fences", "--ellipsis"])
+        .write_stdin("````\nlet x = ...;\n````\n")
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```\nlet x = ...;\n```\n"
+    );
+}
+
+/// Ensures orphan specifiers are attached when `--fences` is used.
+#[test]
+fn test_cli_fences_orphan_specifier() {
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--fences")
+        .write_stdin("Rust\n```\nfn main() {}\n```\n")
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```Rust\nfn main() {}\n```\n"
+    );
+}
+
 /// Tests the CLI `--footnotes` option to convert bare footnote links.
 #[test]
 fn test_cli_footnotes_option() {

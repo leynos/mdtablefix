@@ -13,6 +13,7 @@
 
 pub mod breaks;
 pub mod ellipsis;
+pub mod fences;
 pub mod footnotes;
 mod html;
 pub mod io;
@@ -30,6 +31,7 @@ pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 
 pub use breaks::{THEMATIC_BREAK_LEN, format_breaks};
 pub use ellipsis::replace_ellipsis;
+pub use fences::{attach_orphan_specifiers, compress_fences};
 pub use footnotes::convert_footnotes;
 pub use html::convert_html_tables;
 pub use io::{rewrite, rewrite_no_wrap};

@@ -36,6 +36,10 @@ classDiagram
         <<module>>
         +replace_ellipsis()
     }
+    class fences {
+        <<module>>
+        +compress_fences()
+    }
     class footnotes {
         <<module>>
         +convert_footnotes()
@@ -56,6 +60,7 @@ classDiagram
     lib --> lists
     lib --> breaks
     lib --> ellipsis
+    lib --> fences
     lib --> process
     lib --> io
     html ..> wrap : uses is_fence
@@ -66,6 +71,7 @@ classDiagram
     process ..> html : uses convert_html_tables
     process ..> table : uses reflow_table
     process ..> wrap : uses wrap_text, is_fence
+    process ..> fences : uses compress_fences
     process ..> ellipsis : uses replace_ellipsis
     process ..> footnotes : uses convert_footnotes
     io ..> process : uses process_stream, process_stream_no_wrap
