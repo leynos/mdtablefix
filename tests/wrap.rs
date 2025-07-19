@@ -121,6 +121,10 @@ fn test_wrap_long_inline_code_item() {
     );
 }
 
+/// Tests wrapping for punctuation around future attribute references.
+///
+/// Ensures that long bullet items containing attribute syntax such as
+/// `#[future]` are wrapped correctly without splitting the punctuation.
 #[test]
 fn test_wrap_future_attribute_punctuation() {
     let input = vec![
@@ -143,6 +147,10 @@ fn test_wrap_future_attribute_punctuation() {
     );
 }
 
+/// Tests wrapping for multi-line footnotes with correct indentation.
+///
+/// Verifies that long footnotes are split across lines with the footnote
+/// prefix preserved.
 #[test]
 fn test_wrap_footnote_multiline() {
     let input = lines_vec![concat!(
@@ -212,6 +220,10 @@ fn test_wrap_short_list_item() {
     assert_eq!(output, input);
 }
 
+/// Tests wrapping behaviour for single-level blockquotes.
+///
+/// Verifies that long quoted text is wrapped onto multiple lines while
+/// preserving the ">" prefix on each line.
 #[test]
 fn test_wrap_blockquote() {
     let input = lines_vec![
