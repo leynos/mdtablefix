@@ -1,19 +1,18 @@
 # mdtablefix
 
-`mdtablefix` unb0rks and reflows Markdown tables so that each column has a
-uniform width. It can wrap paragraphs and list items to 80 columns when the
-`--wrap` option is used. Hyphenated words are treated as single units during
-wrapping, so `very-long-word` moves to the next line rather than splitting at
-the hyphen. The tool ignores fenced code blocks and respects escaped pipes
-(`\|`), making it safe for mixed content.
+`mdtablefix` unb0rks and reflows Markdown tables so that each column has a uniform width. When the `--wrap` option is used, it also wraps paragraphs and list items to 80 columns.
+
+Hyphenated words are treated as indivisible during wrapping, so `very-long-word` will move to the next line intact rather than split at the hyphen. The tool ignores fenced code blocks and respects escaped pipes (`\|`), making it safe to use on Markdown with mixed content.
 
 ## Installation
+
+Install via Cargo:
 
 ```bash
 cargo install mdtablefix
 ```
 
-or clone the repository and build from source:
+Or clone the repository and build from source:
 
 ```bash
 cargo install --path .
@@ -25,19 +24,19 @@ cargo install --path .
 mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--in-place] [FILE...]
 ```
 
-- With file paths provided, the corrected tables are printed to stdout.
-- Use `--wrap` to also reflow paragraphs and list items to 80 columns.
-- Use `--renumber` to rewrite ordered lists with sequential numbering.
-- Tabs are interpreted as four spaces when counting indentation for
-  `--renumber`.
-- Use `--breaks` to normalize thematic breaks to a line of 70 underscores
-  (configurable via the `THEMATIC_BREAK_LEN` constant).
-- Use `--ellipsis` to replace groups of three consecutive dots with the
-  ellipsis character. Longer runs are processed left-to-right, so leftover dots
-  remain unchanged.
-- Use `--in-place` to overwrite files.
-- If no files are supplied, input is read from stdin and results are written
-  to stdout.
+- When one or more file paths are provided, the corrected tables are printed to stdout.
+
+- Use `--wrap` to reflow paragraphs and list items to 80 columns.
+
+- Use `--renumber` to rewrite ordered lists with consistent sequential numbering. Tabs are interpreted as four spaces for indentation tracking.
+
+- Use `--breaks` to standardise thematic breaks to a line of 70 underscores (configurable via the `THEMATIC_BREAK_LEN` constant).
+
+- Use `--ellipsis` to replace groups of three dots (`...`) with the ellipsis character (`…`). Longer runs are processed left-to-right, so any leftover dots are preserved.
+
+- Use `--in-place` to modify files in-place.
+
+- If no files are specified, input is read from stdin and output is written to stdout.
 
 ### Example
 
@@ -61,8 +60,7 @@ After running `mdtablefix`:
 
 ## Library usage
 
-The crate exposes helper functions so you can integrate the table reflow logic
-in your own project.
+The crate provides helper functions for embedding the table reflow logic in your own Rust project:
 
 ```rust
 use mdtablefix::{process_stream_opts, rewrite};
@@ -81,31 +79,30 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
-- `process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool) ->
-  Vec<String>` rewrites tables in memory with optional wrapping and ellipsis
-  replacement.
-- `rewrite(&Path) -> std::io::Result<()>` updates a Markdown file on disk.
+- `process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool) -> Vec<String>` rewrites tables in memory, with optional paragraph wrapping and ellipsis substitution.
+
+- `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on disk in-place.
 
 ## HTML table support
 
-`mdtablefix` recognises simple `<table>` elements embedded in Markdown. Before
-the main table reflow runs these HTML tables are converted to Markdown in a
-preprocessing stage handled by `convert_html_tables`.
+`mdtablefix` recognises basic HTML `<table>` elements embedded in Markdown. These are converted to Markdown in a preprocessing stage using `convert_html_tables`, prior to reflow.
 
-Only basic tables composed of `<tr>`, `<th>` and `<td>` tags are detected, and
-attributes or tag casing do not matter. After conversion the regular reflow
-logic aligns them alongside Markdown tables. See [`docs/html-table-support.md`]
-(docs/html-table-support.md) for details.
+Only simple tables composed of `<tr>`, `<th>`, and `<td>` tags are supported. Tag case and attributes are ignored. After conversion, they are reformatted alongside regular Markdown tables.
 
-For an overview of how the crate's modules fit together, see
-[`docs/module-relationships.md`](docs/module-relationships.md).
+See [HTML table support for more details](docs/html-table-support.md).
+
+## Module structure
+
+For an overview of how the crate's internal modules relate to each other, see [Module relationships](docs/module-relationships.md).
 
 ## Testing
 
-See `docs/rust-testing-with-rstest-fixtures.md` for notes on how the test suite
-is organised using the [`rstest`](https://crates.io/crates/rstest) crate.
+The test suite is structured using the [`rstest`](https://crates.io/crates/rstest) crate. See [Rust testing with rstest fixtures](docs/rust-testing-with-rstest-fixtures.md) for details.
 
 ## License
 
-This project is licensed under the ISC license. See the [LICENSE](LICENSE) file
-for details.
+This project is licensed under the ISC License. See the [LICENSE](LICENSE) file for full details.
+
+---
+
+Let me know if you want badge links, CI examples, or anything added for [crates.io](http://crates.io) polish.
