@@ -82,6 +82,9 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
                         .map(|(i, _)| i)
                 {
                     let lang = out[idx].trim().to_string();
+                    while out.len() > idx + 1 && out[idx + 1].trim().is_empty() {
+                        out.remove(idx + 1);
+                    }
                     out.remove(idx);
                     out.push(format!("```{lang}"));
                     in_fence = true;
