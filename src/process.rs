@@ -2,14 +2,33 @@
 
 use crate::{
     ellipsis::replace_ellipsis,
+    fences::{attach_orphan_specifiers, compress_fences},
     html::convert_html_tables,
     table::reflow_table,
     wrap::{self, wrap_text},
 };
 
+/// Processing options controlling the behaviour of `process_stream_inner`.
+#[derive(Clone, Copy)]
+pub struct Options {
+    /// Enable paragraph wrapping
+    pub wrap: bool,
+    /// Replace `...` with `…`
+    pub ellipsis: bool,
+    /// Normalise code block fences
+    pub fences: bool,
+}
+
 #[must_use]
-pub fn process_stream_inner(lines: &[String], wrap: bool, ellipsis: bool) -> Vec<String> {
-    let pre = convert_html_tables(lines);
+pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
+    let lines = if opts.fences {
+        let tmp = compress_fences(lines);
+        attach_orphan_specifiers(&tmp)
+    } else {
+        lines.to_vec()
+    };
+
+    let pre = convert_html_tables(&lines);
 
     let mut out = Vec::new();
     let mut buf = Vec::new();
@@ -70,24 +89,40 @@ pub fn process_stream_inner(lines: &[String], wrap: bool, ellipsis: bool) -> Vec
         }
     }
 
-    let mut out = if wrap { wrap_text(&out, 80) } else { out };
-    if ellipsis {
+    let mut out = if opts.wrap { wrap_text(&out, 80) } else { out };
+    if opts.ellipsis {
         out = replace_ellipsis(&out);
     }
     out
 }
 
 #[must_use]
-pub fn process_stream(lines: &[String]) -> Vec<String> { process_stream_inner(lines, true, false) }
-
-#[must_use]
-pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
-    process_stream_inner(lines, false, false)
+pub fn process_stream(lines: &[String]) -> Vec<String> {
+    process_stream_inner(
+        lines,
+        Options {
+            wrap: true,
+            ellipsis: false,
+            fences: false,
+        },
+    )
 }
 
 #[must_use]
-pub fn process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool) -> Vec<String> {
-    process_stream_inner(lines, wrap, ellipsis)
+pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
+    process_stream_inner(
+        lines,
+        Options {
+            wrap: false,
+            ellipsis: false,
+            fences: false,
+        },
+    )
+}
+
+#[must_use]
+pub fn process_stream_opts(lines: &[String], opts: Options) -> Vec<String> {
+    process_stream_inner(lines, opts)
 }
 
 #[cfg(test)]

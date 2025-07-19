@@ -12,6 +12,7 @@
 
 pub mod breaks;
 pub mod ellipsis;
+pub mod fences;
 mod html;
 pub mod io;
 pub mod lists;
@@ -28,9 +29,10 @@ pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 
 pub use breaks::{THEMATIC_BREAK_LEN, format_breaks};
 pub use ellipsis::replace_ellipsis;
+pub use fences::{attach_orphan_specifiers, compress_fences};
 pub use html::convert_html_tables;
 pub use io::{rewrite, rewrite_no_wrap};
 pub use lists::renumber_lists;
-pub use process::{process_stream, process_stream_no_wrap, process_stream_opts};
+pub use process::{Options, process_stream, process_stream_no_wrap, process_stream_opts};
 pub use table::{reflow_table, split_cells};
 pub use wrap::{is_fence, wrap_text};
