@@ -8,19 +8,25 @@ Hyphenated words are treated as indivisible during wrapping, so `very-long-word`
 
 Install via Cargo:
 
-```bash
+Bash
+
+```
 cargo install mdtablefix
 ```
 
 Or clone the repository and build from source:
 
-```bash
+Bash
+
+```
 cargo install --path .
 ```
 
 ## Command-line usage
 
-```bash
+Bash
+
+```
 mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--in-place] [FILE...]
 ```
 
@@ -28,7 +34,7 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--in-place] [FILE...]
 
 - Use `--wrap` to reflow paragraphs and list items to 80 columns.
 
-- Use `--renumber` to rewrite ordered lists with consistent sequential numbering. Tabs are interpreted as four spaces for indentation tracking.
+- Use `--renumber` to rewrite ordered lists with consistent sequential numbering. The renumbering logic correctly handles nested lists by tracking indentation (tabs are interpreted as four spaces) and restarts numbering after a list is interrupted by other content, such as a paragraph at a lower indentation level.
 
 - Use `--breaks` to standardise thematic breaks to a line of 70 underscores (configurable via the `THEMATIC_BREAK_LEN` constant).
 
@@ -38,11 +44,13 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--in-place] [FILE...]
 
 - If no files are specified, input is read from stdin and output is written to stdout.
 
-### Example
+### Example: Table Reflowing
 
 Before:
 
-```markdown
+Markdown
+
+```
 |Character|Catchphrase|Pizza count| |---|---|---| |Speedy Cerviche|Here
 come the Samurai Pizza Cats!|lots| |Guido Anchovy|Slice and dice!|tons|
 |Polly Esther|Cat fight!|many|
@@ -50,7 +58,9 @@ come the Samurai Pizza Cats!|lots| |Guido Anchovy|Slice and dice!|tons|
 
 After running `mdtablefix`:
 
-```markdown
+Markdown
+
+```
 | Character       | Catchphrase                       | Pizza count |
 | --------------- | --------------------------------- | ----------- |
 | Speedy Cerviche | Here come the Samurai Pizza Cats! | lots        |
@@ -58,11 +68,47 @@ After running `mdtablefix`:
 | Polly Esther    | Cat fight!                        | many        |
 ```
 
+### Example: List Renumbering
+
+Before:
+
+Markdown
+
+```
+1. The Big Cheese's evil plans.
+4. Jerry Atric's schemes.
+
+A brief intermission for pizza.
+
+9. Bad Bird's ninja crows.
+    1. Crow #1
+    5. Crow #2
+12. Miscellaneous robotic mayhem.
+```
+
+After running `mdtablefix --renumber`:
+
+Markdown
+
+```
+1. The Big Cheese's evil plans.
+2. Jerry Atric's schemes.
+
+A brief intermission for pizza.
+
+1. Bad Bird's ninja crows.
+    1. Crow #1
+    2. Crow #2
+2. Miscellaneous robotic mayhem.
+```
+
 ## Library usage
 
 The crate provides helper functions for embedding the table reflow logic in your own Rust project:
 
-```rust
+Rust
+
+```
 use mdtablefix::{process_stream_opts, rewrite};
 use std::path::Path;
 
@@ -97,12 +143,8 @@ For an overview of how the crate's internal modules relate to each other, see [M
 
 ## Testing
 
-The test suite is structured using the [`rstest`](https://crates.io/crates/rstest) crate. See [Rust testing with rstest fixtures](docs/rust-testing-with-rstest-fixtures.md) for details.
+The test suite is structured using the `rstest` crate. See [Rust testing with rstest fixtures](docs/rust-testing-with-rstest-fixtures.md) for details.
 
 ## License
 
 This project is licensed under the ISC License. See the [LICENSE](LICENSE) file for full details.
-
----
-
-Let me know if you want badge links, CI examples, or anything added for [crates.io](http://crates.io) polish.
