@@ -1,7 +1,14 @@
-//! Integration tests for wrapping behaviour.
+//! Integration tests for text wrapping behaviour in Markdown content.
 //!
-//! Covers paragraphs, list items, blockquotes and footnotes,
-//! including the `--wrap` CLI option.
+//! This module validates the wrapping functionality of the `mdtablefix` tool,
+//! including:
+//! - Paragraph wrapping at 80-character boundaries
+//! - List item wrapping with proper indentation preservation
+//! - Blockquote wrapping with prefix maintenance
+//! - Footnote wrapping with correct formatting
+//! - Preservation of inline code spans during wrapping
+//! - Hard line break handling
+//! - CLI `--wrap` option functionality
 
 use mdtablefix::process_stream;
 use rstest::rstest;
@@ -66,6 +73,10 @@ fn test_wrap_preserves_inline_code_spans() {
     common::assert_wrapped_list_item(&output, "- ", 3);
 }
 
+/// Tests that multi-backtick code spans are preserved during wrapping.
+///
+/// Verifies that code spans using multiple backticks (``cmd``, ```echo```) are
+/// not broken when wrapping list items.
 #[test]
 fn test_wrap_multi_backtick_code() {
     let input = lines_vec![
@@ -98,7 +109,7 @@ fn test_wrap_long_inline_code_item() {
     assert!(
         output
             .first()
-            .expect("output should not be empty")
+            .expect("wrapped output should contain at least one line")
             .ends_with("`:")
     );
 }
@@ -210,6 +221,10 @@ fn test_wrap_blockquote() {
     );
 }
 
+/// Tests that nested blockquotes are wrapped correctly.
+///
+/// Verifies that multi-level blockquotes ("> > ") maintain their nesting
+/// structure when wrapped across multiple lines.
 #[test]
 fn test_wrap_blockquote_nested() {
     let input = lines_vec![concat!(
