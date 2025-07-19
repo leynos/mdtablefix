@@ -104,7 +104,7 @@ Doctests reside within documentation comments. Rust recognizes two types:
   of (e.g., a module or the crate itself). They are typically used at the top
   of `lib.rs` or `mod.rs` to provide crate- or module-level documentation.[^9]
 
-Within these comments, a code block is denoted by triple backticks While
+Within these comments, a code block is denoted by triple backticks. while
 `rustdoc` defaults to assuming the language is Rust, explicitly adding the rust
 language specifier (e.g., `rust`) is considered good practice for clarity.[^3]
 
@@ -202,9 +202,8 @@ human-readable example and what constitutes a complete, compilable program. Its
 primary use cases include:
 
 1. **Hiding** `main` **Wrappers**: As demonstrated in the error-handling
-   examples, the entire `fn main() -> Result<…> {... }` and `OK(())`
-   scaffolding can be hidden, presenting the user with only the relevant
-   code.[^10]
+   examples, the entire `fn main() -> Result<…> {… }` and `OK(())` scaffolding
+   can be hidden, presenting the user with only the relevant code.[^10]
 
 2. **Hiding Setup Code**: If an example requires some preliminary setup—like
    creating a temporary file, defining a helper struct for the test, or
@@ -331,7 +330,7 @@ your library:
 /// # }
 /// ```
 pub fn my_func_that_needs_env(ctx: &mut TestContext) -> Result<(), ()> {
-    //... function logic...
+    // … function logic…
     OK(())
 }
 
@@ -343,19 +342,19 @@ mod doctest_helpers {
     use std::io::Result;
 
     pub struct TestContext {
-        //... fields for the test context...
+        // … fields for the test context…
     }
 
     pub fn setup_test_environment() -> Result<TestContext> {
         // All the complex, shared setup logic lives here once.
-        println!("Setting up test environment...");
-        Ok(TestContext { /*... */ })
+        println!("Setting up test environment…");
+        OK(TestContext { /*… */ })
     }
 }
 
 // A struct that might be needed by the public function signature.
 // It can be defined normally.
-pub struct TestContext { /*... */ }
+pub struct TestContext { /*… */ }
 ```
 
 This pattern is the most effective way to achieve DRY doctests. It centralizes
@@ -475,12 +474,12 @@ This approach provides clearer feedback but is significantly more verbose and
 less ergonomic, especially when applied to outer (`///`) doc comments, as the
 `cfg_attr` must be applied to every single line of the comment.[^16]
 
-### 5.3 Displaying Feature Requirements in Docs: `#[doc(cfg(...))]`
+### 5.3 Displaying Feature Requirements in Docs: `#[doc(cfg(…))]`
 
 To complement conditional execution, Rust provides a way to visually flag
 feature-gated items in the generated documentation. This is achieved with the
-`#[doc(cfg(...))]` attribute, which requires enabling the
-`#![feature(doc_cfg)]` feature gate at the crate root.
+`#[doc(cfg(…))]` attribute, which requires enabling the `#![feature(doc_cfg)]`
+feature gate at the crate root.
 
 ```rust
 // At the crate root (lib.rs)
@@ -489,7 +488,7 @@ feature-gated items in the generated documentation. This is achieved with the
 // On the feature-gated item
 #[cfg(feature = "serde")]
 #[doc(cfg(feature = "serde"))]
-pub fn function_requiring_serde() { /*... */ }
+pub fn function_requiring_serde() { /*… */ }
 ```
 
 This will render a banner in the documentation for `function_requiring_serde`
@@ -516,10 +515,10 @@ its own purpose:
 
 - **Unit Tests (**`#[test]` **in** `src/`**)**: These are for testing the
   nitty-gritty details of your implementation. They are placed in submodules
-  within your source files (often `mod tests {... }`) and are compiled only
-  with `#[cfg(test)]`. Because they live inside the crate, they can access
-  private functions and modules, making them perfect for testing internal
-  logic, edge cases, and specific error conditions.[^1]
+  within your source files (often `mod tests {…}`) and are compiled only with
+  `#[cfg(test)]`. Because they live inside the crate, they can access private
+  functions and modules, making them perfect for testing internal logic, edge
+  cases, and specific error conditions.[^1]
 
 - **Integration Tests (in the** `tests/` **directory)**: These test the crate
   from a completely external perspective, much like doctests. However, they are
@@ -562,7 +561,7 @@ real-world challenges when working with doctests.
 
 - **The** `README.md` **Dilemma**: A project's `README.md` file serves multiple
   audiences. It needs to render cleanly on platforms like GitHub and crates.io,
-  where hidden lines (`#...`) look like ugly, commented-out code. At the same
+  where hidden lines (`#…`) look like ugly, commented-out code. At the same
   time, it should contain testable examples, which often require hidden lines
   for setup.[^11] The best practice is to avoid maintaining the README
   manually. Instead, use a tool like
@@ -609,7 +608,7 @@ mastering doctests:
    it in a helper module guarded by `#[cfg(doctest)]` to avoid repetition.
 
 5. **Master** `cfg`: Use `#[cfg(doc)]` to control an item's *visibility* in
-   the final documentation. Use `#[cfg(feature = "...")]` or other `cfg` flags
+   the final documentation. Use `#[cfg(feature = "…")]` or other `cfg` flags
    *inside* the test block to control its conditional *execution*. Do not
    confuse the two.
 
