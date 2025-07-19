@@ -4,12 +4,11 @@
 
 use std::{fs::File, io::Write};
 
-use assert_cmd::Command;
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
-#[macro_use]
-mod common;
+mod prelude;
+use prelude::*;
 
 #[fixture]
 fn broken_table() -> Vec<String> {
@@ -107,4 +106,19 @@ fn test_cli_ellipsis_long_sequence() {
         .unwrap();
     assert!(output.status.success());
     assert_eq!(String::from_utf8_lossy(&output.stdout), "wait….\n");
+}
+
+#[test]
+fn test_cli_ellipsis_multiple_sequences() {
+    let output = Command::cargo_bin("mdtablefix")
+        .unwrap()
+        .arg("--ellipsis")
+        .write_stdin("First... then second... done.\n")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "First… then second… done.\n"
+    );
 }

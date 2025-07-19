@@ -1356,8 +1356,8 @@ provided by `rstest`:
 | #[timeout(…)]                | Sets a timeout for an asynchronous test.                                                     |
 | #[files("glob_pattern",…)]   | Injects file paths (or contents, with mode=) matching a glob pattern as test arguments.      |
 
-By mastering `rstest`, Rust developers can significantly elevate the quality
-and efficiency of their testing practices, leading to more reliable and
+Mastering `rstest` can significantly elevate the quality and efficiency of
+testing practices for Rust developers, leading to more reliable and
 maintainable software.
 
 #### Works cited

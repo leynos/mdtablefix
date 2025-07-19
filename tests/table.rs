@@ -6,8 +6,7 @@
 use mdtablefix::{convert_html_tables, process_stream, reflow_table};
 use rstest::{fixture, rstest};
 
-#[macro_use]
-mod common;
+mod prelude;
 
 #[fixture]
 fn broken_table() -> Vec<String> { return lines_vec!["| A | B |    |", "| 1 | 2 |  | 3 | 4 |"]; }
@@ -285,6 +284,13 @@ fn test_non_table_lines_unchanged() {
         "",
     ];
     assert_eq!(output, expected);
+}
+
+#[test]
+fn test_process_stream_only_whitespace() {
+    let input = lines_vec!["", "   ", "\t\t"];
+    let expected = lines_vec!["", "", ""];
+    assert_eq!(process_stream(&input), expected);
 }
 
 #[rstest(

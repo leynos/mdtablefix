@@ -3,12 +3,11 @@
 //! Covers paragraphs, list items, blockquotes and footnotes,
 //! including the `--wrap` CLI option.
 
-use assert_cmd::Command;
 use mdtablefix::process_stream;
 use rstest::rstest;
 
-#[macro_use]
-mod common;
+mod prelude;
+use prelude::*;
 #[test]
 
 fn test_wrap_paragraph() {
@@ -19,6 +18,17 @@ fn test_wrap_paragraph() {
     let output = process_stream(&input);
     assert!(output.len() > 1);
     assert!(output.iter().all(|l| l.len() <= 80));
+}
+
+/// Ensures that a paragraph with a single word longer than 80 characters is
+/// handled correctly.
+#[test]
+fn test_wrap_paragraph_with_long_word() {
+    let long_word = "a".repeat(100);
+    let input = lines_vec![&long_word];
+    let output = process_stream(&input);
+    assert_eq!(output.len(), 1);
+    assert_eq!(output[0], long_word);
 }
 
 #[test]
@@ -214,6 +224,22 @@ fn test_wrap_blockquote_nested() {
         .collect::<Vec<_>>()
         .join(" ");
     assert_eq!(joined, input[0].trim_start_matches("> > "));
+}
+
+#[test]
+fn test_wrap_blockquote_mixed_indentation() {
+    let input = lines_vec![
+        "> \t> \tThis blockquote uses both spaces and tabs in the prefix to test mixed \
+         indentation handling."
+    ];
+    let output = process_stream(&input);
+    common::assert_wrapped_blockquote(&output, "> \t> \t", 2);
+    let joined = output
+        .iter()
+        .map(|l| l.trim_start_matches("> \t> \t"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert_eq!(joined, input[0].trim_start_matches("> \t> \t"));
 }
 
 #[test]
