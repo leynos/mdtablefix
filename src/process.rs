@@ -2,14 +2,27 @@
 
 use crate::{
     ellipsis::replace_ellipsis,
+    fences::{attach_orphan_specifiers, compress_fences},
     html::convert_html_tables,
     table::reflow_table,
     wrap::{self, wrap_text},
 };
 
 #[must_use]
-pub fn process_stream_inner(lines: &[String], wrap: bool, ellipsis: bool) -> Vec<String> {
-    let pre = convert_html_tables(lines);
+pub fn process_stream_inner(
+    lines: &[String],
+    wrap: bool,
+    ellipsis: bool,
+    fences: bool,
+) -> Vec<String> {
+    let lines = if fences {
+        let tmp = compress_fences(lines);
+        attach_orphan_specifiers(&tmp)
+    } else {
+        lines.to_vec()
+    };
+
+    let pre = convert_html_tables(&lines);
 
     let mut out = Vec::new();
     let mut buf = Vec::new();
@@ -78,16 +91,23 @@ pub fn process_stream_inner(lines: &[String], wrap: bool, ellipsis: bool) -> Vec
 }
 
 #[must_use]
-pub fn process_stream(lines: &[String]) -> Vec<String> { process_stream_inner(lines, true, false) }
-
-#[must_use]
-pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
-    process_stream_inner(lines, false, false)
+pub fn process_stream(lines: &[String]) -> Vec<String> {
+    process_stream_inner(lines, true, false, false)
 }
 
 #[must_use]
-pub fn process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool) -> Vec<String> {
-    process_stream_inner(lines, wrap, ellipsis)
+pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
+    process_stream_inner(lines, false, false, false)
+}
+
+#[must_use]
+pub fn process_stream_opts(
+    lines: &[String],
+    wrap: bool,
+    ellipsis: bool,
+    fences: bool,
+) -> Vec<String> {
+    process_stream_inner(lines, wrap, ellipsis, fences)
 }
 
 #[cfg(test)]

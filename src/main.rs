@@ -38,10 +38,13 @@ struct FormatOpts {
     /// Replace "..." with the ellipsis character
     #[arg(long = "ellipsis")]
     ellipsis: bool,
+    /// Normalise fence delimiters to three backticks
+    #[arg(long = "fences")]
+    fences: bool,
 }
 
 fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
-    let mut out = process_stream_opts(lines, opts.wrap, opts.ellipsis);
+    let mut out = process_stream_opts(lines, opts.wrap, opts.ellipsis, opts.fences);
     if opts.renumber {
         out = renumber_lists(&out);
     }
