@@ -4,12 +4,12 @@
 
 To master the art of writing effective documentation tests in Rust, one must
 first understand the foundational principles upon which the `rustdoc` tool
-operates. Its behavior, particularly its testing mechanism, is not an arbitrary
-collection of features but a direct consequence of a deliberate design
-philosophy. The core of this philosophy is that every doctest should validate
-the public API of a crate from the perspective of an external user. This single
-principle dictates the entire compilation model and explains both the power and
-the inherent limitations of doctests.
+operates. Its behaviour, particularly its testing mechanism, is not an
+arbitrary collection of features but a direct consequence of a deliberate
+design philosophy. The core of this philosophy is that every doctest should
+validate the public API of a crate from the perspective of an external user.
+This single principle dictates the entire compilation model and explains both
+the power and the inherent limitations of doctests.
 
 ### 1.1 The "Separate Crate" Paradigm
 
@@ -55,9 +55,9 @@ This "separate crate" paradigm has two immediate and significant consequences
 that shape all advanced doctesting patterns.
 
 First, **API visibility is strictly limited to public items**. Because the
-doctest is compiled as an external crate, it can only access functions,
-structs, traits, and modules marked with the `pub` keyword. It has no access to
-private items or even crate-level public items (e.g., `pub(crate)`). This is
+doctest is compiled as an external crate, it can only access functions.
+Structs, traits and modules are marked with the `pub` keyword. It has no access
+to private items or even crate-level public items (e.g., `pub(crate)`). This is
 not a bug or an oversight but a fundamental aspect of the design, enforcing the
 perspective of an external consumer.[^1]
 
@@ -122,7 +122,7 @@ illustrates *why* and in *what context* an item should be used.[^10] It should
 tell a small story or solve a miniature problem that illuminates the item's
 purpose. For instance, an example for
 
-`String::clone()` should not just show `hello.clone();`, but should demonstrate
+`String::clone()` should not just show `hello.clone();` but should demonstrate
 a scenario where ownership rules necessitate creating a copy.[^10]
 
 To achieve this, examples must be clear and concise. Any code that is not
@@ -139,7 +139,7 @@ type of `()`, while the `?` operator can only be used in a function that
 returns a `Result` or `Option`. This mismatch leads to a compilation error.[^3]
 
 Using `.unwrap()` or `.expect()` in examples is strongly discouraged. It is
-considered an anti-pattern because users often copy example code verbatim, and
+considered an antipattern because users often copy example code verbatim, and
 encouraging panicking on errors is contrary to robust application design.[^10]
 Instead, two canonical solutions exist.
 
@@ -160,7 +160,7 @@ can then be hidden from the rendered documentation.
 /// let config = "key=value".parse::<MyConfig>()?;
 /// assert_eq!(config.get("key"), Some("value"));
 /// #
-/// # Ok(())
+/// # OK(())
 /// # }
 /// ```
 ```
@@ -202,7 +202,7 @@ human-readable example and what constitutes a complete, compilable program. Its
 primary use cases include:
 
 1. **Hiding** `main` **Wrappers**: As demonstrated in the error-handling
-   examples, the entire `fn main() -> Result<...> {... }` and `Ok(())`
+   examples, the entire `fn main() -> Result<…> {... }` and `OK(())`
    scaffolding can be hidden, presenting the user with only the relevant
    code.[^10]
 
@@ -239,13 +239,13 @@ Choosing the correct attribute is critical for communicating the intent of an
 example and ensuring the test suite provides meaningful feedback. The following
 table provides a comparative reference for the most common doctest attributes.
 
-| Attribute    | Action                                                              | Test Outcome                                                   | Primary Use Case & Caveats                                                                                                                                                                                                        |
-| ------------ | ------------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ignore       | Skips both compilation and execution.                               | ignored                                                        | Use Case: For pseudo-code, examples known to be broken, or to temporarily disable a test. Caveat: Provides no guarantee that the code is even syntactically correct. Generally discouraged in favor of more specific attributes.3 |
-| should_panic | Compiles and runs the code. The test passes if the code panics.     | ok on panic, failed if it does not panic.                      | Use Case: Demonstrating functions that are designed to panic on invalid input (e.g., indexing out of bounds).                                                                                                                     |
-| compile_fail | Attempts to compile the code. The test passes if compilation fails. | ok on compilation failure, failed if it compiles successfully. | Use Case: Illustrating language rules, such as the borrow checker or type system constraints. Caveat: Highly brittle. A future Rust version might make the code valid, causing the test to unexpectedly fail.4                    |
-| no_run       | Compiles the code but does not execute it.                          | ok if compilation succeeds.                                    | Use Case: Essential for examples with undesirable side effects in a test environment, such as network requests, filesystem I/O, or launching a GUI. Guarantees the example is valid Rust code without running it.5                |
-| edition2021  | Compiles the code using the specified Rust edition's rules.         | ok on success.                                                 | Use Case: Demonstrating syntax or idioms that are specific to a particular Rust edition (e.g., edition2018, edition2021).4                                                                                                        |
+| Attribute    | Action                                                              | Test Outcome                                                   | Primary Use Case & Warnings                                                                                                                                                                                                        |
+| ------------ | ------------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ignore       | Skips both compilation and execution.                               | ignored                                                        | Use Case: For pseudocode, examples known to be broken, or to temporarily disable a test. Warning: Provides no guarantee that the code is even syntactically correct. Generally discouraged in favour of more specific attributes.3 |
+| should_panic | Compiles and runs the code. The test passes if the code panics.     | OK on panic, failed if it does not panic.                      | Use Case: Demonstrating functions that are designed to panic on invalid input (e.g., indexing out of bounds).                                                                                                                      |
+| compile_fail | Attempts to compile the code. The test passes if compilation fails. | OK on compilation failure, failed if it compiles successfully. | Use Case: Illustrating language rules, such as the borrow checker or type system constraints. Warning: Highly brittle. A future Rust version might make the code valid, causing the test to unexpectedly fail.4                    |
+| no_run       | Compiles the code but does not execute it.                          | OK if compilation succeeds.                                    | Use Case: Essential for examples with undesirable side effects in a test environment, such as network requests, filesystem I/O, or launching a GUI. Guarantees the example is valid Rust code without running it.5                 |
+| edition2021  | Compiles the code using the specified Rust edition's rules.         | OK on success.                                                 | Use Case: Demonstrating syntax or idioms that are specific to a particular Rust edition (e.g., edition2018, edition2021).4                                                                                                         |
 
 ### 3.2 Detailed Attribute Breakdown
 
@@ -269,10 +269,10 @@ table provides a comparative reference for the most common doctest attributes.
 
 - `no_run`: This attribute strikes a crucial balance between test verification
   and practicality. For an example that demonstrates how to download a file
-  from the internet, you want to ensure the example code is syntactically
-  correct and uses the API properly, but you do not want your CI server to
-  actually perform a network request every time tests are run. `no_run`
-  provides this guarantee by compiling the code without executing it.[^5]
+  from the internet, developers want to ensure the example code is
+  syntactically correct and uses the API properly, but CI servers should not
+  actually perform a network request every time tests run. `no_run` provides
+  this guarantee by compiling the code without executing it.[^5]
 
 - `edition20xx`: This attribute allows an example to be tested against a
   specific Rust edition. This is important for crates that support multiple
@@ -327,12 +327,12 @@ your library:
 /// let mut ctx = setup_test_environment()?;
 /// let result = my_func_that_needs_env(&mut ctx);
 /// assert!(result.is_ok());
-/// # Ok(())
+/// # OK(())
 /// # }
 /// ```
 pub fn my_func_that_needs_env(ctx: &mut TestContext) -> Result<(), ()> {
     //... function logic...
-    Ok(())
+    OK(())
 }
 
 // This module and its contents are only compiled for doctests.
@@ -449,7 +449,7 @@ the doctest itself.
 
 When the `"serde"` feature is disabled, the code inside the block is compiled
 out. The doctest becomes an empty program that runs, does nothing, and is
-reported as `ok`. While simple to write, this can be misleading, as the test
+reported as `OK`. While simple to write, this can be misleading, as the test
 suite reports a "pass" for a test that was effectively skipped.[^16]
 
 Pattern [^2]: cfg_attr to Conditionally ignore the Test
@@ -601,15 +601,15 @@ mastering doctests:
    *how*. Use hidden lines (`#`) ruthlessly to eliminate boilerplate and focus
    the reader's attention on the relevant code.
 
-3. **Handle Errors Gracefully**: For examples of fallible functions, always use
-   the `fn main() -> Result<...>` pattern, hiding the boilerplate. Avoid
+3. **Handle Errors Gracefully**: For fallible functions, always use
+   the `fn main() -> Result<…>` pattern. Hide the boilerplate and avoid
    `.unwrap()` to promote robust error-handling practices.
 
 4. **Be DRY**: When setup logic is shared across multiple examples, centralize
    it in a helper module guarded by `#[cfg(doctest)]` to avoid repetition.
 
-5. **Master** `cfg`: Use `#[cfg(doc)]` to control an item's *visibility* in the
-   final documentation. Use `#[cfg(feature = "...")]` or other `cfg` flags
+5. **Master** `cfg`: Use `#[cfg(doc)]` to control an item's *visibility* in
+   the final documentation. Use `#[cfg(feature = "...")]` or other `cfg` flags
    *inside* the test block to control its conditional *execution*. Do not
    confuse the two.
 
