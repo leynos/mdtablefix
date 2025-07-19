@@ -202,10 +202,10 @@ fn test_wrap_footnote_collection() {
     assert_eq!(output, input);
 }
 
-#[test]
 /// Verifies that short list items are not wrapped or altered by the stream processing logic.
 ///
 /// Ensures that a single-line bullet list item remains unchanged after processing.
+#[test]
 fn test_wrap_short_list_item() {
     let input = lines_vec!["- short item"];
     let output = process_stream(&input);
@@ -264,6 +264,10 @@ fn test_wrap_blockquote_mixed_indentation() {
     assert_eq!(joined, input[0].trim_start_matches("> \t> \t"));
 }
 
+/// Tests blockquote wrapping with blank lines preserved.
+///
+/// Verifies that blank lines within blockquotes are maintained correctly when wrapping long quoted
+/// paragraphs.
 #[test]
 fn test_wrap_blockquote_with_blank_lines() {
     let input = lines_vec![
@@ -285,6 +289,10 @@ fn test_wrap_blockquote_with_blank_lines() {
     assert_wrapped_blockquote(&output[4..], "> ", 3);
 }
 
+/// Tests blockquote wrapping with extra spacing in prefix.
+///
+/// Verifies that blockquotes with additional spaces after ">" are wrapped correctly whilst
+/// preserving the spacing.
 #[test]
 fn test_wrap_blockquote_extra_whitespace() {
     let input = lines_vec![
@@ -308,11 +316,11 @@ fn test_wrap_blockquote_short() {
     assert_eq!(output, input);
 }
 
-#[test]
 /// Tests that lines with hard line breaks (trailing spaces) are preserved after processing.
 ///
 /// Ensures that the `process_stream` function does not remove or alter lines ending with Markdown
 /// hard line breaks.
+#[test]
 fn test_preserve_hard_line_breaks() {
     let input = lines_vec!["Line one with break.  ", "Line two follows."];
     let output = process_stream(&input);
