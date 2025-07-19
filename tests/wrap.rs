@@ -54,6 +54,10 @@ fn test_wrap_list_item() {
     assert_wrapped_list_item(&output, "- ", 2);
 }
 
+/// Parameterised test verifying inline code wrapping for various list prefixes.
+///
+/// Ensures that list items with inline code spans retain prefix formatting
+/// across different bullet and numbered list styles.
 #[rstest]
 #[case("- ", 3)]
 #[case("1. ", 3)]
@@ -69,6 +73,10 @@ fn test_wrap_list_items_with_inline_code(#[case] prefix: &str, #[case] expected:
     assert_wrapped_list_item(&output, prefix, expected);
 }
 
+/// Tests that inline code spans are preserved during list item wrapping.
+///
+/// Verifies that backtick-delimited code spans remain intact when wrapping
+/// long list items across multiple lines.
 #[test]
 fn test_wrap_preserves_inline_code_spans() {
     let input = lines_vec![
@@ -94,6 +102,10 @@ fn test_wrap_multi_backtick_code() {
     assert_wrapped_list_item(&output, "- ", 2);
 }
 
+/// Tests that multiple inline code spans are preserved during wrapping.
+///
+/// Verifies that list items containing multiple code spans are wrapped correctly
+/// without breaking the span boundaries.
 #[test]
 fn test_wrap_multiple_inline_code_spans() {
     let input = lines_vec![
@@ -103,6 +115,10 @@ fn test_wrap_multiple_inline_code_spans() {
     let output = process_stream(&input);
     assert_wrapped_list_item(&output, "- ", 2);
 }
+/// Tests wrapping of list items with long inline code spans.
+///
+/// Verifies that list items containing lengthy code spans are wrapped
+/// appropriately whilst preserving the code span integrity.
 #[test]
 fn test_wrap_long_inline_code_item() {
     let input = lines_vec![concat!(
@@ -127,14 +143,11 @@ fn test_wrap_long_inline_code_item() {
 /// `#[future]` are wrapped correctly without splitting the punctuation.
 #[test]
 fn test_wrap_future_attribute_punctuation() {
-    let input = vec![
-        concat!(
-            "- Test function (`#[awt]`) or a specific `#[future]` argument ",
-            "(`#[future(awt)]`), tells `rstest` to automatically insert `.await` ",
-            "calls for those futures."
-        )
-        .to_string(),
-    ];
+    let input = lines_vec![concat!(
+        "- Test function (`#[awt]`) or a specific `#[future]` argument ",
+        "(`#[future(awt)]`), tells `rstest` to automatically insert `.await` ",
+        "calls for those futures."
+    )];
     let output = process_stream(&input);
     assert_eq!(
         output,
@@ -161,6 +174,9 @@ fn test_wrap_footnote_multiline() {
     assert_wrapped_list_item(&output, "[^note]: ", 2);
 }
 
+/// Tests that footnotes containing inline code are wrapped correctly.
+///
+/// Verifies that code spans within footnotes are preserved during wrapping.
 #[test]
 fn test_wrap_footnote_with_inline_code() {
     let input = lines_vec![concat!(
@@ -260,6 +276,10 @@ fn test_wrap_blockquote_nested() {
     assert_eq!(joined, input[0].trim_start_matches("> > "));
 }
 
+/// Tests blockquote wrapping with mixed spaces and tabs in prefix.
+///
+/// Verifies that blockquotes using both spaces and tabs maintain correct
+/// prefix formatting when wrapped.
 #[test]
 fn test_wrap_blockquote_mixed_indentation() {
     let input = lines_vec![
@@ -321,6 +341,9 @@ fn test_wrap_blockquote_extra_whitespace() {
     assert_eq!(joined, input[0].trim_start_matches(">    "));
 }
 
+/// Tests that short blockquotes remain unchanged after processing.
+///
+/// Verifies that brief quoted text is not altered by the wrapping logic.
 #[test]
 fn test_wrap_blockquote_short() {
     let input = lines_vec!["> short"];
@@ -341,6 +364,10 @@ fn test_preserve_hard_line_breaks() {
     assert_eq!(output[1], "Line two follows.");
 }
 
+/// Tests wrapping behaviour with backslash hard line breaks.
+///
+/// Verifies that lines ending with backslashes are handled correctly
+/// according to Markdown hard line break rules.
 #[test]
 fn test_wrap_hard_linebreak_backslash() {
     let input: Vec<String> = include_lines!("data/hard_linebreak_input.txt");
@@ -348,6 +375,10 @@ fn test_wrap_hard_linebreak_backslash() {
     assert_eq!(process_stream(&input), expected);
 }
 
+/// Tests edge cases for backslash hard line break handling.
+///
+/// Verifies correct processing of various backslash scenarios including
+/// multiple backslashes, isolated backslashes, and trailing spaces.
 #[test]
 fn test_wrap_hard_linebreak_backslash_edge_cases() {
     let input = lines_vec!(
