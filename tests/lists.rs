@@ -61,6 +61,9 @@ fn restart_after_formatting_paragraph() {
     let expected = lines_vec!("1. Start", "", "**Bold intro**", "", "1. Next");
     assert_eq!(renumber_lists(&input), expected);
 }
+/// Tests the CLI `--renumber` option.
+///
+/// Ensures that list numbering is corrected when the flag is supplied.
 #[test]
 fn test_cli_renumber_option() {
     let output = Command::cargo_bin("mdtablefix")

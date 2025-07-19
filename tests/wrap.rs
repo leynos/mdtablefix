@@ -15,8 +15,11 @@ use mdtablefix::process_stream;
 #[macro_use]
 mod prelude;
 use prelude::*;
+/// Tests that long paragraphs are wrapped at 80-character boundaries.
+///
+/// Verifies that a paragraph exceeding 80 characters is split into multiple
+/// lines, each not exceeding the limit.
 #[test]
-
 fn test_wrap_paragraph() {
     let input = lines_vec![
         "This is a very long paragraph that should be wrapped at eighty columns so it needs to \
@@ -38,6 +41,10 @@ fn test_wrap_paragraph_with_long_word() {
     assert_eq!(output[0], long_word);
 }
 
+/// Tests that list items are wrapped whilst preserving prefix formatting.
+///
+/// Verifies that long bullet point items are correctly wrapped across multiple
+/// lines with proper indentation maintained.
 #[test]
 fn test_wrap_list_item() {
     let input = lines_vec![
