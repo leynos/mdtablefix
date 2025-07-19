@@ -9,15 +9,20 @@ use crate::{
     wrap::{self, wrap_text},
 };
 
+/// Processing options controlling the behaviour of `process_stream_inner`.
+#[derive(Clone, Copy)]
+pub struct Options {
+    /// Enable paragraph wrapping
+    pub wrap: bool,
+    /// Replace `...` with `…`
+    pub ellipsis: bool,
+    /// Normalise code block fences
+    pub fences: bool,
+}
+
 #[must_use]
-pub fn process_stream_inner(
-    lines: &[String],
-    wrap: bool,
-    ellipsis: bool,
-    fences: bool,
-    footnotes: bool,
-) -> Vec<String> {
-    let lines = if fences {
+pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
+    let lines = if opts.fences {
         let tmp = compress_fences(lines);
         attach_orphan_specifiers(&tmp)
     } else {
@@ -85,8 +90,8 @@ pub fn process_stream_inner(
         }
     }
 
-    let mut out = if wrap { wrap_text(&out, 80) } else { out };
-    if ellipsis {
+    let mut out = if opts.wrap { wrap_text(&out, 80) } else { out };
+    if opts.ellipsis {
         out = replace_ellipsis(&out);
     }
     if footnotes {
@@ -97,23 +102,31 @@ pub fn process_stream_inner(
 
 #[must_use]
 pub fn process_stream(lines: &[String]) -> Vec<String> {
-    process_stream_inner(lines, true, false, false)
+    process_stream_inner(
+        lines,
+        Options {
+            wrap: true,
+            ellipsis: false,
+            fences: false,
+        },
+    )
 }
 
 #[must_use]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
-    process_stream_inner(lines, false, false, false)
+    process_stream_inner(
+        lines,
+        Options {
+            wrap: false,
+            ellipsis: false,
+            fences: false,
+        },
+    )
 }
 
 #[must_use]
-pub fn process_stream_opts(
-    lines: &[String],
-    wrap: bool,
-    ellipsis: bool,
-    fences: bool,
-    footnotes: bool,
-) -> Vec<String> {
-    process_stream_inner(lines, wrap, ellipsis, fences, footnotes)
+pub fn process_stream_opts(lines: &[String], opts: Options) -> Vec<String> {
+    process_stream_inner(lines, opts)
 }
 
 #[cfg(test)]

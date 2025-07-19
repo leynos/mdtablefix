@@ -182,6 +182,32 @@ fn test_cli_fences_orphan_specifier() {
     );
 }
 
+/// Combines fence normalisation with renumbering to verify processing order.
+#[test]
+fn test_cli_fences_with_renumber() {
+    let input = concat!(
+        "Rust\n",
+        "\n",
+        "~~~~~~\n",
+        "fn main() {}\n",
+        "~~~~~~\n",
+        "\n",
+        "1. first\n",
+        "3. second\n",
+    );
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .args(["--fences", "--renumber"])
+        .write_stdin(input)
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```Rust\nfn main() {}\n```\n\n1. first\n2. second\n",
+    );
+}
+
 /// Tests the CLI `--footnotes` option to convert bare footnote links.
 #[test]
 fn test_cli_footnotes_option() {

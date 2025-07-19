@@ -1,14 +1,15 @@
 //! Pre-processing utilities for normalising fenced code block delimiters.
 //!
-//! `compress_fences` reduces any sequence of three or more backticks
-//! followed by optional language identifiers to exactly three backticks.
+//! `compress_fences` reduces any sequence of three or more backticks or
+//! tildes followed by optional language identifiers to exactly three
+//! backticks.
 //! It preserves indentation and the language list.
 use std::sync::LazyLock;
 
 use regex::Regex;
 
-static BACKTICK_FENCE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^(\s*)`{3,}([A-Za-z0-9_+.,-]*)\s*$").unwrap());
+static FENCE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$").unwrap());
 
 static ORPHAN_LANG_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Za-z0-9_+.-]+(?:,[A-Za-z0-9_+.-]+)*$").unwrap());
@@ -29,9 +30,9 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
     lines
         .iter()
         .map(|line| {
-            if let Some(cap) = BACKTICK_FENCE_RE.captures(line) {
+            if let Some(cap) = FENCE_RE.captures(line) {
                 let indent = cap.get(1).map_or("", |m| m.as_str());
-                let lang = cap.get(2).map_or("", |m| m.as_str());
+                let lang = cap.get(3).map_or("", |m| m.as_str());
                 if lang.is_empty() {
                     format!("{indent}```")
                 } else {
@@ -122,10 +123,10 @@ mod tests {
     }
 
     #[test]
-    fn ignores_tilde_fence() {
+    fn compresses_tilde_fence() {
         let input = vec!["~~~~".to_string()];
         let out = compress_fences(&input);
-        assert_eq!(out, input);
+        assert_eq!(out, vec!["```".to_string()]);
     }
 
     #[test]

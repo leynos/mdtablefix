@@ -6,7 +6,7 @@ use std::{
 };
 
 use clap::Parser;
-use mdtablefix::{format_breaks, process_stream_opts, renumber_lists};
+use mdtablefix::{Options, format_breaks, process_stream_opts, renumber_lists};
 
 #[derive(Parser)]
 #[command(about = "Reflow broken markdown tables")]
@@ -48,7 +48,13 @@ struct FormatOpts {
 }
 
 fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
-    let mut out = process_stream_opts(lines, opts.wrap, opts.ellipsis, opts.fences, opts.footnotes);
+    let opts2 = Options {
+        wrap: opts.wrap,
+        ellipsis: opts.ellipsis,
+        fences: opts.fences,
+        footnotes: opts.footnotes,
+    };
+    let mut out = process_stream_opts(lines, opts2);
     if opts.renumber {
         out = renumber_lists(&out);
     }

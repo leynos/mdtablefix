@@ -114,27 +114,26 @@ The crate provides helper functions for embedding the table reflow logic in
 your own Rust project:
 
 ```rust
-use mdtablefix::{process_stream_opts, rewrite};
+use mdtablefix::{process_stream_opts, rewrite, Options};
 use std::path::Path;
 
 fn main() -> std::io::Result<()> {
     let lines = vec!["|A|B|".to_string(), "|1|2|".to_string()];
-    let fixed = process_stream_opts(
-        &lines,
-        /* wrap = */ true,
-        /* ellipsis = */ true,
-        /* fences = */ true,
-        /* footnotes = */ false,
-    );
+    let opts = Options {
+        wrap: true,
+        ellipsis: true,
+        fences: true,
+    };
+    let fixed = process_stream_opts(&lines, opts);
     println!("{}", fixed.join("\n"));
     rewrite(Path::new("table.md"))?;
     Ok(())
 }
 ```
 
-- `process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool, fences:
-  bool, footnotes: bool) -> Vec<String>` rewrites tables in memory, with optional paragraph
-  wrapping, ellipsis substitution and fence normalisation.
+- `process_stream_opts(lines: &[String], opts: Options) -> Vec<String>`
+  rewrites tables in memory. The options enable paragraph wrapping, ellipsis
+  substitution and fence normalisation.
 
 - `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on
   disk in-place.
