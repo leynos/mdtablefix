@@ -34,7 +34,7 @@ Look at `code 1` for details.
 Refer to equation (1) for context.
 ```
 
-When the final lines of a document form a numbered list, they are replaced with
+When the final lines of a document form a numbered list they are replaced with
 footnote definitions.
 
 Before:
