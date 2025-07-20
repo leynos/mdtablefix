@@ -6,7 +6,8 @@
 //! - `wrap` for paragraph wrapping.
 //! - `lists` for renumbering ordered lists.
 //! - `breaks` for thematic break formatting.
-//! - `ellipsis` for normalising textual ellipses.
+//! - `ellipsis` for normalizing textual ellipses.
+//! - `fences` for issues with code block fences
 //! - `footnotes` for converting bare footnote links.
 //! - `process` for stream processing.
 //! - `io` for file helpers.

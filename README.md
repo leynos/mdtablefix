@@ -140,7 +140,7 @@ fn main() -> std::io::Result<()> {
 
 ## HTML table support
 
-`mdtablefix` recognises basic HTML `<table>` elements embedded in Markdown.
+`mdtablefix` recognizes basic HTML `<table>` elements embedded in Markdown.
 These are converted to Markdown in a preprocessing stage using
 `convert_html_tables`, prior to reflow.
 

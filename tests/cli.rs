@@ -134,7 +134,7 @@ fn test_cli_ellipsis_multiple_sequences() {
     );
 }
 
-/// Tests that the `--fences` option normalises backtick fences.
+/// Tests that the `--fences` option normalizes backtick fences.
 #[test]
 fn test_cli_fences_option() {
     let output = Command::cargo_bin("mdtablefix")
@@ -150,7 +150,7 @@ fn test_cli_fences_option() {
     );
 }
 
-/// Ensures fence normalisation runs before other processing.
+/// Ensures fence normalization runs before other processing.
 #[test]
 fn test_cli_fences_before_ellipsis() {
     let output = Command::cargo_bin("mdtablefix")
@@ -182,7 +182,7 @@ fn test_cli_fences_orphan_specifier() {
     );
 }
 
-/// Combines fence normalisation with renumbering to verify processing order.
+/// Combines fence normalization with renumbering to verify processing order.
 #[test]
 fn test_cli_fences_with_renumber() {
     let input = concat!(

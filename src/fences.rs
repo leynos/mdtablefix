@@ -1,4 +1,4 @@
-//! Pre-processing utilities for normalising fenced code block delimiters.
+//! Pre-processing utilities for normalizing fenced code block delimiters.
 //!
 //! `compress_fences` reduces any sequence of three or more backticks or
 //! tildes followed by optional language identifiers to exactly three
@@ -66,34 +66,48 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    let mut out = Vec::with_capacity(lines.len());
     let mut in_fence = false;
-    for line in lines {
+    let mut iter = lines.iter().peekable();
+
+    while let Some(line) = iter.next() {
         let trimmed = line.trim();
-        if trimmed.starts_with("```") {
-            if in_fence {
-                in_fence = false;
-            } else {
-                if trimmed == "```"
-                    && let Some(idx) = out
-                        .iter()
-                        .enumerate()
-                        .rev()
-                        .find(|(_, l)| !l.trim().is_empty() && ORPHAN_LANG_RE.is_match(l.trim()))
-                        .map(|(i, _)| i)
-                {
-                    let lang = out[idx].trim().to_string();
-                    while out.len() > idx + 1 && out[idx + 1].trim().is_empty() {
-                        out.remove(idx + 1);
-                    }
-                    out.remove(idx);
-                    out.push(format!("```{lang}"));
-                    in_fence = true;
-                    continue;
+
+        if !in_fence && ORPHAN_LANG_RE.is_match(trimmed) {
+            let mut peek_ahead = iter.clone();
+            let mut found_fence = false;
+
+            while let Some(next_line) = peek_ahead.peek() {
+                let next_trimmed = next_line.trim();
+                if next_trimmed.is_empty() {
+                    peek_ahead.next();
+                } else if next_trimmed == "```" {
+                    found_fence = true;
+                    break;
+                } else {
+                    break;
                 }
+            }
+
+            if found_fence {
+                while let Some(next_line) = iter.peek() {
+                    if next_line.trim().is_empty() {
+                        iter.next();
+                    } else {
+                        break;
+                    }
+                }
+                iter.next();
+                out.push(format!("```{trimmed}"));
                 in_fence = true;
+                continue;
             }
         }
+
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+        }
+
         out.push(line.clone());
     }
     out

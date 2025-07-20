@@ -79,7 +79,7 @@ classDiagram
 ```
 
 The `lib` module re-exports the public API from the other modules. The
-`ellipsis` module performs text normalisation. The `process` module provides
+`ellipsis` module performs text normalization. The `process` module provides
 streaming helpers that combine the lower-level functions, including ellipsis
 replacement and footnote conversion. The `io` module handles filesystem
 operations, delegating the text processing to `process`.

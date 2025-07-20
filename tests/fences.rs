@@ -1,4 +1,4 @@
-//! Tests for fence normalisation functionality.
+//! Tests for fence normalization functionality.
 
 #[macro_use]
 mod prelude;
@@ -40,8 +40,15 @@ fn fixes_orphaned_specifier() {
 }
 
 #[test]
-fn attaches_orphan_specifier() {
+fn attaches_orphan_specifier_unit() {
     let input = lines_vec!["Rust", "```", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&input);
+    assert_eq!(out, lines_vec!["```Rust", "fn main() {}", "```"]);
+}
+
+#[test]
+fn attaches_orphan_specifier_with_blank_line_unit() {
+    let input = lines_vec!["Rust", "", "```", "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&input);
     assert_eq!(out, lines_vec!["```Rust", "fn main() {}", "```"]);
 }
