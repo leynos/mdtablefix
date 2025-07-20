@@ -68,11 +68,17 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
     out
 }
 
-fn rewrite_path(path: &Path, opts: FormatOpts) -> std::io::Result<()> {
+fn handle_file(path: &Path, in_place: bool, opts: FormatOpts) -> anyhow::Result<Option<String>> {
     let content = fs::read_to_string(path)?;
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
-    let fixed = process_lines(&lines, opts);
-    fs::write(path, fixed.join("\n") + "\n")
+    let fixed = process_lines(&lines, opts).join("\n");
+
+    if in_place {
+        fs::write(path, format!("{fixed}\n"))?;
+        Ok(None)
+    } else {
+        Ok(Some(fixed))
+    }
 }
 
 /// Entry point for the command-line tool that reflows broken markdown tables.
@@ -110,31 +116,23 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let pool = rayon::ThreadPoolBuilder::new().build()?;
-
     if cli.in_place {
-        pool.install(|| {
-            cli.files
-                .par_iter()
-                .try_for_each(|p| rewrite_path(p, cli.opts))
-        })?;
-        return Ok(());
-    }
-
-    let results: anyhow::Result<Vec<String>> = pool.install(|| {
         cli.files
             .par_iter()
-            .map(|p| -> anyhow::Result<String> {
-                let content = fs::read_to_string(p)?;
-                let lines: Vec<String> = content.lines().map(str::to_string).collect();
-                let fixed = process_lines(&lines, cli.opts);
-                Ok(fixed.join("\n"))
-            })
-            .collect()
-    });
+            .try_for_each(|p| handle_file(p, true, cli.opts).map(|_| ()))?;
+    } else {
+        let outputs: Vec<String> = cli
+            .files
+            .par_iter()
+            .map(|p| handle_file(p, false, cli.opts))
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
 
-    for out in results? {
-        println!("{out}");
+        for out in outputs {
+            println!("{out}");
+        }
     }
 
     Ok(())
