@@ -9,6 +9,9 @@ use crate::{
     wrap::{self, wrap_text},
 };
 
+/// Column width used when wrapping text.
+pub(crate) const WRAP_COLS: usize = 80;
+
 /// Processing options controlling the behaviour of `process_stream_inner`.
 #[expect(
     clippy::struct_excessive_bools,
@@ -96,7 +99,11 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         }
     }
 
-    let mut out = if opts.wrap { wrap_text(&out, 80) } else { out };
+    let mut out = if opts.wrap {
+        wrap_text(&out, WRAP_COLS)
+    } else {
+        out
+    };
     if opts.ellipsis {
         out = replace_ellipsis(&out);
     }
@@ -117,6 +124,14 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
     )
 }
 
+/// Process a Markdown stream without wrapping paragraphs.
+///
+/// ```
+/// use mdtablefix::process_stream_no_wrap;
+/// let lines = vec!["one".to_string(), "two".to_string()];
+/// let out = process_stream_no_wrap(&lines);
+/// assert_eq!(out, lines);
+/// ```
 #[must_use]
 #[inline]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
