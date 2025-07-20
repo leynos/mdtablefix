@@ -17,27 +17,13 @@ static FOOTNOTE_LINE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|
 
 use crate::wrap::{Token, tokenize_markdown};
 
-/// Extract captured footnote components from a regex match.
-fn parse_inline_caps<'a>(caps: &'a Captures<'a>) -> (&'a str, &'a str, &'a str, &'a str, &'a str) {
-    (
-        &caps["pre"],
-        &caps["punc"],
-        &caps["style"],
-        &caps["num"],
-        &caps["boundary"],
-    )
-}
-
-/// Build a Markdown footnote from its captured parts.
-fn build_inline_footnote(pre: &str, punc: &str, style: &str, num: &str, boundary: &str) -> String {
-    format!("{pre}{punc}{style}[^{num}]{boundary}")
-}
-
 fn convert_inline(text: &str) -> String {
     INLINE_FN_RE
         .replace_all(text, |caps: &Captures| {
-            let (pre, punc, style, num, boundary) = parse_inline_caps(caps);
-            build_inline_footnote(pre, punc, style, num, boundary)
+            format!(
+                "{}{}{}[^{}]{}",
+                &caps["pre"], &caps["punc"], &caps["style"], &caps["num"], &caps["boundary"],
+            )
         })
         .into_owned()
 }
