@@ -28,14 +28,22 @@ fn convert_inline(text: &str) -> String {
         .into_owned()
 }
 
-fn convert_block(lines: &mut [String]) {
+fn trimmed_range<F>(lines: &[String], pred: F) -> (usize, usize)
+where
+    F: Fn(&str) -> bool,
+{
     let end = lines
         .iter()
         .rposition(|l| !l.trim().is_empty())
         .map_or(0, |i| i + 1);
     let start = (0..end)
-        .rfind(|&i| !FOOTNOTE_LINE_RE.is_match(lines[i].trim_end()))
+        .rfind(|&i| !pred(lines[i].trim_end()))
         .map_or(0, |i| i + 1);
+    (start, end)
+}
+
+fn convert_block(lines: &mut [String]) {
+    let (start, end) = trimmed_range(lines, |l| FOOTNOTE_LINE_RE.is_match(l));
 
     if start >= end || lines[start].trim_start().starts_with("[^") {
         return;

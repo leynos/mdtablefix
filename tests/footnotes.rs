@@ -27,6 +27,18 @@ fn test_avoids_false_positives() {
 }
 
 #[test]
+fn test_ignores_numbers_in_inline_code() {
+    let input = lines_vec!("Look at `code 1` for details.");
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
+fn test_ignores_numbers_in_parentheses() {
+    let input = lines_vec!("Refer to equation (1) for context.");
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
 fn test_handles_punctuation_inside_bold() {
     let input = lines_vec!("It was **scary.**7");
     let expected = lines_vec!("It was **scary.**[^7]");
