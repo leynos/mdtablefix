@@ -10,6 +10,10 @@ use crate::{
 };
 
 /// Processing options controlling the behaviour of `process_stream_inner`.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Options map directly to CLI flags"
+)]
 #[derive(Clone, Copy)]
 pub struct Options {
     /// Enable paragraph wrapping
@@ -18,6 +22,8 @@ pub struct Options {
     pub ellipsis: bool,
     /// Normalise code block fences
     pub fences: bool,
+    /// Convert bare numeric references to footnotes
+    pub footnotes: bool,
 }
 
 #[must_use]
@@ -94,7 +100,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     if opts.ellipsis {
         out = replace_ellipsis(&out);
     }
-    if footnotes {
+    if opts.footnotes {
         out = convert_footnotes(&out);
     }
     out
@@ -108,6 +114,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
             wrap: true,
             ellipsis: false,
             fences: false,
+            footnotes: false,
         },
     )
 }
@@ -120,6 +127,7 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
             wrap: false,
             ellipsis: false,
             fences: false,
+            footnotes: false,
         },
     )
 }
