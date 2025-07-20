@@ -2,24 +2,21 @@
 
 use regex::Regex;
 
-use crate::wrap::is_fence;
+use crate::{breaks::THEMATIC_BREAK_RE, wrap::is_fence};
 
 /// Characters that mark formatted text at the start of a line.
 const FORMATTING_CHARS: [char; 3] = ['*', '_', '`'];
 
 // Lines starting with optional indentation followed by '#' characters denote
 // Markdown ATX headings. A space or end of line must follow the hashes.
-static HEADING_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^[ ]{0,3}#{1,6}(?:\s|$)").unwrap());
-
-// Matches Markdown thematic breaks using '*', '-' or '_' characters.
-static BREAK_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r"^[ ]{0,3}((?:[ \t]*\*){3,}|(?:[ \t]*-){3,}|(?:[ \t]*_){3,})[ \t]*$").unwrap()
+static HEADING_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"^[ ]{0,3}#{1,6}(?:\s|$)").expect("valid heading regex")
 });
 
 fn parse_numbered(line: &str) -> Option<(&str, &str, &str)> {
-    static NUMBERED_RE: std::sync::LazyLock<Regex> =
-        std::sync::LazyLock::new(|| Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").unwrap());
+    static NUMBERED_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+        Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").expect("valid list number regex")
+    });
     let cap = NUMBERED_RE.captures(line)?;
     let indent = cap.get(1)?.as_str();
     let sep = cap.get(3)?.as_str();
@@ -123,7 +120,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
 
-        if HEADING_RE.is_match(line) || BREAK_RE.is_match(line.trim_end()) {
+        if HEADING_RE.is_match(line) || THEMATIC_BREAK_RE.is_match(line.trim_end()) {
             counters.clear();
             out.push(line.clone());
             prev_blank = false;
