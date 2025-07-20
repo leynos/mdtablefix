@@ -118,6 +118,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 }
 
 #[must_use]
+#[inline]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
     process_stream_inner(lines, Options::default())
 }
