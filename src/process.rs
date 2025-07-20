@@ -46,7 +46,6 @@ pub struct Options {
 }
 
 /// Flushes buffered lines to `out`, formatting as a table when required.
-#[allow(clippy::extend_with_drain)] // maintain consistency across helpers
 fn flush_buffer(buf: &mut Vec<String>, in_table: &mut bool, out: &mut Vec<String>) {
     if buf.is_empty() {
         return;
@@ -55,7 +54,7 @@ fn flush_buffer(buf: &mut Vec<String>, in_table: &mut bool, out: &mut Vec<String
         out.extend(reflow_table(buf));
         buf.clear();
     } else {
-        out.extend(buf.drain(..));
+        out.extend(std::mem::take(buf));
     }
     *in_table = false;
 }
