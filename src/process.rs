@@ -189,7 +189,6 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 }
 
 /// Processes a Markdown stream with all default options enabled.
-#[must_use]
 ///
 /// This is the primary convenience function used by the command-line
 /// interface. Paragraphs are wrapped and tables are reflowed.
@@ -203,6 +202,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 /// let out = process_stream(&lines);
 /// assert!(out.iter().any(|l| l.contains("| a | b |")));
 /// ```
+#[must_use]
 pub fn process_stream(lines: &[String]) -> Vec<String> {
     process_stream_inner(
         lines,
@@ -214,7 +214,6 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 }
 
 /// Processes Markdown without wrapping paragraphs.
-#[must_use]
 ///
 /// Useful when only table reflow and code fence normalisation are required.
 ///
@@ -233,7 +232,6 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 }
 
 /// Runs [`process_stream_inner`] with custom [`Options`].
-#[must_use]
 ///
 /// This is exposed for advanced use cases where callers want precise
 /// control over the processing pipeline.
@@ -252,6 +250,7 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 /// let out = process_stream_opts(&lines, opts);
 /// assert_eq!(out, vec!["text"]);
 /// ```
+#[must_use]
 pub fn process_stream_opts(lines: &[String], opts: Options) -> Vec<String> {
     process_stream_inner(lines, opts)
 }
