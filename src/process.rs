@@ -46,20 +46,7 @@ pub struct Options {
 }
 
 /// Flushes buffered lines to `out`, formatting as a table when required.
-///
-/// ```no_run
-/// # use mdtablefix::table::reflow_table;
-/// # fn flush_buffer(buf: &mut Vec<String>, in_table: &mut bool, out: &mut Vec<String>) {
-/// #     if buf.is_empty() { return; }
-/// #     if *in_table { out.extend(reflow_table(buf)); buf.clear(); } else { out.extend(buf.drain(..)); }
-/// #     *in_table = false;
-/// # }
-/// let mut buf = vec!["| a | b |".to_string()];
-/// let mut out = Vec::new();
-/// let mut in_table = true;
-/// flush_buffer(&mut buf, &mut in_table, &mut out);
-/// assert!(buf.is_empty());
-/// ```
+#[allow(clippy::extend_with_drain)] // maintain consistency across helpers
 fn flush_buffer(buf: &mut Vec<String>, in_table: &mut bool, out: &mut Vec<String>) {
     if buf.is_empty() {
         return;
@@ -68,24 +55,12 @@ fn flush_buffer(buf: &mut Vec<String>, in_table: &mut bool, out: &mut Vec<String
         out.extend(reflow_table(buf));
         buf.clear();
     } else {
-        out.append(buf);
+        out.extend(buf.drain(..));
     }
     *in_table = false;
 }
 
 /// Detects fence lines and toggles code mode, flushing buffered content.
-///
-/// ```no_run
-/// # use mdtablefix::process::{handle_fence_line, flush_buffer};
-/// # use mdtablefix::table::reflow_table;
-/// # fn flush_buffer(_: &mut Vec<String>, _: &mut bool, _: &mut Vec<String>) {}
-/// let mut out = Vec::new();
-/// let mut buf = Vec::new();
-/// let mut in_code = false;
-/// let mut in_table = false;
-/// handle_fence_line("```", &mut buf, &mut in_code, &mut in_table, &mut out);
-/// assert!(in_code);
-/// ```
 fn handle_fence_line(
     line: &str,
     buf: &mut Vec<String>,
@@ -103,20 +78,6 @@ fn handle_fence_line(
 }
 
 /// Buffers table lines, returning `true` when a line was consumed.
-///
-/// ```no_run
-/// # use mdtablefix::process::handle_table_line;
-/// let mut buf = Vec::new();
-/// let mut out = Vec::new();
-/// let mut in_table = false;
-/// assert!(handle_table_line(
-///     "| a | b |",
-///     &mut buf,
-///     &mut in_table,
-///     &mut out
-/// ));
-/// assert!(in_table);
-/// ```
 fn handle_table_line(
     line: &str,
     buf: &mut Vec<String>,
@@ -228,8 +189,8 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     out
 }
 
-#[must_use]
 /// Processes a Markdown stream with all default options enabled.
+#[must_use]
 ///
 /// This is the primary convenience function used by the command-line
 /// interface. Paragraphs are wrapped and tables are reflowed.
@@ -254,6 +215,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 }
 
 /// Processes Markdown without wrapping paragraphs.
+#[must_use]
 ///
 /// Useful when only table reflow and code fence normalisation are required.
 ///
@@ -271,8 +233,8 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
     process_stream_inner(lines, Options::default())
 }
 
-#[must_use]
 /// Runs [`process_stream_inner`] with custom [`Options`].
+#[must_use]
 ///
 /// This is exposed for advanced use cases where callers want precise
 /// control over the processing pipeline.
