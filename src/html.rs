@@ -2,7 +2,7 @@
 //! Markdown table syntax.
 //!
 //! The conversion is intentionally simple: only `<table>`, `<tr>`,
-//! `<th>`, and `<td>` tags are recognised. Attributes and tag casing
+//! `<th>`, and `<td>` tags are recognized. Attributes and tag casing
 //! are ignored. The resulting Markdown lines are passed to
 //! `reflow_table` to ensure consistent column widths.
 

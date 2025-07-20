@@ -133,3 +133,110 @@ fn test_cli_ellipsis_multiple_sequences() {
         "First… then second… done.\n"
     );
 }
+
+/// Tests that the `--fences` option normalizes backtick fences.
+#[test]
+fn test_cli_fences_option() {
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--fences")
+        .write_stdin("````rust\nfn main() {}\n````\n")
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```rust\nfn main() {}\n```\n"
+    );
+}
+
+#[test]
+fn test_cli_fences_option_tilde() {
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--fences")
+        .write_stdin("~~~~rust\nfn main() {}\n~~~~\n")
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```rust\nfn main() {}\n```\n"
+    );
+}
+
+/// Ensures fence normalization runs before other processing.
+#[test]
+fn test_cli_fences_before_ellipsis() {
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .args(["--fences", "--ellipsis"])
+        .write_stdin("````\nlet x = ...;\n````\n")
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```\nlet x = ...;\n```\n"
+    );
+}
+
+/// Ensures orphan specifiers are attached when `--fences` is used.
+#[test]
+fn test_cli_fences_orphan_specifier() {
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--fences")
+        .write_stdin("Rust\n```\nfn main() {}\n```\n")
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```Rust\nfn main() {}\n```\n"
+    );
+}
+
+/// Combines fence normalization with renumbering to verify processing order.
+#[test]
+fn test_cli_fences_with_renumber() {
+    let input = concat!(
+        "Rust\n",
+        "\n",
+        "~~~~~~\n",
+        "fn main() {}\n",
+        "~~~~~~\n",
+        "\n",
+        "1. first\n",
+        "3. second\n",
+    );
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .args(["--fences", "--renumber"])
+        .write_stdin(input)
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```Rust\nfn main() {}\n```\n\n1. first\n2. second\n",
+    );
+}
+
+/// Tests the CLI `--footnotes` option to convert bare footnote links.
+#[test]
+fn test_cli_footnotes_option() {
+    let input = include_str!("data/footnotes_input.txt");
+    let expected = include_str!("data/footnotes_expected.txt");
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--footnotes")
+        .write_stdin(input)
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        output.stdout,
+        format!("{}\n", expected.trim_end()).as_bytes()
+    );
+}

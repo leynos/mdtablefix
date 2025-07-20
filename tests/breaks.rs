@@ -56,7 +56,7 @@ fn test_format_breaks_mixed_chars_excessive_length() {
     assert_eq!(format_breaks(&input), expected);
 }
 
-/// Tests the CLI `--breaks` option to ensure thematic breaks are normalised.
+/// Tests the CLI `--breaks` option to ensure thematic breaks are normalized.
 ///
 /// Provides a single line of hyphens and asserts the output is the standard
 /// underscore-based thematic break.

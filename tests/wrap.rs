@@ -424,3 +424,53 @@ fn test_cli_wrap_option() {
     );
     assert!(text.lines().all(|l| l.len() <= 80));
 }
+
+/// Ensures that links are not split across lines when wrapping paragraphs.
+#[test]
+fn test_wrap_paragraph_with_link() {
+    let input = lines_vec![concat!(
+        "**Wireframe** is an experimental Rust library that simplifies building",
+        " servers and clients for custom binary protocols. The design borrows ",
+        "heavily from [Actix Web](https://actix.rs/) to provide a familiar, ",
+        "declarative API for routing, extractors, and middleware."
+    )];
+    let output = process_stream(&input);
+    assert!(
+        output
+            .iter()
+            .any(|line| line.contains("[Actix Web](https://actix.rs/)")),
+        "link should not be broken across lines"
+    );
+}
+
+/// Ensures that image links are not split across lines when wrapping paragraphs.
+#[test]
+fn test_wrap_paragraph_with_image_link() {
+    let input = lines_vec![concat!(
+        "Here is an image ![logo](https://example.com/logo.png) embedded in ",
+        "a sentence that should wrap without splitting the link."
+    )];
+    let output = process_stream(&input);
+    assert!(
+        output
+            .iter()
+            .any(|line| line.contains("![logo](https://example.com/logo.png)")),
+        "image link should not be broken across lines",
+    );
+}
+
+/// Ensures that links with nested parentheses are preserved during wrapping.
+#[test]
+fn test_wrap_paragraph_with_nested_link() {
+    let input = lines_vec![concat!(
+        "Check [docs](https://example.com/rust(nightly)/guide) for details on",
+        " nightly features and usage."
+    )];
+    let output = process_stream(&input);
+    assert!(
+        output
+            .iter()
+            .any(|line| line.contains("(https://example.com/rust(nightly)/guide)")),
+        "link with nested parentheses should remain intact",
+    );
+}

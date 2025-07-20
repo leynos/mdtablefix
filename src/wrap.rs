@@ -30,6 +30,37 @@ pub enum Token<'a> {
     Newline,
 }
 
+fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
+    let start = i;
+    if chars[i] == '!' {
+        i += 1;
+    }
+    // skip initial '[' which we know is present
+    i += 1;
+    while i < chars.len() && chars[i] != ']' {
+        i += 1;
+    }
+    if i < chars.len() && chars[i] == ']' {
+        i += 1;
+        if i < chars.len() && chars[i] == '(' {
+            i += 1;
+            let mut depth = 1;
+            while i < chars.len() && depth > 0 {
+                match chars[i] {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    _ => {}
+                }
+                i += 1;
+            }
+            let tok: String = chars[start..i].iter().collect();
+            return (tok, i);
+        }
+    }
+    let tok: String = chars[start..=start].iter().collect();
+    (tok, start + 1)
+}
+
 fn tokenize_inline(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = text.chars().collect();
@@ -72,6 +103,10 @@ fn tokenize_inline(text: &str) -> Vec<String> {
                 tokens.push(chars[start..end].iter().collect());
                 i = end;
             }
+        } else if c == '[' || (c == '!' && i + 1 < chars.len() && chars[i + 1] == '[') {
+            let (tok, new_i) = parse_link_or_image(&chars, i);
+            tokens.push(tok);
+            i = new_i;
         } else {
             let start = i;
             while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '`' {

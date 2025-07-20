@@ -36,6 +36,15 @@ classDiagram
         <<module>>
         +replace_ellipsis()
     }
+    class fences {
+        <<module>>
+        +compress_fences()
+        +attach_orphan_specifiers()
+    }
+    class footnotes {
+        <<module>>
+        +convert_footnotes()
+    }
     class process {
         <<module>>
         +process_stream()
@@ -52,6 +61,7 @@ classDiagram
     lib --> lists
     lib --> breaks
     lib --> ellipsis
+    lib --> fences
     lib --> process
     lib --> io
     html ..> wrap : uses is_fence
@@ -62,12 +72,14 @@ classDiagram
     process ..> html : uses convert_html_tables
     process ..> table : uses reflow_table
     process ..> wrap : uses wrap_text, is_fence
+    process ..> fences : uses compress_fences, attach_orphan_specifiers
     process ..> ellipsis : uses replace_ellipsis
+    process ..> footnotes : uses convert_footnotes
     io ..> process : uses process_stream, process_stream_no_wrap
 ```
 
 The `lib` module re-exports the public API from the other modules. The
-`ellipsis` module performs text normalisation. The `process` module provides
+`ellipsis` module performs text normalization. The `process` module provides
 streaming helpers that combine the lower-level functions, including ellipsis
-replacement. The `io` module handles filesystem operations, delegating the text
-processing to `process`.
+replacement and footnote conversion. The `io` module handles filesystem
+operations, delegating the text processing to `process`.

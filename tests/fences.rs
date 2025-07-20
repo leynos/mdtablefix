@@ -1,0 +1,114 @@
+//! Tests for fence normalization functionality.
+
+#[macro_use]
+mod prelude;
+use mdtablefix::{attach_orphan_specifiers, compress_fences};
+
+#[test]
+fn compresses_backtick_fences() {
+    let input = lines_vec!["````rust", "code", "````"];
+    let out = compress_fences(&input);
+    assert_eq!(out, lines_vec!["```rust", "code", "```"]);
+}
+
+#[test]
+fn compresses_indented_backticks() {
+    let input = lines_vec!["    `````foo,bar   "];
+    let out = compress_fences(&input);
+    assert_eq!(out, lines_vec!["    ```foo,bar"]);
+}
+
+#[test]
+fn compresses_tilde_fences() {
+    let input = lines_vec!["~~~~rust", "code", "~~~~"];
+    let out = compress_fences(&input);
+    assert_eq!(out, lines_vec!["```rust", "code", "```"]);
+}
+
+#[test]
+fn does_not_compress_mixed_fences() {
+    let input = lines_vec!["~~~rust", "code", "```"];
+    let out = compress_fences(&input);
+    assert_eq!(out, lines_vec!["```rust", "code", "```"]);
+
+    let input2 = lines_vec!["```rust", "code", "~~~"];
+    let out2 = compress_fences(&input2);
+    assert_eq!(out2, lines_vec!["```rust", "code", "```"]);
+}
+
+#[test]
+fn leaves_other_lines_untouched() {
+    let input = lines_vec!["~~", "``text``"];
+    let out = compress_fences(&input);
+    assert_eq!(out, input);
+}
+
+#[test]
+fn fixes_orphaned_specifier() {
+    let input = lines_vec!["Rust", "```", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["```Rust", "fn main() {}", "```"]);
+}
+
+#[test]
+fn attaches_orphan_specifier_unit() {
+    let input = lines_vec!["Rust", "```", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&input);
+    assert_eq!(out, lines_vec!["```Rust", "fn main() {}", "```"]);
+}
+
+#[test]
+fn attaches_orphan_specifier_with_blank_line_unit() {
+    let input = lines_vec!["Rust", "", "```", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&input);
+    assert_eq!(out, lines_vec!["```Rust", "fn main() {}", "```"]);
+}
+
+#[test]
+fn fixes_orphaned_specifier_with_blank_line() {
+    let input = lines_vec!["Rust", "", "```", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["```Rust", "fn main() {}", "```"]);
+}
+
+#[test]
+fn fixes_multiple_orphaned_specifiers() {
+    let input = lines_vec![
+        "Rust",
+        "```",
+        "fn main() {}",
+        "```",
+        "Python",
+        "```",
+        "print('hi')",
+        "```",
+    ];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(
+        out,
+        lines_vec![
+            "```Rust",
+            "fn main() {}",
+            "```",
+            "```Python",
+            "print('hi')",
+            "```"
+        ]
+    );
+}
+
+#[test]
+fn does_not_attach_non_orphan_lines_before_fences() {
+    let input = lines_vec![
+        "Rust code",
+        "```",
+        "fn main() {}",
+        "```",
+        "rust!",
+        "```",
+        "println!(\"hi\");",
+        "```",
+    ];
+    let out = attach_orphan_specifiers(&input);
+    assert_eq!(out, input);
+}

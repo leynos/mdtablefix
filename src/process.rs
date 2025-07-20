@@ -2,14 +2,43 @@
 
 use crate::{
     ellipsis::replace_ellipsis,
+    fences::{attach_orphan_specifiers, compress_fences},
+    footnotes::convert_footnotes,
     html::convert_html_tables,
     table::reflow_table,
     wrap::{self, wrap_text},
 };
 
+/// Column width used when wrapping text.
+pub(crate) const WRAP_COLS: usize = 80;
+
+/// Processing options controlling the behaviour of `process_stream_inner`.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Options map directly to CLI flags"
+)]
+#[derive(Clone, Copy, Default)]
+pub struct Options {
+    /// Enable paragraph wrapping
+    pub wrap: bool,
+    /// Replace `...` with `…`
+    pub ellipsis: bool,
+    /// Normalise code block fences
+    pub fences: bool,
+    /// Convert bare numeric references to footnotes
+    pub footnotes: bool,
+}
+
 #[must_use]
-pub fn process_stream_inner(lines: &[String], wrap: bool, ellipsis: bool) -> Vec<String> {
-    let pre = convert_html_tables(lines);
+pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
+    let lines = if opts.fences {
+        let tmp = compress_fences(lines);
+        attach_orphan_specifiers(&tmp)
+    } else {
+        lines.to_vec()
+    };
+
+    let pre = convert_html_tables(&lines);
 
     let mut out = Vec::new();
     let mut buf = Vec::new();
@@ -70,24 +99,48 @@ pub fn process_stream_inner(lines: &[String], wrap: bool, ellipsis: bool) -> Vec
         }
     }
 
-    let mut out = if wrap { wrap_text(&out, 80) } else { out };
-    if ellipsis {
+    let mut out = if opts.wrap {
+        wrap_text(&out, WRAP_COLS)
+    } else {
+        out
+    };
+    if opts.ellipsis {
         out = replace_ellipsis(&out);
+    }
+    if opts.footnotes {
+        out = convert_footnotes(&out);
     }
     out
 }
 
 #[must_use]
-pub fn process_stream(lines: &[String]) -> Vec<String> { process_stream_inner(lines, true, false) }
+pub fn process_stream(lines: &[String]) -> Vec<String> {
+    process_stream_inner(
+        lines,
+        Options {
+            wrap: true,
+            ..Default::default()
+        },
+    )
+}
 
+/// Process a Markdown stream without wrapping paragraphs.
+///
+/// ```
+/// use mdtablefix::process_stream_no_wrap;
+/// let lines = vec!["one".to_string(), "two".to_string()];
+/// let out = process_stream_no_wrap(&lines);
+/// assert_eq!(out, lines);
+/// ```
 #[must_use]
+#[inline]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
-    process_stream_inner(lines, false, false)
+    process_stream_inner(lines, Options::default())
 }
 
 #[must_use]
-pub fn process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool) -> Vec<String> {
-    process_stream_inner(lines, wrap, ellipsis)
+pub fn process_stream_opts(lines: &[String], opts: Options) -> Vec<String> {
+    process_stream_inner(lines, opts)
 }
 
 #[cfg(test)]

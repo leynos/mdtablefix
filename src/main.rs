@@ -6,7 +6,7 @@ use std::{
 };
 
 use clap::Parser;
-use mdtablefix::{format_breaks, process_stream_opts, renumber_lists};
+use mdtablefix::{Options, format_breaks, process_stream_opts, renumber_lists};
 
 #[derive(Parser)]
 #[command(about = "Reflow broken markdown tables")]
@@ -23,7 +23,7 @@ struct Cli {
 #[derive(clap::Args, Clone, Copy)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "CLI exposes four independent flags"
+    reason = "CLI exposes five independent flags"
 )]
 struct FormatOpts {
     /// Wrap paragraphs and list items to 80 columns
@@ -38,10 +38,23 @@ struct FormatOpts {
     /// Replace "..." with the ellipsis character
     #[arg(long = "ellipsis")]
     ellipsis: bool,
+    /// Normalise fence delimiters to three backticks
+    #[arg(long = "fences")]
+    fences: bool,
+    /// Convert bare numeric references and the final numbered list to
+    /// Markdown footnote links
+    #[arg(long = "footnotes")]
+    footnotes: bool,
 }
 
 fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
-    let mut out = process_stream_opts(lines, opts.wrap, opts.ellipsis);
+    let opts2 = Options {
+        wrap: opts.wrap,
+        ellipsis: opts.ellipsis,
+        fences: opts.fences,
+        footnotes: opts.footnotes,
+    };
+    let mut out = process_stream_opts(lines, opts2);
     if opts.renumber {
         out = renumber_lists(&out);
     }
