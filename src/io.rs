@@ -42,12 +42,13 @@ pub fn rewrite_no_wrap(path: &Path) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::Permissions;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+    use std::{fs::Permissions, path::Path};
 
     #[cfg(unix)]
     use libc;
+    use rstest::rstest;
     use tempfile::tempdir;
 
     use super::*;
@@ -72,23 +73,16 @@ mod tests {
         assert_eq!(out, "| A | B |\n| 1 | 2 |\n");
     }
 
-    #[test]
-    fn rewrite_missing_file() {
-        let dir = tempdir().unwrap();
-        let file = dir.path().join("missing.md");
-        let err = rewrite(&file).expect_err("expected error for missing file");
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    #[cfg(unix)]
+    fn can_write_as_root() -> bool {
+        // SAFETY: `geteuid()` has no side effects and is safe to call in tests.
+        let uid = unsafe { libc::geteuid() };
+        uid == 0
     }
 
-    #[test]
-    fn rewrite_permission_denied() {
-        let dir = tempdir().unwrap();
-        let file = dir.path().join("deny.md");
-        fs::write(&file, "data").unwrap();
-        fs::set_permissions(&file, Permissions::from_mode(0o444)).unwrap();
-        let result = rewrite(&file);
+    fn assert_permission_error_or_root_success(result: std::io::Result<()>) {
         #[cfg(unix)]
-        if unsafe { libc::geteuid() } == 0 {
+        if can_write_as_root() {
             assert!(result.is_ok());
         } else {
             let err = result.expect_err("expected permission denied error");
@@ -101,33 +95,26 @@ mod tests {
         }
     }
 
-    #[test]
-    fn rewrite_no_wrap_missing_file() {
+    #[rstest]
+    #[case(rewrite)]
+    #[case(rewrite_no_wrap)]
+    fn missing_file_error(#[case] rewrite_fn: fn(&Path) -> std::io::Result<()>) {
         let dir = tempdir().unwrap();
         let file = dir.path().join("missing.md");
-        let err = rewrite_no_wrap(&file).expect_err("expected error for missing file");
+        let err = rewrite_fn(&file).expect_err("expected error for missing file");
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     }
 
-    #[test]
-    fn rewrite_no_wrap_permission_denied() {
+    #[rstest]
+    #[case(rewrite)]
+    #[case(rewrite_no_wrap)]
+    fn permission_denied_error(#[case] rewrite_fn: fn(&Path) -> std::io::Result<()>) {
         let dir = tempdir().unwrap();
         let file = dir.path().join("deny.md");
         fs::write(&file, "data").unwrap();
         fs::set_permissions(&file, Permissions::from_mode(0o444)).unwrap();
-        let result = rewrite_no_wrap(&file);
-        #[cfg(unix)]
-        if unsafe { libc::geteuid() } == 0 {
-            assert!(result.is_ok());
-        } else {
-            let err = result.expect_err("expected permission denied error");
-            assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
-        }
-        #[cfg(not(unix))]
-        {
-            let err = result.expect_err("expected permission denied error");
-            assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
-        }
+        let result = rewrite_fn(&file);
+        assert_permission_error_or_root_success(result);
     }
 
     #[test]
