@@ -123,6 +123,7 @@ fn main() -> std::io::Result<()> {
         wrap: true,
         ellipsis: true,
         fences: true,
+        footnotes: false,
     };
     let fixed = process_stream_opts(&lines, opts);
     println!("{}", fixed.join("\n"));
@@ -133,7 +134,7 @@ fn main() -> std::io::Result<()> {
 
 - `process_stream_opts(lines: &[String], opts: Options) -> Vec<String>`
   rewrites tables in memory. The options enable paragraph wrapping, ellipsis
-  substitution and fence normalization.
+  substitution, fence normalization and footnote conversion.
 
 - `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on
   disk in-place.
