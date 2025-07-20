@@ -123,7 +123,7 @@ fn main() -> std::io::Result<()> {
         wrap: true,
         ellipsis: true,
         fences: true,
-        footnotes: false,
+        ..Default::default()
     };
     let fixed = process_stream_opts(&lines, opts);
     println!("{}", fixed.join("\n"));

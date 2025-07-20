@@ -66,46 +66,29 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
-    let mut out = Vec::with_capacity(lines.len());
+    let mut out: Vec<String> = Vec::with_capacity(lines.len());
     let mut in_fence = false;
-    let mut iter = lines.iter().peekable();
-
-    while let Some(line) = iter.next() {
+    for line in lines {
         let trimmed = line.trim();
 
-        if !in_fence && ORPHAN_LANG_RE.is_match(trimmed) {
-            let mut peek_ahead = iter.clone();
-            let mut found_fence = false;
-
-            while let Some(next_line) = peek_ahead.peek() {
-                let next_trimmed = next_line.trim();
-                if next_trimmed.is_empty() {
-                    peek_ahead.next();
-                } else if next_trimmed == "```" {
-                    found_fence = true;
-                    break;
-                } else {
-                    break;
+        if trimmed.starts_with("```") {
+            if in_fence {
+                in_fence = false;
+            } else {
+                while matches!(out.last(), Some(l) if l.trim().is_empty()) {
+                    out.pop();
                 }
-            }
-
-            if found_fence {
-                while let Some(next_line) = iter.peek() {
-                    if next_line.trim().is_empty() {
-                        iter.next();
-                    } else {
-                        break;
+                if let Some(prev) = out.last() {
+                    let lang = prev.trim().to_string();
+                    if ORPHAN_LANG_RE.is_match(&lang) {
+                        out.pop();
+                        out.push(format!("```{lang}"));
+                        in_fence = true;
+                        continue;
                     }
                 }
-                iter.next();
-                out.push(format!("```{trimmed}"));
                 in_fence = true;
-                continue;
             }
-        }
-
-        if trimmed.starts_with("```") {
-            in_fence = !in_fence;
         }
 
         out.push(line.clone());
