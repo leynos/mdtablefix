@@ -18,6 +18,22 @@ After:
 A useful tip.[^1]
 ```
 
+Numbers inside inline code or parentheses are ignored.
+
+Before:
+
+```markdown
+Look at `code 1` for details.
+Refer to equation (1) for context.
+```
+
+After:
+
+```markdown
+Look at `code 1` for details.
+Refer to equation (1) for context.
+```
+
 When the final lines of a document form a numbered list, they are replaced with
 footnote definitions.
 
@@ -36,7 +52,7 @@ After:
 Text.
 
  [^1] First note
- [^2] Second note
+[^2] Second note
 ```
 
 `convert_footnotes` only processes the final contiguous list of numeric

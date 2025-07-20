@@ -28,6 +28,25 @@ fn convert_inline(text: &str) -> String {
         .into_owned()
 }
 
+/// Find the trailing block of lines that satisfy a predicate.
+///
+/// The slice is scanned from the end and trailing blank lines are ignored.
+/// The returned `(start, end)` pair can be used with slicing so that
+/// `lines[start..end]` contains the contiguous region whose trimmed lines
+/// evaluate to `true` when passed to `pred`.
+///
+/// # Examples
+///
+/// ```ignore
+/// use mdtablefix::footnotes::trimmed_range;
+/// let lines = vec![
+///     "A".to_string(),
+///     "1. note".to_string(),
+///     "2. more".to_string(),
+/// ];
+/// let (start, end) = trimmed_range(&lines, |l| l.starts_with('1') || l.starts_with('2'));
+/// assert_eq!((start, end), (1, 3));
+/// ```
 fn trimmed_range<F>(lines: &[String], pred: F) -> (usize, usize)
 where
     F: Fn(&str) -> bool,
