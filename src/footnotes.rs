@@ -22,13 +22,18 @@ fn convert_inline(text: &str) -> String {
             && (i == 0 || !chars[i - 1].is_ascii_digit())
         {
             let mut j = i + 1;
+            while j < chars.len() && matches!(chars[j], '*' | '_') {
+                j += 1;
+            }
+            let digits_start = j;
             while j < chars.len() && chars[j].is_ascii_digit() {
                 j += 1;
             }
-            if j > i + 1 && (j == chars.len() || chars[j].is_whitespace()) {
+            if j > digits_start && (j == chars.len() || chars[j].is_whitespace()) {
                 out.push(ch);
+                out.extend(chars[i + 1..digits_start].iter());
                 out.push_str("[^");
-                for c in &chars[i + 1..j] {
+                for c in &chars[digits_start..j] {
                     out.push(*c);
                 }
                 out.push(']');
