@@ -118,9 +118,8 @@ A brief intermission for pizza.
 
 ## Library usage
 
-The crate provides helper functions for embedding the table reflow logic in
-your own Rust project:
-
+The crate exposes helper functions for embedding the table-reflow logic in
+Rust projects:
 Rust
 
 ```rust
