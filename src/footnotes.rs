@@ -28,14 +28,40 @@ fn convert_inline(text: &str) -> String {
         .into_owned()
 }
 
-fn convert_block(lines: &mut [String]) {
+/// Find the trailing block of lines that satisfy a predicate.
+///
+/// The slice is scanned from the end and trailing blank lines are ignored.
+/// The returned `(start, end)` indices delimit the contiguous region of lines
+/// whose trimmed contents cause `predicate` to return `true`. Use
+/// `lines[start..end]` for slicing.
+///
+/// # Examples
+///
+/// ```ignore
+/// let lines = vec![
+///     "A".to_string(),
+///     "1. note".to_string(),
+///     "2. more".to_string(),
+/// ];
+/// let (start, end) = trimmed_range(&lines, |l| l.starts_with('1') || l.starts_with('2'));
+/// assert_eq!((start, end), (1, 3));
+/// ```
+fn trimmed_range<F>(lines: &[String], predicate: F) -> (usize, usize)
+where
+    F: Fn(&str) -> bool,
+{
     let end = lines
         .iter()
         .rposition(|l| !l.trim().is_empty())
         .map_or(0, |i| i + 1);
     let start = (0..end)
-        .rfind(|&i| !FOOTNOTE_LINE_RE.is_match(lines[i].trim_end()))
+        .rfind(|&i| !predicate(lines[i].trim_end()))
         .map_or(0, |i| i + 1);
+    (start, end)
+}
+
+fn convert_block(lines: &mut [String]) {
+    let (start, end) = trimmed_range(lines, |l| FOOTNOTE_LINE_RE.is_match(l));
 
     if start >= end || lines[start].trim_start().starts_with("[^") {
         return;
