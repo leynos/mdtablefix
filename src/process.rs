@@ -14,7 +14,7 @@ use crate::{
     clippy::struct_excessive_bools,
     reason = "Options map directly to CLI flags"
 )]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Options {
     /// Enable paragraph wrapping
     pub wrap: bool,
@@ -24,6 +24,36 @@ pub struct Options {
     pub fences: bool,
     /// Convert bare numeric references to footnotes
     pub footnotes: bool,
+}
+
+impl Options {
+    /// Set `wrap` option and return the updated struct.
+    #[must_use]
+    pub fn with_wrap(mut self, wrap: bool) -> Self {
+        self.wrap = wrap;
+        self
+    }
+
+    /// Set `ellipsis` option and return the updated struct.
+    #[must_use]
+    pub fn with_ellipsis(mut self, ellipsis: bool) -> Self {
+        self.ellipsis = ellipsis;
+        self
+    }
+
+    /// Set `fences` option and return the updated struct.
+    #[must_use]
+    pub fn with_fences(mut self, fences: bool) -> Self {
+        self.fences = fences;
+        self
+    }
+
+    /// Set `footnotes` option and return the updated struct.
+    #[must_use]
+    pub fn with_footnotes(mut self, footnotes: bool) -> Self {
+        self.footnotes = footnotes;
+        self
+    }
 }
 
 #[must_use]
@@ -108,28 +138,12 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
 #[must_use]
 pub fn process_stream(lines: &[String]) -> Vec<String> {
-    process_stream_inner(
-        lines,
-        Options {
-            wrap: true,
-            ellipsis: false,
-            fences: false,
-            footnotes: false,
-        },
-    )
+    process_stream_inner(lines, Options::default().with_wrap(true))
 }
 
 #[must_use]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
-    process_stream_inner(
-        lines,
-        Options {
-            wrap: false,
-            ellipsis: false,
-            fences: false,
-            footnotes: false,
-        },
-    )
+    process_stream_inner(lines, Options::default())
 }
 
 #[must_use]

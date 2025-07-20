@@ -119,12 +119,10 @@ use std::path::Path;
 
 fn main() -> std::io::Result<()> {
     let lines = vec!["|A|B|".to_string(), "|1|2|".to_string()];
-    let opts = Options {
-        wrap: true,
-        ellipsis: true,
-        fences: true,
-        footnotes: false,
-    };
+    let opts = Options::default()
+        .with_wrap(true)
+        .with_ellipsis(true)
+        .with_fences(true);
     let fixed = process_stream_opts(&lines, opts);
     println!("{}", fixed.join("\n"));
     rewrite(Path::new("table.md"))?;
