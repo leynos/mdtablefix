@@ -7,6 +7,7 @@ use std::{
 
 use clap::Parser;
 use mdtablefix::{Options, format_breaks, process_stream_opts, renumber_lists};
+use rayon::prelude::*;
 
 #[derive(Parser)]
 #[command(about = "Reflow broken markdown tables")]
@@ -109,15 +110,31 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    for path in cli.files {
-        if cli.in_place {
-            rewrite_path(&path, cli.opts)?;
-        } else {
-            let content = fs::read_to_string(&path)?;
-            let lines: Vec<String> = content.lines().map(str::to_string).collect();
-            let fixed = process_lines(&lines, cli.opts);
-            println!("{}", fixed.join("\n"));
-        }
+    let pool = rayon::ThreadPoolBuilder::new().build()?;
+
+    if cli.in_place {
+        pool.install(|| {
+            cli.files
+                .par_iter()
+                .try_for_each(|p| rewrite_path(p, cli.opts))
+        })?;
+        return Ok(());
+    }
+
+    let results: anyhow::Result<Vec<String>> = pool.install(|| {
+        cli.files
+            .par_iter()
+            .map(|p| -> anyhow::Result<String> {
+                let content = fs::read_to_string(p)?;
+                let lines: Vec<String> = content.lines().map(str::to_string).collect();
+                let fixed = process_lines(&lines, cli.opts);
+                Ok(fixed.join("\n"))
+            })
+            .collect()
+    });
+
+    for out in results? {
+        println!("{out}");
     }
 
     Ok(())
