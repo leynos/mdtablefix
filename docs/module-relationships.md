@@ -39,6 +39,7 @@ classDiagram
     class fences {
         <<module>>
         +compress_fences()
+        +attach_orphan_specifiers()
     }
     class footnotes {
         <<module>>
@@ -71,7 +72,7 @@ classDiagram
     process ..> html : uses convert_html_tables
     process ..> table : uses reflow_table
     process ..> wrap : uses wrap_text, is_fence
-    process ..> fences : uses compress_fences
+    process ..> fences : uses compress_fences, attach_orphan_specifiers
     process ..> ellipsis : uses replace_ellipsis
     process ..> footnotes : uses convert_footnotes
     io ..> process : uses process_stream, process_stream_no_wrap

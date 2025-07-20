@@ -40,6 +40,13 @@ fn fixes_orphaned_specifier() {
 }
 
 #[test]
+fn attaches_orphan_specifier() {
+    let input = lines_vec!["Rust", "```", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&input);
+    assert_eq!(out, lines_vec!["```Rust", "fn main() {}", "```"]);
+}
+
+#[test]
 fn fixes_orphaned_specifier_with_blank_line() {
     let input = lines_vec!["Rust", "", "```", "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&compress_fences(&input));

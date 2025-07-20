@@ -40,14 +40,14 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes
   after a list is interrupted by other content, such as a paragraph at a lower
   indentation level.
 
-- Use `--breaks` to standardise thematic breaks to a line of 70 underscores
+- Use `--breaks` to standardize thematic breaks to a line of 70 underscores
   (configurable via the `THEMATIC_BREAK_LEN` constant).
 
 - Use `--ellipsis` to replace groups of three dots (`...`) with the ellipsis
   character (`…`). Longer runs are processed left-to-right, so any leftover
   dots are preserved.
 
-- Use `--fences` to normalise code block delimiters to three backticks before
+- Use `--fences` to normalize code block delimiters to three backticks before
   other processing.
 
 - Use `--footnotes` to convert bare numeric references and the final numbered
@@ -133,7 +133,7 @@ fn main() -> std::io::Result<()> {
 
 - `process_stream_opts(lines: &[String], opts: Options) -> Vec<String>`
   rewrites tables in memory. The options enable paragraph wrapping, ellipsis
-  substitution and fence normalisation.
+  substitution and fence normalization.
 
 - `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on
   disk in-place.
