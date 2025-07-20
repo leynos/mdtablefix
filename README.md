@@ -52,7 +52,8 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes
   other processing.
 
 - Use `--footnotes` to convert bare numeric references and the final numbered
-  list into GitHub-flavoured footnote links.
+  list into GitHub-flavoured footnote links. See [Footnote
+  conversion](docs/footnote-conversion.md) for details.
 
 - Use `--in-place` to modify files in-place.
 

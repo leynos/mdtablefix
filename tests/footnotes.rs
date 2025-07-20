@@ -1,4 +1,12 @@
 //! Integration tests for footnote conversion.
+//!
+//! These tests exercise the public API using real Markdown examples from
+//! `tests/data`. They ensure that bare numeric references are transformed into
+//! GitHub-flavoured footnotes and that the final numbered list is rewritten as
+//! a footnote block. The helper macros `include_lines!` and `lines_vec!`,
+//! exported by the `prelude` module, build `Vec<String>` values for input and
+//! expected output. The unit tests cover lower level edge cases; here we focus
+//! on integration behaviour.
 
 use mdtablefix::convert_footnotes;
 
@@ -80,4 +88,10 @@ fn test_whitespace_input() {
     let input = lines_vec!("   ", "\t");
     let output = convert_footnotes(&input);
     assert_eq!(output, input);
+}
+
+#[test]
+fn macros_exported_from_prelude() {
+    let _: Vec<String> = lines_vec!("one", "two");
+    let _: Vec<String> = include_lines!("data/footnotes_input.txt");
 }

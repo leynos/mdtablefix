@@ -17,13 +17,27 @@ static FOOTNOTE_LINE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|
 
 use crate::wrap::{Token, tokenize_markdown};
 
+/// Extract captured footnote components from a regex match.
+fn parse_inline_caps<'a>(caps: &'a Captures<'a>) -> (&'a str, &'a str, &'a str, &'a str, &'a str) {
+    (
+        &caps["pre"],
+        &caps["punc"],
+        &caps["style"],
+        &caps["num"],
+        &caps["boundary"],
+    )
+}
+
+/// Build a Markdown footnote from its captured parts.
+fn build_inline_footnote(pre: &str, punc: &str, style: &str, num: &str, boundary: &str) -> String {
+    format!("{pre}{punc}{style}[^{num}]{boundary}")
+}
+
 fn convert_inline(text: &str) -> String {
     INLINE_FN_RE
         .replace_all(text, |caps: &Captures| {
-            format!(
-                "{}{}{}[^{}]{}",
-                &caps["pre"], &caps["punc"], &caps["style"], &caps["num"], &caps["boundary"]
-            )
+            let (pre, punc, style, num, boundary) = parse_inline_caps(caps);
+            build_inline_footnote(pre, punc, style, num, boundary)
         })
         .into_owned()
 }
@@ -63,11 +77,11 @@ where
 fn convert_block(lines: &mut [String]) {
     let (start, end) = trimmed_range(lines, |l| FOOTNOTE_LINE_RE.is_match(l));
 
-    if start >= end || lines[start].trim_start().starts_with("[^") {
+    if footnote_start >= trimmed_end || lines[footnote_start].trim_start().starts_with("[^") {
         return;
     }
 
-    for line in &mut lines[start..end] {
+    for line in &mut lines[footnote_start..trimmed_end] {
         *line = FOOTNOTE_LINE_RE
             .replace(line, "${indent}[^${num}] ${rest}")
             .to_string();
@@ -131,5 +145,31 @@ mod tests {
     fn idempotent_on_existing_block() {
         let input = vec![" [^1] First".to_string()];
         assert_eq!(convert_footnotes(&input), input);
+    }
+
+    #[test]
+    fn multiple_inline_references() {
+        let input = vec!["Alpha.1 Bravo?2".to_string()];
+        let expected = vec!["Alpha.[^1] Bravo?[^2]".to_string()];
+        assert_eq!(convert_footnotes(&input), expected);
+    }
+
+    #[test]
+    fn ignores_non_numeric_identifiers() {
+        let input = vec!["See fig.2a for details.".to_string()];
+        assert_eq!(convert_footnotes(&input), input);
+    }
+
+    #[test]
+    fn empty_input_returns_empty() {
+        let lines: Vec<String> = Vec::new();
+        assert!(convert_footnotes(&lines).is_empty());
+    }
+
+    #[test]
+    fn mixed_content_with_code() {
+        let input = vec!["Beta `var.1` test.2".to_string()];
+        let expected = vec!["Beta `var.1` test.[^2]".to_string()];
+        assert_eq!(convert_footnotes(&input), expected);
     }
 }
