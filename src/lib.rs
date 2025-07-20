@@ -7,11 +7,13 @@
 //! - `lists` for renumbering ordered lists.
 //! - `breaks` for thematic break formatting.
 //! - `ellipsis` for normalising textual ellipses.
+//! - `footnotes` for converting bare footnote links.
 //! - `process` for stream processing.
 //! - `io` for file helpers.
 
 pub mod breaks;
 pub mod ellipsis;
+pub mod footnotes;
 mod html;
 pub mod io;
 pub mod lists;
@@ -28,6 +30,7 @@ pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 
 pub use breaks::{THEMATIC_BREAK_LEN, format_breaks};
 pub use ellipsis::replace_ellipsis;
+pub use footnotes::convert_footnotes;
 pub use html::convert_html_tables;
 pub use io::{rewrite, rewrite_no_wrap};
 pub use lists::renumber_lists;
