@@ -42,9 +42,9 @@ fn no_restart_for_indented_paragraph() {
 }
 
 #[test]
-fn no_restart_for_non_plain_line() {
+fn restart_after_top_heading() {
     let input = lines_vec!("1. One", "", "# Heading", "3. Next");
-    let expected = lines_vec!("1. One", "", "# Heading", "2. Next");
+    let expected = lines_vec!("1. One", "", "# Heading", "1. Next");
     assert_eq!(renumber_lists(&input), expected);
 }
 
@@ -111,6 +111,18 @@ fn test_cli_renumber_option() {
     case::restart_after_formatting(
         include_lines!("data/renumber_formatting_paragraph_input.txt"),
         include_lines!("data/renumber_formatting_paragraph_expected.txt")
+    ),
+    case::restart_after_break(
+        include_lines!("data/renumber_break_restart_input.txt"),
+        include_lines!("data/renumber_break_restart_expected.txt")
+    ),
+    case::restart_after_heading(
+        include_lines!("data/renumber_heading_restart_input.txt"),
+        include_lines!("data/renumber_heading_restart_expected.txt")
+    ),
+    case::restart_after_break_and_heading(
+        include_lines!("data/renumber_break_heading_restart_input.txt"),
+        include_lines!("data/renumber_break_heading_restart_expected.txt")
     )
 )]
 fn test_renumber_cases(input: Vec<String>, expected: Vec<String>) {
