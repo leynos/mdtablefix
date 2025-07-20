@@ -403,6 +403,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "html5ever",
+ "libc",
  "markup5ever_rcdom",
  "once_cell",
  "regex",

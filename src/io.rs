@@ -18,7 +18,12 @@ where
     let text = fs::read_to_string(path)?;
     let lines: Vec<String> = text.lines().map(str::to_string).collect();
     let fixed = f(&lines);
-    fs::write(path, fixed.join("\n") + "\n")
+    let output = if fixed.is_empty() {
+        String::new()
+    } else {
+        fixed.join("\n") + "\n"
+    };
+    fs::write(path, output)
 }
 
 /// Rewrite a file in place with wrapped tables.
@@ -37,6 +42,12 @@ pub fn rewrite_no_wrap(path: &Path) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::Permissions;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(unix)]
+    use libc;
     use tempfile::tempdir;
 
     use super::*;
@@ -71,8 +82,61 @@ mod tests {
 
     #[test]
     fn rewrite_permission_denied() {
-        let file = Path::new("/proc/1/attr/current");
-        let err = rewrite(file).expect_err("expected permission denied error");
-        assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("deny.md");
+        fs::write(&file, "data").unwrap();
+        fs::set_permissions(&file, Permissions::from_mode(0o444)).unwrap();
+        let result = rewrite(&file);
+        #[cfg(unix)]
+        if unsafe { libc::geteuid() } == 0 {
+            assert!(result.is_ok());
+        } else {
+            let err = result.expect_err("expected permission denied error");
+            assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        }
+        #[cfg(not(unix))]
+        {
+            let err = result.expect_err("expected permission denied error");
+            assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        }
+    }
+
+    #[test]
+    fn rewrite_no_wrap_missing_file() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("missing.md");
+        let err = rewrite_no_wrap(&file).expect_err("expected error for missing file");
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn rewrite_no_wrap_permission_denied() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("deny.md");
+        fs::write(&file, "data").unwrap();
+        fs::set_permissions(&file, Permissions::from_mode(0o444)).unwrap();
+        let result = rewrite_no_wrap(&file);
+        #[cfg(unix)]
+        if unsafe { libc::geteuid() } == 0 {
+            assert!(result.is_ok());
+        } else {
+            let err = result.expect_err("expected permission denied error");
+            assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        }
+        #[cfg(not(unix))]
+        {
+            let err = result.expect_err("expected permission denied error");
+            assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        }
+    }
+
+    #[test]
+    fn rewrite_empty_file_no_extra_newline() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("empty.md");
+        fs::write(&file, "").unwrap();
+        rewrite(&file).unwrap();
+        let contents = fs::read_to_string(&file).unwrap();
+        assert!(contents.is_empty());
     }
 }
