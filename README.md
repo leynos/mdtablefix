@@ -13,15 +13,11 @@ making it safe to use on Markdown with mixed content.
 
 Install via Cargo:
 
-Bash
-
 ```bash
 cargo install mdtablefix
 ```
 
 Or clone the repository and build from source:
-
-Bash
 
 ```bash
 cargo install --path .
@@ -29,10 +25,8 @@ cargo install --path .
 
 ## Command-line usage
 
-Bash
-
 ```bash
-mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--in-place] [FILE...]
+mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--footnotes] [--in-place] [FILE...]
 ```
 
 - When one or more file paths are provided, the corrected tables are printed to
@@ -53,6 +47,9 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--in-place] [FILE...]
   character (`…`). Longer runs are processed left-to-right, so any leftover
   dots are preserved.
 
+- Use `--footnotes` to convert bare numeric references and the final numbered
+  list into GitHub-flavoured footnote links.
+
 - Use `--in-place` to modify files in-place.
 
 - If no files are specified, input is read from stdin and output is written to
@@ -62,8 +59,6 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--in-place] [FILE...]
 
 Before:
 
-Markdown
-
 ```markdown
 |Character|Catchphrase|Pizza count| |---|---|---| |Speedy Cerviche|Here
 come the Samurai Pizza Cats!|lots| |Guido Anchovy|Slice and dice!|tons|
@@ -71,8 +66,6 @@ come the Samurai Pizza Cats!|lots| |Guido Anchovy|Slice and dice!|tons|
 ```
 
 After running `mdtablefix`:
-
-Markdown
 
 ```markdown
 | Character       | Catchphrase                       | Pizza count |
@@ -85,8 +78,6 @@ Markdown
 ### Example: List Renumbering
 
 Before:
-
-Markdown
 
 ```markdown
 1. The Big Cheese's evil plans.
@@ -101,8 +92,6 @@ A brief intermission for pizza.
 ```
 
 After running `mdtablefix --renumber`:
-
-Markdown
 
 ```markdown
 1. The Big Cheese's evil plans.
@@ -121,8 +110,6 @@ A brief intermission for pizza.
 The crate provides helper functions for embedding the table reflow logic in
 your own Rust project:
 
-Rust
-
 ```rust
 use mdtablefix::{process_stream_opts, rewrite};
 use std::path::Path;
@@ -133,6 +120,7 @@ fn main() -> std::io::Result<()> {
         &lines,
         /* wrap = */ true,
         /* ellipsis = */ true,
+        /* footnotes = */ false,
     );
     println!("{}", fixed.join("\n"));
     rewrite(Path::new("table.md"))?;
@@ -140,9 +128,9 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
-- `process_stream_opts(lines: &[String], wrap: bool, ellipsis: bool) ->
-  Vec<String>` rewrites tables in memory, with optional paragraph wrapping and
-  ellipsis substitution.
+- `process_stream_opts(lines, wrap, ellipsis, footnotes) -> Vec<String>`
+  rewrites tables in memory, with optional paragraph wrapping, ellipsis
+  substitution, and footnote conversion.
 
 - `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on
   disk in-place.

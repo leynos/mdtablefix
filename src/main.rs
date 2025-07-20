@@ -23,7 +23,7 @@ struct Cli {
 #[derive(clap::Args, Clone, Copy)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "CLI exposes four independent flags"
+    reason = "CLI exposes five independent flags"
 )]
 struct FormatOpts {
     /// Wrap paragraphs and list items to 80 columns
@@ -38,10 +38,14 @@ struct FormatOpts {
     /// Replace "..." with the ellipsis character
     #[arg(long = "ellipsis")]
     ellipsis: bool,
+    /// Convert bare numeric references and the final numbered list to
+    /// Markdown footnote links
+    #[arg(long = "footnotes")]
+    footnotes: bool,
 }
 
 fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
-    let mut out = process_stream_opts(lines, opts.wrap, opts.ellipsis);
+    let mut out = process_stream_opts(lines, opts.wrap, opts.ellipsis, opts.footnotes);
     if opts.renumber {
         out = renumber_lists(&out);
     }

@@ -404,6 +404,7 @@ dependencies = [
  "clap",
  "html5ever",
  "markup5ever_rcdom",
+ "once_cell",
  "regex",
  "rstest",
  "tempfile",

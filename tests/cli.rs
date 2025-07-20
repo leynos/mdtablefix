@@ -133,3 +133,21 @@ fn test_cli_ellipsis_multiple_sequences() {
         "First… then second… done.\n"
     );
 }
+
+/// Tests the CLI `--footnotes` option to convert bare footnote links.
+#[test]
+fn test_cli_footnotes_option() {
+    let input = include_str!("data/footnotes_input.txt");
+    let expected = include_str!("data/footnotes_expected.txt");
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--footnotes")
+        .write_stdin(input)
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        output.stdout,
+        format!("{}\n", expected.trim_end()).as_bytes()
+    );
+}
