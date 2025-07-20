@@ -25,6 +25,7 @@ cargo install --path .
 
 ## Command-line usage
 
+
 ```bash
 mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes] [--in-place] [FILE...]
 ```
@@ -110,8 +111,8 @@ A brief intermission for pizza.
 
 ## Library usage
 
-The crate provides helper functions for embedding the table reflow logic in
-your own Rust project:
+The crate exposes helper functions for embedding the table-reflow logic in
+Rust projects:
 
 ```rust
 use mdtablefix::{process_stream_opts, rewrite, Options};
