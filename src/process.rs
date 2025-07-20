@@ -76,13 +76,12 @@ pub fn process_stream_inner(
         }
     }
 
-    if footnotes {
-        out = convert_footnotes(&out);
-    }
-
     let mut out = if wrap { wrap_text(&out, 80) } else { out };
     if ellipsis {
         out = replace_ellipsis(&out);
+    }
+    if footnotes {
+        out = convert_footnotes(&out);
     }
     out
 }

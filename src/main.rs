@@ -38,7 +38,8 @@ struct FormatOpts {
     /// Replace "..." with the ellipsis character
     #[arg(long = "ellipsis")]
     ellipsis: bool,
-    /// Convert bare numeric footnotes to Markdown links
+    /// Convert bare numeric references and the final numbered list to
+    /// Markdown footnote links
     #[arg(long = "footnotes")]
     footnotes: bool,
 }

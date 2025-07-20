@@ -32,3 +32,17 @@ fn test_handles_punctuation_inside_bold() {
     let expected = lines_vec!("It was **scary.**[^7]");
     assert_eq!(convert_footnotes(&input), expected);
 }
+
+#[test]
+fn test_empty_input() {
+    let input: Vec<String> = Vec::new();
+    let output = convert_footnotes(&input);
+    assert!(output.is_empty());
+}
+
+#[test]
+fn test_whitespace_input() {
+    let input = lines_vec!("   ", "\t");
+    let output = convert_footnotes(&input);
+    assert_eq!(output, input);
+}

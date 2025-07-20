@@ -2,81 +2,49 @@
 //!
 //! Converts bare numeric references in text to GitHub-flavoured Markdown
 //! footnote links and rewrites the trailing numeric list into a footnote
-//! block.
+//! block. Only the final contiguous list of footnotes is processed.
 
-use regex::Regex;
+use regex::{Captures, Regex};
 
-use crate::wrap::{Token, tokenize_markdown};
+static INLINE_FN_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"(?P<pre>^|[^0-9])(?P<punc>[.!?);:])(?P<style>[*_]*)(?P<num>\d+)(?P<boundary>\s|$)")
+        .unwrap()
+});
 
 static FOOTNOTE_LINE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     Regex::new(r"^(?P<indent>\s*)(?P<num>\d+)\.\s+(?P<rest>.*)$").unwrap()
 });
 
+use crate::wrap::{Token, tokenize_markdown};
+
 fn convert_inline(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let ch = chars[i];
-        if matches!(ch, '.' | '!' | '?' | ')' | ';' | ':')
-            && (i == 0 || !chars[i - 1].is_ascii_digit())
-        {
-            let mut j = i + 1;
-            while j < chars.len() && matches!(chars[j], '*' | '_') {
-                j += 1;
-            }
-            let digits_start = j;
-            while j < chars.len() && chars[j].is_ascii_digit() {
-                j += 1;
-            }
-            if j > digits_start && (j == chars.len() || chars[j].is_whitespace()) {
-                out.push(ch);
-                out.extend(chars[i + 1..digits_start].iter());
-                out.push_str("[^");
-                for c in &chars[digits_start..j] {
-                    out.push(*c);
-                }
-                out.push(']');
-                if j < chars.len() {
-                    out.push(chars[j]);
-                    j += 1;
-                }
-                i = j;
-                continue;
-            }
-        }
-        out.push(ch);
-        i += 1;
-    }
-    out
+    INLINE_FN_RE
+        .replace_all(text, |caps: &Captures| {
+            format!(
+                "{}{}{}[^{}]{}",
+                &caps["pre"], &caps["punc"], &caps["style"], &caps["num"], &caps["boundary"]
+            )
+        })
+        .into_owned()
 }
 
 fn convert_block(lines: &mut [String]) {
-    let mut end = lines.len();
-    while end > 0 && lines[end - 1].trim().is_empty() {
-        end -= 1;
-    }
-    let mut start = end;
-    while start > 0 {
-        if FOOTNOTE_LINE_RE.is_match(lines[start - 1].trim_end()) {
-            start -= 1;
-        } else {
-            break;
-        }
-    }
-    if start >= end {
+    let end = lines
+        .iter()
+        .rposition(|l| !l.trim().is_empty())
+        .map_or(0, |i| i + 1);
+    let start = (0..end)
+        .rfind(|&i| !FOOTNOTE_LINE_RE.is_match(lines[i].trim_end()))
+        .map_or(0, |i| i + 1);
+
+    if start >= end || lines[start].trim_start().starts_with("[^") {
         return;
     }
-    if lines[start].trim_start().starts_with("[^") {
-        return;
-    }
-    for line in lines.iter_mut().take(end).skip(start) {
-        if let Some(cap) = FOOTNOTE_LINE_RE.captures(line.as_str()) {
-            let indent = cap.name("indent").unwrap().as_str();
-            let num = cap.name("num").unwrap().as_str();
-            let rest = cap.name("rest").unwrap().as_str();
-            *line = format!("{indent}[^{num}] {rest}");
-        }
+
+    for line in &mut lines[start..end] {
+        *line = FOOTNOTE_LINE_RE
+            .replace(line, "${indent}[^${num}] ${rest}")
+            .to_string();
     }
 }
 

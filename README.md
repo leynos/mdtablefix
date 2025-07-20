@@ -47,8 +47,8 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--footnotes] [--in-pla
   character (`…`). Longer runs are processed left-to-right, so any leftover
   dots are preserved.
 
-- Use `--footnotes` to convert bare numeric references into GitHub-flavoured
-  footnote links.
+- Use `--footnotes` to convert bare numeric references and the final numbered
+  list into GitHub-flavoured footnote links.
 
 - Use `--in-place` to modify files in-place.
 
