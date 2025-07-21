@@ -11,6 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::Context;
 use clap::Parser;
 use mdtablefix::{Options, format_breaks, process_stream_opts, renumber_lists};
 use rayon::prelude::*;
@@ -75,12 +76,14 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
 }
 
 fn handle_file(path: &Path, in_place: bool, opts: FormatOpts) -> anyhow::Result<Option<String>> {
-    let content = fs::read_to_string(path)?;
+    let content =
+        fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
     let fixed = process_lines(&lines, opts).join("\n");
 
     if in_place {
-        fs::write(path, format!("{fixed}\n"))?;
+        fs::write(path, format!("{fixed}\n"))
+            .with_context(|| format!("writing {}", path.display()))?;
         Ok(None)
     } else {
         Ok(Some(fixed))
@@ -123,21 +126,46 @@ fn main() -> anyhow::Result<()> {
     }
 
     if cli.in_place {
-        cli.files
+        let results: Vec<anyhow::Result<()>> = cli
+            .files
             .par_iter()
-            .try_for_each(|p| handle_file(p, true, cli.opts).map(|_| ()))?;
+            .map(|p| handle_file(p, true, cli.opts).map(|_| ()))
+            .collect();
+
+        let mut first_err: Option<anyhow::Error> = None;
+        for res in results {
+            if let Err(e) = res {
+                eprintln!("{e}");
+                if first_err.is_none() {
+                    first_err = Some(e);
+                }
+            }
+        }
+        if let Some(err) = first_err {
+            return Err(err);
+        }
     } else {
-        let outputs: Vec<String> = cli
+        let results: Vec<anyhow::Result<Option<String>>> = cli
             .files
             .par_iter()
             .map(|p| handle_file(p, false, cli.opts))
-            .collect::<anyhow::Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
             .collect();
 
-        for out in outputs {
-            println!("{out}");
+        let mut first_err: Option<anyhow::Error> = None;
+        for res in results {
+            match res {
+                Ok(Some(out)) => println!("{out}"),
+                Ok(None) => {}
+                Err(e) => {
+                    eprintln!("{e}");
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+            }
+        }
+        if let Some(err) = first_err {
+            return Err(err);
         }
     }
 
