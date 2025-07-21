@@ -78,6 +78,7 @@ fn fixes_multiple_orphaned_specifiers() {
         "```",
         "fn main() {}",
         "```",
+        "",
         "Python",
         "```",
         "print('hi')",
@@ -90,6 +91,7 @@ fn fixes_multiple_orphaned_specifiers() {
             "```rust",
             "fn main() {}",
             "```",
+            "",
             "```python",
             "print('hi')",
             "```"
@@ -118,6 +120,16 @@ fn does_not_overwrite_existing_fence() {
     let input = lines_vec!["ruby", "```rust", "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec!["ruby", "```rust", "fn main() {}", "```"]);
+}
+
+#[test]
+fn does_not_attach_specifier_without_preceding_blank_line() {
+    let input = lines_vec!["intro", "Rust", "```", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(
+        out,
+        lines_vec!["intro", "Rust", "```", "fn main() {}", "```"]
+    );
 }
 
 #[test]

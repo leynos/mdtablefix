@@ -83,14 +83,17 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
             let lang_present = cap.get(3).map_or("", |m| m.as_str());
 
             if lang_present.is_empty() {
-                while matches!(out.last(), Some(l) if l.trim().is_empty()) {
-                    out.pop();
+                let mut idx = out.len();
+                while idx > 0 && out[idx - 1].trim().is_empty() {
+                    idx -= 1;
                 }
-                if let Some(prev) = out.last() {
-                    let lang_owned = prev.trim().to_string();
-                    if ORPHAN_LANG_RE.is_match(&lang_owned) {
-                        out.pop();
-                        out.push(format!("{indent}```{}", lang_owned.to_lowercase()));
+                if idx > 0 {
+                    let candidate = out[idx - 1].trim().to_string();
+                    if ORPHAN_LANG_RE.is_match(&candidate)
+                        && (idx == 1 || out[idx - 2].trim().is_empty())
+                    {
+                        out.truncate(idx - 1);
+                        out.push(format!("{indent}```{}", candidate.to_lowercase()));
                         in_fence = true;
                         continue;
                     }
