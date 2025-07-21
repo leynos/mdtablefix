@@ -11,8 +11,7 @@ use regex::Regex;
 static FENCE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$").unwrap());
 
-static ORPHAN_LANG_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[A-Za-z0-9_+.-]+(?:,[A-Za-z0-9_+.-]+)*$").unwrap());
+static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\w+(?:,\w+)*$").unwrap());
 
 /// Compress backtick fences to exactly three backticks.
 ///
@@ -71,24 +70,34 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
     for line in lines {
         let trimmed = line.trim();
 
-        if trimmed.starts_with("```") {
+        if let Some(cap) = FENCE_RE.captures(trimmed) {
             if in_fence {
                 in_fence = false;
-            } else {
+                out.push(line.clone());
+                continue;
+            }
+
+            let indent = cap.get(1).map_or("", |m| m.as_str());
+            let lang_present = cap.get(3).map_or("", |m| m.as_str());
+
+            if lang_present.is_empty() {
                 while matches!(out.last(), Some(l) if l.trim().is_empty()) {
                     out.pop();
                 }
                 if let Some(prev) = out.last() {
-                    let lang = prev.trim().to_string();
-                    if ORPHAN_LANG_RE.is_match(&lang) {
+                    let lang_owned = prev.trim().to_string();
+                    if ORPHAN_LANG_RE.is_match(&lang_owned) {
                         out.pop();
-                        out.push(format!("```{lang}"));
+                        out.push(format!("{indent}```{}", lang_owned.to_lowercase()));
                         in_fence = true;
                         continue;
                     }
                 }
-                in_fence = true;
             }
+
+            in_fence = true;
+            out.push(line.clone());
+            continue;
         }
 
         out.push(line.clone());

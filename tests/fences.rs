@@ -47,28 +47,28 @@ fn leaves_other_lines_untouched() {
 fn fixes_orphaned_specifier() {
     let input = lines_vec!["Rust", "```", "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(out, lines_vec!["```Rust", "fn main() {}", "```"]);
+    assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }
 
 #[test]
 fn attaches_orphan_specifier_unit() {
     let input = lines_vec!["Rust", "```", "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&input);
-    assert_eq!(out, lines_vec!["```Rust", "fn main() {}", "```"]);
+    assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }
 
 #[test]
 fn attaches_orphan_specifier_with_blank_line_unit() {
     let input = lines_vec!["Rust", "", "```", "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&input);
-    assert_eq!(out, lines_vec!["```Rust", "fn main() {}", "```"]);
+    assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }
 
 #[test]
 fn fixes_orphaned_specifier_with_blank_line() {
     let input = lines_vec!["Rust", "", "```", "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(out, lines_vec!["```Rust", "fn main() {}", "```"]);
+    assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }
 
 #[test]
@@ -87,10 +87,10 @@ fn fixes_multiple_orphaned_specifiers() {
     assert_eq!(
         out,
         lines_vec![
-            "```Rust",
+            "```rust",
             "fn main() {}",
             "```",
-            "```Python",
+            "```python",
             "print('hi')",
             "```"
         ]
@@ -111,4 +111,11 @@ fn does_not_attach_non_orphan_lines_before_fences() {
     ];
     let out = attach_orphan_specifiers(&input);
     assert_eq!(out, input);
+}
+
+#[test]
+fn does_not_overwrite_existing_fence() {
+    let input = lines_vec!["ruby", "```rust", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["ruby", "```rust", "fn main() {}", "```"]);
 }
