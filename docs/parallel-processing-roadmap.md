@@ -18,6 +18,6 @@ serial output order.
 - [ ] **Extend tests for parallel execution**
   - Use `rstest` to verify that processing many files yields correct results.
   - Add tests exercising error handling when some paths are invalid.
-- [ ] **Update documentation**
+- [x] **Update documentation**
   - Document the new flags or behaviour in `README.md` and module docs.
   - Note any concurrency caveats or performance implications.
