@@ -1,3 +1,9 @@
+//! Command-line interface for the mdtablefix tool.
+//!
+//! This module provides the main entry point and CLI parsing for fixing
+//! markdown table formatting. It supports concurrent processing of multiple
+//! files using Rayon for improved performance.
+
 use std::{
     borrow::Cow,
     fs,
