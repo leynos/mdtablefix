@@ -1,7 +1,13 @@
 # Markdown stream processor
 
-The `process_stream_inner` function orchestrates the line-by-line rewriting of
-Markdown. It combines several helpers documented in `docs/`.
+`process_stream_inner` orchestrates line-by-line rewriting. The full
+implementation lives in [src/process.rs](../src/process.rs). Its signature is:
+
+```rust
+pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String>
+```
+
+The function combines several helpers documented in `docs/`:
 
 - `fences::compress_fences` and `attach_orphan_specifiers` normalise code block
   delimiters.
@@ -41,6 +47,30 @@ stateDiagram-v2
     InHtmlTable --> InHtmlTable: Line inside table tag
 
     InCodeFence --> Streaming: Line is a fence delimiter
+```
+
+Before:
+
+```markdown
+|A|B|
+|---|---|
+|1|22|
+<table><tr><td>3</td><td>4</td></tr></table>
+```
+
+After:
+
+```markdown
+| A | B  |
+| --- | --- |
+| 1 | 22 |
+| 3 | 4  |
+```
+
+Code fences are passed through verbatim:
+
+```rust
+| not | a | table |
 ```
 
 After scanning all lines the processor performs optional post-processing steps
