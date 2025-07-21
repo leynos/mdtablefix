@@ -38,7 +38,8 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes
   numbering. The renumbering logic correctly handles nested lists by tracking
   indentation (tabs are interpreted as four spaces) and restarts numbering
   after a list is interrupted by other content, such as a paragraph at a lower
-  indentation level, a thematic break, or a heading.
+  indentation level, a thematic break, or a heading. Blank lines between items
+  are ignored, so numbering continues uninterrupted.
 
 - Use `--breaks` to standardize thematic breaks to a line of 70 underscores
   (configurable via the `THEMATIC_BREAK_LEN` constant).

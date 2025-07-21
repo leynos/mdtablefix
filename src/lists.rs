@@ -95,6 +95,12 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             continue;
         }
 
+        if line.trim().is_empty() {
+            out.push(line.clone());
+            prev_blank = true;
+            continue;
+        }
+
         if let Some((indent_str, sep, rest)) = parse_numbered(line) {
             let indent = indent_len(indent_str);
             drop_deeper(indent, &mut counters);

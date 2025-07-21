@@ -1,0 +1,11 @@
+  1. pyo3::marker - Rust, accessed on July 14, 2025,
+     <https://pyo3.rs/main/doc/pyo3/marker/>
+
+  1. Supporting Free-Threaded Python - PyO3 user guide, accessed on July 14,
+     2025, <https://pyo3.rs/main/free-threading>
+
+  1. pyo3 - Rust - [Docs.rs](http://Docs.rs), accessed on July 14, 2025,
+     <https://docs.rs/pyo3/0.25.1/pyo3/>
+
+  1. pyo3 - Rust - [Docs.rs](http://Docs.rs), accessed on July 14, 2025,
+     <https://docs.rs/pyo3/latest/pyo3/>
