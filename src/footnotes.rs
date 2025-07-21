@@ -150,6 +150,13 @@ mod tests {
     }
 
     #[test]
+    fn converts_block_after_existing_line() {
+        let input = vec!["[^1] Old".to_string(), " 2. New".to_string()];
+        let expected = vec!["[^1] Old".to_string(), " [^2] New".to_string()];
+        assert_eq!(convert_footnotes(&input), expected);
+    }
+
+    #[test]
     fn multiple_inline_notes_in_one_line() {
         let input = vec!["First.1 Then?2".to_string()];
         let expected = vec!["First.[^1] Then?[^2]".to_string()];
