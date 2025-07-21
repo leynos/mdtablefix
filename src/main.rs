@@ -83,7 +83,7 @@ fn handle_file(path: &Path, in_place: bool, opts: FormatOpts) -> anyhow::Result<
         fs::write(path, format!("{fixed}\n"))?;
         Ok(None)
     } else {
-        Ok(Some(fixed))
+        Ok(Some(format!("{fixed}\n")))
     }
 }
 
@@ -137,7 +137,7 @@ fn main() -> anyhow::Result<()> {
             .collect();
 
         for out in outputs {
-            println!("{out}");
+            print!("{out}");
         }
     }
 
