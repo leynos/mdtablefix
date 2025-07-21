@@ -11,8 +11,9 @@ use regex::Regex;
 static FENCE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$").unwrap());
 
-static ORPHAN_LANG_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[A-Za-z0-9_+.-]+(?:,[A-Za-z0-9_+.-]+)*$").unwrap());
+static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-](?:,[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-])*$").unwrap()
+});
 
 /// Compress backtick fences to exactly three backticks.
 ///
@@ -62,7 +63,7 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 ///     "```".to_string(),
 /// ];
 /// let fixed = attach_orphan_specifiers(&compress_fences(&lines));
-/// assert_eq!(fixed[0], "```Rust");
+/// assert_eq!(fixed[0], "```rust");
 /// ```
 #[must_use]
 pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
@@ -71,24 +72,37 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
     for line in lines {
         let trimmed = line.trim();
 
-        if trimmed.starts_with("```") {
+        if let Some(cap) = FENCE_RE.captures(trimmed) {
             if in_fence {
                 in_fence = false;
-            } else {
-                while matches!(out.last(), Some(l) if l.trim().is_empty()) {
-                    out.pop();
+                out.push(line.clone());
+                continue;
+            }
+
+            let indent = cap.get(1).map_or("", |m| m.as_str());
+            let lang_present = cap.get(3).map_or("", |m| m.as_str());
+
+            if lang_present.is_empty() {
+                let mut idx = out.len();
+                while idx > 0 && out[idx - 1].trim().is_empty() {
+                    idx -= 1;
                 }
-                if let Some(prev) = out.last() {
-                    let lang = prev.trim().to_string();
-                    if ORPHAN_LANG_RE.is_match(&lang) {
-                        out.pop();
-                        out.push(format!("```{lang}"));
+                if idx > 0 {
+                    let candidate = out[idx - 1].trim().to_string();
+                    if ORPHAN_LANG_RE.is_match(&candidate)
+                        && (idx == 1 || out[idx - 2].trim().is_empty())
+                    {
+                        out.truncate(idx - 1);
+                        out.push(format!("{indent}```{}", candidate.to_lowercase()));
                         in_fence = true;
                         continue;
                     }
                 }
-                in_fence = true;
             }
+
+            in_fence = true;
+            out.push(line.clone());
+            continue;
         }
 
         out.push(line.clone());

@@ -193,7 +193,7 @@ fn test_cli_fences_orphan_specifier() {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
-        "```Rust\nfn main() {}\n```\n"
+        "```rust\nfn main() {}\n```\n"
     );
 }
 
@@ -219,7 +219,53 @@ fn test_cli_fences_with_renumber() {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
-        "```Rust\nfn main() {}\n```\n\n1. first\n2. second\n",
+        "```rust\nfn main() {}\n```\n\n1. first\n2. second\n",
+    );
+}
+
+#[test]
+fn test_cli_fences_preserve_existing_language() {
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--fences")
+        .write_stdin("ruby\n```rust\nfn main() {}\n```\n")
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "ruby\n```rust\nfn main() {}\n```\n"
+    );
+}
+
+#[test]
+fn test_cli_fences_orphan_specifier_symbols() {
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--fences")
+        .write_stdin("C++\n```\nfn main() {}\n```\n")
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```c++\nfn main() {}\n```\n"
+    );
+}
+
+#[test]
+fn test_cli_no_attach_without_preceding_blank_line() {
+    let input = concat!("text\n", "Rust\n", "```\n", "fn main() {}\n", "```\n");
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--fences")
+        .write_stdin(input)
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "text\nRust\n```\nfn main() {}\n```\n",
     );
 }
 

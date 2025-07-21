@@ -25,7 +25,6 @@ cargo install --path .
 
 ## Command-line usage
 
-
 ```bash
 mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes] [--in-place] [FILE...]
 ```
