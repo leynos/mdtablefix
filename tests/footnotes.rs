@@ -1,9 +1,25 @@
 //! Integration tests for footnote conversion.
+//!
+//! These tests feed entire documents through `convert_footnotes` to validate
+//! the complete conversion pipeline. Sample inputs are loaded from data files
+//! using the helper macros `include_lines!` and `lines_vec!` exported by the
+//! `tests::prelude` module. The goal is to ensure inline references are
+//! rewritten and trailing numeric lists become footnote definitions without
+//! affecting other content.
+//!
+//! The presence of the macros here also confirms they are re-exported
+//! correctly for use across integration tests.
 
 use mdtablefix::convert_footnotes;
 
 #[macro_use]
 mod prelude;
+
+#[test]
+fn macros_available() {
+    let _: Vec<String> = lines_vec!("a", "b");
+    let _: Vec<String> = include_lines!("data/footnotes_input.txt");
+}
 
 #[test]
 fn test_convert_bare_footnotes() {

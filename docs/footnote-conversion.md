@@ -2,7 +2,9 @@
 
 `mdtablefix` can optionally convert bare numeric references into
 GitHub-flavoured Markdown footnotes. The `convert_footnotes` function performs
-this operation and is exposed via the higher-level `process_stream_opts` helper.
+this operation and is exposed via the higher-level `process_stream_opts`
+helper. Set `Options { footnotes: true, ..Default::default() }` when calling
+`process_stream_opts` to enable the conversion logic.
 
 Inline references that appear after punctuation are rewritten as footnote links.
 

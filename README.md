@@ -25,7 +25,6 @@ cargo install --path .
 
 ## Command-line usage
 
-
 ```bash
 mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes] [--in-place] [FILE...]
 ```
@@ -111,8 +110,8 @@ A brief intermission for pizza.
 
 ## Library usage
 
-The crate exposes helper functions for embedding the table-reflow logic in
-Rust projects:
+The crate exposes helper functions for embedding the table-reflow logic in Rust
+projects:
 
 ```rust
 use mdtablefix::{process_stream_opts, rewrite, Options};
@@ -124,6 +123,7 @@ fn main() -> std::io::Result<()> {
         wrap: true,
         ellipsis: true,
         fences: true,
+        footnotes: true,
         ..Default::default()
     };
     let fixed = process_stream_opts(&lines, opts);
@@ -135,7 +135,8 @@ fn main() -> std::io::Result<()> {
 
 - `process_stream_opts(lines: &[String], opts: Options) -> Vec<String>`
   rewrites tables in memory. The options enable paragraph wrapping, ellipsis
-  substitution, fence normalization and footnote conversion.
+  substitution, fence normalization and footnote conversion when `footnotes` is
+  set to `true`.
 
 - `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on
   disk in-place.
