@@ -70,7 +70,7 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::with_capacity(lines.len());
     let mut in_fence = false;
     for line in lines {
-        let trimmed = line.trim();
+        let trimmed = line.trim_end();
 
         if let Some(cap) = FENCE_RE.captures(trimmed) {
             if in_fence {
