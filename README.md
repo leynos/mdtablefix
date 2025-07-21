@@ -58,6 +58,13 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes
 - If no files are specified, input is read from stdin and output is written to
   stdout.
 
+## Concurrency
+
+When multiple file paths are supplied the tool processes them in parallel using
+the [`rayon`](https://docs.rs/rayon) crate. Results are buffered so they can be
+printed in the original order. This coordination uses extra memory and can
+outweigh the speed gains when each file is small.
+
 ### Example: Table Reflowing
 
 Before:
