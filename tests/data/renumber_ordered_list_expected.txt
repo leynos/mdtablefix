@@ -1,0 +1,5 @@
+1. Implement the `FemtoFormatter` trait and `DefaultFormatter` in Rust.
+2. Port `StreamHandler` and `FileHandler` following the producer–consumer model.
+3. Update the roadmap once these components have stable tests.
+4. Expand with rotating and network handlers as described in the roadmap's later
+   phases.

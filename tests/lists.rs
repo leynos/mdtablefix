@@ -127,6 +127,10 @@ fn test_cli_renumber_option() {
     case::blank_lines(
         include_lines!("data/renumber_blank_lines_input.txt"),
         include_lines!("data/renumber_blank_lines_expected.txt")
+    ),
+    case::ordered_list(
+        include_lines!("data/renumber_ordered_list_input.txt"),
+        include_lines!("data/renumber_ordered_list_expected.txt")
     )
 )]
 fn test_renumber_cases(input: Vec<String>, expected: Vec<String>) {
