@@ -166,3 +166,17 @@ fn attaches_orphan_specifier_preserves_indent() {
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec!["  ```rust", "  fn main() {}", "  ```"]);
 }
+
+#[test]
+fn attaches_orphan_specifier_preserves_tab_indent() {
+    let input = lines_vec!["\tRust", "", "\t```", "\tfn main() {}", "\t```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["\t```rust", "\tfn main() {}", "\t```"]);
+}
+
+#[test]
+fn attaches_orphan_specifier_mixed_indent() {
+    let input = lines_vec![" \tRust", "", " \t```", " \tfn main() {}", " \t```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec![" \t```rust", " \tfn main() {}", " \t```"]);
+}
