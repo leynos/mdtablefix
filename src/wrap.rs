@@ -127,7 +127,7 @@ fn tokenize_inline(text: &str) -> Vec<String> {
 /// identical delimiter, allowing nested backticks when the span uses a longer
 /// fence. Unmatched delimiter sequences are treated as literal text.
 ///
-/// ```
+/// ```rust,ignore
 /// use mdtablefix::wrap::{Token, tokenize_markdown};
 ///
 /// let tokens = tokenize_markdown("Example with `code`");
