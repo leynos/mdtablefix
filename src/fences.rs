@@ -11,7 +11,9 @@ use regex::Regex;
 static FENCE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$").unwrap());
 
-static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\w+(?:,\w+)*$").unwrap());
+static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-](?:,[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-])*$").unwrap()
+});
 
 /// Compress backtick fences to exactly three backticks.
 ///
@@ -61,7 +63,7 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 ///     "```".to_string(),
 /// ];
 /// let fixed = attach_orphan_specifiers(&compress_fences(&lines));
-/// assert_eq!(fixed[0], "```Rust");
+/// assert_eq!(fixed[0], "```rust");
 /// ```
 #[must_use]
 pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {

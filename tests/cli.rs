@@ -238,6 +238,21 @@ fn test_cli_fences_preserve_existing_language() {
     );
 }
 
+#[test]
+fn test_cli_fences_orphan_specifier_symbols() {
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--fences")
+        .write_stdin("C++\n```\nfn main() {}\n```\n")
+        .output()
+        .expect("Failed to execute mdtablefix command");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "```c++\nfn main() {}\n```\n"
+    );
+}
+
 /// Tests the CLI `--footnotes` option to convert bare footnote links.
 #[test]
 fn test_cli_footnotes_option() {

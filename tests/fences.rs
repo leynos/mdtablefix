@@ -119,3 +119,31 @@ fn does_not_overwrite_existing_fence() {
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec!["ruby", "```rust", "fn main() {}", "```"]);
 }
+
+#[test]
+fn attaches_orphan_specifier_with_symbols() {
+    let input = lines_vec!["C++", "```", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["```c++", "fn main() {}", "```"]);
+}
+
+#[test]
+fn attaches_orphan_specifier_with_hyphen_and_dot() {
+    let input = lines_vec!["objective-c", "```", "int main() {}", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["```objective-c", "int main() {}", "```"]);
+}
+
+#[test]
+fn does_not_attach_specifier_with_trailing_period() {
+    let input = lines_vec!["rust.", "```", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&input);
+    assert_eq!(out, input);
+}
+
+#[test]
+fn does_not_attach_specifier_with_trailing_question_mark() {
+    let input = lines_vec!["rust?", "```", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&input);
+    assert_eq!(out, input);
+}
