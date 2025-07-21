@@ -9,6 +9,13 @@ mod prelude;
 use prelude::*;
 
 #[rstest]
+fn test_cli_parallel_empty_file_list() {
+    let output = run_cli_with_args(&[]);
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "\n");
+}
+
+#[rstest]
 fn test_cli_parallel_multiple_files() {
     let dir = tempdir().expect("failed to create temporary directory");
     let mut files = Vec::new();
@@ -80,11 +87,14 @@ fn test_cli_parallel_missing_file_in_place(broken_table: Vec<String>) {
     drop(f);
     let missing = dir.path().join("missing.md");
 
-    Command::cargo_bin("mdtablefix")
+    let output = Command::cargo_bin("mdtablefix")
         .expect("failed to create command")
         .arg("--in-place")
         .arg(&good)
         .arg(&missing)
-        .assert()
-        .failure();
+        .output()
+        .expect("failed to run command");
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("missing.md"));
 }

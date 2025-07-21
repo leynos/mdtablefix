@@ -90,6 +90,29 @@ fn handle_file(path: &Path, in_place: bool, opts: FormatOpts) -> anyhow::Result<
     }
 }
 
+fn report_results<T, F>(results: Vec<anyhow::Result<T>>, mut on_ok: F) -> anyhow::Result<()>
+where
+    F: FnMut(T),
+{
+    let mut first_err: Option<anyhow::Error> = None;
+    for res in results {
+        match res {
+            Ok(val) => on_ok(val),
+            Err(e) => {
+                eprintln!("{e}");
+                if first_err.is_none() {
+                    first_err = Some(e);
+                }
+            }
+        }
+    }
+    if let Some(err) = first_err {
+        Err(err)
+    } else {
+        Ok(())
+    }
+}
+
 /// Entry point for the command-line tool that reflows broken markdown tables.
 ///
 /// Parses command-line arguments to determine whether to process files in place, print fixed output
@@ -131,42 +154,18 @@ fn main() -> anyhow::Result<()> {
             .par_iter()
             .map(|p| handle_file(p, true, cli.opts).map(|_| ()))
             .collect();
-
-        let mut first_err: Option<anyhow::Error> = None;
-        for res in results {
-            if let Err(e) = res {
-                eprintln!("{e}");
-                if first_err.is_none() {
-                    first_err = Some(e);
-                }
-            }
-        }
-        if let Some(err) = first_err {
-            return Err(err);
-        }
+        report_results(results, |()| {})?;
     } else {
         let results: Vec<anyhow::Result<Option<String>>> = cli
             .files
             .par_iter()
             .map(|p| handle_file(p, false, cli.opts))
             .collect();
-
-        let mut first_err: Option<anyhow::Error> = None;
-        for res in results {
-            match res {
-                Ok(Some(out)) => println!("{out}"),
-                Ok(None) => {}
-                Err(e) => {
-                    eprintln!("{e}");
-                    if first_err.is_none() {
-                        first_err = Some(e);
-                    }
-                }
+        report_results(results, |maybe_out| {
+            if let Some(out) = maybe_out {
+                println!("{out}");
             }
-        }
-        if let Some(err) = first_err {
-            return Err(err);
-        }
+        })?;
     }
 
     Ok(())

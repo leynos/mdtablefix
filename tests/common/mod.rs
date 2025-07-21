@@ -2,6 +2,7 @@
 #![allow(unfulfilled_lint_expectations)]
 
 use rstest::fixture;
+use assert_cmd::Command;
 
 /// Build a `Vec<String>` from a list of string slices.
 ///
@@ -98,4 +99,16 @@ pub fn broken_table() -> Vec<String> {
         "| A | B |    |".to_string(),
         "| 1 | 2 |  | 3 | 4 |".to_string(),
     ]
+}
+
+/// Run the `mdtablefix` binary with the provided arguments.
+///
+/// Returns the captured `Output` from the command execution.
+#[expect(dead_code, reason = "used selectively across integration tests")]
+pub fn run_cli_with_args(args: &[&str]) -> std::process::Output {
+    Command::cargo_bin("mdtablefix")
+        .expect("failed to create command")
+        .args(args)
+        .output()
+        .expect("failed to run command")
 }
