@@ -11,7 +11,7 @@ serial output order.
   - Pin an explicit version and document the decision in `docs/`.
 - [x] **Refactor `main.rs` to launch parallel tasks**
   - Spawn a worker for each file path using the concurrency crate.
-  - Maintain a list of handles so outputs can be gathered in order.
+  - Maintain a list of handles, so outputs can be gathered in order.
 - [x] **Collect results sequentially**
   - Await or join handles in the same order the files were supplied.
   - Print each processed file or error message before moving to the next.
