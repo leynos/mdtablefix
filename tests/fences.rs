@@ -159,3 +159,24 @@ fn does_not_attach_specifier_with_trailing_question_mark() {
     let out = attach_orphan_specifiers(&input);
     assert_eq!(out, input);
 }
+
+#[test]
+fn attaches_orphan_specifier_preserves_indent() {
+    let input = lines_vec!["  Rust", "", "  ```", "  fn main() {}", "  ```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["  ```rust", "  fn main() {}", "  ```"]);
+}
+
+#[test]
+fn attaches_orphan_specifier_preserves_tab_indent() {
+    let input = lines_vec!["\tRust", "", "\t```", "\tfn main() {}", "\t```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["\t```rust", "\tfn main() {}", "\t```"]);
+}
+
+#[test]
+fn attaches_orphan_specifier_mixed_indent() {
+    let input = lines_vec![" \tRust", "", " \t```", " \tfn main() {}", " \t```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec![" \t```rust", " \tfn main() {}", " \t```"]);
+}
