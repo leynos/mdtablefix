@@ -25,7 +25,6 @@ cargo install --path .
 
 ## Command-line usage
 
-
 ```bash
 mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes] [--in-place] [FILE...]
 ```
@@ -111,8 +110,8 @@ A brief intermission for pizza.
 
 ## Library usage
 
-The crate exposes helper functions for embedding the table-reflow logic in
-Rust projects:
+The crate exposes helper functions for embedding the table-reflow logic in Rust
+projects:
 
 ```rust
 use mdtablefix::{process_stream_opts, rewrite, Options};
@@ -159,8 +158,9 @@ For an overview of how the crate's internal modules relate to each other, see
 
 ## Testing
 
-The test suite is structured using the `rstest` crate. See [Rust testing with
-rstest fixtures](docs/rust-testing-with-rstest-fixtures.md) for details.
+The test suite is structured using the `rstest` crate. See
+[Rust testing with rstest fixtures](docs/rust-testing-with-rstest-fixtures.md)
+for details.
 
 ## License
 
