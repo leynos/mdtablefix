@@ -118,7 +118,24 @@ fn tokenize_inline(text: &str) -> Vec<String> {
     tokens
 }
 
-/// Tokenise Markdown into fences, inline code and plain text.
+/// Split the input string into [`Token`]s by analysing whitespace and
+/// backtick delimiters.
+///
+/// The tokenizer groups consecutive whitespace into a single
+/// [`Token::Text`] and recognises backtick sequences as inline code spans.
+/// When a run of backticks is encountered the parser searches forward for an
+/// identical delimiter, allowing nested backticks when the span uses a longer
+/// fence. Unmatched delimiter sequences are treated as literal text.
+///
+/// ```
+/// use mdtablefix::wrap::{Token, tokenize_markdown};
+///
+/// let tokens = tokenize_markdown("Example with `code`");
+/// assert_eq!(
+///     tokens,
+///     vec![Token::Text("Example with "), Token::Code("code")]
+/// );
+/// ```
 pub(crate) fn tokenize_markdown(input: &str) -> Vec<Token<'_>> {
     let mut out = Vec::new();
     let mut in_fence = false;
