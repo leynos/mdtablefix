@@ -22,9 +22,9 @@ The function combines several helpers documented in `docs/`:
 
 - `fences::compress_fences` and `attach_orphan_specifiers` normalize code block
   delimiters.
-- `html::convert_html_tables` transforms basic HTML tables into Markdown so
-  they can be reflowed like regular tables. See
-  [HTML table support](#html-table-support-in-mdtablefix).
+- `html::convert_html_tables` transforms basic HTML tables into Markdown so \
+    they can be reflowed like regular tables. See \
+    [HTML table support](#html-table-support-in-mdtablefix).
 - `wrap::wrap_text` applies optional line wrapping. It relies on the
   `unicode-width` crate for accurate character widths.
 
@@ -85,7 +85,7 @@ Code fences are passed through verbatim:
 ```
 
 After scanning all lines, the processor performs optional post-processing steps
-such as ellipsis replacement and footnote conversion. See
+such as ellipsis replacement and footnote conversion. See \
 [footnote conversion](#footnote-conversion) for details. The function then
 returns the updated stream for writing to disk or further manipulation.
 
@@ -127,7 +127,7 @@ Look at `code 1` for details.
 Refer to equation (1) for context.
 ```
 
-When the final lines of a document form a numbered list they are replaced with
+When the final lines of a document form a numbered list, they are replaced with
 footnote definitions.
 
 Before:
@@ -159,9 +159,9 @@ logic runs. That preprocessing is handled by the `convert_html_tables` function.
 
 Only straightforward tables with `<tr>`, `<th>` and `<td>` tags are detected.
 Attributes and tag casing are ignored, and complex nested or styled tables are
-not supported. After conversion each HTML table is represented as a Markdown
-table so the usual reflow algorithm can align its columns consistently with the
-rest of the document.
+not supported. After conversion, each HTML table is represented as a Markdown
+table, so the usual reflow algorithm can align its columns consistently with
+the rest of the document.
 
 ```html
 <table>
@@ -271,9 +271,9 @@ The dependency is specified as `^1.0` in `Cargo.toml` to track stable API
 changes within the same major release.
 
 Parallelism is enabled automatically whenever more than one file path is
-provided on the command line. Each worker gathers its output before printing so
-results appear in the original order. This buffering increases memory usage and
-may reduce performance if many tiny files are processed.
+provided on the command line. Each worker gathers its output before printing,
+so results appear in the original order. This buffering increases memory usage
+and may reduce performance if many tiny files are processed.
 
 ```mermaid
 sequenceDiagram

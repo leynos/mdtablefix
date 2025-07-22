@@ -160,12 +160,12 @@ Tag case and attributes are ignored. After conversion, they are reformatted
 alongside regular Markdown tables.
 
 See
-[HTML table support for more details](docs/architecture.md#html-table-support-in-mdtablefix)
- .
+[HTML&nbsp;table&nbsp;support&nbsp;for&nbsp;more&nbsp;details](docs/architecture.md#html-table-support-in-mdtablefix)
+.
 
 ## Module structure
 
-For an overview of how the crate's internal modules relate to each other, see
+For an overview of how the crate's internal modules relate to each other, see \
 [Module relationships](docs/architecture.md#module-relationships).
 
 ## Testing
