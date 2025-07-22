@@ -9,31 +9,22 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_TERM_COLOR: always
+      BUILD_PROFILE: debug
       CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
       CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      - uses: leynos/shared-actions/.github/actions/setup-rust@688ce00239f0f57d5742f3c7884bedc328b2b6f4
       - name: Format
         run: rustup component add rustfmt --toolchain nightly-2025-06-10 && cargo +nightly-2025-06-10 fmt --all -- --check
       - name: Lint
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
-      - name: Run coverage
-        run: cargo tarpaulin --out lcov
+      - uses: leynos/shared-actions/.github/actions/generate-coverage@688ce00239f0f57d5742f3c7884bedc328b2b6f4
+        with:
+          output-path: lcov.info
+          format: lcov
       - name: Install CodeScene coverage tool
         if: env.CS_ACCESS_TOKEN
         run: |
