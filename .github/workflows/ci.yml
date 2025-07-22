@@ -16,15 +16,20 @@ jobs:
       - uses: actions/checkout@v4
       - uses: leynos/shared-actions/.github/actions/setup-rust@688ce00239f0f57d5742f3c7884bedc328b2b6f4
       - name: Format
-        run: rustup component add rustfmt --toolchain nightly-2025-06-10 && cargo +nightly-2025-06-10 fmt --all -- --check
+        run: make check-fmt
       - name: Lint
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: make lint
       - name: Test
-        run: cargo test
+        run: make test
       - uses: leynos/shared-actions/.github/actions/generate-coverage@688ce00239f0f57d5742f3c7884bedc328b2b6f4
         with:
           output-path: lcov.info
           format: lcov
+      - name: Archive lcov
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov
+          path: lcov.info
       - name: Install CodeScene coverage tool
         if: env.CS_ACCESS_TOKEN
         run: |
