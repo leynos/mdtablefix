@@ -61,10 +61,10 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes
 
 ## Concurrency
 
-When multiple file paths are supplied the tool processes them in parallel using
-the [`rayon`](https://docs.rs/rayon) crate. Results are buffered so they can be
-printed in the original order. This coordination uses extra memory and can
-outweigh the speed gains when each file is small.
+When multiple file paths are supplied, the tool processes them in parallel
+using the [`rayon`](https://docs.rs/rayon) crate. Results are buffered, so they
+can be printed in the original order. This coordination uses extra memory and
+can outweigh the speed gains when each file is small.
 
 ### Example: Table Reflowing
 
