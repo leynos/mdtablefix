@@ -1,5 +1,14 @@
 # Architecture
 
+## Contents
+
+- [Markdown stream processor](#markdown-stream-processor)
+- [Footnote conversion](#footnote-conversion)
+- [HTML table support](#html-table-support-in-mdtablefix)
+- [Module relationships](#module-relationships)
+- [Concurrency with `rayon`](#concurrency-with-rayon)
+- [Unicode width handling](#unicode-width-handling)
+
 ## Markdown stream processor
 
 `process_stream_inner` orchestrates line-by-line rewriting. The full
