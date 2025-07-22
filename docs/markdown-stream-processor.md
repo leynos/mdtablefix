@@ -13,7 +13,7 @@ The function combines several helpers documented in `docs/`:
   delimiters.
 - `html::convert_html_tables` transforms basic HTML tables into Markdown so they
   can be reflowed like regular tables. See
-  [HTML table support](html-table-support.md).
+  [HTML table support](architecture.md#html-table-support-in-mdtablefix).
 - `wrap::wrap_text` applies optional line wrapping. It relies on the
   `unicode-width` crate for accurate character widths.
 
@@ -75,5 +75,6 @@ Code fences are passed through verbatim:
 
 After scanning all lines, the processor performs optional post-processing steps
 such as ellipsis replacement and footnote conversion. See
-[footnote conversion](footnote-conversion.md) for details. The function then
-returns the updated stream for writing to disk or further manipulation.
+[footnote conversion](architecture.md#footnote-conversion) for details. The
+function then returns the updated stream for writing to disk or further
+manipulation.
