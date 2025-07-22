@@ -474,3 +474,19 @@ fn test_wrap_paragraph_with_nested_link() {
         "link with nested parentheses should remain intact",
     );
 }
+
+/// Ensures that punctuation following a wrapped link is not orphaned.
+#[test]
+fn test_wrap_link_trailing_punctuation() {
+    let input = lines_vec![
+        "See [HTML table support for more \
+         details](docs/architecture.md#html-table-support-in-mdtablefix).",
+    ];
+    let expected = lines_vec![
+        "See",
+        "[HTML table support for more \
+         details](docs/architecture.md#html-table-support-in-mdtablefix).",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}

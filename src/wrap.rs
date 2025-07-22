@@ -191,6 +191,8 @@ fn should_break_line(width: usize, current_width: usize, last_split: Option<usiz
     current_width > width && last_split.is_some()
 }
 
+fn is_punctuation(token: &str) -> bool { token.chars().all(|c| c.is_ascii_punctuation()) }
+
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
 
@@ -225,12 +227,15 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             } else {
                 None
             };
-            if current_width > width {
-                lines.push(current.trim_end().to_string());
-                current.clear();
-                current_width = 0;
-                last_split = None;
-            }
+            continue;
+        }
+
+        if last_split.is_none() && !current.is_empty() && is_punctuation(&token) {
+            current.push_str(&token);
+            lines.push(current.trim_end().to_string());
+            current.clear();
+            current_width = 0;
+            last_split = None;
             continue;
         }
 
