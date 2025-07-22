@@ -37,11 +37,8 @@ fn test_cli_parallel_multiple_files() {
         files.push(path);
     }
 
-    let mut cmd = Command::cargo_bin("mdtablefix").expect("failed to create command");
-    for path in &files {
-        cmd.arg(path);
-    }
-    let output = cmd.output().expect("failed to run command");
+    let args: Vec<&str> = files.iter().map(|p| p.to_str().unwrap()).collect();
+    let output = run_cli_with_args(&args);
     assert!(output.status.success());
     assert_eq!(String::from_utf8_lossy(&output.stdout), expected);
 }
@@ -87,13 +84,9 @@ fn test_cli_parallel_missing_file_in_place(broken_table: Vec<String>) {
     drop(f);
     let missing = dir.path().join("missing.md");
 
-    let output = Command::cargo_bin("mdtablefix")
-        .expect("failed to create command")
-        .arg("--in-place")
-        .arg(&good)
-        .arg(&missing)
-        .output()
-        .expect("failed to run command");
+    let good_str = good.to_str().unwrap();
+    let missing_str = missing.to_str().unwrap();
+    let output = run_cli_with_args(&["--in-place", good_str, missing_str]);
 
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("missing.md"));
