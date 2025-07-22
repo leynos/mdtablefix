@@ -1,8 +1,8 @@
 //! Utility helpers shared across integration tests.
 #![allow(unfulfilled_lint_expectations)]
 
-use rstest::fixture;
 use assert_cmd::Command;
+use rstest::fixture;
 
 /// Build a `Vec<String>` from a list of string slices.
 ///
