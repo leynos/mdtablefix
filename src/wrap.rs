@@ -1,7 +1,7 @@
 //! Text wrapping utilities respecting inline code and prefixes.
 //!
-//! Unicode width handling follows `docs/unicode-width.md` lines 1-9 using the
-//! `unicode-width` crate for accurate display calculations.
+//! Unicode width handling follows `docs/architecture.md` lines 290-298 using
+//! the `unicode-width` crate for accurate display calculations.
 
 use regex::Regex;
 
