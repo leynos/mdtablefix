@@ -15,7 +15,7 @@ serial output order.
 - [x] **Collect results sequentially**
   - Await or join handles in the same order the files were supplied.
   - Print each processed file or error message before moving to the next.
-- [ ] **Extend tests for parallel execution**
+- [x] **Extend tests for parallel execution**
   - Use `rstest` to verify that processing many files yields correct results.
   - Add tests exercising error handling when some paths are invalid.
 - [x] **Update documentation**
