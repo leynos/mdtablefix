@@ -1,6 +1,7 @@
 //! Markdown table reflow utilities.
 //!
-//! Implements the algorithm outlined in `docs/html-table-support.md` lines 1-24.
+//! Implements the algorithm outlined in
+//! [`docs/architecture.md`](../../docs/architecture.md).
 //! Provides helpers used by the `reflow` module and `reflow_table` itself.
 
 use regex::Regex;
