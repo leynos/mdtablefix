@@ -250,12 +250,8 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         if !token.chars().all(char::is_whitespace) {
             current.push_str(&token);
             current_width = token_width;
-            if token.chars().all(char::is_whitespace) {
-                last_split = Some(current.len());
-            } else {
-                last_split = None;
-            }
         }
+        last_split = None;
     }
     let trimmed = current.trim_end();
     if !trimmed.is_empty() {
