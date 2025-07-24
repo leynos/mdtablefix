@@ -191,7 +191,9 @@ fn should_break_line(width: usize, current_width: usize, last_split: Option<usiz
     current_width > width && last_split.is_some()
 }
 
-fn is_punctuation(token: &str) -> bool { token.chars().all(|c| c.is_ascii_punctuation()) }
+const TRAILING_PUNCTUATION: &[char] = &['.', ',', ';', ':', '?', '!', '…'];
+
+fn is_punctuation(token: &str) -> bool { token.chars().all(|c| TRAILING_PUNCTUATION.contains(&c)) }
 
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
@@ -230,25 +232,29 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             continue;
         }
 
-        if last_split.is_none() && !current.is_empty() && is_punctuation(&token) {
-            current.push_str(&token);
-            lines.push(current.trim_end().to_string());
-            current.clear();
-            current_width = 0;
-            last_split = None;
-            continue;
-        }
-
         let trimmed = current.trim_end();
         if !trimmed.is_empty() {
+            if last_split.is_none() && is_punctuation(&token) {
+                let mut line = trimmed.to_string();
+                line.push_str(&token);
+                lines.push(line);
+                current.clear();
+                current_width = 0;
+                last_split = None;
+                continue;
+            }
             lines.push(trimmed.to_string());
         }
         current.clear();
         current_width = 0;
-
         if !token.chars().all(char::is_whitespace) {
             current.push_str(&token);
             current_width = token_width;
+            if token.chars().all(char::is_whitespace) {
+                last_split = Some(current.len());
+            } else {
+                last_split = None;
+            }
         }
     }
     let trimmed = current.trim_end();
