@@ -2,10 +2,10 @@
 //!
 //! This module provides the main entry point for the command-line parsing in
 //! the `mdtablefix` crate. It fixes Markdown table formatting and processes
-//! multiple files concurrently using Rayon. Each worker buffers its output so
-//! lines can be printed in the same order the paths were supplied. For many
-//! small files, this coordination cost may outweigh the benefits of
-//! parallelism.
+//! multiple files concurrently using the `rayon` crate. Each worker buffers
+//! its output so lines can be printed in the same order the paths were
+//! supplied. For many small files, this coordination cost may outweigh the
+//! benefits of parallelism.
 
 use std::{
     borrow::Cow,
