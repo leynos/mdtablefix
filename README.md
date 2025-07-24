@@ -61,7 +61,7 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes
 
 ## Concurrency
 
-When you supply multiple file paths, `mdtablefix` processes them in parallel
+When multiple file paths are supplied, `mdtablefix` processes them in parallel
 using the [`rayon`](https://docs.rs/rayon) crate. The CLI buffers each result,
 so it can print them in the original order. This buffering uses extra memory.
 It might outweigh the speed gains for small files.
