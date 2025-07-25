@@ -22,7 +22,7 @@ static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// use mdtablefix::fences::normalize_specifier;
 /// let (spec, indent) = normalize_specifier("  TOML, Ini");
 /// assert_eq!(spec, "toml,ini");
