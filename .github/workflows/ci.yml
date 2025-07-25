@@ -18,7 +18,8 @@ jobs:
         run: make check-fmt
       - name: Lint
         run: make lint
-      - uses: leynos/shared-actions/.github/actions/generate-coverage@688ce00239f0f57d5742f3c7884bedc328b2b6f4
+      - id: generate-coverage
+        uses: leynos/shared-actions/.github/actions/generate-coverage@688ce00239f0f57d5742f3c7884bedc328b2b6f4
         with:
           output-path: lcov.info
           format: lcov
@@ -39,5 +40,5 @@ jobs:
           bash install-cs-coverage-tool.sh -y
           rm install-cs-coverage-tool.sh
       - name: Upload coverage data to CodeScene
-        if: env.CS_ACCESS_TOKEN
+        if: env.CS_ACCESS_TOKEN && steps.generate-coverage.outcome == 'success'
         run: cs-coverage upload --format "lcov" --metric "line-coverage" "lcov.info"
