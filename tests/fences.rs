@@ -180,3 +180,17 @@ fn attaches_orphan_specifier_mixed_indent() {
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec![" \t```rust", " \tfn main() {}", " \t```"]);
 }
+
+#[test]
+fn attaches_orphan_specifier_uses_candidate_indent_when_fence_unindented() {
+    let input = lines_vec!["  Rust", "", "```", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["  ```rust", "fn main() {}", "```"]);
+}
+
+#[test]
+fn attaches_orphan_specifier_allows_spaces() {
+    let input = lines_vec!["TOML, Ini", "```", "a=1", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["```toml,ini", "a=1", "```"]);
+}
