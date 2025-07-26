@@ -15,6 +15,32 @@ static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-](?:,[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-])*$").unwrap()
 });
 
+/// Normalise a potential language specifier.
+///
+/// Returns the cleaned specifier in lowercase and the leading indentation
+/// captured from the original line.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use mdtablefix::fences::normalize_specifier;
+/// let (spec, indent) = normalize_specifier("  TOML, Ini");
+/// assert_eq!(spec, "toml,ini");
+/// assert_eq!(indent, "  ");
+/// ```
+fn normalize_specifier(line: &str) -> (String, String) {
+    let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+    let cleaned = line
+        .trim()
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(",")
+        .to_lowercase();
+    (cleaned, indent)
+}
+
 /// Compress backtick fences to exactly three backticks.
 ///
 /// Lines that do not start with backtick fences are returned unchanged.
@@ -50,7 +76,9 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 ///
 /// After compressing fences, an orphaned specifier may remain as a single word
 /// on the line before a fence. This function removes that line and applies the
-/// specifier to the following opening fence.
+/// specifier to the following opening fence. Indentation from the specifier
+/// line is preserved when the fence itself is unindented. Specifiers containing
+/// spaces are accepted and normalised.
 ///
 /// # Examples
 ///
@@ -86,12 +114,17 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
                     idx -= 1;
                 }
                 if idx > 0 {
-                    let candidate = out[idx - 1].trim().to_string();
-                    if ORPHAN_LANG_RE.is_match(&candidate)
+                    let (candidate_clean, candidate_indent) = normalize_specifier(&out[idx - 1]);
+                    if ORPHAN_LANG_RE.is_match(&candidate_clean)
                         && (idx == 1 || out[idx - 2].trim().is_empty())
                     {
+                        let final_indent = if indent.is_empty() {
+                            candidate_indent.as_str()
+                        } else {
+                            indent
+                        };
                         out.truncate(idx - 1);
-                        out.push(format!("{indent}```{}", candidate.to_lowercase()));
+                        out.push(format!("{final_indent}```{candidate_clean}"));
                         in_fence = true;
                         continue;
                     }

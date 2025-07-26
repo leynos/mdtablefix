@@ -21,7 +21,9 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String>
 The function combines several helpers documented in `docs/`:
 
 - `fences::compress_fences` and `attach_orphan_specifiers` normalize code block
-  delimiters.
+  delimiters. The latter keeps indentation from the language line when the
+  fence lacks it. It also tolerates spaces within comma-separated specifiers,
+  e.g. `TOML, Ini` becomes `toml,ini`.
 - `html::convert_html_tables` transforms basic HTML tables into Markdown so \
     they can be reflowed like regular tables. See \
     [HTML table support](#html-table-support-in-mdtablefix).
