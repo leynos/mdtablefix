@@ -160,8 +160,8 @@ Tag case and attributes are ignored. After conversion, they are reformatted
 alongside regular Markdown tables.
 
 See
-[HTML&nbsp;table&nbsp;support&nbsp;for&nbsp;more&nbsp;details](docs/architecture.md#html-table-support-in-mdtablefix)
- .
+[HTML table support for more details](docs/architecture.md#html-table-support-in-mdtablefix)
+.
 
 ## Module structure
 
