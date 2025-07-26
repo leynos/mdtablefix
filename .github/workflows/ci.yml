@@ -29,6 +29,7 @@ jobs:
         with:
           name: lcov
           path: lcov.info
+          retention-days: 14
       - name: Install CodeScene coverage tool
         if: env.CS_ACCESS_TOKEN
         run: |
