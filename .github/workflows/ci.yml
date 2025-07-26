@@ -29,6 +29,7 @@ jobs:
         with:
           name: lcov
           path: lcov.info
++          if-no-files-found: ignore
           retention-days: 14
       - name: Upload coverage data to CodeScene
         env:
