@@ -13,13 +13,13 @@ jobs:
       CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
     steps:
       - uses: actions/checkout@v4
-      - uses: leynos/shared-actions/.github/actions/setup-rust@34bc1691c245e761304e47929a05cb1f264e46f1
+      - uses: leynos/shared-actions/.github/actions/setup-rust@3a62b84a163c3f28e5b233499ec2605034e5bb7c
       - name: Format
         run: make check-fmt
       - name: Lint
         run: make lint
       - id: generate-coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@34bc1691c245e761304e47929a05cb1f264e46f1
+        uses: leynos/shared-actions/.github/actions/generate-coverage@3a62b84a163c3f28e5b233499ec2605034e5bb7c
         with:
           output-path: lcov.info
           format: lcov
@@ -30,16 +30,12 @@ jobs:
           name: lcov
           path: lcov.info
           retention-days: 14
-      - name: Install CodeScene coverage tool
-        if: env.CS_ACCESS_TOKEN
-        run: |
-          set -euo pipefail
-          curl -fsSL -o install-cs-coverage-tool.sh https://downloads.codescene.io/enterprise/cli/install-cs-coverage-tool.sh
-          if [ -n "${CODESCENE_CLI_SHA256:-}" ]; then
-            echo "${CODESCENE_CLI_SHA256}  install-cs-coverage-tool.sh" | sha256sum -c -
-          fi
-          bash install-cs-coverage-tool.sh -y
-          rm install-cs-coverage-tool.sh
       - name: Upload coverage data to CodeScene
-        if: env.CS_ACCESS_TOKEN && steps.generate-coverage.outcome == 'success'
-        run: cs-coverage upload --format "lcov" --metric "line-coverage" "lcov.info"
+        env:
+          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        if: ${{ env.CS_ACCESS_TOKEN != '' }}
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@v1.2.1
+        with:
+          format: lcov
+          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
