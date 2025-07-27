@@ -13,13 +13,13 @@ jobs:
       CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
     steps:
       - uses: actions/checkout@v4
-      - uses: leynos/shared-actions/.github/actions/setup-rust@059dccc7fa1fd94a1fbe9fbf8aab9b98a00f7eeb
+      - uses: leynos/shared-actions/.github/actions/setup-rust@68ffa5e9f12b011ba7c9b252d76f0cebd55dbaf0
       - name: Format
         run: make check-fmt
       - name: Lint
         run: make lint
       - id: generate-coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@059dccc7fa1fd94a1fbe9fbf8aab9b98a00f7eeb
+        uses: leynos/shared-actions/.github/actions/generate-coverage@68ffa5e9f12b011ba7c9b252d76f0cebd55dbaf0
         with:
           output-path: lcov.info
           format: lcov
