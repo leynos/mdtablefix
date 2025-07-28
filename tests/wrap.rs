@@ -475,6 +475,18 @@ fn test_wrap_paragraph_with_nested_link() {
     );
 }
 
+/// Ensures punctuation immediately following a link remains attached when
+/// wrapping lines.
+#[test]
+fn test_wrap_link_with_trailing_punctuation() {
+    let input = lines_vec![
+        "[`rust-multithreaded-logging-framework-for-python-design.md`](./\
+         rust-multithreaded-logging-framework-for-python-design.md).",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
 /// Regression test for wrapping list items that end with a full stop.
 ///
 /// The period following the inline code span should remain on the same line

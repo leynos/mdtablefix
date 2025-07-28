@@ -106,6 +106,10 @@ fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
                 }
                 i += 1;
             }
+            // treat trailing punctuation as part of the link token
+            if i < chars.len() && matches!(chars[i], '.' | ',' | '!' | '?' | ':' | ';') {
+                i += 1;
+            }
             let tok: String = chars[start..i].iter().collect();
             return (tok, i);
         }
