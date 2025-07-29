@@ -225,6 +225,10 @@ classDiagram
         <<module>>
         +convert_footnotes()
     }
+    class textproc {
+        <<module>>
+        +process_tokens()
+    }
     class process {
         <<module>>
         +process_stream()
@@ -249,20 +253,23 @@ classDiagram
     lists ..> wrap : uses is_fence
     breaks ..> wrap : uses is_fence
     ellipsis ..> wrap : uses tokenize_markdown
+    ellipsis ..> textproc : uses process_tokens
     process ..> html : uses convert_html_tables
     process ..> table : uses reflow_table
     process ..> wrap : uses wrap_text, is_fence
     process ..> fences : uses compress_fences, attach_orphan_specifiers
     process ..> ellipsis : uses replace_ellipsis
     process ..> footnotes : uses convert_footnotes
+    footnotes ..> textproc : uses process_tokens
     io ..> process : uses process_stream, process_stream_no_wrap
 ```
 
 The `lib` module re-exports the public API from the other modules. The
-`ellipsis` module performs text normalization. The `process` module provides
-streaming helpers that combine the lower-level functions, including ellipsis
-replacement and footnote conversion. The `io` module handles filesystem
-operations, delegating the text processing to `process`.
+`ellipsis` module performs text normalization, while `footnotes` converts bare
+references. The `textproc` module contains shared token-processing helpers used
+by both. The `process` module provides streaming helpers that combine the
+lower-level functions. The `io` module handles filesystem operations,
+delegating the text processing to `process`.
 
 ## Concurrency with `rayon`
 
