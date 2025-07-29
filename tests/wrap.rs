@@ -486,3 +486,63 @@ fn test_wrap_list_item_period_after_code() {
     let output = process_stream(&input);
     assert_eq!(output, expected);
 }
+
+/// Regression test for wrapping list items that end with a question mark.
+///
+/// The question mark following the inline code span should remain on the same line
+/// as the code block rather than being wrapped onto a new indented line.
+#[test]
+fn test_wrap_list_item_question_mark_after_code() {
+    let input: Vec<String> = include_lines!("data/bullet_question_mark_input.txt");
+    let expected: Vec<String> = include_lines!("data/bullet_question_mark_expected.txt");
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
+/// Regression test for wrapping list items that end with an exclamation mark.
+///
+/// The exclamation mark following the inline code span should remain on the same line
+/// as the code block rather than being wrapped onto a new indented line.
+#[test]
+fn test_wrap_list_item_exclamation_mark_after_code() {
+    let input: Vec<String> = include_lines!("data/bullet_exclamation_mark_input.txt");
+    let expected: Vec<String> = include_lines!("data/bullet_exclamation_mark_expected.txt");
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
+/// Regression test for wrapping list items that end with a comma.
+///
+/// The comma following the inline code span should remain on the same line
+/// as the code block rather than being wrapped onto a new indented line.
+#[test]
+fn test_wrap_list_item_comma_after_code() {
+    let input: Vec<String> = include_lines!("data/bullet_comma_input.txt");
+    let expected: Vec<String> = include_lines!("data/bullet_comma_expected.txt");
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
+/// Regression test for wrapping list items that end with a colon.
+///
+/// The colon following the inline code span should remain on the same line
+/// as the code block rather than being wrapped onto a new indented line.
+#[test]
+fn test_wrap_list_item_colon_after_code() {
+    let input: Vec<String> = include_lines!("data/bullet_colon_input.txt");
+    let expected: Vec<String> = include_lines!("data/bullet_colon_expected.txt");
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
+/// Regression test for wrapping list items that end with a semicolon.
+///
+/// The semicolon following the inline code span should remain on the same line
+/// as the code block rather than being wrapped onto a new indented line.
+#[test]
+fn test_wrap_list_item_semicolon_after_code() {
+    let input: Vec<String> = include_lines!("data/bullet_semicolon_input.txt");
+    let expected: Vec<String> = include_lines!("data/bullet_semicolon_expected.txt");
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
