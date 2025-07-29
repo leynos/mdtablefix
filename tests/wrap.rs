@@ -480,7 +480,7 @@ fn test_wrap_paragraph_with_nested_link() {
 fn test_markdownlint_directive_not_broken() {
     let input = lines_vec![
         "[roadmap](./roadmap.md) and expands on the design ideas described in",
-        "<!-- markdownlint-disable-next-line MD013 -->",
+        "<!--  markdownlint-disable-next-line  MD013  -->",
     ];
     let output = process_stream(&input);
     assert_eq!(output, input);

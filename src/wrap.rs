@@ -18,6 +18,11 @@ static FOOTNOTE_RE: std::sync::LazyLock<Regex> =
 static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:>\s*)+)(.*)$").unwrap());
 
+/// Matches markdownlint directives such as `<!-- markdownlint-disable -->`.
+static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"^<!--\s*markdownlint-[^>]*-->$").expect("valid markdownlint regex")
+});
+
 struct PrefixHandler {
     re: &'static std::sync::LazyLock<Regex>,
     is_bq: bool,
@@ -293,6 +298,11 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 #[doc(hidden)]
 pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 
+#[doc(hidden)]
+pub fn is_markdownlint_directive(line: &str) -> bool {
+    MARKDOWNLINT_DIRECTIVE_RE.is_match(line.trim())
+}
+
 fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, width: usize) {
     if buf.is_empty() {
         return;
@@ -408,8 +418,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
-        let trimmed = line.trim();
-        if trimmed.starts_with("<!-- markdownlint-") && trimmed.ends_with("-->") {
+        if is_markdownlint_directive(line) {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
             indent.clear();
@@ -417,7 +426,9 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
-        if line.trim().is_empty() {
+        let trimmed = line.trim();
+
+        if trimmed.is_empty() {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
             indent.clear();
