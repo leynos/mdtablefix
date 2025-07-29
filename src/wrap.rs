@@ -201,6 +201,19 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut last_split: Option<usize> = None;
     for token in tokenize_inline(text) {
         let token_width = UnicodeWidthStr::width(token.as_str());
+        if current.is_empty()
+            && token.len() == 1
+            && ".?!,:;".contains(token.as_str())
+            && lines
+                .last()
+                .is_some_and(|l: &String| l.trim_end().ends_with('`'))
+        {
+            lines
+                .last_mut()
+                .expect("checked last line exists")
+                .push_str(&token);
+            continue;
+        }
         if current_width + token_width <= width {
             current.push_str(&token);
             current_width += token_width;

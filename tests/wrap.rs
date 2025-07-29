@@ -474,3 +474,15 @@ fn test_wrap_paragraph_with_nested_link() {
         "link with nested parentheses should remain intact",
     );
 }
+
+/// Regression test for wrapping list items that end with a full stop.
+///
+/// The period following the inline code span should remain on the same line
+/// as the code block rather than being wrapped onto a new indented line.
+#[test]
+fn test_wrap_list_item_period_after_code() {
+    let input: Vec<String> = include_lines!("data/bullet_full_stop_input.txt");
+    let expected: Vec<String> = include_lines!("data/bullet_full_stop_expected.txt");
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
