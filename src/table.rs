@@ -11,6 +11,24 @@ fn next_is_pipe(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
 }
 
 #[must_use]
+/// Split a Markdown table row into individual cell strings.
+///
+/// Escaped pipe characters (`\|`) are treated as literals and whitespace
+/// inside each cell is trimmed.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::split_cells;
+/// assert_eq!(
+///     split_cells("| A | B |"),
+///     vec!["A".to_string(), "B".to_string()]
+/// );
+/// assert_eq!(
+///     split_cells("a | b \\| c | d"),
+///     vec!["a".to_string(), "b | c".to_string(), "d".to_string()]
+/// );
+/// ```
 pub fn split_cells(line: &str) -> Vec<String> {
     let mut s = line.trim();
     if let Some(stripped) = s.strip_prefix('|') {
@@ -162,6 +180,25 @@ fn calculate_and_format(
     crate::reflow::insert_separator(out, sep_cells, &widths, indent)
 }
 
+/// Reflow a Markdown table so columns align uniformly.
+///
+/// Invalid tables are returned unchanged.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::reflow_table;
+/// let lines = vec![
+///     "| A | B |    |".to_string(),
+///     "| 1 | 2 |  | 3 | 4 |".to_string(),
+/// ];
+/// let expected = vec![
+///     "| A | B |".to_string(),
+///     "| 1 | 2 |".to_string(),
+///     "| 3 | 4 |".to_string(),
+/// ];
+/// assert_eq!(reflow_table(&lines), expected);
+/// ```
 #[must_use]
 pub fn reflow_table(lines: &[String]) -> Vec<String> {
     if lines.is_empty() {

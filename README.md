@@ -161,7 +161,7 @@ alongside regular Markdown tables.
 
 See
 [HTML table support for more details](docs/architecture.md#html-table-support-in-mdtablefix)
-.
+ .
 
 ## Module structure
 
