@@ -90,7 +90,7 @@ fn rows_mismatched(rows: &[Vec<String>], split_within_line: bool) -> bool {
 }
 
 pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
+    std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").expect("valid separator regex"));
 
 /// Holds the parsed and validated table data.
 ///

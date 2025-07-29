@@ -10,7 +10,7 @@ use regex::Regex;
 use crate::wrap::{Token, tokenize_markdown};
 
 static DOT_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"\.{3,}").unwrap());
+    std::sync::LazyLock::new(|| Regex::new(r"\.{3,}").expect("valid dot regex"));
 
 /// Replace `...` with `…` outside code spans and fences.
 #[must_use]

@@ -7,16 +7,19 @@
 use regex::Regex;
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").unwrap());
+    std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").expect("valid fence start regex"));
 
-static BULLET_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
+static BULLET_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").expect("valid list bullet regex")
+});
 
-static FOOTNOTE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^(\s*)(\[\^[^]]+\]:\s*)(.*)$").unwrap());
+static FOOTNOTE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"^(\s*)(\[\^[^]]+\]:\s*)(.*)$").expect("valid footnote regex")
+});
 
-static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:>\s*)+)(.*)$").unwrap());
+static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"^(\s*(?:>\s*)+)(.*)$").expect("valid blockquote regex")
+});
 
 /// Markdown token emitted by [`tokenize_markdown`].
 #[derive(Debug, PartialEq)]
