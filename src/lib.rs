@@ -12,6 +12,9 @@
 //! - `process` for stream processing.
 //! - `io` for file helpers.
 
+#[macro_use]
+mod macros;
+
 pub mod breaks;
 pub mod ellipsis;
 pub mod fences;

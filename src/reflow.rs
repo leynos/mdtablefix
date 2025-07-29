@@ -1,14 +1,15 @@
-// Helper functions for reflowing markdown tables.
-//
-// These small utilities break down the steps of `reflow_table` so each
-// piece can be understood and tested independently.
+//! Helper functions for reflowing Markdown tables.
+//!
+//! These small utilities break down the steps of `reflow_table` so each
+//! piece can be understood and tested independently.
+
+use std::sync::LazyLock;
 
 use regex::Regex;
 
 use crate::table::{SEP_RE, format_separator_cells, split_cells};
 
-static SENTINEL_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").expect("valid sentinel regex"));
+static SENTINEL_RE: LazyLock<Regex> = lazy_regex!(r"\|\s*\|\s*", "valid sentinel regex");
 
 pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
     let raw = trimmed.join(" ");

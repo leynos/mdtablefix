@@ -4,6 +4,8 @@
 //! [`docs/architecture.md`](../../docs/architecture.md).
 //! Provides helpers used by the `reflow` module and `reflow_table` itself.
 
+use std::sync::LazyLock;
+
 use regex::Regex;
 
 fn next_is_pipe(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
@@ -89,8 +91,7 @@ fn rows_mismatched(rows: &[Vec<String>], split_within_line: bool) -> bool {
         .any(|row| row.len() != first_len && !row.iter().all(|c| SEP_RE.is_match(c)))
 }
 
-pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").expect("valid separator regex"));
+pub(crate) static SEP_RE: LazyLock<Regex> = lazy_regex!(r"^[\s|:-]+$", "valid separator regex");
 
 /// Holds the parsed and validated table data.
 ///

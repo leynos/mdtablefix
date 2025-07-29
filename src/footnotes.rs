@@ -4,17 +4,19 @@
 //! footnote links and rewrites the trailing numeric list into a footnote
 //! block. Only the final contiguous list of footnotes is processed.
 
+use std::sync::LazyLock;
+
 use regex::{Captures, Regex};
 
-static INLINE_FN_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r"(?P<pre>^|[^0-9])(?P<punc>[.!?);:])(?P<style>[*_]*)(?P<num>\d+)(?P<boundary>\s|$)")
-        .expect("valid inline footnote regex")
-});
+static INLINE_FN_RE: LazyLock<Regex> = lazy_regex!(
+    r"(?P<pre>^|[^0-9])(?P<punc>[.!?);:])(?P<style>[*_]*)(?P<num>\d+)(?P<boundary>\s|$)",
+    "valid inline footnote regex",
+);
 
-static FOOTNOTE_LINE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r"^(?P<indent>\s*)(?P<num>\d+)\.\s+(?P<rest>.*)$")
-        .expect("valid footnote line regex")
-});
+static FOOTNOTE_LINE_RE: LazyLock<Regex> = lazy_regex!(
+    r"^(?P<indent>\s*)(?P<num>\d+)\.\s+(?P<rest>.*)$",
+    "valid footnote line regex",
+);
 
 use crate::wrap::{Token, tokenize_markdown};
 

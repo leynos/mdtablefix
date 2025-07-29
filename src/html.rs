@@ -16,10 +16,9 @@ use crate::wrap::is_fence;
 
 /// Matches the start of an HTML `<table>` tag, ignoring case.
 static TABLE_START_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)^<table(?:\s|>|$)").expect("valid table start regex"));
+    lazy_regex!(r"(?i)^<table(?:\s|>|$)", "valid table start regex");
 /// Matches the end of an HTML `</table>` tag, ignoring case.
-static TABLE_END_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)</table>").expect("valid table end regex"));
+static TABLE_END_RE: LazyLock<Regex> = lazy_regex!(r"(?i)</table>", "valid table end regex");
 
 /// Extracts the text content of a DOM node, collapsing consecutive
 /// whitespace to single spaces.

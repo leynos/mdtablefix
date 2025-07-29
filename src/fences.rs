@@ -8,14 +8,15 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-static FENCE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$").expect("valid fence regex")
-});
+static FENCE_RE: LazyLock<Regex> = lazy_regex!(
+    r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$",
+    "valid fence regex"
+);
 
-static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-](?:,[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-])*$")
-        .expect("valid language regex")
-});
+static ORPHAN_LANG_RE: LazyLock<Regex> = lazy_regex!(
+    r"^[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-](?:,[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-])*$",
+    "valid language regex"
+);
 
 /// Normalise a potential language specifier.
 ///

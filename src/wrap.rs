@@ -4,22 +4,20 @@
 //! `docs/architecture.md` and uses the `unicode-width` crate for accurate
 //! display calculations.
 
+use std::sync::LazyLock;
+
 use regex::Regex;
 
-static FENCE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").expect("valid fence start regex"));
+static FENCE_RE: LazyLock<Regex> = lazy_regex!(r"^\s*(```|~~~).*", "valid fence start regex");
 
-static BULLET_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").expect("valid list bullet regex")
-});
+static BULLET_RE: LazyLock<Regex> =
+    lazy_regex!(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)", "valid list bullet regex",);
 
-static FOOTNOTE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r"^(\s*)(\[\^[^]]+\]:\s*)(.*)$").expect("valid footnote regex")
-});
+static FOOTNOTE_RE: LazyLock<Regex> =
+    lazy_regex!(r"^(\s*)(\[\^[^]]+\]:\s*)(.*)$", "valid footnote regex",);
 
-static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r"^(\s*(?:>\s*)+)(.*)$").expect("valid blockquote regex")
-});
+static BLOCKQUOTE_RE: LazyLock<Regex> =
+    lazy_regex!(r"^(\s*(?:>\s*)+)(.*)$", "valid blockquote regex",);
 
 /// Markdown token emitted by [`tokenize_markdown`].
 #[derive(Debug, PartialEq)]
