@@ -25,29 +25,31 @@ struct PrefixHandler {
     rest_group: usize,
 }
 
-fn build_bullet_prefix(cap: &Captures) -> String { cap[1].to_string() }
+impl PrefixHandler {
+    fn build_bullet_prefix(cap: &Captures) -> String { cap[1].to_string() }
 
-fn build_footnote_prefix(cap: &Captures) -> String { format!("{}{}", &cap[1], &cap[2]) }
+    fn build_footnote_prefix(cap: &Captures) -> String { format!("{}{}", &cap[1], &cap[2]) }
 
-fn build_blockquote_prefix(cap: &Captures) -> String { cap[1].to_string() }
+    fn build_blockquote_prefix(cap: &Captures) -> String { cap[1].to_string() }
+}
 
 static HANDLERS: &[PrefixHandler] = &[
     PrefixHandler {
         re: &BULLET_RE,
         is_bq: false,
-        build_prefix: build_bullet_prefix,
+        build_prefix: PrefixHandler::build_bullet_prefix,
         rest_group: 2,
     },
     PrefixHandler {
         re: &FOOTNOTE_RE,
         is_bq: false,
-        build_prefix: build_footnote_prefix,
+        build_prefix: PrefixHandler::build_footnote_prefix,
         rest_group: 3,
     },
     PrefixHandler {
         re: &BLOCKQUOTE_RE,
         is_bq: true,
-        build_prefix: build_blockquote_prefix,
+        build_prefix: PrefixHandler::build_blockquote_prefix,
         rest_group: 2,
     },
 ];
