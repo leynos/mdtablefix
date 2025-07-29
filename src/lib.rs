@@ -12,6 +12,13 @@
 //! - `process` for stream processing.
 //! - `io` for file helpers.
 
+#[macro_export]
+macro_rules! lazy_regex {
+    ($re:expr, $msg:expr $(,)?) => {
+        std::sync::LazyLock::new(|| regex::Regex::new($re).expect($msg))
+    };
+}
+
 pub mod breaks;
 pub mod ellipsis;
 pub mod fences;
