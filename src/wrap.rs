@@ -257,6 +257,31 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 #[doc(hidden)]
 pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 
+fn is_list_item(line: &str) -> Option<(&str, &str)> {
+    BULLET_RE
+        .captures(line)
+        .map(|cap| (cap.get(1).unwrap().as_str(), cap.get(2).unwrap().as_str()))
+}
+
+fn is_footnote(line: &str) -> Option<(String, &str)> {
+    FOOTNOTE_RE.captures(line).map(|cap| {
+        (
+            format!(
+                "{}{}",
+                cap.get(1).unwrap().as_str(),
+                cap.get(2).unwrap().as_str()
+            ),
+            cap.get(3).unwrap().as_str(),
+        )
+    })
+}
+
+fn is_blockquote(line: &str) -> Option<(&str, &str)> {
+    BLOCKQUOTE_RE
+        .captures(line)
+        .map(|cap| (cap.get(1).unwrap().as_str(), cap.get(2).unwrap().as_str()))
+}
+
 fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, width: usize) {
     if buf.is_empty() {
         return;
@@ -330,6 +355,48 @@ fn handle_prefix_line(
     append_wrapped_with_prefix(out, prefix, rest, width, repeat_prefix);
 }
 
+fn handle_list_item(
+    out: &mut Vec<String>,
+    buf: &mut Vec<(String, bool)>,
+    indent: &mut String,
+    width: usize,
+    line: &str,
+) -> bool {
+    if let Some((prefix, rest)) = is_list_item(line) {
+        handle_prefix_line(out, buf, indent, width, prefix, rest, false);
+        return true;
+    }
+    false
+}
+
+fn handle_footnote(
+    out: &mut Vec<String>,
+    buf: &mut Vec<(String, bool)>,
+    indent: &mut String,
+    width: usize,
+    line: &str,
+) -> bool {
+    if let Some((prefix, rest)) = is_footnote(line) {
+        handle_prefix_line(out, buf, indent, width, &prefix, rest, false);
+        return true;
+    }
+    false
+}
+
+fn handle_blockquote(
+    out: &mut Vec<String>,
+    buf: &mut Vec<(String, bool)>,
+    indent: &mut String,
+    width: usize,
+    line: &str,
+) -> bool {
+    if let Some((prefix, rest)) = is_blockquote(line) {
+        handle_prefix_line(out, buf, indent, width, prefix, rest, true);
+        return true;
+    }
+    false
+}
+
 /// Wrap text lines to the given width.
 ///
 /// # Panics
@@ -380,26 +447,10 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
-        if let Some(cap) = BULLET_RE.captures(line) {
-            let prefix = cap.get(1).unwrap().as_str();
-            let rest = cap.get(2).unwrap().as_str();
-            handle_prefix_line(&mut out, &mut buf, &mut indent, width, prefix, rest, false);
-            continue;
-        }
-
-        if let Some(cap) = FOOTNOTE_RE.captures(line) {
-            let indent_part = cap.get(1).unwrap().as_str();
-            let label_part = cap.get(2).unwrap().as_str();
-            let prefix = format!("{indent_part}{label_part}");
-            let rest = cap.get(3).unwrap().as_str();
-            handle_prefix_line(&mut out, &mut buf, &mut indent, width, &prefix, rest, false);
-            continue;
-        }
-
-        if let Some(cap) = BLOCKQUOTE_RE.captures(line) {
-            let prefix = cap.get(1).unwrap().as_str();
-            let rest = cap.get(2).unwrap().as_str();
-            handle_prefix_line(&mut out, &mut buf, &mut indent, width, prefix, rest, true);
+        if handle_list_item(&mut out, &mut buf, &mut indent, width, line)
+            || handle_footnote(&mut out, &mut buf, &mut indent, width, line)
+            || handle_blockquote(&mut out, &mut buf, &mut indent, width, line)
+        {
             continue;
         }
 
