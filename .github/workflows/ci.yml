@@ -13,37 +13,22 @@ jobs:
       CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      - uses: leynos/shared-actions/.github/actions/setup-rust@b2f82fdc94c8c9da67833f972a02814c9ef8cf16
       - name: Format
-        run: rustup component add rustfmt --toolchain nightly-2025-06-10 && cargo +nightly-2025-06-10 fmt --all -- --check
+        run: make check-fmt
       - name: Lint
-        run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Test
-        run: cargo test
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
-      - name: Run coverage
-        run: cargo tarpaulin --out lcov
-      - name: Install CodeScene coverage tool
-        if: env.CS_ACCESS_TOKEN
-        run: |
-          set -euo pipefail
-          curl -fsSL -o install-cs-coverage-tool.sh https://downloads.codescene.io/enterprise/cli/install-cs-coverage-tool.sh
-          if [ -n "${CODESCENE_CLI_SHA256:-}" ]; then
-            echo "${CODESCENE_CLI_SHA256}  install-cs-coverage-tool.sh" | sha256sum -c -
-          fi
-          bash install-cs-coverage-tool.sh -y
-          rm install-cs-coverage-tool.sh
+        run: make lint
+      - id: generate-coverage
+        uses: leynos/shared-actions/.github/actions/generate-coverage@b2f82fdc94c8c9da67833f972a02814c9ef8cf16
+        with:
+          output-path: lcov.info
+          format: lcov
       - name: Upload coverage data to CodeScene
-        if: env.CS_ACCESS_TOKEN
-        run: cs-coverage upload --format "lcov" --metric "line-coverage" "lcov.info"
+        env:
+          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        if: ${{ env.CS_ACCESS_TOKEN != '' }}
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@v1.2.1
+        with:
+          format: lcov
+          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
