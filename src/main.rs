@@ -58,14 +58,19 @@ struct FormatOpts {
     footnotes: bool,
 }
 
+impl From<FormatOpts> for Options {
+    fn from(opts: FormatOpts) -> Self {
+        Self {
+            wrap: opts.wrap,
+            ellipsis: opts.ellipsis,
+            fences: opts.fences,
+            footnotes: opts.footnotes,
+        }
+    }
+}
+
 fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
-    let opts2 = Options {
-        wrap: opts.wrap,
-        ellipsis: opts.ellipsis,
-        fences: opts.fences,
-        footnotes: opts.footnotes,
-    };
-    let mut out = process_stream_opts(lines, opts2);
+    let mut out = process_stream_opts(lines, opts.into());
     if opts.renumber {
         out = renumber_lists(&out);
     }
