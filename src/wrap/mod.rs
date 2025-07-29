@@ -20,7 +20,7 @@ static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
 
 mod tokenizer;
 
-pub(crate) use tokenizer::{Token, tokenize_markdown};
+pub(crate) use tokenizer::{Token, tokenize_inline, tokenize_markdown};
 
 /// Determine if the current line should break at the last whitespace.
 ///
@@ -45,10 +45,10 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut current = String::new();
     let mut current_width = 0;
     let mut last_split: Option<usize> = None;
-    for token in tokenizer::tokenize_inline(text) {
-        let token_width = UnicodeWidthStr::width(token.as_str());
+    for token in tokenize_inline(text) {
+        let token_width = UnicodeWidthStr::width(token);
         if current_width + token_width <= width {
-            current.push_str(&token);
+            current.push_str(token);
             current_width += token_width;
             if token.chars().all(char::is_whitespace) {
                 last_split = Some(current.len());
@@ -64,7 +64,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             if !trimmed.is_empty() {
                 lines.push(trimmed.to_string());
             }
-            rest.push_str(&token);
+            rest.push_str(token);
             current = rest;
             current_width = UnicodeWidthStr::width(current.as_str());
             last_split = if token.chars().all(char::is_whitespace) {
@@ -89,7 +89,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         current_width = 0;
 
         if !token.chars().all(char::is_whitespace) {
-            current.push_str(&token);
+            current.push_str(token);
             current_width = token_width;
         }
     }

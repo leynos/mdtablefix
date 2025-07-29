@@ -16,89 +16,81 @@ pub enum Token<'a> {
     Newline,
 }
 
-fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
-    let start = i;
-    if chars[i] == '!' {
-        i += 1;
-    }
-    // skip initial '[' which we know is present
-    i += 1;
-    while i < chars.len() && chars[i] != ']' {
-        i += 1;
-    }
-    if i < chars.len() && chars[i] == ']' {
-        i += 1;
-        if i < chars.len() && chars[i] == '(' {
-            i += 1;
-            let mut depth = 1;
-            while i < chars.len() && depth > 0 {
-                match chars[i] {
-                    '(' => depth += 1,
-                    ')' => depth -= 1,
-                    _ => {}
-                }
-                i += 1;
-            }
-            let tok: String = chars[start..i].iter().collect();
-            return (tok, i);
+fn scan_while<F>(s: &str, mut pos: usize, mut pred: F) -> usize
+where
+    F: FnMut(char) -> bool,
+{
+    while let Some(ch) = s[pos..].chars().next() {
+        if !pred(ch) {
+            break;
         }
+        pos += ch.len_utf8();
     }
-    let tok: String = chars[start..=start].iter().collect();
-    (tok, start + 1)
+    pos
 }
 
-pub(super) fn tokenize_inline(text: &str) -> Vec<String> {
+fn parse_link_or_image(text: &str, start: usize) -> usize {
+    let mut pos = start;
+    if text.as_bytes()[pos] == b'!' {
+        pos += 1;
+    }
+    pos += 1; // skip '['
+    if let Some(end_br) = text[pos..].find("](") {
+        let mut i = pos + end_br + 2;
+        let mut depth = 1;
+        while i < text.len() && depth > 0 {
+            let ch = text[i..].chars().next().expect("valid UTF-8");
+            match ch {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ => {}
+            }
+            i += ch.len_utf8();
+        }
+        if depth == 0 {
+            return i;
+        }
+    }
+    start + text[start..].chars().next().unwrap().len_utf8()
+}
+
+pub(crate) fn tokenize_inline(text: &str) -> Vec<&str> {
     let mut tokens = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        if c.is_whitespace() {
-            let start = i;
-            while i < chars.len() && chars[i].is_whitespace() {
-                i += 1;
-            }
-            tokens.push(chars[start..i].iter().collect());
-        } else if c == '`' {
-            let start = i;
-            let mut delim_len = 0;
-            while i < chars.len() && chars[i] == '`' {
-                i += 1;
-                delim_len += 1;
-            }
-            let mut end = i;
-            while end < chars.len() {
-                if chars[end] == '`' {
-                    let mut j = end;
-                    let mut count = 0;
-                    while j < chars.len() && chars[j] == '`' {
-                        j += 1;
-                        count += 1;
-                    }
-                    if count == delim_len {
-                        end = j;
-                        break;
-                    }
+    let mut pos = 0;
+    while pos < text.len() {
+        let ch = text[pos..].chars().next().expect("valid UTF-8");
+        if ch.is_whitespace() {
+            let start = pos;
+            pos = scan_while(text, start, char::is_whitespace);
+            tokens.push(&text[start..pos]);
+        } else if ch == '`' {
+            let start = pos;
+            pos = scan_while(text, start, |c| c == '`');
+            let delim = &text[start..pos];
+            let mut end = pos;
+            let mut found = false;
+            while end < text.len() {
+                if text[end..].starts_with(delim) {
+                    end += delim.len();
+                    tokens.push(&text[start..end]);
+                    pos = end;
+                    found = true;
+                    break;
                 }
-                end += 1;
+                end += text[end..].chars().next().unwrap().len_utf8();
             }
-            if end >= chars.len() {
-                tokens.push(chars[start..start + delim_len].iter().collect());
-                i = start + delim_len;
-            } else {
-                tokens.push(chars[start..end].iter().collect());
-                i = end;
+            if !found {
+                tokens.push(delim);
+                pos = start + delim.len();
             }
-        } else if c == '[' || (c == '!' && i + 1 < chars.len() && chars[i + 1] == '[') {
-            let (tok, new_i) = parse_link_or_image(&chars, i);
-            tokens.push(tok);
-            i = new_i;
+        } else if ch == '[' || (ch == '!' && text[pos + ch.len_utf8()..].starts_with('[')) {
+            let end = parse_link_or_image(text, pos);
+            tokens.push(&text[pos..end]);
+            pos = end;
         } else {
-            let start = i;
-            while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '`' {
-                i += 1;
-            }
-            tokens.push(chars[start..i].iter().collect());
+            let start = pos;
+            pos = scan_while(text, start, |c| !c.is_whitespace() && c != '`' && c != '[');
+            tokens.push(&text[start..pos]);
         }
     }
     tokens
