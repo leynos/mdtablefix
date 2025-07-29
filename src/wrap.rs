@@ -18,7 +18,8 @@ static FOOTNOTE_RE: std::sync::LazyLock<Regex> =
 static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:>\s*)+)(.*)$").unwrap());
 
-/// Matches markdownlint directives such as `<!-- markdownlint-disable -->`.
+/// Matches markdownlint directives including `disable`, `enable`,
+/// `disable-line` and `disable-next-line` forms.
 static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     Regex::new(r"^<!--\s*markdownlint-[^>]*-->$").expect("valid markdownlint regex")
 });

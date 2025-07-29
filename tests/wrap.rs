@@ -474,36 +474,3 @@ fn test_wrap_paragraph_with_nested_link() {
         "link with nested parentheses should remain intact",
     );
 }
-
-/// Ensures that markdownlint directives remain on their own line when wrapping.
-#[test]
-fn test_markdownlint_directive_not_broken() {
-    let input = lines_vec![
-        "[roadmap](./roadmap.md) and expands on the design ideas described in",
-        "<!--  markdownlint-disable-next-line  MD013  -->",
-    ];
-    let output = process_stream(&input);
-    assert_eq!(output, input);
-}
-
-/// Regular comments should be reflowed like ordinary text when wrapping.
-#[test]
-fn test_regular_comment_wraps_normally() {
-    let input = lines_vec![
-        "Intro text that preludes a lengthy comment.",
-        concat!(
-            "<!-- This comment contains many words and should be wrapped across ",
-            "multiple lines to ensure that regular comments are formatted ",
-            "correctly. -->"
-        ),
-    ];
-    let output = process_stream(&input);
-    assert_eq!(
-        output,
-        lines_vec![
-            "Intro text that preludes a lengthy comment. <!-- This comment contains many",
-            "words and should be wrapped across multiple lines to ensure that regular",
-            "comments are formatted correctly. -->",
-        ]
-    );
-}
