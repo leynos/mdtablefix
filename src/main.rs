@@ -79,16 +79,19 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
 }
 
 fn handle_file(path: &Path, in_place: bool, opts: FormatOpts) -> anyhow::Result<Option<String>> {
-    let content =
-        fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let lines: Vec<String> = content.lines().map(str::to_string).collect();
-    let fixed = process_lines(&lines, opts).join("\n");
-
     if in_place {
-        fs::write(path, format!("{fixed}\n"))
-            .with_context(|| format!("writing {}", path.display()))?;
+        if opts.wrap {
+            mdtablefix::rewrite(path).with_context(|| format!("writing {}", path.display()))?;
+        } else {
+            mdtablefix::rewrite_no_wrap(path)
+                .with_context(|| format!("writing {}", path.display()))?;
+        }
         Ok(None)
     } else {
+        let content =
+            fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let lines: Vec<String> = content.lines().map(str::to_string).collect();
+        let fixed = process_lines(&lines, opts).join("\n");
         Ok(Some(fixed))
     }
 }
