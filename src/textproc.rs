@@ -49,6 +49,9 @@ where
     for token in tokenize_markdown(&joined) {
         f(token, &mut out);
     }
+    if out.is_empty() {
+        return Vec::new();
+    }
     let mut result: Vec<String> = out.split('\n').map(str::to_string).collect();
     let out_blanks = result.iter().rev().take_while(|l| l.is_empty()).count();
     for _ in out_blanks..trailing_blanks {
@@ -81,6 +84,13 @@ mod tests {
     fn empty_input_returns_empty_vector() {
         let lines: Vec<String> = Vec::new();
         let out = process_tokens(&lines, |_tok, _out| unreachable!());
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn transformation_can_remove_all_content() {
+        let lines = vec!["data".to_string()];
+        let out = process_tokens(&lines, |_tok, _out| {});
         assert!(out.is_empty());
     }
 
