@@ -4,7 +4,7 @@
 //! `docs/architecture.md` and uses the `unicode-width` crate for accurate
 //! display calculations.
 
-use regex::Regex;
+use regex::{Captures, Regex};
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").unwrap());
@@ -17,6 +17,40 @@ static FOOTNOTE_RE: std::sync::LazyLock<Regex> =
 
 static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:>\s*)+)(.*)$").unwrap());
+
+struct PrefixHandler {
+    re: &'static std::sync::LazyLock<Regex>,
+    is_bq: bool,
+    build_prefix: fn(&Captures) -> String,
+    rest_group: usize,
+}
+
+fn build_bullet_prefix(cap: &Captures) -> String { cap[1].to_string() }
+
+fn build_footnote_prefix(cap: &Captures) -> String { format!("{}{}", &cap[1], &cap[2]) }
+
+fn build_blockquote_prefix(cap: &Captures) -> String { cap[1].to_string() }
+
+static HANDLERS: &[PrefixHandler] = &[
+    PrefixHandler {
+        re: &BULLET_RE,
+        is_bq: false,
+        build_prefix: build_bullet_prefix,
+        rest_group: 2,
+    },
+    PrefixHandler {
+        re: &FOOTNOTE_RE,
+        is_bq: false,
+        build_prefix: build_footnote_prefix,
+        rest_group: 3,
+    },
+    PrefixHandler {
+        re: &BLOCKQUOTE_RE,
+        is_bq: true,
+        build_prefix: build_blockquote_prefix,
+        rest_group: 2,
+    },
+];
 
 /// Markdown token emitted by [`tokenize_markdown`].
 #[derive(Debug, PartialEq)]
@@ -257,31 +291,6 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 #[doc(hidden)]
 pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 
-fn is_list_item(line: &str) -> Option<(&str, &str)> {
-    BULLET_RE
-        .captures(line)
-        .map(|cap| (cap.get(1).unwrap().as_str(), cap.get(2).unwrap().as_str()))
-}
-
-fn is_footnote(line: &str) -> Option<(String, &str)> {
-    FOOTNOTE_RE.captures(line).map(|cap| {
-        (
-            format!(
-                "{}{}",
-                cap.get(1).unwrap().as_str(),
-                cap.get(2).unwrap().as_str()
-            ),
-            cap.get(3).unwrap().as_str(),
-        )
-    })
-}
-
-fn is_blockquote(line: &str) -> Option<(&str, &str)> {
-    BLOCKQUOTE_RE
-        .captures(line)
-        .map(|cap| (cap.get(1).unwrap().as_str(), cap.get(2).unwrap().as_str()))
-}
-
 fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, width: usize) {
     if buf.is_empty() {
         return;
@@ -355,48 +364,6 @@ fn handle_prefix_line(
     append_wrapped_with_prefix(out, prefix, rest, width, repeat_prefix);
 }
 
-fn handle_list_item(
-    out: &mut Vec<String>,
-    buf: &mut Vec<(String, bool)>,
-    indent: &mut String,
-    width: usize,
-    line: &str,
-) -> bool {
-    if let Some((prefix, rest)) = is_list_item(line) {
-        handle_prefix_line(out, buf, indent, width, prefix, rest, false);
-        return true;
-    }
-    false
-}
-
-fn handle_footnote(
-    out: &mut Vec<String>,
-    buf: &mut Vec<(String, bool)>,
-    indent: &mut String,
-    width: usize,
-    line: &str,
-) -> bool {
-    if let Some((prefix, rest)) = is_footnote(line) {
-        handle_prefix_line(out, buf, indent, width, &prefix, rest, false);
-        return true;
-    }
-    false
-}
-
-fn handle_blockquote(
-    out: &mut Vec<String>,
-    buf: &mut Vec<(String, bool)>,
-    indent: &mut String,
-    width: usize,
-    line: &str,
-) -> bool {
-    if let Some((prefix, rest)) = is_blockquote(line) {
-        handle_prefix_line(out, buf, indent, width, prefix, rest, true);
-        return true;
-    }
-    false
-}
-
 /// Wrap text lines to the given width.
 ///
 /// # Panics
@@ -408,7 +375,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut indent = String::new();
     let mut in_code = false;
 
-    for line in lines {
+    'line_loop: for line in lines {
         if FENCE_RE.is_match(line) {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
@@ -447,11 +414,21 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
-        if handle_list_item(&mut out, &mut buf, &mut indent, width, line)
-            || handle_footnote(&mut out, &mut buf, &mut indent, width, line)
-            || handle_blockquote(&mut out, &mut buf, &mut indent, width, line)
-        {
-            continue;
+        for handler in HANDLERS {
+            if let Some(cap) = handler.re.captures(line) {
+                let prefix = (handler.build_prefix)(&cap);
+                let rest = cap.get(handler.rest_group).unwrap().as_str();
+                handle_prefix_line(
+                    &mut out,
+                    &mut buf,
+                    &mut indent,
+                    width,
+                    &prefix,
+                    rest,
+                    handler.is_bq,
+                );
+                continue 'line_loop;
+            }
         }
 
         if buf.is_empty() {
