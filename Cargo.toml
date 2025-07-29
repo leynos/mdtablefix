@@ -8,7 +8,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 regex = "1"
 once_cell = "1"
-rayon = "^1.0"
+rayon = "1.0"
 html5ever = "0.27"
 markup5ever_rcdom = "0.3"
 unicode-width = "0.1"
@@ -18,7 +18,7 @@ unicode-width = "0.1"
 rstest = "0.18"
 assert_cmd = "2"
 tempfile = "3"
-libc = "0.2"
+libc = "0.2.174"
 
 [lints.clippy]
 pedantic = "warn"
