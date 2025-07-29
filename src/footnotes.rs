@@ -18,7 +18,7 @@ static FOOTNOTE_LINE_RE: LazyLock<Regex> = lazy_regex!(
     "footnote line pattern should compile",
 );
 
-use crate::wrap::{Token, tokenize_markdown};
+use crate::{textproc::process_tokens, wrap::Token};
 
 /// Extract the components of an inline footnote reference.
 #[inline]
@@ -96,24 +96,16 @@ fn convert_block(lines: &mut [String]) {
 /// Convert bare numeric footnote references to Markdown footnote syntax.
 #[must_use]
 pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
-    if lines.is_empty() {
-        return Vec::new();
-    }
-    let joined = lines.join("\n");
-    let mut out = String::new();
-    for token in tokenize_markdown(&joined) {
-        match token {
-            Token::Text(t) => out.push_str(&convert_inline(t)),
-            Token::Code(c) => {
-                out.push('`');
-                out.push_str(c);
-                out.push('`');
-            }
-            Token::Fence(f) => out.push_str(f),
-            Token::Newline => out.push('\n'),
+    let mut lines = process_tokens(lines, |token, out| match token {
+        Token::Text(t) => out.push_str(&convert_inline(t)),
+        Token::Code(c) => {
+            out.push('`');
+            out.push_str(c);
+            out.push('`');
         }
-    }
-    let mut lines: Vec<String> = out.split('\n').map(str::to_string).collect();
+        Token::Fence(f) => out.push_str(f),
+        Token::Newline => out.push('\n'),
+    });
     convert_block(&mut lines);
     lines
 }
