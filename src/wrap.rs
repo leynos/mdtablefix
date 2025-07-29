@@ -372,6 +372,15 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
+        let trimmed = line.trim();
+        if trimmed.starts_with("<!-- markdownlint-") && trimmed.ends_with("-->") {
+            flush_paragraph(&mut out, &buf, &indent, width);
+            buf.clear();
+            indent.clear();
+            out.push(line.clone());
+            continue;
+        }
+
         if line.trim().is_empty() {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
