@@ -278,9 +278,10 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
                 j += 1;
             }
         }
+
         if current.is_empty()
-            && token.len() == 1
-            && ".?!,:;".contains(token.as_str())
+            && tokens[i].len() == 1
+            && ".?!,:;".contains(tokens[i].as_str())
             && lines
                 .last()
                 .is_some_and(|l: &String| l.trim_end().ends_with('`'))
@@ -288,7 +289,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             lines
                 .last_mut()
                 .expect("checked last line exists")
-                .push_str(&token);
+                .push_str(&tokens[i]);
             continue;
         }
 
