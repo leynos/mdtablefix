@@ -102,6 +102,8 @@ pub fn broken_table() -> Vec<String> {
 }
 
 /// Run the `mdtablefix` binary with the provided arguments.
+#[expect(clippy::must_use_candidate, reason = "used for side effects in tests")]
+#[expect(clippy::missing_panics_doc, reason = "test helper")]
 ///
 /// Returns the captured `Output` from the command execution.
 #[expect(dead_code, reason = "used selectively across integration tests")]
