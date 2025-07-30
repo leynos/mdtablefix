@@ -311,7 +311,7 @@ Whenever wrapping logic examines the length of a token, it relies on
 ## Link punctuation handling
 
 Trailing punctuation immediately following a Markdown link or image is
-tokenised separately and grouped with the link when wrapping. This keeps
+tokenized separately and grouped with the link when wrapping. This keeps
 sentences like:
 
 ```markdown
