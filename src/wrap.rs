@@ -20,17 +20,18 @@ static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
 
 /// Matches `markdownlint` comment directives.
 ///
-/// The regex is case-insensitive and supports these forms with optional rule
-/// names:
+/// The regex is case-insensitive and recognises these forms with optional rule
+/// names (including plugin rules such as `MD013/line-length` or
+/// `plugin/rule-name`):
 /// - `<!-- markdownlint-disable -->`
 /// - `<!-- markdownlint-enable -->`
 /// - `<!-- markdownlint-disable-line MD001 MD005 -->`
-/// - `<!-- markdownlint-disable-next-line MD001 -->`
+/// - `<!-- markdownlint-disable-next-line MD001 MD005 -->`
 static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     Regex::new(
-            r"(?i)^\s*<!--\s*markdownlint-(?:disable|enable|disable-line|disable-next-line)(?:\s+MD\d+)*\s*-->\s*$",
-        )
-        .expect("valid markdownlint regex")
+        r"(?i)^\s*<!--\s*markdownlint-(?:disable|enable|disable-line|disable-next-line)(?:\s+[A-Za-z0-9_\-/]+)*\s*-->\s*$",
+    )
+    .expect("valid markdownlint regex")
 });
 
 struct PrefixHandler {
@@ -321,8 +322,8 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 #[doc(hidden)]
 pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 
-pub fn is_markdownlint_directive(line: &str) -> bool {
-    MARKDOWNLINT_DIRECTIVE_RE.is_match(line.trim())
+pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
+    MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
 }
 
 fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, width: usize) {

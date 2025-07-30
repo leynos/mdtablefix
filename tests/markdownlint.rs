@@ -21,6 +21,18 @@ fn test_markdownlint_disable_next_line_preserved() {
     assert_eq!(output, input);
 }
 
+/// The disable-next-line directive must remain intact when in the middle of the input.
+#[test]
+fn test_markdownlint_disable_next_line_preserved_middle() {
+    let input = lines_vec![
+        "This is the first line.",
+        "<!--  markdownlint-disable-next-line  MD013  -->",
+        "This is the third line.",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
 /// Regular comments should still wrap when necessary.
 #[test]
 fn test_regular_comment_wraps_normally() {
@@ -64,4 +76,42 @@ fn test_non_directive_comment_wraps() {
     let input = lines_vec!["Intro line.", "<!-- markdowndisable -->"];
     let output = process_stream(&input);
     assert_eq!(output, lines_vec!["Intro line. <!-- markdowndisable -->"]);
+}
+
+/// Malformed or partially correct directive comments should wrap normally.
+#[test]
+fn test_malformed_directive_missing_closing() {
+    let input = lines_vec!["Text before.", "<!-- markdownlint-disable"];
+    let output = process_stream(&input);
+    assert_eq!(output, lines_vec!["Text before. <!-- markdownlint-disable"]);
+}
+
+#[test]
+fn test_malformed_directive_extra_text() {
+    let input = lines_vec!["Text before.", "<!-- markdownlint-disable --> extra"];
+    let output = process_stream(&input);
+    assert_eq!(
+        output,
+        lines_vec!["Text before. <!-- markdownlint-disable --> extra"]
+    );
+}
+
+#[test]
+fn test_malformed_directive_typo() {
+    let input = lines_vec!["Text before.", "<!-- markdownlnt-disable-line MD001 -->"];
+    let output = process_stream(&input);
+    assert_eq!(
+        output,
+        lines_vec!["Text before. <!-- markdownlnt-disable-line MD001 -->"]
+    );
+}
+
+#[test]
+fn test_malformed_directive_incomplete_tag() {
+    let input = lines_vec!["Text before.", "<!-- markdownlint-disable-line MD001 "];
+    let output = process_stream(&input);
+    assert_eq!(
+        output,
+        lines_vec!["Text before. <!-- markdownlint-disable-line MD001"]
+    );
 }
