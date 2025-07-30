@@ -7,8 +7,7 @@ use prelude::*;
 
 #[fixture]
 pub fn malformed_table() -> Vec<String> {
-    let lines = lines_vec!["| A | |", "| 1 | 2 | 3 |"];
-    lines
+    lines_vec!["| A | |", "| 1 | 2 | 3 |"]
 }
 
 #[fixture]
@@ -23,8 +22,7 @@ pub fn escaped_pipe_table() -> Vec<String> {
 
 #[fixture]
 pub fn indented_table() -> Vec<String> {
-    let lines = lines_vec!["  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |"];
-    lines
+    lines_vec!["  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |"]
 }
 
 #[fixture]
@@ -99,14 +97,12 @@ pub fn html_table_inconsistent_first_row() -> Vec<String> {
 
 #[fixture]
 pub fn html_table_empty() -> Vec<String> {
-    let lines = lines_vec!["<table></table>"];
-    lines
+    lines_vec!["<table></table>"]
 }
 
 #[fixture]
 pub fn html_table_unclosed() -> Vec<String> {
-    let lines = lines_vec!["<table>", "<tr><td>1</td></tr>"];
-    lines
+    lines_vec!["<table>", "<tr><td>1</td></tr>"]
 }
 
 #[fixture]

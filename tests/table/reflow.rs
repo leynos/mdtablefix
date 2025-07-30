@@ -9,6 +9,21 @@ use prelude::*;
 
 use super::fixtures::*;
 
+fn assert_uniform_column_widths(output: &[String]) {
+    assert!(!output.is_empty());
+    let widths: Vec<usize> = output[0]
+        .trim_matches('|')
+        .split('|')
+        .map(str::len)
+        .collect();
+    for row in output {
+        let cols: Vec<&str> = row.trim_matches('|').split('|').collect();
+        for (i, col) in cols.iter().enumerate() {
+            assert_eq!(col.len(), widths[i]);
+        }
+    }
+}
+
 #[rstest]
 fn test_reflow_basic(broken_table: Vec<String>) {
     let expected = lines_vec!["| A | B |", "| 1 | 2 |", "| 3 | 4 |"];
@@ -50,18 +65,7 @@ fn test_uniform_example_one() {
         "| blobs / raw | `BYTEA` | `BLOB` |",
     ];
     let output = reflow_table(&input);
-    assert!(!output.is_empty());
-    let widths: Vec<usize> = output[0]
-        .trim_matches('|')
-        .split('|')
-        .map(str::len)
-        .collect();
-    for row in output {
-        let cols: Vec<&str> = row.trim_matches('|').split('|').collect();
-        for (i, col) in cols.iter().enumerate() {
-            assert_eq!(col.len(), widths[i]);
-        }
-    }
+    assert_uniform_column_widths(&output);
 }
 
 #[test]
@@ -74,16 +78,5 @@ fn test_uniform_example_two() {
         "| **D. Two separate migration trees** | Maintain `migrations/sqlite` and `migrations/postgres` directories with identical version numbers. Use `embed_migrations!(\"migrations/<backend>\")` to compile the right set. | You ship a single binary with migrations baked in. |",
     ];
     let output = reflow_table(&input);
-    assert!(!output.is_empty());
-    let widths: Vec<usize> = output[0]
-        .trim_matches('|')
-        .split('|')
-        .map(str::len)
-        .collect();
-    for row in output {
-        let cols: Vec<&str> = row.trim_matches('|').split('|').collect();
-        for (i, col) in cols.iter().enumerate() {
-            assert_eq!(col.len(), widths[i]);
-        }
-    }
+    assert_uniform_column_widths(&output);
 }

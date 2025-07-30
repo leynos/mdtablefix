@@ -1,4 +1,8 @@
 //! Tests for `convert_html_tables`.
+//!
+//! This module provides comprehensive unit tests for HTML table to markdown conversion,
+//! covering standard tables, edge cases with colspan attributes, malformed HTML,
+//! and various header scenarios.
 
 use mdtablefix::convert_html_tables;
 

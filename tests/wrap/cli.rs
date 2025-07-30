@@ -1,6 +1,5 @@
 //! Tests for CLI wrap option.
 
-use mdtablefix::process_stream; // not used but keep for parity
 
 #[macro_use]
 #[path = "../prelude/mod.rs"]
