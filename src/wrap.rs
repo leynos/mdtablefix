@@ -71,6 +71,7 @@ static HANDLERS: &[PrefixHandler] = &[
 ];
 
 /// Markdown token emitted by [`tokenize_markdown`].
+/// Markdown token emitted by token-processing helpers.
 #[derive(Debug, PartialEq)]
 pub enum Token<'a> {
     /// Line within a fenced code block, including the fence itself.
@@ -170,64 +171,6 @@ fn tokenize_inline(text: &str) -> Vec<String> {
     }
     tokens
 }
-
-/// Split the input string into [`Token`]s by analysing whitespace and
-/// backtick delimiters.
-///
-/// The tokenizer groups consecutive whitespace into a single
-/// [`Token::Text`] and recognises backtick sequences as inline code spans.
-/// When a run of backticks is encountered the parser searches forward for an
-/// identical delimiter, allowing nested backticks when the span uses a longer
-/// fence. Unmatched delimiter sequences are treated as literal text.
-///
-/// ```rust,ignore
-/// use mdtablefix::wrap::{Token, tokenize_markdown};
-///
-/// let tokens = tokenize_markdown("Example with `code`");
-/// assert_eq!(
-///     tokens,
-///     vec![Token::Text("Example with "), Token::Code("code")]
-/// );
-/// ```
-pub(crate) fn tokenize_markdown(input: &str) -> Vec<Token<'_>> {
-    let mut out = Vec::new();
-    let mut in_fence = false;
-    for line in input.split_inclusive('\n') {
-        let trimmed = line.trim_end_matches('\n');
-        if FENCE_RE.is_match(trimmed) {
-            out.push(Token::Fence(trimmed));
-            out.push(Token::Newline);
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
-            out.push(Token::Fence(trimmed));
-            out.push(Token::Newline);
-            continue;
-        }
-        let mut rest = trimmed;
-        while let Some(pos) = rest.find('`') {
-            if pos > 0 {
-                out.push(Token::Text(&rest[..pos]));
-            }
-            if let Some(end) = rest[pos + 1..].find('`') {
-                out.push(Token::Code(&rest[pos + 1..pos + 1 + end]));
-                rest = &rest[pos + end + 2..];
-            } else {
-                out.push(Token::Text(&rest[pos..]));
-                rest = "";
-                break;
-            }
-        }
-        if !rest.is_empty() {
-            out.push(Token::Text(rest));
-        }
-        out.push(Token::Newline);
-    }
-    out.pop();
-    out
-}
-
 /// Determine if the current line should break at the last whitespace.
 ///
 /// Returns `true` if `current_width` exceeds `width` and a whitespace split

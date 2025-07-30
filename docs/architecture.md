@@ -252,7 +252,6 @@ classDiagram
     table ..> reflow : uses parse_rows, etc.
     lists ..> wrap : uses is_fence
     breaks ..> wrap : uses is_fence
-    ellipsis ..> wrap : uses tokenize_markdown
     ellipsis ..> textproc : uses process_tokens
     process ..> html : uses convert_html_tables
     process ..> table : uses reflow_table

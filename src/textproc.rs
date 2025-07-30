@@ -1,25 +1,26 @@
-//! Token-level transformation utilities.
+//! Provides helpers for token-based transformations of Markdown lines.
 //!
-//! This module provides helpers for processing Markdown input by
-//! reusing the tokenizer from the [`wrap`] module. Each helper joins
-//! incoming lines, tokenizes them, and feeds the tokens to caller
-//! provided logic before splitting the output back into lines.
+//! This module reuses the tokenizer from the [`wrap`] module and offers
+//! a streaming API for rewriting Markdown. Each helper tokenizes lines
+//! on the fly, feeds the resulting tokens to caller-provided logic, and
+//! then reconstructs the lines. Trailing blank lines roundtrip
+//! correctly.
 
-use crate::wrap::{Token, tokenize_markdown};
+use crate::wrap::{Token, is_fence};
 
 /// Apply a transformation to a sequence of [`Token`]s.
 ///
-/// The `lines` slice is joined with newlines and tokenized. Each token
-/// is passed to `f` along with the output accumulator. The final
-/// string is split on newline characters and returned as a vector of
-/// lines.
+/// The `lines` slice is tokenized in order, preserving fence context.
+/// Each token is passed to `f` along with the output accumulator. The
+/// final string is split on newline characters and returned as a
+/// vector of lines.
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use mdtablefix::{
 ///     textproc::process_tokens,
-///     wrap::{Token, tokenize_markdown},
+///     wrap::Token,
 /// };
 ///
 /// let lines = vec!["code".to_string()];
@@ -43,15 +44,58 @@ where
     if lines.is_empty() {
         return Vec::new();
     }
+
     let trailing_blanks = lines.iter().rev().take_while(|l| l.is_empty()).count();
-    let joined = lines.join("\n");
-    let mut out = String::new();
-    for token in tokenize_markdown(&joined) {
-        f(token, &mut out);
+    if trailing_blanks == lines.len() {
+        return vec![String::new(); lines.len()];
     }
+
+    let mut out = String::new();
+    let mut in_fence = false;
+    let last_idx = lines.len() - 1;
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.as_str();
+        if is_fence(trimmed) {
+            f(Token::Fence(trimmed), &mut out);
+            if i < last_idx {
+                f(Token::Newline, &mut out);
+            }
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            f(Token::Fence(trimmed), &mut out);
+            if i < last_idx {
+                f(Token::Newline, &mut out);
+            }
+            continue;
+        }
+        let mut rest = trimmed;
+        while let Some(pos) = rest.find('`') {
+            if pos > 0 {
+                f(Token::Text(&rest[..pos]), &mut out);
+            }
+            if let Some(end) = rest[pos + 1..].find('`') {
+                f(Token::Code(&rest[pos + 1..pos + 1 + end]), &mut out);
+                rest = &rest[pos + end + 2..];
+            } else {
+                f(Token::Text(&rest[pos..]), &mut out);
+                rest = "";
+                break;
+            }
+        }
+        if !rest.is_empty() {
+            f(Token::Text(rest), &mut out);
+        }
+        if i < last_idx {
+            f(Token::Newline, &mut out);
+        }
+    }
+
     if out.is_empty() {
         return Vec::new();
     }
+
     let mut result: Vec<String> = out.split('\n').map(str::to_string).collect();
     let out_blanks = result.iter().rev().take_while(|l| l.is_empty()).count();
     for _ in out_blanks..trailing_blanks {
@@ -107,6 +151,13 @@ mod tests {
             Token::Fence(f) => buf.push_str(f),
             Token::Newline => buf.push('\n'),
         });
+        assert_eq!(out, lines);
+    }
+
+    #[test]
+    fn blanks_only_are_preserved() {
+        let lines = vec![String::new(), String::new()];
+        let out = process_tokens(&lines, |_tok, _buf| {});
         assert_eq!(out, lines);
     }
 }
