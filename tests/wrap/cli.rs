@@ -1,4 +1,10 @@
-//! Tests for CLI wrap option.
+//! Behavioural tests for the CLI `--wrap` option.
+//!
+//! These tests exercise how the binary reflows long input when invoked with
+//! `--wrap`. They verify that lines never exceed 80 columns and that wrapping is
+//! consistent with internal library behaviour. By covering the command-line
+//! entry point, they help catch regressions in argument handling and ensure the
+//! user-facing interface behaves as documented.
 
 
 #[macro_use]
