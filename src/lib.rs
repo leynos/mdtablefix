@@ -29,6 +29,7 @@ pub mod lists;
 pub mod process;
 mod reflow;
 pub mod table;
+mod textproc;
 pub mod wrap;
 
 #[deprecated(note = "this function is legacy; use `convert_html_tables` instead")]
