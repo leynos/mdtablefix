@@ -106,16 +106,19 @@ fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
                 }
                 i += 1;
             }
-            // treat trailing punctuation as part of the link token
-            if i < chars.len() && matches!(chars[i], '.' | ',' | '!' | '?' | ':' | ';') {
-                i += 1;
-            }
             let tok: String = chars[start..i].iter().collect();
             return (tok, i);
         }
     }
     let tok: String = chars[start..=start].iter().collect();
     (tok, start + 1)
+}
+
+fn is_trailing_punctuation(c: char) -> bool {
+    matches!(
+        c,
+        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
+    )
 }
 
 fn tokenize_inline(text: &str) -> Vec<String> {
@@ -161,8 +164,16 @@ fn tokenize_inline(text: &str) -> Vec<String> {
                 i = end;
             }
         } else if c == '[' || (c == '!' && i + 1 < chars.len() && chars[i + 1] == '[') {
-            let (tok, new_i) = parse_link_or_image(&chars, i);
+            let (tok, mut new_i) = parse_link_or_image(&chars, i);
             tokens.push(tok);
+            let mut punct = String::new();
+            while new_i < chars.len() && is_trailing_punctuation(chars[new_i]) {
+                punct.push(chars[new_i]);
+                new_i += 1;
+            }
+            if !punct.is_empty() {
+                tokens.push(punct);
+            }
             i = new_i;
         } else {
             let start = i;
@@ -255,8 +266,23 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut current = String::new();
     let mut current_width = 0;
     let mut last_split: Option<usize> = None;
-    for token in tokenize_inline(text) {
-        let token_width = UnicodeWidthStr::width(token.as_str());
+    let tokens = tokenize_inline(text);
+    let mut i = 0;
+    while i < tokens.len() {
+        let mut token = tokens[i].clone();
+        let mut token_width = UnicodeWidthStr::width(token.as_str());
+
+        if token.contains("](") && token.ends_with(')') {
+            let mut j = i + 1;
+            while j < tokens.len() && tokens[j].chars().all(is_trailing_punctuation) {
+                token.push_str(&tokens[j]);
+                token_width += UnicodeWidthStr::width(tokens[j].as_str());
+                j += 1;
+            }
+            i = j;
+        } else {
+            i += 1;
+        }
         if current.is_empty()
             && token.len() == 1
             && ".?!,:;".contains(token.as_str())

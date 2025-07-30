@@ -307,3 +307,16 @@ multibyte characters from causing unexpected wraps or truncation.
 
 Whenever wrapping logic examines the length of a token, it relies on
 `UnicodeWidthStr::width` to measure visible columns rather than byte length.
+
+## Link punctuation handling
+
+Trailing punctuation immediately following a Markdown link or image is
+tokenised separately and grouped with the link when wrapping. This keeps
+sentences like:
+
+```markdown
+[link](path).
+```
+
+on a single line rather than splitting the punctuation onto the next line when
+wrapping occurs.
