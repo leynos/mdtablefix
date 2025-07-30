@@ -290,6 +290,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
                 .last_mut()
                 .expect("checked last line exists")
                 .push_str(&tokens[i]);
+            i += 1;
             continue;
         }
 
