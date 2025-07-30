@@ -269,19 +269,14 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let tokens = tokenize_inline(text);
     let mut i = 0;
     while i < tokens.len() {
-        let mut token = tokens[i].clone();
-        let mut token_width = UnicodeWidthStr::width(token.as_str());
+        let mut j = i + 1;
+        let mut group_width = UnicodeWidthStr::width(tokens[i].as_str());
 
-        if token.contains("](") && token.ends_with(')') {
-            let mut j = i + 1;
+        if tokens[i].contains("](") && tokens[i].ends_with(')') {
             while j < tokens.len() && tokens[j].chars().all(is_trailing_punctuation) {
-                token.push_str(&tokens[j]);
-                token_width += UnicodeWidthStr::width(tokens[j].as_str());
+                group_width += UnicodeWidthStr::width(tokens[j].as_str());
                 j += 1;
             }
-            i = j;
-        } else {
-            i += 1;
         }
         if current.is_empty()
             && token.len() == 1
@@ -296,16 +291,20 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
                 .push_str(&token);
             continue;
         }
-        if current_width + token_width <= width {
-            current.push_str(&token);
-            current_width += token_width;
-            if token.chars().all(char::is_whitespace) {
-                last_split = Some(current.len());
+
+        if current_width + group_width <= width {
+            for tok in &tokens[i..j] {
+                current.push_str(tok);
+                if tok.chars().all(char::is_whitespace) {
+                    last_split = Some(current.len());
+                }
+                current_width += UnicodeWidthStr::width(tok.as_str());
             }
+            i = j;
             continue;
         }
 
-        if should_break_line(width, current_width + token_width, last_split) {
+        if should_break_line(width, current_width + group_width, last_split) {
             let pos = last_split.unwrap();
             let line = current[..pos].to_string();
             let mut rest = current[pos..].trim_start().to_string();
@@ -313,10 +312,12 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             if !trimmed.is_empty() {
                 lines.push(trimmed.to_string());
             }
-            rest.push_str(&token);
+            for tok in &tokens[i..j] {
+                rest.push_str(tok);
+            }
             current = rest;
             current_width = UnicodeWidthStr::width(current.as_str());
-            last_split = if token.chars().all(char::is_whitespace) {
+            last_split = if tokens[j - 1].chars().all(char::is_whitespace) {
                 Some(current.len())
             } else {
                 None
@@ -327,6 +328,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
                 current_width = 0;
                 last_split = None;
             }
+            i = j;
             continue;
         }
 
@@ -336,11 +338,18 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         }
         current.clear();
         current_width = 0;
+        last_split = None;
 
-        if !token.chars().all(char::is_whitespace) {
-            current.push_str(&token);
-            current_width = token_width;
+        for tok in &tokens[i..j] {
+            if !tok.chars().all(char::is_whitespace) {
+                current.push_str(tok);
+                current_width += UnicodeWidthStr::width(tok.as_str());
+            }
         }
+        if j > i && tokens[j - 1].chars().all(char::is_whitespace) {
+            last_split = Some(current.len());
+        }
+        i = j;
     }
     let trimmed = current.trim_end();
     if !trimmed.is_empty() {

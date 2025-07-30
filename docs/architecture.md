@@ -318,5 +318,5 @@ sentences like:
 [link](path).
 ```
 
-on a single line rather than splitting the punctuation onto the next line when
+on a single line, rather than splitting the punctuation onto the next line when
 wrapping occurs.
