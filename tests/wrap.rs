@@ -475,6 +475,57 @@ fn test_wrap_paragraph_with_nested_link() {
     );
 }
 
+/// Ensures punctuation immediately following a link remains attached when
+/// wrapping lines.
+#[test]
+fn test_wrap_link_with_trailing_punctuation() {
+    let input = lines_vec![
+        "[`rust-multithreaded-logging-framework-for-python-design.md`](./\
+         rust-multithreaded-logging-framework-for-python-design.md).",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
+/// Test links followed by various punctuation marks remain on a single line.
+#[rstest]
+#[case(".")]
+#[case(",")]
+#[case(";")]
+#[case(":")]
+#[case("!")]
+#[case("?")]
+#[case("...")]
+fn test_wrap_link_with_various_trailing_punctuation(#[case] punct: &str) {
+    let input = lines_vec![format!("[link](https://example.com){}", punct)];
+    let output = process_stream(&input);
+    assert_eq!(output, input, "Failed for punctuation: {punct}");
+}
+
+/// Test a link at line end without trailing punctuation.
+#[test]
+fn test_wrap_link_at_line_end() {
+    let input = lines_vec!["Check out [link](https://example.com)"];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
+/// Test links containing punctuation within the link text.
+#[test]
+fn test_wrap_link_with_punctuation_in_text() {
+    let input = lines_vec!["[foo, bar!](https://example.com)"];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
+/// Test links containing punctuation inside the URL.
+#[test]
+fn test_wrap_link_with_punctuation_in_url() {
+    let input = lines_vec!["[link](https://example.com/foo,bar)"];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
 /// Regression test for wrapping list items that end with a full stop.
 ///
 /// The period following the inline code span should remain on the same line
