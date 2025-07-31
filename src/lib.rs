@@ -31,7 +31,7 @@ mod reflow;
 pub mod table;
 pub mod wrap;
 
-#[doc(hidden)]
+#[deprecated(note = "this function is legacy; use `convert_html_tables` instead")]
 #[must_use]
 pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     html::html_table_to_markdown(lines)
