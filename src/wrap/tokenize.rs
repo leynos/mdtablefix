@@ -119,6 +119,70 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
     tokens
 }
 
+fn tokenize_inline<'a, F>(text: &'a str, emit: &mut F)
+where
+    F: FnMut(Token<'a>),
+{
+    let mut rest = text;
+    while let Some(pos) = rest.find('`') {
+        if pos > 0 {
+            emit(Token::Text(&rest[..pos]));
+        }
+        let delim_len = rest[pos..].chars().take_while(|&c| c == '`').count();
+        let search = &rest[pos + delim_len..];
+        let closing = "`".repeat(delim_len);
+        if let Some(end) = search.find(&closing) {
+            emit(Token::Code(&rest[pos + delim_len..pos + delim_len + end]));
+            rest = &search[end + delim_len..];
+        } else {
+            emit(Token::Text(&rest[pos..]));
+            rest = "";
+            break;
+        }
+    }
+    if !rest.is_empty() {
+        emit(Token::Text(rest));
+    }
+}
+
+/// Tokenize a block of Markdown into [`Token`]s.
+#[must_use]
+pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
+    if source.is_empty() {
+        return Vec::new();
+    }
+
+    let mut tokens = Vec::new();
+    let lines: Vec<&str> = source.split('\n').collect();
+    let last_idx = lines.len() - 1;
+    let mut in_fence = false;
+
+    for (i, line) in lines.iter().enumerate() {
+        if super::is_fence(line) {
+            tokens.push(Token::Fence(line));
+            if i != last_idx {
+                tokens.push(Token::Newline);
+            }
+            in_fence = !in_fence;
+            continue;
+        }
+
+        if in_fence {
+            tokens.push(Token::Fence(line));
+            if i != last_idx {
+                tokens.push(Token::Newline);
+            }
+            continue;
+        }
+
+        tokenize_inline(line, &mut |tok| tokens.push(tok));
+        if i != last_idx {
+            tokens.push(Token::Newline);
+        }
+    }
+    tokens
+}
+
 /// Split the input string into [`Token`]s by analysing whitespace and backtick
 /// delimiters.
 ///

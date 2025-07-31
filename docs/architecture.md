@@ -266,9 +266,11 @@ classDiagram
 The `lib` module re-exports the public API from the other modules. The
 `ellipsis` module performs text normalization, while `footnotes` converts bare
 references. The `textproc` module contains shared token-processing helpers used
-by both the `ellipsis` and `footnotes` modules. The `process` module provides
-streaming helpers that combine the lower-level functions. The `io` module
-handles filesystem operations, delegating the text processing to `process`.
+by both the `ellipsis` and `footnotes` modules. Tokenization is handled by
+`wrap::tokenize_markdown`, replacing the small state machine that previously
+resided in `process_tokens`. The `process` module provides streaming helpers
+that combine the lower-level functions. The `io` module handles filesystem
+operations, delegating the text processing to `process`.
 
 The helper `html_table_to_markdown` is retained for backward compatibility but
 is deprecated. New code should call `convert_html_tables` instead.
