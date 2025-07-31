@@ -9,6 +9,59 @@
 pub use crate::wrap::Token;
 use crate::wrap::is_fence;
 
+fn tokenize_inline<'a, F>(text: &'a str, emit: &mut F)
+where
+    F: FnMut(Token<'a>),
+{
+    let mut rest = text;
+    while let Some(pos) = rest.find('`') {
+        if pos > 0 {
+            emit(Token::Text(&rest[..pos]));
+        }
+        let delim_len = rest[pos..].chars().take_while(|&c| c == '`').count();
+        let search = &rest[pos + delim_len..];
+        let closing = "`".repeat(delim_len);
+        if let Some(end) = search.find(&closing) {
+            emit(Token::Code(&rest[pos + delim_len..pos + delim_len + end]));
+            rest = &search[end + delim_len..];
+        } else {
+            emit(Token::Text(&rest[pos..]));
+            rest = "";
+            break;
+        }
+    }
+    if !rest.is_empty() {
+        emit(Token::Text(rest));
+    }
+}
+
+fn handle_line<'a, F>(line: &'a str, last: bool, in_fence: &mut bool, f: &mut F, out: &mut String)
+where
+    F: FnMut(Token<'a>, &mut String),
+{
+    if is_fence(line) {
+        f(Token::Fence(line), out);
+        if !last {
+            f(Token::Newline, out);
+        }
+        *in_fence = !*in_fence;
+        return;
+    }
+
+    if *in_fence {
+        f(Token::Fence(line), out);
+        if !last {
+            f(Token::Newline, out);
+        }
+        return;
+    }
+
+    tokenize_inline(line, &mut |tok| f(tok, out));
+    if !last {
+        f(Token::Newline, out);
+    }
+}
+
 /// Apply a transformation to a sequence of [`Token`]s.
 ///
 /// The `lines` slice is tokenized in order, preserving fence context.
@@ -18,11 +71,8 @@ use crate::wrap::is_fence;
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use mdtablefix::{
-///     textproc::process_tokens,
-///     wrap::Token,
-/// };
+/// ```rust
+/// use mdtablefix::{textproc::process_tokens, wrap::Token};
 ///
 /// let lines = vec!["code".to_string()];
 /// let out = process_tokens(&lines, |tok, out| match tok {
@@ -38,7 +88,7 @@ use crate::wrap::is_fence;
 /// assert_eq!(out, lines);
 /// ```
 #[must_use]
-pub(crate) fn process_tokens<F>(lines: &[String], mut f: F) -> Vec<String>
+pub fn process_tokens<F>(lines: &[String], mut f: F) -> Vec<String>
 where
     F: FnMut(Token<'_>, &mut String),
 {
@@ -55,42 +105,7 @@ where
     let mut in_fence = false;
     let last_idx = lines.len() - 1;
     for (i, line) in lines.iter().enumerate() {
-        let trimmed = line.as_str();
-        if is_fence(trimmed) {
-            f(Token::Fence(trimmed), &mut out);
-            if i < last_idx {
-                f(Token::Newline, &mut out);
-            }
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
-            f(Token::Fence(trimmed), &mut out);
-            if i < last_idx {
-                f(Token::Newline, &mut out);
-            }
-            continue;
-        }
-        let mut rest = trimmed;
-        while let Some(pos) = rest.find('`') {
-            if pos > 0 {
-                f(Token::Text(&rest[..pos]), &mut out);
-            }
-            if let Some(end) = rest[pos + 1..].find('`') {
-                f(Token::Code(&rest[pos + 1..pos + 1 + end]), &mut out);
-                rest = &rest[pos + end + 2..];
-            } else {
-                f(Token::Text(&rest[pos..]), &mut out);
-                rest = "";
-                break;
-            }
-        }
-        if !rest.is_empty() {
-            f(Token::Text(rest), &mut out);
-        }
-        if i < last_idx {
-            f(Token::Newline, &mut out);
-        }
+        handle_line(line, i == last_idx, &mut in_fence, &mut f, &mut out);
     }
 
     if out.is_empty() {
@@ -193,6 +208,19 @@ mod tests {
             "Fence(\"```\")".to_string(),
             "Newline".to_string(),
             "Fence(\"code\")".to_string(),
+        ];
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn multi_backtick_spans_are_recognised() {
+        let lines = vec!["A ``code`` span".to_string()];
+        let mut tokens = Vec::new();
+        let _ = process_tokens(&lines, |tok, _| tokens.push(format!("{tok:?}")));
+        let expected = vec![
+            "Text(\"A \")".to_string(),
+            "Code(\"code\")".to_string(),
+            "Text(\" span\")".to_string(),
         ];
         assert_eq!(tokens, expected);
     }
