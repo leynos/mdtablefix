@@ -1,8 +1,9 @@
-//! Text wrapping utilities respecting inline code and prefixes.
+//! Utilities for wrapping Markdown lines.
 //!
-//! Unicode width handling follows the "Unicode Width Handling" section in
-//! `docs/architecture.md` and uses the `unicode-width` crate for accurate
-//! display calculations.
+//! These helpers reflow paragraphs and list items while preserving inline code
+//! spans, fenced code blocks, and other prefixes. Width calculations rely on
+//! `UnicodeWidthStr::width` from the `unicode-width` crate as described in
+//! `docs/architecture.md#unicode-width-handling`.
 
 use regex::{Captures, Regex};
 
