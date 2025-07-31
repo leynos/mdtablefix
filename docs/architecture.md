@@ -94,9 +94,16 @@ returns the updated stream for writing to disk or further manipulation.
 ## Footnote Conversion
 
 `mdtablefix` can optionally convert bare numeric references into
-GitHub-flavoured Markdown footnotes. The `convert_footnotes` function performs
-this operation and is exposed via the higher-level `process_stream_opts`
-helper. Set `Options { footnotes: true, ..Default::default() }` when calling
+GitHub-flavoured Markdown footnotes. A bare numeric reference is a number that
+appears after punctuation with no footnote formatting, for example:
+
+```markdown
+An example of a bare numeric reference.1
+```
+
+The `convert_footnotes` function performs this operation and is exposed via the
+higher-level `process_stream_opts` helper. Set
+`Options { footnotes: true, ..Default::default() }` when calling
 `process_stream_opts` to enable the conversion logic. The parameter defaults to
 `false`.
 
