@@ -3,8 +3,6 @@
 //! This module contains utilities for breaking lines into tokens so that
 //! inline code spans and Markdown links are preserved during wrapping.
 
-use super::FENCE_RE;
-
 fn scan_while<F>(chars: &[char], mut i: usize, cond: F) -> usize
 where
     F: Fn(char) -> bool,
@@ -19,7 +17,7 @@ fn collect_range(chars: &[char], start: usize, end: usize) -> String {
     chars[start..end].iter().collect()
 }
 
-/// Markdown token emitted by [`tokenize_markdown`].
+/// Markdown token emitted by [`segment_inline`].
 #[derive(Debug, PartialEq)]
 pub enum Token<'a> {
     /// Line within a fenced code block, including the fence itself.
@@ -129,45 +127,6 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
 /// is encountered the parser searches forward for an identical delimiter,
 /// allowing nested backticks when the span uses a longer fence. Unmatched
 /// delimiter sequences are treated as literal text.
-pub(crate) fn tokenize_markdown(input: &str) -> Vec<Token<'_>> {
-    let mut out = Vec::new();
-    let mut in_fence = false;
-    for line in input.split_inclusive('\n') {
-        let trimmed = line.trim_end_matches('\n');
-        if FENCE_RE.is_match(trimmed) {
-            out.push(Token::Fence(trimmed));
-            out.push(Token::Newline);
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
-            out.push(Token::Fence(trimmed));
-            out.push(Token::Newline);
-            continue;
-        }
-        let mut rest = trimmed;
-        while let Some(pos) = rest.find('`') {
-            if pos > 0 {
-                out.push(Token::Text(&rest[..pos]));
-            }
-            if let Some(end) = rest[pos + 1..].find('`') {
-                out.push(Token::Code(&rest[pos + 1..pos + 1 + end]));
-                rest = &rest[pos + end + 2..];
-            } else {
-                out.push(Token::Text(&rest[pos..]));
-                rest = "";
-                break;
-            }
-        }
-        if !rest.is_empty() {
-            out.push(Token::Text(rest));
-        }
-        out.push(Token::Newline);
-    }
-    out.pop();
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
