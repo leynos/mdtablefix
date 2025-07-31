@@ -8,7 +8,7 @@
 use regex::{Captures, Regex};
 
 mod tokenize;
-pub(crate) use tokenize::{Token, tokenize_markdown};
+pub use tokenize::Token;
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").unwrap());
@@ -37,18 +37,6 @@ static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLo
     )
     .expect("valid markdownlint regex")
 });
-/// Markdown token emitted by token-processing helpers.
-#[derive(Debug, PartialEq)]
-pub enum Token<'a> {
-    /// Line within a fenced code block, including the fence itself.
-    Fence(&'a str),
-    /// Inline code span without surrounding backticks.
-    Code(&'a str),
-    /// Plain text outside code regions.
-    Text(&'a str),
-    /// Line break separating tokens.
-    Newline,
-}
 
 struct PrefixHandler {
     re: &'static std::sync::LazyLock<Regex>,
@@ -63,77 +51,6 @@ impl PrefixHandler {
     fn build_footnote_prefix(cap: &Captures) -> String { format!("{}{}", &cap[1], &cap[2]) }
 
     fn build_blockquote_prefix(cap: &Captures) -> String { cap[1].to_string() }
-fn tokenize_inline(text: &str) -> Vec<String> {
-    let mut tokens = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        if c.is_whitespace() {
-            let start = i;
-            while i < chars.len() && chars[i].is_whitespace() {
-                i += 1;
-            }
-            tokens.push(chars[start..i].iter().collect());
-        } else if c == '`' {
-            let start = i;
-            let mut delim_len = 0;
-            while i < chars.len() && chars[i] == '`' {
-                i += 1;
-                delim_len += 1;
-            }
-            let mut end = i;
-            while end < chars.len() {
-                if chars[end] == '`' {
-                    let mut j = end;
-                    let mut count = 0;
-                    while j < chars.len() && chars[j] == '`' {
-                        j += 1;
-                        count += 1;
-                    }
-                    if count == delim_len {
-                        end = j;
-                        break;
-                    }
-                }
-                end += 1;
-            }
-            if end >= chars.len() {
-                tokens.push(chars[start..start + delim_len].iter().collect());
-                i = start + delim_len;
-            } else {
-                tokens.push(chars[start..end].iter().collect());
-                i = end;
-            }
-        } else if c == '[' || (c == '!' && i + 1 < chars.len() && chars[i + 1] == '[') {
-            let (tok, new_i) = parse_link_or_image(&chars, i);
-            tokens.push(tok);
-            i = new_i;
-        } else {
-            let start = i;
-            while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '`' {
-                i += 1;
-            }
-            tokens.push(chars[start..i].iter().collect());
-        }
-    }
-    tokens
-}
-
-/// Determine if the current line should break at the last whitespace.
-///
-/// Returns `true` if `current_width` exceeds `width` and a whitespace split
-/// position is available.
-///
-/// # Examples
-///
-/// ```ignore
-/// use mdtablefix::wrap::should_break_line;
-/// assert!(should_break_line(10, 12, Some(3)));
-/// assert!(!should_break_line(10, 8, Some(3)));
-/// ```
-fn should_break_line(width: usize, current_width: usize, last_split: Option<usize>) -> bool {
-    current_width > width && last_split.is_some()
 }
 
 static HANDLERS: &[PrefixHandler] = &[
