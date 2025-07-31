@@ -3,6 +3,7 @@
 //! Validates text wrapping behaviour for paragraph content, including handling
 //! of long words that exceed the 80-column limit and cannot be broken.
 
+use rstest::rstest;
 use super::*;
 
 #[test]
@@ -17,8 +18,6 @@ fn test_wrap_paragraph() {
 }
 
 #[test]
-use rstest::rstest;
-
 #[rstest]
 #[case(100)]
 #[case(150)]
