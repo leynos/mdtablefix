@@ -190,7 +190,7 @@ classDiagram
     class html {
         <<module>>
         +convert_html_tables()
-        +html_table_to_markdown()
+        +html_table_to_markdown() %% deprecated
     }
     class table {
         <<module>>
@@ -263,6 +263,9 @@ The `lib` module re-exports the public API from the other modules. The
 streaming helpers that combine the lower-level functions, including ellipsis
 replacement and footnote conversion. The `io` module handles filesystem
 operations, delegating the text processing to `process`.
+
+The helper `html_table_to_markdown` is retained for backward compatibility but
+is deprecated. New code should call `convert_html_tables` instead.
 
 ## Concurrency with `rayon`
 
