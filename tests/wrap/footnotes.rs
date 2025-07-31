@@ -1,4 +1,8 @@
 //! Footnote wrapping tests.
+//!
+//! Validates wrapping behaviour for Markdown footnotes, ensuring proper
+//! indentation is maintained and inline code spans are not broken across lines.
+//! Tests various footnote formats including those with URLs and code.
 
 use super::*;
 
@@ -10,6 +14,19 @@ fn test_wrap_footnote_multiline() {
     )];
     let output = process_stream(&input);
     assert_wrapped_list_item(&output, "[^note]: ", 2);
+}
+
+#[test]
+fn test_wrap_footnote_multiline_with_blank_lines() {
+    let input = lines_vec![
+        "[^note]: This footnote begins with a paragraph long enough to trigger wrapping so that indentation can be checked.",
+        "",
+        "    This second paragraph should also wrap correctly and remain indented.",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output[1], "");
+    assert!(output.iter().skip(2).all(|l| l.starts_with("    ")));
+    assert!(output.iter().all(|l| l.len() <= 80));
 }
 
 #[test]

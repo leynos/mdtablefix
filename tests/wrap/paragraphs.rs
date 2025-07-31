@@ -1,4 +1,7 @@
 //! Paragraph wrapping tests.
+//!
+//! Validates text wrapping behaviour for paragraph content, including handling
+//! of long words that exceed the 80-column limit and cannot be broken.
 
 use super::*;
 
@@ -14,8 +17,14 @@ fn test_wrap_paragraph() {
 }
 
 #[test]
-fn test_wrap_paragraph_with_long_word() {
-    let long_word = "a".repeat(100);
+use rstest::rstest;
+
+#[rstest]
+#[case(100)]
+#[case(150)]
+#[case(200)]
+fn test_wrap_paragraph_with_long_word_parameterised(#[case] word_length: usize) {
+    let long_word = "a".repeat(word_length);
     let input = lines_vec![&long_word];
     let output = process_stream(&input);
     assert_eq!(output.len(), 1);
