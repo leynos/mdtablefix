@@ -1,0 +1,7 @@
+- **StateScoped Entities:** A best practice for managing entity lifecycles in
+  conjunction with states is the use of `StateScoped(MyState::InGame)`
+  components.10 Entities spawned with such a component are automatically
+  despawned when the application exits the specified state. This greatly
+  simplifies cleanup logic in tests. For example:
+  `commands.spawn((Name::new("TestPlayer"), StateScoped(GameState::InGame), PlayerComponent));`!
+

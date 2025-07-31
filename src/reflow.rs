@@ -1,7 +1,7 @@
-// Helper functions for reflowing markdown tables.
-//
-// These small utilities break down the steps of `reflow_table` so each
-// piece can be understood and tested independently.
+//! Helper functions for table reflow.
+//!
+//! The routines here parse raw rows, calculate cell widths, and format
+//! aligned output for the main [`reflow_table`] function.
 
 use regex::Regex;
 

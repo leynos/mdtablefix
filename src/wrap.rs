@@ -4,7 +4,7 @@
 //! `docs/architecture.md` and uses the `unicode-width` crate for accurate
 //! display calculations.
 
-use regex::Regex;
+use regex::{Captures, Regex};
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").unwrap());
@@ -17,6 +17,58 @@ static FOOTNOTE_RE: std::sync::LazyLock<Regex> =
 
 static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:>\s*)+)(.*)$").unwrap());
+
+/// Matches `markdownlint` comment directives.
+///
+/// The regex is case-insensitive and recognises these forms with optional rule
+/// names (including plugin rules such as `MD013/line-length` or
+/// `plugin/rule-name`):
+/// - `<!-- markdownlint-disable -->`
+/// - `<!-- markdownlint-enable -->`
+/// - `<!-- markdownlint-disable-line MD001 MD005 -->`
+/// - `<!-- markdownlint-disable-next-line MD001 MD005 -->`
+static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(
+        r"(?i)^\s*<!--\s*markdownlint-(?:disable|enable|disable-line|disable-next-line)(?:\s+[A-Za-z0-9_\-/]+)*\s*-->\s*$",
+    )
+    .expect("valid markdownlint regex")
+});
+
+struct PrefixHandler {
+    re: &'static std::sync::LazyLock<Regex>,
+    is_bq: bool,
+    build_prefix: fn(&Captures) -> String,
+    rest_group: usize,
+}
+
+impl PrefixHandler {
+    fn build_bullet_prefix(cap: &Captures) -> String { cap[1].to_string() }
+
+    fn build_footnote_prefix(cap: &Captures) -> String { format!("{}{}", &cap[1], &cap[2]) }
+
+    fn build_blockquote_prefix(cap: &Captures) -> String { cap[1].to_string() }
+}
+
+static HANDLERS: &[PrefixHandler] = &[
+    PrefixHandler {
+        re: &BULLET_RE,
+        is_bq: false,
+        build_prefix: PrefixHandler::build_bullet_prefix,
+        rest_group: 2,
+    },
+    PrefixHandler {
+        re: &FOOTNOTE_RE,
+        is_bq: false,
+        build_prefix: PrefixHandler::build_footnote_prefix,
+        rest_group: 3,
+    },
+    PrefixHandler {
+        re: &BLOCKQUOTE_RE,
+        is_bq: true,
+        build_prefix: PrefixHandler::build_blockquote_prefix,
+        rest_group: 2,
+    },
+];
 
 /// Markdown token emitted by [`tokenize_markdown`].
 #[derive(Debug, PartialEq)]
@@ -62,6 +114,13 @@ fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
     (tok, start + 1)
 }
 
+fn is_trailing_punctuation(c: char) -> bool {
+    matches!(
+        c,
+        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
+    )
+}
+
 fn tokenize_inline(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = text.chars().collect();
@@ -105,8 +164,16 @@ fn tokenize_inline(text: &str) -> Vec<String> {
                 i = end;
             }
         } else if c == '[' || (c == '!' && i + 1 < chars.len() && chars[i + 1] == '[') {
-            let (tok, new_i) = parse_link_or_image(&chars, i);
+            let (tok, mut new_i) = parse_link_or_image(&chars, i);
             tokens.push(tok);
+            let mut punct = String::new();
+            while new_i < chars.len() && is_trailing_punctuation(chars[new_i]) {
+                punct.push(chars[new_i]);
+                new_i += 1;
+            }
+            if !punct.is_empty() {
+                tokens.push(punct);
+            }
             i = new_i;
         } else {
             let start = i;
@@ -199,18 +266,47 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut current = String::new();
     let mut current_width = 0;
     let mut last_split: Option<usize> = None;
-    for token in tokenize_inline(text) {
-        let token_width = UnicodeWidthStr::width(token.as_str());
-        if current_width + token_width <= width {
-            current.push_str(&token);
-            current_width += token_width;
-            if token.chars().all(char::is_whitespace) {
-                last_split = Some(current.len());
+    let tokens = tokenize_inline(text);
+    let mut i = 0;
+    while i < tokens.len() {
+        let mut j = i + 1;
+        let mut group_width = UnicodeWidthStr::width(tokens[i].as_str());
+
+        if tokens[i].contains("](") && tokens[i].ends_with(')') {
+            while j < tokens.len() && tokens[j].chars().all(is_trailing_punctuation) {
+                group_width += UnicodeWidthStr::width(tokens[j].as_str());
+                j += 1;
             }
+        }
+
+        if current.is_empty()
+            && tokens[i].len() == 1
+            && ".?!,:;".contains(tokens[i].as_str())
+            && lines
+                .last()
+                .is_some_and(|l: &String| l.trim_end().ends_with('`'))
+        {
+            lines
+                .last_mut()
+                .expect("checked last line exists")
+                .push_str(&tokens[i]);
+            i += 1;
             continue;
         }
 
-        if should_break_line(width, current_width + token_width, last_split) {
+        if current_width + group_width <= width {
+            for tok in &tokens[i..j] {
+                current.push_str(tok);
+                if tok.chars().all(char::is_whitespace) {
+                    last_split = Some(current.len());
+                }
+                current_width += UnicodeWidthStr::width(tok.as_str());
+            }
+            i = j;
+            continue;
+        }
+
+        if should_break_line(width, current_width + group_width, last_split) {
             let pos = last_split.unwrap();
             let line = current[..pos].to_string();
             let mut rest = current[pos..].trim_start().to_string();
@@ -218,10 +314,12 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             if !trimmed.is_empty() {
                 lines.push(trimmed.to_string());
             }
-            rest.push_str(&token);
+            for tok in &tokens[i..j] {
+                rest.push_str(tok);
+            }
             current = rest;
             current_width = UnicodeWidthStr::width(current.as_str());
-            last_split = if token.chars().all(char::is_whitespace) {
+            last_split = if tokens[j - 1].chars().all(char::is_whitespace) {
                 Some(current.len())
             } else {
                 None
@@ -232,6 +330,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
                 current_width = 0;
                 last_split = None;
             }
+            i = j;
             continue;
         }
 
@@ -241,11 +340,18 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         }
         current.clear();
         current_width = 0;
+        last_split = None;
 
-        if !token.chars().all(char::is_whitespace) {
-            current.push_str(&token);
-            current_width = token_width;
+        for tok in &tokens[i..j] {
+            if !tok.chars().all(char::is_whitespace) {
+                current.push_str(tok);
+                current_width += UnicodeWidthStr::width(tok.as_str());
+            }
         }
+        if j > i && tokens[j - 1].chars().all(char::is_whitespace) {
+            last_split = Some(current.len());
+        }
+        i = j;
     }
     let trimmed = current.trim_end();
     if !trimmed.is_empty() {
@@ -256,6 +362,10 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 
 #[doc(hidden)]
 pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
+
+pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
+    MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
+}
 
 fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, width: usize) {
     if buf.is_empty() {
@@ -341,7 +451,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut indent = String::new();
     let mut in_code = false;
 
-    for line in lines {
+    'line_loop: for line in lines {
         if FENCE_RE.is_match(line) {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
@@ -372,6 +482,14 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
+        if is_markdownlint_directive(line) {
+            flush_paragraph(&mut out, &buf, &indent, width);
+            buf.clear();
+            indent.clear();
+            out.push(line.clone());
+            continue;
+        }
+
         if line.trim().is_empty() {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
@@ -380,27 +498,21 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
-        if let Some(cap) = BULLET_RE.captures(line) {
-            let prefix = cap.get(1).unwrap().as_str();
-            let rest = cap.get(2).unwrap().as_str();
-            handle_prefix_line(&mut out, &mut buf, &mut indent, width, prefix, rest, false);
-            continue;
-        }
-
-        if let Some(cap) = FOOTNOTE_RE.captures(line) {
-            let indent_part = cap.get(1).unwrap().as_str();
-            let label_part = cap.get(2).unwrap().as_str();
-            let prefix = format!("{indent_part}{label_part}");
-            let rest = cap.get(3).unwrap().as_str();
-            handle_prefix_line(&mut out, &mut buf, &mut indent, width, &prefix, rest, false);
-            continue;
-        }
-
-        if let Some(cap) = BLOCKQUOTE_RE.captures(line) {
-            let prefix = cap.get(1).unwrap().as_str();
-            let rest = cap.get(2).unwrap().as_str();
-            handle_prefix_line(&mut out, &mut buf, &mut indent, width, prefix, rest, true);
-            continue;
+        for handler in HANDLERS {
+            if let Some(cap) = handler.re.captures(line) {
+                let prefix = (handler.build_prefix)(&cap);
+                let rest = cap.get(handler.rest_group).unwrap().as_str();
+                handle_prefix_line(
+                    &mut out,
+                    &mut buf,
+                    &mut indent,
+                    width,
+                    &prefix,
+                    rest,
+                    handler.is_bq,
+                );
+                continue 'line_loop;
+            }
         }
 
         if buf.is_empty() {

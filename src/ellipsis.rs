@@ -5,12 +5,13 @@
 //! complete triple remain. Fenced code blocks and inline code spans are left
 //! untouched.
 
+use std::sync::LazyLock;
+
 use regex::Regex;
 
 use crate::wrap::{Token, tokenize_markdown};
 
-static DOT_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"\.{3,}").unwrap());
+static DOT_RE: LazyLock<Regex> = lazy_regex!(r"\.{3,}", "ellipsis pattern regex should compile");
 
 /// Replace `...` with `…` outside code spans and fences.
 #[must_use]

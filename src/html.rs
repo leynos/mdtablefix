@@ -15,10 +15,13 @@ use regex::Regex;
 use crate::wrap::is_fence;
 
 /// Matches the start of an HTML `<table>` tag, ignoring case.
-static TABLE_START_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)^<table(?:\s|>|$)").unwrap());
+static TABLE_START_RE: LazyLock<Regex> = lazy_regex!(
+    r"(?i)^<table(?:\s|>|$)",
+    "HTML table start pattern should compile"
+);
 /// Matches the end of an HTML `</table>` tag, ignoring case.
-static TABLE_END_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)</table>").unwrap());
+static TABLE_END_RE: LazyLock<Regex> =
+    lazy_regex!(r"(?i)</table>", "HTML table end pattern should compile");
 
 /// Extracts the text content of a DOM node, collapsing consecutive
 /// whitespace to single spaces.

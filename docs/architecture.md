@@ -269,7 +269,7 @@ operations, delegating the text processing to `process`.
 `mdtablefix` uses the `rayon` crate to process multiple files concurrently.
 `rayon` provides a work-stealing thread pool and simple parallel iterators. The
 tool relies on Rayon's global thread pool so that no manual setup is required.
-The dependency is specified as `^1.0` in `Cargo.toml` to track stable API
+The dependency is specified as `1.0` in `Cargo.toml` to track stable API
 changes within the same major release.
 
 Parallelism is enabled automatically whenever more than one file path is
@@ -307,3 +307,16 @@ multibyte characters from causing unexpected wraps or truncation.
 
 Whenever wrapping logic examines the length of a token, it relies on
 `UnicodeWidthStr::width` to measure visible columns rather than byte length.
+
+## Link punctuation handling
+
+Trailing punctuation immediately following a Markdown link or image is
+tokenized separately and grouped with the link when wrapping. This keeps
+sentences like:
+
+```markdown
+[link](path).
+```
+
+on a single line, rather than splitting the punctuation onto the next line when
+wrapping occurs.
