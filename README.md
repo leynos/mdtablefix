@@ -135,16 +135,31 @@ fn main() -> std::io::Result<()> {
         ..Default::default()
     };
     let fixed = process_stream_opts(&lines, opts);
-    println!("{}", fixed.join("\n"));
-    rewrite(Path::new("table.md"))?;
-    Ok(())
+  println!("{}", fixed.join("\n"));
+  rewrite(Path::new("table.md"))?;
+  Ok(())
 }
+```
+
+The `footnotes` option also rewrites bare numeric references:
+
+```rust
+use mdtablefix::{process_stream_opts, Options};
+
+let lines = vec![
+    "A tip.1".to_string(),
+    "",
+    "1. Footnote text".to_string(),
+];
+let opts = Options { footnotes: true, ..Default::default() };
+let out = process_stream_opts(&lines, opts);
+assert_eq!(out[0], "A tip.[^1]");
 ```
 
 - `process_stream_opts(lines: &[String], opts: Options) -> Vec<String>`
   rewrites tables in memory. The options enable paragraph wrapping, ellipsis
   substitution, fence normalization and footnote conversion when `footnotes` is
-  set to `true`.
+  set to `true`. The flag is `false` by default.
 
 - `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on
   disk in-place.
