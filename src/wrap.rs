@@ -186,16 +186,16 @@ fn tokenize_inline(text: &str) -> Vec<String> {
     tokens
 }
 
-/// Tokenize the input string by splitting on whitespace and backtick
-/// delimiters.
+/// Tokenize a Markdown snippet using backtick-delimited code spans.
 ///
-/// Consecutive whitespace characters are emitted as a single [`Token::Text`].
-/// Runs of backticks denote code spans; the parser searches ahead for a
-/// matching delimiter of the same length, allowing nested backticks when the
-/// outer span uses more characters. If no matching delimiter is found, the
-/// backticks are treated as literal text. The function employs a small
-/// state machine to track fenced blocks, ensuring that lines within fences are
-/// passed through unchanged.
+/// The function scans the input line by line. Lines matching [`FENCE_RE`]
+/// produce [`Token::Fence`] tokens and toggle fenced mode. Lines inside a
+/// fence are yielded verbatim. Outside fenced regions the scanner searches for
+/// backtick sequences. Text before a backtick becomes [`Token::Text`]. When a
+/// matching sequence of equal length follows, the enclosed portion forms a
+/// [`Token::Code`] span. If no closing sequence is found the backticks and the
+/// remaining text are returned as [`Token::Text`]. Whitespace is preserved
+/// exactly as it appears.
 ///
 /// ```rust,ignore
 /// use mdtablefix::wrap::{Token, tokenize_markdown};
