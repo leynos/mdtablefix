@@ -80,7 +80,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut current = String::new();
     let mut current_width = 0;
     let mut last_split: Option<usize> = None;
-    let tokens = tokenize::tokenize_inline(text);
+    let tokens = tokenize::segment_inline(text);
     let mut i = 0;
     while i < tokens.len() {
         let mut j = i + 1;
@@ -361,3 +361,6 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     flush_paragraph(&mut out, &buf, &indent, width);
     out
 }
+
+#[cfg(test)]
+mod tests;

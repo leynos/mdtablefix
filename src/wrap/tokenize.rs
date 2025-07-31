@@ -5,6 +5,20 @@
 
 use super::FENCE_RE;
 
+fn scan_while<F>(chars: &[char], mut i: usize, cond: F) -> usize
+where
+    F: Fn(char) -> bool,
+{
+    while i < chars.len() && cond(chars[i]) {
+        i += 1;
+    }
+    i
+}
+
+fn collect_range(chars: &[char], start: usize, end: usize) -> String {
+    chars[start..end].iter().collect()
+}
+
 /// Markdown token emitted by [`tokenize_markdown`].
 #[derive(Debug, PartialEq)]
 pub enum Token<'a> {
@@ -24,9 +38,7 @@ fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
         i += 1;
     }
     i += 1; // skip initial '[' which we know is present
-    while i < chars.len() && chars[i] != ']' {
-        i += 1;
-    }
+    i = scan_while(chars, i, |c| c != ']');
     if i < chars.len() && chars[i] == ']' {
         i += 1;
         if i < chars.len() && chars[i] == '(' {
@@ -40,12 +52,10 @@ fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
                 }
                 i += 1;
             }
-            let tok: String = chars[start..i].iter().collect();
-            return (tok, i);
+            return (collect_range(chars, start, i), i);
         }
     }
-    let tok: String = chars[start..=start].iter().collect();
-    (tok, start + 1)
+    (collect_range(chars, start, start + 1), start + 1)
 }
 
 pub(super) fn is_trailing_punctuation(c: char) -> bool {
@@ -55,7 +65,7 @@ pub(super) fn is_trailing_punctuation(c: char) -> bool {
     )
 }
 
-pub(super) fn tokenize_inline(text: &str) -> Vec<String> {
+pub(super) fn segment_inline(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = text.chars().collect();
     let mut i = 0;
@@ -63,58 +73,44 @@ pub(super) fn tokenize_inline(text: &str) -> Vec<String> {
         let c = chars[i];
         if c.is_whitespace() {
             let start = i;
-            while i < chars.len() && chars[i].is_whitespace() {
-                i += 1;
-            }
-            tokens.push(chars[start..i].iter().collect());
+            i = scan_while(&chars, i, char::is_whitespace);
+            tokens.push(collect_range(&chars, start, i));
         } else if c == '`' {
             let start = i;
-            let mut delim_len = 0;
-            while i < chars.len() && chars[i] == '`' {
-                i += 1;
-                delim_len += 1;
-            }
+            let fence_end = scan_while(&chars, i, |ch| ch == '`');
+            let fence_len = fence_end - start;
+            i = fence_end;
+
             let mut end = i;
             while end < chars.len() {
-                if chars[end] == '`' {
-                    let mut j = end;
-                    let mut count = 0;
-                    while j < chars.len() && chars[j] == '`' {
-                        j += 1;
-                        count += 1;
-                    }
-                    if count == delim_len {
-                        end = j;
-                        break;
-                    }
+                let j = scan_while(&chars, end, |ch| ch == '`');
+                if j - end == fence_len {
+                    end = j;
+                    break;
                 }
                 end += 1;
             }
+
             if end >= chars.len() {
-                tokens.push(chars[start..start + delim_len].iter().collect());
-                i = start + delim_len;
+                tokens.push(collect_range(&chars, start, start + fence_len));
+                i = start + fence_len;
             } else {
-                tokens.push(chars[start..end].iter().collect());
+                tokens.push(collect_range(&chars, start, end));
                 i = end;
             }
         } else if c == '[' || (c == '!' && i + 1 < chars.len() && chars[i + 1] == '[') {
             let (tok, mut new_i) = parse_link_or_image(&chars, i);
             tokens.push(tok);
-            let mut punct = String::new();
-            while new_i < chars.len() && is_trailing_punctuation(chars[new_i]) {
-                punct.push(chars[new_i]);
-                new_i += 1;
-            }
-            if !punct.is_empty() {
-                tokens.push(punct);
+            let punct_start = new_i;
+            new_i = scan_while(&chars, new_i, is_trailing_punctuation);
+            if new_i > punct_start {
+                tokens.push(collect_range(&chars, punct_start, new_i));
             }
             i = new_i;
         } else {
             let start = i;
-            while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '`' {
-                i += 1;
-            }
-            tokens.push(chars[start..i].iter().collect());
+            i = scan_while(&chars, i, |ch| !ch.is_whitespace() && ch != '`');
+            tokens.push(collect_range(&chars, start, i));
         }
     }
     tokens
@@ -173,4 +169,33 @@ pub(super) fn should_break_line(
     last_split: Option<usize>,
 ) -> bool {
     current_width > width && last_split.is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn link_with_trailing_punctuation() {
+        let tokens = segment_inline("see [link](url).");
+        assert_eq!(tokens, vec!["see", " ", "[link](url)", "."]);
+    }
+
+    #[test]
+    fn image_with_nested_parentheses() {
+        let tokens = segment_inline("![alt](path(a(b)c))");
+        assert_eq!(tokens, vec!["![alt](path(a(b)c))"]);
+    }
+
+    #[test]
+    fn inline_code_fences() {
+        let tokens = segment_inline("use ``cmd`` now");
+        assert_eq!(tokens, vec!["use", " ", "``cmd``", " ", "now"]);
+    }
+
+    #[test]
+    fn unmatched_backticks() {
+        let tokens = segment_inline("bad `code span");
+        assert_eq!(tokens, vec!["bad", " ", "`", "code", " ", "span"]);
+    }
 }
