@@ -8,6 +8,10 @@
 use regex::{Captures, Regex};
 
 mod tokenize;
+/// Token emitted by [`tokenize`] and used by higher-level wrappers.
+///
+/// This is re-exported so callers of [`textproc`] can implement custom
+/// transformations without depending on internal modules.
 pub use tokenize::Token;
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
