@@ -157,6 +157,22 @@ let out = process_stream_opts(&lines, opts);
 assert_eq!(out[0], "A tip.[^1]");
 ```
 
+It converts a trailing numbered list into footnote definitions:
+
+```rust
+use mdtablefix::{process_stream_opts, Options};
+
+let lines = vec![
+    "More text.".to_string(),
+    "".to_string(),
+    "1. First note".to_string(),
+    "2. Second note".to_string(),
+];
+let opts = Options { footnotes: true, ..Default::default() };
+let out = process_stream_opts(&lines, opts);
+assert_eq!(out[2], "[^1] First note");
+```
+
 - `process_stream_opts(lines: &[String], opts: Options) -> Vec<String>`
   rewrites tables in memory. The options enable paragraph wrapping, ellipsis
   substitution, fence normalization and footnote conversion when `footnotes` is
