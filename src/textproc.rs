@@ -6,61 +6,7 @@
 //! then reconstructs the lines. Trailing blank lines roundtrip
 //! correctly.
 
-pub use crate::wrap::Token;
-use crate::wrap::is_fence;
-
-fn tokenize_inline<'a, F>(text: &'a str, emit: &mut F)
-where
-    F: FnMut(Token<'a>),
-{
-    let mut rest = text;
-    while let Some(pos) = rest.find('`') {
-        if pos > 0 {
-            emit(Token::Text(&rest[..pos]));
-        }
-        let delim_len = rest[pos..].chars().take_while(|&c| c == '`').count();
-        let search = &rest[pos + delim_len..];
-        let closing = "`".repeat(delim_len);
-        if let Some(end) = search.find(&closing) {
-            emit(Token::Code(&rest[pos + delim_len..pos + delim_len + end]));
-            rest = &search[end + delim_len..];
-        } else {
-            emit(Token::Text(&rest[pos..]));
-            rest = "";
-            break;
-        }
-    }
-    if !rest.is_empty() {
-        emit(Token::Text(rest));
-    }
-}
-
-fn handle_line<'a, F>(line: &'a str, last: bool, in_fence: &mut bool, f: &mut F, out: &mut String)
-where
-    F: FnMut(Token<'a>, &mut String),
-{
-    if is_fence(line) {
-        f(Token::Fence(line), out);
-        if !last {
-            f(Token::Newline, out);
-        }
-        *in_fence = !*in_fence;
-        return;
-    }
-
-    if *in_fence {
-        f(Token::Fence(line), out);
-        if !last {
-            f(Token::Newline, out);
-        }
-        return;
-    }
-
-    tokenize_inline(line, &mut |tok| f(tok, out));
-    if !last {
-        f(Token::Newline, out);
-    }
-}
+pub use crate::wrap::{Token, tokenize_markdown};
 
 /// Apply a transformation to a sequence of [`Token`]s.
 ///
@@ -101,22 +47,21 @@ where
         return vec![String::new(); lines.len()];
     }
 
+    let source = lines.join("\n");
     let mut out = String::new();
-    let mut in_fence = false;
-    let last_idx = lines.len() - 1;
-    for (i, line) in lines.iter().enumerate() {
-        handle_line(line, i == last_idx, &mut in_fence, &mut f, &mut out);
+    for token in tokenize_markdown(&source) {
+        f(token, &mut out);
     }
 
     if out.is_empty() {
         return Vec::new();
     }
 
-    let mut result: Vec<String> = out.split('\n').map(str::to_string).collect();
-    let out_blanks = result.iter().rev().take_while(|l| l.is_empty()).count();
-    for _ in out_blanks..trailing_blanks {
-        result.push(String::new());
-    }
+    let mut result: Vec<String> = out.split('\n').map(ToOwned::to_owned).collect();
+    result.extend(std::iter::repeat_n(
+        String::new(),
+        trailing_blanks.saturating_sub(result.len()),
+    ));
     result
 }
 
