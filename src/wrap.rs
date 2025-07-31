@@ -192,9 +192,9 @@ fn tokenize_inline(text: &str) -> Vec<String> {
 /// produce [`Token::Fence`] tokens and toggle fenced mode. Lines inside a
 /// fence are yielded verbatim. Outside fenced regions the scanner searches for
 /// backtick sequences. Text before a backtick becomes [`Token::Text`]. When a
-/// matching sequence of equal length follows, the enclosed portion forms a
-/// [`Token::Code`] span. If no closing sequence is found the backticks and the
-/// remaining text are returned as [`Token::Text`]. Whitespace is preserved
+/// closing backtick follows, the enclosed portion forms a [`Token::Code`]
+/// span. If no closing backtick is found the delimiter and remaining text are
+/// returned as [`Token::Text`]. Whitespace is preserved
 /// exactly as it appears.
 ///
 /// ```rust,ignore
