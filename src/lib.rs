@@ -9,6 +9,7 @@
 //! - `ellipsis` for normalizing textual ellipses.
 //! - `fences` for issues with code block fences
 //! - `footnotes` for converting bare footnote links.
+//! - `textproc` for token-based transformations.
 //! - `process` for stream processing.
 //! - `io` for file helpers.
 
@@ -29,6 +30,7 @@ pub mod lists;
 pub mod process;
 mod reflow;
 pub mod table;
+pub mod textproc;
 pub mod wrap;
 
 #[deprecated(note = "this function is legacy; use `convert_html_tables` instead")]

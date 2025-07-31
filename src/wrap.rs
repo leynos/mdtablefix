@@ -8,7 +8,7 @@
 use regex::{Captures, Regex};
 
 mod tokenize;
-pub(crate) use tokenize::{Token, tokenize_markdown};
+pub use tokenize::Token;
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").unwrap());
