@@ -6,6 +6,9 @@
 
 use regex::{Captures, Regex};
 
+mod tokenize;
+pub(crate) use tokenize::{Token, tokenize_markdown};
+
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").unwrap());
 
@@ -70,195 +73,6 @@ static HANDLERS: &[PrefixHandler] = &[
     },
 ];
 
-/// Markdown token emitted by [`tokenize_markdown`].
-#[derive(Debug, PartialEq)]
-pub enum Token<'a> {
-    /// Line within a fenced code block, including the fence itself.
-    Fence(&'a str),
-    /// Inline code span without surrounding backticks.
-    Code(&'a str),
-    /// Plain text outside code regions.
-    Text(&'a str),
-    /// Line break separating tokens.
-    Newline,
-}
-
-fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
-    let start = i;
-    if chars[i] == '!' {
-        i += 1;
-    }
-    // skip initial '[' which we know is present
-    i += 1;
-    while i < chars.len() && chars[i] != ']' {
-        i += 1;
-    }
-    if i < chars.len() && chars[i] == ']' {
-        i += 1;
-        if i < chars.len() && chars[i] == '(' {
-            i += 1;
-            let mut depth = 1;
-            while i < chars.len() && depth > 0 {
-                match chars[i] {
-                    '(' => depth += 1,
-                    ')' => depth -= 1,
-                    _ => {}
-                }
-                i += 1;
-            }
-            let tok: String = chars[start..i].iter().collect();
-            return (tok, i);
-        }
-    }
-    let tok: String = chars[start..=start].iter().collect();
-    (tok, start + 1)
-}
-
-fn is_trailing_punctuation(c: char) -> bool {
-    matches!(
-        c,
-        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
-    )
-}
-
-fn tokenize_inline(text: &str) -> Vec<String> {
-    let mut tokens = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        if c.is_whitespace() {
-            let start = i;
-            while i < chars.len() && chars[i].is_whitespace() {
-                i += 1;
-            }
-            tokens.push(chars[start..i].iter().collect());
-        } else if c == '`' {
-            let start = i;
-            let mut delim_len = 0;
-            while i < chars.len() && chars[i] == '`' {
-                i += 1;
-                delim_len += 1;
-            }
-            let mut end = i;
-            while end < chars.len() {
-                if chars[end] == '`' {
-                    let mut j = end;
-                    let mut count = 0;
-                    while j < chars.len() && chars[j] == '`' {
-                        j += 1;
-                        count += 1;
-                    }
-                    if count == delim_len {
-                        end = j;
-                        break;
-                    }
-                }
-                end += 1;
-            }
-            if end >= chars.len() {
-                tokens.push(chars[start..start + delim_len].iter().collect());
-                i = start + delim_len;
-            } else {
-                tokens.push(chars[start..end].iter().collect());
-                i = end;
-            }
-        } else if c == '[' || (c == '!' && i + 1 < chars.len() && chars[i + 1] == '[') {
-            let (tok, mut new_i) = parse_link_or_image(&chars, i);
-            tokens.push(tok);
-            let mut punct = String::new();
-            while new_i < chars.len() && is_trailing_punctuation(chars[new_i]) {
-                punct.push(chars[new_i]);
-                new_i += 1;
-            }
-            if !punct.is_empty() {
-                tokens.push(punct);
-            }
-            i = new_i;
-        } else {
-            let start = i;
-            while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '`' {
-                i += 1;
-            }
-            tokens.push(chars[start..i].iter().collect());
-        }
-    }
-    tokens
-}
-
-/// Split the input string into [`Token`]s by analysing whitespace and
-/// backtick delimiters.
-///
-/// The tokenizer groups consecutive whitespace into a single
-/// [`Token::Text`] and recognises backtick sequences as inline code spans.
-/// When a run of backticks is encountered the parser searches forward for an
-/// identical delimiter, allowing nested backticks when the span uses a longer
-/// fence. Unmatched delimiter sequences are treated as literal text.
-///
-/// ```rust,ignore
-/// use mdtablefix::wrap::{Token, tokenize_markdown};
-///
-/// let tokens = tokenize_markdown("Example with `code`");
-/// assert_eq!(
-///     tokens,
-///     vec![Token::Text("Example with "), Token::Code("code")]
-/// );
-/// ```
-pub(crate) fn tokenize_markdown(input: &str) -> Vec<Token<'_>> {
-    let mut out = Vec::new();
-    let mut in_fence = false;
-    for line in input.split_inclusive('\n') {
-        let trimmed = line.trim_end_matches('\n');
-        if FENCE_RE.is_match(trimmed) {
-            out.push(Token::Fence(trimmed));
-            out.push(Token::Newline);
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
-            out.push(Token::Fence(trimmed));
-            out.push(Token::Newline);
-            continue;
-        }
-        let mut rest = trimmed;
-        while let Some(pos) = rest.find('`') {
-            if pos > 0 {
-                out.push(Token::Text(&rest[..pos]));
-            }
-            if let Some(end) = rest[pos + 1..].find('`') {
-                out.push(Token::Code(&rest[pos + 1..pos + 1 + end]));
-                rest = &rest[pos + end + 2..];
-            } else {
-                out.push(Token::Text(&rest[pos..]));
-                rest = "";
-                break;
-            }
-        }
-        if !rest.is_empty() {
-            out.push(Token::Text(rest));
-        }
-        out.push(Token::Newline);
-    }
-    out.pop();
-    out
-}
-
-/// Determine if the current line should break at the last whitespace.
-///
-/// Returns `true` if `current_width` exceeds `width` and a whitespace split
-/// position is available.
-///
-/// # Examples
-///
-/// ```ignore
-/// use mdtablefix::wrap::should_break_line;
-/// assert!(should_break_line(10, 12, Some(3)));
-/// assert!(!should_break_line(10, 8, Some(3)));
-/// ```
-fn should_break_line(width: usize, current_width: usize, last_split: Option<usize>) -> bool {
-    current_width > width && last_split.is_some()
-}
-
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
 
@@ -266,14 +80,21 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut current = String::new();
     let mut current_width = 0;
     let mut last_split: Option<usize> = None;
-    let tokens = tokenize_inline(text);
+    let tokens = tokenize::segment_inline(text);
     let mut i = 0;
     while i < tokens.len() {
         let mut j = i + 1;
         let mut group_width = UnicodeWidthStr::width(tokens[i].as_str());
 
         if tokens[i].contains("](") && tokens[i].ends_with(')') {
-            while j < tokens.len() && tokens[j].chars().all(is_trailing_punctuation) {
+            while j < tokens.len()
+                && tokens[j].chars().all(|c| {
+                    matches!(
+                        c,
+                        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
+                    )
+                })
+            {
                 group_width += UnicodeWidthStr::width(tokens[j].as_str());
                 j += 1;
             }
@@ -306,7 +127,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             continue;
         }
 
-        if should_break_line(width, current_width + group_width, last_split) {
+        if current_width + group_width > width && last_split.is_some() {
             let pos = last_split.unwrap();
             let line = current[..pos].to_string();
             let mut rest = current[pos..].trim_start().to_string();
@@ -549,115 +370,4 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn wrap_text_preserves_hyphenated_words() {
-        let input = vec!["A word that is very-long-word indeed".to_string()];
-        let wrapped = wrap_text(&input, 20);
-        assert_eq!(
-            wrapped,
-            vec![
-                "A word that is".to_string(),
-                "very-long-word".to_string(),
-                "indeed".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn wrap_text_does_not_insert_spaces_in_hyphenated_words() {
-        let input = vec![
-            concat!(
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec tincidunt ",
-                "elit-sed fermentum congue. Vivamus dictum nulla sed consectetur ",
-                "volutpat."
-            )
-            .to_string(),
-        ];
-        let wrapped = wrap_text(&input, 80);
-        assert_eq!(
-            wrapped,
-            vec![
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec tincidunt"
-                    .to_string(),
-                "elit-sed fermentum congue. Vivamus dictum nulla sed consectetur volutpat."
-                    .to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn wrap_text_preserves_code_spans() {
-        let input = vec![
-            "with their own escaping rules. On Windows, scripts default to `powershell -Command` \
-             unless the manifest's `interpreter` field overrides the setting."
-                .to_string(),
-        ];
-        let wrapped = wrap_text(&input, 60);
-        assert_eq!(
-            wrapped,
-            vec![
-                "with their own escaping rules. On Windows, scripts default".to_string(),
-                "to `powershell -Command` unless the manifest's".to_string(),
-                "`interpreter` field overrides the setting.".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn wrap_text_multiple_code_spans() {
-        let input = vec!["combine `foo bar` and `baz qux` in one line".to_string()];
-        let wrapped = wrap_text(&input, 25);
-        assert_eq!(
-            wrapped,
-            vec![
-                "combine `foo bar` and".to_string(),
-                "`baz qux` in one line".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn wrap_text_nested_backticks() {
-        let input = vec!["Use `` `code` `` to quote backticks".to_string()];
-        let wrapped = wrap_text(&input, 20);
-        assert_eq!(
-            wrapped,
-            vec![
-                "Use `` `code` `` to".to_string(),
-                "quote backticks".to_string()
-            ]
-        );
-    }
-
-    #[test]
-    fn wrap_text_unmatched_backticks() {
-        let input = vec!["This has a `dangling code span.".to_string()];
-        let wrapped = wrap_text(&input, 20);
-        assert_eq!(
-            wrapped,
-            vec!["This has a".to_string(), "`dangling code span.".to_string()]
-        );
-    }
-
-    #[test]
-    fn wrap_text_preserves_links() {
-        let input = vec![
-            "`falcon-pachinko` is an extension library for the".to_string(),
-            "[Falcon](https://falcon.readthedocs.io) web framework. It adds a structured"
-                .to_string(),
-            "approach to asynchronous WebSocket routing and background worker integration."
-                .to_string(),
-        ];
-        let wrapped = wrap_text(&input, 80);
-        let joined = wrapped.join("\n");
-        assert_eq!(joined.matches("https://").count(), 1);
-        assert!(
-            wrapped
-                .iter()
-                .any(|l| l.contains("https://falcon.readthedocs.io"))
-        );
-    }
-}
+mod tests;
