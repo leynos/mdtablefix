@@ -6,42 +6,36 @@
 
 use regex::Regex;
 
-fn next_is_pipe(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
-    chars.peek() == Some(&'|')
-}
+static ESCAPED_PIPE_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"\\\|").unwrap());
 
 #[must_use]
+/// Split a Markdown table row into individual cell strings.
+///
+/// Escaped pipe characters (`\|`) are treated as literals and whitespace
+/// inside each cell is trimmed.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::split_cells;
+/// assert_eq!(
+///     split_cells("| A | B |"),
+///     vec!["A".to_string(), "B".to_string()]
+/// );
+/// assert_eq!(
+///     split_cells("a | b \\| c | d"),
+///     vec!["a".to_string(), "b | c".to_string(), "d".to_string()]
+/// );
+/// ```
 pub fn split_cells(line: &str) -> Vec<String> {
-    let mut s = line.trim();
-    if let Some(stripped) = s.strip_prefix('|') {
-        s = stripped;
-    }
-    if let Some(stripped) = s.strip_suffix('|') {
-        s = stripped;
-    }
-
-    let mut cells = Vec::new();
-    let mut current = String::new();
-    let mut chars = s.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            if next_is_pipe(&mut chars) {
-                chars.next();
-                current.push('|');
-                continue;
-            }
-            current.push(ch);
-            continue;
-        }
-        if ch == '|' {
-            cells.push(current.trim().to_string());
-            current.clear();
-        } else {
-            current.push(ch);
-        }
-    }
-    cells.push(current.trim().to_string());
-    cells
+    let trimmed = line.trim().trim_start_matches('|').trim_end_matches('|');
+    let placeholder = '\u{1f}';
+    let replaced = ESCAPED_PIPE_RE.replace_all(trimmed, &placeholder.to_string());
+    replaced
+        .split('|')
+        .map(|cell| cell.trim().replace(placeholder, "|"))
+        .collect()
 }
 
 pub(crate) fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String> {
@@ -162,6 +156,25 @@ fn calculate_and_format(
     crate::reflow::insert_separator(out, sep_cells, &widths, indent)
 }
 
+/// Reflow a Markdown table so columns align uniformly.
+///
+/// Invalid tables are returned unchanged.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::reflow_table;
+/// let lines = vec![
+///     "| A | B |    |".to_string(),
+///     "| 1 | 2 |  | 3 | 4 |".to_string(),
+/// ];
+/// let expected = vec![
+///     "| A | B |".to_string(),
+///     "| 1 | 2 |".to_string(),
+///     "| 3 | 4 |".to_string(),
+/// ];
+/// assert_eq!(reflow_table(&lines), expected);
+/// ```
 #[must_use]
 pub fn reflow_table(lines: &[String]) -> Vec<String> {
     if lines.is_empty() {
