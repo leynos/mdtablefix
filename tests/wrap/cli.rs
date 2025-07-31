@@ -1,4 +1,8 @@
 //! CLI wrapping option tests.
+//!
+//! Validates that the `--wrap` command-line flag correctly triggers text
+//! wrapping behaviour when processing Markdown content through the `mdtablefix`
+//! binary.
 
 use super::*;
 

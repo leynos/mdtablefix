@@ -1,6 +1,20 @@
 //! Integration tests for table reflow and HTML table conversion.
 //!
-//! Covers `reflow_table`, `convert_html_tables` and related `process_stream` behaviour.
+//! This module provides comprehensive test coverage for the table processing
+//! functionality in `mdtablefix`, including Markdown table reflowing and
+//! HTML-to-Markdown conversion.
+//!
+//! The module is organised into focused submodules:
+//! - `reflow`: Tests for `reflow_table` covering basic reflow, malformed tables,
+//!   header preservation, escaped pipes and indentation.
+//! - `process_stream_tests`: Tests for `process_stream` verifying normalisation
+//!   of various HTML table variants and handling of multiple tables.
+//! - `uniform`: Regression tests ensuring uniform column widths after reflowing.
+//! - `convert_html`: Parameterised tests for HTML table conversion edge cases.
+//! - `regressions`: Real-world data validation tests.
+//!
+//! Each test uses fixtures defined in this module to ensure consistent test data
+//! across different scenarios whilst avoiding duplication.
 
 use mdtablefix::{convert_html_tables, process_stream, reflow_table};
 
@@ -10,8 +24,7 @@ use prelude::*;
 
 #[fixture]
 fn malformed_table() -> Vec<String> {
-    let lines = lines_vec!["| A | |", "| 1 | 2 | 3 |"];
-    lines
+    lines_vec!["| A | |", "| 1 | 2 | 3 |"]
 }
 
 #[fixture]
@@ -26,8 +39,7 @@ fn escaped_pipe_table() -> Vec<String> {
 
 #[fixture]
 fn indented_table() -> Vec<String> {
-    let lines = lines_vec!["  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |"];
-    lines
+    lines_vec!["  | I | J |    |", "  | 1 | 2 |  | 3 | 4 |"]
 }
 
 #[fixture]
@@ -102,14 +114,12 @@ fn html_table_inconsistent_first_row() -> Vec<String> {
 
 #[fixture]
 fn html_table_empty() -> Vec<String> {
-    let lines = lines_vec!["<table></table>"];
-    lines
+    lines_vec!["<table></table>"]
 }
 
 #[fixture]
 fn html_table_unclosed() -> Vec<String> {
-    let lines = lines_vec!["<table>", "<tr><td>1</td></tr>"];
-    lines
+    lines_vec!["<table>", "<tr><td>1</td></tr>"]
 }
 
 #[fixture]
