@@ -87,7 +87,14 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         let mut group_width = UnicodeWidthStr::width(tokens[i].as_str());
 
         if tokens[i].contains("](") && tokens[i].ends_with(')') {
-            while j < tokens.len() && tokens[j].chars().all(tokenize::is_trailing_punctuation) {
+            while j < tokens.len()
+                && tokens[j].chars().all(|c| {
+                    matches!(
+                        c,
+                        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
+                    )
+                })
+            {
                 group_width += UnicodeWidthStr::width(tokens[j].as_str());
                 j += 1;
             }
@@ -120,7 +127,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             continue;
         }
 
-        if tokenize::should_break_line(width, current_width + group_width, last_split) {
+        if current_width + group_width > width && last_split.is_some() {
             let pos = last_split.unwrap();
             let line = current[..pos].to_string();
             let mut rest = current[pos..].trim_start().to_string();

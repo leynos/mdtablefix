@@ -32,6 +32,11 @@ pub enum Token<'a> {
     Newline,
 }
 
+/// Parse a Markdown link or image starting at `i`.
+///
+/// Handles nested parentheses within URLs by tracking the depth of opening and
+/// closing delimiters. Returns the parsed slice and the index after the closing
+/// parenthesis if one is found.
 fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
     let start = i;
     if chars[i] == '!' {
@@ -58,7 +63,7 @@ fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
     (collect_range(chars, start, start + 1), start + 1)
 }
 
-pub(super) fn is_trailing_punctuation(c: char) -> bool {
+fn is_trailing_punctuation(c: char) -> bool {
     matches!(
         c,
         '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
@@ -161,14 +166,6 @@ pub(crate) fn tokenize_markdown(input: &str) -> Vec<Token<'_>> {
     }
     out.pop();
     out
-}
-
-pub(super) fn should_break_line(
-    width: usize,
-    current_width: usize,
-    last_split: Option<usize>,
-) -> bool {
-    current_width > width && last_split.is_some()
 }
 
 #[cfg(test)]

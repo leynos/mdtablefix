@@ -1,3 +1,8 @@
+//! Unit tests for text wrapping functionality.
+//!
+//! This module contains tests for the `wrap_text` function, verifying correct
+//! behaviour with code spans, links, hyphenated words, and various line widths.
+
 use super::super::*;
 
 #[test]
