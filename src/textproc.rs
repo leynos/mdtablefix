@@ -58,10 +58,13 @@ where
     }
 
     let mut result: Vec<String> = out.split('\n').map(ToOwned::to_owned).collect();
-    result.extend(std::iter::repeat_n(
-        String::new(),
-        trailing_blanks.saturating_sub(result.len()),
-    ));
+    let out_blanks = result.iter().rev().take_while(|l| l.is_empty()).count();
+    if out_blanks < trailing_blanks {
+        result.extend(std::iter::repeat_n(
+            String::new(),
+            trailing_blanks - out_blanks,
+        ));
+    }
     result
 }
 
