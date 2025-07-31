@@ -1,8 +1,9 @@
 //! Utilities for wrapping Markdown lines.
 //!
 //! These helpers reflow paragraphs and list items while preserving inline code
-//! spans, fenced code blocks and other prefixes. Width calculations rely on the
-//! `unicode-width` crate as described in `docs/architecture.md#unicode-width-handling`.
+//! spans, fenced code blocks, and other prefixes. Width calculations rely on
+//! `UnicodeWidthStr::width` from the `unicode-width` crate as described in
+//! `docs/architecture.md#unicode-width-handling`.
 
 use regex::Regex;
 
