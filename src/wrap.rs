@@ -8,9 +8,9 @@
 use regex::{Captures, Regex};
 
 mod tokenize;
-/// Token emitted by [`tokenize`] and used by higher-level wrappers.
+/// Token emitted by [`tokenize::segment_inline`] and used by higher-level wrappers.
 ///
-/// This is re-exported so callers of [`textproc`] can implement custom
+/// Re-export this so callers of [`crate::textproc`] can implement custom
 /// transformations without depending on internal modules.
 pub use tokenize::Token;
 
