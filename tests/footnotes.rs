@@ -1,14 +1,14 @@
-//! Integration tests for footnote conversion.
+//! End-to-end tests exercising footnote conversion.
 //!
-//! These tests feed entire documents through `convert_footnotes` to validate
-//! the complete conversion pipeline. Sample inputs are loaded from data files
-//! using the helper macros `include_lines!` and `lines_vec!` exported by the
-//! `tests::prelude` module. The goal is to ensure inline references are
-//! rewritten and trailing numeric lists become footnote definitions without
-//! affecting other content.
+//! Each test processes a complete Markdown document using
+//! `convert_footnotes`. Inputs are loaded from fixture files through the
+//! `include_lines!` and `lines_vec!` macros re-exported by `tests::prelude`.
+//! The cases mix headings, code blocks and ordinary text to confirm that
+//! inline references become footnote links and that final numeric lists are
+//! rewritten as definitions.
 //!
-//! The presence of the macros here also confirms they are re-exported
-//! correctly for use across integration tests.
+//! A simple check ensures these macros are available so the prelude exports
+//! are correctly wired for all integration tests.
 
 use mdtablefix::convert_footnotes;
 
