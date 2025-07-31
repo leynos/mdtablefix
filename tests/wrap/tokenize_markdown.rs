@@ -34,3 +34,19 @@ fn malformed_fence_is_text() {
         ]
     );
 }
+
+#[test]
+fn incorrect_fence_length_is_text() {
+    let source = "````\ncode\n````";
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(
+        tokens,
+        vec![
+            Token::Text("````"),
+            Token::Newline,
+            Token::Text("code"),
+            Token::Newline,
+            Token::Text("````"),
+        ]
+    );
+}
