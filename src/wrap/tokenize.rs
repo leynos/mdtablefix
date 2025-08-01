@@ -119,29 +119,37 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
     tokens
 }
 
-fn tokenize_inline<'a, F>(text: &'a str, emit: &mut F)
+fn next_token(s: &str) -> Option<(Token<'_>, usize)> {
+    if s.is_empty() {
+        return None;
+    }
+    if let Some(pos) = s.find('`') {
+        if pos > 0 {
+            return Some((Token::Text(&s[..pos]), pos));
+        }
+        let delim_len = s.chars().take_while(|&c| c == '`').count();
+        if delim_len == 0 {
+            return Some((Token::Text(s), s.len()));
+        }
+        let closing = &s[..delim_len];
+        if let Some(end) = s[delim_len..].find(closing) {
+            let code = &s[delim_len..delim_len + end];
+            return Some((Token::Code(code), delim_len + end + delim_len));
+        }
+    }
+    Some((Token::Text(s), s.len()))
+}
+
+fn tokenize_inline<'a, F>(mut rest: &'a str, mut emit: F)
 where
     F: FnMut(Token<'a>),
 {
-    let mut rest = text;
-    while let Some(pos) = rest.find('`') {
-        if pos > 0 {
-            emit(Token::Text(&rest[..pos]));
-        }
-        let delim_len = rest[pos..].chars().take_while(|&c| c == '`').count();
-        let search = &rest[pos + delim_len..];
-        let closing = "`".repeat(delim_len);
-        if let Some(end) = search.find(&closing) {
-            emit(Token::Code(&rest[pos + delim_len..pos + delim_len + end]));
-            rest = &search[end + delim_len..];
-        } else {
-            emit(Token::Text(&rest[pos..]));
-            rest = "";
+    while let Some((tok, used)) = next_token(rest) {
+        emit(tok);
+        rest = &rest[used..];
+        if rest.is_empty() {
             break;
         }
-    }
-    if !rest.is_empty() {
-        emit(Token::Text(rest));
     }
 }
 
