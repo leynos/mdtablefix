@@ -1,12 +1,27 @@
-//! Text wrapping utilities respecting inline code and prefixes.
+//! Utilities for wrapping Markdown lines.
 //!
-//! Unicode width handling follows the "Unicode Width Handling" section in
-//! `docs/architecture.md` and uses the `unicode-width` crate for accurate
-//! display calculations.
+//! These helpers reflow paragraphs and list items while preserving inline code
+//! spans, fenced code blocks, and other prefixes. Width calculations rely on
+//! `UnicodeWidthStr::width` from the `unicode-width` crate as described in
+//! `docs/architecture.md#unicode-width-handling`.
+//!
+//! The [`Token`] enum and [`tokenize_markdown`] function are public so callers
+//! can perform custom token-based processing.
 
 use regex::Regex;
 
-pub use crate::tokenize::{Token, is_fence, tokenize_inline, tokenize_markdown};
+mod tokenize;
+/// Token emitted by [`tokenize::segment_inline`] and used by higher-level wrappers.
+///
+/// Re-export this so callers of [`crate::textproc`] can implement custom
+/// transformations without depending on internal modules.
+pub use tokenize::Token;
+/// Convenience re-export of [`tokenize::tokenize_markdown`].
+#[doc(inline)]
+pub use tokenize::tokenize_markdown;
+
+static FENCE_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").unwrap());
 
 static BULLET_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)",
@@ -31,6 +46,61 @@ fn should_break_line(width: usize, current_width: usize, last_split: Option<usiz
     current_width > width && last_split.is_some()
 }
 
+static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:>\s*)+)(.*)$").unwrap());
+
+/// Matches `markdownlint` comment directives.
+///
+/// The regex is case-insensitive and recognises these forms with optional rule
+/// names (including plugin rules such as `MD013/line-length` or
+/// `plugin/rule-name`):
+/// - `<!-- markdownlint-disable -->`
+/// - `<!-- markdownlint-enable -->`
+/// - `<!-- markdownlint-disable-line MD001 MD005 -->`
+/// - `<!-- markdownlint-disable-next-line MD001 MD005 -->`
+static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(
+        r"(?i)^\s*<!--\s*markdownlint-(?:disable|enable|disable-line|disable-next-line)(?:\s+[A-Za-z0-9_\-/]+)*\s*-->\s*$",
+    )
+    .expect("valid markdownlint regex")
+});
+
+struct PrefixHandler {
+    re: &'static std::sync::LazyLock<Regex>,
+    is_bq: bool,
+    build_prefix: fn(&Captures) -> String,
+    rest_group: usize,
+}
+
+impl PrefixHandler {
+    fn build_bullet_prefix(cap: &Captures) -> String { cap[1].to_string() }
+
+    fn build_footnote_prefix(cap: &Captures) -> String { format!("{}{}", &cap[1], &cap[2]) }
+
+    fn build_blockquote_prefix(cap: &Captures) -> String { cap[1].to_string() }
+}
+
+static HANDLERS: &[PrefixHandler] = &[
+    PrefixHandler {
+        re: &BULLET_RE,
+        is_bq: false,
+        build_prefix: PrefixHandler::build_bullet_prefix,
+        rest_group: 2,
+    },
+    PrefixHandler {
+        re: &FOOTNOTE_RE,
+        is_bq: false,
+        build_prefix: PrefixHandler::build_footnote_prefix,
+        rest_group: 3,
+    },
+    PrefixHandler {
+        re: &BLOCKQUOTE_RE,
+        is_bq: true,
+        build_prefix: PrefixHandler::build_blockquote_prefix,
+        rest_group: 2,
+    },
+];
+
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
 
@@ -38,11 +108,29 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut current = String::new();
     let mut current_width = 0;
     let mut last_split: Option<usize> = None;
-    for token in tokenize_inline(text) {
-        let token_width = UnicodeWidthStr::width(token.as_str());
+    let tokens = tokenize::segment_inline(text);
+    let mut i = 0;
+    while i < tokens.len() {
+        let mut j = i + 1;
+        let mut group_width = UnicodeWidthStr::width(tokens[i].as_str());
+
+        if tokens[i].contains("](") && tokens[i].ends_with(')') {
+            while j < tokens.len()
+                && tokens[j].chars().all(|c| {
+                    matches!(
+                        c,
+                        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
+                    )
+                })
+            {
+                group_width += UnicodeWidthStr::width(tokens[j].as_str());
+                j += 1;
+            }
+        }
+
         if current.is_empty()
-            && token.len() == 1
-            && ".?!,:;".contains(token.as_str())
+            && tokens[i].len() == 1
+            && ".?!,:;".contains(tokens[i].as_str())
             && lines
                 .last()
                 .is_some_and(|l: &String| l.trim_end().ends_with('`'))
@@ -50,19 +138,24 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             lines
                 .last_mut()
                 .expect("checked last line exists")
-                .push_str(&token);
-            continue;
-        }
-        if current_width + token_width <= width {
-            current.push_str(&token);
-            current_width += token_width;
-            if token.chars().all(char::is_whitespace) {
-                last_split = Some(current.len());
-            }
+                .push_str(&tokens[i]);
+            i += 1;
             continue;
         }
 
-        if should_break_line(width, current_width + token_width, last_split) {
+        if current_width + group_width <= width {
+            for tok in &tokens[i..j] {
+                current.push_str(tok);
+                if tok.chars().all(char::is_whitespace) {
+                    last_split = Some(current.len());
+                }
+                current_width += UnicodeWidthStr::width(tok.as_str());
+            }
+            i = j;
+            continue;
+        }
+
+        if current_width + group_width > width && last_split.is_some() {
             let pos = last_split.unwrap();
             let line = current[..pos].to_string();
             let mut rest = current[pos..].trim_start().to_string();
@@ -70,10 +163,12 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             if !trimmed.is_empty() {
                 lines.push(trimmed.to_string());
             }
-            rest.push_str(&token);
+            for tok in &tokens[i..j] {
+                rest.push_str(tok);
+            }
             current = rest;
             current_width = UnicodeWidthStr::width(current.as_str());
-            last_split = if token.chars().all(char::is_whitespace) {
+            last_split = if tokens[j - 1].chars().all(char::is_whitespace) {
                 Some(current.len())
             } else {
                 None
@@ -84,6 +179,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
                 current_width = 0;
                 last_split = None;
             }
+            i = j;
             continue;
         }
 
@@ -93,17 +189,31 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         }
         current.clear();
         current_width = 0;
+        last_split = None;
 
-        if !token.chars().all(char::is_whitespace) {
-            current.push_str(&token);
-            current_width = token_width;
+        for tok in &tokens[i..j] {
+            if !tok.chars().all(char::is_whitespace) {
+                current.push_str(tok);
+                current_width += UnicodeWidthStr::width(tok.as_str());
+            }
         }
+        if j > i && tokens[j - 1].chars().all(char::is_whitespace) {
+            last_split = Some(current.len());
+        }
+        i = j;
     }
     let trimmed = current.trim_end();
     if !trimmed.is_empty() {
         lines.push(trimmed.to_string());
     }
     lines
+}
+
+#[doc(hidden)]
+pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
+
+pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
+    MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
 }
 
 fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, width: usize) {
@@ -221,6 +331,14 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
+        if is_markdownlint_directive(line) {
+            flush_paragraph(&mut out, &buf, &indent, width);
+            buf.clear();
+            indent.clear();
+            out.push(line.clone());
+            continue;
+        }
+
         if line.trim().is_empty() {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
@@ -288,3 +406,6 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     flush_paragraph(&mut out, &buf, &indent, width);
     out
 }
+
+#[cfg(test)]
+mod tests;

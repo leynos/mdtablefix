@@ -9,6 +9,7 @@
 //! - `ellipsis` for normalizing textual ellipses.
 //! - `fences` for issues with code block fences
 //! - `footnotes` for converting bare footnote links.
+//! - `textproc` for token-based transformations.
 //! - `process` for stream processing.
 //! - `io` for file helpers.
 
@@ -30,9 +31,10 @@ pub mod process;
 mod reflow;
 pub mod table;
 mod tokenize;
+pub mod textproc;
 pub mod wrap;
 
-#[doc(hidden)]
+#[deprecated(note = "this function is legacy; use `convert_html_tables` instead")]
 #[must_use]
 pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     html::html_table_to_markdown(lines)

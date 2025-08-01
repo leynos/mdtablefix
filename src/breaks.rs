@@ -16,6 +16,30 @@ pub(crate) static THEMATIC_BREAK_RE: std::sync::LazyLock<Regex> = std::sync::Laz
 static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| "_".repeat(THEMATIC_BREAK_LEN));
 
+/// Normalize thematic breaks outside fenced code blocks.
+///
+/// Consecutive hyphens, asterisks or underscores are replaced with a
+/// standardised line of underscores. Fenced code blocks are ignored so
+/// that breaks within them remain untouched.
+///
+/// # Examples
+///
+/// ```
+/// use std::borrow::Cow;
+///
+/// use mdtablefix::{THEMATIC_BREAK_LEN, format_breaks};
+///
+/// let lines = vec!["foo".to_string(), "***".to_string(), "bar".to_string()];
+/// let out = format_breaks(&lines);
+/// assert_eq!(
+///     out,
+///     vec![
+///         Cow::Borrowed("foo"),
+///         Cow::Owned("_".repeat(THEMATIC_BREAK_LEN)),
+///         Cow::Borrowed("bar"),
+///     ]
+/// );
+/// ```
 #[must_use]
 pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     let mut out = Vec::with_capacity(lines.len());

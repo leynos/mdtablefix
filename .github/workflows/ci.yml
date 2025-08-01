@@ -3,31 +3,36 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       CARGO_TERM_COLOR: always
-      CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-      CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
+      BUILD_PROFILE: debug
     steps:
       - uses: actions/checkout@v4
-      - uses: leynos/shared-actions/.github/actions/setup-rust@b2f82fdc94c8c9da67833f972a02814c9ef8cf16
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
       - name: Format
         run: make check-fmt
       - name: Lint
         run: make lint
-      - id: generate-coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@b2f82fdc94c8c9da67833f972a02814c9ef8cf16
+      - name: Test and Measure Coverage
+        uses: leynos/shared-actions/.github/actions/generate-coverage@c6559452842af6a83b83429129dccaf910e34562
         with:
           output-path: lcov.info
           format: lcov
       - name: Upload coverage data to CodeScene
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        if: ${{ env.CS_ACCESS_TOKEN != '' }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@v1.2.1
+        if: ${{ env.CS_ACCESS_TOKEN }}
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@c6559452842af6a83b83429129dccaf910e34562
+        
         with:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}

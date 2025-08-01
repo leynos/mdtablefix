@@ -29,6 +29,7 @@ The function combines several helpers documented in `docs/`:
     [HTML table support](#html-table-support-in-mdtablefix).
 - `wrap::wrap_text` applies optional line wrapping. It relies on the
   `unicode-width` crate for accurate character widths.
+- `wrap::tokenize_markdown` emits `Token` values for custom processing.
 
 The function maintains a small state machine that tracks whether it is inside a
 Markdown table, an HTML table, or a fenced code block. The state determines how
@@ -190,7 +191,7 @@ classDiagram
     class html {
         <<module>>
         +convert_html_tables()
-        +html_table_to_markdown()
+        +html_table_to_markdown() %% deprecated
     }
     class table {
         <<module>>
@@ -225,6 +226,10 @@ classDiagram
         <<module>>
         +convert_footnotes()
     }
+    class textproc {
+        <<module>>
+        +process_tokens()
+    }
     class process {
         <<module>>
         +process_stream()
@@ -248,21 +253,30 @@ classDiagram
     table ..> reflow : uses parse_rows, etc.
     lists ..> wrap : uses is_fence
     breaks ..> wrap : uses is_fence
-    ellipsis ..> wrap : uses tokenize_markdown
+    ellipsis ..> textproc : uses process_tokens
     process ..> html : uses convert_html_tables
     process ..> table : uses reflow_table
     process ..> wrap : uses wrap_text, is_fence
     process ..> fences : uses compress_fences, attach_orphan_specifiers
     process ..> ellipsis : uses replace_ellipsis
     process ..> footnotes : uses convert_footnotes
+    footnotes ..> textproc : uses process_tokens
     io ..> process : uses process_stream, process_stream_no_wrap
 ```
 
-The `lib` module re-exports the public API from the other modules. The
-`ellipsis` module performs text normalization. The `process` module provides
-streaming helpers that combine the lower-level functions, including ellipsis
-replacement and footnote conversion. The `io` module handles filesystem
-operations, delegating the text processing to `process`.
+The `lib` module re-exports the public API from the other modules. The `wrap`
+module exposes the `Token` enum and `tokenize_markdown` function for custom
+processing. The `ellipsis` module performs text normalization, while
+`footnotes` converts bare references. The `textproc` module contains shared
+token-processing helpers used by both the `ellipsis` and `footnotes` modules.
+Tokenization is handled by `wrap::tokenize_markdown`, replacing the small state
+machine that previously resided in `process_tokens`. The `process` module
+provides streaming helpers that combine the lower-level functions. The `io`
+module handles filesystem operations, delegating the text processing to
+`process`.
+
+The helper `html_table_to_markdown` is retained for backward compatibility but
+is deprecated. New code should call `convert_html_tables` instead.
 
 ## Concurrency with `rayon`
 
@@ -307,3 +321,16 @@ multibyte characters from causing unexpected wraps or truncation.
 
 Whenever wrapping logic examines the length of a token, it relies on
 `UnicodeWidthStr::width` to measure visible columns rather than byte length.
+
+## Link punctuation handling
+
+Trailing punctuation immediately following a Markdown link or image is
+tokenized separately and grouped with the link when wrapping. This keeps
+sentences like:
+
+```markdown
+[link](path).
+```
+
+on a single line, rather than splitting the punctuation onto the next line when
+wrapping occurs.
