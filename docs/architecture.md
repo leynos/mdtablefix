@@ -29,6 +29,7 @@ The function combines several helpers documented in `docs/`:
     [HTML table support](#html-table-support-in-mdtablefix).
 - `wrap::wrap_text` applies optional line wrapping. It relies on the
   `unicode-width` crate for accurate character widths.
+- `wrap::tokenize_markdown` emits `Token` values for custom processing.
 
 The function maintains a small state machine that tracks whether it is inside a
 Markdown table, an HTML table, or a fenced code block. The state determines how
@@ -263,14 +264,16 @@ classDiagram
     io ..> process : uses process_stream, process_stream_no_wrap
 ```
 
-The `lib` module re-exports the public API from the other modules. The
-`ellipsis` module performs text normalization, while `footnotes` converts bare
-references. The `textproc` module contains shared token-processing helpers used
-by both the `ellipsis` and `footnotes` modules. Tokenization is handled by
-`wrap::tokenize_markdown`, replacing the small state machine that previously
-resided in `process_tokens`. The `process` module provides streaming helpers
-that combine the lower-level functions. The `io` module handles filesystem
-operations, delegating the text processing to `process`.
+The `lib` module re-exports the public API from the other modules. The `wrap`
+module exposes the `Token` enum and `tokenize_markdown` function for custom
+processing. The `ellipsis` module performs text normalization, while
+`footnotes` converts bare references. The `textproc` module contains shared
+token-processing helpers used by both the `ellipsis` and `footnotes` modules.
+Tokenization is handled by `wrap::tokenize_markdown`, replacing the small state
+machine that previously resided in `process_tokens`. The `process` module
+provides streaming helpers that combine the lower-level functions. The `io`
+module handles filesystem operations, delegating the text processing to
+`process`.
 
 The helper `html_table_to_markdown` is retained for backward compatibility but
 is deprecated. New code should call `convert_html_tables` instead.
