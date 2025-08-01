@@ -119,47 +119,37 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
     tokens
 }
 
-struct InlineTok<'a> {
-    rest: &'a str,
-}
-
-impl<'a> InlineTok<'a> {
-    fn new(s: &'a str) -> Self { InlineTok { rest: s } }
-}
-
-impl<'a> Iterator for InlineTok<'a> {
-    type Item = Token<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.rest.is_empty() {
-            return None;
-        }
-        if let Some(pos) = self.rest.find('`') {
-            if pos > 0 {
-                let (head, tail) = self.rest.split_at(pos);
-                self.rest = tail;
-                return Some(Token::Text(head));
-            }
-            let delim_len = self.rest.chars().take_while(|&c| c == '`').count();
-            let (d, after) = self.rest.split_at(delim_len);
-            if let Some(idx) = after.find(d) {
-                let (code, rest) = after.split_at(idx);
-                self.rest = &rest[d.len()..];
-                return Some(Token::Code(code));
-            }
-        }
-        let rem = self.rest;
-        self.rest = "";
-        Some(Token::Text(rem))
+fn next_token(s: &str) -> Option<(Token<'_>, usize)> {
+    if s.is_empty() {
+        return None;
     }
+    if let Some(pos) = s.find('`') {
+        if pos > 0 {
+            return Some((Token::Text(&s[..pos]), pos));
+        }
+        let delim_len = s.chars().take_while(|&c| c == '`').count();
+        if delim_len == 0 {
+            return Some((Token::Text(s), s.len()));
+        }
+        let closing = &s[..delim_len];
+        if let Some(end) = s[delim_len..].find(closing) {
+            let code = &s[delim_len..delim_len + end];
+            return Some((Token::Code(code), delim_len + end + delim_len));
+        }
+    }
+    Some((Token::Text(s), s.len()))
 }
 
-fn tokenize_inline<'a, F>(text: &'a str, mut emit: F)
+fn tokenize_inline<'a, F>(mut rest: &'a str, mut emit: F)
 where
     F: FnMut(Token<'a>),
 {
-    for tok in InlineTok::new(text) {
+    while let Some((tok, used)) = next_token(rest) {
         emit(tok);
+        rest = &rest[used..];
+        if rest.is_empty() {
+            break;
+        }
     }
 }
 
