@@ -30,7 +30,6 @@ pub mod lists;
 pub mod process;
 mod reflow;
 pub mod table;
-mod tokenize;
 pub mod textproc;
 pub mod wrap;
 
