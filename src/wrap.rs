@@ -1,12 +1,12 @@
-//! Utilities for wrapping Markdown lines.
+//! Helpers for wrapping Markdown lines while tracking prefix context.
 //!
-//! These helpers reflow paragraphs and list items while preserving inline code
-//! spans, fenced code blocks, and other prefixes. Width calculations rely on
+//! This module reflows paragraphs and list items without disturbing inline code
+//! spans, fenced blocks, or list markers. Width calculations rely on
 //! `UnicodeWidthStr::width` from the `unicode-width` crate as described in
 //! `docs/architecture.md#unicode-width-handling`.
 //!
-//! The [`Token`] enum and [`tokenize_markdown`] function are public so callers
-//! can perform custom token-based processing.
+//! The [`Token`] enum and [`tokenize_markdown`] function are re-exported so
+//! callers can perform custom token-based processing.
 
 use regex::Regex;
 
@@ -163,7 +163,9 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 }
 
 #[doc(hidden)]
-pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
+pub fn is_fence(line: &str) -> bool {
+    FENCE_RE.is_match(line)
+}
 
 pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)

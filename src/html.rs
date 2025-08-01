@@ -1,10 +1,8 @@
-//! Utilities for converting HTML tables embedded in Markdown into
-//! Markdown table syntax.
+//! Convert basic HTML tables embedded in Markdown into Markdown table syntax.
 //!
-//! The conversion is intentionally simple: only `<table>`, `<tr>`,
-//! `<th>`, and `<td>` tags are recognized. Attributes and tag casing
-//! are ignored. The resulting Markdown lines are passed to
-//! `reflow_table` to ensure consistent column widths.
+//! The conversion intentionally recognises only `<table>`, `<tr>`, `<th>` and
+//! `<td>` tags, ignoring attributes and case. Converted rows are then passed to
+//! `reflow_table` for consistent column widths.
 
 use std::sync::LazyLock;
 
@@ -84,7 +82,9 @@ fn is_element(handle: &Handle, tag: &str) -> bool {
 }
 
 /// Returns `true` if `handle` represents a `<td>` or `<th>` element.
-fn is_table_cell(handle: &Handle) -> bool { is_element(handle, "td") || is_element(handle, "th") }
+fn is_table_cell(handle: &Handle) -> bool {
+    is_element(handle, "td") || is_element(handle, "th")
+}
 
 /// Walks the DOM tree collecting `<table>` nodes under `handle`.
 fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
@@ -112,10 +112,10 @@ fn is_bold_tag(tag: &str) -> bool {
 
 /// Returns `true` if `handle` contains a `<b>` or `<strong>` descendant.
 fn contains_strong(handle: &Handle) -> bool {
-    if let NodeData::Element { name, .. } = &handle.data
-        && is_bold_tag(name.local.as_ref())
-    {
-        return true;
+    if let NodeData::Element { name, .. } = &handle.data {
+        if is_bold_tag(name.local.as_ref()) {
+            return true;
+        }
     }
     let children = handle.children.borrow();
     children.iter().any(contains_strong)
