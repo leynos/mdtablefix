@@ -16,7 +16,7 @@ mod tokenize;
 pub use tokenize::{Token, tokenize_markdown};
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").unwrap());
+    std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").expect("valid fence regex"));
 
 static BULLET_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
