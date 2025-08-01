@@ -114,11 +114,13 @@ fn is_bold_tag(tag: &str) -> bool {
 
 /// Returns `true` if `handle` contains a `<b>` or `<strong>` descendant.
 fn contains_strong(handle: &Handle) -> bool {
-    matches!(
-        &handle.data,
-        NodeData::Element { name, .. }
-            if is_bold_tag(name.local.as_ref())
-    ) || handle.children.borrow().iter().any(contains_strong)
+    if let NodeData::Element { name, .. } = &handle.data
+        && is_bold_tag(name.local.as_ref())
+    {
+        return true;
+    }
+    let children = handle.children.borrow();
+    children.iter().any(contains_strong)
 }
 
 /// Extracts cell text from a row and reports whether all cells are header cells.
