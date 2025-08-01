@@ -30,9 +30,7 @@ where
 ///
 /// # Errors
 /// Returns an error if reading or writing the file fails.
-pub fn rewrite(path: &Path) -> std::io::Result<()> {
-    rewrite_with(path, process_stream)
-}
+pub fn rewrite(path: &Path) -> std::io::Result<()> { rewrite_with(path, process_stream) }
 
 /// Rewrite a file in place without wrapping text.
 ///
