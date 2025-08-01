@@ -1,4 +1,7 @@
 //! Helper functions for reading, processing, and rewriting Markdown files.
+//!
+//! These helpers integrate with the CLI to apply the rewriting logic to each
+//! file.
 
 use std::{fs, path::Path};
 

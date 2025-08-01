@@ -7,6 +7,8 @@
 //!
 //! The [`Token`] enum and [`tokenize_markdown`] function are re-exported so
 //! callers can perform custom token-based processing.
+//!
+//! Public wrappers form the core of Markdown table formatting used by the CLI.
 
 use regex::Regex;
 

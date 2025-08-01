@@ -3,6 +3,8 @@
 //! The conversion intentionally recognises only `<table>`, `<tr>`, `<th>` and
 //! `<td>` tags, ignoring attributes and case. Converted rows are then passed to
 //! `reflow_table` for consistent column widths.
+//!
+//! This module is used by the CLI when rewriting Markdown files.
 
 use std::sync::LazyLock;
 
