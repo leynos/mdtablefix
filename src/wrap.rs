@@ -16,7 +16,8 @@ mod tokenize;
 /// Re-export this so callers of [`crate::textproc`] can implement custom
 /// transformations without depending on internal modules.
 pub use tokenize::Token;
-/// Tokenize a block of Markdown while preserving fence context.
+/// Convenience re-export of [`tokenize::tokenize_markdown`].
+#[doc(inline)]
 pub use tokenize::tokenize_markdown;
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
