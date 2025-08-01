@@ -4,6 +4,9 @@
 //! spans, fenced code blocks, and other prefixes. Width calculations rely on
 //! `UnicodeWidthStr::width` from the `unicode-width` crate as described in
 //! `docs/architecture.md#unicode-width-handling`.
+//!
+//! The [`Token`] enum and [`tokenize_markdown`] function are public so callers
+//! can perform custom token-based processing.
 
 use regex::{Captures, Regex};
 
