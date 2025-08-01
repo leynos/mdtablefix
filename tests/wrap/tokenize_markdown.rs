@@ -64,3 +64,16 @@ fn unmatched_inline_code_is_text() {
     );
 }
 
+#[test]
+fn multiple_unmatched_backticks_are_text() {
+    let source = "``bad code";
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(
+        tokens,
+        vec![
+            Token::Text("``"),
+            Token::Text("bad code"),
+        ]
+    );
+}
+

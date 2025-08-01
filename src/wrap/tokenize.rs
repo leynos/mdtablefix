@@ -129,7 +129,9 @@ fn next_token(s: &str) -> Option<(Token<'_>, usize)> {
         }
         let delim_len = s.chars().take_while(|&c| c == '`').count();
         if delim_len == 0 {
-            return Some((Token::Text(&s[..1]), 1));
+            let first_len = s.chars().next().unwrap().len_utf8();
+            let next = s[first_len..].find('`').map_or(s.len(), |i| first_len + i);
+            return Some((Token::Text(&s[..next]), next));
         }
         let closing = &s[..delim_len];
         if let Some(end) = s[delim_len..].find(closing) {
