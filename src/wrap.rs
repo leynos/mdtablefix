@@ -11,10 +11,6 @@
 use regex::Regex;
 
 mod tokenize;
-/// Token emitted by [`tokenize::segment_inline`] and used by higher-level wrappers.
-///
-/// Re-export this so callers of [`crate::textproc`] can implement custom
-/// transformations without depending on internal modules.
 #[doc(inline)]
 pub use tokenize::{Token, tokenize_markdown};
 
@@ -161,7 +157,9 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 }
 
 #[doc(hidden)]
-pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
+pub fn is_fence(line: &str) -> bool {
+    FENCE_RE.is_match(line)
+}
 
 pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
