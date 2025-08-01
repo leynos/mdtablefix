@@ -38,17 +38,6 @@ static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     "blockquote pattern regex should compile",
 );
 
-/// Determine if the current line should break at the last whitespace.
-///
-/// Returns `true` if `current_width` exceeds `width` and a whitespace split
-/// position is available.
-fn should_break_line(width: usize, current_width: usize, last_split: Option<usize>) -> bool {
-    current_width > width && last_split.is_some()
-}
-
-static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:>\s*)+)(.*)$").unwrap());
-
 /// Matches `markdownlint` comment directives.
 ///
 /// The regex is case-insensitive and recognises these forms with optional rule
@@ -64,42 +53,6 @@ static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLo
     )
     .expect("valid markdownlint regex")
 });
-
-struct PrefixHandler {
-    re: &'static std::sync::LazyLock<Regex>,
-    is_bq: bool,
-    build_prefix: fn(&Captures) -> String,
-    rest_group: usize,
-}
-
-impl PrefixHandler {
-    fn build_bullet_prefix(cap: &Captures) -> String { cap[1].to_string() }
-
-    fn build_footnote_prefix(cap: &Captures) -> String { format!("{}{}", &cap[1], &cap[2]) }
-
-    fn build_blockquote_prefix(cap: &Captures) -> String { cap[1].to_string() }
-}
-
-static HANDLERS: &[PrefixHandler] = &[
-    PrefixHandler {
-        re: &BULLET_RE,
-        is_bq: false,
-        build_prefix: PrefixHandler::build_bullet_prefix,
-        rest_group: 2,
-    },
-    PrefixHandler {
-        re: &FOOTNOTE_RE,
-        is_bq: false,
-        build_prefix: PrefixHandler::build_footnote_prefix,
-        rest_group: 3,
-    },
-    PrefixHandler {
-        re: &BLOCKQUOTE_RE,
-        is_bq: true,
-        build_prefix: PrefixHandler::build_blockquote_prefix,
-        rest_group: 2,
-    },
-];
 
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
@@ -210,7 +163,9 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 }
 
 #[doc(hidden)]
-pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
+pub fn is_fence(line: &str) -> bool {
+    FENCE_RE.is_match(line)
+}
 
 pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
