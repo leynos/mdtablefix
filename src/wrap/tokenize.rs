@@ -129,13 +129,14 @@ fn next_token(s: &str) -> Option<(Token<'_>, usize)> {
         }
         let delim_len = s.chars().take_while(|&c| c == '`').count();
         if delim_len == 0 {
-            return Some((Token::Text(s), s.len()));
+            return Some((Token::Text(&s[..1]), 1));
         }
         let closing = &s[..delim_len];
         if let Some(end) = s[delim_len..].find(closing) {
             let code = &s[delim_len..delim_len + end];
             return Some((Token::Code(code), delim_len + end + delim_len));
         }
+        return Some((Token::Text(&s[..delim_len]), delim_len));
     }
     Some((Token::Text(s), s.len()))
 }
