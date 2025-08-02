@@ -136,9 +136,9 @@ fn main() -> std::io::Result<()> {
         ..Default::default()
     };
     let fixed = process_stream_opts(&lines, opts);
-  println!("{}", fixed.join("\n"));
-  rewrite(Path::new("table.md"))?;
-  Ok(())
+    println!("{}", fixed.join("\n"));
+    rewrite(Path::new("table.md"))?;
+    Ok(())
 }
 ```
 

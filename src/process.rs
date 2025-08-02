@@ -41,7 +41,8 @@ pub struct Options {
     pub ellipsis: bool,
     /// Normalise code block fences.
     pub fences: bool,
-    /// Convert bare numeric references to footnotes (default: `false`).
+    /// Convert bare numeric references into GitHub-flavoured footnote links.
+    /// (default: `false`).
     pub footnotes: bool,
 }
 
