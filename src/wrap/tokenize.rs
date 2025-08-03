@@ -123,24 +123,20 @@ fn next_token(s: &str) -> Option<(Token<'_>, usize)> {
     if s.is_empty() {
         return None;
     }
-    if let Some(pos) = s.find('`') {
-        if pos > 0 {
+    let delim_len = s.chars().take_while(|&c| c == '`').count();
+    if delim_len == 0 {
+        if let Some(pos) = s.find('`') {
             return Some((Token::Text(&s[..pos]), pos));
         }
-        let delim_len = s.chars().take_while(|&c| c == '`').count();
-        if delim_len == 0 {
-            let first_len = s.chars().next().unwrap().len_utf8();
-            let next = s[first_len..].find('`').map_or(s.len(), |i| first_len + i);
-            return Some((Token::Text(&s[..next]), next));
-        }
-        let closing = &s[..delim_len];
-        if let Some(end) = s[delim_len..].find(closing) {
-            let code = &s[delim_len..delim_len + end];
-            return Some((Token::Code(code), delim_len + end + delim_len));
-        }
-        return Some((Token::Text(&s[..delim_len]), delim_len));
+        return Some((Token::Text(s), s.len()));
     }
-    Some((Token::Text(s), s.len()))
+
+    let closing = &s[..delim_len];
+    if let Some(end) = s[delim_len..].find(closing) {
+        let code = &s[delim_len..delim_len + end];
+        return Some((Token::Code(code), delim_len + end + delim_len));
+    }
+    Some((Token::Text(closing), delim_len))
 }
 
 fn tokenize_inline<'a, F>(mut rest: &'a str, mut emit: F)
