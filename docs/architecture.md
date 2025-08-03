@@ -29,6 +29,7 @@ The function combines several helpers documented in `docs/`:
     [HTML table support](#html-table-support-in-mdtablefix).
 - `wrap::wrap_text` applies optional line wrapping. It relies on the
   `unicode-width` crate for accurate character widths.
+- `wrap::tokenize_markdown` emits `Token` values for custom processing.
 
 The function maintains a small state machine that tracks whether it is inside a
 Markdown table, an HTML table, or a fenced code block. The state determines how
@@ -94,10 +95,18 @@ returns the updated stream for writing to disk or further manipulation.
 ## Footnote Conversion
 
 `mdtablefix` can optionally convert bare numeric references into
-GitHub-flavoured Markdown footnotes. The `convert_footnotes` function performs
-this operation and is exposed via the higher-level `process_stream_opts`
-helper. Set `Options { footnotes: true, ..Default::default() }` when calling
-`process_stream_opts` to enable the conversion logic.
+GitHub-flavoured Markdown footnotes. A bare numeric reference is a number that
+appears after punctuation with no footnote formatting, for example:
+
+```markdown
+An example of a bare numeric reference.1
+```
+
+`convert_footnotes` performs this operation and is exposed via the higher-level
+`process_stream_opts` helper. Set
+`Options { footnotes: true, ..Default::default() }` when calling
+`process_stream_opts` to enable the conversion logic. The parameter defaults to
+`false`.
 
 Inline references that appear after punctuation are rewritten as footnote links.
 
@@ -263,13 +272,13 @@ classDiagram
     io ..> process : uses process_stream, process_stream_no_wrap
 ```
 
-The `lib` module re-exports the public API from the other modules. The
-`ellipsis` module performs text normalization, while `footnotes` converts bare
-references. The `textproc` module contains shared token-processing helpers used
-by both the `ellipsis` and `footnotes` modules. Tokenization is handled by
-`wrap::tokenize_markdown`, replacing the small state machine that previously
-resided in `process_tokens`. Both `Token` and `tokenize_markdown` are re-
-exported by the crate root for use by downstream tools. The `process` module
+The `lib` module re-exports the public API from the other modules. The `wrap`
+module exposes the `Token` enum and `tokenize_markdown` function for custom
+processing. The `ellipsis` module performs text normalization, while
+`footnotes` converts bare references. The `textproc` module contains shared
+token-processing helpers used by both the `ellipsis` and `footnotes` modules.
+Tokenization is handled by `wrap::tokenize_markdown`, replacing the small state
+machine that previously resided in `process_tokens`. The `process` module
 provides streaming helpers that combine the lower-level functions. The `io`
 module handles filesystem operations, delegating the text processing to
 `process`.

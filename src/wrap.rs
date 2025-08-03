@@ -4,28 +4,40 @@
 //! spans, fenced code blocks, and other prefixes. Width calculations rely on
 //! `UnicodeWidthStr::width` from the `unicode-width` crate as described in
 //! `docs/architecture.md#unicode-width-handling`.
+//!
+//! The [`Token`] enum and [`tokenize_markdown`] function are public so callers
+//! can perform custom token-based processing.
 
-use regex::{Captures, Regex};
+use regex::Regex;
 
 mod tokenize;
+
 /// Token emitted by [`tokenize::segment_inline`] and used by higher-level
 /// wrappers.
 ///
 /// Re-export these so callers of [`crate::textproc`] can implement custom
 /// transformations without depending on internal modules.
-pub use tokenize::{Token, tokenize_markdown};
+pub use tokenize::Token;
+#[doc(inline)]
+pub use tokenize::tokenize_markdown;
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").expect("valid fence regex"));
 
-static BULLET_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)").unwrap());
+static BULLET_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)",
+    "bullet pattern regex should compile",
+);
 
-static FOOTNOTE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^(\s*)(\[\^[^]]+\]:\s*)(.*)$").unwrap());
+static FOOTNOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^(\s*)(\[\^[^]]+\]:\s*)(.*)$",
+    "footnote pattern regex should compile",
+);
 
-static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^(\s*(?:>\s*)+)(.*)$").unwrap());
+static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^(\s*(?:>\s*)+)(.*)$",
+    "blockquote pattern regex should compile",
+);
 
 /// Matches `markdownlint` comment directives.
 ///
@@ -42,42 +54,6 @@ static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLo
     )
     .expect("valid markdownlint regex")
 });
-
-struct PrefixHandler {
-    re: &'static std::sync::LazyLock<Regex>,
-    is_bq: bool,
-    build_prefix: fn(&Captures) -> String,
-    rest_group: usize,
-}
-
-impl PrefixHandler {
-    fn build_bullet_prefix(cap: &Captures) -> String { cap[1].to_string() }
-
-    fn build_footnote_prefix(cap: &Captures) -> String { format!("{}{}", &cap[1], &cap[2]) }
-
-    fn build_blockquote_prefix(cap: &Captures) -> String { cap[1].to_string() }
-}
-
-static HANDLERS: &[PrefixHandler] = &[
-    PrefixHandler {
-        re: &BULLET_RE,
-        is_bq: false,
-        build_prefix: PrefixHandler::build_bullet_prefix,
-        rest_group: 2,
-    },
-    PrefixHandler {
-        re: &FOOTNOTE_RE,
-        is_bq: false,
-        build_prefix: PrefixHandler::build_footnote_prefix,
-        rest_group: 3,
-    },
-    PrefixHandler {
-        re: &BLOCKQUOTE_RE,
-        is_bq: true,
-        build_prefix: PrefixHandler::build_blockquote_prefix,
-        rest_group: 2,
-    },
-];
 
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
@@ -278,8 +254,8 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut indent = String::new();
     let mut in_code = false;
 
-    'line_loop: for line in lines {
-        if FENCE_RE.is_match(line) {
+    for line in lines {
+        if is_fence(line) {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
             indent.clear();
@@ -325,21 +301,31 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
-        for handler in HANDLERS {
-            if let Some(cap) = handler.re.captures(line) {
-                let prefix = (handler.build_prefix)(&cap);
-                let rest = cap.get(handler.rest_group).unwrap().as_str();
-                handle_prefix_line(
-                    &mut out,
-                    &mut buf,
-                    &mut indent,
-                    width,
-                    &prefix,
-                    rest,
-                    handler.is_bq,
-                );
-                continue 'line_loop;
-            }
+        if let Some(cap) = BULLET_RE.captures(line) {
+            let prefix = cap.get(1).expect("bullet regex capture").as_str();
+            let rest = cap.get(2).expect("bullet regex remainder capture").as_str();
+            handle_prefix_line(&mut out, &mut buf, &mut indent, width, prefix, rest, false);
+            continue;
+        }
+
+        if let Some(cap) = FOOTNOTE_RE.captures(line) {
+            let prefix = format!("{}{}", &cap[1], &cap[2]);
+            let rest = cap
+                .get(3)
+                .expect("footnote regex remainder capture")
+                .as_str();
+            handle_prefix_line(&mut out, &mut buf, &mut indent, width, &prefix, rest, false);
+            continue;
+        }
+
+        if let Some(cap) = BLOCKQUOTE_RE.captures(line) {
+            let prefix = cap.get(1).expect("blockquote prefix capture").as_str();
+            let rest = cap
+                .get(2)
+                .expect("blockquote regex remainder capture")
+                .as_str();
+            handle_prefix_line(&mut out, &mut buf, &mut indent, width, prefix, rest, true);
+            continue;
         }
 
         if buf.is_empty() {

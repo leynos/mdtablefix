@@ -4,10 +4,9 @@
 //! `<!-- markdownlint-disable-next-line -->` remain on their own line
 //! after processing. Regular comments should still be wrapped normally.
 
-use mdtablefix::process_stream;
-
 #[macro_use]
 mod prelude;
+use mdtablefix::process_stream;
 use prelude::*;
 
 /// The disable-next-line directive must remain intact after wrapping.

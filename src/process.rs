@@ -41,7 +41,7 @@ pub struct Options {
     pub ellipsis: bool,
     /// Normalise code block fences.
     pub fences: bool,
-    /// Convert bare numeric references to footnotes.
+    /// Convert bare numeric references into GitHub-flavoured footnote links (default: `false`).
     pub footnotes: bool,
 }
 
@@ -234,7 +234,9 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 /// Runs [`process_stream_inner`] with custom [`Options`].
 ///
 /// This is exposed for advanced use cases where callers want precise
-/// control over the processing pipeline.
+/// control over the processing pipeline. Set `footnotes: true` in `opts`
+/// to convert bare numeric references into GitHub-flavoured footnote
+/// links. The flag defaults to `false`.
 ///
 /// # Examples
 ///
