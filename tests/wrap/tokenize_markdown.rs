@@ -50,3 +50,30 @@ fn incorrect_fence_length_is_text() {
         ]
     );
 }
+#[test]
+fn unmatched_inline_code_is_text() {
+    let source = "bad `code span";
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(
+        tokens,
+        vec![
+            Token::Text("bad "),
+            Token::Text("`"),
+            Token::Text("code span"),
+        ]
+    );
+}
+
+#[test]
+fn multiple_unmatched_backticks_are_text() {
+    let source = "``bad code";
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(
+        tokens,
+        vec![
+            Token::Text("``"),
+            Token::Text("bad code"),
+        ]
+    );
+}
+
