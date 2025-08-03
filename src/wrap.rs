@@ -8,7 +8,7 @@
 //! The [`Token`] enum and [`tokenize_markdown`] function are public so callers
 //! can perform custom token-based processing.
 
-use regex::Regex;
+use regex::{Captures, Regex};
 
 mod tokenize;
 /// Token emitted by [`tokenize::segment_inline`] and used by higher-level wrappers.
