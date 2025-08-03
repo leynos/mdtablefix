@@ -211,6 +211,8 @@ classDiagram
         <<module>>
         +wrap_text()
         +is_fence()
+        +Token
+        +tokenize_markdown()
     }
     class lists {
         <<module>>
@@ -272,9 +274,9 @@ classDiagram
     io ..> process : uses process_stream, process_stream_no_wrap
 ```
 
-The `lib` module re-exports the public API from the other modules. The `wrap`
-module exposes the `Token` enum and `tokenize_markdown` function for custom
-processing. The `ellipsis` module performs text normalization, while
+The `lib` module is re-exported as the public API from the other modules. The
+`wrap` module exposes the `Token` enum and `tokenize_markdown` function for
+custom processing. The `ellipsis` module performs text normalization, while
 `footnotes` converts bare references. The `textproc` module contains shared
 token-processing helpers used by both the `ellipsis` and `footnotes` modules.
 Tokenization is handled by `wrap::tokenize_markdown`, replacing the small state
