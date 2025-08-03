@@ -13,10 +13,6 @@ mod tokenize;
 /// Re-export this so callers of [`crate::textproc`] can implement custom
 /// transformations without depending on internal modules.
 pub use tokenize::Token;
-/// Tokenize a Markdown snippet using backtick-delimited code spans.
-///
-/// Re-exporting this helper lets downstream crates parse Markdown without
-/// depending on the private [`tokenize`] module.
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
 
