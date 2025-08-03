@@ -15,9 +15,9 @@
 /// let end = scan_while(&chars, 0, char::is_alphabetic);
 /// assert_eq!(end, 3);
 /// ```
-fn scan_while<F>(chars: &[char], mut i: usize, cond: F) -> usize
+fn scan_while<F>(chars: &[char], mut i: usize, mut cond: F) -> usize
 where
-    F: Fn(char) -> bool,
+    F: FnMut(char) -> bool,
 {
     while i < chars.len() && cond(chars[i]) {
         i += 1;
@@ -99,12 +99,13 @@ fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
 ///
 /// ```rust,ignore
 /// assert!(is_trailing_punctuation('.'));
+/// assert!(is_trailing_punctuation('('));
 /// assert!(!is_trailing_punctuation('a'));
 /// ```
 fn is_trailing_punctuation(c: char) -> bool {
     matches!(
         c,
-        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
+        '.' | ',' | ';' | ':' | '!' | '?' | '(' | ')' | ']' | '"' | '\''
     )
 }
 
@@ -121,6 +122,13 @@ fn is_trailing_punctuation(c: char) -> bool {
 /// assert_eq!(
 ///     tokens,
 ///     vec!["see", " ", "[link](url)", " ", "and", " ", "`code`"]
+/// );
+///
+/// // Example with consecutive and unusual whitespace
+/// let tokens = segment_inline("foo  bar\tbaz   `qux`");
+/// assert_eq!(
+///     tokens,
+///     vec!["foo", "  ", "bar", "\t", "baz", "   ", "`qux`"]
 /// );
 /// ```
 pub(super) fn segment_inline(text: &str) -> Vec<String> {
@@ -183,8 +191,14 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
 /// # Examples
 ///
 /// ```rust,ignore
+/// // Prints:
+/// // Token::Text("run ")
+/// // Token::Code("cmd")
 /// tokenize_inline("run `cmd`", &mut |t| println!("{:?}", t));
 /// ```
+///
+/// The callback receives each token as a [`Token<'a>`], such as
+/// `Token::Text(&str)` or `Token::Code(&str)`.
 fn tokenize_inline<'a, F>(text: &'a str, emit: &mut F)
 where
     F: FnMut(Token<'a>),
@@ -221,8 +235,8 @@ where
 /// span. If no closing backtick is found the delimiter and remaining text are
 /// returned as [`Token::Text`]. Whitespace is preserved exactly as it appears.
 ///
-/// ```rust,no_run
-/// use mdtablefix::wrap::{Token, tokenize_markdown};
+/// ```rust
+/// use crate::wrap::{Token, tokenize_markdown};
 ///
 /// let tokens = tokenize_markdown("Example with `code`");
 /// assert_eq!(

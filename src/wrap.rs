@@ -13,6 +13,11 @@ mod tokenize;
 /// Re-export this so callers of [`crate::textproc`] can implement custom
 /// transformations without depending on internal modules.
 pub use tokenize::Token;
+/// Tokenize a Markdown snippet using backtick-delimited code spans.
+///
+/// Re-exporting this helper lets downstream crates parse Markdown without
+/// depending on the private [`tokenize`] module.
+#[doc(inline)]
 pub use tokenize::tokenize_markdown;
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
@@ -51,11 +56,17 @@ struct PrefixHandler {
 }
 
 impl PrefixHandler {
-    fn build_bullet_prefix(cap: &Captures) -> String { cap[1].to_string() }
+    fn build_bullet_prefix(cap: &Captures) -> String {
+        cap[1].to_string()
+    }
 
-    fn build_footnote_prefix(cap: &Captures) -> String { format!("{}{}", &cap[1], &cap[2]) }
+    fn build_footnote_prefix(cap: &Captures) -> String {
+        format!("{}{}", &cap[1], &cap[2])
+    }
 
-    fn build_blockquote_prefix(cap: &Captures) -> String { cap[1].to_string() }
+    fn build_blockquote_prefix(cap: &Captures) -> String {
+        cap[1].to_string()
+    }
 }
 
 static HANDLERS: &[PrefixHandler] = &[
@@ -188,7 +199,9 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 }
 
 #[doc(hidden)]
-pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
+pub fn is_fence(line: &str) -> bool {
+    FENCE_RE.is_match(line)
+}
 
 pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
