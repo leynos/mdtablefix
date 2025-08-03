@@ -54,6 +54,9 @@ mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes
 - Use `--footnotes` to convert bare numeric references and the final numbered
   list into GitHub-flavoured footnote links.
 
+  A bare numeric reference is a trailing number after punctuation, like
+  `An example.1`.
+
 - Use `--in-place` to modify files in-place.
 
 - If no files are specified, input is read from stdin and output is written to
@@ -141,10 +144,41 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
+The `footnotes` option also rewrites bare numeric references:
+
+```rust
+use mdtablefix::{process_stream_opts, Options};
+
+let lines = vec![
+    "A tip.1".to_string(),
+    "",
+    "1. Footnote text".to_string(),
+];
+let opts = Options { footnotes: true, ..Default::default() };
+let out = process_stream_opts(&lines, opts);
+assert_eq!(out[0], "A tip.[^1]");
+```
+
+It converts a trailing numbered list into footnote definitions:
+
+```rust
+use mdtablefix::{process_stream_opts, Options};
+
+let lines = vec![
+    "More text.".to_string(),
+    "".to_string(),
+    "1. First note".to_string(),
+    "2. Second note".to_string(),
+];
+let opts = Options { footnotes: true, ..Default::default() };
+let out = process_stream_opts(&lines, opts);
+assert_eq!(out[2], "[^1] First note");
+```
+
 - `process_stream_opts(lines: &[String], opts: Options) -> Vec<String>`
   rewrites tables in memory. The options enable paragraph wrapping, ellipsis
   substitution, fence normalization and footnote conversion when `footnotes` is
-  set to `true`.
+  set to `true`. The flag is `false` by default.
 
 - `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on
   disk in-place.
