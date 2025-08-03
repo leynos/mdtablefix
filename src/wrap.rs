@@ -11,8 +11,13 @@
 use regex::Regex;
 
 mod tokenize;
+/// Token emitted by [`tokenize::segment_inline`] and used by higher-level wrappers.
+///
+/// Re-export this so callers of [`crate::textproc`] can implement custom
+/// transformations without depending on internal modules.
+pub use tokenize::Token;
 #[doc(inline)]
-pub use tokenize::{Token, tokenize_markdown};
+pub use tokenize::tokenize_markdown;
 
 static FENCE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").unwrap());

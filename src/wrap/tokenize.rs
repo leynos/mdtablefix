@@ -3,9 +3,21 @@
 //! This module contains utilities for breaking lines into tokens so that
 //! inline code spans and Markdown links are preserved during wrapping.
 
-fn scan_while<F>(chars: &[char], mut i: usize, cond: F) -> usize
+/// Advance `i` while the predicate evaluates to `true`.
+///
+/// Returns the index of the first character for which `cond` fails. This small
+/// helper keeps the scanning loops concise.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let chars: Vec<char> = "abc123".chars().collect();
+/// let end = scan_while(&chars, 0, char::is_alphabetic);
+/// assert_eq!(end, 3);
+/// ```
+fn scan_while<F>(chars: &[char], mut i: usize, mut cond: F) -> usize
 where
-    F: Fn(char) -> bool,
+    F: FnMut(char) -> bool,
 {
     while i < chars.len() && cond(chars[i]) {
         i += 1;
@@ -13,6 +25,14 @@ where
     i
 }
 
+/// Collect a range of characters into a [`String`].
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let chars: Vec<char> = ['a', 'b', 'c'];
+/// assert_eq!(collect_range(&chars, 0, 2), "ab");
+/// ```
 fn collect_range(chars: &[char], start: usize, end: usize) -> String {
     chars[start..end].iter().collect()
 }
@@ -35,6 +55,15 @@ pub enum Token<'a> {
 /// Handles nested parentheses within URLs by tracking the depth of opening and
 /// closing delimiters. Returns the parsed slice and the index after the closing
 /// parenthesis if one is found.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let chars: Vec<char> = "![alt](a(b)c)".chars().collect();
+/// let (tok, idx) = parse_link_or_image(&chars, 0);
+/// assert_eq!(tok, "![alt](a(b)c)");
+/// assert_eq!(idx, chars.len());
+/// ```
 fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
     let start = i;
     if chars[i] == '!' {
@@ -61,13 +90,47 @@ fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
     (collect_range(chars, start, start + 1), start + 1)
 }
 
+/// Determine whether a character is considered trailing punctuation.
+///
+/// The wrapper treats such punctuation as part of the preceding link when
+/// wrapping lines.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert!(is_trailing_punctuation('.'));
+/// assert!(is_trailing_punctuation('('));
+/// assert!(!is_trailing_punctuation('a'));
+/// ```
 fn is_trailing_punctuation(c: char) -> bool {
     matches!(
         c,
-        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
+        '.' | ',' | ';' | ':' | '!' | '?' | '(' | ')' | ']' | '"' | '\''
     )
 }
 
+/// Break a single line of text into inline token strings.
+///
+/// Code spans, links, images and surrounding whitespace are preserved as
+/// separate tokens. This simplifies later wrapping logic which operates on
+/// slices of the original text.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let tokens = segment_inline("see [link](url) and `code`");
+/// assert_eq!(
+///     tokens,
+///     vec!["see", " ", "[link](url)", " ", "and", " ", "`code`"]
+/// );
+///
+/// // Example with consecutive and unusual whitespace
+/// let tokens = segment_inline("foo  bar\tbaz   `qux`");
+/// assert_eq!(
+///     tokens,
+///     vec!["foo", "  ", "bar", "\t", "baz", "   ", "`qux`"]
+/// );
+/// ```
 pub(super) fn segment_inline(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = text.chars().collect();
@@ -140,6 +203,23 @@ fn next_token(s: &str) -> Option<(Token<'_>, usize)> {
     Some((Token::Text(s), s.len()))
 }
 
+/// Emit [`Token`]s for inline segments within a single line.
+///
+/// The function scans for backtick sequences and yields `Token::Code` for
+/// matched spans. Text outside code spans is emitted as `Token::Text` via the
+/// provided callback.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// // Prints:
+/// // Token::Text("run ")
+/// // Token::Code("cmd")
+/// tokenize_inline("run `cmd`", &mut |t| println!("{:?}", t));
+/// ```
+///
+/// The callback receives each token as a [`Token<'a>`], such as
+/// `Token::Text(&str)` or `Token::Code(&str)`.
 fn tokenize_inline<'a, F>(mut rest: &'a str, mut emit: F)
 where
     F: FnMut(Token<'a>),
@@ -153,7 +233,25 @@ where
     }
 }
 
-/// Tokenize a block of Markdown into [`Token`]s.
+/// Tokenize a Markdown snippet using backtick-delimited code spans.
+///
+/// The function scans the input line by line. Lines matching [`FENCE_RE`]
+/// produce [`Token::Fence`] tokens and toggle fenced mode. Lines inside a
+/// fence are yielded verbatim. Outside fenced regions the scanner searches for
+/// backtick sequences. Text before a backtick becomes [`Token::Text`]. When a
+/// closing backtick follows, the enclosed portion forms a [`Token::Code`]
+/// span. If no closing backtick is found the delimiter and remaining text are
+/// returned as [`Token::Text`]. Whitespace is preserved exactly as it appears.
+///
+/// ```rust
+/// use crate::wrap::{Token, tokenize_markdown};
+///
+/// let tokens = tokenize_markdown("Example with `code`");
+/// assert_eq!(
+///     tokens,
+///     vec![Token::Text("Example with "), Token::Code("code")]
+/// );
+/// ```
 #[must_use]
 pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     if source.is_empty() {
@@ -191,14 +289,6 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     tokens
 }
 
-/// Split the input string into [`Token`]s by analysing whitespace and backtick
-/// delimiters.
-///
-/// The tokenizer groups consecutive whitespace into a single [`Token::Text`] and
-/// recognises backtick sequences as inline code spans. When a run of backticks
-/// is encountered the parser searches forward for an identical delimiter,
-/// allowing nested backticks when the span uses a longer fence. Unmatched
-/// delimiter sequences are treated as literal text.
 #[cfg(test)]
 mod tests {
     use super::*;
