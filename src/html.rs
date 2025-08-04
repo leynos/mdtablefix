@@ -84,7 +84,9 @@ fn is_element(handle: &Handle, tag: &str) -> bool {
 }
 
 /// Returns `true` if `handle` represents a `<td>` or `<th>` element.
-fn is_table_cell(handle: &Handle) -> bool { is_element(handle, "td") || is_element(handle, "th") }
+fn is_table_cell(handle: &Handle) -> bool {
+    is_element(handle, "td") || is_element(handle, "th")
+}
 
 /// Walks the DOM tree collecting `<table>` nodes under `handle`.
 fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
@@ -112,10 +114,10 @@ fn is_bold_tag(tag: &str) -> bool {
 
 /// Returns `true` if `handle` contains a `<b>` or `<strong>` descendant.
 fn contains_strong(handle: &Handle) -> bool {
-    if let NodeData::Element { name, .. } = &handle.data
-        && is_bold_tag(name.local.as_ref())
-    {
-        return true;
+    if let NodeData::Element { name, .. } = &handle.data {
+        if is_bold_tag(name.local.as_ref()) {
+            return true;
+        }
     }
     let children = handle.children.borrow();
     children.iter().any(contains_strong)

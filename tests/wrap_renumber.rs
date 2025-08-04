@@ -14,10 +14,7 @@ fn wrap_then_renumber_preserves_order() {
     out = renumber_lists(&out);
 
     assert_eq!(
-        out,
-        expected,
+        out, expected,
         "renumbered output mismatch:\nexpected: {expected:?}\nactual: {out:?}",
-        expected = expected,
-        out = out,
     );
 }
