@@ -13,5 +13,11 @@ fn wrap_then_renumber_preserves_order() {
     let mut out = process_stream(&input);
     out = renumber_lists(&out);
 
-    assert_eq!(out, expected);
+    assert_eq!(
+        out,
+        expected,
+        "renumbered output mismatch:\nexpected: {expected:?}\nactual: {out:?}",
+        expected = expected,
+        out = out,
+    );
 }
