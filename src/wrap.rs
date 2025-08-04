@@ -15,6 +15,10 @@ mod tokenize;
 /// Token emitted by [`tokenize::segment_inline`] and used by higher-level
 /// wrappers.
 ///
+/// Downstream callers inspect [`Token<'a>`] when implementing bespoke
+/// wrapping logic. The `'a` lifetime parameter ties each token to the source
+/// text, avoiding unnecessary allocation.
+///
 /// Re-export these so callers of [`crate::textproc`] can implement custom
 /// transformations without depending on internal modules.
 pub use tokenize::Token;
@@ -163,7 +167,9 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
+/// Checks if a line is a fence marker (````` or `~~~`), ignoring leading whitespace.
 #[doc(hidden)]
+#[rustfmt::skip]
 pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 
 pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
