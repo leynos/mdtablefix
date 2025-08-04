@@ -167,9 +167,9 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-/// Detect whether a line opens or closes a fenced code block (````` or `~~~`),
-/// ignoring leading whitespace.
+/// Checks if a line is a fence marker (````` or `~~~`), ignoring leading whitespace.
 #[doc(hidden)]
+#[rustfmt::skip]
 pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
 
 pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
