@@ -9,14 +9,14 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use crate::textproc::{Token, process_tokens};
+use crate::textproc::{Token, process_tokens, push_original_token};
 
 static DOT_RE: LazyLock<Regex> = lazy_regex!(r"\.{3,}", "ellipsis pattern regex should compile");
 
 /// Replace `...` with `…` outside code spans and fences.
 #[must_use]
 pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
-    process_tokens(lines, |token, out| match token {
+    process_tokens(lines, |tok, out| match tok {
         Token::Text(t) => {
             if !DOT_RE.is_match(t) {
                 out.push_str(t);
@@ -30,13 +30,7 @@ pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
             });
             out.push_str(&replaced);
         }
-        Token::Code(c) => {
-            out.push('`');
-            out.push_str(c);
-            out.push('`');
-        }
-        Token::Fence(f) => out.push_str(f),
-        Token::Newline => out.push('\n'),
+        _ => push_original_token(&tok, out),
     })
 }
 
