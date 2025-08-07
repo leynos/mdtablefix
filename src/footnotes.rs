@@ -18,7 +18,7 @@ static FOOTNOTE_LINE_RE: LazyLock<Regex> = lazy_regex!(
     "footnote line pattern should compile",
 );
 
-use crate::textproc::{Token, process_tokens};
+use crate::textproc::{Token, process_tokens, push_original_token};
 
 /// Extract the components of an inline footnote reference.
 #[inline]
@@ -96,15 +96,9 @@ fn convert_block(lines: &mut [String]) {
 /// Convert bare numeric footnote references to Markdown footnote syntax.
 #[must_use]
 pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
-    let mut lines = process_tokens(lines, |token, out| match token {
+    let mut lines = process_tokens(lines, |tok, out| match tok {
         Token::Text(t) => out.push_str(&convert_inline(t)),
-        Token::Code(c) => {
-            out.push('`');
-            out.push_str(c);
-            out.push('`');
-        }
-        Token::Fence(f) => out.push_str(f),
-        Token::Newline => out.push('\n'),
+        _ => push_original_token(&tok, out),
     });
     convert_block(&mut lines);
     lines

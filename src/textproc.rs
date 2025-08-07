@@ -8,6 +8,35 @@
 
 pub use crate::wrap::{Token, tokenize_markdown};
 
+/// Append a [`Token`] to an output buffer without modification.
+///
+/// This helper reconstructs a token's original Markdown text. Callers can use
+/// it to forward tokens they do not wish to transform while operating on text
+/// tokens.
+///
+/// # Examples
+///
+/// ```rust
+/// use mdtablefix::textproc::{Token, push_original_token};
+///
+/// let mut buf = String::new();
+/// push_original_token(&Token::Code("x"), &mut buf);
+/// assert_eq!(buf, "`x`");
+/// ```
+#[inline]
+pub fn push_original_token(token: &Token<'_>, out: &mut String) {
+    match token {
+        Token::Text(t) => out.push_str(t),
+        Token::Code(c) => {
+            out.push('`');
+            out.push_str(c);
+            out.push('`');
+        }
+        Token::Fence(f) => out.push_str(f),
+        Token::Newline => out.push('\n'),
+    }
+}
+
 /// Apply a transformation to a sequence of [`Token`]s.
 ///
 /// The `lines` slice is tokenized in order, preserving fence context.
@@ -171,5 +200,25 @@ mod tests {
             "Text(\" span\")".to_string(),
         ];
         assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn push_original_token_roundtrips_all_variants() {
+        let mut buf = String::new();
+
+        push_original_token(&Token::Text("a"), &mut buf);
+        assert_eq!(buf, "a");
+
+        buf.clear();
+        push_original_token(&Token::Code("b"), &mut buf);
+        assert_eq!(buf, "`b`");
+
+        buf.clear();
+        push_original_token(&Token::Fence("```"), &mut buf);
+        assert_eq!(buf, "```");
+
+        buf.clear();
+        push_original_token(&Token::Newline, &mut buf);
+        assert_eq!(buf, "\n");
     }
 }
