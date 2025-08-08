@@ -62,9 +62,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/cross
-          key: cross-v0.2.1-${{ runner.os }}
+          key: cross-v0.2.5-${{ runner.os }}
       - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross --tag v0.2.1
+        run: cargo install cross --git https://github.com/cross-rs/cross --tag v0.2.5
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
