@@ -13,8 +13,13 @@ static INLINE_FN_RE: LazyLock<Regex> = lazy_regex!(
     "inline footnote reference pattern should compile",
 );
 
+static COLON_FN_RE: LazyLock<Regex> = lazy_regex!(
+    r"(?P<pre>^|[^0-9])(?P<space>\s)(?P<style>[*_]*)(?P<num>\d+):(?P<boundary>\s|$)",
+    "space-colon footnote reference pattern should compile",
+);
+
 static FOOTNOTE_LINE_RE: LazyLock<Regex> = lazy_regex!(
-    r"^(?P<indent>\s*)(?P<num>\d+)\.\s+(?P<rest>.*)$",
+    r"^(?P<indent>\s*)(?P<num>\d+)[.:]\s+(?P<rest>.*)$",
     "footnote line pattern should compile",
 );
 
@@ -39,10 +44,17 @@ fn build_footnote(pre: &str, punc: &str, style: &str, num: &str, boundary: &str)
 }
 
 fn convert_inline(text: &str) -> String {
-    INLINE_FN_RE
-        .replace_all(text, |caps: &Captures| {
-            let (pre, punc, style, num, boundary) = capture_parts(caps);
-            build_footnote(pre, punc, style, num, boundary)
+    let out = INLINE_FN_RE.replace_all(text, |caps: &Captures| {
+        let (pre, punc, style, num, boundary) = capture_parts(caps);
+        build_footnote(pre, punc, style, num, boundary)
+    });
+    COLON_FN_RE
+        .replace_all(&out, |caps: &Captures| {
+            let pre = &caps["pre"];
+            let style = &caps["style"];
+            let num = &caps["num"];
+            let boundary = &caps["boundary"];
+            format!("{pre}{style}[^{num}]:{boundary}")
         })
         .into_owned()
 }
