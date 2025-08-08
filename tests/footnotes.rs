@@ -85,6 +85,28 @@ fn test_handles_punctuation_inside_bold() {
 }
 
 #[test]
+fn test_converts_number_followed_by_colon() {
+    let input = lines_vec!(
+        "While a full library tutorial is beyond this guide's scope, a brief look at the",
+        "core API concepts reveals its ergonomic design. The official `docs.rs` page",
+        "provides several end-to-end examples that revolve around a few key types 7:",
+    );
+    let expected = lines_vec!(
+        "While a full library tutorial is beyond this guide's scope, a brief look at the",
+        "core API concepts reveals its ergonomic design. The official `docs.rs` page",
+        "provides several end-to-end examples that revolve around a few key types[^7]:",
+    );
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_converts_colon_footnote_definition() {
+    let input = lines_vec!("7: Footnote text");
+    let expected = lines_vec!("[^7] Footnote text");
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
 fn test_empty_input() {
     let input: Vec<String> = Vec::new();
     let output = convert_footnotes(&input);

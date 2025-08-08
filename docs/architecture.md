@@ -96,10 +96,12 @@ returns the updated stream for writing to disk or further manipulation.
 
 `mdtablefix` can optionally convert bare numeric references into
 GitHub-flavoured Markdown footnotes. A bare numeric reference is a number that
-appears after punctuation with no footnote formatting, for example:
+appears after punctuation or before a colon with no footnote formatting, for
+example:
 
 ```markdown
 An example of a bare numeric reference.1
+The official docs page showcases several types 7:
 ```
 
 `convert_footnotes` performs this operation and is exposed via the higher-level
@@ -108,18 +110,21 @@ An example of a bare numeric reference.1
 `process_stream_opts` to enable the conversion logic. The parameter defaults to
 `false`.
 
-Inline references that appear after punctuation are rewritten as footnote links.
+Inline references that appear after punctuation or before a colon are rewritten
+as footnote links.
 
 Before:
 
 ```markdown
 A useful tip.1
+Core types 7:
 ```
 
 After:
 
 ```markdown
 A useful tip.[^1]
+Core types[^7]:
 ```
 
 Numbers inside inline code or parentheses are ignored.
