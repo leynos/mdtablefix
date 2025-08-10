@@ -14,7 +14,7 @@ static INLINE_FN_RE: LazyLock<Regex> = lazy_regex!(
 );
 
 static COLON_FN_RE: LazyLock<Regex> = lazy_regex!(
-    r"(?P<pre>^|[^0-9])(?P<space>\s)(?P<style>[*_]*)(?P<num>\d+):(?P<boundary>\s|$)",
+    r"(?P<pre>^|[^0-9])\s+(?P<style>[*_]*)(?P<num>\d+)\s*:(?P<colons>:*)(?P<boundary>\s|[[:punct:]]|$)",
     "space-colon footnote reference pattern should compile",
 );
 
@@ -53,8 +53,9 @@ fn convert_inline(text: &str) -> String {
             let pre = &caps["pre"];
             let style = &caps["style"];
             let num = &caps["num"];
+            let colons = caps.name("colons").map_or("", |m| m.as_str());
             let boundary = &caps["boundary"];
-            format!("{pre}{style}[^{num}]:{boundary}")
+            format!("{pre}{style}[^{num}]:{colons}{boundary}")
         })
         .into_owned()
 }
