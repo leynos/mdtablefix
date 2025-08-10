@@ -11,6 +11,7 @@
 //! are correctly wired for all integration tests.
 
 use mdtablefix::convert_footnotes;
+use rstest::rstest;
 
 #[macro_use]
 mod prelude;
@@ -81,6 +82,63 @@ fn test_ignores_numbers_in_indented_code_block() {
 fn test_handles_punctuation_inside_bold() {
     let input = lines_vec!("It was **scary.**7");
     let expected = lines_vec!("It was **scary.**[^7]");
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[rstest]
+#[case(
+    lines_vec!(
+        "While a full library tutorial is beyond this guide's scope, a brief look at the",
+        "core API concepts reveals its ergonomic design. The official `docs.rs` page",
+        "provides several end-to-end examples that revolve around a few key types 7:",
+    ),
+    lines_vec!(
+        "While a full library tutorial is beyond this guide's scope, a brief look at the",
+        "core API concepts reveals its ergonomic design. The official `docs.rs` page",
+        "provides several end-to-end examples that revolve around a few key types[^7]:",
+    )
+)]
+#[case(
+    lines_vec!(
+        "This is a reference 12:: to something important.",
+        "Another example 3::: with more colons.",
+    ),
+    lines_vec!(
+        "This is a reference[^12]:: to something important.",
+        "Another example[^3]::: with more colons.",
+    )
+)]
+#[case(
+    lines_vec!(
+        "See the details in section 5:, which are crucial.",
+        "Another case is 8:; for completeness.",
+    ),
+    lines_vec!(
+        "See the details in section[^5]:, which are crucial.",
+        "Another case is[^8]:; for completeness.",
+    )
+)]
+#[case(
+    lines_vec!(
+        "This is a tricky one  9 : and should be handled.",
+        "Extra spaces  10  : are also possible.",
+    ),
+    lines_vec!(
+        "This is a tricky one[^9]: and should be handled.",
+        "Extra spaces[^10]: are also possible.",
+    )
+)]
+fn test_converts_number_followed_by_colon(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+) {
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_converts_colon_footnote_definition() {
+    let input = lines_vec!("7: Footnote text");
+    let expected = lines_vec!("[^7] Footnote text");
     assert_eq!(convert_footnotes(&input), expected);
 }
 
