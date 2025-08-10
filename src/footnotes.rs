@@ -53,7 +53,7 @@ fn convert_inline(text: &str) -> String {
             let pre = &caps["pre"];
             let style = &caps["style"];
             let num = &caps["num"];
-            let colons = caps.name("colons").map_or("", |m| m.as_str());
+            let colons = &caps["colons"];
             let boundary = &caps["boundary"];
             format!("{pre}{style}[^{num}]:{colons}{boundary}")
         })
