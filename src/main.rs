@@ -18,7 +18,7 @@ use mdtablefix::{Options, format_breaks, process_stream_opts, renumber_lists};
 use rayon::prelude::*;
 
 #[derive(Parser)]
-#[command(about = "Reflow broken markdown tables")]
+#[command(version, about = "Reflow broken markdown tables")]
 struct Cli {
     /// Rewrite files in place
     #[arg(long = "in-place", requires = "files")]

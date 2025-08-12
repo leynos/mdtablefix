@@ -26,11 +26,13 @@ cargo install --path .
 ## Command-line usage
 
 ```bash
-mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes] [--in-place] [FILE...]
+mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes] [--in-place] [FILE...]
 ```
 
 - When one or more file paths are provided, the corrected tables are printed to
   stdout.
+
+- Use `--version` to print the current version and exit.
 
 - Use `--wrap` to reflow paragraphs and list items to 80 columns.
 
