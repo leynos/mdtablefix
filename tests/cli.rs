@@ -27,6 +27,17 @@ fn test_cli_in_place_requires_file() {
         .failure();
 }
 
+/// Verifies that the `--version` flag prints the crate version and exits.
+#[test]
+fn test_cli_version_flag() {
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(format!("mdtablefix {}\n", env!("CARGO_PKG_VERSION")));
+}
+
 /// Tests that the CLI processes a file containing a broken Markdown table and outputs the corrected
 /// table to stdout.
 ///
