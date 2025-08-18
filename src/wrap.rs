@@ -25,9 +25,8 @@ pub use tokenize::Token;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
 
-static FENCE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r"^(\s*)(```|~~~)(\S*)(.*)$").expect("valid fence regex")
-});
+static FENCE_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"^(\s*)(```|~~~)(.*)$").expect("valid fence regex"));
 
 static BULLET_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)",
@@ -171,14 +170,15 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 /// Return fence components if the line starts a fenced code block.
 ///
 /// The function captures the leading indentation, the fence marker itself
-/// (three backticks or tildes), and any language specifier immediately
-/// following the marker.
+/// (three backticks or tildes), and any trailing info string such as an
+/// optional language specifier.
 ///
 /// # Examples
 ///
 /// ```rust
 /// use mdtablefix::is_fence;
 /// assert_eq!(is_fence("```rust"), Some(("", "```", "rust")));
+/// assert_eq!(is_fence("``` rust"), Some(("", "```", " rust")));
 /// assert!(is_fence("not a fence").is_none());
 /// ```
 #[doc(hidden)]
@@ -188,8 +188,8 @@ pub fn is_fence(line: &str) -> Option<(&str, &str, &str)> {
     FENCE_RE.captures(line).map(|cap| {
         let indent = cap.get(1).map_or("", |m| m.as_str());
         let ticks = cap.get(2).map_or("", |m| m.as_str());
-        let lang = cap.get(3).map_or("", |m| m.as_str());
-        (indent, ticks, lang)
+        let info = cap.get(3).map_or("", |m| m.as_str());
+        (indent, ticks, info)
     })
 }
 
@@ -282,12 +282,12 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut in_code = false;
 
     for line in lines {
-        if let Some((f_indent, ticks, lang)) = is_fence(line) {
+        if let Some((f_indent, ticks, info)) = is_fence(line) {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
             indent.clear();
             in_code = !in_code;
-            out.push(format!("{f_indent}{ticks}{lang}"));
+            out.push(format!("{f_indent}{ticks}{info}"));
             continue;
         }
 
