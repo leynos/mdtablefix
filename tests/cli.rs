@@ -6,7 +6,10 @@
 //! - Error handling for invalid argument combinations
 //! - Processing of Markdown files through the CLI interface
 
-use std::{fs::File, io::Write};
+use std::{
+    fs::{self, File},
+    io::Write,
+};
 
 use tempfile::tempdir;
 
@@ -66,14 +69,13 @@ fn test_cli_process_file(broken_table: Vec<String>) {
 /// Verifies that the CLI correctly processes input containing "..." and outputs "…".
 #[test]
 fn test_cli_ellipsis_option() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--ellipsis")
         .write_stdin("foo...\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(String::from_utf8_lossy(&output.stdout), "foo…\n");
+        .assert()
+        .success()
+        .stdout("foo…\n");
 }
 
 /// Tests that the `--ellipsis` option preserves dots within inline code spans.
@@ -81,17 +83,13 @@ fn test_cli_ellipsis_option() {
 /// Verifies that triple dots inside backtick-delimited code spans are not converted to ellipsis.
 #[test]
 fn test_cli_ellipsis_code_span() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--ellipsis")
         .write_stdin("before `dots...` after\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "before `dots...` after\n"
-    );
+        .assert()
+        .success()
+        .stdout("before `dots...` after\n");
 }
 
 /// Tests that the `--ellipsis` option does not alter fenced code blocks.
@@ -99,17 +97,13 @@ fn test_cli_ellipsis_code_span() {
 /// Ensures that sequences like "..." inside a fenced code block remain unchanged.
 #[test]
 fn test_cli_ellipsis_fenced_block() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--ellipsis")
         .write_stdin("```\nlet x = ...;\n```\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "```\nlet x = ...;\n```\n"
-    );
+        .assert()
+        .success()
+        .stdout("```\nlet x = ...;\n```\n");
 }
 
 /// Tests ellipsis replacement for sequences longer than three characters.
@@ -117,14 +111,13 @@ fn test_cli_ellipsis_fenced_block() {
 /// Confirms that only the first three dots are replaced with an ellipsis.
 #[test]
 fn test_cli_ellipsis_long_sequence() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--ellipsis")
         .write_stdin("wait....\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(String::from_utf8_lossy(&output.stdout), "wait….\n");
+        .assert()
+        .success()
+        .stdout("wait….\n");
 }
 
 /// Tests that the `--ellipsis` option handles multiple ellipsis sequences in one line.
@@ -132,80 +125,60 @@ fn test_cli_ellipsis_long_sequence() {
 /// Verifies that all occurrences of "..." are replaced with "…".
 #[test]
 fn test_cli_ellipsis_multiple_sequences() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--ellipsis")
         .write_stdin("First... then second... done.\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "First… then second… done.\n"
-    );
+        .assert()
+        .success()
+        .stdout("First… then second… done.\n");
 }
 
 /// Tests that the `--fences` option normalizes backtick fences.
 #[test]
 fn test_cli_fences_option() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--fences")
         .write_stdin("````rust\nfn main() {}\n````\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "```rust\nfn main() {}\n```\n"
-    );
+        .assert()
+        .success()
+        .stdout("```rust\nfn main() {}\n```\n");
 }
 
 #[test]
 fn test_cli_fences_option_tilde() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--fences")
         .write_stdin("~~~~rust\nfn main() {}\n~~~~\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "```rust\nfn main() {}\n```\n"
-    );
+        .assert()
+        .success()
+        .stdout("```rust\nfn main() {}\n```\n");
 }
 
 /// Ensures fence normalization runs before other processing.
 #[test]
 fn test_cli_fences_before_ellipsis() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .args(["--fences", "--ellipsis"])
         .write_stdin("````\nlet x = ...;\n````\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "```\nlet x = ...;\n```\n"
-    );
+        .assert()
+        .success()
+        .stdout("```\nlet x = ...;\n```\n");
 }
 
 /// Ensures orphan specifiers are attached when `--fences` is used.
 #[test]
 fn test_cli_fences_orphan_specifier() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--fences")
         .write_stdin("Rust\n```\nfn main() {}\n```\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "```rust\nfn main() {}\n```\n"
-    );
+        .assert()
+        .success()
+        .stdout("```rust\nfn main() {}\n```\n");
 }
 
 /// Combines fence normalization with renumbering to verify processing order.
@@ -221,63 +194,47 @@ fn test_cli_fences_with_renumber() {
         "1. first\n",
         "3. second\n",
     );
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .args(["--fences", "--renumber"])
         .write_stdin(input)
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "```rust\nfn main() {}\n```\n\n1. first\n2. second\n",
-    );
+        .assert()
+        .success()
+        .stdout("```rust\nfn main() {}\n```\n\n1. first\n2. second\n");
 }
 
 #[test]
 fn test_cli_fences_preserve_existing_language() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--fences")
         .write_stdin("ruby\n```rust\nfn main() {}\n```\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "ruby\n```rust\nfn main() {}\n```\n"
-    );
+        .assert()
+        .success()
+        .stdout("ruby\n```rust\nfn main() {}\n```\n");
 }
 
 #[test]
 fn test_cli_fences_orphan_specifier_symbols() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--fences")
         .write_stdin("C++\n```\nfn main() {}\n```\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "```c++\nfn main() {}\n```\n"
-    );
+        .assert()
+        .success()
+        .stdout("```c++\nfn main() {}\n```\n");
 }
 
 #[test]
 fn test_cli_no_attach_without_preceding_blank_line() {
     let input = concat!("text\n", "Rust\n", "```\n", "fn main() {}\n", "```\n");
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--fences")
         .write_stdin(input)
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "text\nRust\n```\nfn main() {}\n```\n",
-    );
+        .assert()
+        .success()
+        .stdout("text\nRust\n```\nfn main() {}\n```\n");
 }
 
 /// Tests the CLI `--footnotes` option to convert bare footnote links.
@@ -285,15 +242,76 @@ fn test_cli_no_attach_without_preceding_blank_line() {
 fn test_cli_footnotes_option() {
     let input = include_str!("data/footnotes_input.txt");
     let expected = include_str!("data/footnotes_expected.txt");
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--footnotes")
         .write_stdin(input)
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        output.stdout,
-        format!("{}\n", expected.trim_end()).as_bytes()
-    );
+        .assert()
+        .success()
+        .stdout(format!("{}\n", expected.trim_end()));
+}
+
+/// Ensures `--fences` rewrites files when combined with `--in-place`.
+#[test]
+fn test_cli_in_place_fences() {
+    let dir = tempdir().expect("failed to create temporary directory");
+    let file_path = dir.path().join("sample.md");
+    fs::write(&file_path, "Rust\n```\nfn main() {}\n```\n").expect("failed to write test file");
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .args([
+            "--in-place",
+            "--fences",
+            file_path.to_str().expect("path is not valid UTF-8"),
+        ])
+        .assert()
+        .success()
+        .stdout("");
+    let out = fs::read_to_string(&file_path).expect("failed to read output file");
+    assert_eq!(out, "```rust\nfn main() {}\n```\n");
+}
+
+/// Ensures `--footnotes` rewrites files when combined with `--in-place`.
+#[test]
+fn test_cli_in_place_footnotes() {
+    let dir = tempdir().expect("failed to create temporary directory");
+    let file_path = dir.path().join("sample.md");
+    let input = include_str!("data/footnotes_input.txt");
+    let expected = include_str!("data/footnotes_expected.txt");
+    fs::write(&file_path, input).expect("failed to write test file");
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .args([
+            "--in-place",
+            "--footnotes",
+            file_path.to_str().expect("path is not valid UTF-8"),
+        ])
+        .assert()
+        .success()
+        .stdout("");
+    let out = fs::read_to_string(&file_path).expect("failed to read output file");
+    assert_eq!(out.trim_end(), expected.trim_end());
+}
+
+/// Ensures `--fences` and `--footnotes` rewrite files when combined with `--in-place`.
+#[test]
+fn test_cli_in_place_fences_and_footnotes() {
+    let dir = tempdir().expect("failed to create temporary directory");
+    let file_path = dir.path().join("sample.md");
+    let input = include_str!("data/fences_footnotes_input.txt");
+    let expected = include_str!("data/fences_footnotes_expected.txt");
+    fs::write(&file_path, input).expect("failed to write test file");
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .args([
+            "--in-place",
+            "--fences",
+            "--footnotes",
+            file_path.to_str().expect("path is not valid UTF-8"),
+        ])
+        .assert()
+        .success()
+        .stdout("");
+    let out = fs::read_to_string(&file_path).expect("failed to read output file");
+    assert_eq!(out.trim_end(), expected.trim_end());
 }

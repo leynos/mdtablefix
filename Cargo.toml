@@ -19,6 +19,7 @@ rstest = "0.18"
 assert_cmd = "2"
 tempfile = "3"
 libc = "0.2.174"
+predicates = "3"
 
 [lints.clippy]
 pedantic = "warn"

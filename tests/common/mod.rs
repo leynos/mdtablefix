@@ -1,7 +1,7 @@
 //! Utility helpers shared across integration tests.
 #![allow(unfulfilled_lint_expectations)]
 
-use assert_cmd::Command;
+use assert_cmd::{Command, assert::Assert};
 use rstest::fixture;
 
 /// Build a `Vec<String>` from a list of string slices.
@@ -103,12 +103,23 @@ pub fn broken_table() -> Vec<String> {
 
 /// Run the `mdtablefix` binary with the provided arguments.
 ///
-/// Returns the captured `Output` from the command execution.
+/// Returns an [`Assert`] handle for chaining output and status checks.
 #[expect(dead_code, reason = "used selectively across integration tests")]
-pub fn run_cli_with_args(args: &[&str]) -> std::process::Output {
+pub fn run_cli_with_args(args: &[&str]) -> Assert {
     Command::cargo_bin("mdtablefix")
         .expect("failed to create command")
         .args(args)
-        .output()
-        .expect("failed to run command")
+        .assert()
+}
+
+/// Run the `mdtablefix` binary with the provided arguments and standard input.
+///
+/// Returns an [`Assert`] handle for chaining output and status checks.
+#[expect(dead_code, reason = "used selectively across integration tests")]
+pub fn run_cli_with_stdin(args: &[&str], input: &str) -> Assert {
+    Command::cargo_bin("mdtablefix")
+        .expect("failed to create command")
+        .args(args)
+        .write_stdin(input.to_owned())
+        .assert()
 }

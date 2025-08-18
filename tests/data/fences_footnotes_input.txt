@@ -1,0 +1,9 @@
+Rust
+```
+fn main() {}
+```
+
+Example.1
+
+1. Footnote text
+

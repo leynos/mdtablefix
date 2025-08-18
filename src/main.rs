@@ -1,9 +1,9 @@
-//! Command-line interface for `mdtablefix`.
+//! Binary entry point for `mdtablefix`.
 //!
-//! Parses command-line arguments and coordinate file processing. When paths are
-//! supplied, each file can be rewritten in place and processing is
-//! parallelized with Rayon. Without paths the tool reads from standard input.
-//! Output always appears in the same order as the paths are provided.
+//! Parses command-line arguments and coordinates Markdown formatting. When
+//! file paths are supplied, processing occurs in parallel and files may be
+//! rewritten in place. Without paths the tool reads from standard input and
+//! prints results to stdout while preserving the input order.
 
 use std::{
     borrow::Cow,
@@ -82,20 +82,23 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
 }
 
 fn handle_file(path: &Path, in_place: bool, opts: FormatOpts) -> anyhow::Result<Option<String>> {
+    let content =
+        fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let lines: Vec<String> = content.lines().map(str::to_string).collect();
+    let fixed = process_lines(&lines, opts);
     if in_place {
-        if opts.wrap {
-            mdtablefix::rewrite(path).with_context(|| format!("writing {}", path.display()))?;
+        // Preserve compatibility with the `rewrite` helper by always ending files with a
+        // trailing newline when content exists. This mirrors typical Unix tool behaviour
+        // and avoids spurious diffs when rewriting in place.
+        let output = if fixed.is_empty() {
+            String::new()
         } else {
-            mdtablefix::rewrite_no_wrap(path)
-                .with_context(|| format!("writing {}", path.display()))?;
-        }
+            fixed.join("\n") + "\n"
+        };
+        fs::write(path, output).with_context(|| format!("writing {}", path.display()))?;
         Ok(None)
     } else {
-        let content =
-            fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let lines: Vec<String> = content.lines().map(str::to_string).collect();
-        let fixed = process_lines(&lines, opts).join("\n");
-        Ok(Some(fixed))
+        Ok(Some(fixed.join("\n")))
     }
 }
 

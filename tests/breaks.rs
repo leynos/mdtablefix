@@ -62,15 +62,11 @@ fn test_format_breaks_mixed_chars_excessive_length() {
 /// underscore-based thematic break.
 #[test]
 fn test_cli_breaks_option() {
-    let output = Command::cargo_bin("mdtablefix")
+    Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--breaks")
         .write_stdin("---\n")
-        .output()
-        .expect("Failed to execute mdtablefix command");
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        format!("{}\n", "_".repeat(THEMATIC_BREAK_LEN))
-    );
+        .assert()
+        .success()
+        .stdout(format!("{}\n", "_".repeat(THEMATIC_BREAK_LEN)));
 }
