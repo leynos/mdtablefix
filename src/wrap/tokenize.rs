@@ -258,14 +258,16 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     }
 
     let mut tokens = Vec::new();
-    let lines: Vec<&str> = source.split('\n').collect();
-    let last_idx = lines.len() - 1;
+    let mut lines = source.split('\n').peekable();
     let mut in_fence = false;
 
-    for (i, line) in lines.iter().enumerate() {
+    // Iterate lazily so we can safely use `peek()` to decide on trailing
+    // newline emission without borrowing issues from a `for` loop over
+    // `&str` references.
+    while let Some(line) = lines.next() {
         if super::is_fence(line).is_some() {
             tokens.push(Token::Fence(line));
-            if i != last_idx {
+            if lines.peek().is_some() {
                 tokens.push(Token::Newline);
             }
             in_fence = !in_fence;
@@ -274,17 +276,18 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
 
         if in_fence {
             tokens.push(Token::Fence(line));
-            if i != last_idx {
+            if lines.peek().is_some() {
                 tokens.push(Token::Newline);
             }
             continue;
         }
 
         tokenize_inline(line, &mut |tok| tokens.push(tok));
-        if i != last_idx {
+        if lines.peek().is_some() {
             tokens.push(Token::Newline);
         }
     }
+
     tokens
 }
 
