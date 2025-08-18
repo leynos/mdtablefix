@@ -173,6 +173,22 @@ project:
   API boundaries, and to `eyre` only in the main `main()` entrypoint or
   top-level async task.
 
+## React and TypeScript Guidance
+
+- Build React components as pure functions of props and state; avoid side
+  effects in the render path.
+- Use TypeScript with `strict` options enabled. Explicitly type props and
+  return values; never rely on `any`.
+- Prefer semantic HTML and minimal ARIA. Every interactive element must have an
+  accessible name via visible text or `aria-label`.
+- Localise all user-facing strings through translation keys; do not hard-code
+  copy or concatenate translated fragments.
+- Verify components in left-to-right and right-to-left contexts when adding
+  localisation.
+- Test components with `@testing-library/react` and `userEvent`, querying by
+  role or accessible name rather than test identifiers.
+- Fail tests on accessibility violations using `axe` or equivalent tooling.
+
 ## Markdown Guidance
 
 - Validate Markdown files using `make markdownlint`.
