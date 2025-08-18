@@ -109,3 +109,10 @@ fn wrap_text_preserves_links() {
             .any(|l| l.contains("https://falcon.readthedocs.io"))
     );
 }
+
+#[test]
+fn wrap_preserving_code_keeps_trailing_spaces() {
+    // Trailing spaces should be retained when flushing the final line.
+    let lines = super::wrap_preserving_code("ends with space  ", 80);
+    assert_eq!(lines, vec!["ends with space  ".to_string()]);
+}
