@@ -82,20 +82,23 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
 }
 
 fn handle_file(path: &Path, in_place: bool, opts: FormatOpts) -> anyhow::Result<Option<String>> {
+    let content =
+        fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let lines: Vec<String> = content.lines().map(str::to_string).collect();
+    let fixed = process_lines(&lines, opts);
     if in_place {
-        if opts.wrap {
-            mdtablefix::rewrite(path).with_context(|| format!("writing {}", path.display()))?;
+        // Preserve compatibility with the `rewrite` helper by always ending files with a
+        // trailing newline when content exists. This mirrors typical Unix tool behaviour
+        // and avoids spurious diffs when rewriting in place.
+        let output = if fixed.is_empty() {
+            String::new()
         } else {
-            mdtablefix::rewrite_no_wrap(path)
-                .with_context(|| format!("writing {}", path.display()))?;
-        }
+            fixed.join("\n") + "\n"
+        };
+        fs::write(path, output).with_context(|| format!("writing {}", path.display()))?;
         Ok(None)
     } else {
-        let content =
-            fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let lines: Vec<String> = content.lines().map(str::to_string).collect();
-        let fixed = process_lines(&lines, opts).join("\n");
-        Ok(Some(fixed))
+        Ok(Some(fixed.join("\n")))
     }
 }
 
