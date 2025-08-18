@@ -251,6 +251,18 @@ where
 ///     vec![Token::Text("Example with "), Token::Code("code")]
 /// );
 /// ```
+fn push_newline_if_needed<I>(
+    tokens: &mut Vec<Token<'_>>,
+    lines: &mut std::iter::Peekable<I>,
+    had_trailing_newline: bool,
+) where
+    I: Iterator,
+{
+    if lines.peek().is_some() || had_trailing_newline {
+        tokens.push(Token::Newline);
+    }
+}
+
 #[must_use]
 pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     if source.is_empty() {
@@ -258,7 +270,8 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     }
 
     let mut tokens = Vec::new();
-    let mut lines = source.split('\n').peekable();
+    let had_trailing_newline = source.ends_with('\n');
+    let mut lines = source.lines().peekable();
     let mut in_fence = false;
 
     // Iterate lazily so we can safely use `peek()` to decide on trailing
@@ -267,25 +280,19 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     while let Some(line) = lines.next() {
         if super::is_fence(line).is_some() {
             tokens.push(Token::Fence(line));
-            if lines.peek().is_some() {
-                tokens.push(Token::Newline);
-            }
+            push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
             in_fence = !in_fence;
             continue;
         }
 
         if in_fence {
             tokens.push(Token::Fence(line));
-            if lines.peek().is_some() {
-                tokens.push(Token::Newline);
-            }
+            push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
             continue;
         }
 
         tokenize_inline(line, &mut |tok| tokens.push(tok));
-        if lines.peek().is_some() {
-            tokens.push(Token::Newline);
-        }
+        push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
     }
 
     tokens
@@ -317,5 +324,20 @@ mod tests {
     fn unmatched_backticks() {
         let tokens = segment_inline("bad `code span");
         assert_eq!(tokens, vec!["bad", " ", "`", "code", " ", "span"]);
+    }
+
+    #[test]
+    fn tokenize_marks_trailing_newline() {
+        let tokens = tokenize_markdown("foo\n");
+        assert_eq!(tokens, vec![Token::Text("foo"), Token::Newline]);
+    }
+
+    #[test]
+    fn tokenize_handles_crlf() {
+        let tokens = tokenize_markdown("foo\r\nbar");
+        assert_eq!(
+            tokens,
+            vec![Token::Text("foo"), Token::Newline, Token::Text("bar")]
+        );
     }
 }

@@ -82,11 +82,31 @@ where
         f(token, &mut out);
     }
 
+    process_text(&out, trailing_blanks)
+}
+
+/// Split processed output into lines while preserving trailing blanks.
+///
+/// # Examples
+///
+/// ```rust
+/// use mdtablefix::textproc::process_text;
+///
+/// let lines = process_text("a\nb\n", 0);
+/// assert_eq!(lines, vec!["a".to_string(), "b".to_string(), String::new()]);
+/// ```
+#[must_use]
+pub fn process_text(out: &str, trailing_blanks: usize) -> Vec<String> {
     if out.is_empty() {
         return Vec::new();
     }
 
-    let mut result: Vec<String> = out.split('\n').map(ToOwned::to_owned).collect();
+    let had_trailing_newline = out.ends_with('\n');
+    let mut result: Vec<String> = out.lines().map(ToOwned::to_owned).collect();
+    if had_trailing_newline {
+        result.push(String::new());
+    }
+
     let out_blanks = result.iter().rev().take_while(|l| l.is_empty()).count();
     if out_blanks < trailing_blanks {
         result.extend(std::iter::repeat_n(
@@ -129,6 +149,12 @@ mod tests {
         let lines = vec!["data".to_string()];
         let out = process_tokens(&lines, |_tok, _out| {});
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn process_text_preserves_trailing_blank() {
+        let lines = process_text("a\nb\n", 0);
+        assert_eq!(lines, vec!["a".to_string(), "b".to_string(), String::new()]);
     }
 
     #[test]
