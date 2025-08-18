@@ -12,6 +12,10 @@ binaries for:
 - Windows (x86_64 and aarch64)
 - OpenBSD (x86_64 and aarch64)
 
+Releases start from tags named `v<major>.<minor>.<patch>`. The workflow checks
+that the tag's version, without the leading `v`, matches the `Cargo.toml`
+`version` field and aborts if they differ.
+
 Each binary is named using the pattern `mdtablefix-<os>-<arch>` with an `.exe`
 suffix on Windows.
 
