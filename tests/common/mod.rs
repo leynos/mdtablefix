@@ -111,3 +111,15 @@ pub fn run_cli_with_args(args: &[&str]) -> Assert {
         .args(args)
         .assert()
 }
+
+/// Run the `mdtablefix` binary with the provided arguments and standard input.
+///
+/// Returns an [`Assert`] handle for chaining output and status checks.
+#[expect(dead_code, reason = "used selectively across integration tests")]
+pub fn run_cli_with_stdin(args: &[&str], input: &str) -> Assert {
+    Command::cargo_bin("mdtablefix")
+        .expect("failed to create command")
+        .args(args)
+        .write_stdin(input.to_owned())
+        .assert()
+}

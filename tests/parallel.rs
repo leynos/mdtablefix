@@ -33,7 +33,10 @@ fn test_cli_parallel_multiple_files() {
         files.push(path);
     }
 
-    let args: Vec<&str> = files.iter().map(|p| p.to_str().unwrap()).collect();
+    let args: Vec<&str> = files
+        .iter()
+        .map(|p| p.to_str().expect("path is not valid UTF-8"))
+        .collect();
     run_cli_with_args(&args).success().stdout(expected);
 }
 
@@ -76,8 +79,8 @@ fn test_cli_parallel_missing_file_in_place(broken_table: Vec<String>) {
     drop(f);
     let missing = dir.path().join("missing.md");
 
-    let good_str = good.to_str().unwrap();
-    let missing_str = missing.to_str().unwrap();
+    let good_str = good.to_str().expect("path is not valid UTF-8");
+    let missing_str = missing.to_str().expect("path is not valid UTF-8");
     run_cli_with_args(&["--in-place", good_str, missing_str])
         .failure()
         .stderr(predicates::str::contains("missing.md"));

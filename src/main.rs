@@ -1,9 +1,9 @@
-//! Command-line interface for `mdtablefix`.
+//! Binary entry point for `mdtablefix`.
 //!
-//! Parses command-line arguments and coordinate file processing. When paths are
-//! supplied, each file can be rewritten in place and processing is
-//! parallelized with Rayon. Without paths the tool reads from standard input.
-//! Output always appears in the same order as the paths are provided.
+//! Parses command-line arguments and coordinates Markdown formatting. When
+//! file paths are supplied, processing occurs in parallel and files may be
+//! rewritten in place. Without paths the tool reads from standard input and
+//! prints results to stdout while preserving the input order.
 
 use std::{
     borrow::Cow,
