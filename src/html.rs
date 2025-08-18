@@ -307,7 +307,7 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
     let mut in_code = false;
 
     for line in lines {
-        if is_fence(line) {
+        if is_fence(line).is_some() {
             if in_html {
                 out.append(&mut buf);
                 in_html = false;

@@ -17,3 +17,21 @@ fn test_cli_wrap_option() {
     assert!(text.lines().count() > 1, "expected wrapped output on multiple lines");
     assert!(text.lines().all(|l| l.len() <= 80));
 }
+
+/// Ensures `--wrap` preserves an explicit language specifier on fences.
+#[test]
+fn test_cli_wrap_preserves_language() {
+    let input = "```rust\nfn main() {}\n```\n";
+    run_cli_with_stdin(&["--wrap"], input)
+        .success()
+        .stdout(input);
+}
+
+/// Validates handling of opening fences without language specifiers.
+#[test]
+fn test_cli_wrap_preserves_plain_fence() {
+    let input = "```\ncode\n```\n";
+    run_cli_with_stdin(&["--wrap"], input)
+        .success()
+        .stdout(input);
+}

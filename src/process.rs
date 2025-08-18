@@ -67,7 +67,7 @@ fn handle_fence_line(
     in_table: &mut bool,
     out: &mut Vec<String>,
 ) -> bool {
-    if wrap::is_fence(line) {
+    if wrap::is_fence(line).is_some() {
         flush_buffer(buf, in_table, out);
         *in_code = !*in_code;
         out.push(line.to_string());

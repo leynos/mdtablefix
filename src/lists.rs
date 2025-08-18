@@ -82,7 +82,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut prev_blank = lines.first().is_none_or(|l| l.trim().is_empty());
 
     for line in lines {
-        if is_fence(line) {
+        if is_fence(line).is_some() {
             in_code = !in_code;
             out.push(line.clone());
             prev_blank = false;
