@@ -71,3 +71,30 @@ fn test_cli_wrap_preserves_tilde_fence_without_language() {
         .success()
         .stdout(input);
 }
+
+/// Opening with four backticks should ignore inner triple backticks.
+#[test]
+fn test_cli_wrap_preserves_four_backticks_and_ignores_inner_triple() {
+    let input = "````rust\n```\nfn main() {}\n````\n";
+    run_cli_with_stdin(&["--wrap"], input)
+        .success()
+        .stdout(input);
+}
+
+/// Retains extended info strings including attributes and options.
+#[test]
+fn test_cli_wrap_preserves_extended_info_string() {
+    let input = "``` rust linenums {style=monokai}\ncode\n```\n";
+    run_cli_with_stdin(&["--wrap"], input)
+        .success()
+        .stdout(input);
+}
+
+/// Accepts four or more tildes as fence markers.
+#[test]
+fn test_cli_wrap_preserves_tilde_with_four_markers() {
+    let input = "~~~~python\nprint('hi')\n~~~~\n";
+    run_cli_with_stdin(&["--wrap"], input)
+        .success()
+        .stdout(input);
+}

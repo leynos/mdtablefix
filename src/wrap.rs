@@ -10,8 +10,10 @@
 
 use regex::Regex;
 
+mod fence;
 mod tokenize;
 
+pub use fence::is_fence;
 /// Token emitted by [`tokenize::segment_inline`] and used by higher-level
 /// wrappers.
 ///
@@ -24,9 +26,6 @@ mod tokenize;
 pub use tokenize::Token;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
-
-static FENCE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^(\s*)(```|~~~)(.*)$").expect("valid fence regex"));
 
 static BULLET_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)",
@@ -167,32 +166,6 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-/// Return fence components if the line starts a fenced code block.
-///
-/// The function captures the leading indentation, the fence marker itself
-/// (three backticks or tildes), and any trailing info string such as an
-/// optional language specifier.
-///
-/// # Examples
-///
-/// ```rust
-/// use mdtablefix::is_fence;
-/// assert_eq!(is_fence("```rust"), Some(("", "```", "rust")));
-/// assert_eq!(is_fence("``` rust"), Some(("", "```", " rust")));
-/// assert!(is_fence("not a fence").is_none());
-/// ```
-#[doc(hidden)]
-#[must_use]
-#[rustfmt::skip]
-pub fn is_fence(line: &str) -> Option<(&str, &str, &str)> {
-    FENCE_RE.captures(line).map(|cap| {
-        let indent = cap.get(1).map_or("", |m| m.as_str());
-        let ticks = cap.get(2).map_or("", |m| m.as_str());
-        let info = cap.get(3).map_or("", |m| m.as_str());
-        (indent, ticks, info)
-    })
-}
-
 pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
 }
@@ -280,14 +253,19 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut buf: Vec<(String, bool)> = Vec::new();
     let mut indent = String::new();
     let mut in_code = false;
+    // Track the currently open fence: (marker char, run length), e.g., ('`', 4) or ('~', 3).
+    let mut fence_state: Option<(char, usize)> = None;
 
     for line in lines {
-        if let Some((f_indent, ticks, info)) = is_fence(line) {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
-            in_code = !in_code;
-            out.push(format!("{f_indent}{ticks}{info}"));
+        if fence::handle_fence_line(
+            &mut out,
+            &mut buf,
+            &mut indent,
+            width,
+            line,
+            &mut in_code,
+            &mut fence_state,
+        ) {
             continue;
         }
 
