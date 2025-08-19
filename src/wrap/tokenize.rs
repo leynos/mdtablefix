@@ -263,7 +263,7 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     let mut in_fence = false;
 
     for (i, line) in lines.iter().enumerate() {
-        if super::is_fence(line) {
+        if super::is_fence(line).is_some() {
             tokens.push(Token::Fence(line));
             if i != last_idx {
                 tokens.push(Token::Newline);

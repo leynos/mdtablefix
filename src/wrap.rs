@@ -10,8 +10,10 @@
 
 use regex::Regex;
 
+mod fence;
 mod tokenize;
 
+pub use fence::is_fence;
 /// Token emitted by [`tokenize::segment_inline`] and used by higher-level
 /// wrappers.
 ///
@@ -24,9 +26,6 @@ mod tokenize;
 pub use tokenize::Token;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
-
-static FENCE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^\s*(```|~~~).*").expect("valid fence regex"));
 
 static BULLET_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)",
@@ -167,11 +166,6 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-/// Checks if a line is a fence marker (````` or `~~~`), ignoring leading whitespace.
-#[doc(hidden)]
-#[rustfmt::skip]
-pub fn is_fence(line: &str) -> bool { FENCE_RE.is_match(line) }
-
 pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
 }
@@ -259,14 +253,19 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut buf: Vec<(String, bool)> = Vec::new();
     let mut indent = String::new();
     let mut in_code = false;
+    // Track the currently open fence: (marker char, run length), e.g., ('`', 4) or ('~', 3).
+    let mut fence_state: Option<(char, usize)> = None;
 
     for line in lines {
-        if is_fence(line) {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
-            in_code = !in_code;
-            out.push(line.clone());
+        if fence::handle_fence_line(
+            &mut out,
+            &mut buf,
+            &mut indent,
+            width,
+            line,
+            &mut in_code,
+            &mut fence_state,
+        ) {
             continue;
         }
 

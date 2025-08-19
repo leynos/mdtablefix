@@ -46,7 +46,7 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     let mut in_code = false;
 
     for line in lines {
-        if is_fence(line) {
+        if is_fence(line).is_some() {
             in_code = !in_code;
             out.push(Cow::Borrowed(line.as_str()));
             continue;
