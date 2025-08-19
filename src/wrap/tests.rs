@@ -132,3 +132,25 @@ fn wrap_preserving_code_keeps_trailing_spaces(
             .collect::<Vec<String>>()
     );
 }
+
+#[test]
+fn wrap_text_keeps_trailing_spaces_for_blockquote_final_line() {
+    // "> " is the prefix; available width = 10 - 2 = 8.
+    let input = vec!["> word1 word2  ".to_string()];
+    let wrapped = wrap_text(&input, 10);
+    assert_eq!(
+        wrapped,
+        vec!["> word1".to_string(), "> word2  ".to_string()]
+    );
+}
+
+#[test]
+fn wrap_text_keeps_trailing_spaces_for_bullet_final_line() {
+    // "- " is the prefix; continuation lines are indented with two spaces.
+    let input = vec!["- word1 word2  ".to_string()];
+    let wrapped = wrap_text(&input, 10);
+    assert_eq!(
+        wrapped,
+        vec!["- word1".to_string(), "  word2  ".to_string()]
+    );
+}

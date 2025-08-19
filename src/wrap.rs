@@ -161,6 +161,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         i = j;
     }
     if !current.is_empty() {
+        // Preserve trailing spaces so Markdown hard breaks survive wrapping.
         lines.push(current);
     }
     lines
