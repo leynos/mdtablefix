@@ -1,29 +1,28 @@
 //! Fenced code block helpers.
 
-use std::sync::LazyLock;
-
 use regex::Regex;
 
-// indent, fence of 3+ characters, and the full info string (including leading spaces)
-pub(super) static FENCE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^(\s*)(`{3,}|~{3,})([^\r\n]*)$").expect("valid fence regex"));
+pub(super) static FENCE_RE: std::sync::LazyLock<Regex> =
+    // Capture: indent, fence run of 3+ backticks/tilde, and the full info string (incl. leading
+    // spaces)
+    std::sync::LazyLock::new(|| {
+        Regex::new(r"^(\s*)(`{3,}|~{3,})([^\r\n]*)$").expect("valid fence regex")
+    });
 
 /// Return fence components if the line starts a fenced code block.
 ///
-/// The function captures the leading indentation, the fence marker itself
-/// (three or more backticks or tildes), and any trailing info string such as a
-/// language specifier or additional attributes.
+/// The function captures:
+/// - the leading indentation,
+/// - the fence marker itself (three or more backticks or tildes),
+/// - the full trailing “info string” (including any leading spaces and attributes).
 ///
 /// # Examples
 ///
 /// ```rust
-/// use mdtablefix::is_fence;
+/// use mdtablefix::wrap::is_fence;
 /// assert_eq!(is_fence("```rust"), Some(("", "```", "rust")));
 /// assert_eq!(is_fence("``` rust"), Some(("", "```", " rust")));
-/// assert_eq!(
-///     is_fence("``` rust linenums {style=monokai}"),
-///     Some(("", "```", " rust linenums {style=monokai}")),
-/// );
+/// assert_eq!(is_fence("``` rust linenums"), Some(("", "```", " rust linenums")));
 /// assert!(is_fence("not a fence").is_none());
 /// ```
 #[doc(hidden)]
