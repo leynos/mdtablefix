@@ -258,7 +258,11 @@ fn push_newline_if_needed<I>(
 ) where
     I: Iterator,
 {
-    if lines.peek().is_some() || had_trailing_newline {
+    // Emit a newline token if another line follows or when the
+    // original input ended with a trailing newline. The peek avoids
+    // prematurely allocating for the final newline when it isn't
+    // necessary.
+    if lines.peek().is_some() || (had_trailing_newline && lines.peek().is_none()) {
         tokens.push(Token::Newline);
     }
 }
