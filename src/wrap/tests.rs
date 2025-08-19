@@ -3,6 +3,8 @@
 //! This module contains tests for the `wrap_text` function, verifying correct
 //! behaviour with code spans, links, hyphenated words, and various line widths.
 
+use rstest::rstest;
+
 use super::super::*;
 
 #[test]
@@ -107,5 +109,48 @@ fn wrap_text_preserves_links() {
         wrapped
             .iter()
             .any(|l| l.contains("https://falcon.readthedocs.io"))
+    );
+}
+
+#[rstest]
+#[case("ends with space  ", 80, &["ends with space  "])]
+#[case("four spaces    ", 80, &["four spaces    "])]
+#[case("    ", 80, &["    "])]
+#[case("word1 word2  ", 8, &["word1", "word2  "])]
+fn wrap_preserving_code_keeps_trailing_spaces(
+    #[case] input: &str,
+    #[case] width: usize,
+    #[case] expected: &[&str],
+) {
+    // The final flush must not trim trailing spaces, even after wrapping.
+    let lines = super::wrap_preserving_code(input, width);
+    assert_eq!(
+        lines,
+        expected
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<String>>()
+    );
+}
+
+#[test]
+fn wrap_text_keeps_trailing_spaces_for_blockquote_final_line() {
+    // "> " is the prefix; available width = 10 - 2 = 8.
+    let input = vec!["> word1 word2  ".to_string()];
+    let wrapped = wrap_text(&input, 10);
+    assert_eq!(
+        wrapped,
+        vec!["> word1".to_string(), "> word2  ".to_string()]
+    );
+}
+
+#[test]
+fn wrap_text_keeps_trailing_spaces_for_bullet_final_line() {
+    // "- " is the prefix; continuation lines are indented with two spaces.
+    let input = vec!["- word1 word2  ".to_string()];
+    let wrapped = wrap_text(&input, 10);
+    assert_eq!(
+        wrapped,
+        vec!["- word1".to_string(), "  word2  ".to_string()]
     );
 }

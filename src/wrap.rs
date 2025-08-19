@@ -159,9 +159,9 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         }
         i = j;
     }
-    let trimmed = current.trim_end();
-    if !trimmed.is_empty() {
-        lines.push(trimmed.to_string());
+    if !current.is_empty() {
+        // Preserve trailing spaces so Markdown hard breaks survive wrapping.
+        lines.push(current);
     }
     lines
 }
