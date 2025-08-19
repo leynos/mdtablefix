@@ -251,6 +251,22 @@ where
 ///     vec![Token::Text("Example with "), Token::Code("code")]
 /// );
 /// ```
+fn push_newline_if_needed<I>(
+    tokens: &mut Vec<Token<'_>>,
+    lines: &mut std::iter::Peekable<I>,
+    had_trailing_newline: bool,
+) where
+    I: Iterator,
+{
+    // Emit a newline token if another line follows or when the
+    // original input ended with a trailing newline. The peek avoids
+    // prematurely allocating for the final newline when it isn't
+    // necessary.
+    if lines.peek().is_some() || (had_trailing_newline && lines.peek().is_none()) {
+        tokens.push(Token::Newline);
+    }
+}
+
 #[must_use]
 pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     if source.is_empty() {
@@ -258,33 +274,31 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     }
 
     let mut tokens = Vec::new();
-    let lines: Vec<&str> = source.split('\n').collect();
-    let last_idx = lines.len() - 1;
+    let had_trailing_newline = source.ends_with('\n');
+    let mut lines = source.lines().peekable();
     let mut in_fence = false;
 
-    for (i, line) in lines.iter().enumerate() {
+    // Iterate lazily so we can safely use `peek()` to decide on trailing
+    // newline emission without borrowing issues from a `for` loop over
+    // `&str` references.
+    while let Some(line) = lines.next() {
         if super::is_fence(line).is_some() {
             tokens.push(Token::Fence(line));
-            if i != last_idx {
-                tokens.push(Token::Newline);
-            }
+            push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
             in_fence = !in_fence;
             continue;
         }
 
         if in_fence {
             tokens.push(Token::Fence(line));
-            if i != last_idx {
-                tokens.push(Token::Newline);
-            }
+            push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
             continue;
         }
 
         tokenize_inline(line, &mut |tok| tokens.push(tok));
-        if i != last_idx {
-            tokens.push(Token::Newline);
-        }
+        push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
     }
+
     tokens
 }
 
@@ -314,5 +328,20 @@ mod tests {
     fn unmatched_backticks() {
         let tokens = segment_inline("bad `code span");
         assert_eq!(tokens, vec!["bad", " ", "`", "code", " ", "span"]);
+    }
+
+    #[test]
+    fn tokenize_marks_trailing_newline() {
+        let tokens = tokenize_markdown("foo\n");
+        assert_eq!(tokens, vec![Token::Text("foo"), Token::Newline]);
+    }
+
+    #[test]
+    fn tokenize_handles_crlf() {
+        let tokens = tokenize_markdown("foo\r\nbar");
+        assert_eq!(
+            tokens,
+            vec![Token::Text("foo"), Token::Newline, Token::Text("bar")]
+        );
     }
 }
