@@ -3,7 +3,8 @@
 This project publishes prebuilt binaries for multiple operating systems and
 architectures.
 
-The project targets Rust `1.89.0` as set in `rust-toolchain.toml`.
+The project targets the stable Rust `1.89.0` toolchain, as specified in
+`rust-toolchain.toml`.
 
 The GitHub Actions workflow `.github/workflows/release.yml` builds and uploads
 binaries for:
