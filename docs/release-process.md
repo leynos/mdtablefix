@@ -6,6 +6,10 @@ architectures.
 The project targets the stable Rust `1.89.0` toolchain, as specified in
 `rust-toolchain.toml`.
 
+This Minimum Supported Rust Version (MSRV) is also declared in `Cargo.toml`
+(`rust-version = "1.89"`) and enforced by the `msrv` job in
+`.github/workflows/ci.yml`.
+
 The GitHub Actions workflow `.github/workflows/release.yml` builds and uploads
 binaries for:
 
