@@ -84,7 +84,9 @@ fn is_element(handle: &Handle, tag: &str) -> bool {
 }
 
 /// Returns `true` if `handle` represents a `<td>` or `<th>` element.
-fn is_table_cell(handle: &Handle) -> bool { is_element(handle, "td") || is_element(handle, "th") }
+fn is_table_cell(handle: &Handle) -> bool {
+    is_element(handle, "td") || is_element(handle, "th")
+}
 
 /// Walks the DOM tree collecting `<table>` nodes under `handle`.
 fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {

@@ -15,7 +15,7 @@ jobs:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
       - name: Format
@@ -37,3 +37,4 @@ jobs:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+
