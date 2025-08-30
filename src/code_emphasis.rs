@@ -7,14 +7,20 @@
 use crate::textproc::process_text;
 use crate::wrap::{Token, tokenize_markdown};
 
-fn split_leading_emphasis(s: &str) -> (&str, &str) {
-    let idx = s.find(|c| c != '*' && c != '_').unwrap_or(s.len());
-    s.split_at(idx)
-}
-
-fn split_trailing_emphasis(s: &str) -> (&str, &str) {
-    let idx = s.rfind(|c| c != '*' && c != '_').map_or(0, |i| i + 1);
-    s.split_at(idx)
+/// Split emphasis markers at both ends of `s`.
+///
+/// Returns a triple of leading markers, core text and trailing markers.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(split_marks("**bold**"), ("**", "bold", "**"));
+/// assert_eq!(split_marks("text"), ("", "text", ""));
+/// ```
+fn split_marks(s: &str) -> (&str, &str, &str) {
+    let start = s.find(|c| c != '*' && c != '_').unwrap_or(0);
+    let end = s.rfind(|c| c != '*' && c != '_').map_or(s.len(), |i| i + 1);
+    (&s[..start], &s[start..end], &s[end..])
 }
 
 fn push_code(code: &str, out: &mut String) {
@@ -28,6 +34,17 @@ fn push_code(code: &str, out: &mut String) {
 /// Groups of emphasis markers and inline code with no separating spaces are
 /// normalised so that emphasis markers wrap the entire group or are removed
 /// when they solely surround code.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::code_emphasis::fix_code_emphasis;
+/// let lines = vec!["`code`**text**".to_string()];
+/// assert_eq!(
+///     fix_code_emphasis(&lines),
+///     vec!["**`code`text**".to_string()]
+/// );
+/// ```
 #[must_use]
 pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
     if lines.is_empty() {
@@ -38,53 +55,38 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
         return vec![String::new(); lines.len()];
     }
     let source = lines.join("\n");
-    let tokens = tokenize_markdown(&source);
+    let mut tokens = tokenize_markdown(&source).into_iter().peekable();
     let mut out = String::new();
-    let mut pending_prefix: Option<String> = None;
-    let mut next_override: Option<String> = None;
-    let mut i = 0;
-    while i < tokens.len() {
-        match &tokens[i] {
-            Token::Text(t_raw) => {
-                let t = next_override.take().unwrap_or_else(|| (*t_raw).to_string());
-                if matches!(tokens.get(i + 1), Some(Token::Code(_))) {
-                    let (body, emph) = split_trailing_emphasis(&t);
+    let mut pending = "";
+    while let Some(token) = tokens.next() {
+        match token {
+            Token::Text(raw) => {
+                if tokens.peek().is_some_and(|t| matches!(t, Token::Code(_))) {
+                    let (lead, body, trail) = split_marks(raw);
+                    out.push_str(lead);
                     out.push_str(body);
-                    if !emph.is_empty() {
-                        pending_prefix = Some(emph.to_string());
-                    }
+                    pending = trail;
                 } else {
-                    out.push_str(&t);
+                    out.push_str(raw);
                 }
-                i += 1;
             }
-            Token::Code(c) => {
-                let mut prefix = pending_prefix.take().unwrap_or_default();
-                if let Some(Token::Text(t_next)) = tokens.get(i + 1) {
-                    let (emph, rest) = split_leading_emphasis(t_next);
-                    if !emph.is_empty() {
-                        if prefix.is_empty() {
-                            prefix = emph.to_string();
-                        } else {
-                            prefix.clear();
-                        }
-                        next_override = Some(rest.to_string());
+            Token::Code(code) => {
+                let mut prefix = pending;
+                pending = "";
+                if let Some(Token::Text(next)) = tokens.peek_mut() {
+                    let (lead, _, _) = split_marks(next);
+                    if !lead.is_empty() {
+                        prefix = if prefix.is_empty() { lead } else { "" };
+                        *next = &next[lead.len()..];
                     }
                 }
                 if !prefix.is_empty() {
-                    out.push_str(&prefix);
+                    out.push_str(prefix);
                 }
-                push_code(c, &mut out);
-                i += 1;
+                push_code(code, &mut out);
             }
-            Token::Fence(f) => {
-                out.push_str(f);
-                i += 1;
-            }
-            Token::Newline => {
-                out.push('\n');
-                i += 1;
-            }
+            Token::Fence(f) => out.push_str(f),
+            Token::Newline => out.push('\n'),
         }
     }
     process_text(&out, trailing_blanks)
