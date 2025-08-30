@@ -26,7 +26,8 @@ cargo install --path .
 ## Command-line usage
 
 ```bash
-mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] [--footnotes] [--in-place] [FILE...]
+mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
+          [--footnotes] [--code-emphasis] [--in-place] [FILE...]
 ```
 
 - When one or more file paths are provided, the corrected tables are printed to
@@ -58,6 +59,9 @@ mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences] 
 
   A bare numeric reference is a trailing number after punctuation, like
   `An example.1`.
+
+- Use `--code-emphasis` to fix emphasis markers that directly adjoin inline
+  code without spaces, ensuring the code span remains intact.
 
 - Use `--in-place` to modify files in-place.
 

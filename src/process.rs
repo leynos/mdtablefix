@@ -25,6 +25,7 @@ pub(crate) const WRAP_COLS: usize = 80;
 ///     ellipsis: false,
 ///     fences: false,
 ///     footnotes: false,
+///     code_emphasis: false,
 /// };
 /// let out = process_stream_opts(&lines, opts);
 /// assert_eq!(out, vec!["example"]);
@@ -43,6 +44,8 @@ pub struct Options {
     pub fences: bool,
     /// Convert bare numeric references into GitHub-flavoured footnote links (default: `false`).
     pub footnotes: bool,
+    /// Fix emphasis markers adjacent to inline code.
+    pub code_emphasis: bool,
 }
 
 /// Flushes buffered lines to `out`, formatting as a table when required.
@@ -134,6 +137,7 @@ fn handle_table_line(
 ///         ellipsis: false,
 ///         fences: false,
 ///         footnotes: false,
+///         code_emphasis: false,
 ///     },
 /// );
 /// assert!(out.iter().any(|l| l.contains("| a | b |")));
@@ -184,6 +188,9 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     }
     if opts.footnotes {
         out = convert_footnotes(&out);
+    }
+    if opts.code_emphasis {
+        out = crate::code_emphasis::fix_code_emphasis(&out);
     }
     out
 }
@@ -248,6 +255,7 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 ///     ellipsis: false,
 ///     fences: false,
 ///     footnotes: false,
+///     code_emphasis: false,
 /// };
 /// let out = process_stream_opts(&lines, opts);
 /// assert_eq!(out, vec!["text"]);

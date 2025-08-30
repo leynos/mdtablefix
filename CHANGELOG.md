@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `--code-emphasis` flag to fix emphasis markers that adjoin inline code.
+
 ### Fixed
 
 - Preserve trailing spaces on the final line when wrapping Markdown, retaining
