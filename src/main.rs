@@ -32,7 +32,7 @@ struct Cli {
 #[derive(clap::Args, Clone, Copy)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "CLI exposes five independent flags"
+    reason = "CLI exposes independent flags via separate switches"
 )]
 struct FormatOpts {
     /// Wrap paragraphs and list items to 80 columns

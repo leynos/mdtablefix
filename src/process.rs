@@ -288,4 +288,17 @@ mod tests {
         let out = process_stream_no_wrap(&input);
         assert_eq!(out, vec!["| a | b |", "| 1 | 2 |"]);
     }
+
+    #[test]
+    fn integrates_code_emphasis_flag() {
+        let input = vec!["`X`** Y (in **`Z`**)**".to_string()];
+        let out = process_stream_inner(
+            &input,
+            Options {
+                code_emphasis: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out, vec!["**`X` Y (in `Z`)**"]);
+    }
 }
