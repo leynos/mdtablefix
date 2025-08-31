@@ -194,6 +194,19 @@ fn flush_paragraph(out: &mut Vec<String>, buf: &[(String, bool)], indent: &str, 
     }
 }
 
+fn emit_line_unwrapped(
+    out: &mut Vec<String>,
+    buf: &mut Vec<(String, bool)>,
+    indent: &mut String,
+    width: usize,
+    line: &str,
+) {
+    flush_paragraph(out, buf, indent, width);
+    buf.clear();
+    indent.clear();
+    out.push(line.to_string());
+}
+
 fn append_wrapped_with_prefix(
     out: &mut Vec<String>,
     prefix: &str,
@@ -255,6 +268,10 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut in_code = false;
     // Track the currently open fence: (marker char, run length), e.g., ('`', 4) or ('~', 3).
     let mut fence_state: Option<(char, usize)> = None;
+    // When a `markdownlint-disable-next-line` directive is encountered, the
+    // immediately following line should bypass wrapping. This flag tracks that
+    // state until the next iteration consumes it.
+    let mut skip_next_wrap = false;
 
     for line in lines {
         if fence::handle_fence_line(
@@ -274,35 +291,35 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
+        if skip_next_wrap {
+            emit_line_unwrapped(&mut out, &mut buf, &mut indent, width, line);
+            skip_next_wrap = false;
+            continue;
+        }
+
         if line.trim_start().starts_with('|') || crate::table::SEP_RE.is_match(line.trim()) {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
-            out.push(line.clone());
+            emit_line_unwrapped(&mut out, &mut buf, &mut indent, width, line);
             continue;
         }
 
         if line.trim_start().starts_with('#') {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
-            out.push(line.clone());
+            emit_line_unwrapped(&mut out, &mut buf, &mut indent, width, line);
             continue;
         }
 
         if is_markdownlint_directive(line) {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
-            out.push(line.clone());
+            let disable_next = line
+                .to_ascii_lowercase()
+                .contains("markdownlint-disable-next-line");
+            emit_line_unwrapped(&mut out, &mut buf, &mut indent, width, line);
+            if disable_next {
+                skip_next_wrap = true;
+            }
             continue;
         }
 
         if line.trim().is_empty() {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
-            out.push(String::new());
+            emit_line_unwrapped(&mut out, &mut buf, &mut indent, width, "");
             continue;
         }
 
