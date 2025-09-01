@@ -2,9 +2,8 @@
 //!
 //! Verifies that emphasis markers adjacent to inline code are normalised.
 
-#[macro_use]
 mod prelude;
-use prelude::*;
+use prelude::{run_cli_with_args, run_cli_with_stdin};
 use std::fs;
 use tempfile::tempdir;
 
@@ -75,6 +74,23 @@ fn cli_in_place_code_emphasis_whitespace_file() {
     .stdout("");
     let out = fs::read_to_string(&file_path).expect("failed to read output file");
     assert_eq!(out, expected);
+}
+
+#[test]
+fn cli_in_place_preserves_inner_backticks() {
+    let dir = tempdir().expect("failed to create temporary directory");
+    let file_path = dir.path().join("inner.md");
+    let input = "```` ``a`b`` ````\n";
+    fs::write(&file_path, input).expect("failed to write test file");
+    run_cli_with_args(&[
+        "--code-emphasis",
+        "--in-place",
+        file_path.to_str().expect("path is not valid UTF-8"),
+    ])
+    .success()
+    .stdout("");
+    let out = fs::read_to_string(&file_path).expect("failed to read output file");
+    assert_eq!(out, input);
 }
 
 #[test]

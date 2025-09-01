@@ -9,6 +9,7 @@
 //! - `ellipsis` for normalizing textual ellipses.
 //! - `fences` for issues with code block fences
 //! - `footnotes` for converting bare footnote links.
+//! - `code_emphasis` for fixing misplaced emphasis around code.
 //! - `textproc` for token-based transformations.
 //! - `process` for stream processing.
 //! - `io` for file helpers.

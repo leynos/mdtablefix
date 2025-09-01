@@ -178,6 +178,10 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     flush_buffer(&mut buf, &mut in_table, &mut out);
 
+    if opts.code_emphasis {
+        out = crate::code_emphasis::fix_code_emphasis(&out);
+    }
+
     let mut out = if opts.wrap {
         wrap_text(&out, WRAP_COLS)
     } else {
@@ -188,9 +192,6 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     }
     if opts.footnotes {
         out = convert_footnotes(&out);
-    }
-    if opts.code_emphasis {
-        out = crate::code_emphasis::fix_code_emphasis(&out);
     }
     out
 }

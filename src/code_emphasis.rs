@@ -1,8 +1,14 @@
 //! Fix misplaced emphasis around inline code spans.
 //!
-//! Emphasis markers that directly adjoin backtick-wrapped inline code without
-//! spaces are reordered or stripped so code remains intact within emphasised
-//! text.
+//! The pass normalises emphasis markers that directly adjoin
+//! backtick-wrapped inline code. Only `*` and `_` markers are considered; other
+//! flavours such as tildes are ignored. Inline code is re-serialised using a
+//! backtick fence long enough to contain any inner backticks without escaping.
+//! Spans without adjacent emphasis markers are returned verbatim.
+//!
+//! Mixed surrounding markers (for example `*code**`) are left untouched. This
+//! transformation should run before wrapping and footnote conversion so marker
+//! adjacency is evaluated on the raw input.
 
 use crate::textproc::process_text;
 use crate::wrap::{Token, tokenize_markdown};
@@ -13,9 +19,10 @@ use crate::wrap::{Token, tokenize_markdown};
 ///
 /// # Examples
 ///
-/// ```
-/// assert_eq!(split_marks("**bold**"), ("**", "bold", "**"));
-/// assert_eq!(split_marks("text"), ("", "text", ""));
+/// ```ignore
+/// // Internal helper; see unit tests for coverage.
+/// // assert_eq!(split_marks("**bold**"), ("**", "bold", "**"));
+/// // assert_eq!(split_marks("text"), ("", "text", ""));
 /// ```
 fn split_marks(s: &str) -> (&str, &str, &str) {
     let first = s.find(|c| c != '*' && c != '_').unwrap_or(s.len());
@@ -66,6 +73,13 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
         return vec![String::new(); lines.len()];
     }
     let source = lines.join("\n");
+    if !source.contains("`*")
+        && !source.contains("`_")
+        && !source.contains("*`")
+        && !source.contains("_`")
+    {
+        return lines.to_vec();
+    }
     let mut tokens = tokenize_markdown(&source).into_iter().peekable();
     let mut out = String::new();
     let mut pending = "";
@@ -86,6 +100,19 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
                 }
             }
             Token::Code(code) => {
+                if !pending.is_empty()
+                    && let Some(Token::Text(next)) = tokens.peek()
+                {
+                    let (lead, mid, trail) = split_marks(next);
+                    if mid.is_empty() && trail.is_empty() && lead == pending {
+                        out.push_str(pending);
+                        push_code(code, &mut out);
+                        out.push_str(lead);
+                        pending = "";
+                        tokens.next();
+                        continue;
+                    }
+                }
                 let mut prefix = pending;
                 let mut suffix = "";
                 pending = "";
