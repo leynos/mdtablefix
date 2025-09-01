@@ -101,7 +101,7 @@ fn convert_block(lines: &mut [String]) {
 
     for line in &mut lines[footnote_start..trimmed_end] {
         *line = FOOTNOTE_LINE_RE
-            .replace(line, "${indent}[^${num}] ${rest}")
+            .replace(line, "${indent}[^${num}]: ${rest}")
             .to_string();
     }
 }
@@ -139,22 +139,22 @@ mod tests {
         let expected = vec![
             "Text.".to_string(),
             String::new(),
-            " [^1] First".to_string(),
-            " [^2] Second".to_string(),
+            " [^1]: First".to_string(),
+            " [^2]: Second".to_string(),
         ];
         assert_eq!(convert_footnotes(&input), expected);
     }
 
     #[test]
     fn idempotent_on_existing_block() {
-        let input = vec![" [^1] First".to_string()];
+        let input = vec![" [^1]: First".to_string()];
         assert_eq!(convert_footnotes(&input), input);
     }
 
     #[test]
     fn converts_block_after_existing_line() {
-        let input = vec!["[^1] Old".to_string(), " 2. New".to_string()];
-        let expected = vec!["[^1] Old".to_string(), " [^2] New".to_string()];
+        let input = vec!["[^1]: Old".to_string(), " 2. New".to_string()];
+        let expected = vec!["[^1]: Old".to_string(), " [^2]: New".to_string()];
         assert_eq!(convert_footnotes(&input), expected);
     }
 
@@ -189,7 +189,7 @@ mod tests {
             "Intro.".to_string(),
             "1. not a footnote".to_string(),
             "More text.".to_string(),
-            "[^2] final".to_string(),
+            "[^2]: final".to_string(),
         ];
         assert_eq!(convert_footnotes(&input), expected);
     }

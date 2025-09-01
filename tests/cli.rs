@@ -326,15 +326,22 @@ fn test_cli_in_place_wrap_and_footnotes() {
     fs::write(&file_path, input).expect("failed to write test file");
     Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
-        .args([
-            "--in-place",
-            "--wrap",
-            "--footnotes",
-            file_path.to_str().expect("path is not valid UTF-8"),
-        ])
+        .args(["--in-place", "--wrap", "--footnotes"])
+        .arg(&file_path)
         .assert()
         .success()
         .stdout("");
     let out = fs::read_to_string(&file_path).expect("failed to read output file");
     assert_eq!(out.trim_end(), expected.trim_end());
+
+    // second pass should be a no-op
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .args(["--in-place", "--wrap", "--footnotes"])
+        .arg(&file_path)
+        .assert()
+        .success()
+        .stdout("");
+    let out2 = fs::read_to_string(&file_path).expect("failed to read output file");
+    assert_eq!(out2, out);
 }
