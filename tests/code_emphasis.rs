@@ -18,6 +18,14 @@ fn cli_stdin_code_emphasis() {
 }
 
 #[test]
+fn cli_preserves_emphasised_code_only() {
+    let input = "**`code`**\n";
+    run_cli_with_stdin(&["--code-emphasis"], input)
+        .success()
+        .stdout(input);
+}
+
+#[test]
 fn cli_in_place_code_emphasis() {
     let dir = tempdir().expect("failed to create temporary directory");
     let file_path = dir.path().join("sample.md");
@@ -76,4 +84,12 @@ fn cli_code_emphasis_with_wrap_and_renumber() {
     run_cli_with_stdin(&["--code-emphasis", "--wrap", "--renumber"], input)
         .success()
         .stdout(expected);
+}
+
+#[test]
+fn cli_preserves_inner_backticks() {
+    let input = "``a`b``\n";
+    run_cli_with_stdin(&["--code-emphasis"], input)
+        .success()
+        .stdout(input);
 }

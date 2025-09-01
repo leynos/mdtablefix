@@ -5,6 +5,7 @@
 ### Added
 
 - `--code-emphasis` flag to fix emphasis markers that adjoin inline code.
+  Runs after `--footnotes` in the processing pipeline.
 
 ### Fixed
 
