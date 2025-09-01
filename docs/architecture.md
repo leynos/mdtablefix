@@ -349,3 +349,15 @@ sentences like:
 
 on a single line, rather than splitting the punctuation onto the next line when
 wrapping occurs.
+
+## Inline code punctuation handling
+
+Trailing punctuation that follows an inline code span is grouped with the code
+when wrapping. This prevents sentences such as:
+
+```markdown
+`useState`.
+```
+
+from splitting the full stop onto a new line, preserving the code span's
+readability.

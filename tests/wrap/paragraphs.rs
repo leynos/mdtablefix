@@ -29,3 +29,57 @@ fn test_wrap_paragraph_with_long_word_parameterised(#[case] word_length: usize) 
     assert_eq!(output.len(), 1);
     assert_eq!(output[0], long_word);
 }
+
+#[test]
+fn test_wrap_preserves_inline_code_with_trailing_punctuation() {
+    let input: Vec<String> = include_lines!("data/fsm_paragraph_input.txt");
+    let expected: Vec<String> = include_lines!("data/fsm_paragraph_expected.txt");
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
+#[rstest]
+#[case("`useState`.")]
+#[case("`useState`,")]
+#[case("`useState`!")]
+#[case("`useState`?")]
+#[case("`useState`”")]
+#[case("`useState`’")]
+#[case("`useState`）")]
+#[case("`useState`。")]
+#[case("`useState`…")]
+#[case("`useState`?!")]
+#[case("`isError?`.")]
+fn test_wrap_inline_code_trailing_punct_cases(#[case] snippet: &str) {
+    let prefix =
+        "This line is long enough that wrapping will occur near the end, ensuring ";
+    let input = lines_vec![&format!("{prefix}{snippet}")];
+    let output = process_stream(&input);
+    // Ensure the snippet remains intact and not split between lines.
+    assert!(output.iter().any(|l| l.contains(snippet)));
+}
+
+#[test]
+fn test_wrap_inline_code_at_line_start() {
+    let snippet = "`useState`.";
+    let suffix = concat!(
+        "This line is long enough that wrapping will occur after the trailing ",
+        "punctuation, verifying the start boundary."
+    );
+    let input = lines_vec![format!("{snippet} {suffix}")];
+    let output = process_stream(&input);
+    assert!(output[0].starts_with(snippet));
+}
+
+#[test]
+fn test_wrap_inline_code_surrounded_by_spaces() {
+    let snippet = "`useState`.";
+    let prefix = concat!(
+        "This line is long enough that wrapping will occur before the inline ",
+        "code"
+    );
+    let suffix = "demonstrating handling when code is surrounded by spaces.";
+    let input = lines_vec![format!("{prefix} {snippet} {suffix}")];
+    let output = process_stream(&input);
+    assert!(output.iter().any(|l| l.contains(snippet)));
+}
