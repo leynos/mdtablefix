@@ -37,3 +37,24 @@ fn test_wrap_preserves_inline_code_with_trailing_punctuation() {
     let output = process_stream(&input);
     assert_eq!(output, expected);
 }
+
+#[rstest]
+#[case("`useState`.")]
+#[case("`useState`,")]
+#[case("`useState`!")]
+#[case("`useState`?")]
+#[case("`useState`”")]
+#[case("`useState`’")]
+#[case("`useState`）")]
+#[case("`useState`。")]
+#[case("`useState`…")]
+#[case("`useState`?!")]
+#[case("`isError?`.")]
+fn test_wrap_inline_code_trailing_punct_cases(#[case] snippet: &str) {
+    let prefix =
+        "This line is long enough that wrapping will occur near the end, ensuring ";
+    let input = lines_vec![&format!("{prefix}{snippet}")];
+    let output = process_stream(&input);
+    // Ensure the snippet remains intact and not split between lines.
+    assert!(output.iter().any(|l| l.contains(snippet)));
+}

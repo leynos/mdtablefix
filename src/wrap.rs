@@ -58,17 +58,19 @@ static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLo
     .expect("valid markdownlint regex")
 });
 
+#[inline]
+fn is_trailing_punct(c: char) -> bool {
+    // ASCII closers + common Unicode closers and word-final punctuation
+    matches!(
+        c,
+        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
+    ) || "…—–»›）］】》」』、。，：；！？”.’".contains(c)
+}
+
 fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usize {
     use unicode_width::UnicodeWidthStr;
 
-    while j < tokens.len()
-        && tokens[j].chars().all(|c| {
-            matches!(
-                c,
-                '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
-            )
-        })
-    {
+    while j < tokens.len() && tokens[j].chars().all(is_trailing_punct) {
         *width += UnicodeWidthStr::width(tokens[j].as_str());
         j += 1;
     }
