@@ -315,3 +315,26 @@ fn test_cli_in_place_fences_and_footnotes() {
     let out = fs::read_to_string(&file_path).expect("failed to read output file");
     assert_eq!(out.trim_end(), expected.trim_end());
 }
+
+/// Ensures `--wrap` and `--footnotes` rewrite files when combined with `--in-place`.
+#[test]
+fn test_cli_in_place_wrap_and_footnotes() {
+    let dir = tempdir().expect("failed to create temporary directory");
+    let file_path = dir.path().join("sample.md");
+    let input = include_str!("data/footnotes_input.txt");
+    let expected = include_str!("data/footnotes_wrap_expected.txt");
+    fs::write(&file_path, input).expect("failed to write test file");
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .args([
+            "--in-place",
+            "--wrap",
+            "--footnotes",
+            file_path.to_str().expect("path is not valid UTF-8"),
+        ])
+        .assert()
+        .success()
+        .stdout("");
+    let out = fs::read_to_string(&file_path).expect("failed to read output file");
+    assert_eq!(out.trim_end(), expected.trim_end());
+}
