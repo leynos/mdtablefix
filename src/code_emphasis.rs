@@ -86,7 +86,10 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
     while let Some(token) = tokens.next() {
         match token {
             Token::Text(raw) => {
-                if tokens.peek().is_some_and(|t| matches!(t, Token::Code(_))) {
+                if tokens
+                    .peek()
+                    .is_some_and(|t| matches!(t, Token::Code { .. }))
+                {
                     let (lead, body, trail) = split_marks(raw);
                     if body.is_empty() && trail.is_empty() {
                         pending = lead;
@@ -99,7 +102,7 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
                     out.push_str(raw);
                 }
             }
-            Token::Code(code) => {
+            Token::Code { fence, code } => {
                 if !pending.is_empty()
                     && let Some(Token::Text(next)) = tokens.peek()
                 {
@@ -115,10 +118,12 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
                 }
                 let mut prefix = pending;
                 let mut suffix = "";
+                let mut modified = !pending.is_empty();
                 pending = "";
                 if let Some(Token::Text(next)) = tokens.peek_mut() {
                     let (lead, mid, _) = split_marks(next);
                     if !lead.is_empty() {
+                        modified = true;
                         if prefix.is_empty() {
                             prefix = lead;
                         } else if mid.is_empty() {
@@ -132,7 +137,13 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
                 if !prefix.is_empty() {
                     out.push_str(prefix);
                 }
-                push_code(code, &mut out);
+                if modified {
+                    push_code(code, &mut out);
+                } else {
+                    out.push_str(fence);
+                    out.push_str(code);
+                    out.push_str(fence);
+                }
                 if !suffix.is_empty() {
                     out.push_str(suffix);
                 }
@@ -174,6 +185,12 @@ mod tests {
     #[test]
     fn preserves_inner_backticks_in_code() {
         let input = vec!["``a`b``".to_string()];
+        assert_eq!(fix_code_emphasis(&input), input);
+    }
+
+    #[test]
+    fn preserves_standalone_code() {
+        let input = vec!["before `code` after".to_string()];
         assert_eq!(fix_code_emphasis(&input), input);
     }
 }

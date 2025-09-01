@@ -109,3 +109,11 @@ fn cli_preserves_inner_backticks() {
         .success()
         .stdout(input);
 }
+
+#[test]
+fn cli_preserves_standalone_code() {
+    let input = "`code` text\n";
+    run_cli_with_stdin(&["--code-emphasis"], input)
+        .success()
+        .stdout(input);
+}

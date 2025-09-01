@@ -14,8 +14,8 @@ mod fence;
 mod tokenize;
 
 pub use fence::is_fence;
-/// Token emitted by [`tokenize::segment_inline`] and used by higher-level
-/// wrappers.
+/// Token emitted by the `tokenize::segment_inline` parser and used by
+/// higher-level wrappers.
 ///
 /// Downstream callers inspect [`Token<'a>`] when implementing bespoke
 /// wrapping logic. The `'a` lifetime parameter ties each token to the source
