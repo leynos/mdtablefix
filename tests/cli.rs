@@ -330,7 +330,8 @@ fn test_cli_in_place_wrap_and_footnotes() {
         .arg(&file_path)
         .assert()
         .success()
-        .stdout("");
+        .stdout("")
+        .stderr("");
     let out = fs::read_to_string(&file_path).expect("failed to read output file");
     assert_eq!(out.trim_end(), expected.trim_end());
 
@@ -341,7 +342,8 @@ fn test_cli_in_place_wrap_and_footnotes() {
         .arg(&file_path)
         .assert()
         .success()
-        .stdout("");
+        .stdout("")
+        .stderr("");
     let out2 = fs::read_to_string(&file_path).expect("failed to read output file");
     assert_eq!(out2, out);
 }
