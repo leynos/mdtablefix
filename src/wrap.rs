@@ -58,6 +58,23 @@ static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLo
     .expect("valid markdownlint regex")
 });
 
+fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usize {
+    use unicode_width::UnicodeWidthStr;
+
+    while j < tokens.len()
+        && tokens[j].chars().all(|c| {
+            matches!(
+                c,
+                '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
+            )
+        })
+    {
+        *width += UnicodeWidthStr::width(tokens[j].as_str());
+        j += 1;
+    }
+    j
+}
+
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
 
@@ -72,17 +89,12 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         let mut group_width = UnicodeWidthStr::width(tokens[i].as_str());
 
         if tokens[i].contains("](") && tokens[i].ends_with(')') {
-            while j < tokens.len()
-                && tokens[j].chars().all(|c| {
-                    matches!(
-                        c,
-                        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
-                    )
-                })
-            {
-                group_width += UnicodeWidthStr::width(tokens[j].as_str());
-                j += 1;
-            }
+            j = extend_punctuation(&tokens, j, &mut group_width);
+        }
+
+        if tokens[i].starts_with('`') && tokens[i].ends_with('`') {
+            // Keep trailing punctuation glued to inline code spans.
+            j = extend_punctuation(&tokens, j, &mut group_width);
         }
 
         if current.is_empty()

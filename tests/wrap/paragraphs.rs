@@ -29,3 +29,11 @@ fn test_wrap_paragraph_with_long_word_parameterised(#[case] word_length: usize) 
     assert_eq!(output.len(), 1);
     assert_eq!(output[0], long_word);
 }
+
+#[test]
+fn test_wrap_preserves_inline_code_with_trailing_punctuation() {
+    let input: Vec<String> = include_lines!("data/fsm_paragraph_input.txt");
+    let expected: Vec<String> = include_lines!("data/fsm_paragraph_expected.txt");
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
