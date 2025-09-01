@@ -58,3 +58,28 @@ fn test_wrap_inline_code_trailing_punct_cases(#[case] snippet: &str) {
     // Ensure the snippet remains intact and not split between lines.
     assert!(output.iter().any(|l| l.contains(snippet)));
 }
+
+#[test]
+fn test_wrap_inline_code_at_line_start() {
+    let snippet = "`useState`.";
+    let suffix = concat!(
+        "This line is long enough that wrapping will occur after the trailing ",
+        "punctuation, verifying the start boundary."
+    );
+    let input = lines_vec![format!("{snippet} {suffix}")];
+    let output = process_stream(&input);
+    assert!(output[0].starts_with(snippet));
+}
+
+#[test]
+fn test_wrap_inline_code_surrounded_by_spaces() {
+    let snippet = "`useState`.";
+    let prefix = concat!(
+        "This line is long enough that wrapping will occur before the inline ",
+        "code"
+    );
+    let suffix = "demonstrating handling when code is surrounded by spaces.";
+    let input = lines_vec![format!("{prefix} {snippet} {suffix}")];
+    let output = process_stream(&input);
+    assert!(output.iter().any(|l| l.contains(snippet)));
+}
