@@ -60,7 +60,7 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
             if let Some(cap) = FENCE_RE.captures(line) {
                 let indent = cap.get(1).map_or("", |m| m.as_str());
                 let lang = cap.get(3).map_or("", |m| m.as_str());
-                if lang.is_empty() {
+                if lang.is_empty() || lang.eq_ignore_ascii_case("null") {
                     format!("{indent}```")
                 } else {
                     format!("{indent}```{lang}")
@@ -101,14 +101,20 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
         if let Some(cap) = FENCE_RE.captures(line) {
             if in_fence {
                 in_fence = false;
-                out.push(line.clone());
+                let indent = cap.get(1).map_or("", |m| m.as_str());
+                let lang_present = cap.get(3).map_or("", |m| m.as_str());
+                if lang_present.eq_ignore_ascii_case("null") {
+                    out.push(format!("{indent}```"));
+                } else {
+                    out.push(line.clone());
+                }
                 continue;
             }
 
             let indent = cap.get(1).map_or("", |m| m.as_str());
             let lang_present = cap.get(3).map_or("", |m| m.as_str());
 
-            if lang_present.is_empty() {
+            if lang_present.is_empty() || lang_present.eq_ignore_ascii_case("null") {
                 let mut idx = out.len();
                 while idx > 0 && out[idx - 1].trim().is_empty() {
                     idx -= 1;
@@ -129,6 +135,9 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
                         continue;
                     }
                 }
+                in_fence = true;
+                out.push(format!("{indent}```"));
+                continue;
             }
 
             in_fence = true;

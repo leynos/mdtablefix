@@ -201,3 +201,17 @@ fn attaches_orphan_specifier_allows_spaces() {
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec!["```toml,ini", "a=1", "```"]);
 }
+
+#[test]
+fn compresses_null_language_to_empty() {
+    let input = lines_vec!["````null", "code", "````"];
+    let out = compress_fences(&input);
+    assert_eq!(out, lines_vec!["```", "code", "```"]);
+}
+
+#[test]
+fn attaches_orphan_specifier_when_null_language() {
+    let input = lines_vec!["Rust", "```null", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&input);
+    assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
+}

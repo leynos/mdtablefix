@@ -303,3 +303,14 @@ fn run_in_place(flags: &[&str], input: &str, expected: &str) {
 fn test_cli_in_place_variants(#[case] flags: &[&str], #[case] input: &str, #[case] expected: &str) {
     run_in_place(flags, input, expected);
 }
+
+#[test]
+fn test_cli_fences_null_language() {
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--fences")
+        .write_stdin("```null\nfn main() {}\n```\n")
+        .assert()
+        .success()
+        .stdout("```\nfn main() {}\n```\n");
+}
