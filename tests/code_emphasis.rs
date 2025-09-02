@@ -17,6 +17,12 @@ fn cli_stdin_code_emphasis() {
 }
 
 #[test]
+fn cli_without_flag_is_noop_for_code_emphasis_input() {
+    let input = "`StepContext`** Enhancement (in **`crates/rstest-bdd/src/context.rs`**)**\n";
+    run_cli_with_stdin(&[], input).success().stdout(input);
+}
+
+#[test]
 fn cli_preserves_emphasised_code_only() {
     let input = "**`code`**\n";
     run_cli_with_stdin(&["--code-emphasis"], input)
