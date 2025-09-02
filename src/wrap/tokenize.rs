@@ -42,8 +42,12 @@ fn collect_range(chars: &[char], start: usize, end: usize) -> String {
 pub enum Token<'a> {
     /// Line within a fenced code block, including the fence itself.
     Fence(&'a str),
-    /// Inline code span alongside its original fence.
-    Code { fence: &'a str, code: &'a str },
+    /// Inline code span carrying the original fenced substring.
+    Code {
+        raw: &'a str,
+        fence: &'a str,
+        code: &'a str,
+    },
     /// Plain text outside code regions.
     Text(&'a str),
     /// Line break separating tokens.
@@ -196,13 +200,16 @@ fn next_token(s: &str) -> Option<(Token<'_>, usize)> {
 
     let closing = &s[..delim_len];
     if let Some(end) = s[delim_len..].find(closing) {
+        let raw_end = delim_len + end + delim_len;
         let code = &s[delim_len..delim_len + end];
+        let raw = &s[..raw_end];
         return Some((
             Token::Code {
+                raw,
                 fence: closing,
                 code,
             },
-            delim_len + end + delim_len,
+            raw_end,
         ));
     }
     Some((Token::Text(closing), delim_len))
@@ -219,12 +226,12 @@ fn next_token(s: &str) -> Option<(Token<'_>, usize)> {
 /// ```rust,ignore
 /// // Prints:
 /// // Token::Text("run ")
-/// // Token::Code { fence: "`", code: "cmd" }
+/// // Token::Code { raw: "`cmd`", fence: "`", code: "cmd" }
 /// tokenize_inline("run `cmd`", &mut |t| println!("{:?}", t));
 /// ```
 ///
 /// The callback receives each token as a [`Token<'a>`], such as
-/// `Token::Text(&str)` or `Token::Code { fence: &str, code: &str }`.
+/// `Token::Text(&str)` or `Token::Code { raw: &str, fence: &str, code: &str }`.
 fn tokenize_inline<'a, F>(mut rest: &'a str, mut emit: F)
 where
     F: FnMut(Token<'a>),
@@ -254,7 +261,10 @@ where
 /// let tokens = tokenize_markdown("Example with `code`");
 /// assert_eq!(
 ///     tokens,
-///     vec![Token::Text("Example with "), Token::Code { fence: "`", code: "code" }]
+///     vec![
+///         Token::Text("Example with "),
+///         Token::Code { raw: "`code`", fence: "`", code: "code" },
+///     ]
 /// );
 /// ```
 fn push_newline_if_needed<I>(

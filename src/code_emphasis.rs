@@ -102,7 +102,7 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
                     out.push_str(raw);
                 }
             }
-            Token::Code { fence, code } => {
+            Token::Code { raw, code, .. } => {
                 if !pending.is_empty()
                     && let Some(Token::Text(next)) = tokens.peek()
                 {
@@ -140,9 +140,7 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
                 if modified {
                     push_code(code, &mut out);
                 } else {
-                    out.push_str(fence);
-                    out.push_str(code);
-                    out.push_str(fence);
+                    out.push_str(raw);
                 }
                 if !suffix.is_empty() {
                     out.push_str(suffix);
