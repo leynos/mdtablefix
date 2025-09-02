@@ -25,6 +25,7 @@ pub(crate) const WRAP_COLS: usize = 80;
 ///     ellipsis: false,
 ///     fences: false,
 ///     footnotes: false,
+///     code_emphasis: false,
 /// };
 /// let out = process_stream_opts(&lines, opts);
 /// assert_eq!(out, vec!["example"]);
@@ -43,6 +44,8 @@ pub struct Options {
     pub fences: bool,
     /// Convert bare numeric references into GitHub-flavoured footnote links (default: `false`).
     pub footnotes: bool,
+    /// Fix emphasis markers adjacent to inline code.
+    pub code_emphasis: bool,
 }
 
 /// Flushes buffered lines to `out`, formatting as a table when required.
@@ -134,6 +137,7 @@ fn handle_table_line(
 ///         ellipsis: false,
 ///         fences: false,
 ///         footnotes: false,
+///         code_emphasis: false,
 ///     },
 /// );
 /// assert!(out.iter().any(|l| l.contains("| a | b |")));
@@ -173,6 +177,10 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     }
 
     flush_buffer(&mut buf, &mut in_table, &mut out);
+
+    if opts.code_emphasis {
+        out = crate::code_emphasis::fix_code_emphasis(&out);
+    }
 
     let mut out = if opts.wrap {
         wrap_text(&out, WRAP_COLS)
@@ -248,6 +256,7 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 ///     ellipsis: false,
 ///     fences: false,
 ///     footnotes: false,
+///     code_emphasis: false,
 /// };
 /// let out = process_stream_opts(&lines, opts);
 /// assert_eq!(out, vec!["text"]);
@@ -279,5 +288,18 @@ mod tests {
         let input = vec!["| a | b |".to_string(), "| 1 | 2 |".to_string()];
         let out = process_stream_no_wrap(&input);
         assert_eq!(out, vec!["| a | b |", "| 1 | 2 |"]);
+    }
+
+    #[test]
+    fn integrates_code_emphasis_flag() {
+        let input = vec!["`X`** Y (in **`Z`**)**".to_string()];
+        let out = process_stream_inner(
+            &input,
+            Options {
+                code_emphasis: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(out, vec!["**`X` Y (in `Z`)**"]);
     }
 }

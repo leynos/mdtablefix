@@ -9,6 +9,7 @@
 //! - `ellipsis` for normalizing textual ellipses.
 //! - `fences` for issues with code block fences
 //! - `footnotes` for converting bare footnote links.
+//! - `code_emphasis` for fixing emphasis adjoining inline code.
 //! - `textproc` for token-based transformations.
 //! - `process` for stream processing.
 //! - `io` for file helpers.
@@ -21,6 +22,7 @@ macro_rules! lazy_regex {
 }
 
 pub mod breaks;
+pub mod code_emphasis;
 pub mod ellipsis;
 pub mod fences;
 pub mod footnotes;
@@ -40,6 +42,7 @@ pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 }
 
 pub use breaks::{THEMATIC_BREAK_LEN, format_breaks};
+pub use code_emphasis::fix_code_emphasis;
 pub use ellipsis::replace_ellipsis;
 pub use fences::{attach_orphan_specifiers, compress_fences};
 pub use footnotes::convert_footnotes;

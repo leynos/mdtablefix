@@ -32,7 +32,7 @@ struct Cli {
 #[derive(clap::Args, Clone, Copy)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "CLI exposes five independent flags"
+    reason = "CLI exposes independent flags via separate switches"
 )]
 struct FormatOpts {
     /// Wrap paragraphs and list items to 80 columns
@@ -54,6 +54,9 @@ struct FormatOpts {
     /// Markdown footnote links
     #[arg(long = "footnotes")]
     footnotes: bool,
+    /// Fix emphasis markers adjacent to inline code
+    #[arg(long = "code-emphasis")]
+    code_emphasis: bool,
 }
 
 impl From<FormatOpts> for Options {
@@ -63,6 +66,7 @@ impl From<FormatOpts> for Options {
             ellipsis: opts.ellipsis,
             fences: opts.fences,
             footnotes: opts.footnotes,
+            code_emphasis: opts.code_emphasis,
         }
     }
 }

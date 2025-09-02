@@ -1,6 +1,6 @@
 //! Provides helpers for token-based transformations of Markdown lines.
 //!
-//! This module reuses the tokenizer from the [`wrap`] module and offers
+//! This module reuses the tokenizer from the [`crate::wrap`] module and offers
 //! a streaming API for rewriting Markdown. Each helper tokenizes lines
 //! on the fly, feeds the resulting tokens to caller-provided logic, and
 //! then reconstructs the lines. Trailing blank lines roundtrip
@@ -20,18 +20,21 @@ pub use crate::wrap::{Token, tokenize_markdown};
 /// use mdtablefix::textproc::{Token, push_original_token};
 ///
 /// let mut buf = String::new();
-/// push_original_token(&Token::Code("x"), &mut buf);
+/// push_original_token(
+///     &Token::Code {
+///         raw: "`x`",
+///         fence: "`",
+///         code: "x",
+///     },
+///     &mut buf,
+/// );
 /// assert_eq!(buf, "`x`");
 /// ```
 #[inline]
 pub fn push_original_token(token: &Token<'_>, out: &mut String) {
     match token {
         Token::Text(t) => out.push_str(t),
-        Token::Code(c) => {
-            out.push('`');
-            out.push_str(c);
-            out.push('`');
-        }
+        Token::Code { raw, .. } => out.push_str(raw),
         Token::Fence(f) => out.push_str(f),
         Token::Newline => out.push('\n'),
     }
@@ -52,11 +55,7 @@ pub fn push_original_token(token: &Token<'_>, out: &mut String) {
 /// let lines = vec!["code".to_string()];
 /// let out = process_tokens(&lines, |tok, out| match tok {
 ///     Token::Text(t) => out.push_str(t),
-///     Token::Code(c) => {
-///         out.push('`');
-///         out.push_str(c);
-///         out.push('`');
-///     }
+///     Token::Code { raw, .. } => out.push_str(raw),
 ///     Token::Fence(f) => out.push_str(f),
 ///     Token::Newline => out.push('\n'),
 /// });
@@ -126,11 +125,7 @@ mod tests {
         let lines = vec!["a `b`".to_string()];
         let out = process_tokens(&lines, |tok, buf| match tok {
             Token::Text(t) => buf.push_str(t),
-            Token::Code(c) => {
-                buf.push('`');
-                buf.push_str(c);
-                buf.push('`');
-            }
+            Token::Code { raw, .. } => buf.push_str(raw),
             Token::Fence(f) => buf.push_str(f),
             Token::Newline => buf.push('\n'),
         });
@@ -162,11 +157,7 @@ mod tests {
         let lines = vec!["a".to_string(), String::new(), String::new()];
         let out = process_tokens(&lines, |tok, buf| match tok {
             Token::Text(t) => buf.push_str(t),
-            Token::Code(c) => {
-                buf.push('`');
-                buf.push_str(c);
-                buf.push('`');
-            }
+            Token::Code { raw, .. } => buf.push_str(raw),
             Token::Fence(f) => buf.push_str(f),
             Token::Newline => buf.push('\n'),
         });
@@ -222,7 +213,7 @@ mod tests {
         let _ = process_tokens(&lines, |tok, _| tokens.push(format!("{tok:?}")));
         let expected = vec![
             "Text(\"A \")".to_string(),
-            "Code(\"code\")".to_string(),
+            "Code { raw: \"``code``\", fence: \"``\", code: \"code\" }".to_string(),
             "Text(\" span\")".to_string(),
         ];
         assert_eq!(tokens, expected);
@@ -236,7 +227,14 @@ mod tests {
         assert_eq!(buf, "a");
 
         buf.clear();
-        push_original_token(&Token::Code("b"), &mut buf);
+        push_original_token(
+            &Token::Code {
+                raw: "`b`",
+                fence: "`",
+                code: "b",
+            },
+            &mut buf,
+        );
         assert_eq!(buf, "`b`");
 
         buf.clear();
