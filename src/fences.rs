@@ -34,7 +34,7 @@ fn is_null_lang(s: &str) -> bool {
     trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null")
 }
 
-/// Normalise a potential language specifier.
+/// Normalize a potential language specifier.
 ///
 /// Returns the cleaned specifier in lowercase and the leading indentation
 /// captured from the original line.
