@@ -3,6 +3,7 @@
 #[macro_use]
 mod prelude;
 use mdtablefix::{attach_orphan_specifiers, compress_fences};
+use prelude::*;
 
 #[test]
 fn compresses_backtick_fences() {
@@ -202,16 +203,24 @@ fn attaches_orphan_specifier_allows_spaces() {
     assert_eq!(out, lines_vec!["```toml,ini", "a=1", "```"]);
 }
 
-#[test]
-fn compresses_null_language_to_empty() {
-    let input = lines_vec!["````null", "code", "````"];
+#[rstest]
+#[case("````null")]
+#[case("````NULL")]
+#[case("````Null")]
+#[case("````null  ")]
+fn compresses_null_language_to_empty(#[case] fence: &str) {
+    let input = lines_vec![fence, "code", "````"];
     let out = compress_fences(&input);
     assert_eq!(out, lines_vec!["```", "code", "```"]);
 }
 
-#[test]
-fn attaches_orphan_specifier_when_null_language() {
-    let input = lines_vec!["Rust", "```null", "fn main() {}", "```"];
-    let out = attach_orphan_specifiers(&input);
+#[rstest]
+#[case("```null")]
+#[case("```NULL")]
+#[case("```Null")]
+#[case("```null  ")]
+fn attaches_orphan_specifier_when_null_language(#[case] fence: &str) {
+    let input = lines_vec!["Rust", fence, "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }

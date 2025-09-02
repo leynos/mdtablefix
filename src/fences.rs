@@ -15,6 +15,24 @@ static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-](?:,[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-])*$").unwrap()
 });
 
+/// Determine whether a language specifier denotes an absent language.
+///
+/// A language is absent when it is empty or the case-insensitive string `null`.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use mdtablefix::fences::is_null_lang;
+/// assert!(is_null_lang(""));
+/// assert!(is_null_lang("NULL"));
+/// assert!(!is_null_lang("rust"));
+/// ```
+#[inline]
+fn is_null_lang(s: &str) -> bool {
+    let trimmed = s.trim();
+    trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null")
+}
+
 /// Normalise a potential language specifier.
 ///
 /// Returns the cleaned specifier in lowercase and the leading indentation
@@ -60,7 +78,7 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
             if let Some(cap) = FENCE_RE.captures(line) {
                 let indent = cap.get(1).map_or("", |m| m.as_str());
                 let lang = cap.get(3).map_or("", |m| m.as_str());
-                if lang.is_empty() || lang.eq_ignore_ascii_case("null") {
+                if is_null_lang(lang) {
                     format!("{indent}```")
                 } else {
                     format!("{indent}```{lang}")
@@ -101,20 +119,14 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
         if let Some(cap) = FENCE_RE.captures(line) {
             if in_fence {
                 in_fence = false;
-                let indent = cap.get(1).map_or("", |m| m.as_str());
-                let lang_present = cap.get(3).map_or("", |m| m.as_str());
-                if lang_present.eq_ignore_ascii_case("null") {
-                    out.push(format!("{indent}```"));
-                } else {
-                    out.push(line.clone());
-                }
+                out.push(line.clone());
                 continue;
             }
 
             let indent = cap.get(1).map_or("", |m| m.as_str());
             let lang_present = cap.get(3).map_or("", |m| m.as_str());
 
-            if lang_present.is_empty() || lang_present.eq_ignore_ascii_case("null") {
+            if lang_present.is_empty() {
                 let mut idx = out.len();
                 while idx > 0 && out[idx - 1].trim().is_empty() {
                     idx -= 1;
