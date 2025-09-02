@@ -251,67 +251,54 @@ fn test_cli_footnotes_option() {
         .stdout(format!("{}\n", expected.trim_end()));
 }
 
-/// Ensures `--fences` rewrites files when combined with `--in-place`.
-#[test]
-fn test_cli_in_place_fences() {
+/// Executes an in-place rewrite with the provided flags and asserts idempotence.
+fn run_in_place(flags: &[&str], input: &str, expected: &str) {
     let dir = tempdir().expect("failed to create temporary directory");
     let file_path = dir.path().join("sample.md");
-    fs::write(&file_path, "Rust\n```\nfn main() {}\n```\n").expect("failed to write test file");
-    Command::cargo_bin("mdtablefix")
-        .expect("Failed to create cargo command for mdtablefix")
-        .args([
-            "--in-place",
-            "--fences",
-            file_path.to_str().expect("path is not valid UTF-8"),
-        ])
-        .assert()
-        .success()
-        .stdout("");
-    let out = fs::read_to_string(&file_path).expect("failed to read output file");
-    assert_eq!(out, "```rust\nfn main() {}\n```\n");
-}
-
-/// Ensures `--footnotes` rewrites files when combined with `--in-place`.
-#[test]
-fn test_cli_in_place_footnotes() {
-    let dir = tempdir().expect("failed to create temporary directory");
-    let file_path = dir.path().join("sample.md");
-    let input = include_str!("data/footnotes_input.txt");
-    let expected = include_str!("data/footnotes_expected.txt");
     fs::write(&file_path, input).expect("failed to write test file");
+
     Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
-        .args([
-            "--in-place",
-            "--footnotes",
-            file_path.to_str().expect("path is not valid UTF-8"),
-        ])
+        .args(["--in-place"])
+        .args(flags)
+        .arg(&file_path)
         .assert()
         .success()
-        .stdout("");
+        .stdout("")
+        .stderr("");
+
     let out = fs::read_to_string(&file_path).expect("failed to read output file");
     assert_eq!(out.trim_end(), expected.trim_end());
-}
+    assert!(
+        out.ends_with('\n'),
+        "output file must end with a trailing newline"
+    );
 
-/// Ensures `--fences` and `--footnotes` rewrite files when combined with `--in-place`.
-#[test]
-fn test_cli_in_place_fences_and_footnotes() {
-    let dir = tempdir().expect("failed to create temporary directory");
-    let file_path = dir.path().join("sample.md");
-    let input = include_str!("data/fences_footnotes_input.txt");
-    let expected = include_str!("data/fences_footnotes_expected.txt");
-    fs::write(&file_path, input).expect("failed to write test file");
+    // idempotence
     Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
-        .args([
-            "--in-place",
-            "--fences",
-            "--footnotes",
-            file_path.to_str().expect("path is not valid UTF-8"),
-        ])
+        .args(["--in-place"])
+        .args(flags)
+        .arg(&file_path)
         .assert()
         .success()
-        .stdout("");
-    let out = fs::read_to_string(&file_path).expect("failed to read output file");
-    assert_eq!(out.trim_end(), expected.trim_end());
+        .stdout("")
+        .stderr("");
+
+    let out2 = fs::read_to_string(&file_path).expect("failed to read output file");
+    assert!(
+        out2.ends_with('\n'),
+        "output file must end with a trailing newline"
+    );
+    assert_eq!(out2, out);
+}
+
+/// Ensures `--in-place` rewrites files correctly for multiple flag combinations.
+#[rstest]
+#[case(&["--fences"], "Rust\n```\nfn main() {}\n```\n", "```rust\nfn main() {}\n```\n")]
+#[case(&["--footnotes"], include_str!("data/footnotes_input.txt"), include_str!("data/footnotes_expected.txt"))]
+#[case(&["--fences", "--footnotes"], include_str!("data/fences_footnotes_input.txt"), include_str!("data/fences_footnotes_expected.txt"))]
+#[case(&["--wrap", "--footnotes"], include_str!("data/footnotes_input.txt"), include_str!("data/footnotes_wrap_expected.txt"))]
+fn test_cli_in_place_variants(#[case] flags: &[&str], #[case] input: &str, #[case] expected: &str) {
+    run_in_place(flags, input, expected);
 }

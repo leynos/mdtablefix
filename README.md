@@ -174,7 +174,7 @@ let lines = vec![
 ];
 let opts = Options { footnotes: true, ..Default::default() };
 let out = process_stream_opts(&lines, opts);
-assert_eq!(out[2], "[^1] First note");
+assert_eq!(out[2], "[^1]: First note");
 ```
 
 - `process_stream_opts(lines: &[String], opts: Options) -> Vec<String>`

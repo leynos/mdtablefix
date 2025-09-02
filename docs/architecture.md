@@ -160,8 +160,8 @@ After:
 ```markdown
 Text.
 
- [^1] First note
-[^2] Second note
+[^1]: First note
+[^2]: Second note
 ```
 
 `convert_footnotes` only processes the final contiguous list of numeric

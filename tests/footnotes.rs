@@ -138,7 +138,7 @@ fn test_converts_number_followed_by_colon(
 #[test]
 fn test_converts_colon_footnote_definition() {
     let input = lines_vec!("7: Footnote text");
-    let expected = lines_vec!("[^7] Footnote text");
+    let expected = lines_vec!("[^7]: Footnote text");
     assert_eq!(convert_footnotes(&input), expected);
 }
 

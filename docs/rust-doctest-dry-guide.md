@@ -120,10 +120,9 @@ syntax. A reader can typically be expected to understand the mechanics of
 calling a function or instantiating a struct. A truly valuable example
 illustrates *why* and in *what context* an item should be used.[^10] It should
 tell a small story or solve a miniature problem that illuminates the item's
-purpose. For instance, an example for
-
-`String::clone()` should not just show `hello.clone();` but should demonstrate
-a scenario where ownership rules necessitate creating a copy.[^10]
+purpose. For instance, an example for `String::clone()` should not just show
+`hello.clone();` but should demonstrate a scenario where ownership rules
+necessitate creating a copy.[^10]
 
 To achieve this, examples must be clear and concise. Any code that is not
 directly relevant to the point being made—such as complex setup, boilerplate,
@@ -624,7 +623,7 @@ mastering doctests:
       accessed on July 15, 2025,
       <https://stackoverflow.com/questions/70111757/how-can-i-write-documentation-tests-for-private-modules>
 
-[^2]: Rustdoc doctests need fixing - Swatinem, accessed on July 15, 2025,
+[^2]: Rustdoc doctests need fixing — Swatinem, accessed on 15 July 2025,
       <https://swatinem.de/blog/fix-rustdoc/>
 
 [^3]: Documentation tests - The rustdoc book - Rust Documentation, accessed on
