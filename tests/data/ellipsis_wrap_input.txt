@@ -1,0 +1,1 @@
+This is a long line with some text that contains three dots... which should be converted to an ellipsis and wrapped neatly across several lines when processed.
