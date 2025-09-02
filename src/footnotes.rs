@@ -145,9 +145,11 @@ fn has_h2_heading_before(lines: &[String], start: usize) -> bool {
 /// assert!(has_existing_footnote_block(&lines, 1));
 /// ```
 fn has_existing_footnote_block(lines: &[String], start: usize) -> bool {
-    lines[..start]
-        .iter()
-        .any(|l| l.trim_start().starts_with("[^"))
+    lines[..start].iter().any(|l| {
+        let trimmed = l.trim_start();
+        let trimmed = trimmed.strip_prefix(">").map_or(trimmed, str::trim_start);
+        trimmed.starts_with("[^")
+    })
 }
 
 /// Convert an ordered list item into a GFM footnote definition.

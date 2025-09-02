@@ -150,10 +150,12 @@ fn test_converts_list_with_blank_lines() {
         "## Footnotes",
         "",
         " 1. First",
-        "",
+        "  ",
         " 2. Second",
         "",
         "10. Tenth",
+        "   ",
+        "",
     );
     let expected = lines_vec!(
         "Text.",
@@ -161,10 +163,12 @@ fn test_converts_list_with_blank_lines() {
         "## Footnotes",
         "",
         " [^1]: First",
-        "",
+        "  ",
         " [^2]: Second",
         "",
         "[^10]: Tenth",
+        "   ",
+        "",
     );
     let output = convert_footnotes(&input);
     assert_eq!(output, expected);
@@ -200,4 +204,18 @@ fn test_skips_when_existing_block_present() {
 fn test_skips_when_list_not_last() {
     let input = lines_vec!("## Footnotes", " 1. Note", "", "Tail.",);
     assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
+fn test_skips_with_h3_heading() {
+    let input = lines_vec!("Text.", "### Notes", " 1. First");
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
+fn test_skips_when_existing_block_is_indented_or_quoted() {
+    let input1 = lines_vec!("  [^1]: Old", "## Footnotes", " 2. New");
+    let input2 = lines_vec!("> [^1]: Old", "## Footnotes", " 2. New");
+    assert_eq!(convert_footnotes(&input1), input1);
+    assert_eq!(convert_footnotes(&input2), input2);
 }
