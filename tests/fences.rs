@@ -208,7 +208,10 @@ fn attaches_orphan_specifier_allows_spaces() {
 #[case("````NULL", "````")]
 #[case("````Null", "````")]
 #[case("````null  ", "````")]
+#[case("````NULL  ", "````")]
 #[case("~~~~null", "~~~~")]
+#[case("~~~~NULL", "~~~~")]
+#[case("~~~~null  ", "~~~~")]
 fn compresses_null_language_to_empty(#[case] open: &str, #[case] close: &str) {
     let input = lines_vec![open, "code", close];
     let out = compress_fences(&input);
@@ -220,6 +223,9 @@ fn compresses_null_language_to_empty(#[case] open: &str, #[case] close: &str) {
 #[case("```NULL")]
 #[case("```Null")]
 #[case("```null  ")]
+#[case("```NULL  ")]
+#[case("~~~~null")]
+#[case("~~~~NULL")]
 fn attaches_orphan_specifier_when_null_language(#[case] fence: &str) {
     let input = lines_vec!["Rust", fence, "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&compress_fences(&input));
