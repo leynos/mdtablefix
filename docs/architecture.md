@@ -149,6 +149,7 @@ are replaced with footnote definitions. Blank lines and indentation within the
 list are tolerated; blank-only trailing blocks are ignored. Lines beginning
 with inline footnote references at the start of a line do not count as existing
 definitions, allowing references before the final footnote definition block.
+Definitions prefixed by blockquote markers (`>`) still count as existing blocks.
 
 Before:
 

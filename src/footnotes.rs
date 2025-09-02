@@ -23,6 +23,11 @@ static FOOTNOTE_LINE_RE: LazyLock<Regex> = lazy_regex!(
     "footnote line pattern should compile",
 );
 
+static FOOTNOTE_DEF_RE: LazyLock<Regex> = lazy_regex!(
+    r"^\s*(?:>\s*)*\[\^\d+\]:",
+    "footnote definition pattern should compile",
+);
+
 use crate::textproc::{Token, process_tokens, push_original_token};
 
 /// Extract the components of an inline footnote reference.
@@ -148,14 +153,7 @@ fn has_h2_heading_before(lines: &[String], start: usize) -> bool {
 /// assert!(has_existing_footnote_block(&lines, 1));
 /// ```
 fn has_existing_footnote_block(lines: &[String], start: usize) -> bool {
-    lines[..start].iter().any(|l| {
-        let trimmed = l.trim_start();
-        let trimmed = trimmed.strip_prefix(">").map_or(trimmed, str::trim_start);
-        trimmed
-            .strip_prefix("[^")
-            .and_then(|rest| rest.split_once("]:"))
-            .is_some()
-    })
+    lines[..start].iter().any(|l| FOOTNOTE_DEF_RE.is_match(l))
 }
 
 /// Convert an ordered list item into a GFM footnote definition.
