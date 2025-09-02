@@ -219,3 +219,10 @@ fn test_skips_when_existing_block_is_indented_or_quoted() {
     assert_eq!(convert_footnotes(&input1), input1);
     assert_eq!(convert_footnotes(&input2), input2);
 }
+
+#[test]
+fn test_converts_after_inline_reference_at_bol() {
+    let input = lines_vec!("[^1] see note", "## Footnotes", " 1. First");
+    let expected = lines_vec!("[^1] see note", "## Footnotes", " [^1]: First");
+    assert_eq!(convert_footnotes(&input), expected);
+}

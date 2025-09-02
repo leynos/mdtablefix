@@ -138,6 +138,9 @@ fn has_h2_heading_before(lines: &[String], start: usize) -> bool {
 
 /// Check for existing footnote definitions before the block.
 ///
+/// Lines that start with an inline reference (e.g., `[^1] note`) are ignored;
+/// only definitions like `[^1]: note` cause skipping.
+///
 /// # Examples
 ///
 /// ```ignore
@@ -148,7 +151,10 @@ fn has_existing_footnote_block(lines: &[String], start: usize) -> bool {
     lines[..start].iter().any(|l| {
         let trimmed = l.trim_start();
         let trimmed = trimmed.strip_prefix(">").map_or(trimmed, str::trim_start);
-        trimmed.starts_with("[^")
+        trimmed
+            .strip_prefix("[^")
+            .and_then(|rest| rest.split_once("]:"))
+            .is_some()
     })
 }
 
