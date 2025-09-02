@@ -1,4 +1,4 @@
-//! Pre-processing utilities for normalizing fenced code block delimiters.
+//! Pre-processing utilities for normalising fenced code block delimiters.
 //!
 //! `compress_fences` reduces any sequence of three or more backticks or
 //! tildes followed by optional language identifiers to exactly three
@@ -17,7 +17,7 @@ static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Determine whether a language specifier denotes an absent language.
 ///
-/// A language is absent when it is empty or the case-insensitive string `null`.
+/// A language is absent when it is empty or the case-insensitive string `null`, with surrounding whitespace ignored.
 ///
 /// # Examples
 ///
@@ -25,6 +25,7 @@ static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// use mdtablefix::fences::is_null_lang;
 /// assert!(is_null_lang(""));
 /// assert!(is_null_lang("NULL"));
+/// assert!(is_null_lang("  null  "));
 /// assert!(!is_null_lang("rust"));
 /// ```
 #[inline]

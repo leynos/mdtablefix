@@ -1,4 +1,4 @@
-//! Tests for fence normalization functionality.
+//! Tests for fence normalisation functionality.
 
 #[macro_use]
 mod prelude;
@@ -204,12 +204,13 @@ fn attaches_orphan_specifier_allows_spaces() {
 }
 
 #[rstest]
-#[case("````null")]
-#[case("````NULL")]
-#[case("````Null")]
-#[case("````null  ")]
-fn compresses_null_language_to_empty(#[case] fence: &str) {
-    let input = lines_vec![fence, "code", "````"];
+#[case("````null", "````")]
+#[case("````NULL", "````")]
+#[case("````Null", "````")]
+#[case("````null  ", "````")]
+#[case("~~~~null", "~~~~")]
+fn compresses_null_language_to_empty(#[case] open: &str, #[case] close: &str) {
+    let input = lines_vec![open, "code", close];
     let out = compress_fences(&input);
     assert_eq!(out, lines_vec!["```", "code", "```"]);
 }
