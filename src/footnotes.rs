@@ -93,16 +93,42 @@ where
 }
 
 fn convert_block(lines: &mut [String]) {
-    let (footnote_start, trimmed_end) = trimmed_range(lines, |l| FOOTNOTE_LINE_RE.is_match(l));
+    let (footnote_start, trimmed_end) = trimmed_range(lines, |l| {
+        l.trim().is_empty() || FOOTNOTE_LINE_RE.is_match(l)
+    });
 
-    if footnote_start >= trimmed_end || lines[footnote_start].trim_start().starts_with("[^") {
+    if footnote_start >= trimmed_end {
+        return;
+    }
+    if !lines[footnote_start..trimmed_end]
+        .iter()
+        .any(|l| FOOTNOTE_LINE_RE.is_match(l))
+    {
+        return;
+    }
+
+    let preceding_line = (0..footnote_start)
+        .rfind(|&i| !lines[i].trim().is_empty())
+        .map(|i| lines[i].trim_start());
+    if preceding_line.is_none_or(|l| !l.starts_with("## ")) {
+        return;
+    }
+
+    if lines[..footnote_start]
+        .iter()
+        .any(|l| l.trim_start().starts_with("[^"))
+    {
         return;
     }
 
     for line in &mut lines[footnote_start..trimmed_end] {
-        *line = FOOTNOTE_LINE_RE
-            .replace(line, "${indent}[^${num}]: ${rest}")
-            .to_string();
+        if FOOTNOTE_LINE_RE.is_match(line) {
+            *line = FOOTNOTE_LINE_RE
+                .replace(line, |caps: &Captures| {
+                    format!("{}[^{}]: {}", &caps["indent"], &caps["num"], &caps["rest"])
+                })
+                .to_string();
+        }
     }
 }
 
@@ -133,14 +159,45 @@ mod tests {
         let input = vec![
             "Text.".to_string(),
             String::new(),
+            "## Footnotes".to_string(),
+            String::new(),
             " 1. First".to_string(),
             " 2. Second".to_string(),
         ];
         let expected = vec![
             "Text.".to_string(),
             String::new(),
+            "## Footnotes".to_string(),
+            String::new(),
             " [^1]: First".to_string(),
             " [^2]: Second".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), expected);
+    }
+
+    #[test]
+    fn converts_list_with_blank_lines() {
+        let input = vec![
+            "Text.".to_string(),
+            String::new(),
+            "## Footnotes".to_string(),
+            String::new(),
+            " 1. First".to_string(),
+            String::new(),
+            " 2. Second".to_string(),
+            String::new(),
+            "10. Tenth".to_string(),
+        ];
+        let expected = vec![
+            "Text.".to_string(),
+            String::new(),
+            "## Footnotes".to_string(),
+            String::new(),
+            " [^1]: First".to_string(),
+            String::new(),
+            " [^2]: Second".to_string(),
+            String::new(),
+            "[^10]: Tenth".to_string(),
         ];
         assert_eq!(convert_footnotes(&input), expected);
     }
@@ -152,10 +209,36 @@ mod tests {
     }
 
     #[test]
-    fn converts_block_after_existing_line() {
-        let input = vec!["[^1]: Old".to_string(), " 2. New".to_string()];
-        let expected = vec!["[^1]: Old".to_string(), " [^2]: New".to_string()];
-        assert_eq!(convert_footnotes(&input), expected);
+    fn skips_with_existing_block() {
+        let input = vec![
+            "[^1]: Old".to_string(),
+            "## Footnotes".to_string(),
+            " 2. New".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), input);
+    }
+
+    #[test]
+    fn skips_without_h2() {
+        let input = vec!["Text.".to_string(), " 1. First".to_string()];
+        assert_eq!(convert_footnotes(&input), input);
+    }
+
+    #[test]
+    fn skips_when_list_not_last() {
+        let input = vec![
+            "## Footnotes".to_string(),
+            " 1. First".to_string(),
+            String::new(),
+            "Tail.".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), input);
+    }
+
+    #[test]
+    fn skips_when_block_has_only_blanks() {
+        let input = vec!["## Footnotes".to_string(), String::new()];
+        assert_eq!(convert_footnotes(&input), input);
     }
 
     #[test]
@@ -183,12 +266,14 @@ mod tests {
             "Intro.".to_string(),
             "1. not a footnote".to_string(),
             "More text.".to_string(),
+            "## Footnotes".to_string(),
             "2. final".to_string(),
         ];
         let expected = vec![
             "Intro.".to_string(),
             "1. not a footnote".to_string(),
             "More text.".to_string(),
+            "## Footnotes".to_string(),
             "[^2]: final".to_string(),
         ];
         assert_eq!(convert_footnotes(&input), expected);

@@ -137,9 +137,37 @@ fn test_converts_number_followed_by_colon(
 
 #[test]
 fn test_converts_colon_footnote_definition() {
-    let input = lines_vec!("7: Footnote text");
-    let expected = lines_vec!("[^7]: Footnote text");
+    let input = lines_vec!("## Footnotes", "7: Footnote text");
+    let expected = lines_vec!("## Footnotes", "[^7]: Footnote text");
     assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_converts_list_with_blank_lines() {
+    let input = lines_vec!(
+        "Text.",
+        "",
+        "## Footnotes",
+        "",
+        " 1. First",
+        "",
+        " 2. Second",
+        "",
+        "10. Tenth",
+    );
+    let expected = lines_vec!(
+        "Text.",
+        "",
+        "## Footnotes",
+        "",
+        " [^1]: First",
+        "",
+        " [^2]: Second",
+        "",
+        "[^10]: Tenth",
+    );
+    let output = convert_footnotes(&input);
+    assert_eq!(output, expected);
 }
 
 #[test]
@@ -154,4 +182,22 @@ fn test_whitespace_input() {
     let input = lines_vec!("   ", "\t");
     let output = convert_footnotes(&input);
     assert_eq!(output, input);
+}
+
+#[test]
+fn test_requires_h2_heading() {
+    let input = lines_vec!("Text.", " 1. First footnote",);
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
+fn test_skips_when_existing_block_present() {
+    let input = lines_vec!("[^1]: Old", "## Footnotes", " 2. New",);
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
+fn test_skips_when_list_not_last() {
+    let input = lines_vec!("## Footnotes", " 1. Note", "", "Tail.",);
+    assert_eq!(convert_footnotes(&input), input);
 }

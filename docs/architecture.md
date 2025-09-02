@@ -143,16 +143,23 @@ Look at `code 1` for details.
 Refer to equation (1) for context.
 ```
 
-When the final lines of a document form a numbered list, they are replaced with
-footnote definitions.
+When the final lines of a document form a numbered list that is preceded by an
+H2 heading and the document contains no existing footnote definitions, they are
+replaced with footnote definitions. Blank lines and indentation within the list
+are tolerated.
 
 Before:
 
 ```markdown
 Text.
 
+## Footnotes
+
  1. First note
+
  2. Second note
+
+10. Final note
 ```
 
 After:
@@ -160,12 +167,17 @@ After:
 ```markdown
 Text.
 
-[^1]: First note
-[^2]: Second note
+## Footnotes
+
+ [^1]: First note
+
+ [^2]: Second note
+
+[^10]: Final note
 ```
 
 `convert_footnotes` only processes the final contiguous list of numeric
-references.
+references when these conditions are met.
 
 ## HTML Table Support in `mdtablefix`
 
