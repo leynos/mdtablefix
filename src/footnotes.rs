@@ -92,42 +92,89 @@ where
     (start, end)
 }
 
-fn convert_block(lines: &mut [String]) {
-    let (footnote_start, trimmed_end) = trimmed_range(lines, |l| {
+/// Identify the trailing block of blank or footnote-like lines.
+///
+/// Returns `Some((start, end))` when the final block contains at least one
+/// footnote line; otherwise `None`.
+///
+/// # Examples
+///
+/// ```ignore
+/// let lines = vec![
+///     "Text".to_string(),
+///     " 1. Note".to_string(),
+/// ];
+/// assert_eq!(footnote_block_range(&lines), Some((1, 2)));
+/// ```
+fn footnote_block_range(lines: &[String]) -> Option<(usize, usize)> {
+    let (start, end) = trimmed_range(lines, |l| {
         l.trim().is_empty() || FOOTNOTE_LINE_RE.is_match(l)
     });
-
-    if footnote_start >= trimmed_end {
-        return;
-    }
-    if !lines[footnote_start..trimmed_end]
-        .iter()
-        .any(|l| FOOTNOTE_LINE_RE.is_match(l))
+    if start < end
+        && lines[start..end]
+            .iter()
+            .any(|l| FOOTNOTE_LINE_RE.is_match(l))
     {
-        return;
+        Some((start, end))
+    } else {
+        None
     }
+}
 
-    let preceding_line = (0..footnote_start)
-        .rfind(|&i| !lines[i].trim().is_empty())
-        .map(|i| lines[i].trim_start());
-    if preceding_line.is_none_or(|l| !l.starts_with("## ")) {
-        return;
-    }
+/// Determine whether a second-level heading precedes the block.
+///
+/// # Examples
+///
+/// ```ignore
+/// let lines = vec!["## Footnotes".to_string(), " 1. Note".to_string()];
+/// assert!(has_h2_heading_before(&lines, 1));
+/// ```
+fn has_h2_heading_before(lines: &[String], start: usize) -> bool {
+    lines[..start]
+        .iter()
+        .rfind(|l| !l.trim().is_empty())
+        .is_some_and(|l| l.trim_start().starts_with("## "))
+}
 
-    if lines[..footnote_start]
+/// Check for existing footnote definitions before the block.
+///
+/// # Examples
+///
+/// ```ignore
+/// let lines = vec!["[^1]: Old".to_string(), " 2. New".to_string()];
+/// assert!(has_existing_footnote_block(&lines, 1));
+/// ```
+fn has_existing_footnote_block(lines: &[String], start: usize) -> bool {
+    lines[..start]
         .iter()
         .any(|l| l.trim_start().starts_with("[^"))
-    {
+}
+
+/// Convert an ordered list item into a GFM footnote definition.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert_eq!(replace_footnote_line(" 1. Note"), " [^1]: Note");
+/// ```
+fn replace_footnote_line(line: &str) -> String {
+    FOOTNOTE_LINE_RE
+        .replace(line, |caps: &Captures| {
+            format!("{}[^{}]: {}", &caps["indent"], &caps["num"], &caps["rest"])
+        })
+        .to_string()
+}
+
+fn convert_block(lines: &mut [String]) {
+    let Some((start, end)) = footnote_block_range(lines) else {
+        return;
+    };
+    if !has_h2_heading_before(lines, start) || has_existing_footnote_block(lines, start) {
         return;
     }
-
-    for line in &mut lines[footnote_start..trimmed_end] {
+    for line in &mut lines[start..end] {
         if FOOTNOTE_LINE_RE.is_match(line) {
-            *line = FOOTNOTE_LINE_RE
-                .replace(line, |caps: &Captures| {
-                    format!("{}[^{}]: {}", &caps["indent"], &caps["num"], &caps["rest"])
-                })
-                .to_string();
+            *line = replace_footnote_line(line);
         }
     }
 }
