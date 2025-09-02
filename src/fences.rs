@@ -97,6 +97,7 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 /// specifier to the following opening fence. Indentation from the specifier
 /// line is preserved when the fence itself is unindented. Specifiers containing
 /// spaces are accepted and normalised.
+/// Language specifiers explicitly set to `null` are treated as absent.
 ///
 /// # Examples
 ///
@@ -126,7 +127,7 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
             let indent = cap.get(1).map_or("", |m| m.as_str());
             let lang_present = cap.get(3).map_or("", |m| m.as_str());
 
-            if lang_present.is_empty() {
+            if is_null_lang(lang_present) {
                 let mut idx = out.len();
                 while idx > 0 && out[idx - 1].trim().is_empty() {
                     idx -= 1;
