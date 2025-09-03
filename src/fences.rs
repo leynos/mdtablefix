@@ -1,4 +1,4 @@
-//! Pre-processing utilities for normalising fenced code block delimiters.
+//! Pre-processing utilities for normalizing fenced code block delimiters.
 //!
 //! `compress_fences` reduces any sequence of three or more backticks or
 //! tildes followed by optional language identifiers to exactly three
@@ -97,8 +97,8 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 /// on the line before a fence. This function removes that line and applies the
 /// specifier to the following opening fence. Indentation from the specifier
 /// line is preserved when the fence itself is unindented. Specifiers containing
-/// spaces are accepted and normalised.
-/// Fences labelled `null` are normalised to empty by `compress_fences`,
+/// spaces are accepted and normalized.
+/// Fences labelled `null` are normalized to empty by `compress_fences`,
 /// so only empty languages are treated as absent.
 ///
 /// # Examples
@@ -129,7 +129,7 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
             let indent = cap.get(1).map_or("", |m| m.as_str());
             let lang_present = cap.get(3).map_or("", |m| m.as_str());
 
-            if lang_present.is_empty() {
+            if is_null_lang(lang_present) {
                 let mut idx = out.len();
                 while idx > 0 && out[idx - 1].trim().is_empty() {
                     idx -= 1;

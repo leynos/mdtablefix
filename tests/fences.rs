@@ -243,6 +243,13 @@ fn attaches_orphan_specifier_when_null_language(#[case] fence: &str) {
     assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }
 
+#[test]
+fn attaches_orphan_specifier_null_language_without_compression() {
+    let input = lines_vec!["Rust", "```null", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&input);
+    assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
+}
+
 #[rstest]
 #[case("```   ")]
 #[case("~~~~   ")]
