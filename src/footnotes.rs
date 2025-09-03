@@ -207,9 +207,32 @@ fn convert_block(lines: &mut [String]) {
 /// Convert bare numeric footnote references to Markdown footnote syntax.
 #[must_use]
 pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
+    let mut in_heading = false;
+    let mut at_line_start = true;
     let mut lines = process_tokens(lines, |tok, out| match tok {
-        Token::Text(t) => out.push_str(&convert_inline(t)),
-        _ => push_original_token(&tok, out),
+        Token::Text(t) => {
+            if at_line_start {
+                let trimmed = t.trim_start();
+                if trimmed.starts_with('#') {
+                    in_heading = true;
+                }
+            }
+            if in_heading {
+                out.push_str(t);
+            } else {
+                out.push_str(&convert_inline(t));
+            }
+            at_line_start = false;
+        }
+        Token::Newline => {
+            push_original_token(&tok, out);
+            at_line_start = true;
+            in_heading = false;
+        }
+        _ => {
+            push_original_token(&tok, out);
+            at_line_start = false;
+        }
     });
     convert_block(&mut lines);
     lines

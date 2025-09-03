@@ -14,3 +14,5 @@
   details. ([#65](https://github.com/leynos/mdtablefix/issues/65))
 - Keep trailing punctuation attached to inline code spans during wrapping to
   maintain readability.
+- Avoid converting numeric references in heading text when the `--footnotes`
+  option is enabled.

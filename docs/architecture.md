@@ -131,6 +131,8 @@ Core types[^7]:
 
 Numbers inside inline code or parentheses are ignored.
 
+Heading lines are also left untouched so identifiers like "A.2" remain verbatim.
+
 Before:
 
 ```markdown
