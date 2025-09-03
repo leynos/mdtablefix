@@ -15,7 +15,26 @@ static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-](?:,[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-])*$").unwrap()
 });
 
-/// Normalise a potential language specifier.
+/// Determine whether a language specifier denotes an absent language.
+///
+/// A language is absent when it is empty or the case-insensitive string `null`, with surrounding whitespace ignored.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use mdtablefix::fences::is_null_lang;
+/// assert!(is_null_lang(""));
+/// assert!(is_null_lang("NULL"));
+/// assert!(is_null_lang("  null  "));
+/// assert!(!is_null_lang("rust"));
+/// ```
+#[inline]
+fn is_null_lang(s: &str) -> bool {
+    let trimmed = s.trim();
+    trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null")
+}
+
+/// Normalize a potential language specifier.
 ///
 /// Returns the cleaned specifier in lowercase and the leading indentation
 /// captured from the original line.
@@ -60,7 +79,7 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
             if let Some(cap) = FENCE_RE.captures(line) {
                 let indent = cap.get(1).map_or("", |m| m.as_str());
                 let lang = cap.get(3).map_or("", |m| m.as_str());
-                if lang.is_empty() {
+                if is_null_lang(lang) {
                     format!("{indent}```")
                 } else {
                     format!("{indent}```{lang}")
@@ -78,7 +97,9 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 /// on the line before a fence. This function removes that line and applies the
 /// specifier to the following opening fence. Indentation from the specifier
 /// line is preserved when the fence itself is unindented. Specifiers containing
-/// spaces are accepted and normalised.
+/// spaces are accepted and normalized.
+/// Fences labelled `null` are normalized to empty by `compress_fences`,
+/// so only empty languages are treated as absent.
 ///
 /// # Examples
 ///
@@ -108,7 +129,7 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
             let indent = cap.get(1).map_or("", |m| m.as_str());
             let lang_present = cap.get(3).map_or("", |m| m.as_str());
 
-            if lang_present.is_empty() {
+            if is_null_lang(lang_present) {
                 let mut idx = out.len();
                 while idx > 0 && out[idx - 1].trim().is_empty() {
                     idx -= 1;
@@ -129,6 +150,9 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
                         continue;
                     }
                 }
+                in_fence = true;
+                out.push(format!("{indent}```"));
+                continue;
             }
 
             in_fence = true;

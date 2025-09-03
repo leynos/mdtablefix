@@ -1,8 +1,9 @@
-//! Tests for fence normalization functionality.
+//! Tests for fence normalisation functionality.
 
 #[macro_use]
 mod prelude;
 use mdtablefix::{attach_orphan_specifiers, compress_fences};
+use prelude::*;
 
 #[test]
 fn compresses_backtick_fences() {
@@ -200,4 +201,60 @@ fn attaches_orphan_specifier_allows_spaces() {
     let input = lines_vec!["TOML, Ini", "```", "a=1", "```"];
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec!["```toml,ini", "a=1", "```"]);
+}
+
+#[rstest]
+#[case("````null", "````")]
+#[case("````NULL", "````")]
+#[case("````Null", "````")]
+#[case("````null  ", "````")]
+#[case("````   ", "````")]
+#[case("````NULL  ", "````")]
+#[case("````Null  ", "````")]
+#[case("~~~~null", "~~~~")]
+#[case("~~~~NULL", "~~~~")]
+#[case("~~~~Null", "~~~~")]
+#[case("~~~~null  ", "~~~~")]
+#[case("~~~~   ", "~~~~")]
+#[case("~~~~NULL  ", "~~~~")]
+#[case("~~~~Null  ", "~~~~")]
+fn compresses_null_language_to_empty(#[case] open: &str, #[case] close: &str) {
+    let input = lines_vec![open, "code", close];
+    let out = compress_fences(&input);
+    assert_eq!(out, lines_vec!["```", "code", "```"]);
+}
+
+#[rstest]
+#[case("```null")]
+#[case("```NULL")]
+#[case("```Null")]
+#[case("```null  ")]
+#[case("```NULL  ")]
+#[case("```Null  ")]
+#[case("~~~~null")]
+#[case("~~~~NULL")]
+#[case("~~~~Null")]
+#[case("~~~~null  ")]
+#[case("~~~~NULL  ")]
+#[case("~~~~Null  ")]
+fn attaches_orphan_specifier_when_null_language(#[case] fence: &str) {
+    let input = lines_vec!["Rust", fence, "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
+}
+
+#[test]
+fn attaches_orphan_specifier_null_language_without_compression() {
+    let input = lines_vec!["Rust", "```null", "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&input);
+    assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
+}
+
+#[rstest]
+#[case("```   ")]
+#[case("~~~~   ")]
+fn attaches_orphan_specifier_whitespace_language(#[case] fence: &str) {
+    let input = lines_vec!["Rust", fence, "fn main() {}", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }
