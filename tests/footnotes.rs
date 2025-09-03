@@ -213,6 +213,13 @@ fn test_skips_with_h3_heading() {
 }
 
 #[test]
+fn test_converts_with_non_footnotes_h2() {
+    let input = lines_vec!("## Notes", " 1. First");
+    let expected = lines_vec!("## Notes", " [^1]: First");
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
 fn test_skips_when_existing_block_is_indented_or_quoted() {
     let input1 = lines_vec!("  [^1]: Old", "## Footnotes", " 2. New");
     let input2 = lines_vec!("> [^1]: Old", "## Footnotes", " 2. New");
