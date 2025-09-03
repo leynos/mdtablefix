@@ -1,8 +1,10 @@
 //! Footnote normalisation utilities.
 //!
 //! Converts bare numeric references in text to GitHub-flavoured Markdown
-//! footnote links and rewrites the trailing numeric list into a footnote
-//! block. Only the final contiguous list of footnotes is processed.
+//! footnote links and, when eligible, rewrites the trailing numeric list
+//! into a footnote block. Eligibility requires that the final contiguous
+//! list immediately follows an H2 heading and that no existing footnote
+//! definitions (`[^n]:`) appear earlier in the document.
 
 use std::sync::LazyLock;
 
@@ -92,17 +94,113 @@ where
     (start, end)
 }
 
-fn convert_block(lines: &mut [String]) {
-    let (footnote_start, trimmed_end) = trimmed_range(lines, |l| FOOTNOTE_LINE_RE.is_match(l));
+/// Identify the trailing block of blank or footnote-like lines.
+///
+/// Returns `Some((start, end))` when the final block contains at least one
+/// footnote line; otherwise `None`.
+///
+/// # Examples
+///
+/// ```ignore
+/// let lines = vec![
+///     "Text".to_string(),
+///     " 1. Note".to_string(),
+/// ];
+/// assert_eq!(footnote_block_range(&lines), Some((1, 2)));
+/// ```
+fn footnote_block_range(lines: &[String]) -> Option<(usize, usize)> {
+    let (start, end) = trimmed_range(lines, |l| {
+        l.trim().is_empty() || FOOTNOTE_LINE_RE.is_match(l)
+    });
+    if start < end
+        && lines[start..end]
+            .iter()
+            .any(|l| FOOTNOTE_LINE_RE.is_match(l))
+    {
+        Some((start, end))
+    } else {
+        None
+    }
+}
 
-    if footnote_start >= trimmed_end || lines[footnote_start].trim_start().starts_with("[^") {
+/// Determine whether a second-level heading precedes the block.
+///
+/// # Examples
+///
+/// ```ignore
+/// let lines = vec!["## Footnotes".to_string(), " 1. Note".to_string()];
+/// assert!(has_h2_heading_before(&lines, 1));
+/// ```
+fn has_h2_heading_before(lines: &[String], start: usize) -> bool {
+    lines[..start]
+        .iter()
+        .rfind(|l| !l.trim().is_empty())
+        .is_some_and(|l| l.trim_start().starts_with("## "))
+}
+
+/// Check for existing footnote definitions before the block.
+///
+/// Lines that start with an inline reference (e.g., `[^1] note`) are ignored;
+/// only definitions like `[^1]: note` cause skipping. Definitions inside fenced code blocks are ignored.
+///
+/// # Examples
+///
+/// ```ignore
+/// let lines = vec!["[^1]: Old".to_string(), " 2. New".to_string()];
+/// assert!(has_existing_footnote_block(&lines, 1));
+/// ```
+fn has_existing_footnote_block(lines: &[String], start: usize) -> bool {
+    let mut in_fence = false;
+    for l in &lines[..start] {
+        let t = l.trim_start();
+        // naive fence toggle; good enough for detection here
+        if t.starts_with("```") || t.starts_with("~~~") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+        let mut t = t;
+        while let Some(rest) = t.strip_prefix('>') {
+            t = rest.trim_start();
+        }
+        if t.strip_prefix("[^")
+            .and_then(|r| r.split_once("]:"))
+            .is_some_and(|(num, _)| num.chars().all(|c| c.is_ascii_digit()))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Convert an ordered list item into a GFM footnote definition.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert_eq!(replace_footnote_line(" 1. Note"), " [^1]: Note");
+/// ```
+fn replace_footnote_line(line: &str) -> String {
+    FOOTNOTE_LINE_RE
+        .replace(line, |caps: &Captures| {
+            format!("{}[^{}]: {}", &caps["indent"], &caps["num"], &caps["rest"])
+        })
+        .to_string()
+}
+
+fn convert_block(lines: &mut [String]) {
+    let Some((start, end)) = footnote_block_range(lines) else {
+        return;
+    };
+    if !has_h2_heading_before(lines, start) || has_existing_footnote_block(lines, start) {
         return;
     }
-
-    for line in &mut lines[footnote_start..trimmed_end] {
-        *line = FOOTNOTE_LINE_RE
-            .replace(line, "${indent}[^${num}]: ${rest}")
-            .to_string();
+    for line in &mut lines[start..end] {
+        if FOOTNOTE_LINE_RE.is_match(line) {
+            *line = replace_footnote_line(line);
+        }
     }
 }
 
@@ -133,14 +231,45 @@ mod tests {
         let input = vec![
             "Text.".to_string(),
             String::new(),
+            "## Footnotes".to_string(),
+            String::new(),
             " 1. First".to_string(),
             " 2. Second".to_string(),
         ];
         let expected = vec![
             "Text.".to_string(),
             String::new(),
+            "## Footnotes".to_string(),
+            String::new(),
             " [^1]: First".to_string(),
             " [^2]: Second".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), expected);
+    }
+
+    #[test]
+    fn converts_list_with_blank_lines() {
+        let input = vec![
+            "Text.".to_string(),
+            String::new(),
+            "## Footnotes".to_string(),
+            String::new(),
+            " 1. First".to_string(),
+            String::new(),
+            " 2. Second".to_string(),
+            String::new(),
+            "10. Tenth".to_string(),
+        ];
+        let expected = vec![
+            "Text.".to_string(),
+            String::new(),
+            "## Footnotes".to_string(),
+            String::new(),
+            " [^1]: First".to_string(),
+            String::new(),
+            " [^2]: Second".to_string(),
+            String::new(),
+            "[^10]: Tenth".to_string(),
         ];
         assert_eq!(convert_footnotes(&input), expected);
     }
@@ -152,10 +281,36 @@ mod tests {
     }
 
     #[test]
-    fn converts_block_after_existing_line() {
-        let input = vec!["[^1]: Old".to_string(), " 2. New".to_string()];
-        let expected = vec!["[^1]: Old".to_string(), " [^2]: New".to_string()];
-        assert_eq!(convert_footnotes(&input), expected);
+    fn skips_with_existing_block() {
+        let input = vec![
+            "[^1]: Old".to_string(),
+            "## Footnotes".to_string(),
+            " 2. New".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), input);
+    }
+
+    #[test]
+    fn skips_without_h2() {
+        let input = vec!["Text.".to_string(), " 1. First".to_string()];
+        assert_eq!(convert_footnotes(&input), input);
+    }
+
+    #[test]
+    fn skips_when_list_not_last() {
+        let input = vec![
+            "## Footnotes".to_string(),
+            " 1. First".to_string(),
+            String::new(),
+            "Tail.".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), input);
+    }
+
+    #[test]
+    fn skips_when_block_has_only_blanks() {
+        let input = vec!["## Footnotes".to_string(), String::new()];
+        assert_eq!(convert_footnotes(&input), input);
     }
 
     #[test]
@@ -183,12 +338,14 @@ mod tests {
             "Intro.".to_string(),
             "1. not a footnote".to_string(),
             "More text.".to_string(),
+            "## Footnotes".to_string(),
             "2. final".to_string(),
         ];
         let expected = vec![
             "Intro.".to_string(),
             "1. not a footnote".to_string(),
             "More text.".to_string(),
+            "## Footnotes".to_string(),
             "[^2]: final".to_string(),
         ];
         assert_eq!(convert_footnotes(&input), expected);
