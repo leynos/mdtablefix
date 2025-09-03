@@ -1,8 +1,10 @@
 //! Footnote normalisation utilities.
 //!
 //! Converts bare numeric references in text to GitHub-flavoured Markdown
-//! footnote links and rewrites the trailing numeric list into a footnote
-//! block. Only the final contiguous list of footnotes is processed.
+//! footnote links and, when eligible, rewrites the trailing numeric list
+//! into a footnote block. Eligibility requires that the final contiguous
+//! list immediately follows an H2 heading and that no existing footnote
+//! definitions (`[^n]:`) appear earlier in the document.
 
 use std::sync::LazyLock;
 
@@ -21,11 +23,6 @@ static COLON_FN_RE: LazyLock<Regex> = lazy_regex!(
 static FOOTNOTE_LINE_RE: LazyLock<Regex> = lazy_regex!(
     r"^(?P<indent>\s*)(?P<num>\d+)[.:]\s+(?P<rest>.*)$",
     "footnote line pattern should compile",
-);
-
-static FOOTNOTE_DEF_RE: LazyLock<Regex> = lazy_regex!(
-    r"^\s*(?:>\s*)*\[\^\d+\]:",
-    "footnote definition pattern should compile",
 );
 
 use crate::textproc::{Token, process_tokens, push_original_token};
@@ -144,7 +141,7 @@ fn has_h2_heading_before(lines: &[String], start: usize) -> bool {
 /// Check for existing footnote definitions before the block.
 ///
 /// Lines that start with an inline reference (e.g., `[^1] note`) are ignored;
-/// only definitions like `[^1]: note` cause skipping.
+/// only definitions like `[^1]: note` cause skipping. Definitions inside fenced code blocks are ignored.
 ///
 /// # Examples
 ///
@@ -153,7 +150,29 @@ fn has_h2_heading_before(lines: &[String], start: usize) -> bool {
 /// assert!(has_existing_footnote_block(&lines, 1));
 /// ```
 fn has_existing_footnote_block(lines: &[String], start: usize) -> bool {
-    lines[..start].iter().any(|l| FOOTNOTE_DEF_RE.is_match(l))
+    let mut in_fence = false;
+    for l in &lines[..start] {
+        let t = l.trim_start();
+        // naive fence toggle; good enough for detection here
+        if t.starts_with("```") || t.starts_with("~~~") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+        let mut t = t;
+        while let Some(rest) = t.strip_prefix('>') {
+            t = rest.trim_start();
+        }
+        if t.strip_prefix("[^")
+            .and_then(|r| r.split_once("]:"))
+            .is_some_and(|(num, _)| num.chars().all(|c| c.is_ascii_digit()))
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// Convert an ordered list item into a GFM footnote definition.

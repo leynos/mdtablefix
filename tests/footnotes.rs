@@ -216,13 +216,22 @@ fn test_skips_with_h3_heading() {
 fn test_skips_when_existing_block_is_indented_or_quoted() {
     let input1 = lines_vec!("  [^1]: Old", "## Footnotes", " 2. New");
     let input2 = lines_vec!("> [^1]: Old", "## Footnotes", " 2. New");
+    let input3 = lines_vec!(">> [^1]: Old", "## Footnotes", " 2. New");
     assert_eq!(convert_footnotes(&input1), input1);
     assert_eq!(convert_footnotes(&input2), input2);
+    assert_eq!(convert_footnotes(&input3), input3);
 }
 
 #[test]
 fn test_converts_after_inline_reference_at_bol() {
     let input = lines_vec!("[^1] see note", "## Footnotes", " 1. First");
     let expected = lines_vec!("[^1] see note", "## Footnotes", " [^1]: First");
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_ignores_definition_inside_fence() {
+    let input = lines_vec!("```", "[^1]: Old", "```", "## Footnotes", " 1. First",);
+    let expected = lines_vec!("```", "[^1]: Old", "```", "## Footnotes", " [^1]: First",);
     assert_eq!(convert_footnotes(&input), expected);
 }
