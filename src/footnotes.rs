@@ -25,7 +25,7 @@ static FOOTNOTE_LINE_RE: LazyLock<Regex> = lazy_regex!(
     "footnote line pattern should compile",
 );
 
-use crate::textproc::{Token, process_tokens, push_original_token};
+use crate::textproc::{Token, push_original_token, tokenize_markdown};
 
 /// Extract the components of an inline footnote reference.
 #[inline]
@@ -204,38 +204,44 @@ fn convert_block(lines: &mut [String]) {
     }
 }
 
+#[inline]
+fn is_atx_heading_prefix(s: &str) -> bool {
+    let mut t = s.trim_start();
+    while let Some(rest) = t.strip_prefix('>') {
+        t = rest.trim_start();
+    }
+    if let Some(rest) = t
+        .strip_prefix(['-', '*', '+'])
+        .and_then(|r| r.strip_prefix(' '))
+    {
+        t = rest.trim_start();
+    }
+    t.starts_with('#')
+}
+
 /// Convert bare numeric footnote references to Markdown footnote syntax.
 #[must_use]
 pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
-    let mut in_heading = false;
-    let mut at_line_start = true;
-    let mut lines = process_tokens(lines, |tok, out| match tok {
-        Token::Text(t) => {
-            if at_line_start {
-                let trimmed = t.trim_start();
-                if trimmed.starts_with('#') {
-                    in_heading = true;
-                }
+    let mut out_lines = Vec::with_capacity(lines.len());
+
+    for line in lines {
+        if is_atx_heading_prefix(line) {
+            out_lines.push(line.clone());
+            continue;
+        }
+
+        let mut converted = String::new();
+        for tok in tokenize_markdown(line) {
+            match tok {
+                Token::Text(t) => converted.push_str(&convert_inline(t)),
+                other => push_original_token(&other, &mut converted),
             }
-            if in_heading {
-                out.push_str(t);
-            } else {
-                out.push_str(&convert_inline(t));
-            }
-            at_line_start = false;
         }
-        Token::Newline => {
-            push_original_token(&tok, out);
-            at_line_start = true;
-            in_heading = false;
-        }
-        _ => {
-            push_original_token(&tok, out);
-            at_line_start = false;
-        }
-    });
-    convert_block(&mut lines);
-    lines
+        out_lines.push(converted);
+    }
+
+    convert_block(&mut out_lines);
+    out_lines
 }
 
 #[cfg(test)]

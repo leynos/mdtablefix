@@ -62,6 +62,24 @@ fn test_ignores_numbers_in_headings() {
 }
 
 #[test]
+fn test_ignores_footnote_references_in_headings() {
+    let input = lines_vec!("### Heading with footnote[1]");
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
+fn test_ignores_numbers_in_blockquoted_headings() {
+    let input = lines_vec!("> ### A.2 A Note on This List");
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
+fn test_ignores_numbers_in_list_headings() {
+    let input = lines_vec!("- ### A.2 A Note on This List");
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
 fn test_ignores_numbers_in_fenced_code_block() {
     let input = lines_vec!(
         "Here is a code block:",
