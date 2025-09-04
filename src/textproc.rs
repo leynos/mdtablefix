@@ -76,7 +76,7 @@ where
     }
 
     let source = lines.join("\n");
-    let mut out = String::new();
+    let mut out = String::with_capacity(source.len());
     for token in tokenize_markdown(&source) {
         f(token, &mut out);
     }

@@ -25,7 +25,17 @@ static FOOTNOTE_LINE_RE: LazyLock<Regex> = lazy_regex!(
     "footnote line pattern should compile",
 );
 
-use crate::textproc::{Token, push_original_token, tokenize_markdown};
+use crate::textproc::{Token, process_tokens, push_original_token};
+static ATX_HEADING_RE: LazyLock<Regex> = lazy_regex!(
+    r"(?x)
+        ^\s*
+        (?:>+\s*)*
+        (?:[-*+]\s+|\d+[.)]\s+)*
+        \#{1,6}
+        (?:\s|$)
+    ",
+    "atx heading prefix",
+);
 
 /// Extract the components of an inline footnote reference.
 #[inline]
@@ -206,84 +216,31 @@ fn convert_block(lines: &mut [String]) {
 
 #[inline]
 fn is_atx_heading_prefix(s: &str) -> bool {
-    let mut t = s.trim_start();
-    while let Some(rest) = t.strip_prefix('>') {
-        t = rest.trim_start();
-    }
-    // Skip any number of list markers:
-    // - Unordered: [-*+] + SP
-    // - Ordered: DIGITS + ('.' | ')') + SP
-    loop {
-        let mut progressed = false;
-        let tw = t.trim_start();
-        if let Some(rest) = tw
-            .strip_prefix(['-', '*', '+'])
-            .and_then(|r| r.strip_prefix(' '))
-        {
-            t = rest;
-            progressed = true;
-        } else {
-            let mut digits = 0usize;
-            for ch in tw.chars() {
-                if ch.is_ascii_digit() {
-                    digits += 1;
-                } else {
-                    break;
-                }
-            }
-            if digits > 0 {
-                let after_digits = &tw[digits..];
-                if let Some(rest2) = after_digits
-                    .strip_prefix('.')
-                    .or_else(|| after_digits.strip_prefix(')'))
-                    .and_then(|rest| rest.strip_prefix(' '))
-                {
-                    t = rest2;
-                    progressed = true;
-                }
-            }
-        }
-        if !progressed {
-            t = tw;
-            break;
-        }
-    }
-    // Accept 1..=6 leading '#' then space or EOL
-    let mut hashes = 0usize;
-    let mut rest = t;
-    while let Some(r) = rest.strip_prefix('#') {
-        hashes += 1;
-        rest = r;
-    }
-    if hashes == 0 || hashes > 6 {
-        return false;
-    }
-    rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\t')
+    ATX_HEADING_RE.is_match(s)
 }
 
 /// Convert bare numeric footnote references to Markdown footnote syntax.
 #[must_use]
 pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
-    let mut out_lines = Vec::with_capacity(lines.len());
+    let mut out = Vec::with_capacity(lines.len());
 
     for line in lines {
         if is_atx_heading_prefix(line) {
-            out_lines.push(line.clone());
-            continue;
+            out.push(line.clone());
+        } else {
+            let converted = process_tokens(std::slice::from_ref(line), |tok, buf| match tok {
+                Token::Text(t) => buf.push_str(&convert_inline(t)),
+                other => push_original_token(&other, buf),
+            })
+            .into_iter()
+            .next()
+            .unwrap_or_default();
+            out.push(converted);
         }
-
-        let mut converted = String::new();
-        for tok in tokenize_markdown(line) {
-            match tok {
-                Token::Text(t) => converted.push_str(&convert_inline(t)),
-                other => push_original_token(&other, &mut converted),
-            }
-        }
-        out_lines.push(converted);
     }
 
-    convert_block(&mut out_lines);
-    out_lines
+    convert_block(&mut out);
+    out
 }
 
 #[cfg(test)]
