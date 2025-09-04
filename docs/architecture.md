@@ -298,7 +298,7 @@ classDiagram
     process ..> fences : uses compress_fences, attach_orphan_specifiers
     process ..> ellipsis : uses replace_ellipsis
     process ..> footnotes : uses convert_footnotes
-    footnotes ..> textproc : uses process_tokens
+    footnotes ..> textproc : uses tokenize_markdown, push_original_token
     io ..> process : uses process_stream, process_stream_no_wrap
 ```
 
