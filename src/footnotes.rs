@@ -25,7 +25,17 @@ static FOOTNOTE_LINE_RE: LazyLock<Regex> = lazy_regex!(
     "footnote line pattern should compile",
 );
 
-use crate::textproc::{Token, process_tokens, push_original_token};
+use crate::textproc::{Token, push_original_token, tokenize_markdown};
+static ATX_HEADING_RE: LazyLock<Regex> = lazy_regex!(
+    r"(?x)
+        ^\s*
+        (?:>+\s*)*
+        (?:[-*+]\s+|\d+[.)]\s+)*
+        \#{1,6}
+        (?:\s|$)
+    ",
+    "atx heading prefix",
+);
 
 /// Extract the components of an inline footnote reference.
 #[inline]
@@ -204,15 +214,33 @@ fn convert_block(lines: &mut [String]) {
     }
 }
 
+#[inline]
+fn is_atx_heading_prefix(s: &str) -> bool {
+    ATX_HEADING_RE.is_match(s)
+}
+
 /// Convert bare numeric footnote references to Markdown footnote syntax.
 #[must_use]
 pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
-    let mut lines = process_tokens(lines, |tok, out| match tok {
-        Token::Text(t) => out.push_str(&convert_inline(t)),
-        _ => push_original_token(&tok, out),
-    });
-    convert_block(&mut lines);
-    lines
+    let mut out = Vec::with_capacity(lines.len());
+
+    for line in lines {
+        if is_atx_heading_prefix(line) {
+            out.push(line.clone());
+        } else {
+            let mut converted = String::with_capacity(line.len());
+            for token in tokenize_markdown(line) {
+                match token {
+                    Token::Text(t) => converted.push_str(&convert_inline(t)),
+                    other => push_original_token(&other, &mut converted),
+                }
+            }
+            out.push(converted);
+        }
+    }
+
+    convert_block(&mut out);
+    out
 }
 
 #[cfg(test)]

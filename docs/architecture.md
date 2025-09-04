@@ -131,6 +131,10 @@ Core types[^7]:
 
 Numbers inside inline code or parentheses are ignored.
 
+ATX heading lines (including those nested in blockquotes and list items) are
+not processed for footnote conversion, so identifiers like "A.2" remain
+verbatim. Setext-style headings are not detected.
+
 Before:
 
 ```markdown
@@ -294,7 +298,8 @@ classDiagram
     process ..> fences : uses compress_fences, attach_orphan_specifiers
     process ..> ellipsis : uses replace_ellipsis
     process ..> footnotes : uses convert_footnotes
-    footnotes ..> textproc : uses process_tokens
+    footnotes ..> wrap : uses tokenize_markdown
+    footnotes ..> textproc : uses push_original_token
     io ..> process : uses process_stream, process_stream_no_wrap
 ```
 
