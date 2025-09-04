@@ -25,7 +25,7 @@ static FOOTNOTE_LINE_RE: LazyLock<Regex> = lazy_regex!(
     "footnote line pattern should compile",
 );
 
-use crate::textproc::{Token, process_tokens, push_original_token};
+use crate::textproc::{Token, push_original_token, tokenize_markdown};
 static ATX_HEADING_RE: LazyLock<Regex> = lazy_regex!(
     r"(?x)
         ^\s*
@@ -228,13 +228,13 @@ pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
         if is_atx_heading_prefix(line) {
             out.push(line.clone());
         } else {
-            let converted = process_tokens(std::slice::from_ref(line), |tok, buf| match tok {
-                Token::Text(t) => buf.push_str(&convert_inline(t)),
-                other => push_original_token(&other, buf),
-            })
-            .into_iter()
-            .next()
-            .unwrap_or_default();
+            let mut converted = String::with_capacity(line.len());
+            for token in tokenize_markdown(line) {
+                match token {
+                    Token::Text(t) => converted.push_str(&convert_inline(t)),
+                    other => push_original_token(&other, &mut converted),
+                }
+            }
             out.push(converted);
         }
     }
