@@ -131,9 +131,9 @@ Core types[^7]:
 
 Numbers inside inline code or parentheses are ignored.
 
-Heading lines are also left untouched, so identifiers like "A.2" remain
-verbatim (this applies to ATX-style headings, including those inside
-blockquotes; Setext-style headings are not detected).
+ATX heading lines (including those nested in blockquotes and list items) are
+not processed for footnote conversion, so identifiers like "A.2" remain
+verbatim. Setext-style headings are not detected.
 
 Before:
 

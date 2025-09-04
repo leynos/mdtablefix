@@ -15,4 +15,4 @@
 - Keep trailing punctuation attached to inline code spans during wrapping to
   maintain readability.
 - Avoid converting numeric references in ATX heading text (including headings in
-  blockquotes) when the `--footnotes` option is enabled.
+  blockquotes and list items) when the `--footnotes` option is enabled.

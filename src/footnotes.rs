@@ -210,13 +210,55 @@ fn is_atx_heading_prefix(s: &str) -> bool {
     while let Some(rest) = t.strip_prefix('>') {
         t = rest.trim_start();
     }
-    if let Some(rest) = t
-        .strip_prefix(['-', '*', '+'])
-        .and_then(|r| r.strip_prefix(' '))
-    {
-        t = rest.trim_start();
+    // Skip any number of list markers:
+    // - Unordered: [-*+] + SP
+    // - Ordered: DIGITS + ('.' | ')') + SP
+    loop {
+        let mut progressed = false;
+        let tw = t.trim_start();
+        if let Some(rest) = tw
+            .strip_prefix(['-', '*', '+'])
+            .and_then(|r| r.strip_prefix(' '))
+        {
+            t = rest;
+            progressed = true;
+        } else {
+            let mut digits = 0usize;
+            for ch in tw.chars() {
+                if ch.is_ascii_digit() {
+                    digits += 1;
+                } else {
+                    break;
+                }
+            }
+            if digits > 0 {
+                let after_digits = &tw[digits..];
+                if let Some(rest2) = after_digits
+                    .strip_prefix('.')
+                    .or_else(|| after_digits.strip_prefix(')'))
+                    .and_then(|rest| rest.strip_prefix(' '))
+                {
+                    t = rest2;
+                    progressed = true;
+                }
+            }
+        }
+        if !progressed {
+            t = tw;
+            break;
+        }
     }
-    t.starts_with('#')
+    // Accept 1..=6 leading '#' then space or EOL
+    let mut hashes = 0usize;
+    let mut rest = t;
+    while let Some(r) = rest.strip_prefix('#') {
+        hashes += 1;
+        rest = r;
+    }
+    if hashes == 0 || hashes > 6 {
+        return false;
+    }
+    rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\t')
 }
 
 /// Convert bare numeric footnote references to Markdown footnote syntax.

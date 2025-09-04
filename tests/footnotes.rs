@@ -80,6 +80,24 @@ fn test_ignores_numbers_in_list_headings() {
 }
 
 #[test]
+fn test_ignores_numbers_in_ordered_list_headings() {
+    let input = lines_vec!("1. ### A.2 A Note on This List");
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
+fn test_ignores_numbers_in_nested_list_headings() {
+    let input = lines_vec!("- 1. ### A.2 A Note on This List");
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
+fn test_ignores_numbers_in_deeply_quoted_headings() {
+    let input = lines_vec!(">> ### A.2 A Note on This List");
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
 fn test_ignores_numbers_in_fenced_code_block() {
     let input = lines_vec!(
         "Here is a code block:",
