@@ -60,9 +60,13 @@ fn test_ignores_numbers_in_parentheses() {
 #[case("### Heading with footnote[1]")]
 #[case("> ### A.2 A Note on This List")]
 #[case("- ### A.2 A Note on This List")]
+#[case("* ### A.2 A Note on This List")]
+#[case("+ ### A.2 A Note on This List")]
 #[case("1. ### A.2 A Note on This List")]
+#[case("1) ### A.2 A Note on This List")]
 #[case("- 1. ### A.2 A Note on This List")]
 #[case(">> ### A.2 A Note on This List")]
+#[case(">>> ### A.2 A Note on This List")]
 fn heading_lines_are_left_verbatim(#[case] line: &str) {
     let input = lines_vec!(line);
     assert_eq!(convert_footnotes(&input), input);
