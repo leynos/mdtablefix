@@ -28,7 +28,7 @@ pub use tokenize::Token;
 pub use tokenize::tokenize_markdown;
 
 static BULLET_RE: std::sync::LazyLock<Regex> = lazy_regex!(
-    r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)",
+    r"^(\s*(?:[-*+]|\d+[.)])\s+(?:\[[xX ]\]\s+)?)(.*)",
     "bullet pattern regex should compile",
 );
 

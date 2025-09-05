@@ -147,3 +147,45 @@ fn test_wrap_list_item_semicolon_after_code() {
     let output = process_stream(&input);
     assert_eq!(output, expected);
 }
+
+#[test]
+fn test_wrap_list_items_with_checkboxes() {
+    let input = lines_vec![
+        "- [ ] Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        concat!(
+            "- [ ] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix` ",
+            "method to make concurrent requests to an external OSRM API's `table` ",
+            "service."
+        ),
+    ];
+    let expected = lines_vec![
+        "- [ ] Create a `HttpTravelTimeProvider` struct that implements the",
+        "      `TravelTimeProvider` trait.",
+        "- [ ] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix`",
+        "      method to make concurrent requests to an external OSRM API's `table`",
+        "      service.",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn test_wrap_indented_list_items_with_checkboxes() {
+    let input = lines_vec![
+        "  - [ ] Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        concat!(
+            "  - [ ] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix` ",
+            "method to make concurrent requests to an external OSRM API's `table` ",
+            "service."
+        ),
+    ];
+    let expected = lines_vec![
+        "  - [ ] Create a `HttpTravelTimeProvider` struct that implements the",
+        "        `TravelTimeProvider` trait.",
+        "  - [ ] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix`",
+        "        method to make concurrent requests to an external OSRM API's `table`",
+        "        service.",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
