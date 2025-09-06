@@ -35,7 +35,8 @@ mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
 
 - Use `--version` to print the current version and exit.
 
-- Use `--wrap` to reflow paragraphs and list items to 80 columns.
+- Use `--wrap` to reflow paragraphs and list items to 80 columns. Task list
+  items (`- [ ]`/`- [x]`) are indented correctly.
 
 - Use `--renumber` to rewrite ordered lists with consistent sequential
   numbering. The renumbering logic correctly handles nested lists by tracking

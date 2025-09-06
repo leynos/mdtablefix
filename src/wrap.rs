@@ -27,8 +27,10 @@ pub use tokenize::Token;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
 
+// Permit GFM task list markers with flexible spacing and missing post-marker
+// spaces in Markdown.
 static BULLET_RE: std::sync::LazyLock<Regex> = lazy_regex!(
-    r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)",
+    r"^(\s*(?:[-*+]|\d+[.)])\s+(?:\[\s*(?:[xX]|\s)\s*\]\s*)?)(.*)",
     "bullet pattern regex should compile",
 );
 
