@@ -233,6 +233,28 @@ fn test_wrap_checkbox_items_with_inner_spaces() {
 }
 
 #[test]
+fn test_wrap_checkbox_items_with_asymmetric_inner_spaces() {
+    let input = lines_vec![
+        "- [x ] Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        concat!(
+            "- [ X] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix` ",
+            "method to make concurrent requests to an external OSRM API's `table` ",
+            "service."
+        ),
+    ];
+    let expected = lines_vec![
+        "- [x ] Create a `HttpTravelTimeProvider` struct that implements the",
+        "        `TravelTimeProvider` trait.",
+        "- [ X] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix`",
+        "        method to make concurrent requests to an external OSRM API's `table`",
+        "        service.",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
+
+#[test]
 fn test_wrap_checkbox_items_without_post_marker_space() {
     let input = lines_vec![
         "- [ ]Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
