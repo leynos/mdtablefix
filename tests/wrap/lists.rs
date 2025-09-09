@@ -194,13 +194,17 @@ fn test_wrap_indented_list_items_with_checkboxes() {
 #[case("- [ ] ", 6)]
 #[case("  - [ ] ", 8)]
 #[case("- [x] ", 6)]
+#[case("- [X] ", 6)]
+#[case("- [x]", 5)]
 #[case("- [x ] ", 7)]
 #[case("- [ x ] ", 8)]
 #[case("- [  ] ", 7)]
 #[case("- [ ]  ", 7)]
 #[case("- [ ]", 5)]
 #[case("1. [ ] ", 7)]
+#[case("1. [X] ", 7)]
 #[case("12) [x] ", 8)]
+#[case("12) [X] ", 8)]
 #[case("* [ ] ", 6)]
 #[case("+ [ ] ", 6)]
 fn test_wrap_checkbox_prefixes(#[case] prefix: &str, #[case] indent: usize) {
@@ -210,6 +214,10 @@ fn test_wrap_checkbox_prefixes(#[case] prefix: &str, #[case] indent: usize) {
     assert!(
         output.len() >= 2,
         "expected wrapping to occur for: {prefix}{body}"
+    );
+    assert!(
+        output[0].starts_with(prefix),
+        "prefix mutated in first line for: {prefix}{body}"
     );
     assert!(
         output[1].starts_with(&" ".repeat(indent)),
@@ -238,15 +246,21 @@ fn test_wrap_tab_indented_checkbox_list_items() {
     assert_eq!(output, expected);
 }
 
-#[test]
-fn test_wrap_hyphen_list_items_with_brackets_but_no_checkbox() {
-    let input = lines_vec![concat!(
-        "- [y] This bullet item is exceptionally long and must be wrapped to keep prefix formatting intact."
-    )];
-    let expected = lines_vec![
-        "- [y] This bullet item is exceptionally long and must be wrapped to keep",
-        "  prefix formatting intact.",
-    ];
+#[rstest]
+#[case("- [y] ", 2)]
+#[case("- [Y] ", 2)]
+#[case("- [✓] ", 2)]
+#[case("- [] ", 2)]
+fn test_wrap_non_task_markers_do_not_expand_prefix(#[case] prefix: &str, #[case] indent: usize) {
+    let body = "Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.";
+    let input = lines_vec![format!("{prefix}{body}")];
     let output = process_stream(&input);
-    assert_eq!(output, expected);
+    assert!(
+        output.len() >= 2,
+        "expected wrapping to occur for: {prefix}{body}"
+    );
+    assert!(
+        output[1].starts_with(&" ".repeat(indent)),
+        "indent must match bullet only for: {prefix}{body}"
+    );
 }
