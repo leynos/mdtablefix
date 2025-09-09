@@ -219,10 +219,12 @@ fn test_wrap_checkbox_prefixes(#[case] prefix: &str, #[case] indent: usize) {
         output[0].starts_with(prefix),
         "prefix mutated in first line for: {prefix}{body}"
     );
-    assert!(
-        output[1].starts_with(&" ".repeat(indent)),
-        "indent mismatch for: {prefix}{body}"
-    );
+    for (i, line) in output.iter().enumerate().skip(1) {
+        assert!(
+            line.starts_with(&" ".repeat(indent)),
+            "indent mismatch on line {i} for: {prefix}{body}"
+        );
+    }
 }
 
 #[test]
