@@ -274,3 +274,100 @@ fn test_wrap_checkbox_items_without_post_marker_space() {
     let output = process_stream(&input);
     assert_eq!(output, expected);
 }
+
+#[test]
+fn test_wrap_ordered_checkbox_list_items() {
+    let input = lines_vec![
+        "1. [ ] Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        concat!(
+            "12) [x] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix` ",
+            "method to make concurrent requests to an external OSRM API's `table` ",
+            "service."
+        ),
+    ];
+    let expected = lines_vec![
+        "1. [ ] Create a `HttpTravelTimeProvider` struct that implements the",
+        "       `TravelTimeProvider` trait.",
+        "12) [x] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix`",
+        "        method to make concurrent requests to an external OSRM API's `table`",
+        "        service.",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn test_wrap_alternate_unordered_checkbox_list_items() {
+    let input = lines_vec![
+        "* [ ] Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        concat!(
+            "+ [x] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix` ",
+            "method to make concurrent requests to an external OSRM API's `table` ",
+            "service."
+        ),
+    ];
+    let expected = lines_vec![
+        "* [ ] Create a `HttpTravelTimeProvider` struct that implements the",
+        "      `TravelTimeProvider` trait.",
+        "+ [x] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix`",
+        "      method to make concurrent requests to an external OSRM API's `table`",
+        "      service.",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn test_wrap_checkbox_list_items_with_trailing_spaces() {
+    let input = lines_vec![
+        "- [ ]  Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        concat!(
+            "- [ ]   Using `tokio` and `reqwest`, implement the `get_travel_time_matrix` ",
+            "method to make concurrent requests to an external OSRM API's `table` ",
+            "service."
+        ),
+    ];
+    let expected = lines_vec![
+        "- [ ]  Create a `HttpTravelTimeProvider` struct that implements the",
+        "        `TravelTimeProvider` trait.",
+        "- [ ]   Using `tokio` and `reqwest`, implement the `get_travel_time_matrix`",
+        "        method to make concurrent requests to an external OSRM API's `table`",
+        "        service.",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn test_wrap_tab_indented_checkbox_list_items() {
+    let input = lines_vec![
+        "\t- [ ] Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        concat!(
+            "\t- [ ] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix` ",
+            "method to make concurrent requests to an external OSRM API's `table` ",
+            "service."
+        ),
+    ];
+    let expected = lines_vec![
+        "\t- [ ] Create a `HttpTravelTimeProvider` struct that implements the",
+        "\t      `TravelTimeProvider` trait.",
+        "\t- [ ] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix`",
+        "\t      method to make concurrent requests to an external OSRM API's `table`",
+        "\t      service.",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn test_wrap_hyphen_list_items_with_brackets_but_no_checkbox() {
+    let input = lines_vec![concat!(
+        "- [y] This bullet item is exceptionally long and must be wrapped to keep prefix formatting intact."
+    )];
+    let expected = lines_vec![
+        "- [y] This bullet item is exceptionally long and must be wrapped to keep",
+        "  prefix formatting intact.",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, expected);
+}
