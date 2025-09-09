@@ -267,7 +267,11 @@ fn test_wrap_non_task_markers_do_not_expand_prefix(#[case] prefix: &str, #[case]
         "expected wrapping to occur for: {prefix}{body}"
     );
     assert!(
-        output[1].starts_with(&" ".repeat(indent)),
-        "indent must match bullet only for: {prefix}{body}"
+        output[0].starts_with(prefix),
+        "prefix should be retained for: {prefix}{body}"
+    );
+    assert!(
+        output.iter().skip(1).all(|l| l.starts_with(&" ".repeat(indent))),
+        "continuation indent must match bullet only for: {prefix}{body}"
     );
 }
