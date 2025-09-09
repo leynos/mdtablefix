@@ -1,5 +1,6 @@
 //! Link handling during wrapping.
 
+use rstest::rstest;
 use super::*;
 
 #[test]

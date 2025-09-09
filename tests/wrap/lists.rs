@@ -1,5 +1,6 @@
 //! List item wrapping tests.
 
+use rstest::rstest;
 use super::*;
 
 #[test]
@@ -191,23 +192,25 @@ fn test_wrap_indented_list_items_with_checkboxes() {
 }
 
 #[rstest]
-#[case("- [ ] ", 6)]
-#[case("  - [ ] ", 8)]
-#[case("- [x] ", 6)]
-#[case("- [X] ", 6)]
-#[case("- [x]", 5)]
-#[case("- [x ] ", 7)]
-#[case("- [ x ] ", 8)]
-#[case("- [  ] ", 7)]
-#[case("- [ ]  ", 7)]
-#[case("- [ ]", 5)]
-#[case("1. [ ] ", 7)]
-#[case("1. [X] ", 7)]
-#[case("12) [x] ", 8)]
-#[case("12) [X] ", 8)]
-#[case("* [ ] ", 6)]
-#[case("+ [ ] ", 6)]
-fn test_wrap_checkbox_prefixes(#[case] prefix: &str, #[case] indent: usize) {
+#[case("- [ ] ")]
+#[case("  - [ ] ")]
+#[case("- [x] ")]
+#[case("- [X] ")]
+#[case("- [x]")]
+#[case("- [x ] ")]
+#[case("- [ X] ")]     // asymmetric inner space before X
+#[case("- [X ] ")]     // asymmetric inner space after X
+#[case("- [ x ] ")]
+#[case("- [  ] ")]
+#[case("- [ ]  ")]
+#[case("- [ ]")]
+#[case("1. [ ] ")]
+#[case("1. [X] ")]
+#[case("12) [x] ")]
+#[case("12) [X] ")]
+#[case("* [ ] ")]
+#[case("+ [ ] ")]
+fn test_wrap_checkbox_prefixes(#[case] prefix: &str) {
     let body = "Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.";
     let input = lines_vec![format!("{prefix}{body}")];
     let output = process_stream(&input);
@@ -219,6 +222,7 @@ fn test_wrap_checkbox_prefixes(#[case] prefix: &str, #[case] indent: usize) {
         output[0].starts_with(prefix),
         "prefix mutated in first line for: {prefix}{body}"
     );
+    let indent = prefix.chars().count();
     for (i, line) in output.iter().enumerate().skip(1) {
         assert!(
             line.starts_with(&" ".repeat(indent)),
@@ -226,6 +230,7 @@ fn test_wrap_checkbox_prefixes(#[case] prefix: &str, #[case] indent: usize) {
         );
     }
 }
+
 
 #[test]
 fn test_wrap_tab_indented_checkbox_list_items() {

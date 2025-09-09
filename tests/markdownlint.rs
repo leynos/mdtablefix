@@ -7,7 +7,7 @@
 #[macro_use]
 mod prelude;
 use mdtablefix::process_stream;
-use prelude::*;
+use rstest::rstest;
 
 /// The disable-next-line directive must remain intact after wrapping.
 #[test]

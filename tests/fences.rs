@@ -3,7 +3,7 @@
 #[macro_use]
 mod prelude;
 use mdtablefix::{attach_orphan_specifiers, compress_fences};
-use prelude::*;
+use rstest::rstest;
 
 #[test]
 fn compresses_backtick_fences() {
