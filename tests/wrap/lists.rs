@@ -197,12 +197,14 @@ fn test_wrap_indented_list_items_with_checkboxes() {
 #[case("- [x] ")]
 #[case("- [X] ")]
 #[case("- [x]")]
+#[case("- [X]")]
 #[case("- [x ] ")]
 #[case("- [ X] ")]     // asymmetric inner space before X
 #[case("- [X ] ")]     // asymmetric inner space after X
 #[case("- [ x ] ")]
 #[case("- [  ] ")]
 #[case("- [ ]  ")]
+#[case("- [x]  ")]
 #[case("- [ ]")]
 #[case("1. [ ] ")]
 #[case("1. [X] ")]
@@ -251,6 +253,20 @@ fn test_wrap_tab_indented_checkbox_list_items() {
     ];
     let output = process_stream(&input);
     assert_eq!(output, expected);
+}
+
+#[test]
+fn test_wrap_tab_indented_checkbox_without_trailing_space() {
+    let input = lines_vec![
+        "	- [x]Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+    ];
+    let output = process_stream(&input);
+    // Expect wrap under a width of 1 tab + 5 chars; verify alignment on all continuation lines.
+    let indent = "	- [x]".chars().count();
+    assert!(output.len() >= 2, "expected wrapping to occur");
+    for (i, line) in output.iter().enumerate().skip(1) {
+        assert!(line.starts_with(&" ".repeat(indent)), "indent mismatch on line {i}");
+    }
 }
 
 #[rstest]
