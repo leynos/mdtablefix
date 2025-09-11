@@ -258,16 +258,22 @@ fn test_wrap_tab_indented_checkbox_list_items() {
 #[test]
 fn test_wrap_tab_indented_checkbox_without_trailing_space() {
     let input = lines_vec![
-        "	- [x]Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        "\t- [x]Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
     ];
     let output = process_stream(&input);
     // Expect wrap under a width of 1 tab + 5 chars; verify alignment on all continuation lines.
-    let indent = "	- [x]".chars().count();
     assert!(output.len() >= 2, "expected wrapping to occur");
+    assert!(output[0].starts_with("\t- [x]"), "prefix mutated on first line");
+    // Continuation lines should start with a tab, then spaces equal to "- [x]".len().
+    let expected_prefix = format!("\t{}", " ".repeat("- [x]".chars().count()));
     for (i, line) in output.iter().enumerate().skip(1) {
-        assert!(line.starts_with(&" ".repeat(indent)), "indent mismatch on line {i}");
+        assert!(
+            line.starts_with(&expected_prefix),
+            "indent mismatch on line {i}"
+        );
     }
 }
+
 
 #[rstest]
 #[case("- [y] ", 2)]
