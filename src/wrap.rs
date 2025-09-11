@@ -156,11 +156,9 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             continue;
         }
 
-        let trimmed = current.trim_end();
-        if !trimmed.is_empty() {
-            lines.push(trimmed.to_string());
+        if !current.is_empty() {
+            lines.push(std::mem::take(&mut current));
         }
-        current.clear();
         current_width = 0;
         last_split = None;
 
