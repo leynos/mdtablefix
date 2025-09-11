@@ -1,6 +1,7 @@
 //! Integration tests for list renumbering and counters.
 
 use mdtablefix::{lists::pop_counters_upto, renumber_lists};
+use rstest::rstest;
 
 #[macro_use]
 mod prelude;

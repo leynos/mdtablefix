@@ -1,5 +1,6 @@
 //! Tests for `process_stream` table behaviour.
 
+use rstest::rstest;
 use super::*;
 
 #[rstest(

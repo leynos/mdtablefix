@@ -2,6 +2,7 @@
 
 use std::{fs::File, io::Write};
 
+use rstest::rstest;
 use tempfile::tempdir;
 
 #[macro_use]

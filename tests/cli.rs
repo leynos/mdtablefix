@@ -11,6 +11,7 @@ use std::{
     io::Write,
 };
 
+use rstest::rstest;
 use tempfile::tempdir;
 
 #[macro_use]

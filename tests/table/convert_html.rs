@@ -1,5 +1,6 @@
 //! Tests for HTML table conversion to Markdown.
 
+use rstest::rstest;
 use super::*;
 
 #[rstest(

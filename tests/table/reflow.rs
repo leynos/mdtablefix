@@ -1,5 +1,6 @@
 //! Tests for the `reflow_table` function.
 
+use rstest::rstest;
 use super::*;
 
 #[rstest]
