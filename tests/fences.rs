@@ -189,11 +189,15 @@ fn attaches_orphan_specifier_uses_candidate_indent_when_fence_unindented() {
     assert_eq!(out, lines_vec!["  ```rust", "fn main() {}", "```"]);
 }
 
-#[test]
-fn attaches_orphan_specifier_with_mismatched_indent() {
-    let input = lines_vec!["  Rust", "", "\t```", "\tfn main() {}", "\t```"];
+#[rstest]
+#[case(lines_vec!["  Rust", "", "	```", "	fn main() {}", "	```"], lines_vec!["	```rust", "	fn main() {}", "	```"])]
+#[case(lines_vec!["    Rust", "", "  ```", "  fn main() {}", "  ```"], lines_vec!["    ```rust", "  fn main() {}", "  ```"])]
+fn attaches_orphan_specifier_with_mismatched_indent(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+) {
     let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(out, lines_vec!["\t```rust", "\tfn main() {}", "\t```"]);
+    assert_eq!(out, expected);
 }
 
 #[test]
