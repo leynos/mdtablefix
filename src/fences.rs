@@ -91,15 +91,46 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// Combine an opening fence with a language specifier.
+///
+/// The fence's indentation is retained whenever present. If the specifier's
+/// indentation extends the fence's, the deeper specifier indentation is used.
+/// When the fence lacks indentation, the specifier's indentation becomes the fence's.
+/// If the indentations differ without one extending the other (e.g., tabs vs spaces),
+/// the fence's indentation wins.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use mdtablefix::fences::attach_specifier_to_fence;
+/// assert_eq!(attach_specifier_to_fence("```", "rust", "  "), "  ```rust");
+/// assert_eq!(attach_specifier_to_fence("  ```", "rust", "    "), "    ```rust");
+/// ```
+fn attach_specifier_to_fence(fence_line: &str, specifier: &str, spec_indent: &str) -> String {
+    let fence_indent = FENCE_RE
+        .captures(fence_line)
+        .and_then(|cap| cap.get(1))
+        .map_or("", |m| m.as_str());
+    let final_indent = if fence_indent.is_empty() || spec_indent.starts_with(fence_indent) {
+        spec_indent
+    } else {
+        fence_indent
+    };
+    format!("{final_indent}```{specifier}")
+}
+
 /// Attach orphaned language specifiers to opening fences.
 ///
-/// After compressing fences, an orphaned specifier may remain as a single word
-/// on the line before a fence. This function removes that line and applies the
-/// specifier to the following opening fence. Indentation from the specifier
-/// line is preserved when the fence itself is unindented. Specifiers containing
-/// spaces are accepted and normalized.
-/// Fences labelled `null` are normalized to empty by `compress_fences`,
-/// so only empty languages are treated as absent.
+/// After compressing fences, a language may appear on its own line directly
+/// before a fence. This function removes that line and applies the specifier
+/// to the following opening fence. Blank lines between the specifier and the
+/// fence are skipped. When the fence is unindented, the specifier's indentation
+/// is used. If the specifier's indentation extends the fence's, the deeper
+/// indentation is retained.
+///
+/// Specifiers containing spaces are accepted and normalised. Fences labelled
+/// `null` are normalised to empty by `compress_fences`, so only empty languages
+/// are treated as absent.
 ///
 /// # Examples
 ///
@@ -116,51 +147,36 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = Vec::with_capacity(lines.len());
-    let mut in_fence = false;
-    for line in lines {
-        if let Some(cap) = FENCE_RE.captures(line) {
-            if in_fence {
-                in_fence = false;
-                out.push(line.clone());
-                continue;
+    let mut out = Vec::with_capacity(lines.len());
+    let mut i = 0;
+
+    while i < lines.len() {
+        let line = &lines[i];
+        let (spec, indent) = normalize_specifier(line);
+        if ORPHAN_LANG_RE.is_match(&spec) && out.last().is_none_or(|l: &String| l.trim().is_empty())
+        {
+            let mut j = i + 1;
+            while j < lines.len() && lines[j].trim().is_empty() {
+                j += 1;
             }
-
-            let indent = cap.get(1).map_or("", |m| m.as_str());
-            let lang_present = cap.get(3).map_or("", |m| m.as_str());
-
-            if is_null_lang(lang_present) {
-                let mut idx = out.len();
-                while idx > 0 && out[idx - 1].trim().is_empty() {
-                    idx -= 1;
+            if j < lines.len()
+                && let Some(cap) = FENCE_RE.captures(&lines[j])
+            {
+                let lang = cap.get(3).map_or("", |m| m.as_str());
+                if is_null_lang(lang) {
+                    out.push(attach_specifier_to_fence(&lines[j], &spec, &indent));
+                    i = j + 1;
+                    continue;
                 }
-                if idx > 0 {
-                    let (candidate_clean, candidate_indent) = normalize_specifier(&out[idx - 1]);
-                    if ORPHAN_LANG_RE.is_match(&candidate_clean)
-                        && (idx == 1 || out[idx - 2].trim().is_empty())
-                    {
-                        let final_indent = if indent.is_empty() {
-                            candidate_indent.as_str()
-                        } else {
-                            indent
-                        };
-                        out.truncate(idx - 1);
-                        out.push(format!("{final_indent}```{candidate_clean}"));
-                        in_fence = true;
-                        continue;
-                    }
-                }
-                in_fence = true;
-                out.push(format!("{indent}```"));
-                continue;
             }
-
-            in_fence = true;
             out.push(line.clone());
+            i += 1;
             continue;
         }
 
         out.push(line.clone());
+        i += 1;
     }
+
     out
 }
