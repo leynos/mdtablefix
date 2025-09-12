@@ -26,6 +26,15 @@ fn parse_numbered(line: &str) -> Option<(usize, &str, &str, &str)> {
     Some((indent, indent_str, sep, rest))
 }
 
+/// Remove counters for indents deeper than the given level.
+fn drop_deeper(indent: usize, indent_stack: &mut Vec<usize>, counters: &mut HashMap<usize, usize>) {
+    while indent_stack.last().is_some_and(|&d| d > indent) {
+        if let Some(d) = indent_stack.pop() {
+            counters.remove(&d);
+        }
+    }
+}
+
 fn indent_len(indent: &str) -> usize {
     indent
         .chars()
@@ -44,16 +53,16 @@ fn handle_paragraph_restart(
     indent: usize,
     line: &str,
     prev_blank: bool,
-    stack: &mut Vec<usize>,
+    indent_stack: &mut Vec<usize>,
     counters: &mut HashMap<usize, usize>,
 ) {
     if prev_blank
-        && stack
+        && indent_stack
             .last()
             .is_some_and(|&d| indent <= d && is_plain_paragraph_line(line))
     {
-        while stack.last().is_some_and(|&d| d >= indent) {
-            if let Some(d) = stack.pop() {
+        while indent_stack.last().is_some_and(|&d| d >= indent) {
+            if let Some(d) = indent_stack.pop() {
                 counters.remove(&d);
             }
         }
@@ -63,8 +72,8 @@ fn handle_paragraph_restart(
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
-    let mut stack = Vec::<usize>::new();
-    let mut counters = HashMap::<usize, usize>::new();
+    let mut indent_stack = Vec::<usize>::new(); // stack of active indents
+    let mut counters = HashMap::<usize, usize>::new(); // track next number per indent
     let mut in_code = false;
     let mut prev_blank = lines.first().is_none_or(|l| l.trim().is_empty());
 
@@ -86,13 +95,10 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             continue;
         }
         if let Some((indent, indent_str, sep, rest)) = parse_numbered(line) {
-            while stack.last().is_some_and(|&d| d > indent) {
-                if let Some(d) = stack.pop() {
-                    counters.remove(&d);
-                }
-            }
-            if stack.last().is_none_or(|&d| d < indent) {
-                stack.push(indent);
+            drop_deeper(indent, &mut indent_stack, &mut counters);
+            if indent_stack.last().is_none_or(|&d| d < indent) {
+                // start new list level
+                indent_stack.push(indent);
                 counters.entry(indent).or_insert(1);
             }
             let num = counters.entry(indent).or_insert(1);
@@ -109,18 +115,14 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
         if HEADING_RE.is_match(line) || THEMATIC_BREAK_RE.is_match(line.trim_end()) {
-            stack.clear();
+            indent_stack.clear();
             counters.clear();
             out.push(line.clone());
             prev_blank = false;
             continue;
         }
-        handle_paragraph_restart(indent, line, prev_blank, &mut stack, &mut counters);
-        while stack.last().is_some_and(|&d| d > indent) {
-            if let Some(d) = stack.pop() {
-                counters.remove(&d);
-            }
-        }
+        handle_paragraph_restart(indent, line, prev_blank, &mut indent_stack, &mut counters);
+        drop_deeper(indent, &mut indent_stack, &mut counters);
         out.push(line.clone());
         prev_blank = false;
     }
@@ -130,6 +132,18 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_numbered_parts() {
+        let line = "  12. item";
+        assert_eq!(parse_numbered(line), Some((2, "  ", " ", "item")));
+    }
+
+    #[test]
+    fn parse_numbered_with_tab() {
+        let line = "	1.	foo";
+        assert_eq!(parse_numbered(line), Some((4, "	", "	", "foo")));
+    }
 
     #[test]
     fn simple_renumber() {

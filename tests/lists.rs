@@ -43,6 +43,13 @@ fn restart_after_nested_paragraph() {
 }
 
 #[test]
+fn restart_after_equal_indent_paragraph() {
+    let input = lines_vec!("1. One", "    1. Sub", "", "    Paragraph", "    5. Next");
+    let expected = lines_vec!("1. One", "    1. Sub", "", "    Paragraph", "    1. Next");
+    assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
 fn restart_after_formatting_paragraph() {
     let input = lines_vec!("1. Start", "", "**Bold intro**", "", "4. Next");
     let expected = lines_vec!("1. Start", "", "**Bold intro**", "", "1. Next");
