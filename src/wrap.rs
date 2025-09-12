@@ -157,7 +157,10 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         }
 
         if !current.is_empty() {
+            // Reuse allocation to avoid repeated growth on long wraps.
+            let prev_capacity = current.capacity();
             lines.push(std::mem::take(&mut current));
+            current = String::with_capacity(prev_capacity);
         }
         current_width = 0;
         last_split = None;

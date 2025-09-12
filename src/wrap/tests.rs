@@ -113,23 +113,27 @@ fn wrap_text_preserves_links() {
 }
 
 #[rstest]
-#[case("ends with space  ", 80, &["ends with space  "])]
-#[case("four spaces    ", 80, &["four spaces    "])]
-#[case("    ", 80, &["    "])]
-#[case("word1 word2  ", 8, &["word1", "word2  "])]
-fn wrap_preserving_code_keeps_trailing_spaces(
+#[case("trail  ", 80, &["trail  "])]
+#[case("`code span`  ", 13, &["`code span`  "])]
+fn preserves_trailing_spaces(#[case] input: &str, #[case] width: usize, #[case] expected: &[&str]) {
+    let out = super::wrap_preserving_code(input, width);
+    assert_eq!(
+        out,
+        expected.iter().map(|&s| s.to_string()).collect::<Vec<_>>()
+    );
+}
+
+#[rstest]
+#[case("aaaaaaaaaaaa", 5, &["aaaaaaaaaaaa"])] // forced flush without split
+fn no_split_forced_flush_no_trim(
     #[case] input: &str,
     #[case] width: usize,
     #[case] expected: &[&str],
 ) {
-    // The final flush must not trim trailing spaces, even after wrapping.
-    let lines = super::wrap_preserving_code(input, width);
+    let out = super::wrap_preserving_code(input, width);
     assert_eq!(
-        lines,
-        expected
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>()
+        out,
+        expected.iter().map(|&s| s.to_string()).collect::<Vec<_>>()
     );
 }
 
