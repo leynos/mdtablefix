@@ -15,7 +15,7 @@ jobs:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
       - name: Format
