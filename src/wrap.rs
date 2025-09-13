@@ -71,7 +71,6 @@ fn is_trailing_punct(c: char) -> bool {
 
 fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usize {
     use unicode_width::UnicodeWidthStr;
-
     while j < tokens.len() && tokens[j].chars().all(is_trailing_punct) {
         *width += UnicodeWidthStr::width(tokens[j].as_str());
         j += 1;
@@ -79,9 +78,15 @@ fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usi
     j
 }
 
+fn flush_trailing_whitespace(lines: &mut Vec<String>, current: &mut String, token: &str) {
+    let prev_capacity = current.capacity();
+    current.push_str(token);
+    lines.push(std::mem::take(current));
+    *current = String::with_capacity(prev_capacity);
+}
+
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
-
     let mut lines = Vec::new();
     let mut current = String::new();
     let mut current_width = 0;
@@ -91,11 +96,9 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     while i < tokens.len() {
         let mut j = i + 1;
         let mut group_width = UnicodeWidthStr::width(tokens[i].as_str());
-
         if tokens[i].contains("](") && tokens[i].ends_with(')') {
             j = extend_punctuation(&tokens, j, &mut group_width);
         }
-
         if tokens[i].starts_with('`') && tokens[i].ends_with('`') {
             // Keep trailing punctuation glued to inline code spans.
             j = extend_punctuation(&tokens, j, &mut group_width);
@@ -115,7 +118,6 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             i += 1;
             continue;
         }
-
         if current_width + group_width <= width {
             for tok in &tokens[i..j] {
                 current.push_str(tok);
@@ -155,7 +157,16 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             i = j;
             continue;
         }
-
+        if tokens[i].chars().all(char::is_whitespace) && j == tokens.len() {
+            // Preserve trailing spaces that forced a flush.
+            if !current.is_empty() {
+                flush_trailing_whitespace(&mut lines, &mut current, &tokens[i]);
+            }
+            current_width = 0;
+            last_split = None;
+            i = j;
+            continue;
+        }
         if !current.is_empty() {
             // Reuse allocation to avoid repeated growth on long wraps.
             let prev_capacity = current.capacity();
@@ -219,7 +230,6 @@ fn append_wrapped_with_prefix(
     repeat_prefix: bool,
 ) {
     use unicode_width::UnicodeWidthStr;
-
     let prefix_width = UnicodeWidthStr::width(prefix);
     let available = width.saturating_sub(prefix_width).max(1);
     let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();

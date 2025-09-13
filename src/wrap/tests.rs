@@ -6,6 +6,7 @@
 use rstest::rstest;
 
 use super::super::*;
+use super::wrap_preserving_code;
 
 #[test]
 fn wrap_text_preserves_hyphenated_words() {
@@ -114,9 +115,9 @@ fn wrap_text_preserves_links() {
 
 #[rstest]
 #[case("trail  ", 80, &["trail  "])]
-#[case("`code span`  ", 13, &["`code span`  "])]
+#[case("`code span`  ", 12, &["`code span`  "])]
 fn preserves_trailing_spaces(#[case] input: &str, #[case] width: usize, #[case] expected: &[&str]) {
-    let out = super::wrap_preserving_code(input, width);
+    let out = wrap_preserving_code(input, width);
     assert_eq!(
         out,
         expected.iter().map(|&s| s.to_string()).collect::<Vec<_>>()
@@ -130,7 +131,7 @@ fn no_split_forced_flush_no_trim(
     #[case] width: usize,
     #[case] expected: &[&str],
 ) {
-    let out = super::wrap_preserving_code(input, width);
+    let out = wrap_preserving_code(input, width);
     assert_eq!(
         out,
         expected.iter().map(|&s| s.to_string()).collect::<Vec<_>>()
