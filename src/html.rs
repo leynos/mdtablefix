@@ -34,8 +34,12 @@ fn node_text(handle: &Handle) -> String {
 
 fn is_ignored_tag(tag: &str) -> bool {
     matches!(
-        tag.to_ascii_lowercase().as_str(),
-        "script" | "style" | "noscript" | "template" | "head"
+        tag,
+        t if t.eq_ignore_ascii_case("script")
+            || t.eq_ignore_ascii_case("style")
+            || t.eq_ignore_ascii_case("noscript")
+            || t.eq_ignore_ascii_case("template")
+            || t.eq_ignore_ascii_case("head")
     )
 }
 
@@ -108,7 +112,10 @@ fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
 }
 
 fn is_bold_tag(tag: &str) -> bool {
-    matches!(tag.to_ascii_lowercase().as_str(), "strong" | "b")
+    matches!(
+        tag,
+        t if t.eq_ignore_ascii_case("strong") || t.eq_ignore_ascii_case("b")
+    )
 }
 
 /// Returns `true` if `handle` contains a `<b>` or `<strong>` descendant.
