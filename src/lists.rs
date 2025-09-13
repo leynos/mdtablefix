@@ -27,8 +27,17 @@ fn parse_numbered(line: &str) -> Option<(usize, &str, &str, &str)> {
 }
 
 /// Remove counters for indents deeper than the given level.
-fn drop_deeper(indent: usize, indent_stack: &mut Vec<usize>, counters: &mut HashMap<usize, usize>) {
-    while indent_stack.last().is_some_and(|&d| d > indent) {
+/// When `inclusive` is true, levels equal to `indent` are also removed.
+fn prune_deeper(
+    indent: usize,
+    inclusive: bool,
+    indent_stack: &mut Vec<usize>,
+    counters: &mut HashMap<usize, usize>,
+) {
+    while indent_stack
+        .last()
+        .is_some_and(|&d| if inclusive { d >= indent } else { d > indent })
+    {
         if let Some(d) = indent_stack.pop() {
             counters.remove(&d);
         }
@@ -61,11 +70,7 @@ fn handle_paragraph_restart(
             .last()
             .is_some_and(|&d| indent <= d && is_plain_paragraph_line(line))
     {
-        while indent_stack.last().is_some_and(|&d| d >= indent) {
-            if let Some(d) = indent_stack.pop() {
-                counters.remove(&d);
-            }
-        }
+        prune_deeper(indent, true, indent_stack, counters);
     }
 }
 
@@ -95,7 +100,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             continue;
         }
         if let Some((indent, indent_str, sep, rest)) = parse_numbered(line) {
-            drop_deeper(indent, &mut indent_stack, &mut counters);
+            prune_deeper(indent, false, &mut indent_stack, &mut counters);
             if indent_stack.last().is_none_or(|&d| d < indent) {
                 // start new list level
                 indent_stack.push(indent);
@@ -122,7 +127,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             continue;
         }
         handle_paragraph_restart(indent, line, prev_blank, &mut indent_stack, &mut counters);
-        drop_deeper(indent, &mut indent_stack, &mut counters);
+        prune_deeper(indent, false, &mut indent_stack, &mut counters);
         out.push(line.clone());
         prev_blank = false;
     }
