@@ -55,7 +55,7 @@ jobs:
 #            target: aarch64-unknown-openbsd
 #            ext: ""
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Setup Python 3.11
         id: setup-python
         uses: actions/setup-python@v6
@@ -119,7 +119,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: softprops/action-gh-release@v1
         with:
           generate_release_notes: true
