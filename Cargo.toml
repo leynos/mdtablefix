@@ -16,7 +16,7 @@ unicode-width = "0.1"
 
 
 [dev-dependencies]
-rstest = "0.18"
+rstest = "0.26"
 assert_cmd = "2"
 tempfile = "3"
 libc = "0.2.174"
