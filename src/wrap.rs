@@ -78,8 +78,13 @@ fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usi
     j
 }
 
+#[inline]
 fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
     use unicode_width::UnicodeWidthStr;
+    debug_assert!(
+        tokens[i] == "`",
+        "merge_code_span requires a single backtick opener"
+    );
     let mut j = i + 1;
     while j < tokens.len() && tokens[j] != "`" {
         *width += UnicodeWidthStr::width(tokens[j].as_str());
@@ -162,6 +167,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             let pos = last_split.unwrap();
             let line = current[..pos].to_string();
             let mut rest = current[pos..].trim_start().to_string();
+            // Mid-wrap lines discard trailing spaces.
             let trimmed = line.trim_end();
             if !trimmed.is_empty() {
                 lines.push(trimmed.to_string());
@@ -177,6 +183,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
                 None
             };
             if current_width > width {
+                // Mid-wrap overflow flush trims trailing spaces.
                 lines.push(current.trim_end().to_string());
                 current.clear();
                 current_width = 0;
