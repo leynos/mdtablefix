@@ -15,13 +15,13 @@ static HEADING_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
 
 fn parse_numbered(line: &str) -> Option<(usize, &str, &str, &str)> {
     static NUMBERED_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-        Regex::new(r"^(\s*)([1-9][0-9]*)\.(\s+)(.*)").expect("valid list number regex")
+        Regex::new(r"^(\s*)(?:[1-9][0-9]*)\.(\s+)(.*)").expect("valid list number regex")
     });
     let cap = NUMBERED_RE.captures(line)?;
     let indent_str = cap.get(1)?.as_str();
     let indent = indent_len(indent_str);
-    let sep = cap.get(3)?.as_str();
-    let rest = cap.get(4)?.as_str();
+    let sep = cap.get(2)?.as_str();
+    let rest = cap.get(3)?.as_str();
     Some((indent, indent_str, sep, rest))
 }
 
@@ -78,11 +78,26 @@ fn handle_paragraph_restart(
     inclusive
 }
 
-/// Renumber ordered list items across the provided Markdown lines.
+/// Renumber ordered Markdown list items.
 ///
-/// - Preserve code fences; do not renumber inside them.
-/// - Reset numbering on headings and thematic breaks.
-/// - Restart numbering after a blank line followed by a plain paragraph at the same or shallower indent.
+/// Preserves code fences, resets numbering on headings and thematic breaks,
+/// and restarts after a blank line followed by a plain paragraph at the same
+/// or a shallower indent.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::renumber_lists;
+///
+/// let lines = vec![
+///     String::from("1. first"),
+///     String::from("4. second"),
+/// ];
+/// assert_eq!(
+///     renumber_lists(&lines),
+///     vec![String::from("1. first"), String::from("2. second")]
+/// );
+/// ```
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
