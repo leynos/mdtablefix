@@ -116,6 +116,8 @@ fn wrap_text_preserves_links() {
 #[rstest]
 #[case("trail  ", 80, &["trail  "])]
 #[case("`code span`  ", 12, &["`code span`  "])]
+#[case("foo  ", 3, &["foo  "])]
+#[case("x  ", 1, &["x  "])]
 fn preserves_trailing_spaces(#[case] input: &str, #[case] width: usize, #[case] expected: &[&str]) {
     let out = wrap_preserving_code(input, width);
     assert_eq!(
@@ -126,6 +128,8 @@ fn preserves_trailing_spaces(#[case] input: &str, #[case] width: usize, #[case] 
 
 #[rstest]
 #[case("aaaaaaaaaaaa", 5, &["aaaaaaaaaaaa"])] // forced flush without split
+#[case("abcde", 3, &["abcde"])]
+#[case("`codespan`", 6, &["`codespan`"])]
 fn no_split_forced_flush_no_trim(
     #[case] input: &str,
     #[case] width: usize,

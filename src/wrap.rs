@@ -78,11 +78,35 @@ fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usi
     j
 }
 
-fn flush_trailing_whitespace(lines: &mut Vec<String>, current: &mut String, token: &str) {
-    let prev_capacity = current.capacity();
-    current.push_str(token);
+fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
+    use unicode_width::UnicodeWidthStr;
+    let mut j = i + 1;
+    while j < tokens.len() && tokens[j] != "`" {
+        *width += UnicodeWidthStr::width(tokens[j].as_str());
+        j += 1;
+    }
+    if j < tokens.len() {
+        *width += UnicodeWidthStr::width(tokens[j].as_str());
+        j += 1;
+        j = extend_punctuation(tokens, j, width);
+    }
+    j
+}
+
+#[inline]
+fn flush_current(lines: &mut Vec<String>, current: &mut String) {
+    let cap = current.capacity();
     lines.push(std::mem::take(current));
-    *current = String::with_capacity(prev_capacity);
+    *current = String::with_capacity(cap);
+}
+
+fn flush_trailing_whitespace(lines: &mut Vec<String>, current: &mut String, token: &str) {
+    debug_assert!(
+        token.chars().all(char::is_whitespace),
+        "expected whitespace token"
+    );
+    current.push_str(token);
+    flush_current(lines, current);
 }
 
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
@@ -96,6 +120,10 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     while i < tokens.len() {
         let mut j = i + 1;
         let mut group_width = UnicodeWidthStr::width(tokens[i].as_str());
+        if tokens[i] == "`" {
+            j = merge_code_span(&tokens, i, &mut group_width);
+        }
+
         if tokens[i].contains("](") && tokens[i].ends_with(')') {
             j = extend_punctuation(&tokens, j, &mut group_width);
         }
@@ -169,9 +197,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         }
         if !current.is_empty() {
             // Reuse allocation to avoid repeated growth on long wraps.
-            let prev_capacity = current.capacity();
-            lines.push(std::mem::take(&mut current));
-            current = String::with_capacity(prev_capacity);
+            flush_current(&mut lines, &mut current);
         }
         current_width = 0;
         last_split = None;
