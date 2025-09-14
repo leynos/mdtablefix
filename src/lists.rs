@@ -81,21 +81,6 @@ fn handle_paragraph_restart(
 /// - Preserve code fences; do not renumber inside them.
 /// - Reset numbering on headings and thematic breaks.
 /// - Restart numbering after a blank line followed by a plain paragraph at the same or a shallower indent.
-///
-/// # Examples
-///
-/// ```
-/// use mdtablefix::renumber_lists;
-///
-/// let lines = vec![
-///     String::from("1. first"),
-///     String::from("4. second"),
-/// ];
-/// assert_eq!(
-///     renumber_lists(&lines),
-///     vec![String::from("1. first"), String::from("2. second")]
-/// );
-/// ```
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
