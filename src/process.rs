@@ -88,7 +88,7 @@ fn handle_table_line(
 ) -> bool {
     if line.trim_start().starts_with('|') {
         *in_table = true;
-        buf.push(line.trim_end().to_string());
+        buf.push(line.to_string());
         return true;
     }
     if line.trim().is_empty() {
@@ -98,7 +98,7 @@ fn handle_table_line(
         return false;
     }
     if *in_table && (line.contains('|') || crate::table::SEP_RE.is_match(line.trim())) {
-        buf.push(line.trim_end().to_string());
+        buf.push(line.to_string());
         return true;
     }
     if *in_table {
@@ -112,7 +112,7 @@ fn handle_table_line(
             flush_buffer(buf, in_table, out);
             return false;
         }
-        buf.push(line.trim_end().to_string());
+        buf.push(line.to_string());
         return true;
     }
     false

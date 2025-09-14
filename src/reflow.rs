@@ -26,7 +26,7 @@ fn collect_cells(chunks: &[&str]) -> Vec<String> {
     for (idx, chunk) in chunks.iter().enumerate() {
         let mut ch = (*chunk).to_string();
         if idx != chunks.len() - 1 {
-            ch = ch.trim_end().to_string() + " |ROW_END|";
+            ch.push_str(" |ROW_END|");
         }
         cells.extend(split_cells(&ch));
     }

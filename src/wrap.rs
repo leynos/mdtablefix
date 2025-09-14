@@ -71,7 +71,6 @@ fn is_trailing_punct(c: char) -> bool {
 
 fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usize {
     use unicode_width::UnicodeWidthStr;
-
     while j < tokens.len() && tokens[j].chars().all(is_trailing_punct) {
         *width += UnicodeWidthStr::width(tokens[j].as_str());
         j += 1;
@@ -79,9 +78,44 @@ fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usi
     j
 }
 
+#[inline]
+fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
+    use unicode_width::UnicodeWidthStr;
+    debug_assert!(
+        tokens[i] == "`",
+        "merge_code_span requires a single backtick opener"
+    );
+    let mut j = i + 1;
+    while j < tokens.len() && tokens[j] != "`" {
+        *width += UnicodeWidthStr::width(tokens[j].as_str());
+        j += 1;
+    }
+    if j < tokens.len() {
+        *width += UnicodeWidthStr::width(tokens[j].as_str());
+        j += 1;
+        j = extend_punctuation(tokens, j, width);
+    }
+    j
+}
+
+#[inline]
+fn flush_current(lines: &mut Vec<String>, current: &mut String) {
+    let cap = current.capacity();
+    lines.push(std::mem::take(current));
+    *current = String::with_capacity(cap);
+}
+
+fn flush_trailing_whitespace(lines: &mut Vec<String>, current: &mut String, token: &str) {
+    debug_assert!(
+        token.chars().all(char::is_whitespace),
+        "expected whitespace token"
+    );
+    current.push_str(token);
+    flush_current(lines, current);
+}
+
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
-
     let mut lines = Vec::new();
     let mut current = String::new();
     let mut current_width = 0;
@@ -91,11 +125,13 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     while i < tokens.len() {
         let mut j = i + 1;
         let mut group_width = UnicodeWidthStr::width(tokens[i].as_str());
+        if tokens[i] == "`" {
+            j = merge_code_span(&tokens, i, &mut group_width);
+        }
 
         if tokens[i].contains("](") && tokens[i].ends_with(')') {
             j = extend_punctuation(&tokens, j, &mut group_width);
         }
-
         if tokens[i].starts_with('`') && tokens[i].ends_with('`') {
             // Keep trailing punctuation glued to inline code spans.
             j = extend_punctuation(&tokens, j, &mut group_width);
@@ -115,7 +151,6 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             i += 1;
             continue;
         }
-
         if current_width + group_width <= width {
             for tok in &tokens[i..j] {
                 current.push_str(tok);
@@ -132,6 +167,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             let pos = last_split.unwrap();
             let line = current[..pos].to_string();
             let mut rest = current[pos..].trim_start().to_string();
+            // Mid-wrap lines discard trailing spaces.
             let trimmed = line.trim_end();
             if !trimmed.is_empty() {
                 lines.push(trimmed.to_string());
@@ -147,6 +183,7 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
                 None
             };
             if current_width > width {
+                // Mid-wrap overflow flush trims trailing spaces.
                 lines.push(current.trim_end().to_string());
                 current.clear();
                 current_width = 0;
@@ -155,12 +192,20 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             i = j;
             continue;
         }
-
-        let trimmed = current.trim_end();
-        if !trimmed.is_empty() {
-            lines.push(trimmed.to_string());
+        if tokens[i].chars().all(char::is_whitespace) && j == tokens.len() {
+            // Preserve trailing spaces that forced a flush.
+            if !current.is_empty() {
+                flush_trailing_whitespace(&mut lines, &mut current, &tokens[i]);
+            }
+            current_width = 0;
+            last_split = None;
+            i = j;
+            continue;
         }
-        current.clear();
+        if !current.is_empty() {
+            // Reuse allocation to avoid repeated growth on long wraps.
+            flush_current(&mut lines, &mut current);
+        }
         current_width = 0;
         last_split = None;
 
@@ -218,7 +263,6 @@ fn append_wrapped_with_prefix(
     repeat_prefix: bool,
 ) {
     use unicode_width::UnicodeWidthStr;
-
     let prefix_width = UnicodeWidthStr::width(prefix);
     let available = width.saturating_sub(prefix_width).max(1);
     let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();

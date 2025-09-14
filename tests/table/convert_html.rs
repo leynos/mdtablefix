@@ -62,3 +62,18 @@ fn test_convert_html_table_bold_header() {
     let expected: Vec<String> = include_lines!("data/bold_header_expected.txt");
     assert_eq!(convert_html_tables(&input), expected);
 }
+#[test]
+fn preserves_trailing_spaces_in_cells() {
+    let input = lines_vec![
+        "<table>",
+        "<tr><th>H</th></tr>",
+        "<tr><td>cell </td></tr>",
+        "</table>",
+    ];
+    let expected = lines_vec![
+        "| H |",
+        "| --- |",
+        "| cell  |",
+    ];
+    assert_eq!(convert_html_tables(&input), expected);
+}

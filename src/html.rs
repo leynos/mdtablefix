@@ -29,7 +29,10 @@ fn node_text(handle: &Handle) -> String {
     let mut out = String::new();
     let mut last_space = false;
     collect_text(handle, &mut out, &mut last_space);
-    out.trim().to_string()
+    if last_space {
+        out.push(' ');
+    }
+    out.trim_start().to_string()
 }
 
 fn is_ignored_tag(tag: &str) -> bool {
@@ -184,11 +187,7 @@ fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
         .first()
         .map(|l| l.chars().take_while(|c| c.is_whitespace()).collect())
         .unwrap_or_default();
-    let html: String = lines
-        .iter()
-        .map(|l| l.trim_end())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let html: String = lines.join("\n");
     let opts = ParseOpts::default();
     let dom: RcDom = parse_document(RcDom::default(), opts).one(html);
 
