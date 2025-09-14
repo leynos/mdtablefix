@@ -1,6 +1,6 @@
-//! Integration tests for list renumbering and counters.
+//! Integration tests for list renumbering.
 
-use mdtablefix::{lists::pop_counters_upto, renumber_lists};
+use mdtablefix::renumber_lists;
 use rstest::rstest;
 
 #[macro_use]
@@ -8,21 +8,7 @@ mod prelude;
 use prelude::*;
 
 #[test]
-fn pop_counters_removes_deeper_levels() {
-    let mut counters = vec![(0usize, 1usize), (4, 2), (8, 3)];
-    pop_counters_upto(&mut counters, 4);
-    assert_eq!(counters, vec![(0, 1)]);
-}
-
-#[test]
-fn pop_counters_no_change_when_indent_deeper() {
-    let mut counters = vec![(0usize, 1usize), (4, 2)];
-    pop_counters_upto(&mut counters, 6);
-    assert_eq!(counters, vec![(0, 1), (4, 2)]);
-}
-
-#[test]
-fn restart_after_lower_paragraph() {
+fn restart_after_equal_indent_paragraph() {
     let input = lines_vec!("1. One", "", "Paragraph", "3. Next");
     let expected = lines_vec!("1. One", "", "Paragraph", "1. Next");
     assert_eq!(renumber_lists(&input), expected);
@@ -57,9 +43,23 @@ fn restart_after_nested_paragraph() {
 }
 
 #[test]
+fn restart_after_nested_equal_indent_paragraph() {
+    let input = lines_vec!("1. One", "    1. Sub", "", "    Paragraph", "    5. Next");
+    let expected = lines_vec!("1. One", "    1. Sub", "", "    Paragraph", "    1. Next");
+    assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
 fn restart_after_formatting_paragraph() {
     let input = lines_vec!("1. Start", "", "**Bold intro**", "", "4. Next");
     let expected = lines_vec!("1. Start", "", "**Bold intro**", "", "1. Next");
+    assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
+fn reset_on_heading_and_thematic_break() {
+    let input = lines_vec!("1. a", "2. b", "# Heading", "1. c", "---", "5. d");
+    let expected = lines_vec!("1. a", "2. b", "# Heading", "1. c", "---", "1. d");
     assert_eq!(renumber_lists(&input), expected);
 }
 /// Tests the CLI `--renumber` option.
