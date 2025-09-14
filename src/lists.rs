@@ -1,7 +1,6 @@
 //! Ordered list renumbering utilities.
 
 use regex::Regex;
-use std::collections::HashMap;
 
 use crate::{breaks::THEMATIC_BREAK_RE, wrap::is_fence};
 
@@ -28,19 +27,18 @@ fn parse_numbered(line: &str) -> Option<(usize, &str, &str, &str)> {
 
 /// Remove counters for indents deeper than the given level.
 /// When `inclusive` is true, levels equal to `indent` are also removed.
-fn prune_deeper(
-    indent: usize,
-    inclusive: bool,
-    indent_stack: &mut Vec<usize>,
-    counters: &mut HashMap<usize, usize>,
-) {
-    while indent_stack
-        .last()
-        .is_some_and(|&d| if inclusive { d >= indent } else { d > indent })
-    {
-        if let Some(d) = indent_stack.pop() {
-            counters.remove(&d);
+fn prune_deeper(indent: usize, inclusive: bool, counters: &mut Vec<(usize, usize)>) {
+    while match counters.last() {
+        Some((d, _)) => {
+            if inclusive {
+                *d >= indent
+            } else {
+                *d > indent
+            }
         }
+        None => false,
+    } {
+        counters.pop();
     }
 }
 
@@ -51,36 +49,49 @@ fn indent_len(indent: &str) -> usize {
 }
 
 fn is_plain_paragraph_line(line: &str) -> bool {
-    line.trim_start()
-        .trim_start_matches(|c: char| FORMATTING_CHARS.contains(&c))
-        .chars()
-        .next()
-        .is_some_and(char::is_alphanumeric)
+    matches!(
+        line.trim_start()
+            .trim_start_matches(|c: char| FORMATTING_CHARS.contains(&c))
+            .chars()
+            .next(),
+        Some(c) if c.is_alphanumeric()
+    )
 }
 
 fn handle_paragraph_restart(
     indent: usize,
     line: &str,
     prev_blank: bool,
-    indent_stack: &mut Vec<usize>,
-    counters: &mut HashMap<usize, usize>,
-) {
-    if prev_blank
-        && indent_stack
-            .last()
-            .is_some_and(|&d| indent <= d && is_plain_paragraph_line(line))
-    {
-        prune_deeper(indent, true, indent_stack, counters);
+    counters: &mut Vec<(usize, usize)>,
+) -> bool {
+    let inclusive = if prev_blank {
+        match counters.last() {
+            Some((d, _)) => indent <= *d && is_plain_paragraph_line(line),
+            None => false,
+        }
+    } else {
+        false
+    };
+    if inclusive {
+        prune_deeper(indent, true, counters);
     }
+    inclusive
 }
 
+/// Renumber ordered list items across the provided Markdown lines.
+///
+/// - Preserve code fences; do not renumber inside them.
+/// - Reset numbering on headings and thematic breaks.
+/// - Restart numbering after a blank line followed by a plain paragraph at the same or shallower indent.
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
-    let mut indent_stack = Vec::<usize>::new(); // stack of active indents
-    let mut counters = HashMap::<usize, usize>::new(); // track next number per indent
+    let mut counters: Vec<(usize, usize)> = Vec::new();
     let mut in_code = false;
-    let mut prev_blank = lines.first().is_none_or(|l| l.trim().is_empty());
+    let mut prev_blank = match lines.first() {
+        Some(l) => l.trim().is_empty(),
+        None => true,
+    };
 
     for line in lines {
         if is_fence(line).is_some() {
@@ -100,15 +111,19 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             continue;
         }
         if let Some((indent, indent_str, sep, rest)) = parse_numbered(line) {
-            prune_deeper(indent, false, &mut indent_stack, &mut counters);
-            if indent_stack.last().is_none_or(|&d| d < indent) {
-                // start new list level
-                indent_stack.push(indent);
-                counters.entry(indent).or_insert(1);
-            }
-            let num = counters.entry(indent).or_insert(1);
-            let current = *num;
-            *num += 1;
+            prune_deeper(indent, false, &mut counters);
+            let current = if let Some((d, cnt)) = counters.last_mut() {
+                if *d == indent {
+                    *cnt += 1;
+                    *cnt
+                } else {
+                    counters.push((indent, 1));
+                    1
+                }
+            } else {
+                counters.push((indent, 1));
+                1
+            };
             out.push(format!("{indent_str}{current}.{sep}{rest}"));
             prev_blank = false;
             continue;
@@ -120,14 +135,15 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
         if HEADING_RE.is_match(line) || THEMATIC_BREAK_RE.is_match(line.trim_end()) {
-            indent_stack.clear();
             counters.clear();
             out.push(line.clone());
             prev_blank = false;
             continue;
         }
-        handle_paragraph_restart(indent, line, prev_blank, &mut indent_stack, &mut counters);
-        prune_deeper(indent, false, &mut indent_stack, &mut counters);
+        let did_inclusive = handle_paragraph_restart(indent, line, prev_blank, &mut counters);
+        if !did_inclusive {
+            prune_deeper(indent, false, &mut counters);
+        }
         out.push(line.clone());
         prev_blank = false;
     }
