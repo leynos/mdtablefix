@@ -98,3 +98,33 @@ fn test_cli_wrap_preserves_tilde_with_four_markers() {
         .success()
         .stdout(input);
 }
+
+/// Ensures `--wrap` preserves inline code spans with embedded quotes.
+#[test]
+fn test_cli_wrap_preserves_inline_code_span_with_quotes() {
+    let input = concat!(
+        "- **Imperative (Avoid):** `When I type "user@example.com" into the "email"\n",
+        "  field and click the "submit" button` A declarative style describes the user's\n",
+        "  intent and the system's behaviour—the "what." It abstracts away the\n",
+        "  implementation details.[^18]\n",
+        "- **Declarative (Prefer):** `When the user logs in with valid credentials`\n",
+    );
+    run_cli_with_stdin(&["--wrap"], input)
+        .success()
+        .stdout(input);
+}
+
+/// Ensures `--wrap` preserves emphasised step definition guidance with inline code spans.
+#[test]
+fn test_cli_wrap_preserves_step_definitions_guidance() {
+    let input = concat!(
+        "- **Step Definitions:** Mirror the feature file structure in your `tests/steps/\n",
+        "  ` directory. Create a Rust module for each feature area (e.g., `tests/steps/\n",
+        "  authentication_steps.rs`, `tests/steps/catalog_steps.rs`). This prevents\n",
+        "  having a single, massive step definition file and makes it easier to find the\n",
+        "  code corresponding to a Gherkin step.\n",
+    );
+    run_cli_with_stdin(&["--wrap"], input)
+        .success()
+        .stdout(input);
+}
