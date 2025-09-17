@@ -19,44 +19,49 @@ fn test_cli_wrap_option() {
 }
 
 /// Verifies `--wrap` reflows Markdown paragraphs while respecting inline code spans.
-#[rstest]
-#[case::standard(
-    concat!(
-        "This paragraph demonstrates how reflow respects inline code while ensuring the ",
-        "entire `mdtablefix --wrap --columns 80` invocation remains intact when crossing ",
-        "the boundary for readability in documentation examples.",
+#[rstest(
+    paragraph,
+    expected_lines,
+    case::standard(
+        concat!(
+            "This paragraph demonstrates how reflow respects inline code while ensuring the ",
+            "entire `mdtablefix --wrap --columns 80` invocation remains intact when crossing ",
+            "the boundary for readability in documentation examples.",
+        ),
+        &[
+            "This paragraph demonstrates how reflow respects inline code while ensuring the",
+            "entire `mdtablefix --wrap --columns 80` invocation remains intact when crossing",
+            "the boundary for readability in documentation examples.",
+        ],
     ),
-    &[
-        "This paragraph demonstrates how reflow respects inline code while ensuring the",
-        "entire `mdtablefix --wrap --columns 80` invocation remains intact when crossing",
-        "the boundary for readability in documentation examples.",
-    ],
-)]
-#[case::bulleted(
-    concat!(
-        "- This bullet demonstrates how reflow respects inline code while ensuring the ",
-        "entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing the boundary for documentation readability.",
+    case::bulleted(
+        concat!(
+            "- This bullet demonstrates how reflow respects inline code while ensuring the ",
+            "entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing ",
+            "the boundary for documentation readability.",
+        ),
+        &[
+            "- This bullet demonstrates how reflow respects inline code while ensuring the",
+            "  entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing",
+            "  the boundary for documentation readability.",
+        ],
     ),
-    &[
-        "- This bullet demonstrates how reflow respects inline code while ensuring the",
-        "  entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing",
-        "  the boundary for documentation readability.",
-    ],
-)]
-#[case::numbered(
-    concat!(
-        "1. This numbered example demonstrates how reflow respects inline code while ensuring the ",
-        "entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing the boundary for documentation readability.",
+    case::numbered(
+        concat!(
+            "1. This numbered example demonstrates how reflow respects inline code while ensuring the ",
+            "entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing ",
+            "the boundary for documentation readability.",
+        ),
+        &[
+            "1. This numbered example demonstrates how reflow respects inline code while",
+            "   ensuring the entire `mdtablefix --wrap --columns 80` invocation stays intact",
+            "   when crossing the boundary for documentation readability.",
+        ],
     ),
-    &[
-        "1. This numbered example demonstrates how reflow respects inline code while",
-        "   ensuring the entire `mdtablefix --wrap --columns 80` invocation stays intact",
-        "   when crossing the boundary for documentation readability.",
-    ],
 )]
 fn test_cli_wrap_reflows_markdown(
-    #[case] paragraph: &str,
-    #[case] expected_lines: &[&str],
+    paragraph: &str,
+    expected_lines: &[&str],
 ) {
     let mut input = paragraph.to_owned();
     input.push('\n');
