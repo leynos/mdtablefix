@@ -49,8 +49,8 @@ fn test_cli_wrap_reflows_long_paragraph() {
 #[test]
 fn test_cli_wrap_reflows_bulleted_paragraph() {
     let bullet = concat!(
-        "- This bulleted line is intentionally long so that mdtablefix has to wrap it ",
-        "while maintaining the correct indentation for subsequent lines in the list.",
+        "- This bulleted example ensures the `mdtablefix --wrap` flag leaves inline code ",
+        "spans untouched while the remainder of the explanation wraps neatly.",
     );
     let mut input = bullet.to_owned();
     input.push(char::from(10));
@@ -64,8 +64,8 @@ fn test_cli_wrap_reflows_bulleted_paragraph() {
     assert_eq!(
         output.lines().collect::<Vec<_>>(),
         vec![
-            "- This bulleted line is intentionally long so that mdtablefix has to wrap it",
-            "  while maintaining the correct indentation for subsequent lines in the list.",
+            "- This bulleted example ensures the `mdtablefix --wrap` flag leaves inline code",
+            "  spans untouched while the remainder of the explanation wraps neatly.",
         ],
     );
 }
@@ -74,8 +74,8 @@ fn test_cli_wrap_reflows_bulleted_paragraph() {
 #[test]
 fn test_cli_wrap_reflows_numbered_paragraph() {
     let numbered = concat!(
-        "1. This numbered item is intentionally long to confirm wrapping retains ",
-        "numbering and indentation for subsequent lines when formatting documentation.",
+        "1. This numbered example confirms the `mdtablefix --wrap` flag keeps inline code ",
+        "spans intact while keeping the remainder of the explanation aligned for readers.",
     );
     let mut input = numbered.to_owned();
     input.push(char::from(10));
@@ -89,8 +89,8 @@ fn test_cli_wrap_reflows_numbered_paragraph() {
     assert_eq!(
         output.lines().collect::<Vec<_>>(),
         vec![
-            "1. This numbered item is intentionally long to confirm wrapping retains",
-            "   numbering and indentation for subsequent lines when formatting documentation.",
+            "1. This numbered example confirms the `mdtablefix --wrap` flag keeps inline code",
+            "   spans intact while keeping the remainder of the explanation aligned for readers.",
         ],
     );
 }
