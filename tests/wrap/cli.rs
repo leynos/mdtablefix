@@ -5,6 +5,7 @@
 //! binary.
 
 use super::*;
+use rstest::rstest;
 
 #[test]
 fn test_cli_wrap_option() {
@@ -16,6 +17,62 @@ fn test_cli_wrap_option() {
     let text = String::from_utf8_lossy(&assertion.get_output().stdout);
     assert!(text.lines().count() > 1, "expected wrapped output on multiple lines");
     assert!(text.lines().all(|l| l.len() <= 80));
+}
+
+/// Verifies `--wrap` reflows Markdown paragraphs while respecting inline code spans.
+#[rstest(
+    paragraph,
+    expected_lines,
+    case::standard(
+        concat!(
+            "This paragraph demonstrates how reflow respects inline code while ensuring the ",
+            "entire `mdtablefix --wrap --columns 80` invocation remains intact when crossing ",
+            "the boundary for readability in documentation examples.",
+        ),
+        &[
+            "This paragraph demonstrates how reflow respects inline code while ensuring the",
+            "entire `mdtablefix --wrap --columns 80` invocation remains intact when crossing",
+            "the boundary for readability in documentation examples.",
+        ],
+    ),
+    case::bulleted(
+        concat!(
+            "- This bullet demonstrates how reflow respects inline code while ensuring the ",
+            "entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing ",
+            "the boundary for documentation readability.",
+        ),
+        &[
+            "- This bullet demonstrates how reflow respects inline code while ensuring the",
+            "  entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing",
+            "  the boundary for documentation readability.",
+        ],
+    ),
+    case::numbered(
+        concat!(
+            "1. This numbered example demonstrates how reflow respects inline code while ensuring the ",
+            "entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing ",
+            "the boundary for documentation readability.",
+        ),
+        &[
+            "1. This numbered example demonstrates how reflow respects inline code while",
+            "   ensuring the entire `mdtablefix --wrap --columns 80` invocation stays intact",
+            "   when crossing the boundary for documentation readability.",
+        ],
+    ),
+)]
+fn test_cli_wrap_reflows_markdown(
+    paragraph: &str,
+    expected_lines: &[&str],
+) {
+    let mut input = paragraph.to_owned();
+    input.push('\n');
+    let assertion = run_cli_with_stdin(&["--wrap"], &input).success();
+    let output = String::from_utf8_lossy(&assertion.get_output().stdout);
+    assert!(
+        output.ends_with('\n'),
+        "expected wrapped output to retain trailing newline",
+    );
+    assert_eq!(output.lines().collect::<Vec<_>>(), expected_lines);
 }
 
 /// Ensures `--wrap` preserves an explicit language specifier on fences.
@@ -94,6 +151,38 @@ fn test_cli_wrap_preserves_extended_info_string() {
 #[test]
 fn test_cli_wrap_preserves_tilde_with_four_markers() {
     let input = "~~~~python\nprint('hi')\n~~~~\n";
+    run_cli_with_stdin(&["--wrap"], input)
+        .success()
+        .stdout(input);
+}
+
+/// Ensures `--wrap` preserves inline code spans with embedded quotes.
+#[test]
+fn test_cli_wrap_preserves_inline_code_span_with_quotes() {
+    let input = concat!(
+        r#"- **Imperative (Avoid):** `When I type "user@example.com" into the "email"
+  field and click the "submit" button` A declarative style describes the user's
+  intent and the system's behaviour—the "what." It abstracts away the
+  implementation details.[^18]
+"#,
+        r#"- **Declarative (Prefer):** `When the user logs in with valid credentials`
+"#,
+    );
+    run_cli_with_stdin(&["--wrap"], input)
+        .success()
+        .stdout(input);
+}
+
+/// Ensures `--wrap` preserves emphasised step definition guidance with inline code spans.
+#[test]
+fn test_cli_wrap_preserves_step_definitions_guidance() {
+    let input = concat!(
+        r#"- **Step Definitions:** Mirror the feature file structure in your `tests/steps/` directory.
+  Create a Rust module for each feature area (e.g., `tests/steps/authentication_steps.rs`,
+  `tests/steps/catalog_steps.rs`). This prevents having a single, massive step definition file
+  and makes it easier to find the code corresponding to a Gherkin step.
+"#,
+    );
     run_cli_with_stdin(&["--wrap"], input)
         .success()
         .stdout(input);
