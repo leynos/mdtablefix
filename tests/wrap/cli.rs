@@ -57,11 +57,11 @@ fn test_cli_wrap_reflows_markdown(
     #[case] expected_lines: &[&str],
 ) {
     let mut input = paragraph.to_owned();
-    input.push(char::from(10));
+    input.push('\n');
     let assertion = run_cli_with_stdin(&["--wrap"], &input).success();
     let output = String::from_utf8_lossy(&assertion.get_output().stdout);
     assert!(
-        output.ends_with(char::from(10)),
+        output.ends_with('\n'),
         "expected wrapped output to retain trailing newline",
     );
     assert_eq!(output.lines().collect::<Vec<_>>(), expected_lines);
