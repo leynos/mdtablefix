@@ -22,34 +22,36 @@ fn test_cli_wrap_option() {
 #[rstest]
 #[case::standard(
     concat!(
-        "This deliberately long paragraph demonstrates how the ",
-        "`mdtablefix --wrap` command keeps inline code spans intact even when the ",
-        "surrounding prose needs to be reflowed for consistent formatting.",
+        "This paragraph demonstrates how reflow respects inline code while ensuring the ",
+        "entire `mdtablefix --wrap --columns 80` invocation remains intact when crossing ",
+        "the boundary for readability in documentation examples.",
     ),
     &[
-        "This deliberately long paragraph demonstrates how the `mdtablefix --wrap`",
-        "command keeps inline code spans intact even when the surrounding prose needs to",
-        "be reflowed for consistent formatting.",
+        "This paragraph demonstrates how reflow respects inline code while ensuring the",
+        "entire `mdtablefix --wrap --columns 80` invocation remains intact when crossing",
+        "the boundary for readability in documentation examples.",
     ],
 )]
 #[case::bulleted(
     concat!(
-        "- This bulleted example ensures the `mdtablefix --wrap` flag leaves inline code ",
-        "spans untouched while the remainder of the explanation wraps neatly.",
+        "- This bullet demonstrates how reflow respects inline code while ensuring the ",
+        "entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing the boundary for documentation readability.",
     ),
     &[
-        "- This bulleted example ensures the `mdtablefix --wrap` flag leaves inline code",
-        "  spans untouched while the remainder of the explanation wraps neatly.",
+        "- This bullet demonstrates how reflow respects inline code while ensuring the",
+        "  entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing",
+        "  the boundary for documentation readability.",
     ],
 )]
 #[case::numbered(
     concat!(
-        "1. This numbered example confirms the `mdtablefix --wrap` flag keeps inline code ",
-        "spans intact while keeping the remainder of the explanation aligned for readers.",
+        "1. This numbered example demonstrates how reflow respects inline code while ensuring the ",
+        "entire `mdtablefix --wrap --columns 80` invocation stays intact when crossing the boundary for documentation readability.",
     ),
     &[
-        "1. This numbered example confirms the `mdtablefix --wrap` flag keeps inline code",
-        "   spans intact while keeping the remainder of the explanation aligned for readers.",
+        "1. This numbered example demonstrates how reflow respects inline code while",
+        "   ensuring the entire `mdtablefix --wrap --columns 80` invocation stays intact",
+        "   when crossing the boundary for documentation readability.",
     ],
 )]
 fn test_cli_wrap_reflows_markdown(
