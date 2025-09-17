@@ -18,81 +18,53 @@ fn test_cli_wrap_option() {
     assert!(text.lines().all(|l| l.len() <= 80));
 }
 
-/// Verifies `--wrap` reflows long prose while respecting inline code spans.
-#[test]
-fn test_cli_wrap_reflows_long_paragraph() {
-    let paragraph = concat!(
+/// Verifies `--wrap` reflows Markdown paragraphs while respecting inline code spans.
+#[rstest]
+#[case::standard(
+    concat!(
         "This deliberately long paragraph demonstrates how the ",
         "`mdtablefix --wrap` command keeps inline code spans intact even when the ",
         "surrounding prose needs to be reflowed for consistent formatting.",
-    );
-    let mut input = paragraph.to_owned();
-    input.push(char::from(10));
-    let assertion = run_cli_with_stdin(&["--wrap"], &input)
-        .success();
-    let output = String::from_utf8_lossy(&assertion.get_output().stdout);
-    assert!(
-        output.ends_with(char::from(10)),
-        "expected wrapped output to retain trailing newline",
-    );
-    assert_eq!(
-        output.lines().collect::<Vec<_>>(),
-        vec![
-            "This deliberately long paragraph demonstrates how the `mdtablefix --wrap`",
-            "command keeps inline code spans intact even when the surrounding prose needs to",
-            "be reflowed for consistent formatting.",
-        ],
-    );
-}
-
-/// Verifies `--wrap` reflows long bulleted paragraphs with continued indentation.
-#[test]
-fn test_cli_wrap_reflows_bulleted_paragraph() {
-    let bullet = concat!(
+    ),
+    &[
+        "This deliberately long paragraph demonstrates how the `mdtablefix --wrap`",
+        "command keeps inline code spans intact even when the surrounding prose needs to",
+        "be reflowed for consistent formatting.",
+    ],
+)]
+#[case::bulleted(
+    concat!(
         "- This bulleted example ensures the `mdtablefix --wrap` flag leaves inline code ",
         "spans untouched while the remainder of the explanation wraps neatly.",
-    );
-    let mut input = bullet.to_owned();
-    input.push(char::from(10));
-    let assertion = run_cli_with_stdin(&["--wrap"], &input)
-        .success();
-    let output = String::from_utf8_lossy(&assertion.get_output().stdout);
-    assert!(
-        output.ends_with(char::from(10)),
-        "expected wrapped output to retain trailing newline",
-    );
-    assert_eq!(
-        output.lines().collect::<Vec<_>>(),
-        vec![
-            "- This bulleted example ensures the `mdtablefix --wrap` flag leaves inline code",
-            "  spans untouched while the remainder of the explanation wraps neatly.",
-        ],
-    );
-}
-
-/// Verifies `--wrap` reflows long numbered paragraphs with continued indentation.
-#[test]
-fn test_cli_wrap_reflows_numbered_paragraph() {
-    let numbered = concat!(
+    ),
+    &[
+        "- This bulleted example ensures the `mdtablefix --wrap` flag leaves inline code",
+        "  spans untouched while the remainder of the explanation wraps neatly.",
+    ],
+)]
+#[case::numbered(
+    concat!(
         "1. This numbered example confirms the `mdtablefix --wrap` flag keeps inline code ",
         "spans intact while keeping the remainder of the explanation aligned for readers.",
-    );
-    let mut input = numbered.to_owned();
+    ),
+    &[
+        "1. This numbered example confirms the `mdtablefix --wrap` flag keeps inline code",
+        "   spans intact while keeping the remainder of the explanation aligned for readers.",
+    ],
+)]
+fn test_cli_wrap_reflows_markdown(
+    #[case] paragraph: &str,
+    #[case] expected_lines: &[&str],
+) {
+    let mut input = paragraph.to_owned();
     input.push(char::from(10));
-    let assertion = run_cli_with_stdin(&["--wrap"], &input)
-        .success();
+    let assertion = run_cli_with_stdin(&["--wrap"], &input).success();
     let output = String::from_utf8_lossy(&assertion.get_output().stdout);
     assert!(
         output.ends_with(char::from(10)),
         "expected wrapped output to retain trailing newline",
     );
-    assert_eq!(
-        output.lines().collect::<Vec<_>>(),
-        vec![
-            "1. This numbered example confirms the `mdtablefix --wrap` flag keeps inline code",
-            "   spans intact while keeping the remainder of the explanation aligned for readers.",
-        ],
-    );
+    assert_eq!(output.lines().collect::<Vec<_>>(), expected_lines);
 }
 
 /// Ensures `--wrap` preserves an explicit language specifier on fences.
