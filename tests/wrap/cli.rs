@@ -5,6 +5,7 @@
 //! binary.
 
 use super::*;
+use rstest::rstest;
 
 #[test]
 fn test_cli_wrap_option() {
