@@ -18,12 +18,13 @@ fn test_cli_wrap_option() {
     assert!(text.lines().all(|l| l.len() <= 80));
 }
 
-/// Verifies `--wrap` reflows long prose into deterministic line breaks.
+/// Verifies `--wrap` reflows long prose while respecting inline code spans.
 #[test]
 fn test_cli_wrap_reflows_long_paragraph() {
     let paragraph = concat!(
-        "This is a deliberately long paragraph that should be wrapped by the mdtablefix ",
-        "command so we can assert the exact output produced when applying the wrap option.",
+        "This deliberately long paragraph demonstrates how the ",
+        "`mdtablefix --wrap` command keeps inline code spans intact even when the ",
+        "surrounding prose needs to be reflowed for consistent formatting.",
     );
     let mut input = paragraph.to_owned();
     input.push(char::from(10));
@@ -37,9 +38,59 @@ fn test_cli_wrap_reflows_long_paragraph() {
     assert_eq!(
         output.lines().collect::<Vec<_>>(),
         vec![
-            "This is a deliberately long paragraph that should be wrapped by the mdtablefix",
-            "command so we can assert the exact output produced when applying the wrap",
-            "option.",
+            "This deliberately long paragraph demonstrates how the `mdtablefix --wrap`",
+            "command keeps inline code spans intact even when the surrounding prose needs to",
+            "be reflowed for consistent formatting.",
+        ],
+    );
+}
+
+/// Verifies `--wrap` reflows long bulleted paragraphs with continued indentation.
+#[test]
+fn test_cli_wrap_reflows_bulleted_paragraph() {
+    let bullet = concat!(
+        "- This bulleted line is intentionally long so that mdtablefix has to wrap it ",
+        "while maintaining the correct indentation for subsequent lines in the list.",
+    );
+    let mut input = bullet.to_owned();
+    input.push(char::from(10));
+    let assertion = run_cli_with_stdin(&["--wrap"], &input)
+        .success();
+    let output = String::from_utf8_lossy(&assertion.get_output().stdout);
+    assert!(
+        output.ends_with(char::from(10)),
+        "expected wrapped output to retain trailing newline",
+    );
+    assert_eq!(
+        output.lines().collect::<Vec<_>>(),
+        vec![
+            "- This bulleted line is intentionally long so that mdtablefix has to wrap it",
+            "  while maintaining the correct indentation for subsequent lines in the list.",
+        ],
+    );
+}
+
+/// Verifies `--wrap` reflows long numbered paragraphs with continued indentation.
+#[test]
+fn test_cli_wrap_reflows_numbered_paragraph() {
+    let numbered = concat!(
+        "1. This numbered item is intentionally long to confirm wrapping retains ",
+        "numbering and indentation for subsequent lines when formatting documentation.",
+    );
+    let mut input = numbered.to_owned();
+    input.push(char::from(10));
+    let assertion = run_cli_with_stdin(&["--wrap"], &input)
+        .success();
+    let output = String::from_utf8_lossy(&assertion.get_output().stdout);
+    assert!(
+        output.ends_with(char::from(10)),
+        "expected wrapped output to retain trailing newline",
+    );
+    assert_eq!(
+        output.lines().collect::<Vec<_>>(),
+        vec![
+            "1. This numbered item is intentionally long to confirm wrapping retains",
+            "   numbering and indentation for subsequent lines when formatting documentation.",
         ],
     );
 }
