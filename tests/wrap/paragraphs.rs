@@ -83,3 +83,12 @@ fn test_wrap_inline_code_surrounded_by_spaces() {
     let output = process_stream(&input);
     assert!(output.iter().any(|l| l.contains(snippet)));
 }
+
+#[test]
+fn test_wrap_preserves_escaped_triple_backticks() {
+    let input = lines_vec![r"\`\`\`ignore"];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
+}
