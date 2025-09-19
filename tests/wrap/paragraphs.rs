@@ -91,4 +91,10 @@ fn test_wrap_preserves_escaped_triple_backticks() {
     assert_eq!(output, input);
 }
 
+#[test]
+fn test_wrap_preserves_escaped_backticks_in_paragraph() {
+    let input = lines_vec![r"Escaped ticks: \`code\` with [link](https://ex.com) and emphasis *ok*."];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
 }
+

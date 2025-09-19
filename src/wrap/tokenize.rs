@@ -37,9 +37,12 @@ fn collect_range(chars: &[char], start: usize, end: usize) -> String {
     chars[start..end].iter().collect()
 }
 
-const BACKSLASH: char = 92 as char;
-const BACKSLASH_BYTE: u8 = 92;
+const BACKSLASH: char = '\\';
+const BACKSLASH_BYTE: u8 = b'\\';
 
+/// Check if a character at the given index is preceded by an odd number of backslashes.
+///
+/// An odd number of preceding backslashes means the character is escaped.
 fn has_odd_backslash_escape(chars: &[char], mut idx: usize) -> bool {
     let mut count = 0;
     while idx > 0 {
@@ -53,6 +56,9 @@ fn has_odd_backslash_escape(chars: &[char], mut idx: usize) -> bool {
     count % 2 == 1
 }
 
+/// Check if a byte at the given index is preceded by an odd number of backslashes.
+///
+/// An odd number of preceding backslashes means the byte is escaped.
 fn has_odd_backslash_escape_bytes(bytes: &[u8], mut idx: usize) -> bool {
     let mut count = 0;
     while idx > 0 {
@@ -445,5 +451,20 @@ mod tests {
 
         let tokens = tokenize_markdown(r"foo\`bar");
         assert_eq!(tokens, vec![Token::Text(r"foo\`bar")]);
+    }
+
+    #[test]
+    fn escaped_backtick_adjacent_to_multibyte_characters_is_text() {
+        let tokens = segment_inline(r"ß\`å");
+        assert_eq!(tokens, vec![r"ß\`", "å"]);
+
+        let tokens = tokenize_markdown(r"ß\`å");
+        assert_eq!(tokens, vec![Token::Text(r"ß\`å")]);
+
+        let tokens = segment_inline(r"前\`后");
+        assert_eq!(tokens, vec![r"前\`", "后"]);
+
+        let tokens = tokenize_markdown(r"前\`后");
+        assert_eq!(tokens, vec![Token::Text(r"前\`后")]);
     }
 }
