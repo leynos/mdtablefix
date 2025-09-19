@@ -93,8 +93,12 @@ fn test_wrap_preserves_escaped_triple_backticks() {
 
 #[test]
 fn test_wrap_preserves_escaped_backticks_in_paragraph() {
-    let input = lines_vec![r"Escaped ticks: \`code\` with [link](https://ex.com) and emphasis *ok*."];
+    let input = lines_vec![r"This deliberately verbose paragraph holds escaped ticks like \`code\` alongside [link](https://ex.com) markup and emphasis *still ok* so that wrapping must retain the literal ticks."];
     let output = process_stream(&input);
-    assert_eq!(output, input);
+    assert!(output.len() > 1);
+    let flattened = output.join(" ");
+    assert!(flattened.contains(r"\`code\`"));
+    assert!(flattened.contains("[link](https://ex.com)"));
+    assert!(flattened.contains("*still ok*"));
 }
 
