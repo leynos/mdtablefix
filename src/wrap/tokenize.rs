@@ -37,6 +37,41 @@ fn collect_range(chars: &[char], start: usize, end: usize) -> String {
     chars[start..end].iter().collect()
 }
 
+const BACKSLASH: char = '\\';
+const BACKSLASH_BYTE: u8 = b'\\';
+
+/// Check if a character at the given index is preceded by an odd number of backslashes.
+///
+/// An odd number of preceding backslashes means the character is escaped.
+fn has_odd_backslash_escape(chars: &[char], mut idx: usize) -> bool {
+    let mut count = 0;
+    while idx > 0 {
+        idx -= 1;
+        if chars[idx] == BACKSLASH {
+            count += 1;
+        } else {
+            break;
+        }
+    }
+    count % 2 == 1
+}
+
+/// Check if a byte at the given index is preceded by an odd number of backslashes.
+///
+/// An odd number of preceding backslashes means the byte is escaped.
+fn has_odd_backslash_escape_bytes(bytes: &[u8], mut idx: usize) -> bool {
+    let mut count = 0;
+    while idx > 0 {
+        idx -= 1;
+        if bytes[idx] == BACKSLASH_BYTE {
+            count += 1;
+        } else {
+            break;
+        }
+    }
+    count % 2 == 1
+}
+
 /// Markdown token emitted by the `segment_inline` tokenizer.
 #[derive(Debug, PartialEq)]
 pub enum Token<'a> {
@@ -146,27 +181,38 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
             i = scan_while(&chars, i, char::is_whitespace);
             tokens.push(collect_range(&chars, start, i));
         } else if c == '`' {
+            if has_odd_backslash_escape(&chars, i) {
+                if let Some(last) = tokens.last_mut() {
+                    last.push('`');
+                } else {
+                    tokens.push(String::from("`"));
+                }
+                i += 1;
+                continue;
+            }
+
             let start = i;
             let fence_end = scan_while(&chars, i, |ch| ch == '`');
             let fence_len = fence_end - start;
             i = fence_end;
 
             let mut end = i;
+            let mut closing = None;
             while end < chars.len() {
                 let j = scan_while(&chars, end, |ch| ch == '`');
-                if j - end == fence_len {
-                    end = j;
+                if j - end == fence_len && !has_odd_backslash_escape(&chars, end) {
+                    closing = Some(j);
                     break;
                 }
                 end += 1;
             }
 
-            if end >= chars.len() {
+            if let Some(end_idx) = closing {
+                tokens.push(collect_range(&chars, start, end_idx));
+                i = end_idx;
+            } else {
                 tokens.push(collect_range(&chars, start, start + fence_len));
                 i = start + fence_len;
-            } else {
-                tokens.push(collect_range(&chars, start, end));
-                i = end;
             }
         } else if c == '[' || (c == '!' && i + 1 < chars.len() && chars[i + 1] == '[') {
             let (tok, mut new_i) = parse_link_or_image(&chars, i);
@@ -186,33 +232,56 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
     tokens
 }
 
-fn next_token(s: &str) -> Option<(Token<'_>, usize)> {
-    if s.is_empty() {
+fn next_token(line: &str, offset: usize) -> Option<(Token<'_>, usize)> {
+    if offset >= line.len() {
         return None;
     }
-    let delim_len = s.chars().take_while(|&c| c == '`').count();
-    if delim_len == 0 {
-        if let Some(pos) = s.find('`') {
-            return Some((Token::Text(&s[..pos]), pos));
-        }
-        return Some((Token::Text(s), s.len()));
+
+    let rest = &line[offset..];
+    if rest.is_empty() {
+        return None;
     }
 
-    let closing = &s[..delim_len];
-    if let Some(end) = s[delim_len..].find(closing) {
-        let raw_end = delim_len + end + delim_len;
-        let code = &s[delim_len..delim_len + end];
-        let raw = &s[..raw_end];
-        return Some((
-            Token::Code {
-                raw,
-                fence: closing,
-                code,
-            },
-            raw_end,
-        ));
+    let bytes = line.as_bytes();
+    let delim_len = rest.chars().take_while(|&c| c == '`').count();
+    if delim_len == 0 {
+        let mut search_offset = 0;
+        while let Some(pos) = rest[search_offset..].find('`') {
+            let candidate = search_offset + pos;
+            if has_odd_backslash_escape_bytes(bytes, offset + candidate) {
+                search_offset = candidate + 1;
+                continue;
+            }
+            if candidate == 0 {
+                break;
+            }
+            return Some((Token::Text(&rest[..candidate]), candidate));
+        }
+        return Some((Token::Text(rest), rest.len()));
     }
-    Some((Token::Text(closing), delim_len))
+
+    if has_odd_backslash_escape_bytes(bytes, offset) {
+        if let Some(first) = rest.chars().next() {
+            let used = first.len_utf8();
+            return Some((Token::Text(&rest[..used]), used));
+        }
+        return None;
+    }
+
+    let fence = &rest[..delim_len];
+    let mut search_start = delim_len;
+    while let Some(pos) = rest[search_start..].find(fence) {
+        let candidate = search_start + pos;
+        if !has_odd_backslash_escape_bytes(bytes, offset + candidate) {
+            let raw_end = candidate + delim_len;
+            let code = &rest[delim_len..candidate];
+            let raw = &rest[..raw_end];
+            return Some((Token::Code { raw, fence, code }, raw_end));
+        }
+        search_start = candidate + 1;
+    }
+
+    Some((Token::Text(fence), delim_len))
 }
 
 /// Emit [`Token`]s for inline segments within a single line.
@@ -232,14 +301,19 @@ fn next_token(s: &str) -> Option<(Token<'_>, usize)> {
 ///
 /// The callback receives each token as a [`Token<'a>`], such as
 /// `Token::Text(&str)` or `Token::Code { raw: &str, fence: &str, code: &str }`.
-fn tokenize_inline<'a, F>(mut rest: &'a str, mut emit: F)
+fn tokenize_inline<'a, F>(line: &'a str, mut emit: F)
 where
     F: FnMut(Token<'a>),
 {
-    while let Some((tok, used)) = next_token(rest) {
-        emit(tok);
-        rest = &rest[used..];
-        if rest.is_empty() {
+    let mut offset = 0;
+    while offset < line.len() {
+        if let Some((tok, used)) = next_token(line, offset) {
+            emit(tok);
+            if used == 0 {
+                break;
+            }
+            offset += used;
+        } else {
             break;
         }
     }
@@ -359,5 +433,38 @@ mod tests {
             tokens,
             vec![Token::Text("foo"), Token::Newline, Token::Text("bar")]
         );
+    }
+
+    #[test]
+    fn escaped_triple_backticks_are_text() {
+        let tokens = segment_inline(r"\`\`\`ignore");
+        assert_eq!(tokens, vec![r"\`", r"\`", r"\`", "ignore"]);
+
+        let tokens = tokenize_markdown(r"\`\`\`ignore");
+        assert_eq!(tokens, vec![Token::Text(r"\`\`\`ignore")]);
+    }
+
+    #[test]
+    fn escaped_inline_backtick_is_text() {
+        let tokens = segment_inline(r"foo\`bar");
+        assert_eq!(tokens, vec![r"foo\`", "bar"]);
+
+        let tokens = tokenize_markdown(r"foo\`bar");
+        assert_eq!(tokens, vec![Token::Text(r"foo\`bar")]);
+    }
+
+    #[test]
+    fn escaped_backtick_adjacent_to_multibyte_characters_is_text() {
+        let tokens = segment_inline(r"ß\`å");
+        assert_eq!(tokens, vec![r"ß\`", "å"]);
+
+        let tokens = tokenize_markdown(r"ß\`å");
+        assert_eq!(tokens, vec![Token::Text(r"ß\`å")]);
+
+        let tokens = segment_inline(r"前\`后");
+        assert_eq!(tokens, vec![r"前\`", "后"]);
+
+        let tokens = tokenize_markdown(r"前\`后");
+        assert_eq!(tokens, vec![Token::Text(r"前\`后")]);
     }
 }

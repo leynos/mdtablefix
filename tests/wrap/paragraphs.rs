@@ -83,3 +83,22 @@ fn test_wrap_inline_code_surrounded_by_spaces() {
     let output = process_stream(&input);
     assert!(output.iter().any(|l| l.contains(snippet)));
 }
+
+#[test]
+fn test_wrap_preserves_escaped_triple_backticks() {
+    let input = lines_vec![r"\`\`\`ignore"];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
+#[test]
+fn test_wrap_preserves_escaped_backticks_in_paragraph() {
+    let input = lines_vec![r"This deliberately verbose paragraph holds escaped ticks like \`code\` alongside [link](https://ex.com) markup and emphasis *still ok* so that wrapping must retain the literal ticks."];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    let flattened = output.join(" ");
+    assert!(flattened.contains(r"\`code\`"));
+    assert!(flattened.contains("[link](https://ex.com)"));
+    assert!(flattened.contains("*still ok*"));
+}
+
