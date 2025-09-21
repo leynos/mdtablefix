@@ -200,9 +200,7 @@ Only simple tables composed of `<tr>`, `<th>`, and `<td>` tags are supported.
 Tag case and attributes are ignored. After conversion, they are reformatted
 alongside regular Markdown tables.
 
-See
-[HTML table support for more details](docs/architecture.md#html-table-support-in-mdtablefix)
- .
+See [HTML table support for more details](docs/architecture.md#html-table-support-in-mdtablefix).
 
 ## Module structure
 
