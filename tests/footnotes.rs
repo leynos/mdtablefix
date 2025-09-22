@@ -4,8 +4,9 @@
 //! `convert_footnotes`. Inputs are loaded from fixture files through the
 //! `include_lines!` and `lines_vec!` macros re-exported by `tests::prelude`.
 //! The cases mix headings, code blocks and ordinary text to confirm that
-//! inline references become footnote links and that final numeric lists are
-//! rewritten as definitions.
+//! inline references become footnote links, that final numeric lists are
+//! rewritten as definitions, and that footnotes are renumbered sequentially
+//! with definitions reordered to match.
 //!
 //! A simple check ensures these macros are available so the prelude exports
 //! are correctly wired for all integration tests.
