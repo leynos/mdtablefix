@@ -6,6 +6,8 @@
 //! list immediately follows an H2 heading and that no existing footnote
 //! definitions (`[^n]:`) appear earlier in the document.
 
+use std::collections::HashMap;
+use std::fmt::Write;
 use std::sync::LazyLock;
 
 use regex::{Captures, Regex};
@@ -214,6 +216,288 @@ fn convert_block(lines: &mut [String]) {
     }
 }
 
+fn scan_reference(text: &str, start: usize) -> (Option<(usize, usize, &str)>, usize) {
+    let bytes = text.as_bytes();
+    let mut idx = start;
+    while idx < text.len() {
+        let Some(rel_pos) = text[idx..].find("[^") else {
+            return (None, text.len());
+        };
+        let start_idx = idx + rel_pos;
+        let number_start = start_idx + 2;
+        let mut number_end = number_start;
+        while number_end < text.len() && bytes[number_end].is_ascii_digit() {
+            number_end += 1;
+        }
+        if number_end == number_start {
+            idx = number_start;
+            continue;
+        }
+        if number_end >= text.len() {
+            return (None, text.len());
+        }
+        if bytes[number_end] != b']' {
+            idx = number_end;
+            continue;
+        }
+        let after_bracket = number_end + 1;
+        if after_bracket < text.len() && bytes[after_bracket] == b':' {
+            idx = after_bracket;
+            continue;
+        }
+        let number = &text[number_start..number_end];
+        return (Some((start_idx, after_bracket, number)), after_bracket);
+    }
+    (None, text.len())
+}
+
+fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<String, usize>) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0;
+    while cursor < text.len() {
+        let (maybe_ref, _) = scan_reference(text, cursor);
+        if let Some((start, after, number)) = maybe_ref {
+            out.push_str(&text[cursor..start]);
+            if let Some(&new_number) = mapping.get(number) {
+                write!(&mut out, "[^{new_number}]").expect("write to string cannot fail");
+            } else {
+                out.push_str(&text[start..after]);
+            }
+            cursor = after;
+        } else {
+            out.push_str(&text[cursor..]);
+            break;
+        }
+    }
+    out
+}
+
+fn rewrite_tokens(text: &str, mapping: &HashMap<String, usize>) -> String {
+    let mut rewritten = String::with_capacity(text.len());
+    for token in tokenize_markdown(text) {
+        match token {
+            Token::Text(segment) => {
+                rewritten.push_str(&rewrite_refs_in_segment(segment, mapping));
+            }
+            other => push_original_token(&other, &mut rewritten),
+        }
+    }
+    rewritten
+}
+
+fn collect_reference_mapping(lines: &[String]) -> HashMap<String, usize> {
+    let mut mapping = HashMap::new();
+    let mut next = 1;
+    for line in lines {
+        for token in tokenize_markdown(line) {
+            if let Token::Text(text) = token {
+                let mut cursor = 0;
+                while cursor < text.len() {
+                    let (maybe_ref, _) = scan_reference(text, cursor);
+                    let Some((_, after, number)) = maybe_ref else {
+                        break;
+                    };
+                    if !mapping.contains_key(number) {
+                        mapping.insert(number.to_string(), next);
+                        next += 1;
+                    }
+                    cursor = after;
+                }
+            }
+        }
+    }
+    mapping
+}
+
+#[derive(Clone)]
+struct DefinitionLine {
+    index: usize,
+    new_number: usize,
+    line: String,
+}
+
+struct DefinitionParts<'a> {
+    prefix: &'a str,
+    number: &'a str,
+    rest: &'a str,
+}
+
+fn parse_definition(line: &str) -> Option<DefinitionParts<'_>> {
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    if len < 5 {
+        return None;
+    }
+    let mut idx = 0;
+    while idx < len && bytes[idx].is_ascii_whitespace() {
+        idx += 1;
+    }
+    loop {
+        if idx < len && bytes[idx] == b'>' {
+            idx += 1;
+            while idx < len && bytes[idx].is_ascii_whitespace() {
+                idx += 1;
+            }
+        } else {
+            break;
+        }
+    }
+    let prefix_end = idx;
+    if idx >= len || bytes[idx] != b'[' {
+        return None;
+    }
+    idx += 1;
+    if idx >= len || bytes[idx] != b'^' {
+        return None;
+    }
+    idx += 1;
+    let number_start = idx;
+    while idx < len && bytes[idx].is_ascii_digit() {
+        idx += 1;
+    }
+    if idx == number_start {
+        return None;
+    }
+    if idx >= len || bytes[idx] != b']' {
+        return None;
+    }
+    let number_end = idx;
+    idx += 1;
+    while idx < len && bytes[idx].is_ascii_whitespace() {
+        idx += 1;
+    }
+    if idx >= len || bytes[idx] != b':' {
+        return None;
+    }
+    idx += 1;
+    Some(DefinitionParts {
+        prefix: &line[..prefix_end],
+        number: &line[number_start..number_end],
+        rest: &line[idx..],
+    })
+}
+
+fn footnote_definition_block_range(lines: &[String]) -> Option<(usize, usize)> {
+    let (start, end) = trimmed_range(lines, |line| {
+        line.trim().is_empty() || parse_definition(line).is_some()
+    });
+    if start < end
+        && lines[start..end]
+            .iter()
+            .any(|line| parse_definition(line).is_some())
+    {
+        Some((start, end))
+    } else {
+        None
+    }
+}
+
+fn renumber_footnotes(lines: &mut [String]) {
+    let mut mapping = collect_reference_mapping(lines);
+    let mut next_number = mapping.len() + 1;
+    let mut definitions = Vec::new();
+    let mut is_definition = vec![false; lines.len()];
+    let numeric_list_range = footnote_block_range(lines);
+    let skip_numeric_conversion = numeric_list_range
+        .as_ref()
+        .is_some_and(|(start, _)| has_existing_footnote_block(lines, *start));
+
+    for (idx, line) in lines.iter().enumerate() {
+        if let Some(parts) = parse_definition(line) {
+            let new_number = if let Some(&mapped) = mapping.get(parts.number) {
+                mapped
+            } else {
+                let assigned = next_number;
+                next_number += 1;
+                mapping.insert(parts.number.to_string(), assigned);
+                assigned
+            };
+            let rewritten_rest = rewrite_tokens(parts.rest, &mapping);
+            let mut new_line = String::with_capacity(parts.prefix.len() + rewritten_rest.len() + 8);
+            new_line.push_str(parts.prefix);
+            write!(&mut new_line, "[^{new_number}]:").expect("write to string cannot fail");
+            new_line.push_str(&rewritten_rest);
+            definitions.push(DefinitionLine {
+                index: idx,
+                new_number,
+                line: new_line,
+            });
+            is_definition[idx] = true;
+        } else if numeric_list_range
+            .as_ref()
+            .is_some_and(|(start, end)| (*start..*end).contains(&idx))
+            && let Some(caps) = FOOTNOTE_LINE_RE.captures(line)
+        {
+            if skip_numeric_conversion {
+                continue;
+            }
+            if mapping.is_empty() && definitions.is_empty() {
+                continue;
+            }
+            let number = &caps["num"];
+            let new_number = if let Some(&mapped) = mapping.get(number) {
+                mapped
+            } else {
+                let assigned = next_number;
+                next_number += 1;
+                mapping.insert(number.to_string(), assigned);
+                assigned
+            };
+            let indent = &caps["indent"];
+            let rest = &caps["rest"];
+            let rewritten_rest = rewrite_tokens(rest, &mapping);
+            let mut new_line = String::with_capacity(indent.len() + rewritten_rest.len() + 8);
+            new_line.push_str(indent);
+            write!(&mut new_line, "[^{new_number}]:").expect("write to string cannot fail");
+            new_line.push(' ');
+            new_line.push_str(&rewritten_rest);
+            definitions.push(DefinitionLine {
+                index: idx,
+                new_number,
+                line: new_line,
+            });
+            is_definition[idx] = true;
+        }
+    }
+
+    if mapping.is_empty() && definitions.is_empty() {
+        return;
+    }
+
+    for (idx, line) in lines.iter_mut().enumerate() {
+        if is_definition[idx] {
+            continue;
+        }
+        let rewritten = rewrite_tokens(line, &mapping);
+        *line = rewritten;
+    }
+
+    if definitions.is_empty() {
+        return;
+    }
+
+    for def in &definitions {
+        lines[def.index].clone_from(&def.line);
+    }
+
+    if let Some((start, end)) = footnote_definition_block_range(lines) {
+        let mut defs_in_block: Vec<&DefinitionLine> = definitions
+            .iter()
+            .filter(|d| (start..end).contains(&d.index))
+            .collect();
+        if defs_in_block.len() > 1 {
+            defs_in_block
+                .sort_by(|a, b| a.new_number.cmp(&b.new_number).then(a.index.cmp(&b.index)));
+            let positions: Vec<usize> = (start..end)
+                .filter(|&idx| parse_definition(&lines[idx]).is_some())
+                .collect();
+            for (pos, def) in positions.into_iter().zip(defs_in_block.into_iter()) {
+                lines[pos].clone_from(&def.line);
+            }
+        }
+    }
+}
+
 #[inline]
 fn is_atx_heading_prefix(s: &str) -> bool {
     ATX_HEADING_RE.is_match(s)
@@ -240,6 +524,7 @@ pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
     }
 
     convert_block(&mut out);
+    renumber_footnotes(&mut out);
     out
 }
 
@@ -250,7 +535,7 @@ mod tests {
     #[test]
     fn converts_inline_numbers() {
         let input = vec!["See the docs.2".to_string()];
-        let expected = vec!["See the docs.[^2]".to_string()];
+        let expected = vec!["See the docs.[^1]".to_string()];
         assert_eq!(convert_footnotes(&input), expected);
     }
 
@@ -297,7 +582,7 @@ mod tests {
             String::new(),
             " [^2]: Second".to_string(),
             String::new(),
-            "[^10]: Tenth".to_string(),
+            "[^3]: Tenth".to_string(),
         ];
         assert_eq!(convert_footnotes(&input), expected);
     }
@@ -374,8 +659,95 @@ mod tests {
             "1. not a footnote".to_string(),
             "More text.".to_string(),
             "## Footnotes".to_string(),
-            "[^2]: final".to_string(),
+            "[^1]: final".to_string(),
         ];
         assert_eq!(convert_footnotes(&input), expected);
+    }
+    #[test]
+    fn renumbers_references_and_definitions() {
+        let input = vec![
+            "First reference.[^7]".to_string(),
+            "Second reference.[^3]".to_string(),
+            String::new(),
+            "  [^3]: Third footnote".to_string(),
+            "  [^7]: Seventh footnote".to_string(),
+        ];
+        let expected = vec![
+            "First reference.[^1]".to_string(),
+            "Second reference.[^2]".to_string(),
+            String::new(),
+            "  [^1]: Seventh footnote".to_string(),
+            "  [^2]: Third footnote".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), expected);
+    }
+
+    #[test]
+    fn assigns_new_numbers_to_unreferenced_definitions() {
+        let input = vec![
+            "Alpha.[^5]".to_string(),
+            "Beta.[^2]".to_string(),
+            String::new(),
+            "[^1]: Legacy footnote".to_string(),
+            "[^2]: Beta footnote".to_string(),
+            "[^5]: Alpha footnote".to_string(),
+        ];
+        let expected = vec![
+            "Alpha.[^1]".to_string(),
+            "Beta.[^2]".to_string(),
+            String::new(),
+            "[^1]: Alpha footnote".to_string(),
+            "[^2]: Beta footnote".to_string(),
+            "[^3]: Legacy footnote".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), expected);
+    }
+
+    #[test]
+    fn updates_references_inside_definitions() {
+        let input = vec![
+            "Intro.[^4]".to_string(),
+            String::new(),
+            "[^4]: See [^2] for context".to_string(),
+            "[^2]: Base note".to_string(),
+        ];
+        let expected = vec![
+            "Intro.[^1]".to_string(),
+            String::new(),
+            "[^1]: See [^2] for context".to_string(),
+            "[^2]: Base note".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), expected);
+    }
+
+    #[test]
+    fn renumbers_numeric_list_without_heading() {
+        let input = vec![
+            "First reference.[^7]".to_string(),
+            "Second reference.[^3]".to_string(),
+            String::new(),
+            "1. Legacy footnote".to_string(),
+            "3. Third footnote".to_string(),
+            "7. Seventh footnote".to_string(),
+        ];
+        let expected = vec![
+            "First reference.[^1]".to_string(),
+            "Second reference.[^2]".to_string(),
+            String::new(),
+            "[^1]: Seventh footnote".to_string(),
+            "[^2]: Third footnote".to_string(),
+            "[^3]: Legacy footnote".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), expected);
+    }
+
+    #[test]
+    fn leaves_numeric_list_without_references_unchanged() {
+        let input = vec![
+            "Ordinary list:".to_string(),
+            "1. Apples".to_string(),
+            "2. Bananas".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), input);
     }
 }

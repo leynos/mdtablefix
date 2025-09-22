@@ -98,7 +98,7 @@ fn test_ignores_numbers_in_indented_code_block() {
 #[test]
 fn test_handles_punctuation_inside_bold() {
     let input = lines_vec!("It was **scary.**7");
-    let expected = lines_vec!("It was **scary.**[^7]");
+    let expected = lines_vec!("It was **scary.**[^1]");
     assert_eq!(convert_footnotes(&input), expected);
 }
 
@@ -155,7 +155,7 @@ fn test_converts_number_followed_by_colon(
 #[test]
 fn test_converts_colon_footnote_definition() {
     let input = lines_vec!("## Footnotes", "7: Footnote text");
-    let expected = lines_vec!("## Footnotes", "[^7]: Footnote text");
+    let expected = lines_vec!("## Footnotes", "[^1]: Footnote text");
     assert_eq!(convert_footnotes(&input), expected);
 }
 
@@ -183,7 +183,7 @@ fn test_converts_list_with_blank_lines() {
         "  ",
         " [^2]: Second",
         "",
-        "[^10]: Tenth",
+        "[^3]: Tenth",
         "   ",
         "",
     );
@@ -258,4 +258,31 @@ fn test_ignores_definition_inside_fence() {
     let input = lines_vec!("```", "[^1]: Old", "```", "## Footnotes", " 1. First",);
     let expected = lines_vec!("```", "[^1]: Old", "```", "## Footnotes", " [^1]: First",);
     assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_renumbers_numeric_list_without_heading() {
+    let input = lines_vec!(
+        "First reference.[^7]",
+        "Second reference.[^3]",
+        "",
+        "1. Legacy footnote",
+        "3. Third footnote",
+        "7. Seventh footnote",
+    );
+    let expected = lines_vec!(
+        "First reference.[^1]",
+        "Second reference.[^2]",
+        "",
+        "[^1]: Seventh footnote",
+        "[^2]: Third footnote",
+        "[^3]: Legacy footnote",
+    );
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_preserves_numeric_list_without_references() {
+    let input = lines_vec!("Ordinary list:", "1. Apples", "2. Bananas",);
+    assert_eq!(convert_footnotes(&input), input);
 }
