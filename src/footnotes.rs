@@ -377,10 +377,22 @@ fn parse_definition(line: &str) -> Option<DefinitionParts<'_>> {
     })
 }
 
+fn is_definition_continuation(line: &str) -> bool {
+    line.chars().next().is_some_and(char::is_whitespace)
+}
+
 fn footnote_definition_block_range(lines: &[String]) -> Option<(usize, usize)> {
-    let (start, end) = trimmed_range(lines, |line| {
-        line.trim().is_empty() || parse_definition(line).is_some()
+    let (mut start, end) = trimmed_range(lines, |line| {
+        line.trim().is_empty()
+            || parse_definition(line).is_some()
+            || is_definition_continuation(line)
     });
+    while start < end
+        && parse_definition(&lines[start]).is_none()
+        && !lines[start].trim().is_empty()
+    {
+        start += 1;
+    }
     if start < end
         && lines[start..end]
             .iter()
@@ -389,6 +401,140 @@ fn footnote_definition_block_range(lines: &[String]) -> Option<(usize, usize)> {
         Some((start, end))
     } else {
         None
+    }
+}
+
+fn definition_segment_end(lines: &[String], start: usize, block_end: usize) -> usize {
+    let mut idx = start + 1;
+    while idx < block_end {
+        let line = &lines[idx];
+        if parse_definition(line).is_some() {
+            break;
+        }
+        if is_definition_continuation(line) {
+            idx += 1;
+            continue;
+        }
+        if line.trim().is_empty() {
+            if idx + 1 < block_end && parse_definition(&lines[idx + 1]).is_some() {
+                break;
+            }
+            idx += 1;
+            continue;
+        }
+        break;
+    }
+    idx
+}
+
+/// Keep multi-line footnote definitions attached to their bodies when sorting.
+///
+/// This collects each definition together with its continuation lines, orders
+/// the segments by the new footnote numbers, and writes the reordered block
+/// back to `lines`.
+///
+/// # Examples
+///
+/// ```ignore
+/// let mut lines = vec![
+///     "[^2]: Second".to_string(),
+///     "    Follow up.".to_string(),
+///     "[^1]: First".to_string(),
+/// ];
+/// let defs = vec![
+///     DefinitionLine {
+///         index: 0,
+///         new_number: 2,
+///         line: "[^2]: Second".to_string(),
+///     },
+///     DefinitionLine {
+///         index: 2,
+///         new_number: 1,
+///         line: "[^1]: First".to_string(),
+///     },
+/// ];
+/// reorder_definition_block(&mut lines, 0, lines.len(), &defs);
+/// assert_eq!(lines[0], "[^1]: First");
+/// ```
+///
+/// (Simplified example; comprehensive coverage lives in unit tests.)
+fn reorder_definition_block(
+    lines: &mut [String],
+    start: usize,
+    end: usize,
+    definitions: &[DefinitionLine],
+) {
+    let header_positions: Vec<usize> = (start..end)
+        .filter(|&idx| parse_definition(&lines[idx]).is_some())
+        .collect();
+    if header_positions.len() <= 1 {
+        return;
+    }
+
+    let def_lookup: HashMap<usize, &DefinitionLine> = definitions
+        .iter()
+        .filter(|definition| (start..end).contains(&definition.index))
+        .map(|definition| (definition.index, definition))
+        .collect();
+    if def_lookup.len() <= 1 {
+        return;
+    }
+
+    let prefix_len = header_positions.first().map_or(0, |first| first - start);
+    let mut segments: Vec<(usize, usize, Vec<String>)> = Vec::new();
+    let mut consumed = start + prefix_len;
+    for &position in &header_positions {
+        let mut leading_start = position;
+        while leading_start > consumed
+            && lines[leading_start - 1].trim().is_empty()
+            && !is_definition_continuation(&lines[leading_start - 1])
+        {
+            leading_start -= 1;
+        }
+        let next_bound = definition_segment_end(lines, position, end);
+        if let Some(definition) = def_lookup.get(&position) {
+            let mut segment = lines[leading_start..next_bound].to_vec();
+            if segment.is_empty() {
+                segment.push(definition.line.clone());
+            } else {
+                let header_index = position - leading_start;
+                segment[header_index].clone_from(&definition.line);
+            }
+            segments.push((definition.new_number, definition.index, segment));
+        }
+        consumed = next_bound;
+    }
+
+    if segments.len() <= 1 {
+        return;
+    }
+
+    segments.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+
+    let mut first_leading = Vec::new();
+    if let Some((_, _, first_segment)) = segments.first_mut() {
+        while first_segment
+            .first()
+            .is_some_and(|line| line.trim().is_empty() && !is_definition_continuation(line))
+        {
+            first_leading.push(first_segment.remove(0));
+        }
+    }
+
+    let mut reordered = Vec::with_capacity(end - start);
+    if prefix_len > 0 {
+        reordered.extend(lines[start..start + prefix_len].iter().cloned());
+    }
+
+    for (idx, (_, _, segment)) in segments.into_iter().enumerate() {
+        reordered.extend(segment);
+        if idx == 0 && !first_leading.is_empty() {
+            reordered.append(&mut first_leading);
+        }
+    }
+
+    if reordered.len() == end - start {
+        lines[start..end].clone_from_slice(&reordered);
     }
 }
 
@@ -481,20 +627,7 @@ fn renumber_footnotes(lines: &mut [String]) {
     }
 
     if let Some((start, end)) = footnote_definition_block_range(lines) {
-        let mut defs_in_block: Vec<&DefinitionLine> = definitions
-            .iter()
-            .filter(|d| (start..end).contains(&d.index))
-            .collect();
-        if defs_in_block.len() > 1 {
-            defs_in_block
-                .sort_by(|a, b| a.new_number.cmp(&b.new_number).then(a.index.cmp(&b.index)));
-            let positions: Vec<usize> = (start..end)
-                .filter(|&idx| parse_definition(&lines[idx]).is_some())
-                .collect();
-            for (pos, def) in positions.into_iter().zip(defs_in_block.into_iter()) {
-                lines[pos].clone_from(&def.line);
-            }
-        }
+        reorder_definition_block(lines, start, end, &definitions);
     }
 }
 
@@ -678,6 +811,29 @@ mod tests {
             String::new(),
             "  [^1]: Seventh footnote".to_string(),
             "  [^2]: Third footnote".to_string(),
+        ];
+        assert_eq!(convert_footnotes(&input), expected);
+    }
+
+    #[test]
+    fn preserves_multiline_definition_blocks() {
+        let input = vec![
+            "Intro.[^2]".to_string(),
+            String::new(),
+            "[^1]: Legacy footnote".to_string(),
+            "    More legacy context.".to_string(),
+            String::new(),
+            "[^2]: Current footnote".to_string(),
+            "    Additional context.".to_string(),
+        ];
+        let expected = vec![
+            "Intro.[^1]".to_string(),
+            String::new(),
+            "[^1]: Current footnote".to_string(),
+            "    Additional context.".to_string(),
+            String::new(),
+            "[^2]: Legacy footnote".to_string(),
+            "    More legacy context.".to_string(),
         ];
         assert_eq!(convert_footnotes(&input), expected);
     }
