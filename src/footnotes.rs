@@ -27,6 +27,15 @@ static FOOTNOTE_LINE_RE: LazyLock<Regex> = lazy_regex!(
     "footnote line pattern should compile",
 );
 
+static FOOTNOTE_REF_RE: LazyLock<Regex> = lazy_regex!(
+    r"\[\^(?P<num>\d+)\]",
+    "footnote reference pattern should compile",
+);
+
+static DEF_RE: LazyLock<Regex> = lazy_regex!(
+    r"^(?P<prefix>(?:\s*>\s*)*\s*)\[\^(?P<num>\d+)\]\s*:(?P<rest>.*)$",
+    "footnote definition pattern should compile",
+);
 use crate::textproc::{Token, push_original_token, tokenize_markdown};
 static ATX_HEADING_RE: LazyLock<Regex> = lazy_regex!(
     r"(?x)
@@ -216,63 +225,26 @@ fn convert_block(lines: &mut [String]) {
     }
 }
 
-fn scan_reference(text: &str, start: usize) -> (Option<(usize, usize, &str)>, usize) {
-    let bytes = text.as_bytes();
-    let mut idx = start;
-    while idx < text.len() {
-        let Some(rel_pos) = text[idx..].find("[^") else {
-            return (None, text.len());
-        };
-        let start_idx = idx + rel_pos;
-        let number_start = start_idx + 2;
-        let mut number_end = number_start;
-        while number_end < text.len() && bytes[number_end].is_ascii_digit() {
-            number_end += 1;
-        }
-        if number_end == number_start {
-            idx = number_start;
-            continue;
-        }
-        if number_end >= text.len() {
-            return (None, text.len());
-        }
-        if bytes[number_end] != b']' {
-            idx = number_end;
-            continue;
-        }
-        let after_bracket = number_end + 1;
-        if after_bracket < text.len() && bytes[after_bracket] == b':' {
-            idx = after_bracket;
-            continue;
-        }
-        let number = &text[number_start..number_end];
-        return (Some((start_idx, after_bracket, number)), after_bracket);
-    }
-    (None, text.len())
-}
-
-fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<String, usize>) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut cursor = 0;
-    while cursor < text.len() {
-        let (maybe_ref, _) = scan_reference(text, cursor);
-        if let Some((start, after, number)) = maybe_ref {
-            out.push_str(&text[cursor..start]);
-            if let Some(&new_number) = mapping.get(number) {
-                write!(&mut out, "[^{new_number}]").expect("write to string cannot fail");
-            } else {
-                out.push_str(&text[start..after]);
+fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<usize, usize>) -> String {
+    FOOTNOTE_REF_RE
+        .replace_all(text, |caps: &Captures| {
+            let mat = caps.get(0).expect("regex matched without capture");
+            if mat.end() < text.len() && text.as_bytes()[mat.end()] == b':' {
+                return caps[0].to_string();
             }
-            cursor = after;
-        } else {
-            out.push_str(&text[cursor..]);
-            break;
-        }
-    }
-    out
+            caps["num"]
+                .parse::<usize>()
+                .ok()
+                .and_then(|number| mapping.get(&number).copied())
+                .map_or_else(
+                    || caps[0].to_string(),
+                    |new_number| format!("[^{new_number}]"),
+                )
+        })
+        .into_owned()
 }
 
-fn rewrite_tokens(text: &str, mapping: &HashMap<String, usize>) -> String {
+fn rewrite_tokens(text: &str, mapping: &HashMap<usize, usize>) -> String {
     let mut rewritten = String::with_capacity(text.len());
     for token in tokenize_markdown(text) {
         match token {
@@ -285,23 +257,26 @@ fn rewrite_tokens(text: &str, mapping: &HashMap<String, usize>) -> String {
     rewritten
 }
 
-fn collect_reference_mapping(lines: &[String]) -> HashMap<String, usize> {
+fn collect_reference_mapping(lines: &[String]) -> HashMap<usize, usize> {
     let mut mapping = HashMap::new();
     let mut next = 1;
     for line in lines {
         for token in tokenize_markdown(line) {
             if let Token::Text(text) = token {
-                let mut cursor = 0;
-                while cursor < text.len() {
-                    let (maybe_ref, _) = scan_reference(text, cursor);
-                    let Some((_, after, number)) = maybe_ref else {
-                        break;
+                for caps in FOOTNOTE_REF_RE.captures_iter(text) {
+                    let Some(mat) = caps.get(0) else {
+                        continue;
                     };
-                    if !mapping.contains_key(number) {
-                        mapping.insert(number.to_string(), next);
+                    if mat.end() < text.len() && text.as_bytes()[mat.end()] == b':' {
+                        continue;
+                    }
+                    if let Ok(number) = caps["num"].parse::<usize>() {
+                        if mapping.contains_key(&number) {
+                            continue;
+                        }
+                        mapping.insert(number, next);
                         next += 1;
                     }
-                    cursor = after;
                 }
             }
         }
@@ -318,62 +293,18 @@ struct DefinitionLine {
 
 struct DefinitionParts<'a> {
     prefix: &'a str,
-    number: &'a str,
+    number: usize,
     rest: &'a str,
 }
 
 fn parse_definition(line: &str) -> Option<DefinitionParts<'_>> {
-    let bytes = line.as_bytes();
-    let len = bytes.len();
-    if len < 5 {
-        return None;
-    }
-    let mut idx = 0;
-    while idx < len && bytes[idx].is_ascii_whitespace() {
-        idx += 1;
-    }
-    loop {
-        if idx < len && bytes[idx] == b'>' {
-            idx += 1;
-            while idx < len && bytes[idx].is_ascii_whitespace() {
-                idx += 1;
-            }
-        } else {
-            break;
-        }
-    }
-    let prefix_end = idx;
-    if idx >= len || bytes[idx] != b'[' {
-        return None;
-    }
-    idx += 1;
-    if idx >= len || bytes[idx] != b'^' {
-        return None;
-    }
-    idx += 1;
-    let number_start = idx;
-    while idx < len && bytes[idx].is_ascii_digit() {
-        idx += 1;
-    }
-    if idx == number_start {
-        return None;
-    }
-    if idx >= len || bytes[idx] != b']' {
-        return None;
-    }
-    let number_end = idx;
-    idx += 1;
-    while idx < len && bytes[idx].is_ascii_whitespace() {
-        idx += 1;
-    }
-    if idx >= len || bytes[idx] != b':' {
-        return None;
-    }
-    idx += 1;
-    Some(DefinitionParts {
-        prefix: &line[..prefix_end],
-        number: &line[number_start..number_end],
-        rest: &line[idx..],
+    DEF_RE.captures(line).and_then(|caps| {
+        let number = caps["num"].parse::<usize>().ok()?;
+        Some(DefinitionParts {
+            prefix: caps.name("prefix").map_or("", |m| m.as_str()),
+            number,
+            rest: caps.name("rest").map_or("", |m| m.as_str()),
+        })
     })
 }
 
@@ -538,11 +469,44 @@ fn reorder_definition_block(
     }
 }
 
-fn renumber_footnotes(lines: &mut [String]) {
-    let mut mapping = collect_reference_mapping(lines);
+struct DefinitionUpdates {
+    definitions: Vec<DefinitionLine>,
+    is_definition_line: Vec<bool>,
+}
+
+fn assign_new_number(
+    mapping: &mut HashMap<usize, usize>,
+    number: usize,
+    next_number: &mut usize,
+) -> usize {
+    if let Some(&mapped) = mapping.get(&number) {
+        mapped
+    } else {
+        let assigned = *next_number;
+        *next_number += 1;
+        mapping.insert(number, assigned);
+        assigned
+    }
+}
+
+fn should_convert_numeric_line(
+    index: usize,
+    numeric_range: Option<(usize, usize)>,
+    skip_numeric_conversion: bool,
+) -> bool {
+    if skip_numeric_conversion {
+        return false;
+    }
+    numeric_range.is_some_and(|(start, end)| index >= start && index < end)
+}
+
+fn collect_definition_updates(
+    lines: &[String],
+    mapping: &mut HashMap<usize, usize>,
+) -> DefinitionUpdates {
     let mut next_number = mapping.len() + 1;
     let mut definitions = Vec::new();
-    let mut is_definition = vec![false; lines.len()];
+    let mut is_definition_line = vec![false; lines.len()];
     let numeric_list_range = footnote_block_range(lines);
     let skip_numeric_conversion = numeric_list_range
         .as_ref()
@@ -550,15 +514,8 @@ fn renumber_footnotes(lines: &mut [String]) {
 
     for (idx, line) in lines.iter().enumerate() {
         if let Some(parts) = parse_definition(line) {
-            let new_number = if let Some(&mapped) = mapping.get(parts.number) {
-                mapped
-            } else {
-                let assigned = next_number;
-                next_number += 1;
-                mapping.insert(parts.number.to_string(), assigned);
-                assigned
-            };
-            let rewritten_rest = rewrite_tokens(parts.rest, &mapping);
+            let new_number = assign_new_number(mapping, parts.number, &mut next_number);
+            let rewritten_rest = rewrite_tokens(parts.rest, mapping);
             let mut new_line = String::with_capacity(parts.prefix.len() + rewritten_rest.len() + 8);
             new_line.push_str(parts.prefix);
             write!(&mut new_line, "[^{new_number}]:").expect("write to string cannot fail");
@@ -568,30 +525,20 @@ fn renumber_footnotes(lines: &mut [String]) {
                 new_number,
                 line: new_line,
             });
-            is_definition[idx] = true;
-        } else if numeric_list_range
-            .as_ref()
-            .is_some_and(|(start, end)| (*start..*end).contains(&idx))
+            is_definition_line[idx] = true;
+        } else if should_convert_numeric_line(idx, numeric_list_range, skip_numeric_conversion)
             && let Some(caps) = FOOTNOTE_LINE_RE.captures(line)
         {
-            if skip_numeric_conversion {
-                continue;
-            }
             if mapping.is_empty() && definitions.is_empty() {
                 continue;
             }
-            let number = &caps["num"];
-            let new_number = if let Some(&mapped) = mapping.get(number) {
-                mapped
-            } else {
-                let assigned = next_number;
-                next_number += 1;
-                mapping.insert(number.to_string(), assigned);
-                assigned
+            let Ok(number) = caps["num"].parse::<usize>() else {
+                continue;
             };
-            let indent = &caps["indent"];
-            let rest = &caps["rest"];
-            let rewritten_rest = rewrite_tokens(rest, &mapping);
+            let new_number = assign_new_number(mapping, number, &mut next_number);
+            let indent = caps.name("indent").map_or("", |m| m.as_str());
+            let rest = caps.name("rest").map_or("", |m| m.as_str());
+            let rewritten_rest = rewrite_tokens(rest, mapping);
             let mut new_line = String::with_capacity(indent.len() + rewritten_rest.len() + 8);
             new_line.push_str(indent);
             write!(&mut new_line, "[^{new_number}]:").expect("write to string cannot fail");
@@ -602,29 +549,53 @@ fn renumber_footnotes(lines: &mut [String]) {
                 new_number,
                 line: new_line,
             });
-            is_definition[idx] = true;
+            is_definition_line[idx] = true;
         }
     }
+
+    DefinitionUpdates {
+        definitions,
+        is_definition_line,
+    }
+}
+
+fn apply_mapping_to_lines(
+    lines: &mut [String],
+    mapping: &HashMap<usize, usize>,
+    is_definition_line: &[bool],
+) {
+    for (idx, line) in lines.iter_mut().enumerate() {
+        if is_definition_line.get(idx).copied().unwrap_or(false) {
+            continue;
+        }
+        *line = rewrite_tokens(line, mapping);
+    }
+}
+
+fn rewrite_definition_headers(lines: &mut [String], definitions: &[DefinitionLine]) {
+    for definition in definitions {
+        lines[definition.index].clone_from(&definition.line);
+    }
+}
+
+fn renumber_footnotes(lines: &mut [String]) {
+    let mut mapping = collect_reference_mapping(lines);
+    let DefinitionUpdates {
+        definitions,
+        is_definition_line,
+    } = collect_definition_updates(lines, &mut mapping);
 
     if mapping.is_empty() && definitions.is_empty() {
         return;
     }
 
-    for (idx, line) in lines.iter_mut().enumerate() {
-        if is_definition[idx] {
-            continue;
-        }
-        let rewritten = rewrite_tokens(line, &mapping);
-        *line = rewritten;
-    }
+    apply_mapping_to_lines(lines, &mapping, &is_definition_line);
 
     if definitions.is_empty() {
         return;
     }
 
-    for def in &definitions {
-        lines[def.index].clone_from(&def.line);
-    }
+    rewrite_definition_headers(lines, &definitions);
 
     if let Some((start, end)) = footnote_definition_block_range(lines) {
         reorder_definition_block(lines, start, end, &definitions);
