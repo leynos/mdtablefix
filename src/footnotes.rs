@@ -1,16 +1,27 @@
 //! Footnote normalisation utilities.
 //!
 //! Converts bare numeric references in text to GitHub-flavoured Markdown
-//! footnote links and, when eligible, rewrites the trailing numeric list
-//! into a footnote block. Eligibility requires that the final contiguous
-//! list immediately follows an H2 heading and that no existing footnote
-//! definitions (`[^n]:`) appear earlier in the document.
+//! footnote links and normalises footnote numbering and ordering.
+//!
+//! The conversion operates in two phases:
+//!
+//! 1. **Reference normalisation**: Converts inline numeric references (e.g.,
+//!    `.1` becomes `.[^1]`) and rewrites eligible trailing numeric lists into
+//!    footnote definition blocks. List conversion requires the list immediately
+//!    follows an H2 heading with no existing definitions earlier in the document.
+//!
+//! 2. **Sequential renumbering**: Scans the document for footnote references in
+//!    encounter order, assigns sequential identifiers starting from 1, and
+//!    rewrites both inline references and their matching definitions. Sorts
+//!    definition blocks by the new sequential identifiers whilst preserving
+//!    multi-line definition content and converting eligible numeric lists
+//!    when at least one footnote reference exists.
 
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::LazyLock;
 
-use regex::{Captures, Regex};
+use regex::{Captures, Match, Regex};
 
 static INLINE_FN_RE: LazyLock<Regex> = lazy_regex!(
     r"(?P<pre>^|[^0-9])(?P<punc>[.!?);:])(?P<style>[*_]*)(?P<num>\d+)(?P<boundary>\s|$)",
@@ -225,11 +236,45 @@ fn convert_block(lines: &mut [String]) {
     }
 }
 
+/// Check whether the text before a reference contains only indentation or
+/// blockquote markers.
+fn matches_definition_prefix(prefix: &str) -> bool {
+    let mut remaining = prefix;
+    loop {
+        remaining = remaining.trim_start_matches(char::is_whitespace);
+        if remaining.is_empty() {
+            return true;
+        }
+        if let Some(stripped) = remaining.strip_prefix('>') {
+            remaining = stripped;
+            continue;
+        }
+        return false;
+    }
+}
+
+/// Determine whether a matched reference is part of a definition header.
+fn is_definition_like(text: &str, mat: &Match) -> bool {
+    if !matches_definition_prefix(&text[..mat.start()]) {
+        return false;
+    }
+    let suffix = &text[mat.end()..];
+    let trimmed = suffix.trim_start_matches(char::is_whitespace);
+    if !trimmed.starts_with(':') {
+        return false;
+    }
+    let after_colon = &trimmed[1..];
+    if suffix.len() == trimmed.len() && after_colon.starts_with(':') {
+        return false;
+    }
+    true
+}
+
 fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<usize, usize>) -> String {
     FOOTNOTE_REF_RE
         .replace_all(text, |caps: &Captures| {
             let mat = caps.get(0).expect("regex matched without capture");
-            if mat.end() < text.len() && text.as_bytes()[mat.end()] == b':' {
+            if is_definition_like(text, &mat) {
                 return caps[0].to_string();
             }
             caps["num"]
@@ -267,7 +312,7 @@ fn collect_reference_mapping(lines: &[String]) -> HashMap<usize, usize> {
                     let Some(mat) = caps.get(0) else {
                         continue;
                     };
-                    if mat.end() < text.len() && text.as_bytes()[mat.end()] == b':' {
+                    if is_definition_like(text, &mat) {
                         continue;
                     }
                     if let Ok(number) = caps["num"].parse::<usize>() {

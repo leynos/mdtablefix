@@ -4,9 +4,9 @@
 //! `convert_footnotes`. Inputs are loaded from fixture files through the
 //! `include_lines!` and `lines_vec!` macros re-exported by `tests::prelude`.
 //! The cases mix headings, code blocks and ordinary text to confirm that
-//! inline references become footnote links, that final numeric lists are
-//! rewritten as definitions, and that footnotes are renumbered sequentially
-//! with definitions reordered to match.
+//! inline references become footnote links; eligible trailing numeric lists are
+//! rewritten as definition-style footnotes when at least one footnote reference exists;
+//! footnotes are renumbered sequentially with definitions reordered to match.
 //!
 //! A simple check ensures these macros are available so the prelude exports
 //! are correctly wired for all integration tests.
@@ -113,7 +113,7 @@ fn test_handles_punctuation_inside_bold() {
     lines_vec!(
         "While a full library tutorial is beyond this guide's scope, a brief look at the",
         "core API concepts reveals its ergonomic design. The official `docs.rs` page",
-        "provides several end-to-end examples that revolve around a few key types[^7]:",
+        "provides several end-to-end examples that revolve around a few key types[^1]:",
     )
 )]
 #[case(
@@ -122,8 +122,8 @@ fn test_handles_punctuation_inside_bold() {
         "Another example 3::: with more colons.",
     ),
     lines_vec!(
-        "This is a reference[^12]:: to something important.",
-        "Another example[^3]::: with more colons.",
+        "This is a reference[^1]:: to something important.",
+        "Another example[^2]::: with more colons.",
     )
 )]
 #[case(
@@ -132,8 +132,8 @@ fn test_handles_punctuation_inside_bold() {
         "Another case is 8:; for completeness.",
     ),
     lines_vec!(
-        "See the details in section[^5]:, which are crucial.",
-        "Another case is[^8]:; for completeness.",
+        "See the details in section[^1]:, which are crucial.",
+        "Another case is[^2]:; for completeness.",
     )
 )]
 #[case(
@@ -142,8 +142,8 @@ fn test_handles_punctuation_inside_bold() {
         "Extra spaces  10  : are also possible.",
     ),
     lines_vec!(
-        "This is a tricky one[^9]: and should be handled.",
-        "Extra spaces[^10]: are also possible.",
+        "This is a tricky one[^1]: and should be handled.",
+        "Extra spaces[^2]: are also possible.",
     )
 )]
 fn test_converts_number_followed_by_colon(
@@ -156,6 +156,20 @@ fn test_converts_number_followed_by_colon(
 #[test]
 fn test_converts_colon_footnote_definition() {
     let input = lines_vec!("## Footnotes", "7: Footnote text");
+    let expected = lines_vec!("## Footnotes", "[^1]: Footnote text");
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_converts_colon_definition_with_leading_spaces() {
+    let input = lines_vec!("## Footnotes", "  7: Footnote text");
+    let expected = lines_vec!("## Footnotes", "[^1]: Footnote text");
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_converts_colon_definition_with_trailing_spaces() {
+    let input = lines_vec!("## Footnotes", "7:  Footnote text");
     let expected = lines_vec!("## Footnotes", "[^1]: Footnote text");
     assert_eq!(convert_footnotes(&input), expected);
 }
@@ -280,6 +294,20 @@ fn test_renumbers_numeric_list_without_heading() {
         "[^3]: Legacy footnote",
     );
     assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_skips_numeric_list_not_last_without_heading() {
+    let input = lines_vec!(
+        "Reference.[^2]",
+        "1. First footnote",
+        "2. Second footnote",
+        "",
+        "Tail.",
+    );
+    let output = convert_footnotes(&input);
+    assert_eq!(&output[1..], &input[1..]);
+    assert_eq!(output[0], "Reference.[^1]");
 }
 
 #[test]
