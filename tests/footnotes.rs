@@ -163,14 +163,14 @@ fn test_converts_colon_footnote_definition() {
 #[test]
 fn test_converts_colon_definition_with_leading_spaces() {
     let input = lines_vec!("## Footnotes", "  7: Footnote text");
-    let expected = lines_vec!("## Footnotes", "[^1]: Footnote text");
+    let expected = lines_vec!("## Footnotes", "  [^1]: Footnote text");
     assert_eq!(convert_footnotes(&input), expected);
 }
 
 #[test]
 fn test_converts_colon_definition_with_trailing_spaces() {
     let input = lines_vec!("## Footnotes", "7:  Footnote text");
-    let expected = lines_vec!("## Footnotes", "[^1]: Footnote text");
+    let expected = lines_vec!("## Footnotes", "[^1]:  Footnote text");
     assert_eq!(convert_footnotes(&input), expected);
 }
 

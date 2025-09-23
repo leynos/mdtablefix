@@ -89,7 +89,15 @@ fn convert_inline(text: &str) -> String {
             let num = &caps["num"];
             let colons = &caps["colons"];
             let boundary = &caps["boundary"];
-            format!("{pre}{style}[^{num}]:{colons}{boundary}")
+            let mat = caps.get(0).expect("regex matched without capture");
+            let match_str = mat.as_str();
+            let num_match = caps.name("num").expect("regex matched without num capture");
+            let style_start = caps
+                .name("style")
+                .map_or(num_match.start() - mat.start(), |m| m.start() - mat.start());
+            let whitespace = &match_str[pre.len()..style_start];
+            let leading = if mat.start() == 0 { whitespace } else { "" };
+            format!("{pre}{leading}{style}[^{num}]:{colons}{boundary}")
         })
         .into_owned()
 }
@@ -217,7 +225,17 @@ fn has_existing_footnote_block(lines: &[String], start: usize) -> bool {
 fn replace_footnote_line(line: &str) -> String {
     FOOTNOTE_LINE_RE
         .replace(line, |caps: &Captures| {
-            format!("{}[^{}]: {}", &caps["indent"], &caps["num"], &caps["rest"])
+            let num_match = caps
+                .name("num")
+                .expect("footnote line capture missing number");
+            let rest_match = caps
+                .name("rest")
+                .expect("footnote line capture missing rest");
+            let whitespace = &line[num_match.end() + 1..rest_match.start()];
+            format!(
+                "{}[^{}]:{}{}",
+                &caps["indent"], &caps["num"], whitespace, &caps["rest"]
+            )
         })
         .to_string()
 }
@@ -584,10 +602,18 @@ fn collect_definition_updates(
             let indent = caps.name("indent").map_or("", |m| m.as_str());
             let rest = caps.name("rest").map_or("", |m| m.as_str());
             let rewritten_rest = rewrite_tokens(rest, mapping);
-            let mut new_line = String::with_capacity(indent.len() + rewritten_rest.len() + 8);
+            let num_match = caps
+                .name("num")
+                .expect("numeric list capture missing number");
+            let rest_match = caps
+                .name("rest")
+                .expect("numeric list capture missing rest");
+            let whitespace = &line[num_match.end() + 1..rest_match.start()];
+            let mut new_line =
+                String::with_capacity(indent.len() + rewritten_rest.len() + whitespace.len() + 8);
             new_line.push_str(indent);
             write!(&mut new_line, "[^{new_number}]:").expect("write to string cannot fail");
-            new_line.push(' ');
+            new_line.push_str(whitespace);
             new_line.push_str(&rewritten_rest);
             definitions.push(DefinitionLine {
                 index: idx,
