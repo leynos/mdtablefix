@@ -149,13 +149,15 @@ where
 /// assert_eq!(footnote_block_range(&lines), Some((1, 2)));
 /// ```
 fn footnote_block_range(lines: &[String]) -> Option<(usize, usize)> {
-    let (start, end) = trimmed_range(lines, |l| {
-        l.trim().is_empty() || FOOTNOTE_LINE_RE.is_match(l)
+    let (start, end) = trimmed_range(lines, |line| {
+        line.trim().is_empty()
+            || FOOTNOTE_LINE_RE.is_match(line)
+            || is_definition_continuation(line)
     });
     if start < end
         && lines[start..end]
             .iter()
-            .any(|l| FOOTNOTE_LINE_RE.is_match(l))
+            .any(|line| FOOTNOTE_LINE_RE.is_match(line))
     {
         Some((start, end))
     } else {
@@ -281,11 +283,10 @@ fn is_definition_like(text: &str, mat: &Match) -> bool {
     if !trimmed.starts_with(':') {
         return false;
     }
-    let after_colon = &trimmed[1..];
-    if suffix.len() == trimmed.len() && after_colon.starts_with(':') {
+    if suffix.len() == trimmed.len() && trimmed.starts_with("::") {
         return false;
     }
-    true
+    parse_definition(text.trim_end()).is_some()
 }
 
 fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<usize, usize>) -> String {
@@ -352,6 +353,14 @@ struct DefinitionLine {
     index: usize,
     new_number: usize,
     line: String,
+}
+
+struct NumericCandidate {
+    index: usize,
+    number: usize,
+    indent: String,
+    whitespace: String,
+    rest: String,
 }
 
 struct DefinitionParts<'a> {
@@ -570,6 +579,7 @@ fn collect_definition_updates(
     let mut next_number = mapping.len() + 1;
     let mut definitions = Vec::new();
     let mut is_definition_line = vec![false; lines.len()];
+    let mut numeric_candidates: Vec<NumericCandidate> = Vec::new();
     let numeric_list_range = footnote_block_range(lines);
     let skip_numeric_conversion = numeric_list_range
         .as_ref()
@@ -598,30 +608,41 @@ fn collect_definition_updates(
             let Ok(number) = caps["num"].parse::<usize>() else {
                 continue;
             };
-            let new_number = assign_new_number(mapping, number, &mut next_number);
-            let indent = caps.name("indent").map_or("", |m| m.as_str());
-            let rest = caps.name("rest").map_or("", |m| m.as_str());
-            let rewritten_rest = rewrite_tokens(rest, mapping);
+            let indent = caps.name("indent").map_or("", |m| m.as_str()).to_string();
+            let rest = caps.name("rest").map_or("", |m| m.as_str()).to_string();
             let num_match = caps
                 .name("num")
                 .expect("numeric list capture missing number");
             let rest_match = caps
                 .name("rest")
                 .expect("numeric list capture missing rest");
-            let whitespace = &line[num_match.end() + 1..rest_match.start()];
-            let mut new_line =
-                String::with_capacity(indent.len() + rewritten_rest.len() + whitespace.len() + 8);
-            new_line.push_str(indent);
-            write!(&mut new_line, "[^{new_number}]:").expect("write to string cannot fail");
-            new_line.push_str(whitespace);
-            new_line.push_str(&rewritten_rest);
-            definitions.push(DefinitionLine {
+            let whitespace = line[num_match.end() + 1..rest_match.start()].to_string();
+            numeric_candidates.push(NumericCandidate {
                 index: idx,
-                new_number,
-                line: new_line,
+                number,
+                indent,
+                whitespace,
+                rest,
             });
-            is_definition_line[idx] = true;
         }
+    }
+
+    for candidate in numeric_candidates.into_iter().rev() {
+        let new_number = assign_new_number(mapping, candidate.number, &mut next_number);
+        let rewritten_rest = rewrite_tokens(&candidate.rest, mapping);
+        let mut new_line = String::with_capacity(
+            candidate.indent.len() + candidate.whitespace.len() + rewritten_rest.len() + 8,
+        );
+        new_line.push_str(&candidate.indent);
+        write!(&mut new_line, "[^{new_number}]:").expect("write to string cannot fail");
+        new_line.push_str(&candidate.whitespace);
+        new_line.push_str(&rewritten_rest);
+        definitions.push(DefinitionLine {
+            index: candidate.index,
+            new_number,
+            line: new_line,
+        });
+        is_definition_line[candidate.index] = true;
     }
 
     DefinitionUpdates {
@@ -660,11 +681,11 @@ fn renumber_footnotes(lines: &mut [String]) {
         return;
     }
 
-    apply_mapping_to_lines(lines, &mapping, &is_definition_line);
-
-    if definitions.is_empty() {
+    if definitions.is_empty() && lines.iter().any(|line| FOOTNOTE_LINE_RE.is_match(line)) {
         return;
     }
+
+    apply_mapping_to_lines(lines, &mapping, &is_definition_line);
 
     rewrite_definition_headers(lines, &definitions);
 

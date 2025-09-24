@@ -22,8 +22,8 @@ returns a `Result` or `Option`. This mismatch leads to a compilation error.[^2]
 
 ## Footnotes
 
- 1. Not a footnote
- 2. Rustdoc doctests need fixing — Swatinem, accessed on 15 July 2025,
-    <https://swatinem.de/blog/fix-rustdoc/>
 [^1]: Duplicate example footnote
  [^2]: Another footnote
+ [^3]: Not a footnote
+ [^4]: Rustdoc doctests need fixing — Swatinem, accessed on 15 July 2025,
+    <https://swatinem.de/blog/fix-rustdoc/>

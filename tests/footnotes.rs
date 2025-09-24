@@ -297,6 +297,27 @@ fn test_renumbers_numeric_list_without_heading() {
 }
 
 #[test]
+fn test_renumbers_numeric_list_with_wrapped_items_and_duplicates_without_heading() {
+    let input = lines_vec!(
+        "First ref.[^7] and again [^7]",
+        "",
+        "1. Legacy footnote",
+        "3. Third footnote wraps",
+        "   over two lines.",
+        "7. Seventh footnote",
+    );
+    let expected = lines_vec!(
+        "First ref.[^1] and again [^1]",
+        "",
+        "[^1]: Seventh footnote",
+        "[^2]: Third footnote wraps",
+        "   over two lines.",
+        "[^3]: Legacy footnote",
+    );
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
 fn test_skips_numeric_list_not_last_without_heading() {
     let input = lines_vec!(
         "Reference.[^2]",
@@ -305,9 +326,24 @@ fn test_skips_numeric_list_not_last_without_heading() {
         "",
         "Tail.",
     );
-    let output = convert_footnotes(&input);
-    assert_eq!(&output[1..], &input[1..]);
-    assert_eq!(output[0], "Reference.[^1]");
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
+fn test_renumbers_reference_followed_by_colons() {
+    let input = lines_vec!(
+        "Usage.[^7]:: extra context",
+        "",
+        "## Footnotes",
+        "7. Footnote text",
+    );
+    let expected = lines_vec!(
+        "Usage.[^1]:: extra context",
+        "",
+        "## Footnotes",
+        "[^1]: Footnote text",
+    );
+    assert_eq!(convert_footnotes(&input), expected);
 }
 
 #[test]
