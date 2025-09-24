@@ -4,8 +4,9 @@
 //! `convert_footnotes`. Inputs are loaded from fixture files through the
 //! `include_lines!` and `lines_vec!` macros re-exported by `tests::prelude`.
 //! The cases mix headings, code blocks and ordinary text to confirm that
-//! inline references become footnote links and that final numeric lists are
-//! rewritten as definitions.
+//! inline references become footnote links; eligible trailing numeric lists are
+//! rewritten as definition-style footnotes when at least one footnote reference exists;
+//! footnotes are renumbered sequentially with definitions reordered to match.
 //!
 //! A simple check ensures these macros are available so the prelude exports
 //! are correctly wired for all integration tests.
@@ -98,7 +99,7 @@ fn test_ignores_numbers_in_indented_code_block() {
 #[test]
 fn test_handles_punctuation_inside_bold() {
     let input = lines_vec!("It was **scary.**7");
-    let expected = lines_vec!("It was **scary.**[^7]");
+    let expected = lines_vec!("It was **scary.**[^1]");
     assert_eq!(convert_footnotes(&input), expected);
 }
 
@@ -112,7 +113,7 @@ fn test_handles_punctuation_inside_bold() {
     lines_vec!(
         "While a full library tutorial is beyond this guide's scope, a brief look at the",
         "core API concepts reveals its ergonomic design. The official `docs.rs` page",
-        "provides several end-to-end examples that revolve around a few key types[^7]:",
+        "provides several end-to-end examples that revolve around a few key types[^1]:",
     )
 )]
 #[case(
@@ -121,8 +122,8 @@ fn test_handles_punctuation_inside_bold() {
         "Another example 3::: with more colons.",
     ),
     lines_vec!(
-        "This is a reference[^12]:: to something important.",
-        "Another example[^3]::: with more colons.",
+        "This is a reference[^1]:: to something important.",
+        "Another example[^2]::: with more colons.",
     )
 )]
 #[case(
@@ -131,8 +132,8 @@ fn test_handles_punctuation_inside_bold() {
         "Another case is 8:; for completeness.",
     ),
     lines_vec!(
-        "See the details in section[^5]:, which are crucial.",
-        "Another case is[^8]:; for completeness.",
+        "See the details in section[^1]:, which are crucial.",
+        "Another case is[^2]:; for completeness.",
     )
 )]
 #[case(
@@ -141,8 +142,8 @@ fn test_handles_punctuation_inside_bold() {
         "Extra spaces  10  : are also possible.",
     ),
     lines_vec!(
-        "This is a tricky one[^9]: and should be handled.",
-        "Extra spaces[^10]: are also possible.",
+        "This is a tricky one[^1]: and should be handled.",
+        "Extra spaces[^2]: are also possible.",
     )
 )]
 fn test_converts_number_followed_by_colon(
@@ -155,7 +156,21 @@ fn test_converts_number_followed_by_colon(
 #[test]
 fn test_converts_colon_footnote_definition() {
     let input = lines_vec!("## Footnotes", "7: Footnote text");
-    let expected = lines_vec!("## Footnotes", "[^7]: Footnote text");
+    let expected = lines_vec!("## Footnotes", "[^1]: Footnote text");
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_converts_colon_definition_with_leading_spaces() {
+    let input = lines_vec!("## Footnotes", "  7: Footnote text");
+    let expected = lines_vec!("## Footnotes", "  [^1]: Footnote text");
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_converts_colon_definition_with_trailing_spaces() {
+    let input = lines_vec!("## Footnotes", "7:  Footnote text");
+    let expected = lines_vec!("## Footnotes", "[^1]:  Footnote text");
     assert_eq!(convert_footnotes(&input), expected);
 }
 
@@ -183,7 +198,7 @@ fn test_converts_list_with_blank_lines() {
         "  ",
         " [^2]: Second",
         "",
-        "[^10]: Tenth",
+        "[^3]: Tenth",
         "   ",
         "",
     );
@@ -258,4 +273,81 @@ fn test_ignores_definition_inside_fence() {
     let input = lines_vec!("```", "[^1]: Old", "```", "## Footnotes", " 1. First",);
     let expected = lines_vec!("```", "[^1]: Old", "```", "## Footnotes", " [^1]: First",);
     assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_renumbers_numeric_list_without_heading() {
+    let input = lines_vec!(
+        "First reference.[^7]",
+        "Second reference.[^3]",
+        "",
+        "1. Legacy footnote",
+        "3. Third footnote",
+        "7. Seventh footnote",
+    );
+    let expected = lines_vec!(
+        "First reference.[^1]",
+        "Second reference.[^2]",
+        "",
+        "[^1]: Seventh footnote",
+        "[^2]: Third footnote",
+        "[^3]: Legacy footnote",
+    );
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_renumbers_numeric_list_with_wrapped_items_and_duplicates_without_heading() {
+    let input = lines_vec!(
+        "First ref.[^7] and again [^7]",
+        "",
+        "1. Legacy footnote",
+        "3. Third footnote wraps",
+        "   over two lines.",
+        "7. Seventh footnote",
+    );
+    let expected = lines_vec!(
+        "First ref.[^1] and again [^1]",
+        "",
+        "[^1]: Seventh footnote",
+        "[^2]: Third footnote wraps",
+        "   over two lines.",
+        "[^3]: Legacy footnote",
+    );
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_skips_numeric_list_not_last_without_heading() {
+    let input = lines_vec!(
+        "Reference.[^2]",
+        "1. First footnote",
+        "2. Second footnote",
+        "",
+        "Tail.",
+    );
+    assert_eq!(convert_footnotes(&input), input);
+}
+
+#[test]
+fn test_renumbers_reference_followed_by_colons() {
+    let input = lines_vec!(
+        "Usage.[^7]:: extra context",
+        "",
+        "## Footnotes",
+        "7. Footnote text",
+    );
+    let expected = lines_vec!(
+        "Usage.[^1]:: extra context",
+        "",
+        "## Footnotes",
+        "[^1]: Footnote text",
+    );
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_preserves_numeric_list_without_references() {
+    let input = lines_vec!("Ordinary list:", "1. Apples", "2. Bananas",);
+    assert_eq!(convert_footnotes(&input), input);
 }

@@ -159,6 +159,15 @@ definitions, allowing references before the final footnote definition block.
 Definitions prefixed by blockquote markers (`>`) still count as existing
 blocks, but those inside fenced code blocks are ignored.
 
+Once inline references and trailing lists are normalised, `renumber_footnotes`
+walks the document in the order readers encounter references. It assigns
+sequential identifiers starting from one, rewrites every reference to use its
+new identifier, and updates footnote definitions to match. Trailing numeric
+lists are converted into definitions when the document already contains at
+least one footnote reference or definition, ensuring unrelated lists are left
+untouched. The rewritten definitions are then sorted numerically so the
+rendered footnote block mirrors the logical ordering of references in the text.
+
 Before:
 
 ```markdown
