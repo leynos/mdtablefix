@@ -115,32 +115,6 @@ fn flush_trailing_whitespace(lines: &mut Vec<String>, current: &mut String, toke
     flush_current(lines, current);
 }
 
-struct LineBuffer<'a> {
-    text: &'a mut String,
-    width: &'a mut usize,
-    last_split: &'a mut Option<usize>,
-}
-
-impl<'a> LineBuffer<'a> {
-    fn new(text: &'a mut String, width: &'a mut usize, last_split: &'a mut Option<usize>) -> Self {
-        Self {
-            text,
-            width,
-            last_split,
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.text.is_empty()
-    }
-
-    fn clear(&mut self) {
-        self.text.clear();
-        *self.width = 0;
-        *self.last_split = None;
-    }
-}
-
 fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
     let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());
@@ -155,16 +129,18 @@ fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
 
     if tokens[start].starts_with('`') && tokens[start].ends_with('`') {
         end = extend_punctuation(tokens, end, &mut width);
+
+        while end < tokens.len() && tokens[end].starts_with('`') && tokens[end].ends_with('`') {
+            width += UnicodeWidthStr::width(tokens[end].as_str());
+            end += 1;
+            end = extend_punctuation(tokens, end, &mut width);
+        }
     }
 
     (end, width)
 }
 
-fn try_attach_punctuation_to_previous_line(
-    lines: &mut [String],
-    current: &str,
-    token: &str,
-) -> bool {
+fn attach_punctuation_to_previous_line(lines: &mut [String], current: &str, token: &str) -> bool {
     if !current.is_empty() || token.len() != 1 || !".?!,:;".contains(token) {
         return false;
     }
@@ -179,97 +155,37 @@ fn try_attach_punctuation_to_previous_line(
     false
 }
 
-fn append_group_to_line(tokens: &[String], start: usize, end: usize, buffer: &mut LineBuffer<'_>) {
-    for tok in &tokens[start..end] {
-        buffer.text.push_str(tok);
-        if tok.chars().all(char::is_whitespace) {
-            *buffer.last_split = Some(buffer.text.len());
-        }
-        *buffer.width += UnicodeWidthStr::width(tok.as_str());
-    }
-}
-
-fn handle_split_overflow(
-    lines: &mut Vec<String>,
-    buffer: &mut LineBuffer<'_>,
+fn extend_current_with_group(
     tokens: &[String],
     start: usize,
     end: usize,
-    width: usize,
-) -> bool {
-    let Some(pos) = *buffer.last_split else {
-        return false;
-    };
-
-    let line = buffer.text[..pos].to_string();
-    let mut rest = buffer.text[pos..].trim_start().to_string();
-    let trimmed = line.trim_end();
-    if !trimmed.is_empty() {
-        lines.push(trimmed.to_string());
-    }
-
-    for tok in &tokens[start..end] {
-        rest.push_str(tok);
-    }
-
-    *buffer.text = rest;
-    *buffer.width = UnicodeWidthStr::width(buffer.text.as_str());
-    *buffer.last_split = if tokens[end - 1].chars().all(char::is_whitespace) {
-        Some(buffer.text.len())
-    } else {
-        None
-    };
-
-    if *buffer.width > width {
-        lines.push(buffer.text.trim_end().to_string());
-        buffer.clear();
-    }
-
-    true
-}
-
-fn handle_trailing_whitespace_group(
-    lines: &mut Vec<String>,
-    buffer: &mut LineBuffer<'_>,
-    tokens: &[String],
-    start: usize,
-    end: usize,
-) -> bool {
-    if !tokens[start].chars().all(char::is_whitespace) || end != tokens.len() {
-        return false;
-    }
-
-    if !buffer.text.is_empty() {
-        flush_trailing_whitespace(lines, buffer.text, &tokens[start]);
-    }
-
-    buffer.clear();
-    true
-}
-
-fn start_new_line_with_group(
-    lines: &mut Vec<String>,
-    buffer: &mut LineBuffer<'_>,
-    tokens: &[String],
-    start: usize,
-    end: usize,
+    current: &mut String,
+    current_width: &mut usize,
+    last_split: &mut Option<usize>,
 ) {
-    if !buffer.is_empty() {
-        flush_current(lines, buffer.text);
-    }
-
-    buffer.clear();
-
     for tok in &tokens[start..end] {
-        if tok.chars().all(char::is_whitespace) {
-            continue;
+        let token_str = tok.as_str();
+        if token_str.len() == 1 && ".?!,:;".contains(token_str) && current.trim_end().ends_with('`')
+        {
+            let trimmed_len = current.trim_end_matches(char::is_whitespace).len();
+            if trimmed_len < current.len() {
+                let removed_segment = current[trimmed_len..].to_string();
+                let removed_width = UnicodeWidthStr::width(removed_segment.as_str());
+                current.truncate(trimmed_len);
+                *current_width = current_width.saturating_sub(removed_width);
+                *last_split = current
+                    .char_indices()
+                    .rev()
+                    .find(|(_, ch)| ch.is_whitespace())
+                    .map(|(idx, ch)| idx + ch.len_utf8());
+            }
         }
-        buffer.text.push_str(tok);
-        *buffer.width += UnicodeWidthStr::width(tok.as_str());
-    }
 
-    if end > start && tokens[end - 1].chars().all(char::is_whitespace) {
-        *buffer.last_split = Some(buffer.text.len());
+        current.push_str(token_str);
+        if tok.chars().all(char::is_whitespace) {
+            *last_split = Some(current.len());
+        }
+        *current_width += UnicodeWidthStr::width(token_str);
     }
 }
 
@@ -280,40 +196,86 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut last_split: Option<usize> = None;
     let tokens = tokenize::segment_inline(text);
     let mut i = 0;
-
     while i < tokens.len() {
         let (group_end, group_width) = determine_token_span(&tokens, i);
-
-        if try_attach_punctuation_to_previous_line(lines.as_mut_slice(), &current, &tokens[i]) {
+        if attach_punctuation_to_previous_line(lines.as_mut_slice(), &current, &tokens[i]) {
             i += 1;
             continue;
         }
 
         if current_width + group_width <= width {
-            let mut buffer = LineBuffer::new(&mut current, &mut current_width, &mut last_split);
-            append_group_to_line(&tokens, i, group_end, &mut buffer);
+            extend_current_with_group(
+                &tokens,
+                i,
+                group_end,
+                &mut current,
+                &mut current_width,
+                &mut last_split,
+            );
             i = group_end;
             continue;
         }
 
-        {
-            let mut buffer = LineBuffer::new(&mut current, &mut current_width, &mut last_split);
-            if handle_split_overflow(&mut lines, &mut buffer, &tokens, i, group_end, width) {
-                i = group_end;
-                continue;
+        if last_split.is_some() {
+            let pos = last_split.expect("split position exists");
+            let line = current[..pos].to_string();
+            let mut rest = current[pos..].trim_start().to_string();
+            if !line.trim_end().is_empty() {
+                let trimmed = line.trim_end();
+                let whitespace_segment = &line[trimmed.len()..];
+                if whitespace_segment.chars().count() > 1 {
+                    // Preserve multi-space runs so Markdown hard breaks survive wrapping.
+                    lines.push(line);
+                } else {
+                    lines.push(trimmed.to_string());
+                }
             }
+            for tok in &tokens[i..group_end] {
+                rest.push_str(tok);
+            }
+            current = rest;
+            current_width = UnicodeWidthStr::width(current.as_str());
+            last_split = if group_end > i && tokens[group_end - 1].chars().all(char::is_whitespace)
+            {
+                Some(current.len())
+            } else {
+                None
+            };
+            if current_width > width {
+                lines.push(current.trim_end().to_string());
+                current.clear();
+                current_width = 0;
+                last_split = None;
+            }
+            i = group_end;
+            continue;
         }
 
-        {
-            let mut buffer = LineBuffer::new(&mut current, &mut current_width, &mut last_split);
-            if handle_trailing_whitespace_group(&mut lines, &mut buffer, &tokens, i, group_end) {
-                i = group_end;
-                continue;
+        if tokens[i].chars().all(char::is_whitespace) && group_end == tokens.len() {
+            if !current.is_empty() {
+                flush_trailing_whitespace(&mut lines, &mut current, &tokens[i]);
             }
+            current_width = 0;
+            last_split = None;
+            i = group_end;
+            continue;
         }
 
-        let mut buffer = LineBuffer::new(&mut current, &mut current_width, &mut last_split);
-        start_new_line_with_group(&mut lines, &mut buffer, &tokens, i, group_end);
+        if !current.is_empty() {
+            flush_current(&mut lines, &mut current);
+        }
+        current_width = 0;
+        last_split = None;
+
+        for tok in &tokens[i..group_end] {
+            if !tok.chars().all(char::is_whitespace) {
+                current.push_str(tok);
+                current_width += UnicodeWidthStr::width(tok.as_str());
+            }
+        }
+        if group_end > i && tokens[group_end - 1].chars().all(char::is_whitespace) {
+            last_split = Some(current.len());
+        }
         i = group_end;
     }
 

@@ -7,8 +7,7 @@ use rstest::rstest;
 
 use super::super::*;
 use super::{
-    LineBuffer, append_group_to_line, determine_token_span, handle_split_overflow,
-    handle_trailing_whitespace_group, start_new_line_with_group, tokenize::segment_inline,
+    attach_punctuation_to_previous_line, determine_token_span, tokenize::segment_inline,
     wrap_preserving_code,
 };
 
@@ -16,6 +15,16 @@ use super::{
 #[case("`code`!", "`code`!")]
 #[case("[link](url).", "[link](url).")]
 #[case("plain,", "plain,")]
+#[case("`code`,", "`code`,")]
+#[case("`code`!`more`", "`code`!`more`")]
+#[case("[link](url),", "[link](url),")]
+#[case("[link](url)[another](url2)", "[link](url)")]
+#[case("[link](url) [another](url2)", "[link](url)")]
+#[case("`code` !", "`code`")]
+#[case("`code` ,", "`code`")]
+#[case("`code`", "`code`")]
+#[case("`code!`", "`code!`")]
+#[case("[link!](url)", "[link!](url)")]
 fn determine_token_span_groups_related_tokens(#[case] input: &str, #[case] expected_group: &str) {
     let tokens = segment_inline(input);
     let (end, width) = determine_token_span(&tokens, 0);
@@ -25,110 +34,58 @@ fn determine_token_span_groups_related_tokens(#[case] input: &str, #[case] expec
 }
 
 #[test]
-fn append_group_to_line_updates_last_split_for_whitespace() {
-    let tokens = segment_inline("foo bar");
-    let mut current = String::new();
-    let mut current_width = 0;
-    let mut last_split = None;
-
-    {
-        let mut buffer = LineBuffer::new(&mut current, &mut current_width, &mut last_split);
-        append_group_to_line(&tokens, 0, 1, &mut buffer);
-    }
-    assert_eq!(current, "foo");
-    assert_eq!(current_width, unicode_width::UnicodeWidthStr::width("foo"));
-    assert_eq!(last_split, None);
-
-    {
-        let mut buffer = LineBuffer::new(&mut current, &mut current_width, &mut last_split);
-        append_group_to_line(&tokens, 1, 2, &mut buffer);
-    }
-    assert_eq!(current, "foo ");
-    assert_eq!(current_width, unicode_width::UnicodeWidthStr::width("foo "));
-    assert_eq!(last_split, Some(current.len()));
+fn attach_punctuation_appends_to_previous_code_line() {
+    let mut lines = vec!["wrap `code`".to_string()];
+    let current = String::new();
+    assert!(attach_punctuation_to_previous_line(
+        lines.as_mut_slice(),
+        &current,
+        "!",
+    ));
+    assert_eq!(lines, vec!["wrap `code`!".to_string()]);
 }
 
 #[test]
-fn handle_split_overflow_moves_tokens_to_new_line() {
-    let tokens = segment_inline("foo bar baz");
-    let mut lines = Vec::new();
-    let mut current = String::new();
-    let mut current_width = 0;
-    let mut last_split = None;
-
-    for start in 0..4 {
-        let (end, _) = determine_token_span(&tokens, start);
-        let mut buffer = LineBuffer::new(&mut current, &mut current_width, &mut last_split);
-        append_group_to_line(&tokens, start, end, &mut buffer);
-    }
-
-    let (group_end, _) = determine_token_span(&tokens, 4);
-    let handled = {
-        let mut buffer = LineBuffer::new(&mut current, &mut current_width, &mut last_split);
-        handle_split_overflow(&mut lines, &mut buffer, &tokens, 4, group_end, 10)
-    };
-
-    assert!(handled);
-    assert_eq!(lines, vec!["foo bar".to_string()]);
-    assert_eq!(current, "baz");
-    assert_eq!(current_width, unicode_width::UnicodeWidthStr::width("baz"));
-    assert_eq!(last_split, None);
+fn attach_punctuation_requires_empty_current_buffer() {
+    let mut lines = vec!["`code`".to_string()];
+    let current = " pending".to_string();
+    assert!(!attach_punctuation_to_previous_line(
+        lines.as_mut_slice(),
+        &current,
+        "!",
+    ));
+    assert_eq!(lines, vec!["`code`".to_string()]);
 }
 
 #[test]
-fn handle_trailing_whitespace_group_preserves_spaces() {
-    let tokens = segment_inline("foo  ");
-    let mut lines = Vec::new();
-    let mut current = String::new();
-    let mut current_width = 0;
-    let mut last_split = None;
-
-    let (word_end, _) = determine_token_span(&tokens, 0);
-    {
-        let mut buffer = LineBuffer::new(&mut current, &mut current_width, &mut last_split);
-        append_group_to_line(&tokens, 0, word_end, &mut buffer);
-    }
-
-    let start = tokens
-        .iter()
-        .enumerate()
-        .rev()
-        .find(|(_, tok)| tok.chars().all(char::is_whitespace))
-        .map(|(idx, _)| idx)
-        .expect("at least one trailing whitespace token");
-    let (group_end, _) = determine_token_span(&tokens, start);
-
-    let handled = {
-        let mut buffer = LineBuffer::new(&mut current, &mut current_width, &mut last_split);
-        handle_trailing_whitespace_group(&mut lines, &mut buffer, &tokens, start, group_end)
-    };
-
-    assert!(handled);
-    assert_eq!(lines, vec!["foo  ".to_string()]);
-    assert!(current.is_empty());
-    assert_eq!(current_width, 0);
-    assert_eq!(last_split, None);
+fn attach_punctuation_ignores_non_code_suffix() {
+    let mut lines = vec!["plain text".to_string()];
+    let current = String::new();
+    assert!(!attach_punctuation_to_previous_line(
+        lines.as_mut_slice(),
+        &current,
+        ".",
+    ));
+    assert_eq!(lines, vec!["plain text".to_string()]);
 }
 
 #[test]
-fn start_new_line_with_group_flushes_existing_line() {
-    let tokens = segment_inline("baz ");
-    let mut lines = Vec::new();
-    let mut current = "foo".to_string();
-    let mut current_width = unicode_width::UnicodeWidthStr::width("foo");
-    let mut last_split = Some(current.len());
+fn wrap_preserving_code_splits_after_consecutive_whitespace() {
+    let lines = wrap_preserving_code("alpha  beta   gamma", 8);
+    assert_eq!(
+        lines,
+        vec![
+            "alpha  ".to_string(),
+            "beta   ".to_string(),
+            "gamma".to_string()
+        ]
+    );
+}
 
-    let (group_end, _) = determine_token_span(&tokens, 0);
-
-    {
-        let mut buffer = LineBuffer::new(&mut current, &mut current_width, &mut last_split);
-        start_new_line_with_group(&mut lines, &mut buffer, &tokens, 0, group_end);
-    }
-
-    assert_eq!(lines, vec!["foo".to_string()]);
-    assert_eq!(current, "baz");
-    assert_eq!(current_width, unicode_width::UnicodeWidthStr::width("baz"));
-    assert_eq!(last_split, None);
+#[test]
+fn wrap_preserving_code_glues_punctuation_after_code() {
+    let lines = wrap_preserving_code("line with `code` !", 80);
+    assert_eq!(lines, vec!["line with `code`!".to_string()]);
 }
 
 #[test]
