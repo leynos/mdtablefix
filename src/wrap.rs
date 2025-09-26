@@ -145,11 +145,11 @@ fn attach_punctuation_to_previous_line(lines: &mut [String], current: &str, toke
         return false;
     }
 
-    if let Some(last_line) = lines.last_mut()
-        && last_line.trim_end().ends_with('`')
-    {
-        last_line.push_str(token);
-        return true;
+    if let Some(last_line) = lines.last_mut() {
+        if last_line.trim_end().ends_with('`') {
+            last_line.push_str(token);
+            return true;
+        }
     }
 
     false
@@ -218,18 +218,20 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 
         if last_split.is_some() {
             let pos = last_split.expect("split position exists");
-            let line = current[..pos].to_string();
-            let mut rest = current[pos..].trim_start().to_string();
-            if !line.trim_end().is_empty() {
-                let trimmed = line.trim_end();
-                let whitespace_segment = &line[trimmed.len()..];
-                if whitespace_segment.chars().count() > 1 {
-                    // Preserve multi-space runs so Markdown hard breaks survive wrapping.
-                    lines.push(line);
-                } else {
-                    lines.push(trimmed.to_string());
+            let mut rest = {
+                let (head, tail) = current.split_at(pos);
+                let trimmed = head.trim_end();
+                let whitespace = &head[trimmed.len()..];
+                if !trimmed.is_empty() {
+                    if whitespace.chars().count() > 1 {
+                        // Preserve multi-space runs so Markdown hard breaks survive wrapping.
+                        lines.push(head.to_string());
+                    } else {
+                        lines.push(trimmed.to_string());
+                    }
                 }
-            }
+                tail.trim_start().to_string()
+            };
             for tok in &tokens[i..group_end] {
                 rest.push_str(tok);
             }
