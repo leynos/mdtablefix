@@ -199,10 +199,9 @@ impl LineBuffer {
             }
             self.push_token(tok.as_str());
         }
-        if end > start && tokens[end - 1].chars().all(char::is_whitespace) && !self.text.is_empty()
-        {
-            self.last_split = Some(self.text.len());
-        }
+
+        // No whitespace was appended; keep split unset.
+        self.last_split = None;
     }
 
     fn flush_into(&mut self, lines: &mut Vec<String>) {
@@ -227,16 +226,15 @@ impl LineBuffer {
         };
 
         let (head, tail) = self.text.split_at(pos);
-        let trimmed = head.trim_end();
-        let whitespace = &head[trimmed.len()..];
+        let trimmed_head = head.trim_end();
+        let trailing_ws = &head[trimmed_head.len()..];
 
-        if !trimmed.is_empty() {
-            let line = if whitespace.chars().count() > 1 {
-                head.to_string()
+        if !trimmed_head.is_empty() {
+            if trailing_ws.chars().count() > 1 {
+                lines.push(head.to_string());
             } else {
-                trimmed.to_string()
-            };
-            lines.push(line);
+                lines.push(trimmed_head.to_string());
+            }
         }
 
         let mut remainder = tail.trim_start().to_string();
