@@ -5,7 +5,7 @@
 
 use rstest::rstest;
 
-use super::super::*;
+use super::super::wrap_text;
 use super::{
     LineBuffer, attach_punctuation_to_previous_line, determine_token_span,
     tokenize::segment_inline, wrap_preserving_code,
@@ -101,6 +101,26 @@ fn line_buffer_split_preserves_multi_space_lines() {
     assert!(buffer.try_split_with_group(&mut lines, &tokens, 2, 4, 8));
     assert_eq!(lines, vec!["alpha  ".to_string()]);
     assert_eq!(buffer.text(), "beta   ");
+    assert_eq!(
+        buffer.width(),
+        unicode_width::UnicodeWidthStr::width(buffer.text())
+    );
+}
+
+#[test]
+fn line_buffer_split_trims_single_trailing_space() {
+    let tokens = vec!["alpha".to_string(), " ".to_string(), "beta".to_string()];
+    let mut buffer = LineBuffer::new();
+    buffer.push_group(&tokens, 0, 2);
+
+    let mut lines = Vec::new();
+    assert!(buffer.try_split_with_group(&mut lines, &tokens, 2, 3, 5));
+    assert_eq!(lines, vec!["alpha".to_string()]);
+    assert_eq!(buffer.text(), "beta");
+    assert_eq!(
+        buffer.width(),
+        unicode_width::UnicodeWidthStr::width(buffer.text())
+    );
 }
 
 #[test]

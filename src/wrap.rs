@@ -225,24 +225,33 @@ impl LineBuffer {
             return false;
         };
 
-        let (head, tail) = self.text.split_at(pos);
-        let trimmed_head = head.trim_end();
-        let trailing_ws = &head[trimmed_head.len()..];
-
-        if !trimmed_head.is_empty() {
-            if trailing_ws.chars().count() > 1 {
-                lines.push(head.to_string());
+        let (head_bounds, trimmed_tail_start) = {
+            let (head, tail) = self.text.split_at(pos);
+            let trimmed_head = head.trim_end();
+            let trimmed_head_len = trimmed_head.len();
+            let trailing_ws = &head[trimmed_head_len..];
+            let head_bounds = if trimmed_head_len == 0 {
+                None
+            } else if trailing_ws.chars().count() > 1 {
+                Some((0, pos))
             } else {
-                lines.push(trimmed_head.to_string());
-            }
+                Some((0, trimmed_head_len))
+            };
+
+            let trimmed_tail = tail.trim_start();
+            let trimmed_tail_start = pos + (tail.len() - trimmed_tail.len());
+            (head_bounds, trimmed_tail_start)
+        };
+
+        if let Some((start_idx, end_idx)) = head_bounds {
+            lines.push(self.text[start_idx..end_idx].to_owned());
         }
 
-        let mut remainder = tail.trim_start().to_string();
+        self.text.drain(..trimmed_tail_start);
         for tok in &tokens[start..end] {
-            remainder.push_str(tok);
+            self.text.push_str(tok);
         }
 
-        self.text = remainder;
         self.width = UnicodeWidthStr::width(self.text.as_str());
         if end > start && tokens[end - 1].chars().all(char::is_whitespace) && !self.text.is_empty()
         {
