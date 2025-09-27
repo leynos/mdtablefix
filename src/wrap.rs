@@ -15,7 +15,7 @@ mod fence;
 mod line_buffer;
 mod tokenize;
 pub(crate) use self::line_buffer::LineBuffer;
-pub use fence::is_fence;
+pub use fence::{FenceTracker, is_fence};
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
 ///
@@ -328,9 +328,8 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf: Vec<(String, bool)> = Vec::new();
     let mut indent = String::new();
-    let mut in_code = false;
-    // Track the currently open fence: (marker char, run length), e.g., ('`', 4) or ('~', 3).
-    let mut fence_state: Option<(char, usize)> = None;
+    // Track fenced code blocks so wrapping honours shared fence semantics.
+    let mut fence_tracker = FenceTracker::default();
 
     for line in lines {
         if fence::handle_fence_line(
@@ -339,13 +338,12 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             &mut indent,
             width,
             line,
-            &mut in_code,
-            &mut fence_state,
+            &mut fence_tracker,
         ) {
             continue;
         }
 
-        if in_code {
+        if fence_tracker.in_fence() {
             out.push(line.clone());
             continue;
         }

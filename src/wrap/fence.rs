@@ -46,37 +46,65 @@ pub(crate) fn handle_fence_line(
     indent: &mut String,
     width: usize,
     line: &str,
-    in_code: &mut bool,
-    fence_state: &mut Option<(char, usize)>,
+    tracker: &mut FenceTracker,
 ) -> bool {
-    if let Some((_f_indent, fence, _info)) = is_fence(line) {
-        super::flush_paragraph(out, buf, indent, width);
-        buf.clear();
-        indent.clear();
-
-        // Determine fence marker kind and length to manage open/close state.
-        let marker_ch = fence.chars().next().unwrap_or('`');
-        let marker_len = fence.chars().count();
-
-        if *in_code {
-            if let Some((open_ch, open_len)) = fence_state {
-                // Only close if the marker matches and its length is >= opened length.
-                if marker_ch == *open_ch && marker_len >= *open_len {
-                    *in_code = false;
-                    *fence_state = None;
-                }
-            }
-            // Re-emit the fence line unmodified.
-            out.push(line.to_string());
-            return true;
-        }
-
-        // Open a new fenced block.
-        *in_code = true;
-        *fence_state = Some((marker_ch, marker_len));
-        out.push(line.to_string());
-        return true;
+    if !tracker.observe(line) {
+        return false;
     }
 
-    false
+    super::flush_paragraph(out, buf, indent, width);
+    buf.clear();
+    indent.clear();
+    out.push(line.to_string());
+    true
+}
+
+/// Tracks Markdown fenced code block state across lines.
+///
+/// The tracker centralises fence matching logic so that callers share the
+/// same semantics for opening and closing blocks.
+#[derive(Default)]
+pub struct FenceTracker {
+    state: Option<(char, usize)>,
+}
+
+impl FenceTracker {
+    /// Create a new tracker with no active fence.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Update the tracker with a potential fence line.
+    ///
+    /// Returns `true` when the line is treated as a fence marker and updates
+    /// the internal state accordingly.
+    #[must_use]
+    pub fn observe(&mut self, line: &str) -> bool {
+        let Some((_indent, fence, _info)) = is_fence(line) else {
+            return false;
+        };
+
+        let mut chars = fence.chars();
+        let marker_ch = chars.next().unwrap_or('`');
+        let marker_len = chars.count() + 1;
+
+        match self.state {
+            Some((open_ch, open_len)) if marker_ch == open_ch && marker_len >= open_len => {
+                self.state = None;
+            }
+            Some(_) => {}
+            None => {
+                self.state = Some((marker_ch, marker_len));
+            }
+        }
+
+        true
+    }
+
+    /// Check whether the tracker is currently inside a fenced block.
+    #[must_use]
+    pub fn in_fence(&self) -> bool {
+        self.state.is_some()
+    }
 }

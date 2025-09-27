@@ -9,7 +9,7 @@ use super::{
     LineBuffer, attach_punctuation_to_previous_line, determine_token_span,
     tokenize::segment_inline, wrap_preserving_code,
 };
-use crate::wrap::wrap_text;
+use crate::wrap::{FenceTracker, wrap_text};
 
 #[rstest]
 #[case("`code`!", "`code`!")]
@@ -331,4 +331,25 @@ fn wrap_text_keeps_trailing_spaces_for_bullet_final_line() {
         wrapped,
         vec!["- word1".to_string(), "  word2  ".to_string()]
     );
+}
+
+#[test]
+fn fence_tracker_closes_matching_markers() {
+    let mut tracker = FenceTracker::default();
+    assert!(!tracker.in_fence());
+    assert!(tracker.observe("```rust"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("```"));
+    assert!(!tracker.in_fence());
+}
+
+#[test]
+fn fence_tracker_requires_matching_marker_to_close() {
+    let mut tracker = FenceTracker::default();
+    assert!(tracker.observe("```"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("~~~"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("````"));
+    assert!(!tracker.in_fence());
 }
