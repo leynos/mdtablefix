@@ -9,10 +9,12 @@
 //! can perform custom token-based processing.
 
 use regex::Regex;
+use unicode_width::UnicodeWidthStr;
 
 mod fence;
+mod line_buffer;
 mod tokenize;
-
+pub(crate) use self::line_buffer::LineBuffer;
 pub use fence::is_fence;
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
@@ -69,8 +71,21 @@ fn is_trailing_punct(c: char) -> bool {
     ) || "…—–»›）］】》」』、。，：；！？”.’".contains(c)
 }
 
+fn looks_like_link(token: &str) -> bool {
+    (token.starts_with('[') || token.starts_with("!["))
+        && token.contains("](")
+        && token.ends_with(')')
+}
+
+fn is_whitespace_token(token: &str) -> bool {
+    token.chars().all(char::is_whitespace)
+}
+
+fn is_inline_code_token(token: &str) -> bool {
+    token.starts_with('`') && token.ends_with('`')
+}
+
 fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usize {
-    use unicode_width::UnicodeWidthStr;
     while j < tokens.len() && tokens[j].chars().all(is_trailing_punct) {
         *width += UnicodeWidthStr::width(tokens[j].as_str());
         j += 1;
@@ -80,7 +95,6 @@ fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usi
 
 #[inline]
 fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
-    use unicode_width::UnicodeWidthStr;
     debug_assert!(
         tokens[i] == "`",
         "merge_code_span requires a single backtick opener"
@@ -99,131 +113,134 @@ fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
 }
 
 #[inline]
-fn flush_current(lines: &mut Vec<String>, current: &mut String) {
-    let cap = current.capacity();
-    lines.push(std::mem::take(current));
-    *current = String::with_capacity(cap);
+fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
+    #[derive(PartialEq, Eq)]
+    enum SpanKind {
+        General,
+        Code,
+        Link,
+    }
+
+    let mut end = start + 1;
+    let mut width = UnicodeWidthStr::width(tokens[start].as_str());
+    let mut kind = SpanKind::General;
+
+    if tokens[start] == "`" {
+        kind = SpanKind::Code;
+        end = merge_code_span(tokens, start, &mut width);
+    } else if is_inline_code_token(&tokens[start]) {
+        kind = SpanKind::Code;
+        end = extend_punctuation(tokens, end, &mut width);
+    } else if looks_like_link(&tokens[start]) {
+        kind = SpanKind::Link;
+        end = extend_punctuation(tokens, end, &mut width);
+    }
+
+    while end < tokens.len() {
+        let token = &tokens[end];
+        if is_whitespace_token(token) {
+            if matches!(kind, SpanKind::Code | SpanKind::Link)
+                && end + 1 < tokens.len()
+                && (looks_like_link(&tokens[end + 1])
+                    || is_inline_code_token(&tokens[end + 1])
+                    || tokens[end + 1].chars().all(is_trailing_punct))
+            {
+                width += UnicodeWidthStr::width(token.as_str());
+                end += 1;
+                continue;
+            }
+            break;
+        }
+
+        if token.chars().all(is_trailing_punct) {
+            if matches!(kind, SpanKind::Code | SpanKind::Link) {
+                width += UnicodeWidthStr::width(token.as_str());
+                end += 1;
+                continue;
+            }
+            break;
+        }
+
+        let is_link = looks_like_link(token);
+        let is_code = is_inline_code_token(token);
+
+        if kind == SpanKind::Link && is_link {
+            width += UnicodeWidthStr::width(token.as_str());
+            end += 1;
+            end = extend_punctuation(tokens, end, &mut width);
+            continue;
+        }
+
+        if kind == SpanKind::Code && is_code {
+            width += UnicodeWidthStr::width(token.as_str());
+            end += 1;
+            end = extend_punctuation(tokens, end, &mut width);
+            continue;
+        }
+
+        break;
+    }
+
+    (end, width)
 }
 
-fn flush_trailing_whitespace(lines: &mut Vec<String>, current: &mut String, token: &str) {
-    debug_assert!(
-        token.chars().all(char::is_whitespace),
-        "expected whitespace token"
-    );
-    current.push_str(token);
-    flush_current(lines, current);
+fn attach_punctuation_to_previous_line(lines: &mut [String], current: &str, token: &str) -> bool {
+    if !current.is_empty() || token.len() != 1 || !".?!,:;".contains(token) {
+        return false;
+    }
+
+    let Some(last_line) = lines.last_mut() else {
+        return false;
+    };
+
+    if last_line.trim_end().ends_with('`') {
+        last_line.push_str(token);
+        return true;
+    }
+
+    false
 }
 
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
-    use unicode_width::UnicodeWidthStr;
-    let mut lines = Vec::new();
-    let mut current = String::new();
-    let mut current_width = 0;
-    let mut last_split: Option<usize> = None;
     let tokens = tokenize::segment_inline(text);
+    if tokens.is_empty() {
+        return Vec::new();
+    }
+
+    let mut lines = Vec::new();
+    let mut buffer = LineBuffer::new();
     let mut i = 0;
+
     while i < tokens.len() {
-        let mut j = i + 1;
-        let mut group_width = UnicodeWidthStr::width(tokens[i].as_str());
-        if tokens[i] == "`" {
-            j = merge_code_span(&tokens, i, &mut group_width);
-        }
+        let (group_end, group_width) = determine_token_span(&tokens, i);
 
-        if tokens[i].contains("](") && tokens[i].ends_with(')') {
-            j = extend_punctuation(&tokens, j, &mut group_width);
-        }
-        if tokens[i].starts_with('`') && tokens[i].ends_with('`') {
-            // Keep trailing punctuation glued to inline code spans.
-            j = extend_punctuation(&tokens, j, &mut group_width);
-        }
-
-        if current.is_empty()
-            && tokens[i].len() == 1
-            && ".?!,:;".contains(tokens[i].as_str())
-            && lines
-                .last()
-                .is_some_and(|l: &String| l.trim_end().ends_with('`'))
-        {
-            lines
-                .last_mut()
-                .expect("checked last line exists")
-                .push_str(&tokens[i]);
+        if attach_punctuation_to_previous_line(lines.as_mut_slice(), buffer.text(), &tokens[i]) {
             i += 1;
             continue;
         }
-        if current_width + group_width <= width {
-            for tok in &tokens[i..j] {
-                current.push_str(tok);
-                if tok.chars().all(char::is_whitespace) {
-                    last_split = Some(current.len());
-                }
-                current_width += UnicodeWidthStr::width(tok.as_str());
-            }
-            i = j;
+
+        if buffer.width() + group_width <= width {
+            buffer.push_span(&tokens, i, group_end);
+            i = group_end;
             continue;
         }
 
-        if current_width + group_width > width && last_split.is_some() {
-            let pos = last_split.unwrap();
-            let line = current[..pos].to_string();
-            let mut rest = current[pos..].trim_start().to_string();
-            // Mid-wrap lines discard trailing spaces.
-            let trimmed = line.trim_end();
-            if !trimmed.is_empty() {
-                lines.push(trimmed.to_string());
-            }
-            for tok in &tokens[i..j] {
-                rest.push_str(tok);
-            }
-            current = rest;
-            current_width = UnicodeWidthStr::width(current.as_str());
-            last_split = if tokens[j - 1].chars().all(char::is_whitespace) {
-                Some(current.len())
-            } else {
-                None
-            };
-            if current_width > width {
-                // Mid-wrap overflow flush trims trailing spaces.
-                lines.push(current.trim_end().to_string());
-                current.clear();
-                current_width = 0;
-                last_split = None;
-            }
-            i = j;
+        if buffer.split_with_span(&mut lines, &tokens, i, group_end, width) {
+            i = group_end;
             continue;
         }
-        if tokens[i].chars().all(char::is_whitespace) && j == tokens.len() {
-            // Preserve trailing spaces that forced a flush.
-            if !current.is_empty() {
-                flush_trailing_whitespace(&mut lines, &mut current, &tokens[i]);
-            }
-            current_width = 0;
-            last_split = None;
-            i = j;
-            continue;
-        }
-        if !current.is_empty() {
-            // Reuse allocation to avoid repeated growth on long wraps.
-            flush_current(&mut lines, &mut current);
-        }
-        current_width = 0;
-        last_split = None;
 
-        for tok in &tokens[i..j] {
-            if !tok.chars().all(char::is_whitespace) {
-                current.push_str(tok);
-                current_width += UnicodeWidthStr::width(tok.as_str());
-            }
+        if buffer.flush_trailing_whitespace(&mut lines, &tokens, i, group_end) {
+            i = group_end;
+            continue;
         }
-        if j > i && tokens[j - 1].chars().all(char::is_whitespace) {
-            last_split = Some(current.len());
-        }
-        i = j;
+
+        buffer.flush_into(&mut lines);
+        buffer.push_non_whitespace_span(&tokens, i, group_end);
+        i = group_end;
     }
-    if !current.is_empty() {
-        // Preserve trailing spaces so Markdown hard breaks survive wrapping.
-        lines.push(current);
-    }
+
+    buffer.flush_into(&mut lines);
     lines
 }
 
@@ -262,7 +279,6 @@ fn append_wrapped_with_prefix(
     width: usize,
     repeat_prefix: bool,
 ) {
-    use unicode_width::UnicodeWidthStr;
     let prefix_width = UnicodeWidthStr::width(prefix);
     let available = width.saturating_sub(prefix_width).max(1);
     let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
