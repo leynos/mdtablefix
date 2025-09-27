@@ -12,8 +12,9 @@ use regex::Regex;
 use unicode_width::UnicodeWidthStr;
 
 mod fence;
+mod line_buffer;
 mod tokenize;
-
+pub(crate) use self::line_buffer::LineBuffer;
 pub use fence::is_fence;
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
@@ -70,8 +71,21 @@ fn is_trailing_punct(c: char) -> bool {
     ) || "…—–»›）］】》」』、。，：；！？”.’".contains(c)
 }
 
+fn looks_like_link(token: &str) -> bool {
+    (token.starts_with('[') || token.starts_with("!["))
+        && token.contains("](")
+        && token.ends_with(')')
+}
+
+fn is_whitespace_token(token: &str) -> bool {
+    token.chars().all(char::is_whitespace)
+}
+
+fn is_inline_code_token(token: &str) -> bool {
+    token.starts_with('`') && token.ends_with('`')
+}
+
 fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usize {
-    use unicode_width::UnicodeWidthStr;
     while j < tokens.len() && tokens[j].chars().all(is_trailing_punct) {
         *width += UnicodeWidthStr::width(tokens[j].as_str());
         j += 1;
@@ -81,7 +95,6 @@ fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usi
 
 #[inline]
 fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
-    use unicode_width::UnicodeWidthStr;
     debug_assert!(
         tokens[i] == "`",
         "merge_code_span requires a single backtick opener"
@@ -101,25 +114,71 @@ fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
 
 #[inline]
 fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
+    #[derive(PartialEq, Eq)]
+    enum SpanKind {
+        General,
+        Code,
+        Link,
+    }
+
     let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());
+    let mut kind = SpanKind::General;
 
     if tokens[start] == "`" {
+        kind = SpanKind::Code;
         end = merge_code_span(tokens, start, &mut width);
-    }
-
-    if tokens[start].contains("](") && tokens[start].ends_with(')') {
+    } else if is_inline_code_token(&tokens[start]) {
+        kind = SpanKind::Code;
+        end = extend_punctuation(tokens, end, &mut width);
+    } else if looks_like_link(&tokens[start]) {
+        kind = SpanKind::Link;
         end = extend_punctuation(tokens, end, &mut width);
     }
 
-    if tokens[start].starts_with('`') && tokens[start].ends_with('`') {
-        end = extend_punctuation(tokens, end, &mut width);
+    while end < tokens.len() {
+        let token = &tokens[end];
+        if is_whitespace_token(token) {
+            if matches!(kind, SpanKind::Code | SpanKind::Link)
+                && end + 1 < tokens.len()
+                && (looks_like_link(&tokens[end + 1])
+                    || is_inline_code_token(&tokens[end + 1])
+                    || tokens[end + 1].chars().all(is_trailing_punct))
+            {
+                width += UnicodeWidthStr::width(token.as_str());
+                end += 1;
+                continue;
+            }
+            break;
+        }
 
-        while end < tokens.len() && tokens[end].starts_with('`') && tokens[end].ends_with('`') {
-            width += UnicodeWidthStr::width(tokens[end].as_str());
+        if token.chars().all(is_trailing_punct) {
+            if matches!(kind, SpanKind::Code | SpanKind::Link) {
+                width += UnicodeWidthStr::width(token.as_str());
+                end += 1;
+                continue;
+            }
+            break;
+        }
+
+        let is_link = looks_like_link(token);
+        let is_code = is_inline_code_token(token);
+
+        if kind == SpanKind::Link && is_link {
+            width += UnicodeWidthStr::width(token.as_str());
             end += 1;
             end = extend_punctuation(tokens, end, &mut width);
+            continue;
         }
+
+        if kind == SpanKind::Code && is_code {
+            width += UnicodeWidthStr::width(token.as_str());
+            end += 1;
+            end = extend_punctuation(tokens, end, &mut width);
+            continue;
+        }
+
+        break;
     }
 
     (end, width)
@@ -142,166 +201,6 @@ fn attach_punctuation_to_previous_line(lines: &mut [String], current: &str, toke
     false
 }
 
-#[derive(Default)]
-struct LineBuffer {
-    text: String,
-    width: usize,
-    last_split: Option<usize>,
-}
-
-impl LineBuffer {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn text(&self) -> &str {
-        self.text.as_str()
-    }
-
-    fn width(&self) -> usize {
-        self.width
-    }
-
-    fn push_token(&mut self, token: &str) {
-        if token.len() == 1 && ".?!,:;".contains(token) && self.text.trim_end().ends_with('`') {
-            let trimmed_len = self.text.trim_end_matches(char::is_whitespace).len();
-            if trimmed_len < self.text.len() {
-                let removed = &self.text[trimmed_len..];
-                let removed_width = UnicodeWidthStr::width(removed);
-                self.text.truncate(trimmed_len);
-                self.width = self.width.saturating_sub(removed_width);
-                self.last_split = self
-                    .text
-                    .char_indices()
-                    .rev()
-                    .find(|(_, ch)| ch.is_whitespace())
-                    .map(|(idx, ch)| idx + ch.len_utf8());
-            }
-        }
-
-        self.text.push_str(token);
-        self.width += UnicodeWidthStr::width(token);
-        if token.chars().all(char::is_whitespace) {
-            self.last_split = Some(self.text.len());
-        }
-    }
-
-    fn push_group(&mut self, tokens: &[String], start: usize, end: usize) {
-        for tok in &tokens[start..end] {
-            self.push_token(tok.as_str());
-        }
-    }
-
-    fn push_non_whitespace_group(&mut self, tokens: &[String], start: usize, end: usize) {
-        for tok in &tokens[start..end] {
-            if tok.chars().all(char::is_whitespace) {
-                continue;
-            }
-            self.push_token(tok.as_str());
-        }
-
-        // No whitespace was appended; keep split unset.
-        self.last_split = None;
-    }
-
-    fn flush_into(&mut self, lines: &mut Vec<String>) {
-        if self.text.is_empty() {
-            return;
-        }
-        lines.push(std::mem::take(&mut self.text));
-        self.width = 0;
-        self.last_split = None;
-    }
-
-    fn try_split_with_group(
-        &mut self,
-        lines: &mut Vec<String>,
-        tokens: &[String],
-        start: usize,
-        end: usize,
-        width: usize,
-    ) -> bool {
-        let Some(pos) = self.last_split else {
-            return false;
-        };
-
-        let (head_bounds, trimmed_tail_start) = {
-            let (head, tail) = self.text.split_at(pos);
-            let trimmed_head = head.trim_end();
-            let trimmed_head_len = trimmed_head.len();
-            let trailing_ws = &head[trimmed_head_len..];
-            let head_bounds = if trimmed_head_len == 0 {
-                None
-            } else if trailing_ws.chars().count() > 1 {
-                Some((0, pos))
-            } else {
-                Some((0, trimmed_head_len))
-            };
-
-            let trimmed_tail = tail.trim_start();
-            let trimmed_tail_start = pos + (tail.len() - trimmed_tail.len());
-            (head_bounds, trimmed_tail_start)
-        };
-
-        if let Some((start_idx, end_idx)) = head_bounds {
-            lines.push(self.text[start_idx..end_idx].to_owned());
-        }
-
-        self.text.drain(..trimmed_tail_start);
-        for tok in &tokens[start..end] {
-            self.text.push_str(tok);
-        }
-
-        self.width = UnicodeWidthStr::width(self.text.as_str());
-        if end > start && tokens[end - 1].chars().all(char::is_whitespace) && !self.text.is_empty()
-        {
-            self.last_split = Some(self.text.len());
-        } else {
-            self.last_split = None;
-        }
-
-        if self.width > width {
-            lines.push(self.text.trim_end().to_string());
-            self.text.clear();
-            self.width = 0;
-            self.last_split = None;
-        }
-
-        true
-    }
-
-    fn handle_trailing_whitespace_group(
-        &mut self,
-        lines: &mut Vec<String>,
-        tokens: &[String],
-        start: usize,
-        end: usize,
-    ) -> bool {
-        if end != tokens.len() {
-            return false;
-        }
-        if !tokens[start..end]
-            .iter()
-            .all(|tok| tok.chars().all(char::is_whitespace))
-        {
-            return false;
-        }
-
-        if self.text.is_empty() {
-            self.last_split = None;
-            return true;
-        }
-
-        for tok in &tokens[start..end] {
-            self.text.push_str(tok);
-        }
-        lines.push(std::mem::take(&mut self.text));
-        self.width = 0;
-        self.last_split = None;
-        true
-    }
-}
-
 fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let tokens = tokenize::segment_inline(text);
     if tokens.is_empty() {
@@ -321,23 +220,23 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         }
 
         if buffer.width() + group_width <= width {
-            buffer.push_group(&tokens, i, group_end);
+            buffer.push_span(&tokens, i, group_end);
             i = group_end;
             continue;
         }
 
-        if buffer.try_split_with_group(&mut lines, &tokens, i, group_end, width) {
+        if buffer.split_with_span(&mut lines, &tokens, i, group_end, width) {
             i = group_end;
             continue;
         }
 
-        if buffer.handle_trailing_whitespace_group(&mut lines, &tokens, i, group_end) {
+        if buffer.flush_trailing_whitespace(&mut lines, &tokens, i, group_end) {
             i = group_end;
             continue;
         }
 
         buffer.flush_into(&mut lines);
-        buffer.push_non_whitespace_group(&tokens, i, group_end);
+        buffer.push_non_whitespace_span(&tokens, i, group_end);
         i = group_end;
     }
 
@@ -380,7 +279,6 @@ fn append_wrapped_with_prefix(
     width: usize,
     repeat_prefix: bool,
 ) {
-    use unicode_width::UnicodeWidthStr;
     let prefix_width = UnicodeWidthStr::width(prefix);
     let available = width.saturating_sub(prefix_width).max(1);
     let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();

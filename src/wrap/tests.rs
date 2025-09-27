@@ -5,11 +5,11 @@
 
 use rstest::rstest;
 
-use super::super::wrap_text;
 use super::{
     LineBuffer, attach_punctuation_to_previous_line, determine_token_span,
     tokenize::segment_inline, wrap_preserving_code,
 };
+use crate::wrap::wrap_text;
 
 #[rstest]
 #[case("`code`!", "`code`!")]
@@ -18,11 +18,11 @@ use super::{
 #[case("`code`,", "`code`,")]
 #[case("`code`!`more`", "`code`!`more`")]
 #[case("[link](url),", "[link](url),")]
-#[case("[link](url)[another](url2)", "[link](url)")]
-#[case("[link](url) [another](url2)", "[link](url)")]
-#[case("`code` !", "`code`")]
-#[case("`code` ,", "`code`")]
-#[case("`code`", "`code`")]
+#[case("[link](url)[another](url2)", "[link](url)[another](url2)")]
+#[case("[link](url) [another](url2)", "[link](url) [another](url2)")]
+#[case("`code` ,", "`code` ,")]
+#[case("`code` !", "`code` !")]
+#[case("[link](url) .", "[link](url) .")]
 #[case("`code!`", "`code!`")]
 #[case("[link!](url)", "[link!](url)")]
 fn determine_token_span_groups_related_tokens(#[case] input: &str, #[case] expected_group: &str) {
@@ -78,11 +78,11 @@ fn line_buffer_trims_trailing_whitespace_before_punctuation() {
         "  ".to_string(),
     ];
     let mut buffer = LineBuffer::new();
-    buffer.push_group(&tokens, 0, tokens.len());
+    buffer.push_span(&tokens, 0, tokens.len());
     assert_eq!(buffer.text(), "wrap `code`  ");
 
     let punct = vec!["!".to_string()];
-    buffer.push_group(&punct, 0, punct.len());
+    buffer.push_span(&punct, 0, punct.len());
     assert_eq!(buffer.text(), "wrap `code`!");
 }
 
@@ -95,10 +95,10 @@ fn line_buffer_split_preserves_multi_space_lines() {
         "   ".to_string(),
     ];
     let mut buffer = LineBuffer::new();
-    buffer.push_group(&tokens, 0, 2);
+    buffer.push_span(&tokens, 0, 2);
 
     let mut lines = Vec::new();
-    assert!(buffer.try_split_with_group(&mut lines, &tokens, 2, 4, 8));
+    assert!(buffer.split_with_span(&mut lines, &tokens, 2, 4, 8));
     assert_eq!(lines, vec!["alpha  ".to_string()]);
     assert_eq!(buffer.text(), "beta   ");
     assert_eq!(
@@ -111,10 +111,10 @@ fn line_buffer_split_preserves_multi_space_lines() {
 fn line_buffer_split_trims_single_trailing_space() {
     let tokens = vec!["alpha".to_string(), " ".to_string(), "beta".to_string()];
     let mut buffer = LineBuffer::new();
-    buffer.push_group(&tokens, 0, 2);
+    buffer.push_span(&tokens, 0, 2);
 
     let mut lines = Vec::new();
-    assert!(buffer.try_split_with_group(&mut lines, &tokens, 2, 3, 5));
+    assert!(buffer.split_with_span(&mut lines, &tokens, 2, 3, 5));
     assert_eq!(lines, vec!["alpha".to_string()]);
     assert_eq!(buffer.text(), "beta");
     assert_eq!(
@@ -124,14 +124,31 @@ fn line_buffer_split_trims_single_trailing_space() {
 }
 
 #[test]
+fn line_buffer_split_tracks_multiple_whitespace_tokens() {
+    let tokens = vec![
+        "foo".to_string(),
+        " ".to_string(),
+        " ".to_string(),
+        "bar".to_string(),
+    ];
+    let mut buffer = LineBuffer::new();
+    buffer.push_span(&tokens, 0, 3);
+
+    let mut lines = Vec::new();
+    assert!(buffer.split_with_span(&mut lines, &tokens, 3, 4, 4));
+    assert_eq!(lines, vec!["foo  ".to_string()]);
+    assert_eq!(buffer.text(), "bar");
+}
+
+#[test]
 fn line_buffer_trailing_whitespace_flushes_line() {
     let mut buffer = LineBuffer::new();
     let words = vec!["foo".to_string()];
-    buffer.push_group(&words, 0, words.len());
+    buffer.push_span(&words, 0, words.len());
 
     let whitespace_tokens = vec!["  ".to_string()];
     let mut lines = Vec::new();
-    assert!(buffer.handle_trailing_whitespace_group(
+    assert!(buffer.flush_trailing_whitespace(
         &mut lines,
         &whitespace_tokens,
         0,
