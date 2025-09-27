@@ -334,6 +334,12 @@ fn wrap_text_keeps_trailing_spaces_for_bullet_final_line() {
 }
 
 #[test]
+fn fence_tracker_new_starts_outside_fence() {
+    let tracker = FenceTracker::new();
+    assert!(!tracker.in_fence());
+}
+
+#[test]
 fn fence_tracker_closes_matching_markers() {
     let mut tracker = FenceTracker::default();
     assert!(!tracker.in_fence());
@@ -341,6 +347,15 @@ fn fence_tracker_closes_matching_markers() {
     assert!(tracker.in_fence());
     assert!(tracker.observe("```"));
     assert!(!tracker.in_fence());
+}
+
+#[test]
+fn fence_tracker_ignores_shorter_closing_marker() {
+    let mut tracker = FenceTracker::new();
+    assert!(tracker.observe("````"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("```"));
+    assert!(tracker.in_fence());
 }
 
 #[test]

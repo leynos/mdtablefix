@@ -63,6 +63,19 @@ pub(crate) fn handle_fence_line(
 ///
 /// The tracker centralises fence matching logic so that callers share the
 /// same semantics for opening and closing blocks.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::wrap::FenceTracker;
+///
+/// let mut tracker = FenceTracker::new();
+/// assert!(!tracker.in_fence());
+/// assert!(tracker.observe("```rust"));
+/// assert!(tracker.in_fence());
+/// assert!(tracker.observe("```"));
+/// assert!(!tracker.in_fence());
+/// ```
 #[derive(Default)]
 pub struct FenceTracker {
     state: Option<(char, usize)>,
