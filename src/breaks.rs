@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use regex::Regex;
 
-use crate::wrap::is_fence;
+use crate::wrap::FenceTracker;
 
 pub const THEMATIC_BREAK_LEN: usize = 70;
 
@@ -43,16 +43,16 @@ static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
 #[must_use]
 pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     let mut out = Vec::with_capacity(lines.len());
-    let mut in_code = false;
+    // Track fenced code blocks consistently while formatting breaks.
+    let mut fences = FenceTracker::default();
 
     for line in lines {
-        if is_fence(line).is_some() {
-            in_code = !in_code;
+        if fences.observe(line) {
             out.push(Cow::Borrowed(line.as_str()));
             continue;
         }
 
-        if !in_code && THEMATIC_BREAK_RE.is_match(line.trim_end()) {
+        if !fences.in_fence() && THEMATIC_BREAK_RE.is_match(line.trim_end()) {
             out.push(Cow::Borrowed(THEMATIC_BREAK_LINE.as_str()));
         } else {
             out.push(Cow::Borrowed(line.as_str()));

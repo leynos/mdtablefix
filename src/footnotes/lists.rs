@@ -6,6 +6,7 @@
 use regex::Captures;
 
 use super::parsing::{FOOTNOTE_LINE_RE, is_definition_continuation};
+use crate::wrap::FenceTracker;
 
 /// Find the trailing block of lines that satisfy a predicate.
 pub(super) fn trimmed_range<F>(lines: &[String], predicate: F) -> (usize, usize)
@@ -50,17 +51,15 @@ pub(super) fn has_h2_heading_before(lines: &[String], start: usize) -> bool {
 
 /// Check for existing footnote definitions before the block.
 pub(super) fn has_existing_footnote_block(lines: &[String], start: usize) -> bool {
-    let mut in_fence = false;
+    let mut fences = FenceTracker::default();
     for l in &lines[..start] {
-        let t = l.trim_start();
-        if t.starts_with("```") || t.starts_with("~~~") {
-            in_fence = !in_fence;
+        if fences.observe(l) {
             continue;
         }
-        if in_fence {
+        if fences.in_fence() {
             continue;
         }
-        let mut t = t;
+        let mut t = l.trim_start();
         while let Some(rest) = t.strip_prefix('>') {
             t = rest.trim_start();
         }

@@ -3,7 +3,7 @@
 use regex::Regex;
 use std::collections::HashMap;
 
-use crate::{breaks::THEMATIC_BREAK_RE, wrap::is_fence};
+use crate::{breaks::THEMATIC_BREAK_RE, wrap::FenceTracker};
 
 /// Characters that mark formatted text at the start of a line.
 const FORMATTING_CHARS: [char; 3] = ['*', '_', '`'];
@@ -86,18 +86,18 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
     let mut indent_stack: Vec<usize> = Vec::new();
     let mut counters: HashMap<usize, usize> = HashMap::new();
-    let mut in_code = false;
+    // Track fenced code blocks consistently across list processing.
+    let mut fences = FenceTracker::default();
     #[allow(clippy::unnecessary_map_or)]
     let mut prev_blank = lines.first().map_or(true, |l| l.trim().is_empty());
 
     for line in lines {
-        if is_fence(line).is_some() {
-            in_code = !in_code;
+        if fences.observe(line) {
             out.push(line.clone());
             prev_blank = false;
             continue;
         }
-        if in_code {
+        if fences.in_fence() {
             out.push(line.clone());
             prev_blank = line.trim().is_empty();
             continue;
