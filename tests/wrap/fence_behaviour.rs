@@ -19,6 +19,7 @@ fn wrap_respects_fence_boundaries_in_paragraphs() {
     );
     let input = lines_vec![first_paragraph, "```", code_line, "```", closing_paragraph];
     let output = process_stream(&input);
+    assert!(!output.iter().any(|l| l.starts_with("``") && l.len() == 2), "no false 2-tick fences");
 
     let fence_positions: Vec<usize> = output
         .iter()

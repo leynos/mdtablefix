@@ -350,6 +350,15 @@ fn fence_tracker_closes_matching_markers() {
 }
 
 #[test]
+fn fence_tracker_closes_with_info_string() {
+    let mut tracker = FenceTracker::new();
+    assert!(tracker.observe("```rust"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("```   "));
+    assert!(!tracker.in_fence());
+}
+
+#[test]
 fn fence_tracker_ignores_shorter_closing_marker() {
     let mut tracker = FenceTracker::new();
     assert!(tracker.observe("````"));

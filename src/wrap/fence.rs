@@ -76,7 +76,7 @@ pub(crate) fn handle_fence_line(
 /// assert!(tracker.observe("```"));
 /// assert!(!tracker.in_fence());
 /// ```
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct FenceTracker {
     state: Option<(char, usize)>,
 }
@@ -92,6 +92,11 @@ impl FenceTracker {
     ///
     /// Returns `true` when the line is treated as a fence marker and updates
     /// the internal state accordingly.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the fence regular expression yields an empty marker, which
+    /// would indicate the regex is inconsistent with Markdown fence rules.
     #[must_use]
     pub fn observe(&mut self, line: &str) -> bool {
         let Some((_indent, fence, _info)) = is_fence(line) else {
@@ -99,7 +104,7 @@ impl FenceTracker {
         };
 
         let mut chars = fence.chars();
-        let marker_ch = chars.next().unwrap_or('`');
+        let marker_ch = chars.next().expect("FENCE_RE guarantees a non-empty fence");
         let marker_len = chars.count() + 1;
 
         match self.state {
