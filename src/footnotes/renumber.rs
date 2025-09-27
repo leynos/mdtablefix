@@ -46,6 +46,14 @@ fn is_definition_like(text: &str, mat: &Match) -> bool {
     parse_definition(text.trim_end()).is_some()
 }
 
+fn is_fence_line(line: &str) -> bool {
+    let mut trimmed = line.trim_start();
+    while let Some(rest) = trimmed.strip_prefix('>') {
+        trimmed = rest.trim_start();
+    }
+    trimmed.starts_with("```") || trimmed.starts_with("~~~")
+}
+
 fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<usize, usize>) -> String {
     FOOTNOTE_REF_RE
         .replace_all(text, |caps: &Captures| {
@@ -81,7 +89,15 @@ fn rewrite_tokens(text: &str, mapping: &HashMap<usize, usize>) -> String {
 fn collect_reference_mapping(lines: &[String]) -> HashMap<usize, usize> {
     let mut mapping = HashMap::new();
     let mut next = 1;
+    let mut in_fence = false;
     for line in lines {
+        if is_fence_line(line) {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
         for token in tokenize_markdown(line) {
             if let Token::Text(text) = token {
                 for caps in FOOTNOTE_REF_RE.captures_iter(text) {
@@ -281,7 +297,7 @@ fn collect_definition_updates(
     lines: &[String],
     mapping: &mut HashMap<usize, usize>,
 ) -> DefinitionUpdates {
-    let mut next_number = mapping.len() + 1;
+    let mut next_number = mapping.values().copied().max().unwrap_or(0) + 1;
     let mut definitions = Vec::new();
     let mut is_definition_line = vec![false; lines.len()];
     let mut numeric_candidates: Vec<NumericCandidate> = Vec::new();
@@ -290,7 +306,17 @@ fn collect_definition_updates(
         .as_ref()
         .is_some_and(|(start, _)| has_existing_footnote_block(lines, *start));
 
+    let mut in_fence = false;
+
     for (idx, line) in lines.iter().enumerate() {
+        if is_fence_line(line) {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+
         if let Some(parts) = parse_definition(line) {
             let new_number = assign_new_number(mapping, parts.number, &mut next_number);
             let rewritten_rest = rewrite_tokens(parts.rest, mapping);
@@ -361,8 +387,13 @@ fn apply_mapping_to_lines(
     mapping: &HashMap<usize, usize>,
     is_definition_line: &[bool],
 ) {
+    let mut in_fence = false;
     for (idx, line) in lines.iter_mut().enumerate() {
-        if is_definition_line.get(idx).copied().unwrap_or(false) {
+        if is_fence_line(line) {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence || is_definition_line.get(idx).copied().unwrap_or(false) {
             continue;
         }
         *line = rewrite_tokens(line, mapping);

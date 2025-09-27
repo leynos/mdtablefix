@@ -63,9 +63,15 @@ pub(super) fn convert_inline(text: &str) -> String {
             let style_start = caps
                 .name("style")
                 .map_or(num_match.start() - mat.start(), |m| m.start() - mat.start());
-            let whitespace = &match_str[pre.len()..style_start];
-            let leading = if mat.start() == 0 { whitespace } else { "" };
-            format!("{pre}{leading}{style}[^{num}]:{colons}{boundary}")
+            let captured_gap = &match_str[pre.len()..style_start];
+            let gap = if pre.is_empty() {
+                captured_gap
+            } else if pre.chars().last().is_some_and(char::is_alphanumeric) {
+                ""
+            } else {
+                captured_gap
+            };
+            format!("{pre}{gap}{style}[^{num}]:{colons}{boundary}")
         })
         .into_owned()
 }
