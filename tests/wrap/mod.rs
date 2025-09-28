@@ -15,4 +15,5 @@ mod footnotes;
 mod blockquotes;
 mod hard_line_breaks;
 mod links;
+mod fence_behaviour;
 mod cli;

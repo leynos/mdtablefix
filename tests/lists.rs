@@ -76,6 +76,58 @@ fn test_cli_renumber_option() {
         .stdout("1. a\n2. b\n");
 }
 
+#[test]
+fn nested_lists_respect_fence_tracker() {
+    let input = lines_vec![
+        "1. Outer list",
+        "   ```",
+        "   1. Code block list",
+        "   ```",
+        "9. Outer list continued",
+        "   4. Nested list",
+        "      ```",
+        "      - Malformed fence",
+        "      ```",
+        "   8. Nested list continued",
+    ];
+    let expected = lines_vec![
+        "1. Outer list",
+        "   ```",
+        "   1. Code block list",
+        "   ```",
+        "2. Outer list continued",
+        "   1. Nested list",
+        "      ```",
+        "      - Malformed fence",
+        "      ```",
+        "   2. Nested list continued",
+    ];
+    assert_eq!(renumber_lists(&input), expected);
+}
+
+#[test]
+fn malformed_fences_do_not_break_list_renumbering() {
+    let input = lines_vec![
+        "1. List before fence",
+        "   ```",
+        "   1. Inside code block",
+        "   ``",
+        "   still inside fence",
+        "   ```",
+        "7. List after fence",
+    ];
+    let expected = lines_vec![
+        "1. List before fence",
+        "   ```",
+        "   1. Inside code block",
+        "   ``",
+        "   still inside fence",
+        "   ```",
+        "2. List after fence",
+    ];
+    assert_eq!(renumber_lists(&input), expected);
+}
+
 #[rstest(
     input,
     expected,

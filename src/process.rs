@@ -6,7 +6,7 @@ use crate::{
     footnotes::convert_footnotes,
     html::convert_html_tables,
     table::reflow_table,
-    wrap::{self, wrap_text},
+    wrap::{FenceTracker, wrap_text},
 };
 
 /// Column width used when wrapping text.
@@ -66,17 +66,17 @@ fn flush_buffer(buf: &mut Vec<String>, in_table: &mut bool, out: &mut Vec<String
 fn handle_fence_line(
     line: &str,
     buf: &mut Vec<String>,
-    in_code: &mut bool,
     in_table: &mut bool,
     out: &mut Vec<String>,
+    fences: &mut FenceTracker,
 ) -> bool {
-    if wrap::is_fence(line).is_some() {
-        flush_buffer(buf, in_table, out);
-        *in_code = !*in_code;
-        out.push(line.to_string());
-        return true;
+    if !fences.observe(line) {
+        return false;
     }
-    false
+
+    flush_buffer(buf, in_table, out);
+    out.push(line.to_string());
+    true
 }
 
 /// Buffers table lines, returning `true` when a line was consumed.
@@ -155,15 +155,16 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     let mut out = Vec::new();
     let mut buf = Vec::new();
-    let mut in_code = false;
+    // Track fences so subsequent logic respects shared semantics.
+    let mut fence_tracker = FenceTracker::default();
     let mut in_table = false;
 
     for line in &pre {
-        if handle_fence_line(line, &mut buf, &mut in_code, &mut in_table, &mut out) {
+        if handle_fence_line(line, &mut buf, &mut in_table, &mut out, &mut fence_tracker) {
             continue;
         }
 
-        if in_code {
+        if fence_tracker.in_fence() {
             out.push(line.to_string());
             continue;
         }
