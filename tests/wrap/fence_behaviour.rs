@@ -42,3 +42,132 @@ fn wrap_respects_fence_boundaries_in_paragraphs() {
     );
 }
 
+#[test]
+fn wrap_respects_fences_with_info_strings_and_whitespace() {
+    let intro = concat!(
+        "The introductory paragraph needs enough length to force wrapping so that we can confirm ",
+        "behaviour when the subsequent fence appears with indentation."
+    );
+    let outro = concat!(
+        "The final paragraph is equally verbose to verify that wrapping resumes immediately after ",
+        "the closing fence with trailing spaces."
+    );
+    let rust_line = concat!(
+        "    println!(\"This line deliberately exceeds eighty characters to prove that wrapping ",
+        "remains disabled inside the fenced block.\");"
+    );
+    let json_line = concat!(
+        "{ \"message\": \"This JSON object should stay on one line even though it is wordy\" }"
+    );
+    let input = lines_vec![
+        intro,
+        "    ```rust   lineno=1",
+        rust_line,
+        "    ```   ",
+        "```json   ",
+        json_line,
+        "```   ",
+        outro,
+    ];
+    let output = process_stream(&input);
+
+    let fence_lines: Vec<_> = output
+        .iter()
+        .filter(|line| line.trim_start().starts_with("```"))
+        .collect();
+    assert_eq!(
+        fence_lines.len(),
+        4,
+        "expected both opening and closing fences to be retained"
+    );
+
+    assert!(
+        output.contains(&rust_line.to_string()),
+        "indented code lines should remain unchanged"
+    );
+    assert!(
+        output.contains(&json_line.to_string()),
+        "info string fences should keep their payload intact"
+    );
+
+    let before_fence: Vec<_> = output
+        .iter()
+        .take_while(|line| !line.trim_start().starts_with("```"))
+        .collect();
+    assert!(
+        before_fence.len() > 1,
+        "introductory paragraph should wrap before the fence"
+    );
+
+    let after_fence: Vec<_> = output
+        .iter()
+        .rev()
+        .take_while(|line| !line.trim_start().starts_with("```"))
+        .collect();
+    assert!(
+        after_fence.len() > 1,
+        "closing paragraph should wrap after the fence"
+    );
+}
+
+#[test]
+fn wrap_does_not_close_on_shorter_closing_marker() {
+    let intro = concat!(
+        "This paragraph intentionally spans more than eighty characters so that wrapping occurs ",
+        "before the fenced block."
+    );
+    let code_line = concat!(
+        "print(\"short marker test that remains inside the code fence even when the closing marker ",
+        "is too short\")"
+    );
+    let long_code_after_short = concat!(
+        "print(\"this line should stay intact because the shorter closing fence should not end the ",
+        "block prematurely even though the content is wide\")"
+    );
+    let outro = concat!(
+        "After the fence we expect wrapping to resume, demonstrating that the tracker only closes ",
+        "when a marker of adequate length appears."
+    );
+    let input = lines_vec![
+        intro,
+        "````python",
+        code_line,
+        "```",
+        long_code_after_short,
+        "````",
+        outro,
+    ];
+    let output = process_stream(&input);
+
+    let long_line_count = output
+        .iter()
+        .filter(|line| line.contains("should stay intact"))
+        .count();
+    assert_eq!(
+        long_line_count, 1,
+        "long code lines after the shorter closing marker must remain unwrapped inside the fence"
+    );
+
+    let fence_lines: Vec<_> = output
+        .iter()
+        .filter(|line| line.trim_start().starts_with("```"))
+        .collect();
+    assert_eq!(
+        fence_lines.len(),
+        3,
+        "all fence markers, including the ignored shorter one, should be retained"
+    );
+
+    let post_fence: Vec<_> = output
+        .iter()
+        .skip_while(|line| !line.trim_start().starts_with("````"))
+        .skip(1)
+        .take_while(|line| !line.trim_start().starts_with("```"))
+        .collect();
+    assert!(
+        post_fence.len() > 1,
+        "paragraph after the fence should resume wrapping"
+    );
+}
+
+
