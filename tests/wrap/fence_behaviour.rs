@@ -158,15 +158,20 @@ fn wrap_does_not_close_on_shorter_closing_marker() {
         "all fence markers, including the ignored shorter one, should be retained"
     );
 
-    let post_fence: Vec<_> = output
+    let closing_idx = output
         .iter()
-        .skip_while(|line| !line.trim_start().starts_with("````"))
-        .skip(1)
-        .take_while(|line| !line.trim_start().starts_with("```"))
-        .collect();
+        .rposition(|line| line.trim_start().starts_with("````"))
+        .expect("closing fence should exist");
+    let post_fence = &output[closing_idx + 1..];
     assert!(
         post_fence.len() > 1,
         "paragraph after the fence should resume wrapping"
+    );
+    assert!(
+        post_fence
+            .iter()
+            .all(|line| !line.trim_start().starts_with("```")),
+        "trailing paragraph must not be treated as fenced content"
     );
 }
 
