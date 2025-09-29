@@ -81,6 +81,21 @@ fn test_non_table_lines_unchanged() {
 }
 
 #[test]
+fn test_process_stream_reflows_table_before_numeric_paragraph() {
+    let input = lines_vec![
+        "| a | b |",
+        "| 1 | 22 |",
+        "2024 revenue climbed 10%",
+    ];
+    let expected = lines_vec![
+        "| a | b  |",
+        "| 1 | 22 |",
+        "2024 revenue climbed 10%",
+    ];
+    assert_eq!(process_stream(&input), expected);
+}
+
+#[test]
 fn test_process_stream_only_whitespace() {
     let input = lines_vec!["", "   ", "\t\t"];
     let expected = lines_vec!["", "", ""];
