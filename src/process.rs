@@ -86,7 +86,9 @@ fn handle_table_line(
     in_table: &mut bool,
     out: &mut Vec<String>,
 ) -> bool {
-    if line.trim_start().starts_with('|') {
+    let trimmed = line.trim_start();
+
+    if trimmed.starts_with('|') {
         *in_table = true;
         buf.push(line.to_string());
         return true;
@@ -103,6 +105,12 @@ fn handle_table_line(
     }
     if *in_table {
         if classify_block(line).is_some() {
+            flush_buffer(buf, in_table, out);
+            return false;
+        }
+        let indent = line.len().saturating_sub(trimmed.len());
+        if indent >= 4 && trimmed.starts_with('#') {
+            // Treat indented hash-prefixed lines as code, not table rows.
             flush_buffer(buf, in_table, out);
             return false;
         }

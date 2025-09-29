@@ -257,15 +257,24 @@ pub(crate) enum BlockKind {
     FootnoteDefinition,
     /// HTML-style markdownlint directives recognised by [`is_markdownlint_directive`].
     MarkdownlintDirective,
+    /// Lines whose first non-whitespace character is an ASCII digit.
+    DigitPrefix,
 }
 
 /// Classifies block-level Markdown prefixes shared by wrapping and table detection.
 ///
+/// Detection order determines precedence when a line could match multiple prefixes.
+/// The current precedence is: heading, bullet, blockquote, footnote definition,
+/// markdownlint directive, digit prefix. Headings outrank bullets and blockquotes,
+/// so inputs such as "# 1" remain headings rather than list items. Headings ignore
+/// indentation of four or more spaces so indented code remains untouched.
 /// For example, passing `"> quote"` returns `Some(BlockKind::Blockquote)` while
 /// `"| cell |"` yields `None` because the line is part of a table.
 pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
     let trimmed = line.trim_start();
-    if trimmed.starts_with('#') {
+    let indent = line.len().saturating_sub(trimmed.len());
+
+    if indent < 4 && trimmed.starts_with('#') {
         return Some(BlockKind::Heading);
     }
     if BULLET_RE.is_match(line) {
@@ -279,6 +288,9 @@ pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
     }
     if is_markdownlint_directive(line) {
         return Some(BlockKind::MarkdownlintDirective);
+    }
+    if trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        return Some(BlockKind::DigitPrefix);
     }
     None
 }
@@ -356,6 +368,16 @@ fn handle_prefix_line(
     buf.clear();
     indent.clear();
     append_wrapped_with_prefix(out, prefix, rest, width, repeat_prefix);
+}
+
+fn is_indented_code_line(line: &str) -> bool {
+    let indent_width = line
+        .as_bytes()
+        .iter()
+        .take_while(|b| **b == b' ' || **b == 0x09)
+        .fold(0_usize, |acc, &b| acc + if b == 0x09 { 4 } else { 1 });
+
+    indent_width >= 4 && line.chars().any(|c| !c.is_whitespace())
 }
 
 /// Wrap text lines to the given width.
@@ -438,6 +460,15 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
                 .expect("blockquote regex remainder capture")
                 .as_str();
             handle_prefix_line(&mut out, &mut buf, &mut indent, width, prefix, rest, true);
+            continue;
+        }
+
+        if is_indented_code_line(line) {
+            // Preserve indented code blocks verbatim so wrapping does not merge them into paragraphs.
+            flush_paragraph(&mut out, &buf, &indent, width);
+            buf.clear();
+            indent.clear();
+            out.push(line.clone());
             continue;
         }
 

@@ -9,7 +9,7 @@ use super::{
     LineBuffer, attach_punctuation_to_previous_line, determine_token_span,
     tokenize::segment_inline, wrap_preserving_code,
 };
-use crate::wrap::wrap_text;
+use crate::wrap::{BlockKind, classify_block, wrap_text};
 
 #[rstest]
 #[case("`code`!", "`code`!")]
@@ -349,6 +349,27 @@ fn wrap_text_preserves_indented_hash_as_text() {
             "Continuation.".to_string(),
         ]
     );
+}
+
+#[rstest(
+    line,
+    expected,
+    case("# Heading", Some(BlockKind::Heading)),
+    case("   # Heading", Some(BlockKind::Heading)),
+    case("    # Heading", None),
+    case("- item", Some(BlockKind::Bullet)),
+    case("1. item", Some(BlockKind::Bullet)),
+    case("> quote", Some(BlockKind::Blockquote)),
+    case("[^1]: footnote", Some(BlockKind::FootnoteDefinition)),
+    case(
+        "<!-- markdownlint-disable -->",
+        Some(BlockKind::MarkdownlintDirective)
+    ),
+    case("2024 revenue", Some(BlockKind::DigitPrefix)),
+    case("plain text", None)
+)]
+fn classify_block_detects_markdown_prefixes(line: &str, expected: Option<BlockKind>) {
+    assert_eq!(classify_block(line), expected);
 }
 
 mod fence_tracker;
