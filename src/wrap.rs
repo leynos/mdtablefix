@@ -244,6 +244,45 @@ fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
+/// Describes the Markdown block prefix detected by [`classify_block`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BlockKind {
+    /// Lines that begin with `#`, `##`, and similar heading prefixes.
+    Heading,
+    /// Bullet or ordered list markers matched by [`BULLET_RE`].
+    Bullet,
+    /// Lines that begin with one or more `>` markers.
+    Blockquote,
+    /// Footnote definitions recognised by [`FOOTNOTE_RE`].
+    FootnoteDefinition,
+    /// HTML-style markdownlint directives recognised by [`is_markdownlint_directive`].
+    MarkdownlintDirective,
+}
+
+/// Classifies block-level Markdown prefixes shared by wrapping and table detection.
+///
+/// For example, passing `"> quote"` returns `Some(BlockKind::Blockquote)` while
+/// `"| cell |"` yields `None` because the line is part of a table.
+pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
+    let trimmed = line.trim_start();
+    if trimmed.starts_with('#') {
+        return Some(BlockKind::Heading);
+    }
+    if BULLET_RE.is_match(line) {
+        return Some(BlockKind::Bullet);
+    }
+    if BLOCKQUOTE_RE.is_match(line) {
+        return Some(BlockKind::Blockquote);
+    }
+    if FOOTNOTE_RE.is_match(line) {
+        return Some(BlockKind::FootnoteDefinition);
+    }
+    if is_markdownlint_directive(line) {
+        return Some(BlockKind::MarkdownlintDirective);
+    }
+    None
+}
+
 pub(crate) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
 }
