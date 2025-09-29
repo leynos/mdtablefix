@@ -104,7 +104,8 @@ fn handle_table_line(
         return true;
     }
     if *in_table {
-        if classify_block(line).is_some() {
+        let digit_prefixed = trimmed.chars().next().is_some_and(|c| c.is_ascii_digit());
+        if classify_block(line).is_some() || digit_prefixed {
             flush_buffer(buf, in_table, out);
             return false;
         }

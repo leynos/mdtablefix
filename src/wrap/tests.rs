@@ -366,6 +366,7 @@ fn wrap_text_preserves_indented_hash_as_text() {
         Some(BlockKind::MarkdownlintDirective)
     ),
     case("2024 revenue", Some(BlockKind::DigitPrefix)),
+    case("a | b", None),
     case("plain text", None)
 )]
 fn classify_block_detects_markdown_prefixes(line: &str, expected: Option<BlockKind>) {
