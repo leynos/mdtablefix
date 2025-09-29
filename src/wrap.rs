@@ -395,15 +395,10 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
-        if line.trim_start().starts_with('#') {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
-            out.push(line.clone());
-            continue;
-        }
-
-        if is_markdownlint_directive(line) {
+        if matches!(
+            classify_block(line),
+            Some(BlockKind::Heading | BlockKind::MarkdownlintDirective)
+        ) {
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
             indent.clear();

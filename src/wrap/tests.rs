@@ -333,4 +333,22 @@ fn wrap_text_keeps_trailing_spaces_for_bullet_final_line() {
     );
 }
 
+#[test]
+fn wrap_text_preserves_indented_hash_as_text() {
+    let input = vec![
+        "Paragraph intro.".to_string(),
+        "    # code".to_string(),
+        "Continuation.".to_string(),
+    ];
+    let wrapped = wrap_text(&input, 40);
+    assert_eq!(
+        wrapped,
+        vec![
+            "Paragraph intro.".to_string(),
+            "    # code".to_string(),
+            "Continuation.".to_string(),
+        ]
+    );
+}
+
 mod fence_tracker;
