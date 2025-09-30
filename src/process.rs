@@ -6,7 +6,7 @@ use crate::{
     footnotes::convert_footnotes,
     html::convert_html_tables,
     table::reflow_table,
-    wrap::{FenceTracker, wrap_text},
+    wrap::{FenceTracker, classify_block, wrap_text},
 };
 
 /// Column width used when wrapping text.
@@ -104,7 +104,13 @@ fn handle_table_line(
         return true;
     }
     if *in_table {
-        // Any non-tableish line ends the table; let the caller reprocess this line.
+        if classify_block(line).is_some() {
+            // Flush when a new Markdown block (heading, list, quote, footnote, directive,
+            // or digit-prefixed text) begins so wrapping and table detection stay aligned.
+            flush_buffer(buf, in_table, out);
+            return false;
+        }
+        // Plain paragraphs also end the table so the caller can reprocess them for wrapping.
         flush_buffer(buf, in_table, out);
         return false;
     }

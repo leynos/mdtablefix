@@ -6,6 +6,27 @@
 
 use regex::Regex;
 
+/// Returns the indentation width (treating tabs as four columns) and the byte
+/// offset of the first non-space or tab character.
+fn leading_indent(line: &str) -> (usize, usize) {
+    let mut width = 0;
+    let mut bytes = 0;
+    for &b in line.as_bytes() {
+        match b {
+            b' ' => {
+                width += 1;
+                bytes += 1;
+            }
+            0x09 => {
+                width += 4;
+                bytes += 1;
+            }
+            _ => break,
+        }
+    }
+    (width, bytes)
+}
+
 /// Matches bullet and ordered list prefixes captured for wrapping and table detection.
 pub(super) static BULLET_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*(?:[-*+]|\d+[.)])\s+(?:\[\s*(?:[xX]|\s)\s*\]\s*)?)(.*)",
@@ -65,10 +86,10 @@ pub(crate) enum BlockKind {
 /// For example, passing "> quote" returns `Some(BlockKind::Blockquote)` while
 /// "| cell |" yields `None` because the line is part of a table.
 pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
-    let trimmed = line.trim_start();
-    let indent = line.len().saturating_sub(trimmed.len());
+    let (indent_width, indent_bytes) = leading_indent(line);
+    let trimmed = line[indent_bytes..].trim_start();
 
-    if indent < 4 && trimmed.starts_with('#') {
+    if indent_width < 4 && trimmed.starts_with('#') {
         return Some(BlockKind::Heading);
     }
     if BULLET_RE.is_match(line) {

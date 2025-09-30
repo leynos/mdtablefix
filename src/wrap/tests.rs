@@ -6,11 +6,7 @@
 use rstest::rstest;
 
 use super::{
-    inline::{
-        attach_punctuation_to_previous_line,
-        determine_token_span,
-        wrap_preserving_code,
-    },
+    inline::{attach_punctuation_to_previous_line, determine_token_span, wrap_preserving_code},
     line_buffer::LineBuffer,
     tokenize::segment_inline,
 };
@@ -362,6 +358,7 @@ fn wrap_text_preserves_indented_hash_as_text() {
     case("# Heading", Some(BlockKind::Heading)),
     case("   # Heading", Some(BlockKind::Heading)),
     case("    # Heading", None),
+    case("	# Heading", None),
     case("- item", Some(BlockKind::Bullet)),
     case("1. item", Some(BlockKind::Bullet)),
     case("> quote", Some(BlockKind::Blockquote)),
