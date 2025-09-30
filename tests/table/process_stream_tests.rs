@@ -96,6 +96,18 @@ fn test_process_stream_reflows_table_before_numeric_paragraph() {
 }
 
 #[test]
+fn flushes_table_before_plain_paragraph_no_blank() {
+    let input = vec![
+        "| a | b |".to_string(),
+        "|---|---|".to_string(),
+        "AWS revenue rose".to_string(),
+    ];
+    let out = crate::process::process_stream(&input);
+    assert!(out.iter().any(|l| l.contains("| a | b |")));
+    assert!(out.iter().any(|l| l == "AWS revenue rose"));
+}
+
+#[test]
 fn test_process_stream_only_whitespace() {
     let input = lines_vec!["", "   ", "\t\t"];
     let expected = lines_vec!["", "", ""];

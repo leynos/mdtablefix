@@ -6,8 +6,13 @@
 use rstest::rstest;
 
 use super::{
-    LineBuffer, attach_punctuation_to_previous_line, determine_token_span,
-    tokenize::segment_inline, wrap_preserving_code,
+    inline::{
+        attach_punctuation_to_previous_line,
+        determine_token_span,
+        wrap_preserving_code,
+    },
+    line_buffer::LineBuffer,
+    tokenize::segment_inline,
 };
 use crate::wrap::{BlockKind, classify_block, wrap_text};
 

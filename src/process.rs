@@ -6,7 +6,7 @@ use crate::{
     footnotes::convert_footnotes,
     html::convert_html_tables,
     table::reflow_table,
-    wrap::{FenceTracker, classify_block, wrap_text},
+    wrap::{FenceTracker, wrap_text},
 };
 
 /// Column width used when wrapping text.
@@ -104,21 +104,9 @@ fn handle_table_line(
         return true;
     }
     if *in_table {
-        let digit_prefixed = trimmed.chars().next().is_some_and(|c| c.is_ascii_digit());
-        if classify_block(line).is_some() || digit_prefixed {
-            // Flush on digit-prefixed paragraphs as well so numeric introductions
-            // following tables remain wrap candidates.
-            flush_buffer(buf, in_table, out);
-            return false;
-        }
-        let indent = line.len().saturating_sub(trimmed.len());
-        if indent >= 4 && trimmed.starts_with('#') {
-            // Treat indented hash-prefixed lines as code, not table rows.
-            flush_buffer(buf, in_table, out);
-            return false;
-        }
-        buf.push(line.to_string());
-        return true;
+        // Any non-tableish line ends the table; let the caller reprocess this line.
+        flush_buffer(buf, in_table, out);
+        return false;
     }
     false
 }
