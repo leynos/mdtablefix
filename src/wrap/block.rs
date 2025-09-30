@@ -90,6 +90,14 @@ pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
 }
 
 /// Returns `true` when `line` matches a recognised `markdownlint` directive comment.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use crate::wrap::block::is_markdownlint_directive;
+/// assert!(is_markdownlint_directive("<!-- markdownlint-disable -->"));
+/// assert!(!is_markdownlint_directive("<!-- regular comment -->"));
+/// ```
 #[inline]
 pub(super) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
