@@ -287,11 +287,13 @@ fn handle_prefix_line(
 }
 
 fn is_indented_code_line(line: &str) -> bool {
+    // CommonMark expands tabs to four spaces when measuring indentation.
     let indent_width = line
         .as_bytes()
         .iter()
         .take_while(|b| **b == b' ' || **b == 0x09)
-        .fold(0_usize, |acc, &b| acc + if b == 0x09 { 4 } else { 1 });
+        .map(|&b| if b == 0x09 { 4 } else { 1 })
+        .sum::<usize>();
 
     indent_width >= 4 && line.chars().any(|c| !c.is_whitespace())
 }

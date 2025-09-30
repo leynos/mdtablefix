@@ -6,16 +6,19 @@
 
 use regex::Regex;
 
+/// Matches bullet and ordered list prefixes captured for wrapping and table detection.
 pub(super) static BULLET_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*(?:[-*+]|\d+[.)])\s+(?:\[\s*(?:[xX]|\s)\s*\]\s*)?)(.*)",
     "bullet pattern regex should compile",
 );
 
+/// Matches footnote definition prefixes so they remain atomic during wrapping and table parsing.
 pub(super) static FOOTNOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*)(\[\^[^]]+\]:\s*)(.*)$",
     "footnote pattern regex should compile",
 );
 
+/// Matches blockquote prefixes, capturing the marker run and the remainder for reuse.
 pub(super) static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*(?:>\s*)+)(.*)$",
     "blockquote pattern regex should compile",
@@ -30,13 +33,9 @@ pub(super) static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
 /// - `<!-- markdownlint-enable -->`
 /// - `<!-- markdownlint-disable-line MD001 MD005 -->`
 /// - `<!-- markdownlint-disable-next-line MD001 MD005 -->`
-pub(super) static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(
-    || {
-        Regex::new(
-        r"(?i)^\s*<!--\s*markdownlint-(?:disable|enable|disable-line|disable-next-line)(?:\s+[A-Za-z0-9_\-/]+)*\s*-->\s*$",
-    )
-    .expect("valid markdownlint regex")
-    },
+pub(super) static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"(?i)^\s*<!--\s*markdownlint-(?:disable|enable|disable-line|disable-next-line)(?:\s+[A-Za-z0-9_\-/]+)*\s*-->\s*$",
+    "markdownlint directive regex should compile",
 );
 
 /// Describes the Markdown block prefix detected by [`classify_block`].
@@ -90,6 +89,7 @@ pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
     None
 }
 
+/// Returns `true` when `line` matches a recognised `markdownlint` directive comment.
 #[inline]
 pub(super) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)

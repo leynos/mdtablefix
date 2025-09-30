@@ -106,6 +106,8 @@ fn handle_table_line(
     if *in_table {
         let digit_prefixed = trimmed.chars().next().is_some_and(|c| c.is_ascii_digit());
         if classify_block(line).is_some() || digit_prefixed {
+            // Flush on digit-prefixed paragraphs as well so numeric introductions
+            // following tables remain wrap candidates.
             flush_buffer(buf, in_table, out);
             return false;
         }
