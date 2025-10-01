@@ -352,6 +352,24 @@ fn wrap_text_preserves_indented_hash_as_text() {
     );
 }
 
+#[test]
+fn wrap_text_flushes_before_heading() {
+    let input = vec![
+        "Paragraph intro.".to_string(),
+        "# Heading".to_string(),
+        "Continuation.".to_string(),
+    ];
+    let wrapped = wrap_text(&input, 40);
+    assert_eq!(
+        wrapped,
+        vec![
+            "Paragraph intro.".to_string(),
+            "# Heading".to_string(),
+            "Continuation.".to_string(),
+        ]
+    );
+}
+
 #[rstest(
     line,
     expected,

@@ -123,3 +123,45 @@ pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
 pub(super) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest(
+        line,
+        expected,
+        case("# Heading", Some(BlockKind::Heading)),
+        case("   # Heading", Some(BlockKind::Heading)),
+        case("    # Code block", None),
+        case("- item", Some(BlockKind::Bullet)),
+        case("1. item", Some(BlockKind::Bullet)),
+        case("> quote", Some(BlockKind::Blockquote)),
+        case("[^1]: footnote", Some(BlockKind::FootnoteDefinition)),
+        case(
+            "<!-- markdownlint-disable -->",
+            Some(BlockKind::MarkdownlintDirective)
+        ),
+        case("2024 revenue", Some(BlockKind::DigitPrefix)),
+        case("plain paragraph", None),
+        case("| a | b |", None),
+        case("#123", Some(BlockKind::Heading)),
+        case("1) list", Some(BlockKind::Bullet)),
+        case(" 2024", Some(BlockKind::DigitPrefix)),
+        case("    1. code", Some(BlockKind::Bullet))
+    )]
+    fn classify_block_identifies_prefixes(line: &str, expected: Option<BlockKind>) {
+        assert_eq!(classify_block(line), expected);
+    }
+
+    #[rstest]
+    #[case("<!-- markdownlint-disable -->", true)]
+    #[case("<!-- markdownlint-disable-next-line MD013 -->", true)]
+    #[case("<!-- markdownlint-enable -->", true)]
+    #[case("<!-- markdownlint enable -->", false)]
+    #[case("<!-- just a comment -->", false)]
+    fn detects_markdownlint_directives(#[case] line: &str, #[case] expected: bool) {
+        assert_eq!(is_markdownlint_directive(line), expected);
+    }
+}

@@ -108,6 +108,22 @@ fn flushes_table_before_plain_paragraph_no_blank() {
 }
 
 #[test]
+fn test_process_stream_reflows_table_before_heading() {
+    let input = lines_vec![
+        "| a | b |",
+        "| 1 | 22 |",
+        "# Heading",
+    ];
+    let expected = lines_vec![
+        "| a | b  |",
+        "| 1 | 22 |",
+        "# Heading",
+    ];
+    assert_eq!(process_stream(&input), expected);
+}
+
+
+#[test]
 fn test_process_stream_only_whitespace() {
     let input = lines_vec!["", "   ", "\t\t"];
     let expected = lines_vec!["", "", ""];
