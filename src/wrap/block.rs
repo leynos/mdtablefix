@@ -92,19 +92,19 @@ pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
     if indent_width < 4 && trimmed.starts_with('#') {
         return Some(BlockKind::Heading);
     }
-    if BULLET_RE.is_match(line) {
+    if indent_width < 4 && BULLET_RE.is_match(line) {
         return Some(BlockKind::Bullet);
     }
-    if BLOCKQUOTE_RE.is_match(line) {
+    if indent_width < 4 && BLOCKQUOTE_RE.is_match(line) {
         return Some(BlockKind::Blockquote);
     }
-    if FOOTNOTE_RE.is_match(line) {
+    if indent_width < 4 && FOOTNOTE_RE.is_match(line) {
         return Some(BlockKind::FootnoteDefinition);
     }
-    if is_markdownlint_directive(line) {
+    if indent_width < 4 && is_markdownlint_directive(line) {
         return Some(BlockKind::MarkdownlintDirective);
     }
-    if trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+    if indent_width < 4 && trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         return Some(BlockKind::DigitPrefix);
     }
     None
@@ -149,7 +149,7 @@ mod tests {
         case("#123", Some(BlockKind::Heading)),
         case("1) list", Some(BlockKind::Bullet)),
         case(" 2024", Some(BlockKind::DigitPrefix)),
-        case("    1. code", Some(BlockKind::Bullet))
+        case("    1. code", None)
     )]
     fn classify_block_identifies_prefixes(line: &str, expected: Option<BlockKind>) {
         assert_eq!(classify_block(line), expected);
