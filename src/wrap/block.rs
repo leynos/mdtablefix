@@ -1,0 +1,167 @@
+//! Block-level Markdown prefix classification shared by wrapping and table detection.
+//!
+//! The regex helpers centralise detection for headings, lists, blockquotes, footnotes,
+//! markdownlint directives, and digit-prefixed paragraphs so wrapping and table handlers
+//! stay in sync.
+
+use regex::Regex;
+
+/// Returns the indentation width (treating tabs as four columns) and the byte
+/// offset of the first non-space or tab character.
+fn leading_indent(line: &str) -> (usize, usize) {
+    let mut width = 0;
+    let mut bytes = 0;
+    for &b in line.as_bytes() {
+        match b {
+            b' ' => {
+                width += 1;
+                bytes += 1;
+            }
+            0x09 => {
+                width += 4;
+                bytes += 1;
+            }
+            _ => break,
+        }
+    }
+    (width, bytes)
+}
+
+/// Matches bullet and ordered list prefixes captured for wrapping and table detection.
+pub(super) static BULLET_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^(\s*(?:[-*+]|\d+[.)])\s+(?:\[\s*(?:[xX]|\s)\s*\]\s*)?)(.*)",
+    "bullet pattern regex should compile",
+);
+
+/// Matches footnote definition prefixes so they remain atomic during wrapping and table parsing.
+pub(super) static FOOTNOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^(\s*)(\[\^[^]]+\]:\s*)(.*)$",
+    "footnote pattern regex should compile",
+);
+
+/// Matches blockquote prefixes, capturing the marker run and the remainder for reuse.
+pub(super) static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^(\s*(?:>\s*)+)(.*)$",
+    "blockquote pattern regex should compile",
+);
+
+/// Matches `markdownlint` comment directives.
+///
+/// The regex is case-insensitive and recognises these forms with optional rule
+/// names (including plugin rules such as `MD013/line-length` or
+/// `plugin/rule-name`):
+/// - `<!-- markdownlint-disable -->`
+/// - `<!-- markdownlint-enable -->`
+/// - `<!-- markdownlint-disable-line MD001 MD005 -->`
+/// - `<!-- markdownlint-disable-next-line MD001 MD005 -->`
+pub(super) static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"(?i)^\s*<!--\s*markdownlint-(?:disable|enable|disable-line|disable-next-line)(?:\s+[A-Za-z0-9_\-/]+)*\s*-->\s*$",
+    "markdownlint directive regex should compile",
+);
+
+/// Describes the Markdown block prefix detected by [`classify_block`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BlockKind {
+    /// Lines that begin with `#`, `##`, and similar heading prefixes.
+    Heading,
+    /// Bullet or ordered list markers matched by [`BULLET_RE`].
+    Bullet,
+    /// Lines that begin with one or more `>` markers.
+    Blockquote,
+    /// Footnote definitions recognised by [`FOOTNOTE_RE`].
+    FootnoteDefinition,
+    /// HTML-style markdownlint directives recognised by [`is_markdownlint_directive`].
+    MarkdownlintDirective,
+    /// Lines whose first non-whitespace character is an ASCII digit.
+    DigitPrefix,
+}
+
+/// Classifies block-level Markdown prefixes shared by wrapping and table detection.
+///
+/// Detection order determines precedence when a line could match multiple prefixes.
+/// The current precedence is: heading, bullet, blockquote, footnote definition,
+/// markdownlint directive, digit prefix. Headings outrank bullets and blockquotes,
+/// so inputs such as "# 1" remain headings rather than list items. Headings ignore
+/// indentation of four or more spaces so indented code remains untouched.
+/// For example, passing "> quote" returns `Some(BlockKind::Blockquote)` while
+/// "| cell |" yields `None` because the line is part of a table.
+pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
+    let (indent_width, indent_bytes) = leading_indent(line);
+    let trimmed = line[indent_bytes..].trim_start();
+
+    if indent_width < 4 && trimmed.starts_with('#') {
+        return Some(BlockKind::Heading);
+    }
+    if indent_width < 4 && BULLET_RE.is_match(line) {
+        return Some(BlockKind::Bullet);
+    }
+    if indent_width < 4 && BLOCKQUOTE_RE.is_match(line) {
+        return Some(BlockKind::Blockquote);
+    }
+    if indent_width < 4 && FOOTNOTE_RE.is_match(line) {
+        return Some(BlockKind::FootnoteDefinition);
+    }
+    if indent_width < 4 && is_markdownlint_directive(line) {
+        return Some(BlockKind::MarkdownlintDirective);
+    }
+    if indent_width < 4 && trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        return Some(BlockKind::DigitPrefix);
+    }
+    None
+}
+
+/// Returns `true` when `line` matches a recognised `markdownlint` directive comment.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use crate::wrap::block::is_markdownlint_directive;
+/// assert!(is_markdownlint_directive("<!-- markdownlint-disable -->"));
+/// assert!(!is_markdownlint_directive("<!-- regular comment -->"));
+/// ```
+#[inline]
+pub(super) fn is_markdownlint_directive(line: &str) -> bool {
+    MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest(
+        line,
+        expected,
+        case("# Heading", Some(BlockKind::Heading)),
+        case("   # Heading", Some(BlockKind::Heading)),
+        case("    # Code block", None),
+        case("- item", Some(BlockKind::Bullet)),
+        case("1. item", Some(BlockKind::Bullet)),
+        case("> quote", Some(BlockKind::Blockquote)),
+        case("[^1]: footnote", Some(BlockKind::FootnoteDefinition)),
+        case(
+            "<!-- markdownlint-disable -->",
+            Some(BlockKind::MarkdownlintDirective)
+        ),
+        case("2024 revenue", Some(BlockKind::DigitPrefix)),
+        case("plain paragraph", None),
+        case("| a | b |", None),
+        case("#123", Some(BlockKind::Heading)),
+        case("1) list", Some(BlockKind::Bullet)),
+        case(" 2024", Some(BlockKind::DigitPrefix)),
+        case("    1. code", None)
+    )]
+    fn classify_block_identifies_prefixes(line: &str, expected: Option<BlockKind>) {
+        assert_eq!(classify_block(line), expected);
+    }
+
+    #[rstest]
+    #[case("<!-- markdownlint-disable -->", true)]
+    #[case("<!-- markdownlint-disable-next-line MD013 -->", true)]
+    #[case("<!-- markdownlint-enable -->", true)]
+    #[case("<!-- markdownlint enable -->", false)]
+    #[case("<!-- just a comment -->", false)]
+    fn detects_markdownlint_directives(#[case] line: &str, #[case] expected: bool) {
+        assert_eq!(is_markdownlint_directive(line), expected);
+    }
+}

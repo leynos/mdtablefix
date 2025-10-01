@@ -6,10 +6,11 @@
 use rstest::rstest;
 
 use super::{
-    LineBuffer, attach_punctuation_to_previous_line, determine_token_span,
-    tokenize::segment_inline, wrap_preserving_code,
+    inline::{attach_punctuation_to_previous_line, determine_token_span, wrap_preserving_code},
+    line_buffer::LineBuffer,
+    tokenize::segment_inline,
 };
-use crate::wrap::wrap_text;
+use crate::wrap::{BlockKind, classify_block, wrap_text};
 
 #[rstest]
 #[case("`code`!", "`code`!")]
@@ -331,6 +332,65 @@ fn wrap_text_keeps_trailing_spaces_for_bullet_final_line() {
         wrapped,
         vec!["- word1".to_string(), "  word2  ".to_string()]
     );
+}
+
+#[test]
+fn wrap_text_preserves_indented_hash_as_text() {
+    let input = vec![
+        "Paragraph intro.".to_string(),
+        "    # code".to_string(),
+        "Continuation.".to_string(),
+    ];
+    let wrapped = wrap_text(&input, 40);
+    assert_eq!(
+        wrapped,
+        vec![
+            "Paragraph intro.".to_string(),
+            "    # code".to_string(),
+            "Continuation.".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn wrap_text_flushes_before_heading() {
+    let input = vec![
+        "Paragraph intro.".to_string(),
+        "# Heading".to_string(),
+        "Continuation.".to_string(),
+    ];
+    let wrapped = wrap_text(&input, 40);
+    assert_eq!(
+        wrapped,
+        vec![
+            "Paragraph intro.".to_string(),
+            "# Heading".to_string(),
+            "Continuation.".to_string(),
+        ]
+    );
+}
+
+#[rstest(
+    line,
+    expected,
+    case("# Heading", Some(BlockKind::Heading)),
+    case("   # Heading", Some(BlockKind::Heading)),
+    case("    # Heading", None),
+    case("	# Heading", None),
+    case("- item", Some(BlockKind::Bullet)),
+    case("1. item", Some(BlockKind::Bullet)),
+    case("> quote", Some(BlockKind::Blockquote)),
+    case("[^1]: footnote", Some(BlockKind::FootnoteDefinition)),
+    case(
+        "<!-- markdownlint-disable -->",
+        Some(BlockKind::MarkdownlintDirective)
+    ),
+    case("2024 revenue", Some(BlockKind::DigitPrefix)),
+    case("a | b", None),
+    case("plain text", None)
+)]
+fn classify_block_detects_markdown_prefixes(line: &str, expected: Option<BlockKind>) {
+    assert_eq!(classify_block(line), expected);
 }
 
 mod fence_tracker;

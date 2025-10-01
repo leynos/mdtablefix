@@ -6,7 +6,7 @@ use crate::{
     footnotes::convert_footnotes,
     html::convert_html_tables,
     table::reflow_table,
-    wrap::{FenceTracker, wrap_text},
+    wrap::{FenceTracker, classify_block, wrap_text},
 };
 
 /// Column width used when wrapping text.
@@ -86,7 +86,9 @@ fn handle_table_line(
     in_table: &mut bool,
     out: &mut Vec<String>,
 ) -> bool {
-    if line.trim_start().starts_with('|') {
+    let trimmed = line.trim_start();
+
+    if trimmed.starts_with('|') {
         *in_table = true;
         buf.push(line.to_string());
         return true;
@@ -102,18 +104,15 @@ fn handle_table_line(
         return true;
     }
     if *in_table {
-        let trimmed = line.trim_start();
-        let new_block = trimmed.starts_with('#')
-            || trimmed.starts_with('*')
-            || trimmed.starts_with('-')
-            || trimmed.starts_with('>')
-            || trimmed.chars().next().is_some_and(|c| c.is_ascii_digit());
-        if new_block {
+        if classify_block(line).is_some() {
+            // Flush when a new Markdown block (heading, list, quote, footnote, directive,
+            // or digit-prefixed text) begins so wrapping and table detection stay aligned.
             flush_buffer(buf, in_table, out);
             return false;
         }
-        buf.push(line.to_string());
-        return true;
+        // Plain paragraphs also end the table so the caller can reprocess them for wrapping.
+        flush_buffer(buf, in_table, out);
+        return false;
     }
     false
 }
