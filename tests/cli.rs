@@ -147,6 +147,41 @@ fn test_cli_fences_option() {
         .stdout("```rust\nfn main() {}\n```\n");
 }
 
+/// Tests that the `--headings` option converts Setext headings to ATX headings.
+#[test]
+fn test_cli_headings_option() {
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--headings")
+        .write_stdin("Title\n=====\n")
+        .assert()
+        .success()
+        .stdout("# Title\n");
+}
+
+/// Verifies that Setext headings are left untouched unless `--headings` is provided.
+#[test]
+fn test_cli_headings_disabled_by_default() {
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .write_stdin("Heading\n-----\n")
+        .assert()
+        .success()
+        .stdout("Heading\n-----\n");
+}
+
+/// Ensures the `--headings` option ignores short underline markers to avoid false positives.
+#[test]
+fn test_cli_headings_requires_long_marker() {
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--headings")
+        .write_stdin("Maybe not\n==\n")
+        .assert()
+        .success()
+        .stdout("Maybe not\n==\n");
+}
+
 #[test]
 fn test_cli_fences_option_tilde() {
     Command::cargo_bin("mdtablefix")

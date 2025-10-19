@@ -9,6 +9,7 @@
 //! - `ellipsis` for normalizing textual ellipses.
 //! - `fences` for issues with code block fences
 //! - `footnotes` for converting bare footnote links.
+//! - `headings` for normalising Setext headings.
 //! - `code_emphasis` for fixing emphasis adjoining inline code.
 //! - `textproc` for token-based transformations.
 //! - `process` for stream processing.
@@ -26,6 +27,7 @@ pub mod code_emphasis;
 pub mod ellipsis;
 pub mod fences;
 pub mod footnotes;
+pub mod headings;
 mod html;
 pub mod io;
 pub mod lists;
@@ -46,6 +48,7 @@ pub use code_emphasis::fix_code_emphasis;
 pub use ellipsis::replace_ellipsis;
 pub use fences::{attach_orphan_specifiers, compress_fences};
 pub use footnotes::convert_footnotes;
+pub use headings::convert_setext_headings;
 pub use html::convert_html_tables;
 pub use io::{rewrite, rewrite_no_wrap};
 pub use lists::renumber_lists;
