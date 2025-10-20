@@ -182,6 +182,19 @@ fn test_cli_headings_requires_long_marker() {
         .stdout("Maybe not\n==\n");
 }
 
+/// Ensures blockquote paragraphs are not turned into headings when underline markers lack the
+/// corresponding quote prefix.
+#[test]
+fn test_cli_headings_preserves_blockquote_paragraphs() {
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--headings")
+        .write_stdin("> Quote\n-----\n")
+        .assert()
+        .success()
+        .stdout("> Quote\n-----\n");
+}
+
 #[test]
 fn test_cli_fences_option_tilde() {
     Command::cargo_bin("mdtablefix")

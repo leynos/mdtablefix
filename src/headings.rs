@@ -53,6 +53,9 @@ fn detect_setext_heading(line: &str, underline: Option<&String>) -> Option<(usiz
     }
 
     let prefix_len = shared_prefix_len(line, underline);
+    if has_unmatched_prefix(line, underline) {
+        return None;
+    }
     if prefix_len > 0
         && !line[..prefix_len]
             .chars()
@@ -102,6 +105,29 @@ fn shared_prefix_len(a: &str, b: &str) -> usize {
     end
 }
 
+/// Determine whether a line and its underline disagree on indentation or blockquote prefix.
+///
+/// Setext headings must repeat blockquote (`>`) markers and indentation on both lines. When the
+/// prefixes differ we leave the text untouched so blockquote paragraphs or code blocks are not
+/// promoted to headings.
+fn has_unmatched_prefix(line: &str, underline: &str) -> bool {
+    let line_prefix = prefix_of_indent_or_quote(line);
+    let underline_prefix = prefix_of_indent_or_quote(underline);
+    line_prefix != underline_prefix && (line_prefix > 0 || underline_prefix > 0)
+}
+
+fn prefix_of_indent_or_quote(text: &str) -> usize {
+    let mut last = 0;
+    for (idx, ch) in text.char_indices() {
+        if ch.is_whitespace() || ch == '>' {
+            last = idx + ch.len_utf8();
+            continue;
+        }
+        break;
+    }
+    last
+}
+
 fn build_heading_line(prefix: &str, level: usize, text: &str) -> String {
     let mut heading = String::new();
     heading.push_str(prefix);
@@ -139,6 +165,7 @@ mod tests {
     #[case(vec!["Not a heading".into(), "--".into()])]
     #[case(vec!["- Item".into(), "-----".into()])]
     #[case(vec![String::new(), "---".into()])]
+    #[case(vec!["> Quote".into(), "-----".into()])]
     fn leaves_non_headings_untouched(#[case] lines: Vec<String>) {
         assert_eq!(convert_setext_headings(&lines), lines);
     }
