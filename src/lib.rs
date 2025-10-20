@@ -6,10 +6,10 @@
 //! - `wrap` for paragraph wrapping.
 //! - `lists` for renumbering ordered lists.
 //! - `breaks` for thematic break formatting.
-//! - `ellipsis` for normalizing textual ellipses.
+//! - `ellipsis` for replacing textual ellipses.
 //! - `fences` for issues with code block fences
 //! - `footnotes` for converting bare footnote links.
-//! - `headings` for normalising Setext headings.
+//! - `headings` for rewriting Setext headings.
 //! - `code_emphasis` for fixing emphasis adjoining inline code.
 //! - `textproc` for token-based transformations.
 //! - `process` for stream processing.

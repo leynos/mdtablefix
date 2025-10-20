@@ -32,7 +32,9 @@ pub fn convert_setext_headings(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        if let Some((level, prefix_len, text)) = detect_setext_heading(line, lines.get(idx + 1)) {
+        if let Some((level, prefix_len, text)) =
+            detect_setext_heading(line, lines.get(idx + 1).map(String::as_str))
+        {
             let prefix = &line[..prefix_len];
             out.push(build_heading_line(prefix, level, &text));
             idx += 2;
@@ -46,7 +48,7 @@ pub fn convert_setext_headings(lines: &[String]) -> Vec<String> {
     out
 }
 
-fn detect_setext_heading(line: &str, underline: Option<&String>) -> Option<(usize, usize, String)> {
+fn detect_setext_heading(line: &str, underline: Option<&str>) -> Option<(usize, usize, String)> {
     let underline = underline?;
     if line.trim().is_empty() {
         return None;
@@ -80,7 +82,7 @@ fn detect_setext_heading(line: &str, underline: Option<&String>) -> Option<(usiz
     if !underline_body.chars().all(|c| c == marker) {
         return None;
     }
-    if underline_body.chars().count() < 3 {
+    if underline_body.len() < 3 {
         return None;
     }
 
@@ -131,7 +133,7 @@ fn prefix_of_indent_or_quote(text: &str) -> usize {
 fn build_heading_line(prefix: &str, level: usize, text: &str) -> String {
     let mut heading = String::new();
     heading.push_str(prefix);
-    if !prefix.is_empty() && !prefix.chars().last().is_some_and(char::is_whitespace) {
+    if needs_space_after(prefix) {
         heading.push(' ');
     }
     heading.push_str(&"#".repeat(level));
@@ -140,6 +142,10 @@ fn build_heading_line(prefix: &str, level: usize, text: &str) -> String {
         heading.push_str(text);
     }
     heading
+}
+
+fn needs_space_after(prefix: &str) -> bool {
+    !prefix.is_empty() && !prefix.chars().last().is_some_and(char::is_whitespace)
 }
 
 #[cfg(test)]
@@ -152,9 +158,14 @@ mod tests {
     #[case(vec!["Heading".into(), "----".into()], vec!["## Heading".into()])]
     #[case(vec!["Title   ".into(), "=====".into()], vec!["# Title".into()])]
     #[case(vec!["   Heading".into(), "   ====".into()], vec!["   # Heading".into()])]
+    #[case(vec!["Heading".into(), "----   ".into()], vec!["## Heading".into()])]
     #[case(
         vec!["> Quote".into(), "> ----".into()],
         vec!["> ## Quote".into()]
+    )]
+    #[case(
+        vec![">> Title".into(), ">> ----".into()],
+        vec![">> ## Title".into()]
     )]
     fn converts_setext_headings(#[case] input: Vec<String>, #[case] expected: Vec<String>) {
         assert_eq!(convert_setext_headings(&input), expected);
@@ -166,6 +177,8 @@ mod tests {
     #[case(vec!["- Item".into(), "-----".into()])]
     #[case(vec![String::new(), "---".into()])]
     #[case(vec!["> Quote".into(), "-----".into()])]
+    #[case(vec![" Heading".into(), "  ---".into()])]
+    #[case(vec!["Heading".into(), "-==".into()])]
     fn leaves_non_headings_untouched(#[case] lines: Vec<String>) {
         assert_eq!(convert_setext_headings(&lines), lines);
     }

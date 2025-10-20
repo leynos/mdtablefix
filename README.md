@@ -66,8 +66,8 @@ mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
 
 - Use `--headings` to convert Setext headings that use underline markers into
   hash-prefixed headings. The underline must contain at least three matching
-  `=` or `-` characters so the converter can distinguish headings from thematic
-  breaks and list markers.
+  `=` or `-` characters, so the converter can distinguish headings from
+  thematic breaks and list markers.
 
 - Use `--in-place` to modify files in-place.
 

@@ -39,8 +39,8 @@ The function combines several helpers documented in `docs/`:
   helper only rewrites lines whose shared prefix is whitespace or `>` so nested
   lists continue to behave normally.
 
-Heading conversion runs after fence/table processing and before wrapping so the
-wrapping stage sees the normalised ATX headings and leaves them untouched.
+Heading conversion runs after fence/table processing and before wrapping, so
+the wrapping stage observes ATX headings and leaves them untouched.
 
 The function maintains a small state machine that tracks whether it is inside a
 Markdown table, an HTML table, or a fenced code block. The state determines how
