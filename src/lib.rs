@@ -1,15 +1,15 @@
-//! Library for fixing Markdown tables and wrapping text.
+//! Library for normalizing Markdown tables and wrapping text.
 //!
 //! Modules:
 //! - `html` for converting HTML tables.
-//! - `table` for Markdown table alignment.
+//! - `table` for standardizing Markdown table alignment.
 //! - `wrap` for paragraph wrapping.
 //! - `lists` for renumbering ordered lists.
-//! - `breaks` for thematic break formatting.
+//! - `breaks` for thematizing horizontal rules.
 //! - `ellipsis` for replacing textual ellipses.
 //! - `fences` for issues with code block fences
 //! - `footnotes` for converting bare footnote links.
-//! - `headings` for rewriting Setext headings.
+//! - `headings` for standardizing Setext headings.
 //! - `code_emphasis` for fixing emphasis adjoining inline code.
 //! - `textproc` for token-based transformations.
 //! - `process` for stream processing.
