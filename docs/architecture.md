@@ -34,7 +34,7 @@ The function combines several helpers documented in `docs/`:
 - `wrap::tokenize_markdown` emits `Token` values for custom processing.
 - `headings::convert_setext_headings` rewrites Setext headings with underline
   markers into ATX headings when the CLI `--headings` flag is provided. The
-  underline must contain at least three identical `=` or `-` characters so the
+  underline must contain at least three identical `=` or `-` characters, so the
   converter can distinguish headings from thematic breaks or list markers. The
   helper only rewrites lines whose shared prefix is whitespace or `>` so nested
   lists continue to behave normally.
