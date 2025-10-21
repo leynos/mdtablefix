@@ -27,7 +27,7 @@ cargo install --path .
 
 ```bash
 mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
-          [--footnotes] [--code-emphasis] [--in-place] [FILE...]
+          [--footnotes] [--code-emphasis] [--headings] [--in-place] [FILE...]
 ```
 
 - When one or more file paths are provided, the corrected tables are printed to
@@ -63,6 +63,11 @@ mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
 
 - Use `--code-emphasis` to fix emphasis markers that directly adjoin inline
   code without spaces, ensuring the code span remains intact.
+
+- Use `--headings` to convert Setext headings that use underline markers into
+  hash-prefixed headings. The underline must contain at least three matching
+  `=` or `-` characters, so the converter can distinguish headings from
+  thematic breaks and list markers.
 
 - Use `--in-place` to modify files in-place.
 
@@ -142,6 +147,7 @@ fn main() -> std::io::Result<()> {
         ellipsis: true,
         fences: true,
         footnotes: true,
+        headings: true,
         ..Default::default()
     };
     let fixed = process_stream_opts(&lines, opts);
@@ -184,8 +190,9 @@ assert_eq!(out[2], "[^1]: First note");
 
 - `process_stream_opts(lines: &[String], opts: Options) -> Vec<String>`
   rewrites tables in memory. The options enable paragraph wrapping, ellipsis
-  substitution, fence normalization and footnote conversion when `footnotes` is
-  set to `true`. The flag is `false` by default.
+  substitution, fence normalization, Setext-to-ATX heading conversion, and
+  footnote conversion when `footnotes` is set to `true`. The flags are `false`
+  by default.
 
 - `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on
   disk in-place.

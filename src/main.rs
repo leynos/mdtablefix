@@ -57,6 +57,9 @@ struct FormatOpts {
     /// Fix emphasis markers adjacent to inline code
     #[arg(long = "code-emphasis")]
     code_emphasis: bool,
+    /// Convert Setext-style headings to hash-prefixed headings
+    #[arg(long = "headings")]
+    headings: bool,
 }
 
 impl From<FormatOpts> for Options {
@@ -67,6 +70,7 @@ impl From<FormatOpts> for Options {
             fences: opts.fences,
             footnotes: opts.footnotes,
             code_emphasis: opts.code_emphasis,
+            headings: opts.headings,
         }
     }
 }

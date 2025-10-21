@@ -32,6 +32,15 @@ The function combines several helpers documented in `docs/`:
 - `wrap::wrap_text` applies optional line wrapping. It relies on the
   `unicode-width` crate for accurate character widths.
 - `wrap::tokenize_markdown` emits `Token` values for custom processing.
+- `headings::convert_setext_headings` rewrites Setext headings with underline
+  markers into ATX headings when the CLI `--headings` flag is provided. The
+  underline must contain at least three identical `=` or `-` characters, so the
+  converter can distinguish headings from thematic breaks or list markers. The
+  helper only rewrites lines whose shared prefix is whitespace or `>` so nested
+  lists continue to behave normally.
+
+Heading conversion runs after fence/table processing and before wrapping, so
+the wrapping stage observes ATX headings and leaves them untouched.
 
 The function maintains a small state machine that tracks whether it is inside a
 Markdown table, an HTML table, or a fenced code block. The state determines how
@@ -133,7 +142,8 @@ Numbers inside inline code or parentheses are ignored.
 
 ATX heading lines (including those nested in blockquotes and list items) are
 not processed for footnote conversion, so identifiers like "A.2" remain
-verbatim. Setext-style headings are not detected.
+verbatim. Setext-style headings are not detected unless the `--headings`
+conversion already rewrote them into ATX headings earlier in the pipeline.
 
 Before:
 

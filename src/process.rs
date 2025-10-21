@@ -26,6 +26,7 @@ pub(crate) const WRAP_COLS: usize = 80;
 ///     fences: false,
 ///     footnotes: false,
 ///     code_emphasis: false,
+///     headings: false,
 /// };
 /// let out = process_stream_opts(&lines, opts);
 /// assert_eq!(out, vec!["example"]);
@@ -46,6 +47,8 @@ pub struct Options {
     pub footnotes: bool,
     /// Fix emphasis markers adjacent to inline code.
     pub code_emphasis: bool,
+    /// Convert Setext-style headings into ATX (`#`) headings.
+    pub headings: bool,
 }
 
 /// Flushes buffered lines to `out`, formatting as a table when required.
@@ -137,6 +140,7 @@ fn handle_table_line(
 ///         fences: false,
 ///         footnotes: false,
 ///         code_emphasis: false,
+///         headings: false,
 ///     },
 /// );
 /// assert!(out.iter().any(|l| l.contains("| a | b |")));
@@ -178,6 +182,9 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     flush_buffer(&mut buf, &mut in_table, &mut out);
 
+    if opts.headings {
+        out = crate::headings::convert_setext_headings(&out);
+    }
     if opts.code_emphasis {
         out = crate::code_emphasis::fix_code_emphasis(&out);
     }
@@ -257,6 +264,7 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 ///     fences: false,
 ///     footnotes: false,
 ///     code_emphasis: false,
+///     headings: false,
 /// };
 /// let out = process_stream_opts(&lines, opts);
 /// assert_eq!(out, vec!["text"]);
@@ -301,5 +309,34 @@ mod tests {
             },
         );
         assert_eq!(out, vec!["**`X` Y (in `Z`)**"]);
+    }
+
+    #[test]
+    fn converts_headings_when_enabled() {
+        let input = vec![
+            "Heading".to_string(),
+            "====".to_string(),
+            "Paragraph".to_string(),
+        ];
+        let disabled = process_stream_inner(
+            &input,
+            Options {
+                headings: false,
+                ..Default::default()
+            },
+        );
+        assert_eq!(disabled, input);
+
+        let enabled = process_stream_inner(
+            &input,
+            Options {
+                headings: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            enabled,
+            vec!["# Heading".to_string(), "Paragraph".to_string()]
+        );
     }
 }
