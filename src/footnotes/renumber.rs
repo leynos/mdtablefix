@@ -217,12 +217,12 @@ fn reorder_definition_block(
         }
         let next_bound = definition_segment_end(lines, position, end);
         if let Some(definition) = def_lookup.get(&position) {
-            let mut segment = lines[leading_start..next_bound].to_vec();
-            if segment.is_empty() {
-                segment.push(definition.line.clone());
-            } else {
-                let header_index = position - leading_start;
-                segment[header_index].clone_from(&definition.line);
+            let mut segment = Vec::with_capacity(next_bound.saturating_sub(leading_start).max(1));
+            segment.extend(lines[leading_start..position].iter().cloned());
+            segment.push(definition.line.clone());
+            let tail_start = position.saturating_add(1);
+            if tail_start < next_bound {
+                segment.extend(lines[tail_start..next_bound].iter().cloned());
             }
             segments.push((definition.new_number, definition.index, segment));
         }

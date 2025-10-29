@@ -11,7 +11,7 @@
 //! A simple check ensures these macros are available so the prelude exports
 //! are correctly wired for all integration tests.
 
-use mdtablefix::convert_footnotes;
+use mdtablefix::{convert_footnotes, process_stream};
 use rstest::rstest;
 
 #[macro_use]
@@ -172,6 +172,21 @@ fn test_converts_colon_definition_with_trailing_spaces() {
     let input = lines_vec!("## Footnotes", "7:  Footnote text");
     let expected = lines_vec!("## Footnotes", "[^1]:  Footnote text");
     assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
+fn test_convert_preserves_headers_with_blank_separators() {
+    let input: Vec<String> = include_lines!("data/footnotes_regression_input.txt");
+    let expected: Vec<String> = include_lines!("data/footnotes_regression_expected.txt");
+
+    let reflowed = process_stream(&input);
+    assert_eq!(
+        reflowed, expected,
+        "reflowed fixture must match expectation"
+    );
+
+    let output = convert_footnotes(&reflowed);
+    assert_eq!(output, expected);
 }
 
 #[test]

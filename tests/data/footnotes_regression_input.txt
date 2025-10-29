@@ -1,0 +1,12 @@
+Intro text referencing items[^1] and others[^2].
+
+Extra context linking to third[^3].
+
+[^1]: rayon-rs/rayon - Data parallelism library.
+      <https://github.com/rayon-rs/rayon>
+
+[^2]: Parallel Processing in Rust article.
+      <https://kartik.example/parallel>
+
+[^3]: Research paper overview with summary.
+      <https://example.com/paper>
