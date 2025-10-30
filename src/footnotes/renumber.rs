@@ -217,6 +217,10 @@ fn reorder_definition_block(
         }
         let next_bound = definition_segment_end(lines, position, end);
         if let Some(definition) = def_lookup.get(&position) {
+            debug_assert!(
+                position >= leading_start,
+                "definition header {position} cannot precede leading segment start {leading_start}",
+            );
             let mut segment = Vec::with_capacity(next_bound.saturating_sub(leading_start).max(1));
             segment.extend(lines[leading_start..position].iter().cloned());
             segment.push(definition.line.clone());
