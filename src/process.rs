@@ -9,6 +9,18 @@ use crate::{
     wrap::{FenceTracker, classify_block, wrap_text},
 };
 
+// Length of the YAML frontmatter header if present.
+fn frontmatter_len(lines: &[String]) -> usize {
+    if lines.first().is_some_and(|line| line.trim() == "---") {
+        for (idx, line) in lines.iter().enumerate().skip(1) {
+            if line.trim() == "---" {
+                return idx + 1;
+            }
+        }
+    }
+    0
+}
+
 /// Column width used when wrapping text.
 pub(crate) const WRAP_COLS: usize = 80;
 
@@ -147,14 +159,18 @@ fn handle_table_line(
 /// ```
 #[must_use]
 pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
-    let lines = if opts.fences {
-        let tmp = compress_fences(lines);
+    let fm_len = frontmatter_len(lines);
+    let (frontmatter, body) = lines.split_at(fm_len);
+    let frontmatter = frontmatter.to_vec();
+
+    let body = if opts.fences {
+        let tmp = compress_fences(body);
         attach_orphan_specifiers(&tmp)
     } else {
-        lines.to_vec()
+        body.to_vec()
     };
 
-    let pre = convert_html_tables(&lines);
+    let pre = convert_html_tables(&body);
 
     let mut out = Vec::new();
     let mut buf = Vec::new();
@@ -200,7 +216,14 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     if opts.footnotes {
         out = convert_footnotes(&out);
     }
-    out
+
+    if fm_len > 0 {
+        let mut combined = frontmatter;
+        combined.extend(out);
+        combined
+    } else {
+        out
+    }
 }
 
 /// Processes a Markdown stream with all default options enabled.
@@ -338,5 +361,21 @@ mod tests {
             enabled,
             vec!["# Heading".to_string(), "Paragraph".to_string()]
         );
+    }
+
+    #[test]
+    fn skips_frontmatter_processing() {
+        let input = vec![
+            "---".to_string(),
+            "title: Example".to_string(),
+            "---".to_string(),
+            "| a | b |".to_string(),
+            "|---|---|".to_string(),
+            "| 1 | 2 |".to_string(),
+        ];
+        let output = process_stream(&input);
+
+        assert_eq!(output[0..3], input[0..3]);
+        assert!(output.iter().any(|line| line.contains("| a | b |")));
     }
 }
