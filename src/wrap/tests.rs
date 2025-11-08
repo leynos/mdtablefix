@@ -178,6 +178,23 @@ fn wrap_preserving_code_glues_punctuation_after_code() {
     assert_eq!(lines, vec!["line with `code`!".to_string()]);
 }
 
+#[rstest]
+#[case("alpha beta", 5, &["alpha", " beta"])]
+#[case("alpha  beta", 5, &["alpha", "  beta"])]
+#[case("alpha `beta`", 5, &["alpha", " `beta`"])]
+fn wrap_preserving_code_preserves_carry_whitespace(
+    #[case] input: &str,
+    #[case] width: usize,
+    #[case] expected: &[&str],
+) {
+    let lines = wrap_preserving_code(input, width);
+    assert_eq!(
+        lines,
+        expected.iter().map(|&s| s.to_string()).collect::<Vec<_>>()
+    );
+    assert_eq!(lines.concat(), input);
+}
+
 #[test]
 fn wrap_text_preserves_hyphenated_words() {
     let input = vec!["A word that is very-long-word indeed".to_string()];

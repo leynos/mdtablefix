@@ -55,18 +55,6 @@ impl LineBuffer {
         }
     }
 
-    pub(crate) fn push_non_whitespace_span(&mut self, tokens: &[String], start: usize, end: usize) {
-        for tok in &tokens[start..end] {
-            if tok.chars().all(char::is_whitespace) {
-                continue;
-            }
-            self.push_token(tok.as_str());
-        }
-
-        // No whitespace was appended; keep split unset.
-        self.last_split = None;
-    }
-
     pub(crate) fn flush_into(&mut self, lines: &mut Vec<String>) {
         if self.text.is_empty() {
             return;
