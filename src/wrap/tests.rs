@@ -182,7 +182,10 @@ fn wrap_preserving_code_glues_punctuation_after_code() {
 #[test]
 fn wrap_preserving_code_breaks_between_inline_code_spans() {
     let text = "Extensions (`.toml`, `.json`, `.json5`, `.yaml`, `.yml`).";
-    let lines = wrap_preserving_code(text, 55);
+    // Width 40 sits between the width of the `.json` and `.json5` prefixes,
+    // forcing the wrapper to decide whether it can break between separate
+    // inline code spans that are spaced apart.
+    let lines = wrap_preserving_code(text, 35);
     assert_eq!(
         lines,
         vec![
