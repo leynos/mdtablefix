@@ -150,6 +150,30 @@ pub(super) fn attach_punctuation_to_previous_line(
     false
 }
 
+fn push_span_with_carry(
+    buffer: &mut LineBuffer,
+    tokens: &[String],
+    start: usize,
+    end: usize,
+    carried_whitespace: &mut String,
+) {
+    if start >= end {
+        return;
+    }
+
+    if carried_whitespace.is_empty() {
+        buffer.push_span(tokens, start, end);
+        return;
+    }
+
+    let mut first_token = std::mem::take(carried_whitespace);
+    first_token.push_str(tokens[start].as_str());
+    buffer.push_token(first_token.as_str());
+    if start + 1 < end {
+        buffer.push_span(tokens, start + 1, end);
+    }
+}
+
 pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let tokens = tokenize::segment_inline(text);
     if tokens.is_empty() {
@@ -158,18 +182,31 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 
     let mut lines = Vec::new();
     let mut buffer = LineBuffer::new();
+    let mut carried_whitespace = String::new();
     let mut i = 0;
 
     while i < tokens.len() {
         let (group_end, group_width) = determine_token_span(&tokens, i);
+        let span_is_whitespace = tokens[i..group_end]
+            .iter()
+            .all(|tok| is_whitespace_token(tok));
+
+        if span_is_whitespace && !carried_whitespace.is_empty() && group_end != tokens.len() {
+            for tok in &tokens[i..group_end] {
+                carried_whitespace.push_str(tok);
+            }
+            i = group_end;
+            continue;
+        }
 
         if attach_punctuation_to_previous_line(lines.as_mut_slice(), buffer.text(), &tokens[i]) {
+            carried_whitespace.clear();
             i += 1;
             continue;
         }
 
         if buffer.width() + group_width <= width {
-            buffer.push_span(&tokens, i, group_end);
+            push_span_with_carry(&mut buffer, &tokens, i, group_end, &mut carried_whitespace);
             i = group_end;
             continue;
         }
@@ -185,8 +222,21 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         }
 
         buffer.flush_into(&mut lines);
-        buffer.push_non_whitespace_span(&tokens, i, group_end);
+        if span_is_whitespace {
+            for tok in &tokens[i..group_end] {
+                carried_whitespace.push_str(tok);
+            }
+            i = group_end;
+            continue;
+        }
+
+        push_span_with_carry(&mut buffer, &tokens, i, group_end, &mut carried_whitespace);
         i = group_end;
+    }
+
+    if !carried_whitespace.is_empty() {
+        buffer.push_token(carried_whitespace.as_str());
+        carried_whitespace.clear();
     }
 
     buffer.flush_into(&mut lines);
