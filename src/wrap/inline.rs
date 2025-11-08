@@ -8,6 +8,13 @@ use unicode_width::UnicodeWidthStr;
 
 use super::{line_buffer::LineBuffer, tokenize};
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum SpanKind {
+    General,
+    Code,
+    Link,
+}
+
 #[inline]
 fn is_trailing_punct(c: char) -> bool {
     // ASCII closers + common Unicode closers and word-final punctuation
@@ -39,6 +46,28 @@ fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usi
     j
 }
 
+/// Decide whether whitespace between grouped tokens should stay attached to the
+/// current span.
+///
+/// Links absorb following whitespace when another link, inline code span, or
+/// punctuation immediately follows so that rendered Markdown keeps those items
+/// together. Code spans are only coupled with trailing punctuation so that two
+/// adjacent code spans can break across lines, but `code`, style suffixes still
+/// cling to the preceding span.
+fn should_couple_whitespace(kind: SpanKind, next_token: Option<&String>) -> bool {
+    match (kind, next_token) {
+        (SpanKind::Link, Some(next))
+            if looks_like_link(next)
+                || is_inline_code_token(next)
+                || next.chars().all(is_trailing_punct) =>
+        {
+            true
+        }
+        (SpanKind::Code, Some(next)) if next.chars().all(is_trailing_punct) => true,
+        _ => false,
+    }
+}
+
 #[inline]
 fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
     debug_assert!(
@@ -59,13 +88,6 @@ fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
 }
 
 pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
-    #[derive(Copy, Clone, PartialEq, Eq)]
-    enum SpanKind {
-        General,
-        Code,
-        Link,
-    }
-
     let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());
     let mut kind = SpanKind::General;
@@ -84,20 +106,7 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     while end < tokens.len() {
         let token = &tokens[end];
         if is_whitespace_token(token) {
-            let next_token = tokens.get(end + 1);
-            let should_couple_with_next = match (kind, next_token) {
-                (SpanKind::Link, Some(next))
-                    if looks_like_link(next)
-                        || is_inline_code_token(next)
-                        || next.chars().all(is_trailing_punct) =>
-                {
-                    true
-                }
-                (SpanKind::Code, Some(next)) if next.chars().all(is_trailing_punct) => true,
-                _ => false,
-            };
-
-            if should_couple_with_next {
+            if should_couple_whitespace(kind, tokens.get(end + 1)) {
                 width += UnicodeWidthStr::width(token.as_str());
                 end += 1;
                 continue;
