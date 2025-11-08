@@ -1,8 +1,12 @@
 [package]
 name = "mdtablefix"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 rust-version = "1.89"
+license = "ISC"
+description = """
+`mdtablefix` unb0rks and reflows Markdown tables so that each column has a uniform width. When \
+the `--wrap` option is used, it also wraps paragraphs and list items to 80 columns."""
 
 [dependencies]
 anyhow = "1"
