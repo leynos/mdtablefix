@@ -59,7 +59,7 @@ fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
 }
 
 pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
-    #[derive(PartialEq, Eq)]
+    #[derive(Copy, Clone, PartialEq, Eq)]
     enum SpanKind {
         General,
         Code,
@@ -84,16 +84,25 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     while end < tokens.len() {
         let token = &tokens[end];
         if is_whitespace_token(token) {
-            if matches!(kind, SpanKind::Code | SpanKind::Link)
-                && end + 1 < tokens.len()
-                && (looks_like_link(&tokens[end + 1])
-                    || is_inline_code_token(&tokens[end + 1])
-                    || tokens[end + 1].chars().all(is_trailing_punct))
-            {
+            let next_token = tokens.get(end + 1);
+            let should_couple_with_next = match (kind, next_token) {
+                (SpanKind::Link, Some(next))
+                    if looks_like_link(next)
+                        || is_inline_code_token(next)
+                        || next.chars().all(is_trailing_punct) =>
+                {
+                    true
+                }
+                (SpanKind::Code, Some(next)) if next.chars().all(is_trailing_punct) => true,
+                _ => false,
+            };
+
+            if should_couple_with_next {
                 width += UnicodeWidthStr::width(token.as_str());
                 end += 1;
                 continue;
             }
+
             break;
         }
 

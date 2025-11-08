@@ -18,6 +18,7 @@ use crate::wrap::{BlockKind, classify_block, wrap_text};
 #[case("plain,", "plain,")]
 #[case("`code`,", "`code`,")]
 #[case("`code`!`more`", "`code`!`more`")]
+#[case("`code` `more`", "`code`")]
 #[case("[link](url),", "[link](url),")]
 #[case("[link](url)[another](url2)", "[link](url)[another](url2)")]
 #[case("[link](url) [another](url2)", "[link](url) [another](url2)")]
@@ -176,6 +177,19 @@ fn wrap_preserving_code_splits_after_consecutive_whitespace() {
 fn wrap_preserving_code_glues_punctuation_after_code() {
     let lines = wrap_preserving_code("line with `code` !", 80);
     assert_eq!(lines, vec!["line with `code`!".to_string()]);
+}
+
+#[test]
+fn wrap_preserving_code_breaks_between_inline_code_spans() {
+    let text = "Extensions (`.toml`, `.json`, `.json5`, `.yaml`, `.yml`).";
+    let lines = wrap_preserving_code(text, 55);
+    assert_eq!(
+        lines,
+        vec![
+            "Extensions (`.toml`, `.json`,".to_string(),
+            "`.json5`, `.yaml`, `.yml`).".to_string(),
+        ]
+    );
 }
 
 #[rstest]
