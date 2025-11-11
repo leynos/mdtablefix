@@ -53,9 +53,7 @@ fn char_at(text: &str, idx: usize) -> Option<char> {
 }
 
 fn advance_char(text: &str, idx: usize) -> usize {
-    char_at(text, idx)
-        .map(|ch| idx + ch.len_utf8())
-        .unwrap_or_else(|| text.len())
+    char_at(text, idx).map_or(text.len(), |ch| idx + ch.len_utf8())
 }
 
 /// Check if a byte at the given index is preceded by an odd number of
