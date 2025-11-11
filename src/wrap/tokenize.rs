@@ -156,6 +156,28 @@ fn is_trailing_punctuation(c: char) -> bool {
     )
 }
 
+fn handle_backtick_fence(text: &str, bytes: &[u8], start_idx: usize) -> (String, usize) {
+    let start = start_idx;
+    let fence_end = scan_while(text, start_idx, |ch| ch == '`');
+    let fence_len = fence_end - start;
+    let mut end = fence_end;
+
+    while end < text.len() {
+        let candidate_end = scan_while(text, end, |ch| ch == '`');
+        if candidate_end - end == fence_len && !has_odd_backslash_escape_bytes(bytes, end) {
+            return (collect_range(text, start, candidate_end), candidate_end);
+        }
+
+        if let Some(next) = text[end..].chars().next() {
+            end += next.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    (collect_range(text, start, fence_end), fence_end)
+}
+
 /// Break a single line of text into inline token strings.
 ///
 /// Code spans, links, images and surrounding whitespace are preserved as
@@ -183,7 +205,9 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
     let bytes = text.as_bytes();
     let mut i = 0;
     while i < text.len() {
-        let ch = text[i..].chars().next().expect("valid char boundary");
+        let Some(ch) = text[i..].chars().next() else {
+            break;
+        };
         if ch.is_whitespace() {
             let start = i;
             i = scan_while(text, i, char::is_whitespace);
@@ -200,33 +224,9 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
                 continue;
             }
 
-            let start = i;
-            let fence_end = scan_while(text, i, |ch| ch == '`');
-            let fence_len = fence_end - start;
-            i = fence_end;
-
-            let mut end = i;
-            let mut closing = None;
-            while end < text.len() {
-                let j = scan_while(text, end, |ch| ch == '`');
-                if j - end == fence_len && !has_odd_backslash_escape_bytes(bytes, end) {
-                    closing = Some(j);
-                    break;
-                }
-                if let Some(next) = text[end..].chars().next() {
-                    end += next.len_utf8();
-                } else {
-                    break;
-                }
-            }
-
-            if let Some(end_idx) = closing {
-                tokens.push(collect_range(text, start, end_idx));
-                i = end_idx;
-            } else {
-                tokens.push(collect_range(text, start, fence_end));
-                i = fence_end;
-            }
+            let (token, new_i) = handle_backtick_fence(text, bytes, i);
+            tokens.push(token);
+            i = new_i;
             continue;
         }
 
