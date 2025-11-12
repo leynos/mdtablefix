@@ -333,6 +333,37 @@ provides streaming helpers that combine the lower-level functions. The `io`
 module handles filesystem operations, delegating the text processing to
 `process`.
 
+### Tokenizer flow
+
+The inline tokenizer iterates over the source string lazily, so no duplicate
+`Vec<char>` representation is required. The following diagram summarizes the
+control flow, highlighting the helpers touched during whitespace, code span,
+and link handling.
+
+```mermaid
+flowchart TD
+    A["Input text (&str)"] --> B["Initialize tokens Vec"]
+    B --> C["Iterate over text by byte index"]
+    C --> D{"Current char is whitespace?"}
+    D -- Yes --> E["scan_while for whitespace"]
+    E --> F["collect_range and push token"]
+    D -- No --> G{"Current char is '`'?"}
+    G -- Yes --> H["Check backslash escape (has_odd_backslash_escape_bytes)"]
+    H -- Escaped --> I["Push '`' as token"]
+    H -- Not escaped --> J["scan_while for code fence"]
+    J --> K["Find closing fence, collect_range and push token"]
+    G -- No --> L{"Current char is '[' or '!['?"}
+    L -- Yes --> M["parse_link_or_image"]
+    M --> N["Push link/image token"]
+    N --> O["scan_while for trailing punctuation"]
+    O --> P["collect_range and push punctuation token"]
+    L -- No --> Q["scan_while for non-whitespace/non-` chars"]
+    Q --> R["collect_range and push token"]
+    F & I & K & P & R --> S["Continue iteration"]
+    S --> C
+    C -->|End| T["Return tokens Vec"]
+```
+
 The helper `html_table_to_markdown` is retained for backward compatibility but
 is deprecated. New code should call `convert_html_tables` instead.
 

@@ -77,3 +77,20 @@ fn multiple_unmatched_backticks_are_text() {
     );
 }
 
+#[test]
+fn multibyte_characters_round_trip() {
+    let source = "ßß `λ` fin";
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(
+        tokens,
+        vec![
+            Token::Text("ßß "),
+            Token::Code {
+                raw: "`λ`",
+                fence: "`",
+                code: "λ",
+            },
+            Token::Text(" fin"),
+        ]
+    );
+}

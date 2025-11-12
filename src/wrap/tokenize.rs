@@ -3,26 +3,31 @@
 //! This module contains utilities for breaking lines into tokens so that
 //! inline code spans and Markdown links are preserved during wrapping.
 
-/// Advance `i` while the predicate evaluates to `true`.
+/// Advance `idx` while the predicate evaluates to `true`.
 ///
-/// Returns the index of the first character for which `cond` fails. This small
-/// helper keeps the scanning loops concise.
+/// Returns the byte index of the first character for which `cond` fails.
+/// This small helper keeps the scanning loops concise and avoids
+/// materialising the source as a char buffer.
 ///
 /// # Examples
 ///
 /// ```rust,ignore
-/// let chars: Vec<char> = "abc123".chars().collect();
-/// let end = scan_while(&chars, 0, char::is_alphabetic);
+/// let text = "abc123";
+/// let end = scan_while(text, 0, char::is_alphabetic);
 /// assert_eq!(end, 3);
 /// ```
-fn scan_while<F>(chars: &[char], mut i: usize, mut cond: F) -> usize
+fn scan_while<F>(text: &str, start: usize, mut cond: F) -> usize
 where
     F: FnMut(char) -> bool,
 {
-    while i < chars.len() && cond(chars[i]) {
-        i += 1;
+    let mut idx = start;
+    for ch in text[start..].chars() {
+        if !cond(ch) {
+            break;
+        }
+        idx += ch.len_utf8();
     }
-    i
+    idx
 }
 
 /// Collect a range of characters into a [`String`].
@@ -30,33 +35,17 @@ where
 /// # Examples
 ///
 /// ```rust,ignore
-/// let chars: Vec<char> = ['a', 'b', 'c'];
-/// assert_eq!(collect_range(&chars, 0, 2), "ab");
+/// let text = "abc";
+/// assert_eq!(collect_range(text, 0, 2), "ab");
 /// ```
-fn collect_range(chars: &[char], start: usize, end: usize) -> String {
-    chars[start..end].iter().collect()
+fn collect_range(text: &str, start: usize, end: usize) -> String {
+    text[start..end].to_string()
 }
 
-const BACKSLASH: char = '\\';
 const BACKSLASH_BYTE: u8 = b'\\';
 
-/// Check if a character at the given index is preceded by an odd number of backslashes.
-///
-/// An odd number of preceding backslashes means the character is escaped.
-fn has_odd_backslash_escape(chars: &[char], mut idx: usize) -> bool {
-    let mut count = 0;
-    while idx > 0 {
-        idx -= 1;
-        if chars[idx] == BACKSLASH {
-            count += 1;
-        } else {
-            break;
-        }
-    }
-    count % 2 == 1
-}
-
-/// Check if a byte at the given index is preceded by an odd number of backslashes.
+/// Check if a byte at the given index is preceded by an odd number of
+/// backslashes.
 ///
 /// An odd number of preceding backslashes means the byte is escaped.
 fn has_odd_backslash_escape_bytes(bytes: &[u8], mut idx: usize) -> bool {
@@ -98,35 +87,54 @@ pub enum Token<'a> {
 /// # Examples
 ///
 /// ```rust,ignore
-/// let chars: Vec<char> = "![alt](a(b)c)".chars().collect();
-/// let (tok, idx) = parse_link_or_image(&chars, 0);
+/// let text = "![alt](a(b)c)";
+/// let (tok, idx) = parse_link_or_image(text, 0);
 /// assert_eq!(tok, "![alt](a(b)c)");
-/// assert_eq!(idx, chars.len());
+/// assert_eq!(idx, text.len());
 /// ```
-fn parse_link_or_image(chars: &[char], mut i: usize) -> (String, usize) {
-    let start = i;
-    if chars[i] == '!' {
-        i += 1;
+fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize) {
+    let start = idx;
+
+    if text[idx..].starts_with('!') {
+        idx += '!'.len_utf8();
     }
-    i += 1; // skip initial '[' which we know is present
-    i = scan_while(chars, i, |c| c != ']');
-    if i < chars.len() && chars[i] == ']' {
-        i += 1;
-        if i < chars.len() && chars[i] == '(' {
-            i += 1;
+
+    if !text[idx..].starts_with('[') {
+        let next = text[start..]
+            .chars()
+            .next()
+            .map_or(text.len(), |ch| start + ch.len_utf8());
+        return (collect_range(text, start, next), next);
+    }
+
+    idx += '['.len_utf8();
+    idx = scan_while(text, idx, |c| c != ']');
+    if idx < text.len() && text[idx..].starts_with(']') {
+        idx += ']'.len_utf8();
+        if idx < text.len() && text[idx..].starts_with('(') {
+            idx += '('.len_utf8();
             let mut depth = 1;
-            while i < chars.len() && depth > 0 {
-                match chars[i] {
-                    '(' => depth += 1,
-                    ')' => depth -= 1,
-                    _ => {}
+            while idx < text.len() && depth > 0 {
+                if let Some(ch) = text[idx..].chars().next() {
+                    idx += ch.len_utf8();
+                    match ch {
+                        '(' => depth += 1,
+                        ')' => depth -= 1,
+                        _ => {}
+                    }
+                } else {
+                    break;
                 }
-                i += 1;
             }
-            return (collect_range(chars, start, i), i);
+            return (collect_range(text, start, idx), idx);
         }
     }
-    (collect_range(chars, start, start + 1), start + 1)
+
+    let next = text[start..]
+        .chars()
+        .next()
+        .map_or(text.len(), |ch| start + ch.len_utf8());
+    (collect_range(text, start, next), next)
 }
 
 /// Determine whether a character is considered trailing punctuation.
@@ -146,6 +154,28 @@ fn is_trailing_punctuation(c: char) -> bool {
         c,
         '.' | ',' | ';' | ':' | '!' | '?' | '(' | ')' | ']' | '"' | '\''
     )
+}
+
+fn handle_backtick_fence(text: &str, bytes: &[u8], start_idx: usize) -> (String, usize) {
+    let start = start_idx;
+    let fence_end = scan_while(text, start_idx, |ch| ch == '`');
+    let fence_len = fence_end - start;
+    let mut end = fence_end;
+
+    while end < text.len() {
+        let candidate_end = scan_while(text, end, |ch| ch == '`');
+        if candidate_end - end == fence_len && !has_odd_backslash_escape_bytes(bytes, end) {
+            return (collect_range(text, start, candidate_end), candidate_end);
+        }
+
+        if let Some(next) = text[end..].chars().next() {
+            end += next.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    (collect_range(text, start, fence_end), fence_end)
 }
 
 /// Break a single line of text into inline token strings.
@@ -172,61 +202,50 @@ fn is_trailing_punctuation(c: char) -> bool {
 /// ```
 pub(super) fn segment_inline(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
+    let bytes = text.as_bytes();
     let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        if c.is_whitespace() {
+    while i < text.len() {
+        let Some(ch) = text[i..].chars().next() else {
+            break;
+        };
+        if ch.is_whitespace() {
             let start = i;
-            i = scan_while(&chars, i, char::is_whitespace);
-            tokens.push(collect_range(&chars, start, i));
-        } else if c == '`' {
-            if has_odd_backslash_escape(&chars, i) {
+            i = scan_while(text, i, char::is_whitespace);
+            tokens.push(collect_range(text, start, i));
+            continue;
+        } else if ch == '`' {
+            if has_odd_backslash_escape_bytes(bytes, i) {
                 if let Some(last) = tokens.last_mut() {
                     last.push('`');
                 } else {
                     tokens.push(String::from("`"));
                 }
-                i += 1;
+                i += ch.len_utf8();
                 continue;
             }
 
-            let start = i;
-            let fence_end = scan_while(&chars, i, |ch| ch == '`');
-            let fence_len = fence_end - start;
-            i = fence_end;
+            let (token, new_i) = handle_backtick_fence(text, bytes, i);
+            tokens.push(token);
+            i = new_i;
+            continue;
+        }
 
-            let mut end = i;
-            let mut closing = None;
-            while end < chars.len() {
-                let j = scan_while(&chars, end, |ch| ch == '`');
-                if j - end == fence_len && !has_odd_backslash_escape(&chars, end) {
-                    closing = Some(j);
-                    break;
-                }
-                end += 1;
-            }
-
-            if let Some(end_idx) = closing {
-                tokens.push(collect_range(&chars, start, end_idx));
-                i = end_idx;
-            } else {
-                tokens.push(collect_range(&chars, start, start + fence_len));
-                i = start + fence_len;
-            }
-        } else if c == '[' || (c == '!' && i + 1 < chars.len() && chars[i + 1] == '[') {
-            let (tok, mut new_i) = parse_link_or_image(&chars, i);
+        let after_bang = i + ch.len_utf8();
+        let looks_like_image =
+            ch == '!' && after_bang <= text.len() && text[after_bang..].starts_with('[');
+        if ch == '[' || looks_like_image {
+            let (tok, mut new_i) = parse_link_or_image(text, i);
             tokens.push(tok);
             let punct_start = new_i;
-            new_i = scan_while(&chars, new_i, is_trailing_punctuation);
+            new_i = scan_while(text, new_i, is_trailing_punctuation);
             if new_i > punct_start {
-                tokens.push(collect_range(&chars, punct_start, new_i));
+                tokens.push(collect_range(text, punct_start, new_i));
             }
             i = new_i;
         } else {
             let start = i;
-            i = scan_while(&chars, i, |ch| !ch.is_whitespace() && ch != '`');
-            tokens.push(collect_range(&chars, start, i));
+            i = scan_while(text, i, |ch| !ch.is_whitespace() && ch != '`');
+            tokens.push(collect_range(text, start, i));
         }
     }
     tokens
@@ -395,6 +414,60 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scan_while_respects_predicate_boundaries() {
+        let text = "abc123";
+        assert_eq!(scan_while(text, 0, char::is_alphabetic), 3);
+        assert_eq!(scan_while(text, 3, char::is_numeric), text.len());
+    }
+
+    #[test]
+    fn scan_while_advances_over_multibyte_characters() {
+        let text = "åßç123";
+        let idx = scan_while(text, 0, char::is_alphabetic);
+        assert_eq!(&text[..idx], "åßç");
+    }
+
+    #[test]
+    fn collect_range_extracts_multibyte_segments() {
+        let text = "αβγδε";
+        let first_two = "αβ".len();
+        let middle = first_two + "γδ".len();
+        assert_eq!(collect_range(text, 0, first_two), "αβ");
+        assert_eq!(collect_range(text, first_two, middle), "γδ");
+    }
+
+    #[test]
+    fn parse_link_or_image_handles_nested_parentheses() {
+        let text = "![alt](path(a(b)c)) more";
+        let (token, idx) = parse_link_or_image(text, 0);
+        assert_eq!(token, "![alt](path(a(b)c))");
+        assert_eq!(idx, token.len());
+    }
+
+    #[test]
+    fn parse_link_or_image_falls_back_on_malformed_input() {
+        let text = "[broken";
+        let (token, idx) = parse_link_or_image(text, 0);
+        assert_eq!(token, "[");
+        assert_eq!(idx, "[".len());
+    }
+
+    #[test]
+    fn segment_inline_handles_multibyte_tokens() {
+        let tokens = segment_inline("ßß `λ` фин");
+        assert_eq!(
+            tokens,
+            vec![
+                String::from("ßß"),
+                String::from(" "),
+                String::from("`λ`"),
+                String::from(" "),
+                String::from("фин"),
+            ]
+        );
+    }
 
     #[test]
     fn link_with_trailing_punctuation() {
