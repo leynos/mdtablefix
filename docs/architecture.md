@@ -336,7 +336,7 @@ module handles filesystem operations, delegating the text processing to
 ### Tokenizer flow
 
 The inline tokenizer iterates over the source string lazily, so no duplicate
-`Vec<char>` representation is required. The following diagram summarises the
+`Vec<char>` representation is required. The following diagram summarizes the
 control flow, highlighting the helpers touched during whitespace, code span,
 and link handling.
 
