@@ -36,6 +36,19 @@ fn determine_token_span_groups_related_tokens(#[case] input: &str, #[case] expec
     assert_eq!(width, unicode_width::UnicodeWidthStr::width(expected_group));
 }
 
+#[rstest]
+#[case("word[link](url)", &["word", "[link](url)"])]
+#[case(
+    "word[link](url)[another](url2)",
+    &["word", "[link](url)", "[another](url2)"]
+)]
+#[case("word![img](url)", &["word", "![img](url)"])]
+fn segment_inline_splits_before_embedded_links(#[case] input: &str, #[case] expected: &[&str]) {
+    let tokens = segment_inline(input);
+    let actual: Vec<&str> = tokens.iter().map(String::as_str).collect();
+    assert_eq!(actual, expected);
+}
+
 #[test]
 fn attach_punctuation_appends_to_previous_code_line() {
     let mut lines = vec!["wrap `code`".to_string()];

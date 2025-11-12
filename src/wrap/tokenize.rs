@@ -244,7 +244,21 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
             i = new_i;
         } else {
             let start = i;
-            i = scan_while(text, i, |ch| !ch.is_whitespace() && ch != '`');
+            while i < text.len() {
+                let Some(current) = text[i..].chars().next() else {
+                    break;
+                };
+                if current.is_whitespace() || current == '`' || current == '[' {
+                    break;
+                }
+                if current == '!' {
+                    let after_bang = i + current.len_utf8();
+                    if after_bang <= text.len() && text[after_bang..].starts_with('[') {
+                        break;
+                    }
+                }
+                i += current.len_utf8();
+            }
             tokens.push(collect_range(text, start, i));
         }
     }
