@@ -137,6 +137,22 @@ fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize) {
     (collect_range(text, start, next), next)
 }
 
+/// Determine whether the character at `idx` begins a Markdown image literal.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert!(looks_like_image_start("![alt](url)", 0, '!'));
+/// assert!(!looks_like_image_start("! not", 0, '!'));
+/// ```
+fn looks_like_image_start(text: &str, idx: usize, ch: char) -> bool {
+    if ch != '!' {
+        return false;
+    }
+    let after_bang = idx + ch.len_utf8();
+    after_bang <= text.len() && text[after_bang..].starts_with('[')
+}
+
 /// Determine whether a character is considered trailing punctuation.
 ///
 /// The wrapper treats such punctuation as part of the preceding link when
@@ -230,10 +246,9 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
             continue;
         }
 
-        let after_bang = i + ch.len_utf8();
-        let looks_like_image =
-            ch == '!' && after_bang <= text.len() && text[after_bang..].starts_with('[');
-        if ch == '[' || looks_like_image {
+        let looks_like_image = looks_like_image_start(text, i, ch);
+        let is_escaped = has_odd_backslash_escape_bytes(bytes, i);
+        if (ch == '[' || looks_like_image) && !is_escaped {
             let (tok, mut new_i) = parse_link_or_image(text, i);
             tokens.push(tok);
             let punct_start = new_i;
@@ -248,14 +263,15 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
                 let Some(current) = text[i..].chars().next() else {
                     break;
                 };
-                if current.is_whitespace() || current == '`' || current == '[' {
+                if current.is_whitespace() || current == '`' {
                     break;
                 }
-                if current == '!' {
-                    let after_bang = i + current.len_utf8();
-                    if after_bang <= text.len() && text[after_bang..].starts_with('[') {
-                        break;
-                    }
+                let current_escaped = has_odd_backslash_escape_bytes(bytes, i);
+                if current == '[' && !current_escaped {
+                    break;
+                }
+                if looks_like_image_start(text, i, current) && !current_escaped {
+                    break;
                 }
                 i += current.len_utf8();
             }

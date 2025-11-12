@@ -49,6 +49,15 @@ fn segment_inline_splits_before_embedded_links(#[case] input: &str, #[case] expe
     assert_eq!(actual, expected);
 }
 
+#[rstest]
+#[case(r"\[link](url)")]
+#[case(r"word\[link](url)")]
+#[case(r"\![img](url)")]
+#[case(r"word\![img](url)")]
+fn segment_inline_preserves_escaped_link_literals(#[case] input: &str) {
+    assert_eq!(segment_inline(input), vec![input.to_string()]);
+}
+
 #[test]
 fn attach_punctuation_appends_to_previous_code_line() {
     let mut lines = vec!["wrap `code`".to_string()];
