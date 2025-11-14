@@ -61,6 +61,17 @@ fn has_odd_backslash_escape_bytes(bytes: &[u8], mut idx: usize) -> bool {
     count % 2 == 1
 }
 
+/// Check whether a `[` at `idx` follows an escaped `!` (i.e. "\![").
+///
+/// When this predicate is true the bracket must be treated as literal text
+/// rather than the start of an image token.
+fn bracket_follows_escaped_bang(bytes: &[u8], idx: usize) -> bool {
+    if idx == 0 || bytes[idx - 1] != b'!' {
+        return false;
+    }
+    has_odd_backslash_escape_bytes(bytes, idx - 1)
+}
+
 /// Markdown token emitted by the `segment_inline` tokenizer.
 #[derive(Debug, PartialEq)]
 pub enum Token<'a> {
@@ -267,10 +278,11 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
                     break;
                 }
                 let current_escaped = has_odd_backslash_escape_bytes(bytes, i);
-                if current == '[' && !current_escaped {
-                    break;
-                }
-                if looks_like_image_start(text, i, current) && !current_escaped {
+                if current == '[' {
+                    if !current_escaped && !bracket_follows_escaped_bang(bytes, i) {
+                        break;
+                    }
+                } else if looks_like_image_start(text, i, current) && !current_escaped {
                     break;
                 }
                 i += current.len_utf8();
