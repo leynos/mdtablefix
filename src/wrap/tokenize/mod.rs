@@ -3,63 +3,15 @@
 //! This module contains utilities for breaking lines into tokens so that
 //! inline code spans and Markdown links are preserved during wrapping.
 
-/// Advance `idx` while the predicate evaluates to `true`.
-///
-/// Returns the byte index of the first character for which `cond` fails.
-/// This small helper keeps the scanning loops concise and avoids
-/// materialising the source as a char buffer.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// let text = "abc123";
-/// let end = scan_while(text, 0, char::is_alphabetic);
-/// assert_eq!(end, 3);
-/// ```
-fn scan_while<F>(text: &str, start: usize, mut cond: F) -> usize
-where
-    F: FnMut(char) -> bool,
-{
-    let mut idx = start;
-    for ch in text[start..].chars() {
-        if !cond(ch) {
-            break;
-        }
-        idx += ch.len_utf8();
-    }
-    idx
-}
+mod parsing;
+mod scanning;
 
-/// Collect a range of characters into a [`String`].
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// let text = "abc";
-/// assert_eq!(collect_range(text, 0, 2), "ab");
-/// ```
-fn collect_range(text: &str, start: usize, end: usize) -> String {
-    text[start..end].to_string()
-}
-
-const BACKSLASH_BYTE: u8 = b'\\';
-
-/// Check if a byte at the given index is preceded by an odd number of
-/// backslashes.
-///
-/// An odd number of preceding backslashes means the byte is escaped.
-fn has_odd_backslash_escape_bytes(bytes: &[u8], mut idx: usize) -> bool {
-    let mut count = 0;
-    while idx > 0 {
-        idx -= 1;
-        if bytes[idx] == BACKSLASH_BYTE {
-            count += 1;
-        } else {
-            break;
-        }
-    }
-    count % 2 == 1
-}
+use parsing::{
+    handle_backtick_fence, is_trailing_punctuation, looks_like_image_start, parse_link_or_image,
+};
+use scanning::{
+    bracket_follows_escaped_bang, collect_range, has_odd_backslash_escape_bytes, scan_while,
+};
 
 /// Markdown token emitted by the `segment_inline` tokenizer.
 #[derive(Debug, PartialEq)]
@@ -76,106 +28,6 @@ pub enum Token<'a> {
     Text(&'a str),
     /// Line break separating tokens.
     Newline,
-}
-
-/// Parse a Markdown link or image starting at `i`.
-///
-/// Handles nested parentheses within URLs by tracking the depth of opening and
-/// closing delimiters. Returns the parsed slice and the index after the closing
-/// parenthesis if one is found.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// let text = "![alt](a(b)c)";
-/// let (tok, idx) = parse_link_or_image(text, 0);
-/// assert_eq!(tok, "![alt](a(b)c)");
-/// assert_eq!(idx, text.len());
-/// ```
-fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize) {
-    let start = idx;
-
-    if text[idx..].starts_with('!') {
-        idx += '!'.len_utf8();
-    }
-
-    if !text[idx..].starts_with('[') {
-        let next = text[start..]
-            .chars()
-            .next()
-            .map_or(text.len(), |ch| start + ch.len_utf8());
-        return (collect_range(text, start, next), next);
-    }
-
-    idx += '['.len_utf8();
-    idx = scan_while(text, idx, |c| c != ']');
-    if idx < text.len() && text[idx..].starts_with(']') {
-        idx += ']'.len_utf8();
-        if idx < text.len() && text[idx..].starts_with('(') {
-            idx += '('.len_utf8();
-            let mut depth = 1;
-            while idx < text.len() && depth > 0 {
-                if let Some(ch) = text[idx..].chars().next() {
-                    idx += ch.len_utf8();
-                    match ch {
-                        '(' => depth += 1,
-                        ')' => depth -= 1,
-                        _ => {}
-                    }
-                } else {
-                    break;
-                }
-            }
-            return (collect_range(text, start, idx), idx);
-        }
-    }
-
-    let next = text[start..]
-        .chars()
-        .next()
-        .map_or(text.len(), |ch| start + ch.len_utf8());
-    (collect_range(text, start, next), next)
-}
-
-/// Determine whether a character is considered trailing punctuation.
-///
-/// The wrapper treats such punctuation as part of the preceding link when
-/// wrapping lines.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// assert!(is_trailing_punctuation('.'));
-/// assert!(is_trailing_punctuation('('));
-/// assert!(!is_trailing_punctuation('a'));
-/// ```
-fn is_trailing_punctuation(c: char) -> bool {
-    matches!(
-        c,
-        '.' | ',' | ';' | ':' | '!' | '?' | '(' | ')' | ']' | '"' | '\''
-    )
-}
-
-fn handle_backtick_fence(text: &str, bytes: &[u8], start_idx: usize) -> (String, usize) {
-    let start = start_idx;
-    let fence_end = scan_while(text, start_idx, |ch| ch == '`');
-    let fence_len = fence_end - start;
-    let mut end = fence_end;
-
-    while end < text.len() {
-        let candidate_end = scan_while(text, end, |ch| ch == '`');
-        if candidate_end - end == fence_len && !has_odd_backslash_escape_bytes(bytes, end) {
-            return (collect_range(text, start, candidate_end), candidate_end);
-        }
-
-        if let Some(next) = text[end..].chars().next() {
-            end += next.len_utf8();
-        } else {
-            break;
-        }
-    }
-
-    (collect_range(text, start, fence_end), fence_end)
 }
 
 /// Break a single line of text into inline token strings.
@@ -230,10 +82,9 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
             continue;
         }
 
-        let after_bang = i + ch.len_utf8();
-        let looks_like_image =
-            ch == '!' && after_bang <= text.len() && text[after_bang..].starts_with('[');
-        if ch == '[' || looks_like_image {
+        let looks_like_image = looks_like_image_start(text, i, ch);
+        let is_escaped = has_odd_backslash_escape_bytes(bytes, i);
+        if (ch == '[' || looks_like_image) && !is_escaped {
             let (tok, mut new_i) = parse_link_or_image(text, i);
             tokens.push(tok);
             let punct_start = new_i;
@@ -244,7 +95,23 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
             i = new_i;
         } else {
             let start = i;
-            i = scan_while(text, i, |ch| !ch.is_whitespace() && ch != '`');
+            while i < text.len() {
+                let Some(current) = text[i..].chars().next() else {
+                    break;
+                };
+                if current.is_whitespace() || current == '`' {
+                    break;
+                }
+                let current_escaped = has_odd_backslash_escape_bytes(bytes, i);
+                if current == '[' {
+                    if !current_escaped && !bracket_follows_escaped_bang(bytes, i) {
+                        break;
+                    }
+                } else if looks_like_image_start(text, i, current) && !current_escaped {
+                    break;
+                }
+                i += current.len_utf8();
+            }
             tokens.push(collect_range(text, start, i));
         }
     }
@@ -414,45 +281,6 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn scan_while_respects_predicate_boundaries() {
-        let text = "abc123";
-        assert_eq!(scan_while(text, 0, char::is_alphabetic), 3);
-        assert_eq!(scan_while(text, 3, char::is_numeric), text.len());
-    }
-
-    #[test]
-    fn scan_while_advances_over_multibyte_characters() {
-        let text = "åßç123";
-        let idx = scan_while(text, 0, char::is_alphabetic);
-        assert_eq!(&text[..idx], "åßç");
-    }
-
-    #[test]
-    fn collect_range_extracts_multibyte_segments() {
-        let text = "αβγδε";
-        let first_two = "αβ".len();
-        let middle = first_two + "γδ".len();
-        assert_eq!(collect_range(text, 0, first_two), "αβ");
-        assert_eq!(collect_range(text, first_two, middle), "γδ");
-    }
-
-    #[test]
-    fn parse_link_or_image_handles_nested_parentheses() {
-        let text = "![alt](path(a(b)c)) more";
-        let (token, idx) = parse_link_or_image(text, 0);
-        assert_eq!(token, "![alt](path(a(b)c))");
-        assert_eq!(idx, token.len());
-    }
-
-    #[test]
-    fn parse_link_or_image_falls_back_on_malformed_input() {
-        let text = "[broken";
-        let (token, idx) = parse_link_or_image(text, 0);
-        assert_eq!(token, "[");
-        assert_eq!(idx, "[".len());
-    }
 
     #[test]
     fn segment_inline_handles_multibyte_tokens() {
