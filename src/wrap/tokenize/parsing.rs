@@ -27,37 +27,61 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
         idx += '!'.len_utf8();
     }
 
-    if !text[idx..].starts_with('[') {
-        let next = text[start..]
-            .chars()
-            .next()
-            .map_or(text.len(), |ch| start + ch.len_utf8());
-        return (collect_range(text, start, next), next);
+    let Some(text_end) = parse_link_text(text, idx) else {
+        return fallback_single_char(text, start);
+    };
+
+    if text_end < text.len() && text[text_end..].starts_with('(') {
+        if let Some(url_end) = parse_link_url(text, text_end) {
+            return (collect_range(text, start, url_end), url_end);
+        }
+        // Unbalanced URL: mirror the original behaviour by returning
+        // everything through the end of the string.
+        return (collect_range(text, start, text.len()), text.len());
     }
 
-    idx += '['.len_utf8();
-    idx = scan_while(text, idx, |c| c != ']');
-    if idx < text.len() && text[idx..].starts_with(']') {
-        idx += ']'.len_utf8();
-        if idx < text.len() && text[idx..].starts_with('(') {
-            idx += '('.len_utf8();
-            let mut depth = 1;
-            while idx < text.len() && depth > 0 {
-                if let Some(ch) = text[idx..].chars().next() {
-                    idx += ch.len_utf8();
-                    match ch {
-                        '(' => depth += 1,
-                        ')' => depth -= 1,
-                        _ => {}
-                    }
-                } else {
-                    break;
+    fallback_single_char(text, start)
+}
+
+fn parse_link_text(text: &str, idx: usize) -> Option<usize> {
+    if idx >= text.len() || !text[idx..].starts_with('[') {
+        return None;
+    }
+    let mut cursor = idx + '['.len_utf8();
+    cursor = scan_while(text, cursor, |c| c != ']');
+    if cursor < text.len() && text[cursor..].starts_with(']') {
+        Some(cursor + ']'.len_utf8())
+    } else {
+        None
+    }
+}
+
+fn parse_link_url(text: &str, mut idx: usize) -> Option<usize> {
+    if idx >= text.len() || !text[idx..].starts_with('(') {
+        return None;
+    }
+    idx += '('.len_utf8();
+    let mut depth = 1;
+    while idx < text.len() {
+        let Some(ch) = text[idx..].chars().next() else {
+            break;
+        };
+        idx += ch.len_utf8();
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(idx);
                 }
             }
-            return (collect_range(text, start, idx), idx);
+            _ => {}
         }
     }
+    None
+}
 
+fn fallback_single_char(text: &str, start: usize) -> (String, usize) {
     let next = text[start..]
         .chars()
         .next()
@@ -140,5 +164,29 @@ mod tests {
         let (token, idx) = parse_link_or_image(text, 0);
         assert_eq!(token, "[");
         assert_eq!(idx, "[".len());
+    }
+
+    #[test]
+    fn parse_link_or_image_handles_deeply_nested_parentheses() {
+        let text = "[link](url(a(b(c)d)e)) tail";
+        let (token, idx) = parse_link_or_image(text, 0);
+        assert_eq!(token, "[link](url(a(b(c)d)e))");
+        assert_eq!(idx, token.len());
+    }
+
+    #[test]
+    fn parse_link_or_image_handles_nested_parentheses_for_images() {
+        let text = "![alt](path(a(b(c)d)e))";
+        let (token, idx) = parse_link_or_image(text, 0);
+        assert_eq!(token, "![alt](path(a(b(c)d)e))");
+        assert_eq!(idx, token.len());
+    }
+
+    #[test]
+    fn parse_link_or_image_handles_text_ending_at_bracket() {
+        let text = "[";
+        let (token, idx) = parse_link_or_image(text, 0);
+        assert_eq!(token, "[");
+        assert_eq!(idx, 1);
     }
 }
