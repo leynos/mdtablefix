@@ -20,6 +20,12 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String>
 
 The function combines several helpers documented in `docs/`:
 
+- `frontmatter::split_leading_yaml_frontmatter` detects and splits a leading
+  YAML frontmatter block from the document body. A valid frontmatter block
+  starts with `---` on the first line and ends with `---` or `...` before any
+  body content. The prefix is preserved verbatim while only the body is
+  processed. This shielding also applies to CLI-only transforms such as
+  `renumber_lists` and `format_breaks`.
 - `fences::compress_fences` and `attach_orphan_specifiers` normalize code block
   delimiters. The latter keeps indentation from the language line when the
   fence lacks it. Language specifiers explicitly set to `null`

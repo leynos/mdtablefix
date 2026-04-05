@@ -4,6 +4,7 @@ use crate::{
     ellipsis::replace_ellipsis,
     fences::{attach_orphan_specifiers, compress_fences},
     footnotes::convert_footnotes,
+    frontmatter::split_leading_yaml_frontmatter,
     html::convert_html_tables,
     table::reflow_table,
     wrap::{FenceTracker, classify_block, wrap_text},
@@ -147,14 +148,17 @@ fn handle_table_line(
 /// ```
 #[must_use]
 pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
-    let lines = if opts.fences {
-        let tmp = compress_fences(lines);
+    // Split off leading YAML frontmatter to preserve it unchanged
+    let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
+
+    let body = if opts.fences {
+        let tmp = compress_fences(body);
         attach_orphan_specifiers(&tmp)
     } else {
-        lines.to_vec()
+        body.to_vec()
     };
 
-    let pre = convert_html_tables(&lines);
+    let pre = convert_html_tables(&body);
 
     let mut out = Vec::new();
     let mut buf = Vec::new();
@@ -200,7 +204,11 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     if opts.footnotes {
         out = convert_footnotes(&out);
     }
-    out
+
+    // Prepend the preserved frontmatter prefix to the processed body
+    let mut result = frontmatter_prefix.to_vec();
+    result.extend(out);
+    result
 }
 
 /// Processes a Markdown stream with all default options enabled.
@@ -338,5 +346,72 @@ mod tests {
             enabled,
             vec!["# Heading".to_string(), "Paragraph".to_string()]
         );
+    }
+
+    #[test]
+    fn preserves_yaml_frontmatter_unchanged() {
+        let input = vec![
+            "---".to_string(),
+            "title: Example".to_string(),
+            "author: Test".to_string(),
+            "---".to_string(),
+            "# Heading".to_string(),
+            "|A|B|".to_string(),
+            "|1|2|".to_string(),
+        ];
+        let out = process_stream(&input);
+        // Frontmatter lines should be unchanged
+        assert_eq!(out[0], "---");
+        assert_eq!(out[1], "title: Example");
+        assert_eq!(out[2], "author: Test");
+        assert_eq!(out[3], "---");
+        // Body should be formatted
+        assert!(out[4].contains("# Heading"));
+        assert!(out[5].contains("| A | B |") || out[5].contains("|A|B|"));
+    }
+
+    #[test]
+    fn frontmatter_with_triple_dot_closer_preserved() {
+        let input = vec![
+            "---".to_string(),
+            "title: Example".to_string(),
+            "...".to_string(),
+            "Body text".to_string(),
+        ];
+        let out = process_stream(&input);
+        assert_eq!(out[0], "---");
+        assert_eq!(out[1], "title: Example");
+        assert_eq!(out[2], "...");
+        assert_eq!(out[3], "Body text");
+    }
+
+    #[test]
+    fn no_frontmatter_processes_normally() {
+        let input = vec![
+            "# Heading".to_string(),
+            "|A|B|".to_string(),
+            "|1|2|".to_string(),
+        ];
+        let out = process_stream(&input);
+        // Should process normally without frontmatter
+        assert_eq!(out[0], "# Heading");
+        assert!(out.len() >= 2);
+    }
+
+    #[test]
+    fn unmatched_frontmatter_opener_processed_as_body() {
+        // A --- without a closer is not frontmatter
+        let input = vec![
+            "---".to_string(),
+            "Not frontmatter".to_string(),
+            "More text".to_string(),
+        ];
+        let out = process_stream(&input);
+        // All lines should be processed as body (no special frontmatter handling)
+        // The lines may be wrapped together, so just verify the content is present
+        assert!(out[0].contains("---"));
+        let joined = out.join("\n");
+        assert!(joined.contains("Not frontmatter"));
+        assert!(joined.contains("More text"));
     }
 }
