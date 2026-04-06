@@ -25,11 +25,11 @@ lint: ## Run Clippy with warnings denied
 	$(CARGO) clippy $(CLIPPY_FLAGS)
 
 fmt: ## Format Rust and Markdown sources
-	$(CARGO) +nightly fmt --all
+	$(CARGO) fmt --all
 	mdformat-all
 
 check-fmt: ## Verify formatting
-	$(CARGO) +nightly fmt --all -- --check
+	$(CARGO) fmt --all -- --check
 
 markdownlint: ## Lint Markdown files
 	$(MDLINT) "**/*.md"
