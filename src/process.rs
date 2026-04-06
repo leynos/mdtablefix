@@ -172,7 +172,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         }
 
         if fence_tracker.in_fence() {
-            out.push(line.to_string());
+            out.push(line.clone());
             continue;
         }
 
@@ -181,7 +181,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         }
 
         flush_buffer(&mut buf, &mut in_table, &mut out);
-        out.push(line.to_string());
+        out.push(line.clone());
     }
 
     flush_buffer(&mut buf, &mut in_table, &mut out);

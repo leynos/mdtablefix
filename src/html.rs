@@ -258,7 +258,7 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 
     for line in lines {
         if depth > 0 || TABLE_START_RE.is_match(line.trim_start()) {
-            buf.push(line.to_string());
+            buf.push(line.clone());
             depth += TABLE_START_RE.find_iter(line).count();
             if TABLE_END_RE.is_match(line) {
                 depth = depth.saturating_sub(TABLE_END_RE.find_iter(line).count());
@@ -270,7 +270,7 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        out.push(line.to_string());
+        out.push(line.clone());
     }
 
     if !buf.is_empty() {
@@ -319,12 +319,12 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
                 depth = 0;
             }
             in_code = !in_code;
-            out.push(line.to_string());
+            out.push(line.clone());
             continue;
         }
 
         if in_code {
-            out.push(line.to_string());
+            out.push(line.clone());
             continue;
         }
 
@@ -339,7 +339,7 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        out.push(line.to_string());
+        out.push(line.clone());
     }
 
     if !buf.is_empty() {
