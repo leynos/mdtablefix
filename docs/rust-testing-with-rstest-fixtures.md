@@ -546,7 +546,8 @@ When using `#[once]`, there are critical caveats 12:
    the end of the test suite. This makes `#[once]` fixtures best suited for
    truly passive data or resources whose cleanup is managed by the operating
    system upon process exit.
-1. **Functional Limitations:** `#[once]` fixtures cannot be `async` functions
+
+2. **Functional Limitations:** `#[once]` fixtures cannot be `async` functions
    and cannot be generic functions (neither with generic type parameters nor
    using `impl Trait` in arguments or return types).
 
@@ -1377,7 +1378,7 @@ on June 12, 2025, <https://github.com/la10736/rstest>
 \[^5\]: It's Not Out Yet… But Rstest Has Me HYPED - YouTube, accessed on June 12,
 2025, <https://www.youtube.com/watch?v=nhSCmYJew-M&vl=fr>
 
-```
+```text
   GitHub, accessed on June 12, 2025,
   <https://github.com/web-infra-dev/rstest>
 ```
@@ -1385,8 +1386,8 @@ on June 12, 2025, <https://github.com/la10736/rstest>
 \[^7\]: Iterating on Testing in Rust - Hacker News, accessed on June 12, 2025,
 <https://news.ycombinator.com/item?id=36368246>
 
-\[^8\]: Feature request: Support for debugging parameterized tests using rstest :
-RUST-12206, accessed on June 12, 2025,
+\[^8\]: Feature request: Support for debugging parameterized tests using
+rstest: RUST-12206, accessed on June 12, 2025,
 <https://youtrack.jetbrains.com/issue/RUST-12206/Feature-request-Support-for-debugging-parameterized-tests-using-rstest>
 
 \[^9\]: rstest - [crates.io](http://crates.io): Rust Package Registry, accessed
@@ -1404,7 +1405,7 @@ on June 12, 2025, <https://crates.io/crates/rstest>
 \[^13\]: rstest in rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June
 12, 2025, <https://docs.rs/rstest/latest/rstest/attr.rstest.html>
 
-```
+```text
    [Shuttle.dev](http://Shuttle.dev), accessed on June 12, 2025,
    <https://www.shuttle.dev/blog/2024/03/21/testing-in-rust>
 ```
@@ -1437,7 +1438,7 @@ accessed on June 12, 2025,
 \[^22\]: test-with - [crates.io](http://crates.io): Rust Package Registry,
 accessed on June 12, 2025, <https://crates.io/crates/test-with>
 
-```
+```text
    accessed on June 12, 2025,
    <https://www.reddit.com/r/rust/comments/1jos03j/introducing_rustest_a_new_integration_tests/>
 ```
