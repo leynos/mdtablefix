@@ -1,7 +1,8 @@
 //! Ordered list renumbering utilities.
 
-use regex::Regex;
 use std::collections::HashMap;
+
+use regex::Regex;
 
 use crate::{breaks::THEMATIC_BREAK_RE, wrap::FenceTracker};
 
@@ -80,7 +81,8 @@ fn handle_paragraph_restart(
 /// Renumber ordered Markdown list items across the given lines.
 /// - Preserve code fences; do not renumber inside them.
 /// - Reset numbering on headings and thematic breaks.
-/// - Restart numbering after a blank line followed by a plain paragraph at the same or a shallower indent.
+/// - Restart numbering after a blank line followed by a plain paragraph at the same or a shallower
+///   indent.
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());

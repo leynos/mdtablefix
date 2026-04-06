@@ -3,8 +3,9 @@
 //! Verifies that emphasis markers adjacent to inline code are normalised.
 
 mod prelude;
-use prelude::{run_cli_with_args, run_cli_with_stdin};
 use std::fs;
+
+use prelude::{run_cli_with_args, run_cli_with_stdin};
 use tempfile::tempdir;
 
 #[test]
@@ -101,8 +102,10 @@ fn cli_in_place_preserves_inner_backticks() {
 
 #[test]
 fn cli_code_emphasis_with_wrap_and_renumber() {
-    let input = "8. `StepContext`** Enhancement (in **`crates/rstest-bdd/src/context.rs`**)**\n10. Second item\n";
-    let expected = "1. **`StepContext` Enhancement (in `crates/rstest-bdd/src/context.rs`)**\n2. Second item\n";
+    let input = "8. `StepContext`** Enhancement (in \
+                 **`crates/rstest-bdd/src/context.rs`**)**\n10. Second item\n";
+    let expected = "1. **`StepContext` Enhancement (in `crates/rstest-bdd/src/context.rs`)**\n2. \
+                    Second item\n";
     run_cli_with_stdin(&["--code-emphasis", "--wrap", "--renumber"], input)
         .success()
         .stdout(expected);

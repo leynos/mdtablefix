@@ -150,8 +150,9 @@ fn needs_space_after(prefix: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case(vec!["Heading".into(), "===".into()], vec!["# Heading".into()])]

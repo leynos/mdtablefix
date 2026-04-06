@@ -17,7 +17,8 @@ static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Determine whether a language specifier denotes an absent language.
 ///
-/// A language is absent when it is empty or the case-insensitive string `null`, with surrounding whitespace ignored.
+/// A language is absent when it is empty or the case-insensitive string `null`, with surrounding
+/// whitespace ignored.
 ///
 /// # Examples
 ///

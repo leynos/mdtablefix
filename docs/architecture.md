@@ -33,8 +33,8 @@ The function combines several helpers documented in `docs/`:
   `compress_fences` also tolerates spaces within comma-separated specifiers,
   e.g. `TOML, Ini` becomes `toml,ini`.
 - `html::convert_html_tables` transforms basic HTML tables into Markdown so \
-    they can be reflowed like regular tables. See \
-    [HTML table support](#html-table-support-in-mdtablefix).
+  they can be reflowed like regular tables. See \
+  [HTML table support](#html-table-support-in-mdtablefix).
 - `wrap::wrap_text` applies optional line wrapping. It relies on the
   `unicode-width` crate for accurate character widths.
 - `wrap::tokenize_markdown` emits `Token` values for custom processing.
@@ -54,7 +54,7 @@ incoming lines are buffered or emitted. Once the end of a table or fence is
 reached, buffered lines are flushed and possibly reformatted. The simplified
 behaviour is illustrated below.
 
-```mermaid
+````mermaid
 stateDiagram-v2
 
     [*] --> Streaming: Start
@@ -78,7 +78,7 @@ stateDiagram-v2
     InHtmlTable --> InHtmlTable: Line inside table tag
 
     InCodeFence --> Streaming: Line is a fence delimiter
-```
+````
 
 Before:
 

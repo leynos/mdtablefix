@@ -9,11 +9,11 @@ mod lists;
 mod parsing;
 mod renumber;
 
-use crate::textproc::{Token, push_original_token, tokenize_markdown};
-
 use inline::{convert_inline, is_atx_heading_prefix};
 use lists::convert_block;
 use renumber::renumber_footnotes;
+
+use crate::textproc::{Token, push_original_token, tokenize_markdown};
 
 /// Convert bare numeric footnote references to Markdown footnote syntax.
 #[must_use]

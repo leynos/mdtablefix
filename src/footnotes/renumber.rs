@@ -1,15 +1,14 @@
 //! Sequential renumbering of footnote references and definitions.
 
-use std::collections::HashMap;
-use std::fmt::Write;
-use std::sync::LazyLock;
+use std::{collections::HashMap, fmt::Write, sync::LazyLock};
 
 use regex::{Captures, Match, Regex};
 
+use super::{
+    lists::{footnote_block_range, has_existing_footnote_block, trimmed_range},
+    parsing::{FOOTNOTE_LINE_RE, is_definition_continuation, parse_definition},
+};
 use crate::textproc::{Token, push_original_token, tokenize_markdown};
-
-use super::lists::{footnote_block_range, has_existing_footnote_block, trimmed_range};
-use super::parsing::{FOOTNOTE_LINE_RE, is_definition_continuation, parse_definition};
 
 static FOOTNOTE_REF_RE: LazyLock<Regex> = lazy_regex!(
     r"\[\^(?P<num>\d+)\]",

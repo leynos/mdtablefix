@@ -30,13 +30,9 @@ fn looks_like_link(token: &str) -> bool {
         && token.ends_with(')')
 }
 
-fn is_whitespace_token(token: &str) -> bool {
-    token.chars().all(char::is_whitespace)
-}
+fn is_whitespace_token(token: &str) -> bool { token.chars().all(char::is_whitespace) }
 
-fn is_inline_code_token(token: &str) -> bool {
-    token.starts_with('`') && token.ends_with('`')
-}
+fn is_inline_code_token(token: &str) -> bool { token.starts_with('`') && token.ends_with('`') }
 
 fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usize {
     while j < tokens.len() && tokens[j].chars().all(is_trailing_punct) {

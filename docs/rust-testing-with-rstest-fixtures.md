@@ -546,7 +546,7 @@ When using `#[once]`, there are critical caveats 12:
    the end of the test suite. This makes `#[once]` fixtures best suited for
    truly passive data or resources whose cleanup is managed by the operating
    system upon process exit.
-2. **Functional Limitations:** `#[once]` fixtures cannot be `async` functions
+1. **Functional Limitations:** `#[once]` fixtures cannot be `async` functions
    and cannot be generic functions (neither with generic type parameters nor
    using `impl Trait` in arguments or return types).
 
@@ -1197,13 +1197,13 @@ The following table summarizes key differences:
 **Table 1:** `rstest` **vs. Standard Rust** `#[test]` **for Fixture Management
 and Parameterization**
 
-| Feature                                  | Standard #[test] Approach                                     | rstest Approach                                                                  |
+| Feature | Standard #[test] Approach | rstest Approach |
 | ---------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Fixture Injection                        | Manual calls to setup functions within each test.             | Fixture name as argument in #[rstest] function; fixture defined with #[fixture]. |
-| Parameterized Tests (Specific Cases)     | Loop inside one test, or multiple distinct #[test] functions. | #[case(…)] attributes on #[rstest] function.                                     |
-| Parameterized Tests (Value Combinations) | Nested loops inside one test, or complex manual generation.   | #[values(…)] attributes on arguments of #[rstest] function.                      |
-| Async Fixture Setup                      | Manual async block and .await calls inside test.              | async fn fixtures, with #[future] and #[awt] for ergonomic .awaiting.            |
-| Reusing Parameter Sets                   | Manual duplication of cases or custom helper macros.          | rstest_reuse crate with #[template] and #[apply] attributes.                     |
+| Fixture Injection | Manual calls to setup functions within each test. | Fixture name as argument in #[rstest] function; fixture defined with #[fixture]. |
+| Parameterized Tests (Specific Cases) | Loop inside one test, or multiple distinct #[test] functions. | #[case(…)] attributes on #[rstest] function. |
+| Parameterized Tests (Value Combinations) | Nested loops inside one test, or complex manual generation. | #[values(…)] attributes on arguments of #[rstest] function. |
+| Async Fixture Setup | Manual async block and .await calls inside test. | async fn fixtures, with #[future] and #[awt] for ergonomic .awaiting. |
+| Reusing Parameter Sets | Manual duplication of cases or custom helper macros. | rstest_reuse crate with #[template] and #[apply] attributes. |
 
 This comparison highlights how `rstest`'s attribute-based, declarative approach
 streamlines common testing patterns, reducing manual effort and improving the
@@ -1341,20 +1341,20 @@ provided by `rstest`:
 
 **Table 2: Key** `rstest` **Attributes Quick Reference**
 
-| Attribute                    | Core Purpose                                                                                 |
+| Attribute | Core Purpose |
 | ---------------------------- | -------------------------------------------------------------------------------------------- |
-| #[rstest]                    | Marks a function as an rstest test; enables fixture injection and parameterization.          |
-| #[fixture]                   | Defines a function that provides a test fixture (setup data or services).                    |
-| #[case(…)]                   | Defines a single parameterized test case with specific input values.                         |
-| #[values(…)]                 | Defines a list of values for an argument, generating tests for each value or combination.    |
-| #[once]                      | Marks a fixture to be initialized only once and shared (as a static reference) across tests. |
-| #[future]                    | Simplifies async argument types by removing impl Future boilerplate.                         |
-| #[awt]                       | (Function or argument level) Automatically .awaits future arguments in async tests.          |
-| #[from(original_name)]       | Allows renaming an injected fixture argument in the test function.                           |
-| #[with(…)]                   | Overrides default arguments of a fixture for a specific test.                                |
-| #[default(…)]                | Provides default values for arguments within a fixture function.                             |
-| #[timeout(…)]                | Sets a timeout for an asynchronous test.                                                     |
-| #[files("glob_pattern",…)]   | Injects file paths (or contents, with mode=) matching a glob pattern as test arguments.      |
+| #[rstest] | Marks a function as an rstest test; enables fixture injection and parameterization. |
+| #[fixture] | Defines a function that provides a test fixture (setup data or services). |
+| #[case(…)] | Defines a single parameterized test case with specific input values. |
+| #[values(…)] | Defines a list of values for an argument, generating tests for each value or combination. |
+| #[once] | Marks a fixture to be initialized only once and shared (as a static reference) across tests. |
+| #[future] | Simplifies async argument types by removing impl Future boilerplate. |
+| #[awt] | (Function or argument level) Automatically .awaits future arguments in async tests. |
+| #[from(original_name)] | Allows renaming an injected fixture argument in the test function. |
+| #[with(…)] | Overrides default arguments of a fixture for a specific test. |
+| #[default(…)] | Provides default values for arguments within a fixture function. |
+| #[timeout(…)] | Sets a timeout for an asynchronous test. |
+| #[files("glob_pattern",…)] | Injects file paths (or contents, with mode=) matching a glob pattern as test arguments. |
 
 Mastering `rstest` can significantly elevate the quality and efficiency of
 testing practices for Rust developers, leading to more reliable and
@@ -1362,76 +1362,82 @@ maintainable software.
 
 #### Works cited
 
-[^1]: rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June 12, 2025,
-      <https://docs.rs/rstest/latest/rstest/>
+\[^1\]: rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June 12, 2025,
+<https://docs.rs/rstest/latest/rstest/>
 
-[^2]: rstest - Rust Package Registry - [Crates.io](http://Crates.io), accessed
-      on June 12, 2025, <https://crates.io/crates/rstest/0.11.0/dependencies>
+\[^2\]: rstest - Rust Package Registry - [Crates.io](http://Crates.io), accessed
+on June 12, 2025, <https://crates.io/crates/rstest/0.11.0/dependencies>
 
-[^3]: rstest_macros - [crates.io](http://crates.io): Rust Package Registry,
-      accessed on June 12, 2025, <https://crates.io/crates/rstest_macros>
+\[^3\]: rstest_macros - [crates.io](http://crates.io): Rust Package Registry,
+accessed on June 12, 2025, <https://crates.io/crates/rstest_macros>
 
-[^4]: la10736/rstest: Fixture-based test framework for Rust - GitHub, accessed
-      on June 12, 2025, <https://github.com/la10736/rstest>
+\[^4\]: la10736/rstest: Fixture-based test framework for Rust - GitHub, accessed
+on June 12, 2025, <https://github.com/la10736/rstest>
 
-[^5]: It's Not Out Yet… But Rstest Has Me HYPED - YouTube, accessed on June 12,
-      2025, <https://www.youtube.com/watch?v=nhSCmYJew-M&vl=fr>
+\[^5\]: It's Not Out Yet… But Rstest Has Me HYPED - YouTube, accessed on June 12,
+2025, <https://www.youtube.com/watch?v=nhSCmYJew-M&vl=fr>
 
-      GitHub, accessed on June 12, 2025,
-      <https://github.com/web-infra-dev/rstest>
+```
+  GitHub, accessed on June 12, 2025,
+  <https://github.com/web-infra-dev/rstest>
+```
 
-[^7]: Iterating on Testing in Rust - Hacker News, accessed on June 12, 2025,
-      <https://news.ycombinator.com/item?id=36368246>
+\[^7\]: Iterating on Testing in Rust - Hacker News, accessed on June 12, 2025,
+<https://news.ycombinator.com/item?id=36368246>
 
-[^8]: Feature request: Support for debugging parameterized tests using rstest :
-      RUST-12206, accessed on June 12, 2025,
-      <https://youtrack.jetbrains.com/issue/RUST-12206/Feature-request-Support-for-debugging-parameterized-tests-using-rstest>
+\[^8\]: Feature request: Support for debugging parameterized tests using rstest :
+RUST-12206, accessed on June 12, 2025,
+<https://youtrack.jetbrains.com/issue/RUST-12206/Feature-request-Support-for-debugging-parameterized-tests-using-rstest>
 
-[^9]: rstest - [crates.io](http://crates.io): Rust Package Registry, accessed
-      on June 12, 2025, <https://crates.io/crates/rstest/0.12.0>
+\[^9\]: rstest - [crates.io](http://crates.io): Rust Package Registry, accessed
+on June 12, 2025, <https://crates.io/crates/rstest/0.12.0>
 
-[^10]: rstest - [crates.io](http://crates.io): Rust Package Registry, accessed
-       on June 12, 2025, <https://crates.io/crates/rstest>
+\[^10\]: rstest - [crates.io](http://crates.io): Rust Package Registry, accessed
+on June 12, 2025, <https://crates.io/crates/rstest>
 
-[^11]: Test Organization - The Rust Programming Language, accessed on June 12,
-       2025, <https://doc.rust-lang.org/book/ch11-03-test-organization.html>
+\[^11\]: Test Organization - The Rust Programming Language, accessed on June 12,
+2025, <https://doc.rust-lang.org/book/ch11-03-test-organization.html>
 
-[^12]: fixture in rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June
-       12, 2025, <https://docs.rs/rstest/latest/rstest/attr.fixture.html>
+\[^12\]: fixture in rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June
+12, 2025, <https://docs.rs/rstest/latest/rstest/attr.fixture.html>
 
-[^13]: rstest in rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June
-       12, 2025, <https://docs.rs/rstest/latest/rstest/attr.rstest.html>
+\[^13\]: rstest in rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June
+12, 2025, <https://docs.rs/rstest/latest/rstest/attr.rstest.html>
 
-       [Shuttle.dev](http://Shuttle.dev), accessed on June 12, 2025,
-       <https://www.shuttle.dev/blog/2024/03/21/testing-in-rust>
+```
+   [Shuttle.dev](http://Shuttle.dev), accessed on June 12, 2025,
+   <https://www.shuttle.dev/blog/2024/03/21/testing-in-rust>
+```
 
-[^15]: Very long build time · Issue #184 · la10736/rstest - GitHub, accessed on
-       June 12, 2025, <https://github.com/la10736/rstest/issues/184>
+\[^15\]: Very long build time · Issue #184 · la10736/rstest - GitHub, accessed on
+June 12, 2025, <https://github.com/la10736/rstest/issues/184>
 
-[^16]: test-temp-dir - [crates.io](http://crates.io): Rust Package Registry,
-       accessed on June 12, 2025, <https://crates.io/crates/test-temp-dir>
+\[^16\]: test-temp-dir - [crates.io](http://crates.io): Rust Package Registry,
+accessed on June 12, 2025, <https://crates.io/crates/test-temp-dir>
 
-[^17]: Mistakes to avoid while writing unit test for your rust codebase? -
-       Reddit, accessed on June 12, 2025,
-       <https://www.reddit.com/r/rust/comments/18u8n38/mistakes_to_avoid_while_writing_unit_test_for/>
+\[^17\]: Mistakes to avoid while writing unit test for your rust codebase? -
+Reddit, accessed on June 12, 2025,
+<https://www.reddit.com/r/rust/comments/18u8n38/mistakes_to_avoid_while_writing_unit_test_for/>
 
-[^18]: rstest_reuse - [crates.io](http://crates.io): Rust Package Registry,
-       accessed on June 12, 2025, <https://crates.io/crates/rstest_reuse/0.5.0>
+\[^18\]: rstest_reuse - [crates.io](http://crates.io): Rust Package Registry,
+accessed on June 12, 2025, <https://crates.io/crates/rstest_reuse/0.5.0>
 
-[^19]: crates or tips on how to organize test better? : r/rust - Reddit,
-       accessed on June 12, 2025,
-       <https://www.reddit.com/r/rust/comments/1akaert/crates_or_tips_on_how_to_organize_test_better/>
+\[^19\]: crates or tips on how to organize test better? : r/rust - Reddit,
+accessed on June 12, 2025,
+<https://www.reddit.com/r/rust/comments/1akaert/crates_or_tips_on_how_to_organize_test_better/>
 
-[^20]: Is there any point in avoiding std when testing a no_std library? - Rust
-       Users Forum, accessed on June 12, 2025,
-       <https://users.rust-lang.org/t/is-there-any-point-in-avoiding-std-when-testing-a-no-std-library/122731>
+\[^20\]: Is there any point in avoiding std when testing a no_std library? - Rust
+Users Forum, accessed on June 12, 2025,
+<https://users.rust-lang.org/t/is-there-any-point-in-avoiding-std-when-testing-a-no-std-library/122731>
 
-[^21]: rstest-log - [crates.io](http://crates.io): Rust Package Registry,
-       accessed on June 12, 2025,
-       <https://crates.io/crates/rstest-log/dependencies>
+\[^21\]: rstest-log - [crates.io](http://crates.io): Rust Package Registry,
+accessed on June 12, 2025,
+<https://crates.io/crates/rstest-log/dependencies>
 
-[^22]: test-with - [crates.io](http://crates.io): Rust Package Registry,
-       accessed on June 12, 2025, <https://crates.io/crates/test-with>
+\[^22\]: test-with - [crates.io](http://crates.io): Rust Package Registry,
+accessed on June 12, 2025, <https://crates.io/crates/test-with>
 
-       accessed on June 12, 2025,
-       <https://www.reddit.com/r/rust/comments/1jos03j/introducing_rustest_a_new_integration_tests/>
+```
+   accessed on June 12, 2025,
+   <https://www.reddit.com/r/rust/comments/1jos03j/introducing_rustest_a_new_integration_tests/>
+```

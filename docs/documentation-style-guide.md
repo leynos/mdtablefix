@@ -9,9 +9,9 @@ Apply these rules to keep the documentation clear and consistent for developers.
   [Oxford English Dictionary](https://public.oed.com/) locale `en-GB`, which
   denotes English for the Great Britain market:
   - suffix -ize in words like _realize_ and _organization_ instead of
-     -ise endings,
+    -ise endings,
   - suffix ‑lyse in words not traced to the Greek ‑izo, ‑izein suffixes,
-     such as _analyse_, _paralyse_ and _catalyse_,
+    such as _analyse_, _paralyse_ and _catalyse_,
   - suffix -our in words such as _colour_, _behaviour_ and _neighbour_,
   - suffix -re in words such as _calibre_, _centre_ and _fibre_,
   - double "l" in words such as _cancelled_, _counsellor_ and _cruellest_,
@@ -87,7 +87,7 @@ contents of the manual.
   they do not execute during documentation tests.
 - Put function attributes after the doc comment.
 
-```rust,no_run
+````rust,no_run
 /// Returns the sum of `a` and `b`.
 ///
 /// # Parameters
@@ -106,7 +106,7 @@ contents of the manual.
 pub fn add(a: i32, b: i32) -> i32 {
     a + b
 }
-```
+````
 
 ## Diagrams and images
 
@@ -163,4 +163,4 @@ navigability:
 
 ______________________________________________________________________
 
-[^1]: A linter that enforces consistent Markdown formatting.
+\[^1\]: A linter that enforces consistent Markdown formatting.

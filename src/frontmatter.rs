@@ -153,7 +153,10 @@ mod tests {
         ];
         let (prefix, body) = split_leading_yaml_frontmatter(&lines);
         // Indented opener is not recognized as frontmatter
-        assert!(prefix.is_empty(), "indented opener should not be recognized");
+        assert!(
+            prefix.is_empty(),
+            "indented opener should not be recognized"
+        );
         assert_eq!(body.len(), 3);
     }
 

@@ -10,8 +10,10 @@
 //! transformation should run before wrapping and footnote conversion so marker
 //! adjacency is evaluated on the raw input.
 
-use crate::textproc::process_text;
-use crate::wrap::{Token, tokenize_markdown};
+use crate::{
+    textproc::process_text,
+    wrap::{Token, tokenize_markdown},
+};
 
 /// Split emphasis markers at both ends of `s`.
 ///

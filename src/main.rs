@@ -15,7 +15,11 @@ use std::{
 use anyhow::Context;
 use clap::Parser;
 use mdtablefix::{
-    Options, format_breaks, process_stream_opts, renumber_lists, split_leading_yaml_frontmatter,
+    Options,
+    format_breaks,
+    process_stream_opts,
+    renumber_lists,
+    split_leading_yaml_frontmatter,
 };
 use rayon::prelude::*;
 

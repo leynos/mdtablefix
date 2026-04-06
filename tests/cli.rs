@@ -428,7 +428,8 @@ fn test_cli_yaml_frontmatter_with_wrap() {
         "title: Example\n",
         "---\n",
         "\n",
-        "This is a very long paragraph that should be wrapped to 80 columns when the wrap option is enabled.\n",
+        "This is a very long paragraph that should be wrapped to 80 columns when the wrap option \
+         is enabled.\n",
     );
     let binding = Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command")
