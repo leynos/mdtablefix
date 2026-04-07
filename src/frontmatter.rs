@@ -3,14 +3,15 @@
 //! This module provides a helper to detect and split a leading YAML frontmatter
 //! block from a Markdown document. The frontmatter block is defined as starting
 //! with a line containing exactly `---` (the YAML opener) and ending with a line
-//! containing exactly `---` or `...` (the YAML closer). Only a block at the very
-//! beginning of the document counts as frontmatter.
+//! containing `---` or `...` with optional trailing whitespace (the YAML closer).
+//! Only a block at the very beginning of the document counts as frontmatter.
 
 /// Splits the input into a leading YAML frontmatter prefix and the remaining body.
 ///
 /// A valid frontmatter block must:
 /// - Start with the first line being exactly `---`
-/// - End with a line that is exactly `---` or `...` before any body content
+/// - End with a line that is `---` or `...` with optional trailing whitespace before any body
+///   content (matching is done after `trim_end()`)}
 ///
 /// If no valid closer is found, the entire input is returned as the body with an
 /// empty prefix. This preserves existing behaviour for malformed or non-frontmatter

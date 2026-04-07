@@ -278,29 +278,6 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 /// let out = process_stream_opts(&lines, opts);
 /// assert_eq!(out, vec!["text"]);
 /// ```
-/// Runs [`process_stream_inner`] with custom [`Options`].
-///
-/// This is exposed for advanced use cases where callers want precise
-/// control over the processing pipeline. Set `footnotes: true` in `opts`
-/// to convert bare numeric references into GitHub-flavoured footnote
-/// links. The flag defaults to `false`.
-///
-/// # Examples
-///
-/// ```
-/// use mdtablefix::process::{Options, process_stream_opts};
-/// let lines = vec!["text".to_string()];
-/// let opts = Options {
-///     wrap: false,
-///     ellipsis: false,
-///     fences: false,
-///     footnotes: false,
-///     code_emphasis: false,
-///     headings: false,
-/// };
-/// let out = process_stream_opts(&lines, opts);
-/// assert_eq!(out, vec!["text"]);
-/// ```
 #[must_use]
 pub fn process_stream_opts(lines: &[String], opts: Options) -> Vec<String> {
     let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
