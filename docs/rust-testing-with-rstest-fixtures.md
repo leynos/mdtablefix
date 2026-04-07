@@ -1363,82 +1363,67 @@ maintainable software.
 
 #### Works cited
 
-\[^1\]: rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June 12, 2025,
+[^1]: rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June 12, 2025,
 <https://docs.rs/rstest/latest/rstest/>
 
-\[^2\]: rstest - Rust Package Registry - [Crates.io](http://Crates.io), accessed
+[^2]: rstest - Rust Package Registry - [Crates.io](http://Crates.io), accessed
 on June 12, 2025, <https://crates.io/crates/rstest/0.11.0/dependencies>
 
-\[^3\]: rstest_macros - [crates.io](http://crates.io): Rust Package Registry,
+[^3]: rstest_macros - [crates.io](http://crates.io): Rust Package Registry,
 accessed on June 12, 2025, <https://crates.io/crates/rstest_macros>
 
-\[^4\]: la10736/rstest: Fixture-based test framework for Rust - GitHub, accessed
+[^4]: la10736/rstest: Fixture-based test framework for Rust - GitHub, accessed
 on June 12, 2025, <https://github.com/la10736/rstest>
 
-\[^5\]: It's Not Out Yet… But Rstest Has Me HYPED - YouTube, accessed on June 12,
+[^5]: It's Not Out Yet… But Rstest Has Me HYPED - YouTube, accessed on June 12,
 2025, <https://www.youtube.com/watch?v=nhSCmYJew-M&vl=fr>
 
-```text
-  GitHub, accessed on June 12, 2025,
-  <https://github.com/web-infra-dev/rstest>
-```
-
-\[^7\]: Iterating on Testing in Rust - Hacker News, accessed on June 12, 2025,
+[^7]: Iterating on Testing in Rust - Hacker News, accessed on June 12, 2025,
 <https://news.ycombinator.com/item?id=36368246>
 
-\[^8\]: Feature request: Support for debugging parameterized tests using
+[^8]: Feature request: Support for debugging parameterized tests using
 rstest: RUST-12206, accessed on June 12, 2025,
 <https://youtrack.jetbrains.com/issue/RUST-12206/Feature-request-Support-for-debugging-parameterized-tests-using-rstest>
 
-\[^9\]: rstest - [crates.io](http://crates.io): Rust Package Registry, accessed
+[^9]: rstest - [crates.io](http://crates.io): Rust Package Registry, accessed
 on June 12, 2025, <https://crates.io/crates/rstest/0.12.0>
 
-\[^10\]: rstest - [crates.io](http://crates.io): Rust Package Registry, accessed
+[^10]: rstest - [crates.io](http://crates.io): Rust Package Registry, accessed
 on June 12, 2025, <https://crates.io/crates/rstest>
 
-\[^11\]: Test Organization - The Rust Programming Language, accessed on June 12,
+[^11]: Test Organization - The Rust Programming Language, accessed on June 12,
 2025, <https://doc.rust-lang.org/book/ch11-03-test-organization.html>
 
-\[^12\]: fixture in rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June
+[^12]: fixture in rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June
 12, 2025, <https://docs.rs/rstest/latest/rstest/attr.fixture.html>
 
-\[^13\]: rstest in rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June
+[^13]: rstest in rstest - Rust - [Docs.rs](http://Docs.rs), accessed on June
 12, 2025, <https://docs.rs/rstest/latest/rstest/attr.rstest.html>
 
-```text
-   [Shuttle.dev](http://Shuttle.dev), accessed on June 12, 2025,
-   <https://www.shuttle.dev/blog/2024/03/21/testing-in-rust>
-```
-
-\[^15\]: Very long build time · Issue #184 · la10736/rstest - GitHub, accessed on
+[^15]: Very long build time · Issue #184 · la10736/rstest - GitHub, accessed on
 June 12, 2025, <https://github.com/la10736/rstest/issues/184>
 
-\[^16\]: test-temp-dir - [crates.io](http://crates.io): Rust Package Registry,
+[^16]: test-temp-dir - [crates.io](http://crates.io): Rust Package Registry,
 accessed on June 12, 2025, <https://crates.io/crates/test-temp-dir>
 
-\[^17\]: Mistakes to avoid while writing unit test for your rust codebase? -
+[^17]: Mistakes to avoid while writing unit test for your rust codebase? -
 Reddit, accessed on June 12, 2025,
 <https://www.reddit.com/r/rust/comments/18u8n38/mistakes_to_avoid_while_writing_unit_test_for/>
 
-\[^18\]: rstest_reuse - [crates.io](http://crates.io): Rust Package Registry,
+[^18]: rstest_reuse - [crates.io](http://crates.io): Rust Package Registry,
 accessed on June 12, 2025, <https://crates.io/crates/rstest_reuse/0.5.0>
 
-\[^19\]: crates or tips on how to organize test better? : r/rust - Reddit,
+[^19]: crates or tips on how to organize test better? : r/rust - Reddit,
 accessed on June 12, 2025,
 <https://www.reddit.com/r/rust/comments/1akaert/crates_or_tips_on_how_to_organize_test_better/>
 
-\[^20\]: Is there any point in avoiding std when testing a no_std library? - Rust
+[^20]: Is there any point in avoiding std when testing a no_std library? - Rust
 Users Forum, accessed on June 12, 2025,
 <https://users.rust-lang.org/t/is-there-any-point-in-avoiding-std-when-testing-a-no-std-library/122731>
 
-\[^21\]: rstest-log - [crates.io](http://crates.io): Rust Package Registry,
+[^21]: rstest-log - [crates.io](http://crates.io): Rust Package Registry,
 accessed on June 12, 2025,
 <https://crates.io/crates/rstest-log/dependencies>
 
-\[^22\]: test-with - [crates.io](http://crates.io): Rust Package Registry,
+[^22]: test-with - [crates.io](http://crates.io): Rust Package Registry,
 accessed on June 12, 2025, <https://crates.io/crates/test-with>
-
-```text
-   accessed on June 12, 2025,
-   <https://www.reddit.com/r/rust/comments/1jos03j/introducing_rustest_a_new_integration_tests/>
-```
