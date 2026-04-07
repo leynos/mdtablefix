@@ -26,19 +26,19 @@ block found in the documentation comments \[^3\]:
    target.[^2] It then extracts all code examples enclosed in triple-backtick
    fences (\`\`\`\`).
 
-2. **Code Generation**: For each extracted code block, `rustdoc` performs a
+1. **Code Generation**: For each extracted code block, `rustdoc` performs a
    textual transformation to create a complete, self-contained Rust program. If
    the block does not already contain a `fn main()`, the code is wrapped within
    one. Crucially, `rustdoc` also injects an `extern crate <mycrate>;`
    statement, where `<mycrate>` is the name of the library being documented.
    This makes the library under test available as an external dependency.[^3]
 
-3. **Individual Compilation**: `rustdoc` then invokes the Rust compiler
+1. **Individual Compilation**: `rustdoc` then invokes the Rust compiler
    (`rustc`) separately for *each* of these newly generated miniature programs.
    Each one is compiled and linked against the already-compiled version of the
    main library.[^2]
 
-4. **Execution and Verification**: Finally, if compilation succeeds, the
+1. **Execution and Verification**: Finally, if compilation succeeds, the
    resulting executable is run. The test is considered to have passed if the
    program runs to completion without panicking. The executable is then
    deleted.[^2]
@@ -204,12 +204,12 @@ primary use cases include:
    examples, the entire `fn main() -> Result<…> {… }` and `OK(())` scaffolding
    can be hidden, presenting the user with only the relevant code.[^10]
 
-2. **Hiding Setup Code**: If an example requires some preliminary setup—like
+1. **Hiding Setup Code**: If an example requires some preliminary setup—like
    creating a temporary file, defining a helper struct for the test, or
    initializing a server—this logic can be hidden to keep the example focused
    on the API item being documented.[^3]
 
-3. **Hiding** `use` **Statements**: While often useful to show which types are
+1. **Hiding** `use` **Statements**: While often useful to show which types are
    involved, `use` statements can sometimes be hidden to de-clutter very simple
    examples.
 
@@ -535,12 +535,12 @@ workarounds, but each comes with significant trade-offs \[^1\]:
    but sacrifices the guarantee of correctness. It is the least desirable
    option.
 
-2. **Make items** `pub` **in a** `detail` **or** `internal` **module**: This
+1. **Make items** `pub` **in a** `detail` **or** `internal` **module**: This
    compromises API design by polluting the public namespace and exposing
    implementation details that should be encapsulated. It can lead to misuse by
    users and makes future refactoring difficult.
 
-3. **Use** `cfg_attr` **to conditionally make items public**: This involves
+1. **Use** `cfg_attr` **to conditionally make items public**: This involves
    adding an attribute like
    `#[cfg_attr(feature = "doctest-private", visibility::make(pub))]` to every
    private item you wish to test. While robust, it is highly invasive and adds
@@ -595,23 +595,23 @@ mastering doctests:
    integration test compiled in a separate crate. This mental model explains
    nearly all of its behavior.
 
-2. **Prioritize Clarity**: Write examples that teach the *why*, not just the
+1. **Prioritize Clarity**: Write examples that teach the *why*, not just the
    *how*. Use hidden lines (`#`) ruthlessly to eliminate boilerplate and focus
    the reader's attention on the relevant code.
 
-3. **Handle Errors Gracefully**: For fallible functions, always use
+1. **Handle Errors Gracefully**: For fallible functions, always use
    the `fn main() -> Result<…>` pattern. Hide the boilerplate and avoid
    `.unwrap()` to promote robust error-handling practices.
 
-4. **Be DRY**: When setup logic is shared across multiple examples, centralize
+1. **Be DRY**: When setup logic is shared across multiple examples, centralize
    it in a helper module guarded by `#[cfg(doctest)]` to avoid repetition.
 
-5. **Master** `cfg`: Use `#[cfg(doc)]` to control an item's *visibility* in
+1. **Master** `cfg`: Use `#[cfg(doc)]` to control an item's *visibility* in
    the final documentation. Use `#[cfg(feature = "…")]` or other `cfg` flags
    *inside* the test block to control its conditional *execution*. Do not
    confuse the two.
 
-6. **Know When to Stop**: A doctest is not the right tool for every job. When
+1. **Know When to Stop**: A doctest is not the right tool for every job. When
    an example becomes overly complex, requires testing intricate error paths,
    or needs to access private implementation details, move it to a dedicated
    unit or integration test. Do not compromise your API design or test clarity

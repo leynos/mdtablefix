@@ -522,3 +522,52 @@ fn test_cli_yaml_frontmatter_in_place() {
     );
     run_in_place(&[], input, expected);
 }
+
+/// Tests YAML frontmatter preservation together with `--renumber`.
+#[test]
+fn test_cli_yaml_frontmatter_with_renumber() {
+    let input = concat!(
+        "---\n",
+        "title: Example\n",
+        "---\n",
+        "\n",
+        "3. Third item\n",
+        "5. Fifth item\n",
+    );
+    let expected = concat!(
+        "---\n",
+        "title: Example\n",
+        "---\n",
+        "\n",
+        "1. Third item\n",
+        "2. Fifth item\n",
+    );
+
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--renumber")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(expected);
+}
+
+/// Tests that malformed YAML frontmatter (missing closer) is treated as body content.
+#[test]
+fn test_cli_malformed_yaml_frontmatter_treated_as_body() {
+    // Leading '---' without a closing delimiter should be treated as normal body content,
+    // not as YAML frontmatter.
+    let input = concat!(
+        "---\n",
+        "This is not valid YAML frontmatter\n",
+        "and there is no closing delimiter.\n",
+    );
+    let expected = input;
+
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(expected);
+}

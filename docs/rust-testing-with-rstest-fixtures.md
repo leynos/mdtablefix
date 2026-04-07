@@ -547,7 +547,7 @@ When using `#[once]`, there are critical caveats 12:
    truly passive data or resources whose cleanup is managed by the operating
    system upon process exit.
 
-2. **Functional Limitations:** `#[once]` fixtures cannot be `async` functions
+1. **Functional Limitations:** `#[once]` fixtures cannot be `async` functions
    and cannot be generic functions (neither with generic type parameters nor
    using `impl Trait` in arguments or return types).
 
