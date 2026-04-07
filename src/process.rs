@@ -148,17 +148,14 @@ fn handle_table_line(
 /// ```
 #[must_use]
 pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
-    // Split off leading YAML frontmatter to preserve it unchanged
-    let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
-
-    let body = if opts.fences {
-        let tmp = compress_fences(body);
+    let lines = if opts.fences {
+        let tmp = compress_fences(lines);
         attach_orphan_specifiers(&tmp)
     } else {
-        body.to_vec()
+        lines.to_vec()
     };
 
-    let pre = convert_html_tables(&body);
+    let pre = convert_html_tables(&lines);
 
     let mut out = Vec::new();
     let mut buf = Vec::new();
@@ -205,10 +202,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         out = convert_footnotes(&out);
     }
 
-    // Prepend the preserved frontmatter prefix to the processed body
-    let mut result = frontmatter_prefix.to_vec();
-    result.extend(out);
-    result
+    out
 }
 
 /// Processes a Markdown stream with all default options enabled.
@@ -227,13 +221,17 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn process_stream(lines: &[String]) -> Vec<String> {
-    process_stream_inner(
-        lines,
+    let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
+    let out = process_stream_inner(
+        body,
         Options {
             wrap: true,
             ..Default::default()
         },
-    )
+    );
+    let mut result = frontmatter_prefix.to_vec();
+    result.extend(out);
+    result
 }
 
 /// Processes Markdown without wrapping paragraphs.
@@ -249,9 +247,12 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 /// assert!(out.iter().any(|l| l.contains("| a | b |")));
 /// ```
 #[must_use]
-#[inline]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
-    process_stream_inner(lines, Options::default())
+    let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
+    let out = process_stream_inner(body, Options::default());
+    let mut result = frontmatter_prefix.to_vec();
+    result.extend(out);
+    result
 }
 
 /// Runs [`process_stream_inner`] with custom [`Options`].
@@ -277,9 +278,36 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 /// let out = process_stream_opts(&lines, opts);
 /// assert_eq!(out, vec!["text"]);
 /// ```
+/// Runs [`process_stream_inner`] with custom [`Options`].
+///
+/// This is exposed for advanced use cases where callers want precise
+/// control over the processing pipeline. Set `footnotes: true` in `opts`
+/// to convert bare numeric references into GitHub-flavoured footnote
+/// links. The flag defaults to `false`.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::process::{Options, process_stream_opts};
+/// let lines = vec!["text".to_string()];
+/// let opts = Options {
+///     wrap: false,
+///     ellipsis: false,
+///     fences: false,
+///     footnotes: false,
+///     code_emphasis: false,
+///     headings: false,
+/// };
+/// let out = process_stream_opts(&lines, opts);
+/// assert_eq!(out, vec!["text"]);
+/// ```
 #[must_use]
 pub fn process_stream_opts(lines: &[String], opts: Options) -> Vec<String> {
-    process_stream_inner(lines, opts)
+    let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
+    let out = process_stream_inner(body, opts);
+    let mut result = frontmatter_prefix.to_vec();
+    result.extend(out);
+    result
 }
 
 #[cfg(test)]

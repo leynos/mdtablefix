@@ -44,9 +44,11 @@ pub fn split_leading_yaml_frontmatter(lines: &[String]) -> (&[String], &[String]
     }
 
     // Look for a closing delimiter after the opener
+    // Only trim trailing whitespace to preserve leading whitespace
+    // (indented lines inside YAML block scalars should not be treated as closers)
     for (idx, line) in lines.iter().enumerate().skip(1) {
-        let trimmed = line.trim();
-        if trimmed == "---" || trimmed == "..." {
+        let trimmed_end = line.trim_end();
+        if trimmed_end == "---" || trimmed_end == "..." {
             // Found valid closer - split after this line
             let split_at = idx + 1;
             return (&lines[..split_at], &lines[split_at..]);
@@ -176,12 +178,27 @@ mod tests {
     }
 
     #[test]
-    fn whitespace_around_closer_is_trimmed() {
-        // The closer can have surrounding whitespace
+    fn indented_closer_not_recognized() {
+        // Indented closers are not recognized (to preserve YAML block scalars)
         let lines = vec![
             "---".to_string(),
             "title: Example".to_string(),
             "  ---  ".to_string(),
+            "# Heading".to_string(),
+        ];
+        let (prefix, body) = split_leading_yaml_frontmatter(&lines);
+        // The indented --- is not treated as a closer
+        assert!(prefix.is_empty());
+        assert_eq!(body.len(), 4);
+    }
+
+    #[test]
+    fn trailing_whitespace_on_closer_is_trimmed() {
+        // The closer can have trailing whitespace
+        let lines = vec![
+            "---".to_string(),
+            "title: Example".to_string(),
+            "---  ".to_string(),
             "# Heading".to_string(),
         ];
         let (prefix, body) = split_leading_yaml_frontmatter(&lines);
