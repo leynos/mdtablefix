@@ -17,7 +17,7 @@ use clap::Parser;
 use mdtablefix::{
     Options,
     format_breaks,
-    process_stream_opts,
+    process::process_stream_inner,
     renumber_lists,
     split_leading_yaml_frontmatter,
 };
@@ -85,7 +85,8 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
     // Split off leading YAML frontmatter to preserve it from all transforms
     let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
 
-    let mut out = process_stream_opts(body, opts.into());
+    // Use process_stream_inner directly since we've already split frontmatter
+    let mut out = process_stream_inner(body, opts.into());
     if opts.renumber {
         out = renumber_lists(&out);
     }

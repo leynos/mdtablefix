@@ -163,4 +163,4 @@ navigability:
 
 ______________________________________________________________________
 
-\[^1\]: A linter that enforces consistent Markdown formatting.
+[^1]: A linter that enforces consistent Markdown formatting.

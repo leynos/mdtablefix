@@ -11,7 +11,7 @@
 /// A valid frontmatter block must:
 /// - Start with the first line being exactly `---`
 /// - End with a line that is `---` or `...` with optional trailing whitespace before any body
-///   content (matching is done after `trim_end()`)}
+///   content (matching is done after `trim_end()`)
 ///
 /// If no valid closer is found, the entire input is returned as the body with an
 /// empty prefix. This preserves existing behaviour for malformed or non-frontmatter

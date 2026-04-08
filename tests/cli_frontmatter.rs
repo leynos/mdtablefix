@@ -55,13 +55,13 @@ fn test_cli_yaml_frontmatter_with_wrap() {
         "This is a very long paragraph that should be wrapped to 80 columns when the wrap option \
          is enabled.\n",
     );
-    let binding = Command::cargo_bin("mdtablefix")
+    let cmd_result = Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command")
         .arg("--wrap")
         .write_stdin(input)
         .assert()
         .success();
-    let output = String::from_utf8_lossy(&binding.get_output().stdout);
+    let output = String::from_utf8_lossy(&cmd_result.get_output().stdout);
     assert!(output.starts_with("---\ntitle: Example\n---\n"));
 }
 
@@ -79,13 +79,13 @@ fn test_cli_yaml_frontmatter_with_breaks() {
         "\n",
         "More text\n",
     );
-    let binding = Command::cargo_bin("mdtablefix")
+    let cmd_result = Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command")
         .args(["--breaks", "--wrap"])
         .write_stdin(input)
         .assert()
         .success();
-    let output = String::from_utf8_lossy(&binding.get_output().stdout);
+    let output = String::from_utf8_lossy(&cmd_result.get_output().stdout);
     // Frontmatter delimiters should be preserved
     let lines: Vec<&str> = output.lines().collect();
     assert_eq!(lines[0], "---");
