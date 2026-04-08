@@ -1,6 +1,7 @@
 //! CLI tests for YAML frontmatter handling.
 
 use assert_cmd::Command;
+use rstest::rstest;
 
 /// Helper function for in-place file modification tests.
 fn run_in_place(args: &[&str], input: &str, expected: &str) {
@@ -15,35 +16,112 @@ fn run_in_place(args: &[&str], input: &str, expected: &str) {
     assert_eq!(actual, expected, "in-place content mismatch");
 }
 
-/// Tests that YAML frontmatter is preserved unchanged while the body is formatted.
-#[test]
-fn test_cli_yaml_frontmatter_preserved() {
-    let input = concat!(
-        "---\n",
-        "title: Example\n",
-        "author: Test\n",
-        "---\n",
-        "\n",
-        "|A|B|\n",
-        "|1|2|\n",
-    );
-    let expected = concat!(
-        "---\n",
-        "title: Example\n",
-        "author: Test\n",
-        "---\n",
-        "\n",
-        "| A | B |\n",
-        "| 1 | 2 |\n",
-    );
-    Command::cargo_bin("mdtablefix")
-        .expect("Failed to create cargo command for mdtablefix")
+/// Stdin→stdout equality cases for YAML frontmatter handling.
+#[rstest]
+#[case::preserved(&[], concat!(
+    "---\n",
+    "title: Example\n",
+    "author: Test\n",
+    "---\n",
+    "\n",
+    "|A|B|\n",
+    "|1|2|\n",
+), concat!(
+    "---\n",
+    "title: Example\n",
+    "author: Test\n",
+    "---\n",
+    "\n",
+    "| A | B |\n",
+    "| 1 | 2 |\n",
+))]
+#[case::dot_closer(&[], concat!(
+    "---\n",
+    "title: Example\n",
+    "...\n",
+    "# Heading\n",
+), concat!(
+    "---\n",
+    "title: Example\n",
+    "...\n",
+    "# Heading\n",
+))]
+#[case::later_dash_block_not_frontmatter(&[], concat!(
+    "# Heading\n",
+    "\n",
+    "---\n",
+    "\n",
+    "Text after break\n",
+), concat!(
+    "# Heading\n",
+    "\n",
+    "---\n",
+    "\n",
+    "Text after break\n",
+))]
+#[case::with_renumber(&["--renumber"], concat!(
+    "---\n",
+    "title: Example\n",
+    "---\n",
+    "\n",
+    "3. Third item\n",
+    "5. Fifth item\n",
+), concat!(
+    "---\n",
+    "title: Example\n",
+    "---\n",
+    "\n",
+    "1. Third item\n",
+    "2. Fifth item\n",
+))]
+#[case::malformed_treated_as_body(&[], concat!(
+    "---\n",
+    "This is not valid YAML frontmatter\n",
+    "and there is no closing delimiter.\n",
+), concat!(
+    "---\n",
+    "This is not valid YAML frontmatter\n",
+    "and there is no closing delimiter.\n",
+))]
+fn test_cli_yaml_frontmatter_stdin(
+    #[case] args: &[&str],
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    let mut cmd = Command::cargo_bin("mdtablefix").expect("find binary");
+    cmd.args(args)
         .write_stdin(input)
         .assert()
         .success()
-        .stdout(expected);
+        .stdout(expected.to_string());
 }
 
+/// In-place file modification cases for YAML frontmatter handling.
+#[rstest]
+#[case::basic(&[], concat!(
+    "---\n",
+    "title: Example\n",
+    "---\n",
+    "\n",
+    "|A|B|\n",
+    "|1|2|\n",
+), concat!(
+    "---\n",
+    "title: Example\n",
+    "---\n",
+    "\n",
+    "| A | B |\n",
+    "| 1 | 2 |\n",
+))]
+fn test_cli_yaml_frontmatter_in_place_variants(
+    #[case] args: &[&str],
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    run_in_place(args, input, expected);
+}
+
+// Cannot be parameterised: uses partial/line-level assertions rather than stdout equality.
 /// Tests that YAML frontmatter is preserved with `--wrap` option.
 #[test]
 fn test_cli_yaml_frontmatter_with_wrap() {
@@ -65,6 +143,7 @@ fn test_cli_yaml_frontmatter_with_wrap() {
     assert!(output.starts_with("---\ntitle: Example\n---\n"));
 }
 
+// Cannot be parameterised: uses partial/line-level assertions rather than stdout equality.
 /// Tests that YAML frontmatter delimiters are not rewritten by `--breaks`.
 #[test]
 fn test_cli_yaml_frontmatter_with_breaks() {
@@ -97,101 +176,4 @@ fn test_cli_yaml_frontmatter_with_breaks() {
         later_dashes.is_some(),
         "thematic break should be underscores"
     );
-}
-
-/// Tests that YAML frontmatter with `...` closer is preserved.
-#[test]
-fn test_cli_yaml_frontmatter_dot_closer() {
-    let input = concat!("---\n", "title: Example\n", "...\n", "# Heading\n",);
-    let expected = concat!("---\n", "title: Example\n", "...\n", "# Heading\n",);
-    Command::cargo_bin("mdtablefix")
-        .expect("Failed to create cargo command for mdtablefix")
-        .write_stdin(input)
-        .assert()
-        .success()
-        .stdout(expected);
-}
-
-/// Tests that a `---` line later in the document (not frontmatter) is still processed.
-#[test]
-fn test_cli_later_dash_block_not_frontmatter() {
-    let input = concat!("# Heading\n", "\n", "---\n", "\n", "Text after break\n",);
-    // Without --breaks, the --- stays as is
-    Command::cargo_bin("mdtablefix")
-        .expect("Failed to create cargo command for mdtablefix")
-        .write_stdin(input)
-        .assert()
-        .success()
-        .stdout(input);
-}
-
-/// Tests YAML frontmatter preservation with `--in-place`.
-#[test]
-fn test_cli_yaml_frontmatter_in_place() {
-    let input = concat!(
-        "---\n",
-        "title: Example\n",
-        "---\n",
-        "\n",
-        "|A|B|\n",
-        "|1|2|\n",
-    );
-    let expected = concat!(
-        "---\n",
-        "title: Example\n",
-        "---\n",
-        "\n",
-        "| A | B |\n",
-        "| 1 | 2 |\n",
-    );
-    run_in_place(&[], input, expected);
-}
-
-/// Tests YAML frontmatter preservation together with `--renumber`.
-#[test]
-fn test_cli_yaml_frontmatter_with_renumber() {
-    let input = concat!(
-        "---\n",
-        "title: Example\n",
-        "---\n",
-        "\n",
-        "3. Third item\n",
-        "5. Fifth item\n",
-    );
-    let expected = concat!(
-        "---\n",
-        "title: Example\n",
-        "---\n",
-        "\n",
-        "1. Third item\n",
-        "2. Fifth item\n",
-    );
-
-    Command::cargo_bin("mdtablefix")
-        .expect("Failed to create cargo command for mdtablefix")
-        .arg("--renumber")
-        .write_stdin(input)
-        .assert()
-        .success()
-        .stdout(expected);
-}
-
-/// Tests that malformed YAML frontmatter (missing closer) is treated as body content.
-#[test]
-fn test_cli_malformed_yaml_frontmatter_treated_as_body() {
-    // Leading '---' without a closing delimiter should be treated as normal body content,
-    // not as YAML frontmatter.
-    let input = concat!(
-        "---\n",
-        "This is not valid YAML frontmatter\n",
-        "and there is no closing delimiter.\n",
-    );
-    let expected = input;
-
-    Command::cargo_bin("mdtablefix")
-        .expect("Failed to create cargo command for mdtablefix")
-        .write_stdin(input)
-        .assert()
-        .success()
-        .stdout(expected);
 }
