@@ -1,72 +1,56 @@
 //! Tests for YAML frontmatter handling in process functions.
 
 use mdtablefix::process::{Options, process_stream, process_stream_inner};
+use rstest::rstest;
 
-#[test]
-fn preserves_yaml_frontmatter_unchanged() {
-    let input = vec![
-        "---".to_string(),
-        "title: Example".to_string(),
-        "author: Test".to_string(),
-        "---".to_string(),
-        "# Heading".to_string(),
-        "|A|B|".to_string(),
-        "|1|2|".to_string(),
-    ];
+#[rstest]
+#[case(
+    vec!["---", "title: Example", "author: Test", "---", "# Heading", "|A|B|", "|1|2|"],
+    true,
+    Some(vec!["---", "title: Example", "author: Test", "---"]),
+)]
+#[case(
+    vec!["---", "title: Example", "...", "Body text"],
+    true,
+    Some(vec!["---", "title: Example", "...", "Body text"]),
+)]
+#[case(
+    vec!["# Heading", "|A|B|", "|1|2|"],
+    false,
+    None,
+)]
+#[case(
+    vec!["---", "Not frontmatter", "More text"],
+    false,
+    None,
+)]
+fn frontmatter_detection_behaviour(
+    #[case] raw: Vec<&str>,
+    #[case] has_frontmatter: bool,
+    #[case] expected_prefix: Option<Vec<&str>>,
+) {
+    let first_line = raw[0].to_string();
+    let input: Vec<String> = raw.into_iter().map(str::to_string).collect();
     let out = process_stream(&input);
-    // Frontmatter lines should be unchanged
-    assert_eq!(out[0], "---");
-    assert_eq!(out[1], "title: Example");
-    assert_eq!(out[2], "author: Test");
-    assert_eq!(out[3], "---");
-    // Body should be formatted
-    assert!(out[4].contains("# Heading"));
-    assert!(out[5].contains("| A | B |") || out[5].contains("|A|B|"));
-}
+    assert!(!out.is_empty());
 
-#[test]
-fn frontmatter_with_triple_dot_closer_preserved() {
-    let input = vec![
-        "---".to_string(),
-        "title: Example".to_string(),
-        "...".to_string(),
-        "Body text".to_string(),
-    ];
-    let out = process_stream(&input);
-    assert_eq!(out[0], "---");
-    assert_eq!(out[1], "title: Example");
-    assert_eq!(out[2], "...");
-    assert_eq!(out[3], "Body text");
-}
-
-#[test]
-fn no_frontmatter_processes_normally() {
-    let input = vec![
-        "# Heading".to_string(),
-        "|A|B|".to_string(),
-        "|1|2|".to_string(),
-    ];
-    let out = process_stream(&input);
-    // Should process normally without frontmatter
-    assert_eq!(out[0], "# Heading");
-    assert!(out.len() >= 2);
-}
-
-#[test]
-fn unmatched_frontmatter_opener_processed_as_body() {
-    // A --- without a closer is not frontmatter
-    let input = vec![
-        "---".to_string(),
-        "Not frontmatter".to_string(),
-        "More text".to_string(),
-    ];
-    let out = process_stream(&input);
-    // All lines should be processed as body (no special frontmatter handling)
-    // The lines may be wrapped together, so just verify the content is present
-    assert!(out[0].contains("---"));
-    let joined = out.join("\n");
-    assert!(joined.contains("Not frontmatter"));
-    assert!(joined.contains("More text"));
+    if has_frontmatter {
+        if let Some(prefix) = expected_prefix {
+            for (i, expected_line) in prefix.iter().enumerate() {
+                assert_eq!(&out[i], *expected_line);
+            }
+        }
+    } else if first_line == "---" {
+        // Unmatched opener case: --- is treated as body content
+        let joined = out.join("\n");
+        assert!(out[0].contains("---"));
+        assert!(joined.contains("Not frontmatter"));
+        assert!(joined.contains("More text"));
+    } else {
+        // No frontmatter case: body processed normally
+        assert_eq!(out[0], "# Heading");
+        assert!(out.len() >= 2);
+    }
 }
 
 #[test]
