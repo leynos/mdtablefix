@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: DELIVERED
 
 ## Purpose / big picture
 
@@ -313,20 +313,30 @@ Do not add dependencies.
 Add a new internal module at `src/frontmatter.rs` with a helper shaped like:
 
 ```rust
-pub(crate) fn split_leading_yaml_frontmatter(
-    lines: &[String],
-) -> (&[String], &[String])
+#[doc(hidden)]
+pub mod frontmatter;
+#[doc(hidden)]
+pub use frontmatter::split_leading_yaml_frontmatter;
 ```
 
-The helper should return `(prefix, body)`, where `prefix` is the untouched
-leading YAML block, or an empty slice if no valid block exists.
+The helper `split_leading_yaml_frontmatter` returns `(prefix, body)`, where
+`prefix` is the untouched leading YAML block, or an empty slice if no valid
+block exists. The module and helper are marked `#[doc(hidden)]` to keep them
+out of the public API documentation while remaining accessible to the binary
+crate.
 
-`src/process.rs` should call the helper before existing body processing.
-`src/main.rs` should call the same helper before CLI-only transforms.
-`src/lib.rs` only needs to declare the module; it does not need to re-export
-the helper.
+`src/process.rs` calls the helper in `process_stream`, `process_stream_no_wrap`,
+and `process_stream_opts` before existing body processing. `src/main.rs` calls
+the same helper in `process_lines` before CLI-only transforms (`--renumber`,
+`--breaks`).
 
-Revision note: Initial draft created after reviewing the current pipeline,
-tests, and documentation surfaces. The main change from the initial intuition
-is that CLI-only transforms also need shielding, so the plan now uses a shared
-splitter instead of a `process_stream_inner`-only special case.
+Interface note: The `frontmatter` module is exported as `pub` with
+`#[doc(hidden)]` rather than `pub(crate)` because the binary crate (`main.rs`)
+requires access to `split_leading_yaml_frontmatter`. The binary and library are
+separate crate targets, so `pub(crate)` would not allow the binary to access
+the symbol. Using `#[doc(hidden)]` prevents the API from appearing in docs
+while maintaining the necessary visibility.
+
+Revision note: Delivered. The implementation follows the plan with the
+visibility adjustment noted above. All tests pass and the feature is ready
+for use.

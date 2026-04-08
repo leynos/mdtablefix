@@ -221,17 +221,13 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn process_stream(lines: &[String]) -> Vec<String> {
-    let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
-    let out = process_stream_inner(
-        body,
+    process_with_frontmatter(
+        lines,
         Options {
             wrap: true,
             ..Default::default()
         },
-    );
-    let mut result = frontmatter_prefix.to_vec();
-    result.extend(out);
-    result
+    )
 }
 
 /// Processes Markdown without wrapping paragraphs.
@@ -248,11 +244,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
-    let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
-    let out = process_stream_inner(body, Options::default());
-    let mut result = frontmatter_prefix.to_vec();
-    result.extend(out);
-    result
+    process_with_frontmatter(lines, Options::default())
 }
 
 /// Runs [`process_stream_inner`] with custom [`Options`].
@@ -280,6 +272,11 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn process_stream_opts(lines: &[String], opts: Options) -> Vec<String> {
+    process_with_frontmatter(lines, opts)
+}
+
+/// Helper to split frontmatter, process body, and rejoin.
+fn process_with_frontmatter(lines: &[String], opts: Options) -> Vec<String> {
     let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
     let out = process_stream_inner(body, opts);
     let mut result = frontmatter_prefix.to_vec();

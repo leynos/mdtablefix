@@ -104,12 +104,11 @@ Doctests reside within documentation comments. Rust recognizes two types:
   (e.g., a module or the crate itself). They are typically used at the top of
   `lib.rs` or `mod.rs` to provide crate- or module-level documentation.[^8]
 
-<!-- markdownlint-disable MD013 --> Within these comments, a code block is
-denoted by triple back-ticks (```). While `rustdoc` defaults to Rust syntax,
-explicitly add the `rust` language specifier for clarity.[^3] A doctest
-"passes" when it compiles and runs without panicking. To assert specific
-outcomes, use the standard macros `assert!`, `assert_eq!`, and
-`assert_ne!`.[^3] <!-- markdownlint-enable MD013 -->
+Within these comments, a code block is denoted by triple back-ticks (```).
+While `rustdoc` defaults to Rust syntax, explicitly add the `rust` language
+specifier for clarity.[^3] A doctest "passes" when it compiles and runs
+without panicking. To assert specific outcomes, use the standard macros
+`assert!`, `assert_eq!`, and `assert_ne!`.[^3]
 
 ### 2.2 The Philosophy of a Good Example
 
