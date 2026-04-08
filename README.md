@@ -80,7 +80,7 @@ Documents that begin with a YAML frontmatter block have that block preserved
 exactly while the remainder of the document is formatted. A frontmatter block
 starts with a line containing exactly `---` and ends with a line containing
 exactly `---` or `...`. Only a block at the very beginning of the document is
-recognised as frontmatter.
+recognized as frontmatter.
 
 Before:
 
