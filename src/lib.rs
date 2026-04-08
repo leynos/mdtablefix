@@ -27,8 +27,8 @@ pub mod code_emphasis;
 pub mod ellipsis;
 pub mod fences;
 pub mod footnotes;
-#[doc(hidden)]
-pub mod frontmatter;
+mod frontmatter;
+pub use frontmatter::split_leading_yaml_frontmatter;
 pub mod headings;
 mod html;
 pub mod io;
@@ -50,9 +50,6 @@ pub use code_emphasis::fix_code_emphasis;
 pub use ellipsis::replace_ellipsis;
 pub use fences::{attach_orphan_specifiers, compress_fences};
 pub use footnotes::convert_footnotes;
-// Re-export frontmatter helper for internal use (binary crate)
-#[doc(hidden)]
-pub use frontmatter::split_leading_yaml_frontmatter;
 pub use headings::convert_setext_headings;
 pub use html::convert_html_tables;
 pub use io::{rewrite, rewrite_no_wrap};
