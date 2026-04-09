@@ -85,14 +85,14 @@ according to the selected options.
 
 - [x] (2026-04-05 22:45Z) Reviewed the current processing pipeline, test
   layout, and user-facing documentation surfaces.
-- [ ] Add a shared helper for detecting and splitting leading YAML
+- [x] (2026-04-09) Add a shared helper for detecting and splitting leading YAML
   frontmatter.
-- [ ] Thread the helper through the library and CLI formatting pipeline so all
+- [x] (2026-04-09) Thread the helper through the library and CLI formatting pipeline so all
   transforms skip the frontmatter prefix.
-- [ ] Add unit and behavioural regression tests covering detection, wrapping,
+- [x] (2026-04-09) Add unit and behavioural regression tests covering detection, wrapping,
   and `--breaks`.
-- [ ] Update `README.md` and `docs/architecture.md`.
-- [ ] Run `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
+- [x] (2026-04-09) Update `README.md` and `docs/architecture.md`.
+- [x] (2026-04-09) Run `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
   and `make nixie` if Mermaid content changes.
 
 ## Surprises & discoveries
@@ -125,10 +125,12 @@ according to the selected options.
 
 ## Outcomes & retrospective
 
-This plan is still in draft. No implementation has started yet. The current
-best approach is a small shared frontmatter splitter, plus regression coverage
-that proves both the library path and the CLI path leave the leading YAML
-block untouched.
+The frontmatter splitter was successfully implemented in the `frontmatter`
+module and integrated through both the `process` module and `main` module.
+Test coverage was added covering detection, wrapping, and `--breaks` flags
+for both library and CLI paths. All transforms now correctly skip the
+frontmatter prefix, preserving the leading YAML block exactly while
+formatting the Markdown body.
 
 ## Context and orientation
 

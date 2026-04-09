@@ -1,19 +1,22 @@
 //! CLI tests for YAML frontmatter handling.
 
 use assert_cmd::Command;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 
-/// Helper function for in-place file modification tests.
-fn run_in_place(args: &[&str], input: &str, expected: &str) {
-    let temp = tempfile::NamedTempFile::new().expect("create temp file");
-    std::fs::write(temp.path(), input).expect("write temp file");
+/// Fixture providing an in-place test runner closure.
+#[fixture]
+fn in_place_runner() -> impl Fn(&[&str], &str, &str) {
+    |args: &[&str], input: &str, expected: &str| {
+        let temp = tempfile::NamedTempFile::new().expect("create temp file");
+        std::fs::write(temp.path(), input).expect("write temp file");
 
-    let mut cmd = Command::cargo_bin("mdtablefix").expect("find binary");
-    cmd.arg("--in-place").args(args).arg(temp.path());
-    cmd.assert().success();
+        let mut cmd = Command::cargo_bin("mdtablefix").expect("find binary");
+        cmd.arg("--in-place").args(args).arg(temp.path());
+        cmd.assert().success();
 
-    let actual = std::fs::read_to_string(temp.path()).expect("read temp file");
-    assert_eq!(actual, expected, "in-place content mismatch");
+        let actual = std::fs::read_to_string(temp.path()).expect("read temp file");
+        assert_eq!(actual, expected, "in-place content mismatch");
+    }
 }
 
 /// Stdin→stdout equality cases for YAML frontmatter handling.
@@ -117,11 +120,12 @@ fn test_cli_yaml_frontmatter_in_place_variants(
     #[case] args: &[&str],
     #[case] input: &str,
     #[case] expected: &str,
+    in_place_runner: impl Fn(&[&str], &str, &str),
 ) {
-    run_in_place(args, input, expected);
+    in_place_runner(args, input, expected);
 }
 
-// Cannot be parameterised: uses partial/line-level assertions rather than stdout equality.
+// Cannot be parameterized: uses partial/line-level assertions rather than stdout equality.
 /// Tests that YAML frontmatter is preserved with `--wrap` option.
 #[test]
 fn test_cli_yaml_frontmatter_with_wrap() {
@@ -143,7 +147,7 @@ fn test_cli_yaml_frontmatter_with_wrap() {
     assert!(output.starts_with("---\ntitle: Example\n---\n"));
 }
 
-// Cannot be parameterised: uses partial/line-level assertions rather than stdout equality.
+// Cannot be parameterized: uses partial/line-level assertions rather than stdout equality.
 /// Tests that YAML frontmatter delimiters are not rewritten by `--breaks`.
 #[test]
 fn test_cli_yaml_frontmatter_with_breaks() {
@@ -167,6 +171,10 @@ fn test_cli_yaml_frontmatter_with_breaks() {
     let output = String::from_utf8_lossy(&cmd_result.get_output().stdout);
     // Frontmatter delimiters should be preserved
     let lines: Vec<&str> = output.lines().collect();
+    assert!(
+        lines.len() >= 3,
+        "expected at least 3 lines in output: {output}"
+    );
     assert_eq!(lines[0], "---");
     assert_eq!(lines[1], "title: Example");
     assert_eq!(lines[2], "---");
