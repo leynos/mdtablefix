@@ -17,9 +17,9 @@ use clap::Parser;
 use mdtablefix::{
     Options,
     format_breaks,
-    frontmatter::split_leading_yaml_frontmatter,
     process::process_stream_inner,
     renumber_lists,
+    split_leading_yaml_frontmatter,
 };
 use rayon::prelude::*;
 
