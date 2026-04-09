@@ -87,10 +87,10 @@ according to the selected options.
   layout, and user-facing documentation surfaces.
 - [x] (2026-04-09) Add a shared helper for detecting and splitting leading YAML
   frontmatter.
-- [x] (2026-04-09) Thread the helper through the library and CLI formatting pipeline so all
-  transforms skip the frontmatter prefix.
-- [x] (2026-04-09) Add unit and behavioural regression tests covering detection, wrapping,
-  and `--breaks`.
+- [x] (2026-04-09) Thread the helper through the library and CLI formatting pipeline
+  so all transforms skip the frontmatter prefix.
+- [x] (2026-04-09) Add unit and behavioural regression tests covering detection,
+  wrapping, and `--breaks`.
 - [x] (2026-04-09) Update `README.md` and `docs/architecture.md`.
 - [x] (2026-04-09) Run `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
   and `make nixie` if Mermaid content changes.
