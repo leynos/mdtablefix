@@ -27,8 +27,8 @@ pub mod code_emphasis;
 pub mod ellipsis;
 pub mod fences;
 pub mod footnotes;
-mod frontmatter;
-pub use frontmatter::split_leading_yaml_frontmatter;
+#[doc(hidden)]
+pub mod frontmatter;
 pub mod headings;
 mod html;
 pub mod io;
