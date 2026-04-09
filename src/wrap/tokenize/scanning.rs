@@ -78,8 +78,9 @@ pub(super) fn bracket_follows_escaped_bang(bytes: &[u8], idx: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case::alpha_prefix("abc123", 0, Some(char::is_alphabetic as fn(char) -> bool), None, Some(3), None)]

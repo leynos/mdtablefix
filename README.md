@@ -74,6 +74,38 @@ mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
 - If no files are specified, input is read from stdin and output is written to
   stdout.
 
+## YAML frontmatter
+
+Documents that begin with a YAML frontmatter block have that block preserved
+exactly while the remainder of the document is formatted. A frontmatter block
+starts with a line containing exactly `---` and ends with a line containing
+exactly `---` or `...`. Only a block at the very beginning of the document is
+recognized as frontmatter.
+
+Before:
+
+```markdown
+---
+title: My Document
+author: Jane Doe
+---
+|Character|Catchphrase|
+|---|---|
+|Speedy|Here come the cats!|
+```
+
+After running `mdtablefix`:
+
+```markdown
+---
+title: My Document
+author: Jane Doe
+---
+| Character | Catchphrase         |
+| --------- | ------------------- |
+| Speedy    | Here come the cats! |
+```
+
 ## Concurrency
 
 When multiple file paths are supplied, `mdtablefix` processes them in parallel

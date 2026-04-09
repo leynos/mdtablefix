@@ -7,10 +7,16 @@ mod parsing;
 mod scanning;
 
 use parsing::{
-    handle_backtick_fence, is_trailing_punctuation, looks_like_image_start, parse_link_or_image,
+    handle_backtick_fence,
+    is_trailing_punctuation,
+    looks_like_image_start,
+    parse_link_or_image,
 };
 use scanning::{
-    bracket_follows_escaped_bang, collect_range, has_odd_backslash_escape_bytes, scan_while,
+    bracket_follows_escaped_bang,
+    collect_range,
+    has_odd_backslash_escape_bytes,
+    scan_while,
 };
 
 /// Markdown token emitted by the `segment_inline` tokenizer.
@@ -223,7 +229,11 @@ where
 ///     tokens,
 ///     vec![
 ///         Token::Text("Example with "),
-///         Token::Code { raw: "`code`", fence: "`", code: "code" },
+///         Token::Code {
+///             raw: "`code`",
+///             fence: "`",
+///             code: "code"
+///         },
 ///     ]
 /// );
 /// ```

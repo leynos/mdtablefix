@@ -10,9 +10,7 @@ mod prelude;
 use prelude::*;
 
 #[rstest]
-fn test_cli_parallel_empty_file_list() {
-    run_cli_with_args(&[]).success().stdout("\n");
-}
+fn test_cli_parallel_empty_file_list() { run_cli_with_args(&[]).success().stdout("\n"); }
 
 #[rstest]
 fn test_cli_parallel_multiple_files() {

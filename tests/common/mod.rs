@@ -19,7 +19,7 @@ macro_rules! lines_vec {
 ///
 /// Example:
 /// ```
-/// let input: Vec<String> = include_lines!("data/bold_header_input.txt");
+/// let input: Vec<String> = include_lines!("data/bold_header_input.txt"); 
 /// ```
 #[expect(unused_macros, reason = "macros are optional helpers across modules")]
 macro_rules! include_lines {

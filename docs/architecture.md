@@ -20,6 +20,12 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String>
 
 The function combines several helpers documented in `docs/`:
 
+- `frontmatter::split_leading_yaml_frontmatter` detects and splits a leading
+  YAML frontmatter block from the document body. A valid frontmatter block
+  starts with `---` on the first line and ends with `---` or `...` before any
+  body content. The prefix is preserved verbatim while only the body is
+  processed. This shielding also applies to CLI-only transforms such as
+  `renumber_lists` and `format_breaks`.
 - `fences::compress_fences` and `attach_orphan_specifiers` normalize code block
   delimiters. The latter keeps indentation from the language line when the
   fence lacks it. Language specifiers explicitly set to `null`
@@ -27,8 +33,8 @@ The function combines several helpers documented in `docs/`:
   `compress_fences` also tolerates spaces within comma-separated specifiers,
   e.g. `TOML, Ini` becomes `toml,ini`.
 - `html::convert_html_tables` transforms basic HTML tables into Markdown so \
-    they can be reflowed like regular tables. See \
-    [HTML table support](#html-table-support-in-mdtablefix).
+  they can be reflowed like regular tables. See \
+  [HTML table support](#html-table-support-in-mdtablefix).
 - `wrap::wrap_text` applies optional line wrapping. It relies on the
   `unicode-width` crate for accurate character widths.
 - `wrap::tokenize_markdown` emits `Token` values for custom processing.
@@ -48,7 +54,7 @@ incoming lines are buffered or emitted. Once the end of a table or fence is
 reached, buffered lines are flushed and possibly reformatted. The simplified
 behaviour is illustrated below.
 
-```mermaid
+````mermaid
 stateDiagram-v2
 
     [*] --> Streaming: Start
@@ -72,7 +78,7 @@ stateDiagram-v2
     InHtmlTable --> InHtmlTable: Line inside table tag
 
     InCodeFence --> Streaming: Line is a fence delimiter
-```
+````
 
 Before:
 

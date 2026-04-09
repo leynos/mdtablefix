@@ -77,6 +77,4 @@ pub(super) fn convert_inline(text: &str) -> String {
 }
 
 /// Determine whether a string is the prefix of an ATX heading.
-pub(super) fn is_atx_heading_prefix(s: &str) -> bool {
-    ATX_HEADING_RE.is_match(s)
-}
+pub(super) fn is_atx_heading_prefix(s: &str) -> bool { ATX_HEADING_RE.is_match(s) }

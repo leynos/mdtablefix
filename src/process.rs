@@ -4,6 +4,7 @@ use crate::{
     ellipsis::replace_ellipsis,
     fences::{attach_orphan_specifiers, compress_fences},
     footnotes::convert_footnotes,
+    frontmatter::split_leading_yaml_frontmatter,
     html::convert_html_tables,
     table::reflow_table,
     wrap::{FenceTracker, classify_block, wrap_text},
@@ -168,7 +169,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         }
 
         if fence_tracker.in_fence() {
-            out.push(line.to_string());
+            out.push(line.clone());
             continue;
         }
 
@@ -177,7 +178,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         }
 
         flush_buffer(&mut buf, &mut in_table, &mut out);
-        out.push(line.to_string());
+        out.push(line.clone());
     }
 
     flush_buffer(&mut buf, &mut in_table, &mut out);
@@ -200,6 +201,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     if opts.footnotes {
         out = convert_footnotes(&out);
     }
+
     out
 }
 
@@ -219,7 +221,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn process_stream(lines: &[String]) -> Vec<String> {
-    process_stream_inner(
+    process_with_frontmatter(
         lines,
         Options {
             wrap: true,
@@ -241,9 +243,8 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 /// assert!(out.iter().any(|l| l.contains("| a | b |")));
 /// ```
 #[must_use]
-#[inline]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
-    process_stream_inner(lines, Options::default())
+    process_with_frontmatter(lines, Options::default())
 }
 
 /// Runs [`process_stream_inner`] with custom [`Options`].
@@ -271,7 +272,16 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn process_stream_opts(lines: &[String], opts: Options) -> Vec<String> {
-    process_stream_inner(lines, opts)
+    process_with_frontmatter(lines, opts)
+}
+
+/// Helper to split frontmatter, process body, and rejoin.
+fn process_with_frontmatter(lines: &[String], opts: Options) -> Vec<String> {
+    let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
+    let out = process_stream_inner(body, opts);
+    let mut result = frontmatter_prefix.to_vec();
+    result.extend(out);
+    result
 }
 
 #[cfg(test)]

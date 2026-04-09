@@ -126,8 +126,9 @@ pub(super) fn is_markdownlint_directive(line: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest(
         line,

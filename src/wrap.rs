@@ -130,7 +130,8 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
         }
 
         if is_indented_code_line(line) {
-            // Preserve indented code blocks verbatim so wrapping does not merge them into paragraphs.
+            // Preserve indented code blocks verbatim so wrapping does not merge them into
+            // paragraphs.
             flush_paragraph(&mut out, &buf, &indent, width);
             buf.clear();
             indent.clear();

@@ -13,17 +13,11 @@ pub(crate) struct LineBuffer {
 }
 
 impl LineBuffer {
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
+    pub(crate) fn new() -> Self { Self::default() }
 
-    pub(crate) fn text(&self) -> &str {
-        self.text.as_str()
-    }
+    pub(crate) fn text(&self) -> &str { self.text.as_str() }
 
-    pub(crate) fn width(&self) -> usize {
-        self.width
-    }
+    pub(crate) fn width(&self) -> usize { self.width }
 
     pub(crate) fn push_token(&mut self, token: &str) {
         if token.len() == 1 && ".?!,:;".contains(token) && self.text.trim_end().ends_with('`') {

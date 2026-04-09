@@ -84,9 +84,7 @@ pub struct FenceTracker {
 impl FenceTracker {
     /// Create a new tracker with no active fence.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Update the tracker with a potential fence line.
     ///
@@ -122,7 +120,5 @@ impl FenceTracker {
 
     /// Check whether the tracker is currently inside a fenced block.
     #[must_use]
-    pub fn in_fence(&self) -> bool {
-        self.state.is_some()
-    }
+    pub fn in_fence(&self) -> bool { self.state.is_some() }
 }
