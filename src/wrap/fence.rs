@@ -2,6 +2,8 @@
 
 use regex::Regex;
 
+use super::paragraph::{ParagraphState, ParagraphWriter};
+
 pub(super) static FENCE_RE: std::sync::LazyLock<Regex> =
     // Capture: indent, fence run of 3+ backticks/tilde, and the full info string (incl. leading
     // spaces)
@@ -41,21 +43,16 @@ pub fn is_fence(line: &str) -> Option<(&str, &str, &str)> {
 ///
 /// Returns `true` if the line was processed as a fence.
 pub(crate) fn handle_fence_line(
-    out: &mut Vec<String>,
-    buf: &mut Vec<(String, bool)>,
-    indent: &mut String,
-    width: usize,
     line: &str,
+    writer: &mut ParagraphWriter<'_>,
+    state: &mut ParagraphState,
     tracker: &mut FenceTracker,
 ) -> bool {
     if !tracker.observe(line) {
         return false;
     }
 
-    super::flush_paragraph(out, buf, indent, width);
-    buf.clear();
-    indent.clear();
-    out.push(line.to_string());
+    writer.push_verbatim(state, line);
     true
 }
 

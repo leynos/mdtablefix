@@ -28,28 +28,37 @@ static ATX_HEADING_RE: LazyLock<Regex> = lazy_regex!(
     "atx heading prefix",
 );
 
-#[inline]
-fn capture_parts<'a>(caps: &'a Captures<'a>) -> (&'a str, &'a str, &'a str, &'a str, &'a str) {
-    (
-        &caps["pre"],
-        &caps["punc"],
-        &caps["style"],
-        &caps["num"],
-        &caps["boundary"],
-    )
+#[derive(Clone, Copy)]
+struct InlineFootnote<'a> {
+    pre: &'a str,
+    punc: &'a str,
+    style: &'a str,
+    num: &'a str,
+    boundary: &'a str,
 }
 
 #[inline]
-fn build_footnote(pre: &str, punc: &str, style: &str, num: &str, boundary: &str) -> String {
-    format!("{pre}{punc}{style}[^{num}]{boundary}")
+fn capture_parts<'a>(caps: &'a Captures<'a>) -> InlineFootnote<'a> {
+    InlineFootnote {
+        pre: &caps["pre"],
+        punc: &caps["punc"],
+        style: &caps["style"],
+        num: &caps["num"],
+        boundary: &caps["boundary"],
+    }
+}
+
+#[inline]
+fn build_footnote(parts: InlineFootnote<'_>) -> String {
+    format!(
+        "{}{}{}[^{}]{}",
+        parts.pre, parts.punc, parts.style, parts.num, parts.boundary
+    )
 }
 
 /// Convert inline numeric references into Markdown footnote syntax.
 pub(super) fn convert_inline(text: &str) -> String {
-    let out = INLINE_FN_RE.replace_all(text, |caps: &Captures| {
-        let (pre, punc, style, num, boundary) = capture_parts(caps);
-        build_footnote(pre, punc, style, num, boundary)
-    });
+    let out = INLINE_FN_RE.replace_all(text, |caps: &Captures| build_footnote(capture_parts(caps)));
     COLON_FN_RE
         .replace_all(&out, |caps: &Captures| {
             let pre = &caps["pre"];

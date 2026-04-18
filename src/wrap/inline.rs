@@ -4,9 +4,14 @@
 //! inline code, links, and trailing punctuation without reimplementing the
 //! grouping logic in multiple places.
 
+use std::ops::Range;
+
 use unicode_width::UnicodeWidthStr;
 
-use super::{line_buffer::LineBuffer, tokenize};
+use super::{
+    line_buffer::{LineBuffer, SplitContext},
+    tokenize,
+};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum SpanKind {
@@ -167,24 +172,23 @@ pub(super) fn attach_punctuation_to_previous_line(
 fn push_span_with_carry(
     buffer: &mut LineBuffer,
     tokens: &[String],
-    start: usize,
-    end: usize,
+    span: Range<usize>,
     carried_whitespace: &mut String,
 ) {
-    if start >= end {
+    if span.start >= span.end {
         return;
     }
 
     if carried_whitespace.is_empty() {
-        buffer.push_span(tokens, start, end);
+        buffer.push_span(tokens, span.start, span.end);
         return;
     }
 
     let mut first_token = std::mem::take(carried_whitespace);
-    first_token.push_str(tokens[start].as_str());
+    first_token.push_str(tokens[span.start].as_str());
     buffer.push_token(first_token.as_str());
-    if start + 1 < end {
-        buffer.push_span(tokens, start + 1, end);
+    if span.start + 1 < span.end {
+        buffer.push_span(tokens, span.start + 1, span.end);
     }
 }
 
@@ -201,12 +205,13 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 
     while i < tokens.len() {
         let (group_end, group_width) = determine_token_span(&tokens, i);
-        let span_is_whitespace = tokens[i..group_end]
+        let span = i..group_end;
+        let span_is_whitespace = tokens[span.clone()]
             .iter()
             .all(|tok| is_whitespace_token(tok));
 
         if span_is_whitespace && !carried_whitespace.is_empty() && group_end != tokens.len() {
-            for tok in &tokens[i..group_end] {
+            for tok in &tokens[span.clone()] {
                 carried_whitespace.push_str(tok);
             }
             i = group_end;
@@ -220,31 +225,35 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         }
 
         if buffer.width() + group_width <= width {
-            push_span_with_carry(&mut buffer, &tokens, i, group_end, &mut carried_whitespace);
+            push_span_with_carry(&mut buffer, &tokens, span.clone(), &mut carried_whitespace);
             i = group_end;
             continue;
         }
 
-        if buffer.split_with_span(&mut lines, &tokens, i, group_end, width) {
+        let mut split = SplitContext {
+            lines: &mut lines,
+            width,
+        };
+        if buffer.split_with_span(&mut split, &tokens, span.clone()) {
             i = group_end;
             continue;
         }
 
-        if buffer.flush_trailing_whitespace(&mut lines, &tokens, i, group_end) {
+        if buffer.flush_trailing_whitespace(&mut lines, &tokens, span.clone()) {
             i = group_end;
             continue;
         }
 
         buffer.flush_into(&mut lines);
         if span_is_whitespace {
-            for tok in &tokens[i..group_end] {
+            for tok in &tokens[span] {
                 carried_whitespace.push_str(tok);
             }
             i = group_end;
             continue;
         }
 
-        push_span_with_carry(&mut buffer, &tokens, i, group_end, &mut carried_whitespace);
+        push_span_with_carry(&mut buffer, &tokens, i..group_end, &mut carried_whitespace);
         i = group_end;
     }
 

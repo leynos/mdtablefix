@@ -120,6 +120,24 @@ fn attach_specifier_to_fence(fence_line: &str, specifier: &str, spec_indent: &st
     format!("{final_indent}```{specifier}")
 }
 
+fn orphan_specifier_target(lines: &[String], start: usize) -> Option<usize> {
+    let mut index = start;
+    while index < lines.len() && lines[index].trim().is_empty() {
+        index += 1;
+    }
+    if index >= lines.len() || FENCE_RE.captures(&lines[index]).is_none() {
+        return None;
+    }
+    Some(index)
+}
+
+fn orphan_specifier_target_without_language(lines: &[String], start: usize) -> Option<usize> {
+    let target = orphan_specifier_target(lines, start)?;
+    let cap = FENCE_RE.captures(&lines[target])?;
+    let lang = cap.get(3).map_or("", |m| m.as_str());
+    is_null_lang(lang).then_some(target)
+}
+
 /// Attach orphaned language specifiers to opening fences.
 ///
 /// After compressing fences, a language may appear on its own line directly
@@ -156,19 +174,10 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
         let (spec, indent) = normalize_specifier(line);
         if ORPHAN_LANG_RE.is_match(&spec) && out.last().is_none_or(|l: &String| l.trim().is_empty())
         {
-            let mut j = i + 1;
-            while j < lines.len() && lines[j].trim().is_empty() {
-                j += 1;
-            }
-            if j < lines.len()
-                && let Some(cap) = FENCE_RE.captures(&lines[j])
-            {
-                let lang = cap.get(3).map_or("", |m| m.as_str());
-                if is_null_lang(lang) {
-                    out.push(attach_specifier_to_fence(&lines[j], &spec, &indent));
-                    i = j + 1;
-                    continue;
-                }
+            if let Some(target) = orphan_specifier_target_without_language(lines, i + 1) {
+                out.push(attach_specifier_to_fence(&lines[target], &spec, &indent));
+                i = target + 1;
+                continue;
             }
             out.push(line.clone());
             i += 1;

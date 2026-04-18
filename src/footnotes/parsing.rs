@@ -14,7 +14,7 @@ pub(super) static DEF_RE: LazyLock<Regex> = lazy_regex!(
     "footnote definition pattern should compile",
 );
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub(super) struct DefinitionParts<'a> {
     pub(super) prefix: &'a str,
     pub(super) number: usize,

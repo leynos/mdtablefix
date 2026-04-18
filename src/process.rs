@@ -53,72 +53,67 @@ pub struct Options {
 }
 
 /// Flushes buffered lines to `out`, formatting as a table when required.
-fn flush_buffer(buf: &mut Vec<String>, in_table: &mut bool, out: &mut Vec<String>) {
-    if buf.is_empty() {
-        return;
-    }
-    if *in_table {
-        out.extend(reflow_table(buf));
-        buf.clear();
-    } else {
-        out.extend(std::mem::take(buf));
-    }
-    *in_table = false;
+struct ProcessBuffer {
+    out: Vec<String>,
+    buf: Vec<String>,
+    in_table: bool,
 }
 
-/// Detects fence lines and toggles code mode, flushing buffered content.
-fn handle_fence_line(
-    line: &str,
-    buf: &mut Vec<String>,
-    in_table: &mut bool,
-    out: &mut Vec<String>,
-    fences: &mut FenceTracker,
-) -> bool {
-    if !fences.observe(line) {
-        return false;
-    }
-
-    flush_buffer(buf, in_table, out);
-    out.push(line.to_string());
-    true
-}
-
-/// Buffers table lines, returning `true` when a line was consumed.
-fn handle_table_line(
-    line: &str,
-    buf: &mut Vec<String>,
-    in_table: &mut bool,
-    out: &mut Vec<String>,
-) -> bool {
-    let trimmed = line.trim_start();
-
-    if trimmed.starts_with('|') {
-        *in_table = true;
-        buf.push(line.to_string());
-        return true;
-    }
-    if line.trim().is_empty() {
-        if *in_table {
-            flush_buffer(buf, in_table, out);
+impl ProcessBuffer {
+    fn flush(&mut self) {
+        if self.buf.is_empty() {
+            return;
         }
-        return false;
+        if self.in_table {
+            self.out.extend(reflow_table(&self.buf));
+            self.buf.clear();
+        } else {
+            self.out.extend(std::mem::take(&mut self.buf));
+        }
+        self.in_table = false;
     }
-    if *in_table && (line.contains('|') || crate::table::SEP_RE.is_match(line.trim())) {
-        buf.push(line.to_string());
-        return true;
+
+    fn push_verbatim(&mut self, line: &str) {
+        self.flush();
+        self.out.push(line.to_string());
     }
-    if *in_table {
-        if classify_block(line).is_some() {
-            // Flush when a new Markdown block (heading, list, quote, footnote, directive,
-            // or digit-prefixed text) begins so wrapping and table detection stay aligned.
-            flush_buffer(buf, in_table, out);
+
+    fn handle_fence_line(&mut self, line: &str, fences: &mut FenceTracker) -> bool {
+        if !fences.observe(line) {
             return false;
         }
-        // Plain paragraphs also end the table so the caller can reprocess them for wrapping.
-        flush_buffer(buf, in_table, out);
-        return false;
+
+        self.push_verbatim(line);
+        true
     }
-    false
+
+    fn handle_table_line(&mut self, line: &str) -> bool {
+        if line.trim_start().starts_with('|') {
+            self.in_table = true;
+            self.buf.push(line.to_string());
+            return true;
+        }
+        if line.trim().is_empty() {
+            if self.in_table {
+                self.flush();
+            }
+            return false;
+        }
+        if self.in_table && (line.contains('|') || crate::table::SEP_RE.is_match(line.trim())) {
+            self.buf.push(line.to_string());
+            return true;
+        }
+        if self.in_table {
+            if classify_block(line).is_some() {
+                // Flush when a new Markdown block begins so wrapping and table
+                // detection stay aligned.
+                self.flush();
+                return false;
+            }
+            self.flush();
+        }
+        false
+    }
 }
 
 /// Processes a stream of Markdown lines using the provided [`Options`].
@@ -157,32 +152,35 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     let pre = convert_html_tables(&lines);
 
-    let mut out = Vec::new();
-    let mut buf = Vec::new();
+    let mut state = ProcessBuffer {
+        out: Vec::new(),
+        buf: Vec::new(),
+        in_table: false,
+    };
     // Track fences so subsequent logic respects shared semantics.
     let mut fence_tracker = FenceTracker::default();
-    let mut in_table = false;
 
     for line in &pre {
-        if handle_fence_line(line, &mut buf, &mut in_table, &mut out, &mut fence_tracker) {
+        if state.handle_fence_line(line, &mut fence_tracker) {
             continue;
         }
 
         if fence_tracker.in_fence() {
-            out.push(line.clone());
+            state.out.push(line.clone());
             continue;
         }
 
-        if handle_table_line(line, &mut buf, &mut in_table, &mut out) {
+        if state.handle_table_line(line) {
             continue;
         }
 
-        flush_buffer(&mut buf, &mut in_table, &mut out);
-        out.push(line.clone());
+        state.flush();
+        state.out.push(line.clone());
     }
 
-    flush_buffer(&mut buf, &mut in_table, &mut out);
+    state.flush();
 
+    let mut out = state.out;
     if opts.headings {
         out = crate::headings::convert_setext_headings(&out);
     }

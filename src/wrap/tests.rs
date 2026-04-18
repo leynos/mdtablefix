@@ -7,7 +7,7 @@ use rstest::rstest;
 
 use super::{
     inline::{attach_punctuation_to_previous_line, determine_token_span, wrap_preserving_code},
-    line_buffer::LineBuffer,
+    line_buffer::{LineBuffer, SplitContext},
     tokenize::segment_inline,
 };
 use crate::wrap::{BlockKind, classify_block, wrap_text};
@@ -123,7 +123,11 @@ fn line_buffer_split_preserves_multi_space_lines() {
     buffer.push_span(&tokens, 0, 2);
 
     let mut lines = Vec::new();
-    assert!(buffer.split_with_span(&mut lines, &tokens, 2, 4, 8));
+    let mut split = SplitContext {
+        lines: &mut lines,
+        width: 8,
+    };
+    assert!(buffer.split_with_span(&mut split, &tokens, 2..4));
     assert_eq!(lines, vec!["alpha  ".to_string()]);
     assert_eq!(buffer.text(), "beta   ");
     assert_eq!(
@@ -139,7 +143,11 @@ fn line_buffer_split_trims_single_trailing_space() {
     buffer.push_span(&tokens, 0, 2);
 
     let mut lines = Vec::new();
-    assert!(buffer.split_with_span(&mut lines, &tokens, 2, 3, 5));
+    let mut split = SplitContext {
+        lines: &mut lines,
+        width: 5,
+    };
+    assert!(buffer.split_with_span(&mut split, &tokens, 2..3));
     assert_eq!(lines, vec!["alpha".to_string()]);
     assert_eq!(buffer.text(), "beta");
     assert_eq!(
@@ -160,7 +168,11 @@ fn line_buffer_split_tracks_multiple_whitespace_tokens() {
     buffer.push_span(&tokens, 0, 3);
 
     let mut lines = Vec::new();
-    assert!(buffer.split_with_span(&mut lines, &tokens, 3, 4, 4));
+    let mut split = SplitContext {
+        lines: &mut lines,
+        width: 4,
+    };
+    assert!(buffer.split_with_span(&mut split, &tokens, 3..4));
     assert_eq!(lines, vec!["foo  ".to_string()]);
     assert_eq!(buffer.text(), "bar");
 }
@@ -176,8 +188,7 @@ fn line_buffer_trailing_whitespace_flushes_line() {
     assert!(buffer.flush_trailing_whitespace(
         &mut lines,
         &whitespace_tokens,
-        0,
-        whitespace_tokens.len(),
+        0..whitespace_tokens.len()
     ));
     assert_eq!(lines, vec!["foo  ".to_string()]);
     assert!(buffer.text().is_empty());

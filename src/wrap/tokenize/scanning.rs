@@ -82,31 +82,33 @@ mod tests {
 
     use super::*;
 
+    struct ScanCollectCase {
+        text: &'static str,
+        start: usize,
+        predicate: Option<fn(char) -> bool>,
+        end: Option<usize>,
+        expected_idx: Option<usize>,
+        expected_str: Option<&'static str>,
+    }
+
     #[rstest]
-    #[case::alpha_prefix("abc123", 0, Some(char::is_alphabetic as fn(char) -> bool), None, Some(3), None)]
-    #[case::numeric_suffix("abc123", 3, Some(char::is_numeric as fn(char) -> bool), None, Some("abc123".len()), None)]
-    #[case::multibyte_scan("åßç123", 0, Some(char::is_alphabetic as fn(char) -> bool), None, Some("åßç123".find('1').unwrap_or("åßç123".len())), Some("åßç"))]
-    #[case::collect_first_two("αβγδε", 0, None, Some("αβ".len()), None, Some("αβ"))]
-    #[case::collect_middle("αβγδε", "αβ".len(), None, Some("αβ".len() + "γδ".len()), None, Some("γδ"))]
-    fn scan_and_collect_cases(
-        #[case] text: &str,
-        #[case] start: usize,
-        #[case] predicate: Option<fn(char) -> bool>,
-        #[case] end: Option<usize>,
-        #[case] expected_idx: Option<usize>,
-        #[case] expected_str: Option<&str>,
-    ) {
-        if let Some(pred) = predicate {
-            let idx = scan_while(text, start, pred);
-            if let Some(expected) = expected_idx {
+    #[case::alpha_prefix(ScanCollectCase { text: "abc123", start: 0, predicate: Some(char::is_alphabetic as fn(char) -> bool), end: None, expected_idx: Some(3), expected_str: None })]
+    #[case::numeric_suffix(ScanCollectCase { text: "abc123", start: 3, predicate: Some(char::is_numeric as fn(char) -> bool), end: None, expected_idx: Some("abc123".len()), expected_str: None })]
+    #[case::multibyte_scan(ScanCollectCase { text: "åßç123", start: 0, predicate: Some(char::is_alphabetic as fn(char) -> bool), end: None, expected_idx: Some("åßç123".find('1').unwrap_or("åßç123".len())), expected_str: Some("åßç") })]
+    #[case::collect_first_two(ScanCollectCase { text: "αβγδε", start: 0, predicate: None, end: Some("αβ".len()), expected_idx: None, expected_str: Some("αβ") })]
+    #[case::collect_middle(ScanCollectCase { text: "αβγδε", start: "αβ".len(), predicate: None, end: Some("αβ".len() + "γδ".len()), expected_idx: None, expected_str: Some("γδ") })]
+    fn scan_and_collect_cases(#[case] case: ScanCollectCase) {
+        if let Some(pred) = case.predicate {
+            let idx = scan_while(case.text, case.start, pred);
+            if let Some(expected) = case.expected_idx {
                 assert_eq!(idx, expected);
             }
-            if let Some(expected_slice) = expected_str {
-                assert_eq!(&text[..idx], expected_slice);
+            if let Some(expected_slice) = case.expected_str {
+                assert_eq!(&case.text[..idx], expected_slice);
             }
-        } else if let Some(end_idx) = end {
-            let collected = collect_range(text, start, end_idx);
-            if let Some(expected_slice) = expected_str {
+        } else if let Some(end_idx) = case.end {
+            let collected = collect_range(case.text, case.start, end_idx);
+            if let Some(expected_slice) = case.expected_str {
                 assert_eq!(collected, expected_slice);
             }
         } else {

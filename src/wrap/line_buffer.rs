@@ -3,6 +3,8 @@
 //! This module encapsulates the mutable state required to accumulate tokens into
 //! wrapped lines while reusing allocations between iterations.
 
+use std::ops::Range;
+
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Default)]
@@ -10,6 +12,11 @@ pub(crate) struct LineBuffer {
     text: String,
     width: usize,
     last_split: Option<usize>,
+}
+
+pub(crate) struct SplitContext<'a> {
+    pub(crate) lines: &'a mut Vec<String>,
+    pub(crate) width: usize,
 }
 
 impl LineBuffer {
@@ -60,11 +67,9 @@ impl LineBuffer {
 
     pub(crate) fn split_with_span(
         &mut self,
-        lines: &mut Vec<String>,
+        ctx: &mut SplitContext<'_>,
         tokens: &[String],
-        start: usize,
-        end: usize,
-        width: usize,
+        span: Range<usize>,
     ) -> bool {
         let Some(pos) = self.last_split else {
             return false;
@@ -89,24 +94,26 @@ impl LineBuffer {
         };
 
         if let Some((start_idx, end_idx)) = head_bounds {
-            lines.push(self.text[start_idx..end_idx].to_owned());
+            ctx.lines.push(self.text[start_idx..end_idx].to_owned());
         }
 
         self.text.drain(..trimmed_tail_start);
-        for tok in &tokens[start..end] {
+        for tok in &tokens[span.clone()] {
             self.text.push_str(tok);
         }
 
         self.width = UnicodeWidthStr::width(self.text.as_str());
-        if end > start && tokens[end - 1].chars().all(char::is_whitespace) && !self.text.is_empty()
+        if span.end > span.start
+            && tokens[span.end - 1].chars().all(char::is_whitespace)
+            && !self.text.is_empty()
         {
             self.last_split = Some(self.text.len());
         } else {
             self.last_split = None;
         }
 
-        if self.width > width {
-            lines.push(self.text.trim_end().to_string());
+        if self.width > ctx.width {
+            ctx.lines.push(self.text.trim_end().to_string());
             self.text.clear();
             self.width = 0;
             self.last_split = None;
@@ -119,13 +126,12 @@ impl LineBuffer {
         &mut self,
         lines: &mut Vec<String>,
         tokens: &[String],
-        start: usize,
-        end: usize,
+        span: Range<usize>,
     ) -> bool {
-        if end != tokens.len() {
+        if span.end != tokens.len() {
             return false;
         }
-        if !tokens[start..end]
+        if !tokens[span.clone()]
             .iter()
             .all(|tok| tok.chars().all(char::is_whitespace))
         {
@@ -137,7 +143,7 @@ impl LineBuffer {
             return true;
         }
 
-        for tok in &tokens[start..end] {
+        for tok in &tokens[span] {
             self.text.push_str(tok);
         }
         lines.push(std::mem::take(&mut self.text));
