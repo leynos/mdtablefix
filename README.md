@@ -17,6 +17,13 @@ Install via Cargo:
 cargo install mdtablefix
 ```
 
+On Linux `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, install
+the prebuilt release archive via `cargo-binstall`:
+
+```bash
+cargo binstall mdtablefix
+```
+
 Or clone the repository and build from source:
 
 ```bash
