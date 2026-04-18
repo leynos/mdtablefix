@@ -97,7 +97,7 @@ fn should_convert_numeric_line(
 
 fn definition_line_from_parts(
     index: usize,
-    parts: super::super::parsing::DefinitionParts<'_>,
+    parts: super::parsing::DefinitionParts<'_>,
     mapping: &mut HashMap<usize, usize>,
     next_number: &mut usize,
 ) -> DefinitionLine {

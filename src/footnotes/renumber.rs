@@ -5,6 +5,9 @@ use std::{collections::HashMap, sync::LazyLock};
 use regex::{Captures, Match, Regex};
 
 mod definitions;
+mod parsing {
+    pub(super) use super::super::parsing::DefinitionParts;
+}
 
 #[cfg(test)]
 use definitions::numeric_candidate_from_line;
