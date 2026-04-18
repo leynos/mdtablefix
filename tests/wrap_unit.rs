@@ -53,6 +53,30 @@ fn wrap_text_preserves_code_spans() {
 }
 
 #[test]
+fn wrap_text_normalizes_whitespace_only_lines() {
+    let input = vec![String::new(), "   ".to_string(), "\t\t".to_string()];
+    let wrapped = wrap_text(&input, 80);
+    assert_eq!(wrapped, vec![String::new(), String::new(), String::new()]);
+}
+
+#[test]
+fn wrap_text_treats_whitespace_only_lines_as_paragraph_breaks() {
+    let input = vec!["foo".to_string(), "   ".to_string(), "bar".to_string()];
+    let wrapped = wrap_text(&input, 80);
+    assert_eq!(
+        wrapped,
+        vec!["foo".to_string(), String::new(), "bar".to_string()]
+    );
+}
+
+#[test]
+fn wrap_text_uses_display_width_for_unicode_indent() {
+    let input = vec!["　a b".to_string()];
+    let wrapped = wrap_text(&input, 4);
+    assert_eq!(wrapped, vec!["　a".to_string(), "　b".to_string()]);
+}
+
+#[test]
 fn wrap_text_multiple_code_spans() {
     let input = vec!["combine `foo bar` and `baz qux` in one line".to_string()];
     let wrapped = wrap_text(&input, 25);
