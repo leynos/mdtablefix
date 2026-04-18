@@ -61,12 +61,18 @@ fn is_plain_paragraph_line(line: &str) -> bool {
     )
 }
 
+#[derive(Default)]
 struct ListState {
     indent_stack: Vec<usize>,
     counters: HashMap<usize, usize>,
 }
 
 impl ListState {
+    fn reset(&mut self) {
+        self.indent_stack.clear();
+        self.counters.clear();
+    }
+
     fn prune_deeper(&mut self, indent: usize, inclusive: bool) {
         prune_deeper(
             indent,
@@ -74,6 +80,17 @@ impl ListState {
             &mut self.indent_stack,
             &mut self.counters,
         );
+    }
+
+    fn next_number(&mut self, indent: usize) -> usize {
+        self.prune_deeper(indent, false);
+        if self.indent_stack.last().is_none_or(|&d| d < indent) {
+            self.indent_stack.push(indent);
+        }
+        let num = self.counters.entry(indent).or_insert(1);
+        let current = *num;
+        *num += 1;
+        current
     }
 
     fn handle_paragraph_restart(&mut self, indent: usize, line: &str, prev_blank: bool) -> bool {
@@ -97,10 +114,7 @@ impl ListState {
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
-    let mut state = ListState {
-        indent_stack: Vec::new(),
-        counters: HashMap::new(),
-    };
+    let mut state = ListState::default();
     // Track fenced code blocks consistently across list processing.
     let mut fences = FenceTracker::default();
     #[allow(clippy::unnecessary_map_or)]
@@ -123,13 +137,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             continue;
         }
         if let Some((indent, indent_str, sep, rest)) = parse_numbered(line) {
-            state.prune_deeper(indent, false);
-            if state.indent_stack.last().is_none_or(|&d| d < indent) {
-                state.indent_stack.push(indent);
-            }
-            let num = state.counters.entry(indent).or_insert(1);
-            let current = *num;
-            *num += 1;
+            let current = state.next_number(indent);
             out.push(format!("{indent_str}{current}.{sep}{rest}"));
             prev_blank = false;
             continue;
@@ -141,8 +149,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
         if HEADING_RE.is_match(line) || THEMATIC_BREAK_RE.is_match(line.trim_end()) {
-            state.indent_stack.clear();
-            state.counters.clear();
+            state.reset();
             out.push(line.clone());
             prev_blank = false;
             continue;

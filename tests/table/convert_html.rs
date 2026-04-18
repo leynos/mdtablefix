@@ -77,3 +77,19 @@ fn preserves_trailing_spaces_in_cells() {
     ];
     assert_eq!(convert_html_tables(&input), expected);
 }
+
+#[test]
+fn converts_indented_multiline_html_table() {
+    let input = lines_vec![
+        "  <table>",
+        "    <tr><th>A</th><th>B</th></tr>",
+        "    <tr><td>1</td><td>2</td></tr>",
+        "  </table>",
+    ];
+    let expected = lines_vec![
+        "  | A | B |",
+        "  | --- | --- |",
+        "  | 1 | 2 |",
+    ];
+    assert_eq!(convert_html_tables(&input), expected);
+}

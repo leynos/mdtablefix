@@ -80,8 +80,8 @@ fn is_passthrough_block(block_kind: Option<BlockKind>, line: &str) -> bool {
 
 fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
     if let Some(cap) = BULLET_RE.captures(line) {
-        let prefix = cap.get(1).expect("bullet regex capture").as_str();
-        let rest = cap.get(2).expect("bullet regex remainder capture").as_str();
+        let prefix = cap.get(1).map(|m| m.as_str())?;
+        let rest = cap.get(2).map(|m| m.as_str())?;
         return Some(PrefixLine {
             prefix: Cow::Borrowed(prefix),
             rest,
@@ -90,12 +90,9 @@ fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
     }
 
     if let Some(cap) = FOOTNOTE_RE.captures(line) {
-        let prefix = cap.get(1).expect("footnote prefix capture").as_str();
-        let marker = cap.get(2).expect("footnote marker capture").as_str();
-        let rest = cap
-            .get(3)
-            .expect("footnote regex remainder capture")
-            .as_str();
+        let prefix = cap.get(1).map(|m| m.as_str())?;
+        let marker = cap.get(2).map(|m| m.as_str())?;
+        let rest = cap.get(3).map(|m| m.as_str())?;
         return Some(PrefixLine {
             prefix: Cow::Owned(format!("{prefix}{marker}")),
             rest,
@@ -103,12 +100,12 @@ fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
         });
     }
 
-    BLOCKQUOTE_RE.captures(line).map(|cap| PrefixLine {
-        prefix: Cow::Borrowed(cap.get(1).expect("blockquote prefix capture").as_str()),
-        rest: cap
-            .get(2)
-            .expect("blockquote regex remainder capture")
-            .as_str(),
+    let cap = BLOCKQUOTE_RE.captures(line)?;
+    let prefix = cap.get(1).map(|m| m.as_str())?;
+    let rest = cap.get(2).map(|m| m.as_str())?;
+    Some(PrefixLine {
+        prefix: Cow::Borrowed(prefix),
+        rest,
         repeat_prefix: true,
     })
 }
@@ -172,9 +169,6 @@ fn handle_pending_continuation(
 }
 
 /// Wrap text lines to the given width.
-///
-/// # Panics
-/// Panics if regex captures fail unexpectedly.
 #[must_use]
 pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
