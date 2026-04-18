@@ -228,10 +228,10 @@ impl HtmlTableState {
         let trimmed = line.trim_start();
         self.buf.push(line.to_string());
         self.depth += TABLE_START_RE.find_iter(trimmed).count();
-        if TABLE_END_RE.is_match(line) {
+        if TABLE_END_RE.is_match(trimmed) {
             self.depth = self
                 .depth
-                .saturating_sub(TABLE_END_RE.find_iter(line).count());
+                .saturating_sub(TABLE_END_RE.find_iter(trimmed).count());
         }
         if self.depth == 0 {
             out.extend(table_lines_to_markdown(&self.buf));
