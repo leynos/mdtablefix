@@ -1,6 +1,6 @@
 //! Sequential renumbering of footnote references and definitions.
 
-use std::{collections::HashMap, fmt::Write, sync::LazyLock};
+use std::{collections::HashMap, sync::LazyLock};
 
 use regex::{Captures, Match, Regex};
 
@@ -325,7 +325,8 @@ fn definition_line_from_parts(
     let rewritten_rest = rewrite_tokens(parts.rest, mapping);
     let mut line = String::with_capacity(parts.prefix.len() + rewritten_rest.len() + 8);
     line.push_str(parts.prefix);
-    let _ = write!(&mut line, "[^{new_number}]:");
+    let header = format!("[^{new_number}]:");
+    line.push_str(&header);
     line.push_str(&rewritten_rest);
     DefinitionLine {
         index,
@@ -336,11 +337,11 @@ fn definition_line_from_parts(
 
 fn numeric_candidate_from_line(line: &str, index: usize) -> Option<NumericCandidate> {
     let caps = FOOTNOTE_LINE_RE.captures(line)?;
-    let number = caps["num"].parse::<usize>().ok()?;
     let indent = caps.name("indent").map_or("", |m| m.as_str()).to_string();
-    let rest = caps.name("rest").map_or("", |m| m.as_str()).to_string();
     let num_match = caps.name("num")?;
     let rest_match = caps.name("rest")?;
+    let number = num_match.as_str().parse::<usize>().ok()?;
+    let rest = rest_match.as_str().to_string();
     let whitespace = line[num_match.end() + 1..rest_match.start()].to_string();
     Some(NumericCandidate {
         index,
@@ -401,7 +402,8 @@ fn finalize_numeric_candidates(state: &mut DefinitionScanState<'_>) {
             candidate.indent.len() + candidate.whitespace.len() + rewritten_rest.len() + 8,
         );
         line.push_str(&candidate.indent);
-        let _ = write!(&mut line, "[^{new_number}]:");
+        let header = format!("[^{new_number}]:");
+        line.push_str(&header);
         line.push_str(&candidate.whitespace);
         line.push_str(&rewritten_rest);
         state.definitions.push(DefinitionLine {
