@@ -70,7 +70,9 @@ fn is_fence_line(line: &str) -> bool {
 fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<usize, usize>) -> String {
     FOOTNOTE_REF_RE
         .replace_all(text, |caps: &Captures| {
-            let mat = caps.get(0).expect("regex matched without capture");
+            let Some(mat) = caps.get(0) else {
+                return String::new();
+            };
             if is_definition_like(text, &mat) {
                 return caps[0].to_string();
             }
