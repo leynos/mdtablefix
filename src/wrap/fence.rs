@@ -2,7 +2,7 @@
 
 use regex::Regex;
 
-use super::paragraph::{ParagraphState, ParagraphWriter};
+use super::paragraph::ParagraphWriter;
 
 pub(super) static FENCE_RE: std::sync::LazyLock<Regex> =
     // Capture: indent, fence run of 3+ backticks/tilde, and the full info string (incl. leading
@@ -45,14 +45,13 @@ pub fn is_fence(line: &str) -> Option<(&str, &str, &str)> {
 pub(crate) fn handle_fence_line(
     line: &str,
     writer: &mut ParagraphWriter<'_>,
-    state: &mut ParagraphState,
     tracker: &mut FenceTracker,
 ) -> bool {
     if !tracker.observe(line) {
         return false;
     }
 
-    writer.push_verbatim(state, line);
+    writer.push_verbatim(line);
     true
 }
 

@@ -123,10 +123,7 @@ fn line_buffer_split_preserves_multi_space_lines() {
     buffer.push_span(&tokens, 0, 2);
 
     let mut lines = Vec::new();
-    let mut split = SplitContext {
-        lines: &mut lines,
-        width: 8,
-    };
+    let mut split = SplitContext::new(&mut lines, 8);
     assert!(buffer.split_with_span(&mut split, &tokens, 2..4));
     assert_eq!(lines, vec!["alpha  ".to_string()]);
     assert_eq!(buffer.text(), "beta   ");
@@ -143,10 +140,7 @@ fn line_buffer_split_trims_single_trailing_space() {
     buffer.push_span(&tokens, 0, 2);
 
     let mut lines = Vec::new();
-    let mut split = SplitContext {
-        lines: &mut lines,
-        width: 5,
-    };
+    let mut split = SplitContext::new(&mut lines, 5);
     assert!(buffer.split_with_span(&mut split, &tokens, 2..3));
     assert_eq!(lines, vec!["alpha".to_string()]);
     assert_eq!(buffer.text(), "beta");
@@ -168,10 +162,7 @@ fn line_buffer_split_tracks_multiple_whitespace_tokens() {
     buffer.push_span(&tokens, 0, 3);
 
     let mut lines = Vec::new();
-    let mut split = SplitContext {
-        lines: &mut lines,
-        width: 4,
-    };
+    let mut split = SplitContext::new(&mut lines, 4);
     assert!(buffer.split_with_span(&mut split, &tokens, 3..4));
     assert_eq!(lines, vec!["foo  ".to_string()]);
     assert_eq!(buffer.text(), "bar");
@@ -306,6 +297,20 @@ fn wrap_text_preserves_code_spans() {
             "`interpreter` field overrides the setting.".to_string(),
         ]
     );
+}
+
+#[test]
+fn wrap_text_normalizes_whitespace_only_lines() {
+    let input = vec![String::new(), "   ".to_string(), "\t\t".to_string()];
+    let wrapped = wrap_text(&input, 80);
+    assert_eq!(wrapped, vec![String::new(), String::new(), String::new()]);
+}
+
+#[test]
+fn wrap_text_uses_display_width_for_unicode_indent() {
+    let input = vec!["　a".to_string()];
+    let wrapped = wrap_text(&input, 2);
+    assert_eq!(wrapped, vec!["　a".to_string()]);
 }
 
 #[test]

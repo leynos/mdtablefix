@@ -231,4 +231,15 @@ mod tests {
         let input = vec!["before `code` after".to_string()];
         assert_eq!(fix_code_emphasis(&input), input);
     }
+
+    #[test]
+    fn consume_code_affixes_clears_mixed_pending_prefix() {
+        let mut tokens = vec![Token::Text("*lead*tail")].into_iter().peekable();
+        let mut pending = "**";
+
+        let (prefix, suffix, modified) = consume_code_affixes(&mut tokens, &mut pending);
+
+        assert_eq!((prefix, suffix, modified), ("", "", true));
+        assert_eq!(tokens.next(), Some(Token::Text("lead*tail")));
+    }
 }
