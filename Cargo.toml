@@ -4,9 +4,17 @@ version = "0.3.1"
 edition = "2024"
 rust-version = "1.89"
 license = "ISC"
+repository = "https://github.com/leynos/mdtablefix"
 description = """
 `mdtablefix` unb0rks and reflows Markdown tables so that each column has a uniform width. When \
 the `--wrap` option is used, it also wraps paragraphs and list items to 80 columns."""
+
+[package.metadata.binstall]
+
+[package.metadata.binstall.overrides.'cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"), target_env = "gnu"))']
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }.tar.gz"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
 
 [dependencies]
 anyhow = "1"

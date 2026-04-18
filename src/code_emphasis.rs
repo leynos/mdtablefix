@@ -10,6 +10,8 @@
 //! transformation should run before wrapping and footnote conversion so marker
 //! adjacency is evaluated on the raw input.
 
+use std::{iter::Peekable, vec::IntoIter};
+
 use crate::{
     textproc::process_text,
     wrap::{Token, tokenize_markdown},
@@ -49,6 +51,103 @@ fn push_code(code: &str, out: &mut String) {
     out.push_str(&fence);
 }
 
+fn has_code_emphasis_adjacent(source: &str) -> bool {
+    source.contains("`*") || source.contains("`_") || source.contains("*`") || source.contains("_`")
+}
+
+fn handle_text_token<'a>(
+    raw: &'a str,
+    next: Option<&Token<'a>>,
+    out: &mut String,
+    pending: &mut &'a str,
+) {
+    if !next.is_some_and(|token| matches!(token, Token::Code { .. })) {
+        out.push_str(raw);
+        return;
+    }
+
+    let (lead, body, trail) = split_marks(raw);
+    if body.is_empty() && trail.is_empty() {
+        *pending = lead;
+        return;
+    }
+
+    out.push_str(lead);
+    out.push_str(body);
+    *pending = trail;
+}
+
+fn try_fold_matching_emphasis<'a>(
+    tokens: &mut Peekable<IntoIter<Token<'a>>>,
+    pending: &mut &'a str,
+    code: &str,
+    out: &mut String,
+) -> bool {
+    let Some(Token::Text(next)) = tokens.peek() else {
+        return false;
+    };
+    let (lead, mid, trail) = split_marks(next);
+    if *pending == lead && mid.is_empty() && trail.is_empty() {
+        out.push_str(pending);
+        push_code(code, out);
+        out.push_str(lead);
+        *pending = "";
+        tokens.next();
+        return true;
+    }
+    false
+}
+
+fn consume_code_affixes<'a>(
+    tokens: &mut Peekable<IntoIter<Token<'a>>>,
+    pending: &mut &'a str,
+) -> (&'a str, &'a str, bool) {
+    let mut prefix = std::mem::take(pending);
+    let mut suffix = "";
+    let mut modified = !prefix.is_empty();
+
+    let Some(Token::Text(next)) = tokens.peek_mut() else {
+        return (prefix, suffix, modified);
+    };
+
+    let (lead, mid, _) = split_marks(next);
+    if lead.is_empty() {
+        return (prefix, suffix, modified);
+    }
+
+    modified = true;
+    if prefix.is_empty() {
+        prefix = lead;
+    } else if mid.is_empty() {
+        suffix = lead;
+    } else {
+        prefix = "";
+    }
+    *next = &next[lead.len()..];
+    (prefix, suffix, modified)
+}
+
+fn handle_code_token<'a>(
+    tokens: &mut Peekable<IntoIter<Token<'a>>>,
+    code_token: (&'a str, &'a str),
+    out: &mut String,
+    pending: &mut &'a str,
+) {
+    let (raw, code) = code_token;
+    if !pending.is_empty() && try_fold_matching_emphasis(tokens, pending, code, out) {
+        return;
+    }
+
+    let (prefix, suffix, modified) = consume_code_affixes(tokens, pending);
+    out.push_str(prefix);
+    if modified {
+        push_code(code, out);
+    } else {
+        out.push_str(raw);
+    }
+    out.push_str(suffix);
+}
+
 /// Merge contiguous code and emphasis spans.
 ///
 /// Groups of emphasis markers and inline code with no separating spaces are
@@ -75,11 +174,7 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
         return vec![String::new(); lines.len()];
     }
     let source = lines.join("\n");
-    if !source.contains("`*")
-        && !source.contains("`_")
-        && !source.contains("*`")
-        && !source.contains("_`")
-    {
+    if !has_code_emphasis_adjacent(&source) {
         return lines.to_vec();
     }
     let mut tokens = tokenize_markdown(&source).into_iter().peekable();
@@ -87,66 +182,9 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
     let mut pending = "";
     while let Some(token) = tokens.next() {
         match token {
-            Token::Text(raw) => {
-                if tokens
-                    .peek()
-                    .is_some_and(|t| matches!(t, Token::Code { .. }))
-                {
-                    let (lead, body, trail) = split_marks(raw);
-                    if body.is_empty() && trail.is_empty() {
-                        pending = lead;
-                    } else {
-                        out.push_str(lead);
-                        out.push_str(body);
-                        pending = trail;
-                    }
-                } else {
-                    out.push_str(raw);
-                }
-            }
+            Token::Text(raw) => handle_text_token(raw, tokens.peek(), &mut out, &mut pending),
             Token::Code { raw, code, .. } => {
-                if !pending.is_empty()
-                    && let Some(Token::Text(next)) = tokens.peek()
-                {
-                    let (lead, mid, trail) = split_marks(next);
-                    if mid.is_empty() && trail.is_empty() && lead == pending {
-                        out.push_str(pending);
-                        push_code(code, &mut out);
-                        out.push_str(lead);
-                        pending = "";
-                        tokens.next();
-                        continue;
-                    }
-                }
-                let mut prefix = pending;
-                let mut suffix = "";
-                let mut modified = !pending.is_empty();
-                pending = "";
-                if let Some(Token::Text(next)) = tokens.peek_mut() {
-                    let (lead, mid, _) = split_marks(next);
-                    if !lead.is_empty() {
-                        modified = true;
-                        if prefix.is_empty() {
-                            prefix = lead;
-                        } else if mid.is_empty() {
-                            suffix = lead;
-                        } else {
-                            prefix = "";
-                        }
-                        *next = &next[lead.len()..];
-                    }
-                }
-                if !prefix.is_empty() {
-                    out.push_str(prefix);
-                }
-                if modified {
-                    push_code(code, &mut out);
-                } else {
-                    out.push_str(raw);
-                }
-                if !suffix.is_empty() {
-                    out.push_str(suffix);
-                }
+                handle_code_token(&mut tokens, (raw, code), &mut out, &mut pending);
             }
             Token::Fence(f) => out.push_str(f),
             Token::Newline => out.push('\n'),

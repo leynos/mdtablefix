@@ -69,49 +69,35 @@ mod tests {
     /// Helper to convert `&[&str]` → `Vec<String>`.
     fn s(v: &[&str]) -> Vec<String> { v.iter().copied().map(str::to_string).collect() }
 
+    struct PrefixEmptyCase {
+        lines: Vec<String>,
+        body_is_empty: bool,
+        check_body_equality: bool,
+    }
+
+    struct FrontmatterSplitCase {
+        lines: Vec<String>,
+        prefix_len: usize,
+        body_len: usize,
+        prefix_spot_checks: Vec<(usize, &'static str)>,
+        body_spot_check: Option<&'static str>,
+    }
+
     /// Cases where `prefix` is empty (no frontmatter detected).
     #[rstest]
-    #[case::empty_input_returns_empty_slices(
-        s(&[]),
-        true, // body_is_empty
-        false // check_body_equality
-    )]
-    #[case::no_frontmatter_returns_empty_prefix(
-        s(&["# Heading", "Some text"]),
-        false,
-        true // check body == input lines
-    )]
-    #[case::unmatched_opener_treated_as_body(
-        s(&["---", "Some text", "More text"]),
-        false,
-        false
-    )]
-    #[case::indented_opener_not_recognized(
-        s(&["  ---", "title: Example", "  ---"]),
-        false,
-        false
-    )]
-    #[case::later_dash_block_not_frontmatter(
-        s(&["# Heading", "", "---", "Not frontmatter", "---"]),
-        false,
-        false
-    )]
-    #[case::indented_closer_not_recognized(
-        s(&["---", "title: Example", "  ---  ", "# Heading"]),
-        false,
-        false
-    )]
-    fn prefix_empty_cases(
-        #[case] lines: Vec<String>,
-        #[case] body_is_empty: bool,
-        #[case] check_body_equality: bool,
-    ) {
-        let (prefix, body) = split_leading_yaml_frontmatter(&lines);
+    #[case::empty_input_returns_empty_slices(PrefixEmptyCase { lines: s(&[]), body_is_empty: true, check_body_equality: false })]
+    #[case::no_frontmatter_returns_empty_prefix(PrefixEmptyCase { lines: s(&["# Heading", "Some text"]), body_is_empty: false, check_body_equality: true })]
+    #[case::unmatched_opener_treated_as_body(PrefixEmptyCase { lines: s(&["---", "Some text", "More text"]), body_is_empty: false, check_body_equality: false })]
+    #[case::indented_opener_not_recognized(PrefixEmptyCase { lines: s(&["  ---", "title: Example", "  ---"]), body_is_empty: false, check_body_equality: false })]
+    #[case::later_dash_block_not_frontmatter(PrefixEmptyCase { lines: s(&["# Heading", "", "---", "Not frontmatter", "---"]), body_is_empty: false, check_body_equality: false })]
+    #[case::indented_closer_not_recognized(PrefixEmptyCase { lines: s(&["---", "title: Example", "  ---  ", "# Heading"]), body_is_empty: false, check_body_equality: false })]
+    fn prefix_empty_cases(#[case] case: PrefixEmptyCase) {
+        let (prefix, body) = split_leading_yaml_frontmatter(&case.lines);
         assert!(prefix.is_empty());
-        if body_is_empty {
+        if case.body_is_empty {
             assert!(body.is_empty());
-        } else if check_body_equality {
-            assert_eq!(body, &lines);
+        } else if case.check_body_equality {
+            assert_eq!(body, &case.lines);
         } else {
             assert!(!body.is_empty());
         }
@@ -119,72 +105,20 @@ mod tests {
 
     /// Cases where frontmatter is detected (non-empty `prefix`).
     #[rstest]
-    #[case::detects_frontmatter_with_triple_dash_closer(
-        s(&["---", "title: Example", "author: Test", "---", "# Heading", "Body text"]),
-        4,      // prefix_len
-        2,      // body_len
-        Some((0, "---")),
-        Some((3, "---")),
-        Some("# Heading")
-    )]
-    #[case::detects_frontmatter_with_triple_dot_closer(
-        s(&["---", "title: Example", "...", "# Heading"]),
-        3,
-        1,
-        Some((2, "...")),
-        None,
-        Some("# Heading")
-    )]
-    #[case::frontmatter_with_empty_body(
-        s(&["---", "title: Example", "---"]),
-        3,
-        0,
-        None,
-        None,
-        None
-    )]
-    #[case::frontmatter_only_no_body(
-        s(&["---", "---"]),
-        2,
-        0,
-        Some((1, "---")),
-        None,
-        None
-    )]
-    #[case::trailing_whitespace_on_closer_is_trimmed(
-        s(&["---", "title: Example", "---  ", "# Heading"]),
-        3,
-        1,
-        None,
-        None,
-        None
-    )]
-    #[case::multiline_yaml_values_preserved(
-        s(&["---", "description: |", "  This is a multi-line", "  YAML value", "---", "# Content"]),
-        5,
-        1,
-        None,
-        None,
-        Some("# Content")
-    )]
-    fn frontmatter_split_cases(
-        #[case] lines: Vec<String>,
-        #[case] prefix_len: usize,
-        #[case] body_len: usize,
-        #[case] prefix_spot_check: Option<(usize, &str)>,
-        #[case] prefix_spot_check_2: Option<(usize, &str)>,
-        #[case] body_spot_check: Option<&str>,
-    ) {
-        let (prefix, body) = split_leading_yaml_frontmatter(&lines);
-        assert_eq!(prefix.len(), prefix_len);
-        assert_eq!(body.len(), body_len);
-        if let Some((idx, expected)) = prefix_spot_check {
+    #[case::detects_frontmatter_with_triple_dash_closer(FrontmatterSplitCase { lines: s(&["---", "title: Example", "author: Test", "---", "# Heading", "Body text"]), prefix_len: 4, body_len: 2, prefix_spot_checks: vec![(0, "---"), (3, "---")], body_spot_check: Some("# Heading") })]
+    #[case::detects_frontmatter_with_triple_dot_closer(FrontmatterSplitCase { lines: s(&["---", "title: Example", "...", "# Heading"]), prefix_len: 3, body_len: 1, prefix_spot_checks: vec![(2, "...")], body_spot_check: Some("# Heading") })]
+    #[case::frontmatter_with_empty_body(FrontmatterSplitCase { lines: s(&["---", "title: Example", "---"]), prefix_len: 3, body_len: 0, prefix_spot_checks: vec![], body_spot_check: None })]
+    #[case::frontmatter_only_no_body(FrontmatterSplitCase { lines: s(&["---", "---"]), prefix_len: 2, body_len: 0, prefix_spot_checks: vec![(1, "---")], body_spot_check: None })]
+    #[case::trailing_whitespace_on_closer_is_trimmed(FrontmatterSplitCase { lines: s(&["---", "title: Example", "---  ", "# Heading"]), prefix_len: 3, body_len: 1, prefix_spot_checks: vec![], body_spot_check: None })]
+    #[case::multiline_yaml_values_preserved(FrontmatterSplitCase { lines: s(&["---", "description: |", "  This is a multi-line", "  YAML value", "---", "# Content"]), prefix_len: 5, body_len: 1, prefix_spot_checks: vec![], body_spot_check: Some("# Content") })]
+    fn frontmatter_split_cases(#[case] case: FrontmatterSplitCase) {
+        let (prefix, body) = split_leading_yaml_frontmatter(&case.lines);
+        assert_eq!(prefix.len(), case.prefix_len);
+        assert_eq!(body.len(), case.body_len);
+        for (idx, expected) in case.prefix_spot_checks {
             assert_eq!(prefix[idx], expected);
         }
-        if let Some((idx, expected)) = prefix_spot_check_2 {
-            assert_eq!(prefix[idx], expected);
-        }
-        if let Some(expected) = body_spot_check {
+        if let Some(expected) = case.body_spot_check {
             assert_eq!(body[0], expected);
         }
     }

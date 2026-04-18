@@ -8,6 +8,8 @@
 //! The [`Token`] enum and [`tokenize_markdown`] function are public so callers
 //! can perform custom token-based processing.
 
+use std::borrow::Cow;
+
 mod block;
 mod fence;
 mod inline;
@@ -17,7 +19,7 @@ mod tokenize;
 use block::{BLOCKQUOTE_RE, BULLET_RE, FOOTNOTE_RE};
 pub(crate) use block::{BlockKind, classify_block};
 pub use fence::{FenceTracker, is_fence};
-use paragraph::{flush_paragraph, handle_prefix_line};
+use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
 ///
@@ -46,6 +48,74 @@ fn is_indented_code_line(line: &str) -> bool {
     indent_width >= 4 && line.chars().any(|c| !c.is_whitespace())
 }
 
+fn is_table_or_separator(line: &str) -> bool {
+    line.trim_start().starts_with('|') || crate::table::SEP_RE.is_match(line.trim())
+}
+
+fn is_passthrough_block(line: &str) -> bool {
+    is_table_or_separator(line)
+        || matches!(
+            classify_block(line),
+            Some(BlockKind::Heading | BlockKind::MarkdownlintDirective)
+        )
+        || line.trim().is_empty()
+        || is_indented_code_line(line)
+}
+
+fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
+    if let Some(cap) = BULLET_RE.captures(line) {
+        let prefix = cap.get(1).expect("bullet regex capture").as_str();
+        let rest = cap.get(2).expect("bullet regex remainder capture").as_str();
+        return Some(PrefixLine {
+            prefix: Cow::Borrowed(prefix),
+            rest,
+            repeat_prefix: false,
+        });
+    }
+
+    if let Some(cap) = FOOTNOTE_RE.captures(line) {
+        let prefix = cap.get(1).expect("footnote prefix capture").as_str();
+        let marker = cap.get(2).expect("footnote marker capture").as_str();
+        let rest = cap
+            .get(3)
+            .expect("footnote regex remainder capture")
+            .as_str();
+        return Some(PrefixLine {
+            prefix: Cow::Owned(format!("{prefix}{marker}")),
+            rest,
+            repeat_prefix: false,
+        });
+    }
+
+    BLOCKQUOTE_RE.captures(line).map(|cap| PrefixLine {
+        prefix: Cow::Borrowed(cap.get(1).expect("blockquote prefix capture").as_str()),
+        rest: cap
+            .get(2)
+            .expect("blockquote regex remainder capture")
+            .as_str(),
+        repeat_prefix: true,
+    })
+}
+
+fn line_break_parts(line: &str) -> (String, bool) {
+    let trimmed_end = line.trim_end();
+    let text_without_html_breaks = trimmed_end
+        .trim_end_matches("<br>")
+        .trim_end_matches("<br/>")
+        .trim_end_matches("<br />");
+
+    let is_trailing_spaces = line.ends_with("  ");
+    let is_html_br = trimmed_end != text_without_html_breaks;
+    let backslash_count = trimmed_end.chars().rev().take_while(|&c| c == '\\').count();
+    let is_backslash_escape = backslash_count % 2 == 1;
+    let hard_break = is_trailing_spaces || is_html_br || is_backslash_escape;
+    let text = text_without_html_breaks
+        .trim_start()
+        .trim_end_matches(' ')
+        .to_string();
+    (text, hard_break)
+}
+
 /// Wrap text lines to the given width.
 ///
 /// # Panics
@@ -53,122 +123,37 @@ fn is_indented_code_line(line: &str) -> bool {
 #[must_use]
 pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
-    let mut buf: Vec<(String, bool)> = Vec::new();
-    let mut indent = String::new();
+    let mut state = ParagraphState::default();
+    let mut writer = ParagraphWriter::new(&mut out, width);
     // Track fenced code blocks so wrapping honours shared fence semantics.
     let mut fence_tracker = FenceTracker::default();
 
     for line in lines {
-        if fence::handle_fence_line(
-            &mut out,
-            &mut buf,
-            &mut indent,
-            width,
-            line,
-            &mut fence_tracker,
-        ) {
+        if fence::handle_fence_line(line, &mut writer, &mut state, &mut fence_tracker) {
             continue;
         }
 
         if fence_tracker.in_fence() {
-            out.push(line.clone());
+            writer.push_verbatim(&mut state, line);
             continue;
         }
 
-        if line.trim_start().starts_with('|') || crate::table::SEP_RE.is_match(line.trim()) {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
-            out.push(line.clone());
+        if is_passthrough_block(line) {
+            writer.push_verbatim(&mut state, line);
             continue;
         }
 
-        if matches!(
-            classify_block(line),
-            Some(BlockKind::Heading | BlockKind::MarkdownlintDirective)
-        ) {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
-            out.push(line.clone());
+        if let Some(prefix_line) = prefix_line(line) {
+            writer.handle_prefix_line(&mut state, &prefix_line);
             continue;
         }
 
-        if line.trim().is_empty() {
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
-            out.push(String::new());
-            continue;
-        }
-
-        if let Some(cap) = BULLET_RE.captures(line) {
-            let prefix = cap.get(1).expect("bullet regex capture").as_str();
-            let rest = cap.get(2).expect("bullet regex remainder capture").as_str();
-            handle_prefix_line(&mut out, &mut buf, &mut indent, width, prefix, rest, false);
-            continue;
-        }
-
-        if let Some(cap) = FOOTNOTE_RE.captures(line) {
-            let prefix = format!("{}{}", &cap[1], &cap[2]);
-            let rest = cap
-                .get(3)
-                .expect("footnote regex remainder capture")
-                .as_str();
-            handle_prefix_line(&mut out, &mut buf, &mut indent, width, &prefix, rest, false);
-            continue;
-        }
-
-        if let Some(cap) = BLOCKQUOTE_RE.captures(line) {
-            let prefix = cap.get(1).expect("blockquote prefix capture").as_str();
-            let rest = cap
-                .get(2)
-                .expect("blockquote regex remainder capture")
-                .as_str();
-            handle_prefix_line(&mut out, &mut buf, &mut indent, width, prefix, rest, true);
-            continue;
-        }
-
-        if is_indented_code_line(line) {
-            // Preserve indented code blocks verbatim so wrapping does not merge them into
-            // paragraphs.
-            flush_paragraph(&mut out, &buf, &indent, width);
-            buf.clear();
-            indent.clear();
-            out.push(line.clone());
-            continue;
-        }
-
-        if buf.is_empty() {
-            indent = line.chars().take_while(|c| c.is_whitespace()).collect();
-        }
-        let trimmed_end = line.trim_end();
-        let text_without_html_breaks = trimmed_end
-            .trim_end_matches("<br>")
-            .trim_end_matches("<br/>")
-            .trim_end_matches("<br />");
-
-        let is_trailing_spaces = line.ends_with("  ");
-        let is_html_br = trimmed_end != text_without_html_breaks;
-        let backslash_count = line
-            .trim_end()
-            .chars()
-            .rev()
-            .take_while(|&c| c == '\\')
-            .count();
-        let is_backslash_escape = backslash_count % 2 == 1;
-
-        let hard_break = is_trailing_spaces || is_html_br || is_backslash_escape;
-
-        let text = text_without_html_breaks
-            .trim_start()
-            .trim_end_matches(' ')
-            .to_string();
-
-        buf.push((text, hard_break));
+        state.note_indent(line);
+        let (text, hard_break) = line_break_parts(line);
+        state.push(text, hard_break);
     }
 
-    flush_paragraph(&mut out, &buf, &indent, width);
+    writer.flush_paragraph(&mut state);
     out
 }
 

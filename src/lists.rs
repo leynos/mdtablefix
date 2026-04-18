@@ -61,21 +61,32 @@ fn is_plain_paragraph_line(line: &str) -> bool {
     )
 }
 
-fn handle_paragraph_restart(
-    indent: usize,
-    line: &str,
-    prev_blank: bool,
-    indent_stack: &mut Vec<usize>,
-    counters: &mut HashMap<usize, usize>,
-) -> bool {
-    let inclusive = prev_blank
-        && indent_stack
-            .last()
-            .is_some_and(|&d| indent <= d && is_plain_paragraph_line(line));
-    if inclusive {
-        prune_deeper(indent, true, indent_stack, counters);
+struct ListState {
+    indent_stack: Vec<usize>,
+    counters: HashMap<usize, usize>,
+}
+
+impl ListState {
+    fn prune_deeper(&mut self, indent: usize, inclusive: bool) {
+        prune_deeper(
+            indent,
+            inclusive,
+            &mut self.indent_stack,
+            &mut self.counters,
+        );
     }
-    inclusive
+
+    fn handle_paragraph_restart(&mut self, indent: usize, line: &str, prev_blank: bool) -> bool {
+        let inclusive = prev_blank
+            && self
+                .indent_stack
+                .last()
+                .is_some_and(|&depth| indent <= depth && is_plain_paragraph_line(line));
+        if inclusive {
+            self.prune_deeper(indent, true);
+        }
+        inclusive
+    }
 }
 
 /// Renumber ordered Markdown list items across the given lines.
@@ -86,8 +97,10 @@ fn handle_paragraph_restart(
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
-    let mut indent_stack: Vec<usize> = Vec::new();
-    let mut counters: HashMap<usize, usize> = HashMap::new();
+    let mut state = ListState {
+        indent_stack: Vec::new(),
+        counters: HashMap::new(),
+    };
     // Track fenced code blocks consistently across list processing.
     let mut fences = FenceTracker::default();
     #[allow(clippy::unnecessary_map_or)]
@@ -110,11 +123,11 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             continue;
         }
         if let Some((indent, indent_str, sep, rest)) = parse_numbered(line) {
-            prune_deeper(indent, false, &mut indent_stack, &mut counters);
-            if indent_stack.last().is_none_or(|&d| d < indent) {
-                indent_stack.push(indent);
+            state.prune_deeper(indent, false);
+            if state.indent_stack.last().is_none_or(|&d| d < indent) {
+                state.indent_stack.push(indent);
             }
-            let num = counters.entry(indent).or_insert(1);
+            let num = state.counters.entry(indent).or_insert(1);
             let current = *num;
             *num += 1;
             out.push(format!("{indent_str}{current}.{sep}{rest}"));
@@ -128,16 +141,15 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
         if HEADING_RE.is_match(line) || THEMATIC_BREAK_RE.is_match(line.trim_end()) {
-            indent_stack.clear();
-            counters.clear();
+            state.indent_stack.clear();
+            state.counters.clear();
             out.push(line.clone());
             prev_blank = false;
             continue;
         }
-        let did_inclusive =
-            handle_paragraph_restart(indent, line, prev_blank, &mut indent_stack, &mut counters);
+        let did_inclusive = state.handle_paragraph_restart(indent, line, prev_blank);
         if !did_inclusive {
-            prune_deeper(indent, false, &mut indent_stack, &mut counters);
+            state.prune_deeper(indent, false);
         }
         out.push(line.clone());
         prev_blank = false;

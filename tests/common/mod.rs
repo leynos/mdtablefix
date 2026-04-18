@@ -52,29 +52,41 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
 
     let mut open: Option<usize> = None;
     for line in output {
-        let chars: Vec<char> = line.chars().collect();
-        let mut i = 0;
-        while i < chars.len() {
-            if chars[i] == '`' {
-                let mut len = 0;
-                while i < chars.len() && chars[i] == '`' {
-                    len += 1;
-                    i += 1;
-                }
-                if let Some(open_len) = open {
-                    if open_len == len {
-                        open = None;
-                    }
-                } else {
-                    open = Some(len);
-                }
-            } else {
-                i += 1;
-            }
-        }
+        scan_code_spans(line, &mut open);
         assert!(open.is_none(), "code span split across lines");
     }
     assert!(open.is_none(), "unclosed code span");
+}
+
+fn scan_code_spans(line: &str, open: &mut Option<usize>) {
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] != '`' {
+            i += 1;
+            continue;
+        }
+
+        let len = count_backticks(&chars, &mut i);
+        toggle_code_span(open, len);
+    }
+}
+
+fn count_backticks(chars: &[char], index: &mut usize) -> usize {
+    let mut len = 0;
+    while *index < chars.len() && chars[*index] == '`' {
+        len += 1;
+        *index += 1;
+    }
+    len
+}
+
+fn toggle_code_span(open: &mut Option<usize>, len: usize) {
+    if open.is_some_and(|open_len| open_len == len) {
+        *open = None;
+    } else {
+        *open = Some(len);
+    }
 }
 
 /// Assert that every line in a blockquote starts with the given prefix and is at most 80

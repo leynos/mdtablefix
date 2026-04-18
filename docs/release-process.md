@@ -1,7 +1,8 @@
 # Release Process
 
 This project publishes prebuilt binaries for multiple operating systems and
-architectures.
+architectures. It also publishes `cargo-binstall` archives for the supported
+Linux release targets.
 
 The project targets the stable Rust `1.89.0` toolchain, as specified in
 `rust-toolchain.toml`.
@@ -14,10 +15,7 @@ The GitHub Actions workflow `.github/workflows/release.yml` builds and uploads
 binaries for:
 
 - Linux (x86_64 and aarch64)
-- FreeBSD (x86_64 and aarch64)
-- macOS (x86_64 and aarch64)
-- Windows (x86_64 and aarch64)
-- OpenBSD (x86_64 and aarch64)
+- FreeBSD (x86_64)
 
 Releases start from tags named `v<major>.<minor>.<patch>`. The workflow checks
 that the tag's version, without the leading `v`, matches the `Cargo.toml`
@@ -26,6 +24,12 @@ that the tag's version, without the leading `v`, matches the `Cargo.toml`
 Each binary is named using the pattern `mdtablefix-<os>-<arch>` with an `.exe`
 suffix on Windows.
 
+For Linux `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, the
+workflow also produces `cargo-binstall` archives named
+`mdtablefix-<version>-<target>.tar.gz`. Each archive contains the `mdtablefix`
+binary at the archive root, matching the `Cargo.toml`
+`[package.metadata.binstall]` configuration.
+
 Binaries are uploaded as soon as they are built, so they are available from the
 workflow run while other targets build.
 
@@ -33,13 +37,15 @@ workflow run while other targets build.
 
 The `release.yml` workflow defines a matrix of operating system and
 architecture combinations. Each entry includes the target triple used by
-`cross` and a filename extension for Windows. During the build job, `cross`
-compiles a release binary for every matrix row.
+`cross` and whether the target also needs a `cargo-binstall` archive. During
+the build job, `cross` compiles a release binary for every matrix row.
 
 `cross` is installed from a specific git tag to avoid unexpected behaviour from
 its main branch. Each binary is placed in an `artifacts/<os>-<arch>` directory
 using the naming pattern `mdtablefix-<os>-<arch>[.exe]`. An SHA-256 checksum is
-written alongside each binary for download verification.
+written alongside each binary for download verification. The Linux
+`cargo-binstall` targets additionally produce
+`mdtablefix-<version>-<target>.tar.gz` plus a matching SHA-256 checksum.
 
 After every build completes, the artefact is uploaded so that the GitHub
 Actions interface provides it immediately. Once the matrix has finished, the

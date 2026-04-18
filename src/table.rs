@@ -144,16 +144,10 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
 }
 
 /// Calculates column widths and formats the final table output.
-fn calculate_and_format(
-    cleaned: &[Vec<String>],
-    output_rows: &[Vec<String>],
-    sep_cells: Option<Vec<String>>,
-    max_cols: usize,
-    indent: &str,
-) -> Vec<String> {
-    let widths = crate::reflow::calculate_widths(cleaned, max_cols);
-    let out = crate::reflow::format_rows(output_rows, &widths, indent);
-    crate::reflow::insert_separator(out, sep_cells, &widths, indent)
+fn calculate_and_format(parsed: &ParsedTable, indent: &str) -> Vec<String> {
+    let widths = crate::reflow::calculate_widths(&parsed.cleaned, parsed.max_cols);
+    let out = crate::reflow::format_rows(&parsed.output_rows, &widths, indent);
+    crate::reflow::insert_separator(out, parsed.sep_cells.clone(), &widths, indent)
 }
 
 /// Reflow a Markdown table so columns align uniformly.
@@ -188,13 +182,7 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         return lines.to_vec();
     };
 
-    calculate_and_format(
-        &parsed.cleaned,
-        &parsed.output_rows,
-        parsed.sep_cells,
-        parsed.max_cols,
-        &indent,
-    )
+    calculate_and_format(&parsed, &indent)
 }
 
 #[cfg(test)]

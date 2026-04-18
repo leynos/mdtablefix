@@ -18,10 +18,12 @@ jobs:
             arch: x86_64
             target: x86_64-unknown-linux-gnu
             ext: ""
+            cargo_binstall_archive: true
           - os: linux
             arch: aarch64
             target: aarch64-unknown-linux-gnu
             ext: ""
+            cargo_binstall_archive: true
 #          - os: windows
 #            arch: x86_64
 #            target: x86_64-pc-windows-msvc
@@ -42,6 +44,7 @@ jobs:
             arch: x86_64
             target: x86_64-unknown-freebsd
             ext: ""
+            cargo_binstall_archive: false
 #          - os: freebsd
 #            arch: aarch64
 #            target: aarch64-unknown-freebsd
@@ -104,11 +107,24 @@ jobs:
         run: cross +stable build --release --target ${{ matrix.target }}
       - name: Prepare artifact
         run: |
-          mkdir -p artifacts/${{ matrix.os }}-${{ matrix.arch }}
-          cp target/${{ matrix.target }}/release/${{ env.REPO_NAME }}${{ matrix.ext }} \
-            artifacts/${{ matrix.os }}-${{ matrix.arch }}/${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
-          sha256sum artifacts/${{ matrix.os }}-${{ matrix.arch }}/${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} > \
-            artifacts/${{ matrix.os }}-${{ matrix.arch }}/${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}.sha256
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          artifact_dir="artifacts/${{ matrix.os }}-${{ matrix.arch }}"
+          binary_path="target/${{ matrix.target }}/release/${{ env.REPO_NAME }}${{ matrix.ext }}"
+          binary_name="${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
+
+          mkdir -p "${artifact_dir}"
+          cp "${binary_path}" "${artifact_dir}/${binary_name}"
+          sha256sum "${artifact_dir}/${binary_name}" > \
+            "${artifact_dir}/${binary_name}.sha256"
+
+          if [ "${{ matrix.cargo_binstall_archive }}" = "true" ]; then
+            archive_name="${{ env.REPO_NAME }}-${version}-${{ matrix.target }}.tar.gz"
+            tar -C "target/${{ matrix.target }}/release" -czf \
+              "${artifact_dir}/${archive_name}" "${{ env.REPO_NAME }}${{ matrix.ext }}"
+            sha256sum "${artifact_dir}/${archive_name}" > \
+              "${artifact_dir}/${archive_name}.sha256"
+          fi
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:

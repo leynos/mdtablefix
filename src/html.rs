@@ -52,15 +52,7 @@ fn collect_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
     match &handle.data {
         NodeData::Text { contents } => {
             for ch in contents.borrow().chars() {
-                if ch.is_whitespace() {
-                    *last_space = true;
-                } else {
-                    if *last_space && !out.is_empty() {
-                        out.push(' ');
-                    }
-                    out.push(ch);
-                    *last_space = false;
-                }
+                push_collapsed_text_char(ch, out, last_space);
             }
         }
         NodeData::Element { name, .. } => {
@@ -78,6 +70,18 @@ fn collect_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
         }
         _ => {}
     }
+}
+
+fn push_collapsed_text_char(ch: char, out: &mut String, last_space: &mut bool) {
+    if ch.is_whitespace() {
+        *last_space = true;
+        return;
+    }
+    if *last_space && !out.is_empty() {
+        out.push(' ');
+    }
+    out.push(ch);
+    *last_space = false;
 }
 
 /// Returns `true` if `handle` is an HTML element with the given tag name.
@@ -204,26 +208,43 @@ fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
     out
 }
 
-/// Appends HTML table lines, tracking `<table>` depth and converting them to Markdown when closed.
-///
-/// Tracks the nesting depth of `<table>` tags, appending each line to the buffer. When all opened
-/// tables are closed (depth reaches zero), converts the buffered HTML table lines to Markdown and
-/// appends them to the output vector. Resets the buffer and updates the HTML state accordingly.
-fn push_html_line(
-    line: &str,
-    buf: &mut Vec<String>,
-    depth: &mut usize,
-    in_html: &mut bool,
-    out: &mut Vec<String>,
-) {
+fn append_html_table_line(line: &str, buf: &mut Vec<String>, depth: &mut usize) {
     buf.push(line.to_string());
     *depth += TABLE_START_RE.find_iter(line).count();
     if TABLE_END_RE.is_match(line) {
         *depth = depth.saturating_sub(TABLE_END_RE.find_iter(line).count());
-        if *depth == 0 {
-            out.extend(html_table_to_markdown(buf));
-            buf.clear();
-            *in_html = false;
+    }
+}
+
+fn flush_completed_html_table(buf: &mut Vec<String>, depth: usize, out: &mut Vec<String>) -> bool {
+    if depth != 0 {
+        return false;
+    }
+    out.extend(table_lines_to_markdown(buf));
+    buf.clear();
+    true
+}
+
+#[derive(Default)]
+struct HtmlTableState {
+    buf: Vec<String>,
+    depth: usize,
+    in_html: bool,
+}
+
+impl HtmlTableState {
+    fn flush_raw(&mut self, out: &mut Vec<String>) {
+        if !self.buf.is_empty() {
+            out.append(&mut self.buf);
+        }
+        self.depth = 0;
+        self.in_html = false;
+    }
+
+    fn push_html_line(&mut self, line: &str, out: &mut Vec<String>) {
+        append_html_table_line(line, &mut self.buf, &mut self.depth);
+        if flush_completed_html_table(&mut self.buf, self.depth, out) {
+            self.in_html = false;
         }
     }
 }
@@ -258,15 +279,8 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 
     for line in lines {
         if depth > 0 || TABLE_START_RE.is_match(line.trim_start()) {
-            buf.push(line.clone());
-            depth += TABLE_START_RE.find_iter(line).count();
-            if TABLE_END_RE.is_match(line) {
-                depth = depth.saturating_sub(TABLE_END_RE.find_iter(line).count());
-                if depth == 0 {
-                    out.extend(table_lines_to_markdown(&buf));
-                    buf.clear();
-                }
-            }
+            append_html_table_line(line, &mut buf, &mut depth);
+            let _ = flush_completed_html_table(&mut buf, depth, &mut out);
             continue;
         }
 
@@ -306,17 +320,13 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 /// ```
 pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
-    let mut buf = Vec::new();
-    let mut depth = 0usize;
-    let mut in_html = false;
+    let mut html_state = HtmlTableState::default();
     let mut in_code = false;
 
     for line in lines {
         if is_fence(line).is_some() {
-            if in_html {
-                out.append(&mut buf);
-                in_html = false;
-                depth = 0;
+            if html_state.in_html {
+                html_state.flush_raw(&mut out);
             }
             in_code = !in_code;
             out.push(line.clone());
@@ -328,22 +338,22 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        if in_html {
-            push_html_line(line, &mut buf, &mut depth, &mut in_html, &mut out);
+        if html_state.in_html {
+            html_state.push_html_line(line, &mut out);
             continue;
         }
 
         if TABLE_START_RE.is_match(line.trim_start()) {
-            in_html = true;
-            push_html_line(line, &mut buf, &mut depth, &mut in_html, &mut out);
+            html_state.in_html = true;
+            html_state.push_html_line(line, &mut out);
             continue;
         }
 
         out.push(line.clone());
     }
 
-    if !buf.is_empty() {
-        out.extend(buf);
+    if !html_state.buf.is_empty() {
+        out.extend(html_state.buf);
     }
 
     out

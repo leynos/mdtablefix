@@ -99,25 +99,34 @@ fn collect_reference_mapping(lines: &[String]) -> HashMap<usize, usize> {
         }
         for token in tokenize_markdown(line) {
             if let Token::Text(text) = token {
-                for caps in FOOTNOTE_REF_RE.captures_iter(text) {
-                    let Some(mat) = caps.get(0) else {
-                        continue;
-                    };
-                    if is_definition_like(text, &mat) {
-                        continue;
-                    }
-                    if let Ok(number) = caps["num"].parse::<usize>() {
-                        if mapping.contains_key(&number) {
-                            continue;
-                        }
-                        mapping.insert(number, next);
-                        next += 1;
-                    }
-                }
+                collect_reference_mapping_from_text(text, &mut mapping, &mut next);
             }
         }
     }
     mapping
+}
+
+fn collect_reference_mapping_from_text(
+    text: &str,
+    mapping: &mut HashMap<usize, usize>,
+    next: &mut usize,
+) {
+    for caps in FOOTNOTE_REF_RE.captures_iter(text) {
+        let Some(mat) = caps.get(0) else {
+            continue;
+        };
+        if is_definition_like(text, &mat) {
+            continue;
+        }
+        let Ok(number) = caps["num"].parse::<usize>() else {
+            continue;
+        };
+        if mapping.contains_key(&number) {
+            continue;
+        }
+        mapping.insert(number, *next);
+        *next += 1;
+    }
 }
 
 #[derive(Clone)]
@@ -270,6 +279,18 @@ struct DefinitionUpdates {
     is_definition_line: Vec<bool>,
 }
 
+struct DefinitionScanContext<'a> {
+    mapping: &'a mut HashMap<usize, usize>,
+    next_number: &'a mut usize,
+    numeric_list_range: Option<(usize, usize)>,
+    skip_numeric_conversion: bool,
+}
+
+struct DefinitionAccumulator {
+    definitions: Vec<DefinitionLine>,
+    is_definition_line: Vec<bool>,
+}
+
 fn assign_new_number(
     mapping: &mut HashMap<usize, usize>,
     number: usize,
@@ -296,22 +317,58 @@ fn should_convert_numeric_line(
     numeric_range.is_some_and(|(start, end)| index >= start && index < end)
 }
 
-fn collect_definition_updates(
-    lines: &[String],
+fn definition_line_from_parts(
+    index: usize,
+    parts: super::parsing::DefinitionParts<'_>,
     mapping: &mut HashMap<usize, usize>,
-) -> DefinitionUpdates {
-    let mut next_number = mapping.values().copied().max().unwrap_or(0) + 1;
-    let mut definitions = Vec::new();
-    let mut is_definition_line = vec![false; lines.len()];
-    let mut numeric_candidates: Vec<NumericCandidate> = Vec::new();
-    let numeric_list_range = footnote_block_range(lines);
-    let skip_numeric_conversion = numeric_list_range
-        .as_ref()
-        .is_some_and(|(start, _)| has_existing_footnote_block(lines, *start));
+    next_number: &mut usize,
+) -> DefinitionLine {
+    let new_number = assign_new_number(mapping, parts.number, next_number);
+    let rewritten_rest = rewrite_tokens(parts.rest, mapping);
+    let mut line = String::with_capacity(parts.prefix.len() + rewritten_rest.len() + 8);
+    line.push_str(parts.prefix);
+    write!(&mut line, "[^{new_number}]:").expect("write to string cannot fail");
+    line.push_str(&rewritten_rest);
+    DefinitionLine {
+        index,
+        new_number,
+        line,
+    }
+}
 
+fn numeric_candidate_from_line(line: &str, index: usize) -> Option<NumericCandidate> {
+    let caps = FOOTNOTE_LINE_RE.captures(line)?;
+    let number = caps["num"].parse::<usize>().ok()?;
+    let indent = caps.name("indent").map_or("", |m| m.as_str()).to_string();
+    let rest = caps.name("rest").map_or("", |m| m.as_str()).to_string();
+    let num_match = caps
+        .name("num")
+        .expect("numeric list capture missing number");
+    let rest_match = caps
+        .name("rest")
+        .expect("numeric list capture missing rest");
+    let whitespace = line[num_match.end() + 1..rest_match.start()].to_string();
+    Some(NumericCandidate {
+        index,
+        number,
+        indent,
+        whitespace,
+        rest,
+    })
+}
+
+fn collect_scan_updates(
+    lines: &[String],
+    ctx: &mut DefinitionScanContext<'_>,
+) -> (DefinitionAccumulator, Vec<NumericCandidate>) {
+    let mut acc = DefinitionAccumulator {
+        definitions: Vec::new(),
+        is_definition_line: vec![false; lines.len()],
+    };
+    let mut numeric_candidates = Vec::new();
     let mut in_fence = false;
 
-    for (idx, line) in lines.iter().enumerate() {
+    for (index, line) in lines.iter().enumerate() {
         if is_fence_line(line) {
             in_fence = !in_fence;
             continue;
@@ -321,67 +378,76 @@ fn collect_definition_updates(
         }
 
         if let Some(parts) = parse_definition(line) {
-            let new_number = assign_new_number(mapping, parts.number, &mut next_number);
-            let rewritten_rest = rewrite_tokens(parts.rest, mapping);
-            let mut new_line = String::with_capacity(parts.prefix.len() + rewritten_rest.len() + 8);
-            new_line.push_str(parts.prefix);
-            write!(&mut new_line, "[^{new_number}]:").expect("write to string cannot fail");
-            new_line.push_str(&rewritten_rest);
-            definitions.push(DefinitionLine {
-                index: idx,
-                new_number,
-                line: new_line,
-            });
-            is_definition_line[idx] = true;
-        } else if should_convert_numeric_line(idx, numeric_list_range, skip_numeric_conversion)
-            && let Some(caps) = FOOTNOTE_LINE_RE.captures(line)
+            acc.definitions.push(definition_line_from_parts(
+                index,
+                parts,
+                ctx.mapping,
+                ctx.next_number,
+            ));
+            acc.is_definition_line[index] = true;
+            continue;
+        }
+
+        if !should_convert_numeric_line(index, ctx.numeric_list_range, ctx.skip_numeric_conversion)
         {
-            if mapping.is_empty() && definitions.is_empty() {
-                continue;
-            }
-            let Ok(number) = caps["num"].parse::<usize>() else {
-                continue;
-            };
-            let indent = caps.name("indent").map_or("", |m| m.as_str()).to_string();
-            let rest = caps.name("rest").map_or("", |m| m.as_str()).to_string();
-            let num_match = caps
-                .name("num")
-                .expect("numeric list capture missing number");
-            let rest_match = caps
-                .name("rest")
-                .expect("numeric list capture missing rest");
-            let whitespace = line[num_match.end() + 1..rest_match.start()].to_string();
-            numeric_candidates.push(NumericCandidate {
-                index: idx,
-                number,
-                indent,
-                whitespace,
-                rest,
-            });
+            continue;
+        }
+        if ctx.mapping.is_empty() && acc.definitions.is_empty() {
+            continue;
+        }
+        if let Some(candidate) = numeric_candidate_from_line(line, index) {
+            numeric_candidates.push(candidate);
         }
     }
 
+    (acc, numeric_candidates)
+}
+
+fn finalize_numeric_candidates(
+    numeric_candidates: Vec<NumericCandidate>,
+    ctx: &mut DefinitionScanContext<'_>,
+    acc: &mut DefinitionAccumulator,
+) {
     for candidate in numeric_candidates.into_iter().rev() {
-        let new_number = assign_new_number(mapping, candidate.number, &mut next_number);
-        let rewritten_rest = rewrite_tokens(&candidate.rest, mapping);
-        let mut new_line = String::with_capacity(
+        let new_number = assign_new_number(ctx.mapping, candidate.number, ctx.next_number);
+        let rewritten_rest = rewrite_tokens(&candidate.rest, ctx.mapping);
+        let mut line = String::with_capacity(
             candidate.indent.len() + candidate.whitespace.len() + rewritten_rest.len() + 8,
         );
-        new_line.push_str(&candidate.indent);
-        write!(&mut new_line, "[^{new_number}]:").expect("write to string cannot fail");
-        new_line.push_str(&candidate.whitespace);
-        new_line.push_str(&rewritten_rest);
-        definitions.push(DefinitionLine {
+        line.push_str(&candidate.indent);
+        write!(&mut line, "[^{new_number}]:").expect("write to string cannot fail");
+        line.push_str(&candidate.whitespace);
+        line.push_str(&rewritten_rest);
+        acc.definitions.push(DefinitionLine {
             index: candidate.index,
             new_number,
-            line: new_line,
+            line,
         });
-        is_definition_line[candidate.index] = true;
+        acc.is_definition_line[candidate.index] = true;
     }
+}
+
+fn collect_definition_updates(
+    lines: &[String],
+    mapping: &mut HashMap<usize, usize>,
+) -> DefinitionUpdates {
+    let mut next_number = mapping.values().copied().max().unwrap_or(0) + 1;
+    let numeric_list_range = footnote_block_range(lines);
+    let skip_numeric_conversion = numeric_list_range
+        .as_ref()
+        .is_some_and(|(start, _)| has_existing_footnote_block(lines, *start));
+    let mut ctx = DefinitionScanContext {
+        mapping,
+        next_number: &mut next_number,
+        numeric_list_range,
+        skip_numeric_conversion,
+    };
+    let (mut acc, numeric_candidates) = collect_scan_updates(lines, &mut ctx);
+    finalize_numeric_candidates(numeric_candidates, &mut ctx, &mut acc);
 
     DefinitionUpdates {
-        definitions,
-        is_definition_line,
+        definitions: acc.definitions,
+        is_definition_line: acc.is_definition_line,
     }
 }
 

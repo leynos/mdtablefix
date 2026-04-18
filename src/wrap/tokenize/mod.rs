@@ -71,13 +71,11 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
             i = scan_while(text, i, char::is_whitespace);
             tokens.push(collect_range(text, start, i));
             continue;
-        } else if ch == '`' {
+        }
+
+        if ch == '`' {
             if has_odd_backslash_escape_bytes(bytes, i) {
-                if let Some(last) = tokens.last_mut() {
-                    last.push('`');
-                } else {
-                    tokens.push(String::from("`"));
-                }
+                append_escaped_backtick(&mut tokens);
                 i += ch.len_utf8();
                 continue;
             }
@@ -99,29 +97,49 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
                 tokens.push(collect_range(text, punct_start, new_i));
             }
             i = new_i;
-        } else {
-            let start = i;
-            while i < text.len() {
-                let Some(current) = text[i..].chars().next() else {
-                    break;
-                };
-                if current.is_whitespace() || current == '`' {
-                    break;
-                }
-                let current_escaped = has_odd_backslash_escape_bytes(bytes, i);
-                if current == '[' {
-                    if !current_escaped && !bracket_follows_escaped_bang(bytes, i) {
-                        break;
-                    }
-                } else if looks_like_image_start(text, i, current) && !current_escaped {
-                    break;
-                }
-                i += current.len_utf8();
-            }
-            tokens.push(collect_range(text, start, i));
+            continue;
         }
+
+        let start = i;
+        i = scan_plain_text_end(text, bytes, i);
+        tokens.push(collect_range(text, start, i));
     }
     tokens
+}
+
+fn append_escaped_backtick(tokens: &mut Vec<String>) {
+    if let Some(last) = tokens.last_mut() {
+        last.push('`');
+    } else {
+        tokens.push(String::from("`"));
+    }
+}
+
+fn scan_plain_text_end(text: &str, bytes: &[u8], mut index: usize) -> usize {
+    while index < text.len() {
+        let Some(current) = text[index..].chars().next() else {
+            break;
+        };
+        if current.is_whitespace() || current == '`' {
+            break;
+        }
+
+        let current_escaped = has_odd_backslash_escape_bytes(bytes, index);
+        if should_stop_plain_text(text, bytes, index, (current, current_escaped)) {
+            break;
+        }
+
+        index += current.len_utf8();
+    }
+    index
+}
+
+fn should_stop_plain_text(text: &str, bytes: &[u8], index: usize, current: (char, bool)) -> bool {
+    let (ch, is_escaped) = current;
+    if ch == '[' {
+        return !is_escaped && !bracket_follows_escaped_bang(bytes, index);
+    }
+    looks_like_image_start(text, index, ch) && !is_escaped
 }
 
 fn next_token(line: &str, offset: usize) -> Option<(Token<'_>, usize)> {
