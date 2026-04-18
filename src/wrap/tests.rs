@@ -307,6 +307,16 @@ fn wrap_text_normalizes_whitespace_only_lines() {
 }
 
 #[test]
+fn wrap_text_treats_whitespace_only_lines_as_paragraph_breaks() {
+    let input = vec!["foo".to_string(), "   ".to_string(), "bar".to_string()];
+    let wrapped = wrap_text(&input, 80);
+    assert_eq!(
+        wrapped,
+        vec!["foo".to_string(), String::new(), "bar".to_string()]
+    );
+}
+
+#[test]
 fn wrap_text_uses_display_width_for_unicode_indent() {
     let input = vec!["　a".to_string()];
     let wrapped = wrap_text(&input, 2);

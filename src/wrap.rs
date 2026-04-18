@@ -8,6 +8,8 @@
 //! The [`Token`] enum and [`tokenize_markdown`] function are public so callers
 //! can perform custom token-based processing.
 
+use std::borrow::Cow;
+
 mod block;
 mod fence;
 mod inline;
@@ -61,7 +63,7 @@ fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
         let prefix = cap.get(1).map(|m| m.as_str())?;
         let rest = cap.get(2).map(|m| m.as_str())?;
         return Some(PrefixLine {
-            prefix: prefix.to_string(),
+            prefix: Cow::Borrowed(prefix),
             rest,
             repeat_prefix: false,
         });
@@ -72,7 +74,7 @@ fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
         let marker = cap.get(2).map(|m| m.as_str())?;
         let rest = cap.get(3).map(|m| m.as_str())?;
         return Some(PrefixLine {
-            prefix: format!("{prefix}{marker}"),
+            prefix: Cow::Owned(format!("{prefix}{marker}")),
             rest,
             repeat_prefix: false,
         });
@@ -82,7 +84,7 @@ fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
     let prefix = cap.get(1).map(|m| m.as_str())?;
     let rest = cap.get(2).map(|m| m.as_str())?;
     Some(PrefixLine {
-        prefix: prefix.to_string(),
+        prefix: Cow::Borrowed(prefix),
         rest,
         repeat_prefix: true,
     })

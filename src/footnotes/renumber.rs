@@ -391,6 +391,9 @@ fn collect_scan_updates(lines: &[String], state: &mut DefinitionScanState<'_>) {
 }
 
 fn finalize_numeric_candidates(state: &mut DefinitionScanState<'_>) {
+    // Drain from the bottom so wrapped continuation lines stay attached to the
+    // correct definition when numeric candidates are later reordered by their
+    // assigned footnote numbers.
     for candidate in state.numeric_candidates.drain(..).rev() {
         let new_number = assign_new_number(state.mapping, candidate.number, state.next_number);
         let rewritten_rest = rewrite_tokens(&candidate.rest, state.mapping);
@@ -482,5 +485,44 @@ pub(super) fn renumber_footnotes(lines: &mut [String]) {
 
     if let Some((start, end)) = footnote_definition_block_range(lines) {
         reorder_definition_block(lines, start, end, &definitions);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{numeric_candidate_from_line, renumber_footnotes};
+
+    fn strings(lines: &[&str]) -> Vec<String> {
+        lines.iter().map(|line| (*line).to_string()).collect()
+    }
+
+    #[test]
+    fn malformed_numeric_candidate_line_is_ignored() {
+        assert!(numeric_candidate_from_line("7.", 0).is_none());
+        assert!(numeric_candidate_from_line("7:", 0).is_none());
+    }
+
+    #[test]
+    fn renumber_footnotes_rewrites_existing_definition_headers() {
+        let mut lines = strings(&["Reference.[^7]", "", "[^7]: Existing definition"]);
+
+        renumber_footnotes(&mut lines);
+
+        assert_eq!(
+            lines,
+            strings(&["Reference.[^1]", "", "[^1]: Existing definition"])
+        );
+    }
+
+    #[test]
+    fn renumber_footnotes_rewrites_numeric_candidates() {
+        let mut lines = strings(&["Reference.[^7]", "", "7. Legacy footnote"]);
+
+        renumber_footnotes(&mut lines);
+
+        assert_eq!(
+            lines,
+            strings(&["Reference.[^1]", "", "[^1]: Legacy footnote"])
+        );
     }
 }

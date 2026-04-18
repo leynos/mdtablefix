@@ -93,3 +93,23 @@ fn converts_indented_multiline_html_table() {
     ];
     assert_eq!(convert_html_tables(&input), expected);
 }
+
+#[test]
+fn converts_indented_table_without_touching_surrounding_content() {
+    let input = lines_vec![
+        "  <div>before</div>",
+        "  <table>",
+        "    <tr><th>A</th><th>B</th></tr>",
+        "    <tr><td>1</td><td>2</td></tr>",
+        "  </table>",
+        "  <p>after</p>",
+    ];
+    let expected = lines_vec![
+        "  <div>before</div>",
+        "  | A | B |",
+        "  | --- | --- |",
+        "  | 1 | 2 |",
+        "  <p>after</p>",
+    ];
+    assert_eq!(convert_html_tables(&input), expected);
+}

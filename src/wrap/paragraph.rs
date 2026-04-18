@@ -3,12 +3,14 @@
 //! These helpers keep paragraph logic focused on buffer management while
 //! deferring inline wrapping to `inline::wrap_preserving_code`.
 
+use std::borrow::Cow;
+
 use unicode_width::UnicodeWidthStr;
 
 use super::inline::wrap_preserving_code;
 
 pub(super) struct PrefixLine<'a> {
-    pub(super) prefix: String,
+    pub(super) prefix: Cow<'a, str>,
     pub(super) rest: &'a str,
     pub(super) repeat_prefix: bool,
 }
@@ -85,7 +87,7 @@ impl<'a> ParagraphWriter<'a> {
     pub(super) fn handle_prefix_line(&mut self, prefix_line: &PrefixLine<'_>) {
         self.flush_paragraph();
 
-        let prefix = prefix_line.prefix.as_str();
+        let prefix = prefix_line.prefix.as_ref();
         let prefix_width = UnicodeWidthStr::width(prefix);
         let available = self.width.saturating_sub(prefix_width).max(1);
         let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
