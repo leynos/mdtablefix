@@ -230,10 +230,7 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             continue;
         }
 
-        let mut split = SplitContext {
-            lines: &mut lines,
-            width,
-        };
+        let mut split = SplitContext::new(&mut lines, width);
         if buffer.split_with_span(&mut split, &tokens, span.clone()) {
             i = group_end;
             continue;

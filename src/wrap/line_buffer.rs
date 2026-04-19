@@ -19,6 +19,10 @@ pub(crate) struct SplitContext<'a> {
     pub(crate) width: usize,
 }
 
+impl<'a> SplitContext<'a> {
+    pub(crate) fn new(lines: &'a mut Vec<String>, width: usize) -> Self { Self { lines, width } }
+}
+
 impl LineBuffer {
     pub(crate) fn new() -> Self { Self::default() }
 

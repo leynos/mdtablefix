@@ -13,7 +13,7 @@ the `--wrap` option is used, it also wraps paragraphs and list items to 80 colum
 
 [package.metadata.binstall.overrides.'cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"), target_env = "gnu"))']
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }.tar.gz"
-bin-dir = "{ bin }{ binary-ext }"
+bin-dir = "."
 pkg-fmt = "tgz"
 
 [dependencies]

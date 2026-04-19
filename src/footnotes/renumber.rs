@@ -1,8 +1,22 @@
 //! Sequential renumbering of footnote references and definitions.
 
-use std::{collections::HashMap, fmt::Write, sync::LazyLock};
+use std::{collections::HashMap, sync::LazyLock};
 
 use regex::{Captures, Match, Regex};
+
+mod definitions;
+mod parsing {
+    pub(super) use super::super::parsing::DefinitionParts;
+}
+
+#[cfg(test)]
+use definitions::numeric_candidate_from_line;
+use definitions::{
+    DefinitionUpdates,
+    collect_definition_updates,
+    reorder_definition_block,
+    rewrite_definition_headers,
+};
 
 use super::{
     lists::{footnote_block_range, has_existing_footnote_block, trimmed_range},
@@ -56,7 +70,9 @@ fn is_fence_line(line: &str) -> bool {
 fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<usize, usize>) -> String {
     FOOTNOTE_REF_RE
         .replace_all(text, |caps: &Captures| {
-            let mat = caps.get(0).expect("regex matched without capture");
+            let Some(mat) = caps.get(0) else {
+                return String::new();
+            };
             if is_definition_like(text, &mat) {
                 return caps[0].to_string();
             }
@@ -129,21 +145,6 @@ fn collect_reference_mapping_from_text(
     }
 }
 
-#[derive(Clone)]
-struct DefinitionLine {
-    index: usize,
-    new_number: usize,
-    line: String,
-}
-
-struct NumericCandidate {
-    index: usize,
-    number: usize,
-    indent: String,
-    whitespace: String,
-    rest: String,
-}
-
 fn footnote_definition_block_range(lines: &[String]) -> Option<(usize, usize)> {
     let (mut start, end) = trimmed_range(lines, |line| {
         line.trim().is_empty()
@@ -167,290 +168,6 @@ fn footnote_definition_block_range(lines: &[String]) -> Option<(usize, usize)> {
     }
 }
 
-fn definition_segment_end(lines: &[String], start: usize, block_end: usize) -> usize {
-    let mut idx = start + 1;
-    while idx < block_end {
-        let line = &lines[idx];
-        if parse_definition(line).is_some() {
-            break;
-        }
-        if is_definition_continuation(line) {
-            idx += 1;
-            continue;
-        }
-        if line.trim().is_empty() {
-            if idx + 1 < block_end && parse_definition(&lines[idx + 1]).is_some() {
-                break;
-            }
-            idx += 1;
-            continue;
-        }
-        break;
-    }
-    idx
-}
-
-fn reorder_definition_block(
-    lines: &mut [String],
-    start: usize,
-    end: usize,
-    definitions: &[DefinitionLine],
-) {
-    let header_positions: Vec<usize> = (start..end)
-        .filter(|&idx| parse_definition(&lines[idx]).is_some())
-        .collect();
-    if header_positions.len() <= 1 {
-        return;
-    }
-
-    let def_lookup: HashMap<usize, &DefinitionLine> = definitions
-        .iter()
-        .filter(|definition| (start..end).contains(&definition.index))
-        .map(|definition| (definition.index, definition))
-        .collect();
-    if def_lookup.len() <= 1 {
-        return;
-    }
-
-    let prefix_len = header_positions.first().map_or(0, |first| first - start);
-    let mut segments: Vec<(usize, usize, Vec<String>)> = Vec::new();
-    let mut consumed = start + prefix_len;
-    for &position in &header_positions {
-        let mut leading_start = position;
-        while leading_start > consumed
-            && lines[leading_start - 1].trim().is_empty()
-            && !is_definition_continuation(&lines[leading_start - 1])
-        {
-            leading_start -= 1;
-        }
-        let next_bound = definition_segment_end(lines, position, end);
-        if let Some(definition) = def_lookup.get(&position) {
-            debug_assert!(
-                position >= leading_start,
-                "definition header {position} cannot precede leading segment start {leading_start}",
-            );
-            let mut segment = Vec::with_capacity(next_bound.saturating_sub(leading_start).max(1));
-            segment.extend(lines[leading_start..position].iter().cloned());
-            segment.push(definition.line.clone());
-            let tail_start = position.saturating_add(1);
-            if tail_start < next_bound {
-                segment.extend(lines[tail_start..next_bound].iter().cloned());
-            }
-            segments.push((definition.new_number, definition.index, segment));
-        }
-        consumed = next_bound;
-    }
-
-    if segments.len() <= 1 {
-        return;
-    }
-
-    segments.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
-
-    let mut first_leading = Vec::new();
-    if let Some((_, _, first_segment)) = segments.first_mut() {
-        while first_segment
-            .first()
-            .is_some_and(|line| line.trim().is_empty() && !is_definition_continuation(line))
-        {
-            first_leading.push(first_segment.remove(0));
-        }
-    }
-
-    let mut reordered = Vec::with_capacity(end - start);
-    if prefix_len > 0 {
-        reordered.extend(lines[start..start + prefix_len].iter().cloned());
-    }
-
-    for (idx, (_, _, segment)) in segments.into_iter().enumerate() {
-        reordered.extend(segment);
-        if idx == 0 && !first_leading.is_empty() {
-            reordered.append(&mut first_leading);
-        }
-    }
-
-    if reordered.len() == end - start {
-        lines[start..end].clone_from_slice(&reordered);
-    }
-}
-
-struct DefinitionUpdates {
-    definitions: Vec<DefinitionLine>,
-    is_definition_line: Vec<bool>,
-}
-
-struct DefinitionScanContext<'a> {
-    mapping: &'a mut HashMap<usize, usize>,
-    next_number: &'a mut usize,
-    numeric_list_range: Option<(usize, usize)>,
-    skip_numeric_conversion: bool,
-}
-
-struct DefinitionAccumulator {
-    definitions: Vec<DefinitionLine>,
-    is_definition_line: Vec<bool>,
-}
-
-fn assign_new_number(
-    mapping: &mut HashMap<usize, usize>,
-    number: usize,
-    next_number: &mut usize,
-) -> usize {
-    if let Some(&mapped) = mapping.get(&number) {
-        mapped
-    } else {
-        let assigned = *next_number;
-        *next_number += 1;
-        mapping.insert(number, assigned);
-        assigned
-    }
-}
-
-fn should_convert_numeric_line(
-    index: usize,
-    numeric_range: Option<(usize, usize)>,
-    skip_numeric_conversion: bool,
-) -> bool {
-    if skip_numeric_conversion {
-        return false;
-    }
-    numeric_range.is_some_and(|(start, end)| index >= start && index < end)
-}
-
-fn definition_line_from_parts(
-    index: usize,
-    parts: super::parsing::DefinitionParts<'_>,
-    mapping: &mut HashMap<usize, usize>,
-    next_number: &mut usize,
-) -> DefinitionLine {
-    let new_number = assign_new_number(mapping, parts.number, next_number);
-    let rewritten_rest = rewrite_tokens(parts.rest, mapping);
-    let mut line = String::with_capacity(parts.prefix.len() + rewritten_rest.len() + 8);
-    line.push_str(parts.prefix);
-    write!(&mut line, "[^{new_number}]:").expect("write to string cannot fail");
-    line.push_str(&rewritten_rest);
-    DefinitionLine {
-        index,
-        new_number,
-        line,
-    }
-}
-
-fn numeric_candidate_from_line(line: &str, index: usize) -> Option<NumericCandidate> {
-    let caps = FOOTNOTE_LINE_RE.captures(line)?;
-    let number = caps["num"].parse::<usize>().ok()?;
-    let indent = caps.name("indent").map_or("", |m| m.as_str()).to_string();
-    let rest = caps.name("rest").map_or("", |m| m.as_str()).to_string();
-    let num_match = caps
-        .name("num")
-        .expect("numeric list capture missing number");
-    let rest_match = caps
-        .name("rest")
-        .expect("numeric list capture missing rest");
-    let whitespace = line[num_match.end() + 1..rest_match.start()].to_string();
-    Some(NumericCandidate {
-        index,
-        number,
-        indent,
-        whitespace,
-        rest,
-    })
-}
-
-fn collect_scan_updates(
-    lines: &[String],
-    ctx: &mut DefinitionScanContext<'_>,
-) -> (DefinitionAccumulator, Vec<NumericCandidate>) {
-    let mut acc = DefinitionAccumulator {
-        definitions: Vec::new(),
-        is_definition_line: vec![false; lines.len()],
-    };
-    let mut numeric_candidates = Vec::new();
-    let mut in_fence = false;
-
-    for (index, line) in lines.iter().enumerate() {
-        if is_fence_line(line) {
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
-            continue;
-        }
-
-        if let Some(parts) = parse_definition(line) {
-            acc.definitions.push(definition_line_from_parts(
-                index,
-                parts,
-                ctx.mapping,
-                ctx.next_number,
-            ));
-            acc.is_definition_line[index] = true;
-            continue;
-        }
-
-        if !should_convert_numeric_line(index, ctx.numeric_list_range, ctx.skip_numeric_conversion)
-        {
-            continue;
-        }
-        if ctx.mapping.is_empty() && acc.definitions.is_empty() {
-            continue;
-        }
-        if let Some(candidate) = numeric_candidate_from_line(line, index) {
-            numeric_candidates.push(candidate);
-        }
-    }
-
-    (acc, numeric_candidates)
-}
-
-fn finalize_numeric_candidates(
-    numeric_candidates: Vec<NumericCandidate>,
-    ctx: &mut DefinitionScanContext<'_>,
-    acc: &mut DefinitionAccumulator,
-) {
-    for candidate in numeric_candidates.into_iter().rev() {
-        let new_number = assign_new_number(ctx.mapping, candidate.number, ctx.next_number);
-        let rewritten_rest = rewrite_tokens(&candidate.rest, ctx.mapping);
-        let mut line = String::with_capacity(
-            candidate.indent.len() + candidate.whitespace.len() + rewritten_rest.len() + 8,
-        );
-        line.push_str(&candidate.indent);
-        write!(&mut line, "[^{new_number}]:").expect("write to string cannot fail");
-        line.push_str(&candidate.whitespace);
-        line.push_str(&rewritten_rest);
-        acc.definitions.push(DefinitionLine {
-            index: candidate.index,
-            new_number,
-            line,
-        });
-        acc.is_definition_line[candidate.index] = true;
-    }
-}
-
-fn collect_definition_updates(
-    lines: &[String],
-    mapping: &mut HashMap<usize, usize>,
-) -> DefinitionUpdates {
-    let mut next_number = mapping.values().copied().max().unwrap_or(0) + 1;
-    let numeric_list_range = footnote_block_range(lines);
-    let skip_numeric_conversion = numeric_list_range
-        .as_ref()
-        .is_some_and(|(start, _)| has_existing_footnote_block(lines, *start));
-    let mut ctx = DefinitionScanContext {
-        mapping,
-        next_number: &mut next_number,
-        numeric_list_range,
-        skip_numeric_conversion,
-    };
-    let (mut acc, numeric_candidates) = collect_scan_updates(lines, &mut ctx);
-    finalize_numeric_candidates(numeric_candidates, &mut ctx, &mut acc);
-
-    DefinitionUpdates {
-        definitions: acc.definitions,
-        is_definition_line: acc.is_definition_line,
-    }
-}
-
 fn apply_mapping_to_lines(
     lines: &mut [String],
     mapping: &HashMap<usize, usize>,
@@ -466,12 +183,6 @@ fn apply_mapping_to_lines(
             continue;
         }
         *line = rewrite_tokens(line, mapping);
-    }
-}
-
-fn rewrite_definition_headers(lines: &mut [String], definitions: &[DefinitionLine]) {
-    for definition in definitions {
-        lines[definition.index].clone_from(&definition.line);
     }
 }
 
@@ -498,3 +209,6 @@ pub(super) fn renumber_footnotes(lines: &mut [String]) {
         reorder_definition_block(lines, start, end, &definitions);
     }
 }
+
+#[cfg(test)]
+mod tests;

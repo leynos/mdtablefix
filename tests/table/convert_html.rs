@@ -77,3 +77,41 @@ fn preserves_trailing_spaces_in_cells() {
     ];
     assert_eq!(convert_html_tables(&input), expected);
 }
+
+#[rstest(
+    input,
+    expected,
+    case::multiline(
+        lines_vec![
+            "  <table>",
+            "    <tr><th>A</th><th>B</th></tr>",
+            "    <tr><td>1</td><td>2</td></tr>",
+            "  </table>",
+        ],
+        lines_vec![
+            "  | A | B |",
+            "  | --- | --- |",
+            "  | 1 | 2 |",
+        ]
+    ),
+    case::surrounding_content(
+        lines_vec![
+            "  <div>before</div>",
+            "  <table>",
+            "    <tr><th>A</th><th>B</th></tr>",
+            "    <tr><td>1</td><td>2</td></tr>",
+            "  </table>",
+            "  <p>after</p>",
+        ],
+        lines_vec![
+            "  <div>before</div>",
+            "  | A | B |",
+            "  | --- | --- |",
+            "  | 1 | 2 |",
+            "  <p>after</p>",
+        ]
+    ),
+)]
+fn converts_indented_html_table_cases(input: Vec<String>, expected: Vec<String>) {
+    assert_eq!(convert_html_tables(&input), expected);
+}
