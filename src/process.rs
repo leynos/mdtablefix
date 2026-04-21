@@ -57,6 +57,7 @@ struct ProcessBuffer {
     out: Vec<String>,
     buf: Vec<String>,
     in_table: bool,
+    ellipsis: bool,
 }
 
 impl ProcessBuffer {
@@ -64,11 +65,16 @@ impl ProcessBuffer {
         if self.buf.is_empty() {
             return;
         }
+        let buffered = std::mem::take(&mut self.buf);
         if self.in_table {
-            self.out.extend(reflow_table(&self.buf));
-            self.buf.clear();
+            let table_lines = if self.ellipsis {
+                replace_ellipsis(&buffered)
+            } else {
+                buffered
+            };
+            self.out.extend(reflow_table(&table_lines));
         } else {
-            self.out.extend(std::mem::take(&mut self.buf));
+            self.out.extend(buffered);
         }
         self.in_table = false;
     }
@@ -156,6 +162,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         out: Vec::new(),
         buf: Vec::new(),
         in_table: false,
+        ellipsis: opts.ellipsis,
     };
     // Track fences so subsequent logic respects shared semantics.
     let mut fence_tracker = FenceTracker::default();
@@ -295,8 +302,8 @@ mod tests {
             "| 1 | 2 |".to_string(),
         ];
         let output = process_stream(&input);
-        assert!(output.iter().any(|l| l.contains("| A | B |")));
-        assert!(output.iter().any(|l| l.contains("| X | Y |")));
+        assert!(output.iter().any(|l| l.contains("| A   | B   |")));
+        assert!(output.iter().any(|l| l.contains("| X   | Y   |")));
     }
 
     #[test]

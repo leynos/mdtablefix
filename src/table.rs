@@ -91,7 +91,7 @@ pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
 /// This is produced by [`parse_and_validate`] and passed to
 /// [`calculate_and_format`].
 ///
-/// * `cleaned` - rows after empty cells are removed
+/// * `cleaned` - rows after parser markers are cleaned up
 /// * `output_rows` - rows ready for output (separator removed)
 /// * `sep_cells` - optional separator cells for formatting
 /// * `max_cols` - maximum column count across all rows
@@ -145,7 +145,12 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
 
 /// Calculates column widths and formats the final table output.
 fn calculate_and_format(parsed: &ParsedTable, indent: &str) -> Vec<String> {
-    let widths = crate::reflow::calculate_widths(&parsed.cleaned, parsed.max_cols);
+    let mut widths = crate::reflow::calculate_widths(&parsed.cleaned, parsed.max_cols);
+    if parsed.sep_cells.is_some() {
+        for width in &mut widths {
+            *width = (*width).max(3);
+        }
+    }
     let out = crate::reflow::format_rows(&parsed.output_rows, &widths, indent);
     crate::reflow::insert_separator(out, parsed.sep_cells.clone(), &widths, indent)
 }
