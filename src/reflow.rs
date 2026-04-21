@@ -4,14 +4,20 @@
 //! aligned output for the main [`reflow_table`] function.
 
 use regex::Regex;
+use unicode_width::UnicodeWidthStr;
 
 use crate::table::{SEP_RE, format_separator_cells, split_cells};
 
 static SENTINEL_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").unwrap());
+const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 
 pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
-    let raw = trimmed.join(" ");
+    let protected = trimmed
+        .iter()
+        .map(|line| protect_leading_empty_cells(line))
+        .collect::<Vec<_>>();
+    let raw = protected.join(" ");
     let chunks: Vec<&str> = SENTINEL_RE.split(&raw).collect();
     let split_within_line = chunks.len() > trimmed.len();
 
@@ -52,19 +58,27 @@ fn split_into_rows(cells: Vec<String>) -> Vec<Vec<String>> {
 }
 
 pub(crate) fn clean_rows(rows: Vec<Vec<String>>) -> Vec<Vec<String>> {
-    let mut cleaned = Vec::new();
-    for mut row in rows {
-        row.retain(|c| !c.is_empty());
-        cleaned.push(row);
-    }
-    cleaned
+    rows.into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|cell| {
+                    if cell == LEADING_EMPTY_CELL_MARKER {
+                        String::new()
+                    } else {
+                        cell
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .filter(|row| row.iter().any(|cell| !cell.is_empty()))
+        .collect()
 }
 
 pub(crate) fn calculate_widths(rows: &[Vec<String>], max_cols: usize) -> Vec<usize> {
     let mut widths = vec![0; max_cols];
     for row in rows {
         for (idx, cell) in row.iter().enumerate() {
-            widths[idx] = widths[idx].max(cell.len());
+            widths[idx] = widths[idx].max(UnicodeWidthStr::width(cell.as_str()));
         }
     }
     widths
@@ -76,7 +90,7 @@ pub(crate) fn format_rows(rows: &[Vec<String>], widths: &[usize], indent: &str) 
             let padded: Vec<String> = row
                 .iter()
                 .enumerate()
-                .map(|(i, c)| format!("{:<width$}", c, width = widths[i]))
+                .map(|(i, cell)| pad_cell_to_width(cell, widths[i]))
                 .collect();
             format!("{}| {} |", indent, padded.join(" | "))
         })
@@ -135,4 +149,33 @@ fn should_use_second_row_as_separator(sep_invalid: bool, rows: &[Vec<String>]) -
 
 fn second_row_is_separator(rows: &[Vec<String>]) -> bool {
     rows.len() > 1 && rows[1].iter().all(|c| SEP_RE.is_match(c))
+}
+
+/// Replaces leading empty cells with a marker so continuation rows survive the
+/// global row-splitting pass.
+fn protect_leading_empty_cells(line: &str) -> String {
+    let cells = split_cells(line);
+    let leading_empty_cells = cells.iter().take_while(|cell| cell.is_empty()).count();
+    if leading_empty_cells == 0 {
+        return line.to_string();
+    }
+
+    let protected_cells = cells
+        .into_iter()
+        .enumerate()
+        .map(|(idx, cell)| {
+            if idx < leading_empty_cells {
+                LEADING_EMPTY_CELL_MARKER.to_string()
+            } else {
+                cell
+            }
+        })
+        .collect::<Vec<_>>();
+
+    format!("| {} |", protected_cells.join(" | "))
+}
+
+fn pad_cell_to_width(cell: &str, width: usize) -> String {
+    let padding = width.saturating_sub(UnicodeWidthStr::width(cell));
+    format!("{cell}{}", " ".repeat(padding))
 }
