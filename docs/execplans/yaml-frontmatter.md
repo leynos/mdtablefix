@@ -11,10 +11,10 @@ Status: DELIVERED
 
 After this change, `mdtablefix` must accept a Markdown document that begins
 with a YAML frontmatter block and leave that block byte-for-byte unchanged
-while continuing to format the Markdown body normally. A user should be able
-to run the formatter with flags such as `--wrap`, `--breaks`, or `--in-place`
-and still see the opening delimiter, YAML keys, and closing delimiter exactly
-as they were written.
+while continuing to format the Markdown body normally. A user should be able to
+run the formatter with flags such as `--wrap`, `--breaks`, or `--in-place` and
+still see the opening delimiter, YAML keys, and closing delimiter exactly as
+they were written.
 
 The observable success case is a file that starts with:
 
@@ -62,24 +62,20 @@ according to the selected options.
 
 - Risk: frontmatter might still be modified by CLI-only transforms such as
   `renumber_lists` or `format_breaks` after the main stream processor returns.
-  Severity: high
-  Likelihood: medium
-  Mitigation: protect the body split at the highest shared pipeline boundary
-  and add a CLI regression that includes `--breaks`.
+  Severity: high Likelihood: medium Mitigation: protect the body split at the
+  highest shared pipeline boundary and add a CLI regression that includes
+  `--breaks`.
 
 - Risk: delimiter detection can become too permissive and accidentally treat a
-  thematic break or ordinary `---` block as frontmatter.
-  Severity: medium
-  Likelihood: medium
-  Mitigation: only detect frontmatter when the very first line is a delimiter
-  and require a matching closing delimiter before shielding the block.
+  thematic break or ordinary `---` block as frontmatter. Severity: medium
+  Likelihood: medium Mitigation: only detect frontmatter when the very first
+  line is a delimiter and require a matching closing delimiter before shielding
+  the block.
 
 - Risk: `src/process.rs` is already close to the repository's file-length
-  ceiling.
-  Severity: medium
-  Likelihood: high
-  Mitigation: place the detector and splitter logic in a new small module
-  instead of extending `src/process.rs` significantly.
+  ceiling. Severity: medium Likelihood: high Mitigation: place the detector and
+  splitter logic in a new small module instead of extending `src/process.rs`
+  significantly.
 
 ## Progress
 
@@ -87,50 +83,50 @@ according to the selected options.
   layout, and user-facing documentation surfaces.
 - [x] (2026-04-09) Add a shared helper for detecting and splitting leading YAML
   frontmatter.
-- [x] (2026-04-09) Thread the helper through the library and CLI formatting pipeline
+- [x] (2026-04-09) Thread the helper through the library and CLI formatting
+      pipeline
   so all transforms skip the frontmatter prefix.
 - [x] (2026-04-09) Add unit and behavioural regression tests covering detection,
   wrapping, and `--breaks`.
 - [x] (2026-04-09) Update `README.md` and `docs/architecture.md`.
-- [x] (2026-04-09) Run `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
+- [x] (2026-04-09) Run `make check-fmt`, `make lint`, `make test`,
+      `make markdownlint`,
   and `make nixie` if Mermaid content changes.
 
 ## Surprises & discoveries
 
 - Observation: `src/main.rs` applies `renumber_lists` and `format_breaks`
   after `process_stream_opts`, so shielding only `process_stream_inner` would
-  still allow the frontmatter delimiters to be rewritten.
-  Evidence: `process_lines` in `src/main.rs`.
-  Impact: the plan must protect the body before or around CLI-only transforms,
-  not just inside `src/process.rs`.
+  still allow the frontmatter delimiters to be rewritten. Evidence:
+  `process_lines` in `src/main.rs`. Impact: the plan must protect the body
+  before or around CLI-only transforms, not just inside `src/process.rs`.
 
 - Observation: `src/process.rs` is 343 lines before this feature.
-  Evidence: `leta files` output for `src/process.rs`.
-  Impact: new helper logic should live in its own module to stay within the
-  repository limit and keep tests readable.
+  Evidence: `leta files` output for `src/process.rs`. Impact: new helper logic
+  should live in its own module to stay within the repository limit and keep
+  tests readable.
 
 ## Decision log
 
 - Decision: use a shared internal splitter for leading YAML frontmatter rather
-  than adding special cases separately in each transform.
-  Rationale: one detector keeps the delimiter rules consistent and reduces the
-  chance that a later pipeline stage mutates the protected prefix.
-  Date/Author: 2026-04-05 22:45Z / Droid
+  than adding special cases separately in each transform. Rationale: one
+  detector keeps the delimiter rules consistent and reduces the chance that a
+  later pipeline stage mutates the protected prefix. Date/Author: 2026-04-05
+  22:45Z / Droid
 
 - Decision: treat unmatched opening delimiters as ordinary Markdown instead of
-  partially shielding the document.
-  Rationale: this avoids swallowing the entire file into a special mode and
-  preserves current behaviour for malformed input.
-  Date/Author: 2026-04-05 22:45Z / Droid
+  partially shielding the document. Rationale: this avoids swallowing the
+  entire file into a special mode and preserves current behaviour for malformed
+  input. Date/Author: 2026-04-05 22:45Z / Droid
 
 ## Outcomes & retrospective
 
 The frontmatter splitter was successfully implemented in the `frontmatter`
-module and integrated through both the `process` module and `main` module.
-Test coverage was added covering detection, wrapping, and `--breaks` flags
-for both library and CLI paths. All transforms now correctly skip the
-frontmatter prefix, preserving the leading YAML block exactly while
-formatting the Markdown body.
+module and integrated through both the `process` module and `main` module. Test
+coverage was added covering detection, wrapping, and `--breaks` flags for both
+library and CLI paths. All transforms now correctly skip the frontmatter
+prefix, preserving the leading YAML block exactly while formatting the Markdown
+body.
 
 ## Context and orientation
 
@@ -184,9 +180,9 @@ The CLI test should enable `--breaks` and one ordinary formatting option such
 as `--wrap` so it proves both preservation and continued formatting.
 
 Stage E updates the docs. Add a short YAML frontmatter note and example to
-`README.md` so users know the block is preserved. Update
-`docs/architecture.md` to describe the leading-frontmatter split before the
-rest of the formatting pipeline.
+`README.md` so users know the block is preserved. Update `docs/architecture.md`
+to describe the leading-frontmatter split before the rest of the formatting
+pipeline.
 
 Each stage ends with focused validation before moving on.
 
@@ -204,8 +200,8 @@ Expected:
 /home/leynos/Projects/mdtablefix.worktrees/yaml-frontmatter
 ```
 
-Add the detector and its focused tests, then run the smallest relevant test
-set first:
+Add the detector and its focused tests, then run the smallest relevant test set
+first:
 
 ```bash
 cargo test frontmatter --lib
@@ -260,8 +256,8 @@ make markdownlint
 make nixie
 ```
 
-If `docs/architecture.md` does not change any Mermaid content, `make nixie`
-may be skipped.
+If `docs/architecture.md` does not change any Mermaid content, `make nixie` may
+be skipped.
 
 ## Validation and acceptance
 
@@ -289,8 +285,8 @@ Quality criteria:
 
 The planned edits are safe to repeat because the detector only changes control
 flow, not persisted state outside the repository. If a step goes wrong, revert
-the affected file and rerun the focused tests before continuing. The manual
-CLI example is read-only and may be rerun as many times as needed.
+the affected file and rerun the focused tests before continuing. The manual CLI
+example is read-only and may be rerun as many times as needed.
 
 ## Artifacts and notes
 
@@ -327,10 +323,10 @@ block exists. The module and helper are marked `#[doc(hidden)]` to keep them
 out of the public API documentation while remaining accessible to the binary
 crate.
 
-`src/process.rs` calls the helper in `process_stream`, `process_stream_no_wrap`,
-and `process_stream_opts` before existing body processing. `src/main.rs` calls
-the same helper in `process_lines` before CLI-only transforms (`--renumber`,
-`--breaks`).
+`src/process.rs` calls the helper in `process_stream`,
+`process_stream_no_wrap`, and `process_stream_opts` before existing body
+processing. `src/main.rs` calls the same helper in `process_lines` before
+CLI-only transforms (`--renumber`, `--breaks`).
 
 Interface note: The `frontmatter` module is exported as `pub` with
 `#[doc(hidden)]` rather than `pub(crate)` because the binary crate (`main.rs`)
@@ -340,5 +336,5 @@ the symbol. Using `#[doc(hidden)]` prevents the API from appearing in docs
 while maintaining the necessary visibility.
 
 Revision note: Delivered. The implementation follows the plan with the
-visibility adjustment noted above. All tests pass and the feature is ready
-for use.
+visibility adjustment noted above. All tests pass and the feature is ready for
+use.
