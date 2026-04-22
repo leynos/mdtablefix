@@ -1,3 +1,8 @@
+//! Unit tests for `wrap_text`.
+//!
+//! This module covers the core wrapping behaviour for prose and the regression
+//! guards for issue `#261`, ensuring verbatim code blocks remain untouched.
+
 use mdtablefix::wrap::wrap_text;
 
 #[test]
@@ -106,6 +111,8 @@ fn wrap_text_preserves_links() {
 }
 
 #[test]
+/// Guards issue `#261` by asserting fenced shell blocks remain byte-identical
+/// after `wrap_text` processes surrounding Markdown.
 fn wrap_text_preserves_fenced_shell_block_after_heading() {
     let input = vec![
         "## Verification".to_string(),
@@ -122,6 +129,8 @@ fn wrap_text_preserves_fenced_shell_block_after_heading() {
 }
 
 #[test]
+/// Guards issue `#261` by asserting four-space indented shell blocks remain
+/// byte-identical after `wrap_text` processes surrounding Markdown.
 fn wrap_text_preserves_indented_shell_block_after_heading() {
     let input = vec![
         "## Verification".to_string(),
