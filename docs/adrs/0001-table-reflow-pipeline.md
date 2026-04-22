@@ -1,4 +1,4 @@
-# ADR 0001: preserve table structure during reflow
+# Architecture Decision Record (ADR) 0001: preserve table structure during reflow
 
 - Status: Accepted
 - Date: 2026-04-22

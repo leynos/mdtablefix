@@ -81,7 +81,16 @@ fn process_stream_preserves_literal_ellipsis_in_table_cells_when_disabled() {
         "| `bar`  | and also ... in this cell  |",
     ];
 
-    assert_eq!(process_stream(&input), expected);
+    assert_eq!(
+        process_stream_opts(
+            &input,
+            Options {
+                ellipsis: false,
+                ..Default::default()
+            },
+        ),
+        expected
+    );
 }
 
 #[test]

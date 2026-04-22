@@ -122,8 +122,9 @@ returns the updated stream for writing to disk or further manipulation.
 3. `clean_rows`, `detect_separator`, and `calculate_widths` rebuild the logical
    table. Explicit separator lines are preferred, but the second parsed row can
    be promoted when the source embeds the separator in the body. Widths are
-   measured with `UnicodeWidthStr::width`, so CJK text, emoji, and accented
-   characters align by display width rather than byte count.
+   measured with `UnicodeWidthStr::width`, so Chinese, Japanese, and Korean
+   (CJK) text, emoji, and accented characters align by display width rather
+   than byte count.
 4. `format_rows` and `insert_separator` emit the final table. Separator cells
    preserve alignment markers, and each separator column is widened to at least
    three dashes to keep Markdown linters satisfied.
@@ -139,7 +140,7 @@ ordering ensures the width calculation sees the final glyphs, rather than
 aligning for `...` and shrinking the rendered column after the fact.
 
 The rationale for these choices is captured in
-[ADR 0001](adrs/0001-table-reflow-pipeline.md).
+[Architecture Decision Record (ADR) 0001](adrs/0001-table-reflow-pipeline.md).
 
 ## Footnote Conversion
 
