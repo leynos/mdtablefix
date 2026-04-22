@@ -9,7 +9,6 @@ use regex::Regex;
 static ESCAPED_PIPE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"\\\|").unwrap());
 
-#[must_use]
 /// Split a Markdown table row into individual cell strings.
 ///
 /// Escaped pipe characters (`\|`) are treated as literals and whitespace
@@ -28,6 +27,7 @@ static ESCAPED_PIPE_RE: std::sync::LazyLock<Regex> =
 ///     vec!["a".to_string(), "b | c".to_string(), "d".to_string()]
 /// );
 /// ```
+#[must_use]
 pub fn split_cells(line: &str) -> Vec<String> {
     let trimmed = line.trim().trim_start_matches('|').trim_end_matches('|');
     let placeholder = '\u{1f}';
@@ -38,6 +38,10 @@ pub fn split_cells(line: &str) -> Vec<String> {
         .collect()
 }
 
+/// Formats separator cells so they match the computed table widths.
+///
+/// Alignment markers from the source separator are preserved while each cell
+/// is widened to at least three dashes, as required by Markdown tables.
 pub(crate) fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String> {
     if sep_cells.len() != widths.len() {
         return sep_cells.to_vec();
@@ -116,7 +120,7 @@ fn extract_indent_and_trim(lines: &[String]) -> (String, Vec<String>) {
     (indent, trimmed)
 }
 
-/// Removes and return the first separator line detected in `lines`.
+/// Removes and returns the first separator line detected in `lines`.
 fn extract_separator_line(lines: &mut Vec<String>) -> Option<String> {
     let sep_idx = lines.iter().position(|l| SEP_RE.is_match(l));
     sep_idx.map(|idx| lines.remove(idx))
@@ -192,6 +196,8 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
     #[test]
@@ -223,5 +229,25 @@ mod tests {
         assert!(!rows_mismatched(&with_sep, false));
 
         assert!(!rows_mismatched(&mismatch, true));
+    }
+
+    #[rstest]
+    #[case(vec![2], vec!["---".to_string()], vec!["---".to_string()])]
+    #[case(vec![5], vec![":---".to_string()], vec![":----".to_string()])]
+    #[case(vec![5], vec!["---:".to_string()], vec!["----:".to_string()])]
+    #[case(vec![5], vec![":--:".to_string()], vec![":---:".to_string()])]
+    fn format_separator_cells_preserves_alignment_markers(
+        #[case] widths: Vec<usize>,
+        #[case] cells: Vec<String>,
+        #[case] expected: Vec<String>,
+    ) {
+        assert_eq!(format_separator_cells(&widths, &cells), expected);
+    }
+
+    #[test]
+    fn format_separator_cells_returns_original_cells_when_counts_mismatch() {
+        let sep_cells = vec!["---".to_string()];
+
+        assert_eq!(format_separator_cells(&[3, 4], &sep_cells), sep_cells);
     }
 }
