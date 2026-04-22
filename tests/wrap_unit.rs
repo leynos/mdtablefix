@@ -120,3 +120,17 @@ fn wrap_text_preserves_fenced_shell_block_after_heading() {
 
     assert_eq!(wrap_text(&input, 80), input);
 }
+
+#[test]
+fn wrap_text_preserves_indented_shell_block_after_heading() {
+    let input = vec![
+        "## Verification".to_string(),
+        String::new(),
+        "    set -o pipefail".to_string(),
+        "    make check-fmt 2>&1 | tee /tmp/fmt.log".to_string(),
+        "    make lint 2>&1 | tee /tmp/lint.log".to_string(),
+        "    make test 2>&1 | tee /tmp/test.log".to_string(),
+    ];
+
+    assert_eq!(wrap_text(&input, 80), input);
+}
