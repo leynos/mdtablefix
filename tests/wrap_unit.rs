@@ -1,4 +1,10 @@
+//! Unit tests for `wrap_text`.
+//!
+//! This module covers the core wrapping behaviour for prose and the regression
+//! guards for issue `#261`, ensuring verbatim code blocks remain untouched.
+
 use mdtablefix::wrap::wrap_text;
+use rstest::rstest;
 
 #[test]
 fn wrap_text_preserves_hyphenated_words() {
@@ -103,4 +109,47 @@ fn wrap_text_preserves_links() {
             .iter()
             .any(|l| l.contains("https://falcon.readthedocs.io"))
     );
+}
+
+/// Guards issue `#261` by asserting both fenced and four-space indented shell
+/// blocks remain byte-identical after `wrap_text` processes surrounding
+/// Markdown.
+#[rstest]
+#[case(vec![
+    "## Verification".to_string(),
+    String::new(),
+    "```bash".to_string(),
+    "set -o pipefail".to_string(),
+    "make check-fmt 2>&1 | tee /tmp/fmt.log".to_string(),
+    "make lint 2>&1 | tee /tmp/lint.log".to_string(),
+    "make test 2>&1 | tee /tmp/test.log".to_string(),
+    "```".to_string(),
+])]
+#[case(vec![
+    "## Verification".to_string(),
+    String::new(),
+    "    set -o pipefail".to_string(),
+    "    make check-fmt 2>&1 | tee /tmp/fmt.log".to_string(),
+    "    make lint 2>&1 | tee /tmp/lint.log".to_string(),
+    "    make test 2>&1 | tee /tmp/test.log".to_string(),
+])]
+fn wrap_text_preserves_shell_block_after_heading(#[case] input: Vec<String>) {
+    assert_eq!(wrap_text(&input, 80), input);
+}
+
+/// Guards issue `#261` by asserting fenced shell blocks remain byte-identical
+/// even when the heading is immediately followed by the opening fence.
+#[test]
+fn wrap_text_preserves_fenced_shell_block_without_blank_line_after_heading() {
+    let input = vec![
+        "## Verification".to_string(),
+        "```bash".to_string(),
+        "set -o pipefail".to_string(),
+        "make check-fmt 2>&1 | tee /tmp/fmt.log".to_string(),
+        "make lint 2>&1 | tee /tmp/lint.log".to_string(),
+        "make test 2>&1 | tee /tmp/test.log".to_string(),
+        "```".to_string(),
+    ];
+
+    assert_eq!(wrap_text(&input, 80), input);
 }
