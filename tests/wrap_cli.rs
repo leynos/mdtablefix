@@ -6,12 +6,14 @@ use assert_cmd::Command;
 use rstest::rstest;
 use tempfile::NamedTempFile;
 
-fn run_wrap_in_place_and_read_back(input: &str) -> String {
-    let temp = NamedTempFile::new().expect("create temp file");
-    fs::write(temp.path(), input).expect("write temp file");
+fn run_wrap_in_place_and_read_back(
+    input: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let temp = NamedTempFile::new()?;
+    fs::write(temp.path(), input)?;
 
-    Command::cargo_bin("mdtablefix")
-        .expect("find binary")
+    let mut command = Command::cargo_bin("mdtablefix")?;
+    command
         .args(["--wrap", "--in-place"])
         .arg(temp.path())
         .assert()
@@ -19,7 +21,7 @@ fn run_wrap_in_place_and_read_back(input: &str) -> String {
         .stdout("")
         .stderr("");
 
-    fs::read_to_string(temp.path()).expect("read temp file")
+    Ok(fs::read_to_string(temp.path())?)
 }
 
 /// Guards issue #261 by asserting `--wrap --in-place` leaves shell code blocks
@@ -49,16 +51,21 @@ fn run_wrap_in_place_and_read_back(input: &str) -> String {
     ),
     "indented code blocks must remain byte-identical",
 )]
-fn cli_wrap_in_place_preserves_shell_block_verbatim(#[case] input: &str, #[case] message: &str) {
-    let actual = run_wrap_in_place_and_read_back(input);
+fn cli_wrap_in_place_preserves_shell_block_verbatim(
+    #[case] input: &str,
+    #[case] message: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let actual = run_wrap_in_place_and_read_back(input)?;
     assert_eq!(actual, input, "{message}");
+    Ok(())
 }
 
 /// Guards issue #261 by asserting `--wrap --in-place` keeps fenced code blocks
 /// intact even when there is no blank line after the heading, content follows
 /// the block, and the source file lacks a trailing newline.
 #[test]
-fn cli_wrap_in_place_preserves_fenced_block_without_final_newline() {
+fn cli_wrap_in_place_preserves_fenced_block_without_final_newline(
+) -> Result<(), Box<dyn std::error::Error>> {
     let input = concat!(
         "## Verification\n",
         "```bash\n",
@@ -80,6 +87,7 @@ fn cli_wrap_in_place_preserves_fenced_block_without_final_newline() {
         "Trailing paragraph without final newline\n",
     );
 
-    let actual = run_wrap_in_place_and_read_back(input);
+    let actual = run_wrap_in_place_and_read_back(input)?;
     assert_eq!(actual, expected);
+    Ok(())
 }
