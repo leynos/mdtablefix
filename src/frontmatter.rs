@@ -19,8 +19,8 @@
 ///
 /// # Examples
 ///
-/// ```
-/// use mdtablefix::frontmatter::split_leading_yaml_frontmatter;
+/// ```ignore
+/// use crate::frontmatter::split_leading_yaml_frontmatter;
 ///
 /// let lines = vec![
 ///     "---".to_string(),
@@ -34,7 +34,7 @@
 /// assert_eq!(body[0], "# Heading");
 /// ```
 #[must_use]
-pub fn split_leading_yaml_frontmatter(lines: &[String]) -> (&[String], &[String]) {
+pub(crate) fn split_leading_yaml_frontmatter(lines: &[String]) -> (&[String], &[String]) {
     if lines.is_empty() {
         return (&[], &[]);
     }
