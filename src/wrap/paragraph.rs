@@ -46,19 +46,10 @@ pub(super) struct ParagraphWriter<'a> {
 impl<'a> ParagraphWriter<'a> {
     pub(super) fn new(out: &'a mut Vec<String>, width: usize) -> Self { Self { out, width } }
 
-    fn append_wrapped_with_prefix(&mut self, line: &PrefixLine<'_>) {
-        let prefix = line.prefix.as_ref();
+    fn wrap_with_prefix(&mut self, prefix: &str, continuation_prefix: &str, text: &str) {
         let prefix_width = UnicodeWidthStr::width(prefix);
         let available = self.width.saturating_sub(prefix_width).max(1);
-        let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
-        let indent_width = UnicodeWidthStr::width(indent_str.as_str());
-        let wrapped_indent = if line.repeat_prefix {
-            prefix.to_string()
-        } else {
-            format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width))
-        };
-
-        let lines = wrap_preserving_code(line.rest, available);
+        let lines = wrap_preserving_code(text, available);
         if lines.is_empty() {
             self.out.push(prefix.to_string());
             return;
@@ -68,9 +59,24 @@ impl<'a> ParagraphWriter<'a> {
             if index == 0 {
                 self.out.push(format!("{prefix}{wrapped_line}"));
             } else {
-                self.out.push(format!("{wrapped_indent}{wrapped_line}"));
+                self.out
+                    .push(format!("{continuation_prefix}{wrapped_line}"));
             }
         }
+    }
+
+    fn append_wrapped_with_prefix(&mut self, line: &PrefixLine<'_>) {
+        let prefix = line.prefix.as_ref();
+        let prefix_width = UnicodeWidthStr::width(prefix);
+        let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
+        let indent_width = UnicodeWidthStr::width(indent_str.as_str());
+        let continuation_prefix = if line.repeat_prefix {
+            prefix.to_string()
+        } else {
+            format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width))
+        };
+
+        self.wrap_with_prefix(prefix, continuation_prefix.as_str(), line.rest);
     }
 
     pub(super) fn flush_paragraph(&mut self, state: &mut ParagraphState) {
@@ -98,9 +104,7 @@ impl<'a> ParagraphWriter<'a> {
     }
 
     fn push_wrapped_segment(&mut self, indent: &str, segment: &str) {
-        for line in wrap_preserving_code(segment, self.width - indent.len()) {
-            self.out.push(format!("{indent}{line}"));
-        }
+        self.wrap_with_prefix(indent, indent, segment);
     }
 
     pub(super) fn push_verbatim(&mut self, state: &mut ParagraphState, line: &str) {

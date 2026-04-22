@@ -36,8 +36,9 @@ The function combines several helpers documented in `docs/`:
 - `html::convert_html_tables` transforms basic HTML tables into Markdown so \
   they can be reflowed like regular tables. See \
   [HTML table support](#html-table-support-in-mdtablefix).
-- `wrap::wrap_text` applies optional line wrapping. It relies on the
-  `unicode-width` crate for accurate character widths.
+- `wrap::wrap_text` applies optional line wrapping. It classifies Markdown
+  block structure locally and delegates greedy line fitting to the `textwrap`
+  crate over Markdown-aware fragments measured with `unicode-width`.
 - `wrap::tokenize_markdown` emits `Token` values for custom processing.
 - `headings::convert_setext_headings` rewrites Setext headings with underline
   markers into ATX headings when the CLI `--headings` flag is provided. The
@@ -374,33 +375,20 @@ module handles filesystem operations, delegating the text processing to
 
 ### Tokenizer flow
 
-The inline tokenizer iterates over the source string lazily, so no duplicate
-`Vec<char>` representation is required. The following diagram summarizes the
-control flow, highlighting the helpers touched during whitespace, code span,
-and link handling.
+The inline tokenizer still iterates over the source string lazily, so no
+duplicate `Vec<char>` representation is required. The resulting tokens are then
+grouped into Markdown-aware fragments and passed to
+`textwrap::wrap_algorithms::wrap_first_fit`, which chooses the breakpoints
+without splitting code spans, links, or punctuation groups.
 
 ```mermaid
 flowchart TD
-    A["Input text (&str)"] --> B["Initialize tokens Vec"]
-    B --> C["Iterate over text by byte index"]
-    C --> D{"Current char is whitespace?"}
-    D -- Yes --> E["scan_while for whitespace"]
-    E --> F["collect_range and push token"]
-    D -- No --> G{"Current char is '`'?"}
-    G -- Yes --> H["Check backslash escape (has_odd_backslash_escape_bytes)"]
-    H -- Escaped --> I["Push '`' as token"]
-    H -- Not escaped --> J["scan_while for code fence"]
-    J --> K["Find closing fence, collect_range and push token"]
-    G -- No --> L{"Current char is '[' or '!['?"}
-    L -- Yes --> M["parse_link_or_image"]
-    M --> N["Push link/image token"]
-    N --> O["scan_while for trailing punctuation"]
-    O --> P["collect_range and push punctuation token"]
-    L -- No --> Q["scan_while for non-whitespace/non-` chars"]
-    Q --> R["collect_range and push token"]
-    F & I & K & P & R --> S["Continue iteration"]
-    S --> C
-    C -->|End| T["Return tokens Vec"]
+    A["Input text (&str)"] --> B["Tokenize into whitespace and inline Markdown tokens"]
+    B --> C["Group tokens into Markdown-aware fragments"]
+    C --> D["Measure fragment widths with unicode-width"]
+    D --> E["Run textwrap wrap_first_fit over current fragments"]
+    E --> F["Merge whitespace-only continuation lines forward"]
+    F --> G["Render wrapped lines, trimming only a single trailing separator space"]
 ```
 
 The helper `html_table_to_markdown` is retained for backward compatibility but
@@ -444,8 +432,9 @@ sequenceDiagram
 
 `mdtablefix` wraps paragraphs and list items while respecting the display width
 of Unicode characters. The `unicode-width` crate is used to compute the width
-of strings when deciding where to break lines. This prevents emojis or other
-multibyte characters from causing unexpected wraps or truncation.
+of prefixes and Markdown-aware wrapping fragments before `textwrap` performs
+line fitting. This prevents emojis or other multibyte characters from causing
+unexpected wraps or truncation.
 
 Whenever wrapping logic examines the length of a token, it relies on
 `UnicodeWidthStr::width` to measure visible columns rather than byte length.

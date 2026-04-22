@@ -96,7 +96,7 @@ according to the selected options.
 - [x] (2026-04-09) Update `README.md` and `docs/architecture.md`.
 - [x] (2026-04-09) Run `make check-fmt`, `make lint`, `make test`,
       `make markdownlint`,
-  and `make nixie`.
+  and `make nixie` if Mermaid content changes.
 
 ## Surprises & discoveries
 
@@ -261,7 +261,8 @@ make markdownlint
 make nixie
 ```
 
-`make nixie` is required.
+If `docs/architecture.md` does not change any Mermaid content, `make nixie` may
+be skipped.
 
 ## Validation and acceptance
 

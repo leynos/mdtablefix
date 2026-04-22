@@ -1,11 +1,11 @@
 # Trailing spaces
 
-`wrap_preserving_code` keeps trailing spaces on the final line.
+The `textwrap`-backed inline wrapper keeps trailing spaces on the final line.
 
 Markdown treats two spaces at the end of a line as a hard break. Earlier
 versions trimmed those spaces during the final flush, turning hard breaks into
-soft ones. The final line is now pushed as-is so trailing whitespace survives
-wrapping.
+soft ones. The current wrapper still renders the final line as-is after
+`textwrap` has chosen the line breaks, so trailing whitespace survives wrapping.
 
 ## Example
 

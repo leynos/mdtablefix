@@ -13,7 +13,6 @@ use std::borrow::Cow;
 mod block;
 mod fence;
 mod inline;
-mod line_buffer;
 mod paragraph;
 mod tokenize;
 use block::{BLOCKQUOTE_RE, BULLET_RE, FOOTNOTE_RE};

@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETED
 
 ## Purpose / big picture
 
@@ -124,13 +124,19 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
   engine.
 - [x] (2026-04-22 00:00Z) Confirmed that `tests/wrap/*.rs` are orphaned from
   Cargo integration discovery and must not be relied upon as active coverage.
-- [ ] Add or promote active regression tests that pin the behaviour required
-  before changing the wrap engine.
-- [ ] Introduce `textwrap` and build a minimal prototype behind the existing
-  wrapping entry points.
-- [ ] Replace the bespoke line-buffer loop and consolidate prefix handling.
-- [ ] Remove dead wrapping internals that are no longer referenced.
-- [ ] Update the affected documentation and run the full quality gates.
+- [x] (2026-04-22 00:00Z) Added active regressions for nested blockquote
+  prefix repetition, footnote continuation alignment, and checkbox indentation
+  in `src/wrap/tests.rs`.
+- [x] (2026-04-22 00:00Z) Introduced `textwrap` and routed inline line fitting
+  through `textwrap::wrap_algorithms::wrap_first_fit`.
+- [x] (2026-04-22 00:00Z) Replaced the bespoke line-buffer loop with
+  fragment-based wrapping and consolidated prefix handling in
+  `src/wrap/paragraph.rs`.
+- [x] (2026-04-22 00:00Z) Removed the dead `src/wrap/line_buffer.rs` module
+  from the active wrap path.
+- [x] (2026-04-22 00:00Z) Updated the affected documentation and passed
+  `make fmt`, `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
+  and `make nixie`.
 
 ## Surprises & Discoveries
 
@@ -159,6 +165,13 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
   handling", plus `docs/trailing-spaces.md`. Impact: documentation updates are
   part of the required work, not optional cleanup.
 
+- Observation: `textwrap`'s low-level `wrap_first_fit` API works better for
+  this migration than `textwrap::wrap` because it accepts pre-grouped fragments
+  with caller-defined widths. Evidence: `textwrap::core::Fragment` and
+  `textwrap::wrap_algorithms::wrap_first_fit`. Impact: the repository can keep
+  its existing Markdown-aware token grouping and whitespace preservation
+  without reviving the old mutable `LineBuffer`.
+
 ## Decision Log
 
 - Decision: scope the first delivery to replacing the bespoke wrapping engine,
@@ -177,12 +190,28 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
   Rationale: the repository contains inactive wrap tests, so moving directly to
   cleanup would create a false sense of safety. Date/Author: 2026-04-22 / Codex
 
+- Decision: use `textwrap::wrap_algorithms::wrap_first_fit` with custom
+  Markdown-aware fragments instead of `textwrap::wrap`. Rationale:
+  `wrap_first_fit` delegates line fitting to `textwrap` while allowing
+  `mdtablefix` to preserve leading carry whitespace, atomic code spans, and
+  display-width measurements on grouped fragments. That keeps the refactor
+  small without losing the behaviours guarded by the current tests.
+  Date/Author: 2026-04-22 / Codex
+
 ## Outcomes & Retrospective
 
-This section is intentionally blank until implementation is complete. When the
-work lands, replace this paragraph with a short summary of what changed, what
-was left for follow-up, and what the repository learned about using `textwrap`
-for Markdown-aware wrapping.
+The implementation kept `tokenize_markdown` and the existing block
+classification intact, but replaced the bespoke `LineBuffer` loop with a
+fragment-based adapter over `textwrap::wrap_algorithms::wrap_first_fit`. Prefix
+handling now flows through one helper in `src/wrap/paragraph.rs`, and active
+regressions cover nested blockquotes, footnote continuation alignment, and
+checkbox indentation.
+
+The key lesson from the migration is that `textwrap` alone is not a drop-in
+replacement for the repository's historic whitespace semantics. Preserving the
+old behaviour required a thin adaptation layer that merges whitespace-only
+overflow lines forward and sometimes rebalances the trailing fragment when the
+correct break only becomes obvious after the following separator arrives.
 
 ## Context and orientation
 
