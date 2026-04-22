@@ -441,3 +441,9 @@ when wrapping. This prevents sentences such as:
 
 from splitting the full stop onto a new line, preserving the code span's
 readability.
+
+This grouping is deliberately narrow. Whitespace between separate inline code
+spans remains a valid break opportunity, so sequences such as `.toml`, `.json`,
+`.json5`, `.yaml`, and `.yml` can wrap between spans when required. The
+coupling rule only keeps immediately trailing punctuation with the preceding
+code span.
