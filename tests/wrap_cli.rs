@@ -6,9 +6,7 @@ use assert_cmd::Command;
 use rstest::rstest;
 use tempfile::NamedTempFile;
 
-fn run_wrap_in_place_and_read_back(
-    input: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+fn run_wrap_in_place_and_read_back(input: &str) -> Result<String, Box<dyn std::error::Error>> {
     let temp = NamedTempFile::new()?;
     fs::write(temp.path(), input)?;
 
@@ -64,8 +62,8 @@ fn cli_wrap_in_place_preserves_shell_block_verbatim(
 /// intact even when there is no blank line after the heading, content follows
 /// the block, and the source file lacks a trailing newline.
 #[test]
-fn cli_wrap_in_place_preserves_fenced_block_without_final_newline(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn cli_wrap_in_place_preserves_fenced_block_without_final_newline()
+-> Result<(), Box<dyn std::error::Error>> {
     let input = concat!(
         "## Verification\n",
         "```bash\n",
