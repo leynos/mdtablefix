@@ -128,10 +128,10 @@ fn reflow_table_preserves_escaped_pipes_in_continuation_rows() {
         "|     | keep \\| literal in continuation |",
     ];
     let expected = lines_vec![
-        "| Key   | Notes                          |",
-        "| ----- | ------------------------------ |",
-        "| `api` | first item                     |",
-        "|       | keep | literal in continuation |",
+        "| Key   | Notes                           |",
+        "| ----- | ------------------------------- |",
+        "| `api` | first item                      |",
+        "|       | keep \\| literal in continuation |",
     ];
 
     assert_eq!(reflow_table(&input), expected);
