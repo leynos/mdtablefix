@@ -87,7 +87,7 @@ contents of the manual.
   they do not execute during documentation tests.
 - Put function attributes after the doc comment.
 
-````rust,no_run
+```rust,no_run
 /// Returns the sum of `a` and `b`.
 ///
 /// # Parameters
@@ -106,7 +106,7 @@ contents of the manual.
 pub fn add(a: i32, b: i32) -> i32 {
     a + b
 }
-````
+```
 
 ## Diagrams and images
 

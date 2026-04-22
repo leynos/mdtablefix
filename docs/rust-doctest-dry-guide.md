@@ -106,9 +106,9 @@ Doctests reside within documentation comments. Rust recognizes two types:
 
 Within these comments, a code block is denoted by triple back-ticks (```).
 While `rustdoc` defaults to Rust syntax, explicitly add the `rust` language
-specifier for clarity.[^3] A doctest "passes" when it compiles and runs
-without panicking. To assert specific outcomes, use the standard macros
-`assert!`, `assert_eq!`, and `assert_ne!`.[^3]
+specifier for clarity.[^3] A doctest "passes" when it compiles and runs without
+panicking. To assert specific outcomes, use the standard macros `assert!`,
+`assert_eq!`, and `assert_ne!`.[^3]
 
 ### 2.2 The Philosophy of a Good Example
 

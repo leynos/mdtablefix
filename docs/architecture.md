@@ -54,7 +54,7 @@ incoming lines are buffered or emitted. Once the end of a table or fence is
 reached, buffered lines are flushed and possibly reformatted. The simplified
 behaviour is illustrated below.
 
-````mermaid
+```mermaid
 stateDiagram-v2
 
     [*] --> Streaming: Start
@@ -78,7 +78,7 @@ stateDiagram-v2
     InHtmlTable --> InHtmlTable: Line inside table tag
 
     InCodeFence --> Streaming: Line is a fence delimiter
-````
+```
 
 Before:
 

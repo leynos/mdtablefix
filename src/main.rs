@@ -5,6 +5,12 @@
 //! rewritten in place. Without paths the tool reads from standard input and
 //! prints results to stdout while preserving the input order.
 
+/// Detects and splits leading YAML frontmatter for CLI processing so command
+/// handlers can preserve the prefix while applying transforms to the Markdown
+/// body.
+#[path = "frontmatter.rs"]
+mod frontmatter;
+
 use std::{
     borrow::Cow,
     fs,
@@ -14,14 +20,10 @@ use std::{
 
 use anyhow::Context;
 use clap::Parser;
-use mdtablefix::{
-    Options,
-    format_breaks,
-    process::process_stream_inner,
-    renumber_lists,
-    split_leading_yaml_frontmatter,
-};
+use mdtablefix::{Options, format_breaks, process::process_stream_inner, renumber_lists};
 use rayon::prelude::*;
+
+use crate::frontmatter::split_leading_yaml_frontmatter;
 
 #[derive(Parser)]
 #[command(version, about = "Reflow broken markdown tables")]
