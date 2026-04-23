@@ -16,6 +16,31 @@ const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 ///
 /// Leading empty cells are protected before the global split so continuation
 /// rows keep their original column positions.
+///
+/// # Arguments
+///
+/// - `trimmed`: Trimmed table lines collected from the source document.
+///
+/// # Returns
+///
+/// A tuple containing the parsed rows and a flag indicating whether the
+/// sentinel split crossed an original line boundary.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let trimmed = vec!["| a | b |".to_string(), "| 1 | 2 |".to_string()];
+/// let (rows, split_within_line) = mdtablefix::reflow::parse_rows(&trimmed);
+///
+/// assert_eq!(
+///     rows,
+///     vec![
+///         vec!["a".to_string(), "b".to_string()],
+///         vec!["1".to_string(), "2".to_string()],
+///     ]
+/// );
+/// assert!(!split_within_line);
+/// ```
 pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
     let protected = trimmed
         .iter()
@@ -62,6 +87,27 @@ fn split_into_rows(cells: Vec<String>) -> Vec<Vec<String>> {
 }
 
 /// Restores parser markers and removes rows that contain only empty cells.
+///
+/// # Arguments
+///
+/// - `rows`: Parsed rows that may still contain continuation markers.
+///
+/// # Returns
+///
+/// Rows with marker cells restored to empty strings and fully empty rows
+/// removed.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let rows = vec![
+///     vec!["\u{1d}".to_string(), "value".to_string()],
+///     vec![String::new(), String::new()],
+/// ];
+/// let cleaned = mdtablefix::reflow::clean_rows(rows);
+///
+/// assert_eq!(cleaned, vec![vec![String::new(), "value".to_string()]]);
+/// ```
 pub(crate) fn clean_rows(rows: Vec<Vec<String>>) -> Vec<Vec<String>> {
     rows.into_iter()
         .map(|row| {
@@ -83,6 +129,27 @@ pub(crate) fn clean_rows(rows: Vec<Vec<String>>) -> Vec<Vec<String>> {
 ///
 /// Widths are measured with `unicode-width` so wide glyphs align correctly in
 /// the rendered table output.
+///
+/// # Arguments
+///
+/// - `rows`: Parsed rows whose cell widths should contribute to the final table layout.
+/// - `max_cols`: The number of output columns to size.
+///
+/// # Returns
+///
+/// A vector containing the widest emitted display width for each column.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let rows = vec![
+///     vec!["ASCII".to_string(), "漢".to_string()],
+///     vec!["a | b".to_string(), "wide".to_string()],
+/// ];
+/// let widths = mdtablefix::reflow::calculate_widths(&rows, 2);
+///
+/// assert_eq!(widths, vec![6, 4]);
+/// ```
 pub(crate) fn calculate_widths(rows: &[Vec<String>], max_cols: usize) -> Vec<usize> {
     let mut widths = vec![0; max_cols];
     for row in rows {
@@ -94,6 +161,26 @@ pub(crate) fn calculate_widths(rows: &[Vec<String>], max_cols: usize) -> Vec<usi
 }
 
 /// Formats each row with the supplied display widths and original indentation.
+///
+/// # Arguments
+///
+/// - `rows`: Output rows to emit.
+/// - `widths`: Display widths calculated for each column.
+/// - `indent`: Leading whitespace that should prefix every emitted row.
+///
+/// # Returns
+///
+/// Fully formatted table rows with escaped literal pipes and padding applied.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let rows = vec![vec!["a".to_string(), "b | c".to_string()]];
+/// let widths = vec![1, 5];
+/// let formatted = mdtablefix::reflow::format_rows(&rows, &widths, "  ");
+///
+/// assert_eq!(formatted, vec!["  | a | b \\| c |".to_string()]);
+/// ```
 pub(crate) fn format_rows(rows: &[Vec<String>], widths: &[usize], indent: &str) -> Vec<String> {
     rows.iter()
         .map(|row| {
@@ -108,6 +195,39 @@ pub(crate) fn format_rows(rows: &[Vec<String>], widths: &[usize], indent: &str) 
 }
 
 /// Reinserts the separator row, when present, ahead of the table body.
+///
+/// # Arguments
+///
+/// - `out`: Formatted table body rows.
+/// - `sep_cells`: Optional separator cells to reinsert.
+/// - `widths`: Display widths for each column.
+/// - `indent`: Leading whitespace to prefix the separator row.
+///
+/// # Returns
+///
+/// The output rows with a formatted separator inserted after the header row
+/// when separator cells are available.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let out = vec!["| head | body |".to_string(), "| row  | text |".to_string()];
+/// let inserted = mdtablefix::reflow::insert_separator(
+///     out,
+///     Some(vec!["---".to_string(), ":--".to_string()]),
+///     &[4, 4],
+///     "",
+/// );
+///
+/// assert_eq!(
+///     inserted,
+///     vec![
+///         "| head | body |".to_string(),
+///         "| ---- | :--- |".to_string(),
+///         "| row  | text |".to_string(),
+///     ]
+/// );
+/// ```
 pub(crate) fn insert_separator(
     out: Vec<String>,
     sep_cells: Option<Vec<String>>,
@@ -134,6 +254,31 @@ pub(crate) fn insert_separator(
 ///
 /// The explicit separator line is preferred, but the second parsed row can be
 /// promoted when the source omitted a standalone separator line.
+///
+/// # Arguments
+///
+/// - `sep_line`: Optional separator line extracted from the original input.
+/// - `rows`: Parsed table rows.
+/// - `max_cols`: The maximum column count across the parsed rows.
+///
+/// # Returns
+///
+/// A tuple containing the chosen separator cells and the index of the
+/// promoted separator row when one of the parsed rows is reused.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let rows = vec![
+///     vec!["head".to_string(), "body".to_string()],
+///     vec!["---".to_string(), "---".to_string()],
+///     vec!["row".to_string(), "text".to_string()],
+/// ];
+/// let (sep_cells, sep_row_idx) = mdtablefix::reflow::detect_separator(None, &rows, 2);
+///
+/// assert_eq!(sep_cells, Some(vec!["---".to_string(), "---".to_string()]));
+/// assert_eq!(sep_row_idx, Some(1));
+/// ```
 pub(crate) fn detect_separator(
     sep_line: Option<&String>,
     rows: &[Vec<String>],
@@ -240,6 +385,52 @@ mod tests {
             clean_rows(rows),
             vec![vec![String::new(), "value".to_string()]]
         );
+    }
+
+    #[test]
+    fn escape_literal_pipes_only_escapes_bare_pipes() {
+        assert_eq!(escape_literal_pipes("plain text"), "plain text");
+        assert_eq!(escape_literal_pipes("left | right"), r"left \| right");
+        assert_eq!(escape_literal_pipes(r"left \| right"), r"left \\| right");
+    }
+
+    #[test]
+    fn emitted_cell_width_accounts_for_escaping_and_unicode_width() {
+        let ascii = "ASCII";
+        let with_pipe = "a|b";
+        let wide = "漢";
+
+        assert_eq!(emitted_cell_width(ascii), ascii.len());
+        assert_eq!(emitted_cell_width(with_pipe), with_pipe.len() + 1);
+        assert_eq!(emitted_cell_width(wide), UnicodeWidthStr::width(wide));
+    }
+
+    #[test]
+    fn pad_cell_to_width_pads_short_cells_to_target_width() {
+        let padded = pad_cell_to_width("cat", 5);
+
+        assert_eq!(padded, "cat  ");
+        assert_eq!(UnicodeWidthStr::width(padded.as_str()), 5);
+    }
+
+    #[test]
+    fn pad_cell_to_width_escapes_pipes_before_padding() {
+        let padded = pad_cell_to_width("a|b", 5);
+
+        assert_eq!(padded, r"a\|b ");
+        assert_eq!(UnicodeWidthStr::width(padded.as_str()), 5);
+    }
+
+    #[test]
+    fn pad_cell_to_width_leaves_exact_width_cells_unpadded() {
+        let cell = "漢";
+
+        assert_eq!(pad_cell_to_width(cell, emitted_cell_width(cell)), cell);
+    }
+
+    #[test]
+    fn pad_cell_to_width_saturates_without_truncating() {
+        assert_eq!(pad_cell_to_width("a|b", 2), r"a\|b");
     }
 
     #[rstest]

@@ -42,6 +42,26 @@ pub fn split_cells(line: &str) -> Vec<String> {
 ///
 /// Alignment markers from the source separator are preserved while each cell
 /// is widened to at least three dashes, as required by Markdown tables.
+///
+/// # Arguments
+///
+/// - `widths`: Computed display widths for each output column.
+/// - `sep_cells`: Separator cells taken from the parsed Markdown table.
+///
+/// # Returns
+///
+/// Separator cells widened to the target widths while preserving left and
+/// right alignment markers. When the counts do not match, the original cells
+/// are returned unchanged.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let sep_cells = vec![":--".to_string(), "---:".to_string()];
+/// let formatted = mdtablefix::table::format_separator_cells(&[4, 5], &sep_cells);
+///
+/// assert_eq!(formatted, vec![":---".to_string(), "----:".to_string()]);
+/// ```
 pub(crate) fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String> {
     if sep_cells.len() != widths.len() {
         return sep_cells.to_vec();

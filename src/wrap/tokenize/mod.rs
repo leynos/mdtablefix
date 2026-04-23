@@ -240,7 +240,7 @@ where
 /// returned as [`Token::Text`]. Whitespace is preserved exactly as it appears.
 ///
 /// ```rust
-/// use crate::wrap::{Token, tokenize_markdown};
+/// use mdtablefix::wrap::{Token, tokenize_markdown};
 ///
 /// let tokens = tokenize_markdown("Example with `code`");
 /// assert_eq!(
