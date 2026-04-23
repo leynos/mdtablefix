@@ -275,14 +275,55 @@ fn attach_specifier_to_fence(fence_line: &str, specifier: &str, spec_indent: &st
     format!("{final_indent}{fence_marker}{specifier}")
 }
 
+fn attach_to_next_fence<'a, I>(
+    lines: &mut std::iter::Peekable<I>,
+    specifier: &str,
+    indent: &str,
+    out: &mut Vec<String>,
+    specifier_line: &str,
+    tracker: &mut FenceTracker,
+) -> bool
+where
+    I: Iterator<Item = &'a String>,
+{
+    let mut blank_lines = Vec::new();
+
+    while let Some(next_line) = lines.peek() {
+        if next_line.trim().is_empty() {
+            if let Some(blank_line) = lines.next() {
+                blank_lines.push(blank_line.clone());
+            }
+            continue;
+        }
+
+        if let Some(captures) = FENCE_RE.captures(next_line) {
+            let lang = captures.get(3).map_or("", |m| m.as_str());
+            if is_null_lang(lang)
+                && let Some(fence_line) = lines.next()
+            {
+                out.extend(blank_lines);
+                out.push(attach_specifier_to_fence(fence_line, specifier, indent));
+                let _ = tracker.observe(fence_line);
+                return true;
+            }
+        }
+
+        break;
+    }
+
+    out.push(specifier_line.to_string());
+    out.extend(blank_lines);
+    false
+}
+
 /// Attach orphaned language specifiers to opening fences.
 ///
 /// After compressing fences, a language may appear on its own line directly
 /// before a fence. This function removes that line and applies the specifier
-/// to the following opening fence. Blank lines between the specifier and the
-/// fence are skipped. When the fence is unindented, the specifier's indentation
-/// is used. If the specifier's indentation extends the fence's, the deeper
-/// indentation is retained.
+/// to the following opening fence while preserving any intervening blank lines.
+/// When the fence is unindented, the specifier's indentation is used. If the
+/// specifier's indentation extends the fence's, the deeper indentation is
+/// retained.
 ///
 /// Specifiers containing spaces are accepted and normalised. Fences labelled
 /// `null` are normalised to empty by `compress_fences`, so only empty languages
@@ -317,37 +358,10 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
         let (spec, indent) = normalize_specifier(line);
         if ORPHAN_LANG_RE.is_match(&spec) && out.last().is_none_or(|l: &String| l.trim().is_empty())
         {
-            let mut blank_lines = Vec::new();
-            let mut attached = false;
-
-            while let Some(next_line) = lines.peek() {
-                if next_line.trim().is_empty() {
-                    if let Some(blank_line) = lines.next() {
-                        blank_lines.push(blank_line.clone());
-                    }
-                    continue;
-                }
-
-                if let Some(captures) = FENCE_RE.captures(next_line) {
-                    let lang = captures.get(3).map_or("", |m| m.as_str());
-                    if is_null_lang(lang)
-                        && let Some(fence_line) = lines.next()
-                    {
-                        out.push(attach_specifier_to_fence(fence_line, &spec, &indent));
-                        let _ = tracker.observe(fence_line);
-                        attached = true;
-                    }
-                }
-                break;
-            }
-
-            if attached {
+            if attach_to_next_fence(&mut lines, &spec, &indent, &mut out, line, &mut tracker) {
                 continue;
             }
-
-            out.push(line.clone());
             let _ = tracker.observe(line);
-            out.extend(blank_lines);
             continue;
         }
 

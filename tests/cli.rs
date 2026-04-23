@@ -262,7 +262,7 @@ fn test_cli_fences_with_renumber() {
         .write_stdin(input)
         .assert()
         .success()
-        .stdout("```rust\nfn main() {}\n```\n\n1. first\n2. second\n");
+        .stdout("\n```rust\nfn main() {}\n```\n\n1. first\n2. second\n");
 }
 
 #[test]
