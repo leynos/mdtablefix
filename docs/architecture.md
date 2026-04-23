@@ -417,10 +417,10 @@ flowchart TD
     F -->|Yes| G[wrap_with_prefix computes display width using unicode-width]
     F -->|No| H[wrap_preserving_code wraps inline content]
 
-    G --> I[InlineTextwrapAdapter prepares textwrap options]
+    G --> I[fragment-building / post-process helpers]
     H --> I
 
-    I --> J[textwrap::wrap performs line breaking]
+    I --> J[textwrap::wrap_algorithms::wrap_first_fit performs line breaking]
     J --> K[Reconstruct wrapped lines with prefixes and preserved spans]
     K --> L[Emit wrapped lines to wrap_text]
 

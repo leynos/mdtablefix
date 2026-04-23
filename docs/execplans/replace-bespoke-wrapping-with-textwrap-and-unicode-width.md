@@ -47,8 +47,9 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
 - Keep Unicode display-width handling based on `unicode-width`. Any helper that
   computes indentation or available columns must use display width rather than
   byte length.
-- Add `textwrap` using a caret requirement that is compatible with the
-  repository's Rust `1.89` minimum version and existing 2024 edition build.
+- Add the `textwrap` dependency to `Cargo.toml` using implicit semver (no
+  leading `^`) that is compatible with the repository's Rust `1.89` minimum
+  version and existing 2024 edition build.
 - Keep touched source files below the repository's 400-line soft ceiling. If
   the refactor would make a file exceed that limit, split the code into a small
   new module instead of extending the file.

@@ -49,9 +49,9 @@ pub(super) fn merge_whitespace_only_lines(
                     .last()
                     .is_some_and(|fragment| fragment.kind == FragmentKind::InlineCode)
             {
-                let previous_atomic = previous_line
-                    .pop()
-                    .expect("line with an atomic tail contains that fragment");
+                let Some(previous_atomic) = previous_line.pop() else {
+                    continue;
+                };
                 pending_whitespace.push(previous_atomic);
                 if previous_line.is_empty() {
                     merged.pop();
@@ -96,17 +96,16 @@ pub(super) fn rebalance_atomic_tails(lines: &mut [Vec<InlineFragment>], width: u
             continue;
         }
 
-        let trailing_width = lines[index]
-            .last()
-            .map(|fragment| fragment.width)
-            .expect("line selected for tail rebalancing contains a trailing fragment");
+        let Some(trailing_width) = lines[index].last().map(|fragment| fragment.width) else {
+            continue;
+        };
         if line_width(&lines[index + 1]) + trailing_width > width {
             continue;
         }
 
-        let trailing_fragment = lines[index]
-            .pop()
-            .expect("line selected for tail rebalancing contains a trailing fragment");
+        let Some(trailing_fragment) = lines[index].pop() else {
+            continue;
+        };
         lines[index + 1].insert(0, trailing_fragment);
     }
 }

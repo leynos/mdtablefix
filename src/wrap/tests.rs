@@ -341,6 +341,7 @@ fn wrap_text_keeps_trailing_spaces_for_bullet_final_line() {
 
 #[test]
 fn wrap_text_repeats_nested_blockquote_prefix() {
+    let prefix = "> > ";
     let input = vec![
         concat!(
             "> > This nested quote contains enough text to require wrapping so that we can verify ",
@@ -351,6 +352,24 @@ fn wrap_text_repeats_nested_blockquote_prefix() {
     let wrapped = wrap_text(&input, 80);
     assert!(wrapped.len() > 1);
     assert!(wrapped.iter().all(|line| line.starts_with("> > ")));
+    let wrapped_payload = wrapped
+        .iter()
+        .map(|line| {
+            line.strip_prefix(prefix)
+                .expect("nested blockquote line keeps its prefix")
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let normalized_payload = wrapped_payload
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert_eq!(
+        normalized_payload,
+        input[0]
+            .strip_prefix(prefix)
+            .expect("original test input uses the nested blockquote prefix")
+    );
 }
 
 #[rstest(
