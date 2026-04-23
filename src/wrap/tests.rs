@@ -271,6 +271,31 @@ fn wrap_text_preserves_hyphenated_words() {
 }
 
 #[test]
+fn wrap_text_breaks_between_space_separated_code_spans() {
+    let input = vec![
+        "The file loader selects the parser based on the extension (`.toml`, `.json`, `.json5`, \
+         `.yaml`, `.yml`). When the `json5` feature is active, both `.json` and `.json5` files \
+         are parsed using the JSON5 format."
+            .to_string(),
+    ];
+    let wrapped = wrap_text(&input, 80);
+
+    for line in &wrapped {
+        assert!(
+            unicode_width::UnicodeWidthStr::width(line.as_str()) <= 80,
+            "line too wide ({} cols): {line:?}",
+            unicode_width::UnicodeWidthStr::width(line.as_str())
+        );
+    }
+
+    assert!(
+        wrapped[0].ends_with("`.toml`,") || wrapped[0].ends_with("`.json`,"),
+        "expected first line to break inside the code-span list, got: {:?}",
+        wrapped[0]
+    );
+}
+
+#[test]
 fn wrap_text_does_not_insert_spaces_in_hyphenated_words() {
     let input = vec![
         concat!(
