@@ -284,9 +284,10 @@ fn attach_specifier_to_fence(fence_line: &str, specifier: &str, spec_indent: &st
 /// orphan specifier, buffering intervening blank lines until it either finds a
 /// fence that can accept the provided `specifier` or determines attachment is
 /// not possible. The `indent` is retained when building the rewritten fence.
-/// Successful and fallback output is written into `out`, and
-/// `specifier_line` preserves the original orphan line when no matching fence
-/// is found.
+/// On a successful attachment the buffered blank lines are dropped so the
+/// specifier stays directly attached to the rewritten fence. Fallback output is
+/// written into `out`, and `specifier_line` preserves the original orphan line
+/// when no matching fence is found.
 ///
 /// # Parameters
 ///
@@ -321,7 +322,6 @@ fn attach_to_next_fence<'a, I>(
             if is_null_lang(lang)
                 && let Some(fence_line) = lines.next()
             {
-                out.extend(blank_lines);
                 out.push(attach_specifier_to_fence(fence_line, specifier, indent));
                 let _ = tracker.observe(fence_line);
                 return;
@@ -339,10 +339,10 @@ fn attach_to_next_fence<'a, I>(
 ///
 /// After compressing fences, a language may appear on its own line directly
 /// before a fence. This function removes that line and applies the specifier
-/// to the following opening fence while preserving any intervening blank lines.
-/// When the fence is unindented, the specifier's indentation is used. If the
-/// specifier's indentation extends the fence's, the deeper indentation is
-/// retained.
+/// to the following opening fence, dropping any intervening blank lines when
+/// attachment succeeds. When the fence is unindented, the specifier's
+/// indentation is used. If the specifier's indentation extends the fence's, the
+/// deeper indentation is retained.
 ///
 /// Specifiers containing spaces are accepted and normalised. Fences labelled
 /// `null` are normalised to empty by `compress_fences`, so only empty languages
