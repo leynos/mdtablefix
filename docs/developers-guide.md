@@ -88,3 +88,50 @@ The rationale for the staged table reflow pipeline is recorded in
 `docs/adrs/0001-table-reflow-pipeline.md`. Refer to that ADR when changing the
 parse, width-calculation, or separator-handling flow so implementation changes
 stay aligned with the documented design constraints.
+
+## Wrap module architecture
+
+The wrapping pipeline for `--wrap` operates in three stages:
+
+1. **Block classification.** Each input line is inspected by `classify_block`
+   in `src/wrap.rs` to determine whether it is a fenced code block, blockquote,
+   bullet, footnote definition, or plain paragraph text. Lines that belong to
+   fenced or indented code blocks are passed through verbatim.
+
+2. **Fragment construction.** Prose lines are tokenised by
+   `tokenize::segment_inline` and grouped into `InlineFragment` values by
+   `build_fragments` in `src/wrap/inline.rs`. Each fragment carries its display
+   width (measured with `unicode-width`) and a `FragmentKind` tag
+   (`Whitespace`, `InlineCode`, `Link`, or `Plain`) computed once at
+   construction time by `classify_fragment`.
+
+3. **Line fitting and post-processing.** `wrap_preserving_code` calls
+   `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
+   buffer, then applies `merge_whitespace_only_lines` and
+   `rebalance_atomic_tails` from `src/wrap/inline/postprocess.rs` to normalise
+   whitespace-only wrap lines and rebalance atomic tails that would otherwise
+   appear isolated at the start of continuation lines.
+
+### Key types and functions
+
+| Symbol                                                  | File                             |
+| ------------------------------------------------------- | -------------------------------- |
+| `FragmentKind`, `InlineFragment`, `classify_fragment`   | `src/wrap/inline.rs`             |
+| `build_fragments`, `wrap_preserving_code`               | `src/wrap/inline.rs`             |
+| `merge_whitespace_only_lines`, `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
+| `ParagraphWriter`, `wrap_with_prefix`                   | `src/wrap/paragraph.rs`          |
+| `ParagraphState`, `PrefixLine`                          | `src/wrap/paragraph.rs`          |
+
+### Design constraints
+
+- **Public API stability.** `mdtablefix::wrap::wrap_text`, `Token`, and
+  `tokenize_markdown` must not change their signatures or observable behaviour.
+- **Atomic fragments.** Inline code spans and Markdown links are never split
+  across lines; they move as a unit when they would overflow the target width.
+- **Prefix width.** The visual width of every prefix string is measured with
+  `UnicodeWidthStr::width` before the available text width is computed, so
+  non-ASCII prefix characters (e.g. `「` in CJK blockquotes) are accounted for
+  correctly.
+
+Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
+replacing `LineBuffer` with `textwrap`.

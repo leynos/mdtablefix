@@ -15,13 +15,18 @@ use unicode_width::UnicodeWidthStr;
 use super::tokenize;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
+/// Marks how a grouped token span should behave during wrapping.
 enum SpanKind {
+    /// Treat the span as ordinary prose.
     General,
+    /// Treat the span as an inline code sequence.
     Code,
+    /// Treat the span as a Markdown link or image link.
     Link,
 }
 
 #[inline]
+/// Returns whether a character should stay attached as trailing punctuation.
 fn is_trailing_punct(c: char) -> bool {
     // ASCII closers + common Unicode closers and word-final punctuation
     matches!(
@@ -30,16 +35,20 @@ fn is_trailing_punct(c: char) -> bool {
     ) || "…—–»›）］】》」』、。，：；！？”.’".contains(c)
 }
 
+/// Returns whether a token already looks like a complete Markdown link.
 fn looks_like_link(token: &str) -> bool {
     (token.starts_with('[') || token.starts_with("!["))
         && token.contains("](")
         && token.ends_with(')')
 }
 
+/// Returns whether a token contains only Unicode whitespace.
 fn is_whitespace_token(token: &str) -> bool { token.chars().all(char::is_whitespace) }
 
+/// Returns whether a token is a complete inline code span.
 fn is_inline_code_token(token: &str) -> bool { token.starts_with('`') && token.ends_with('`') }
 
+/// Extends a grouped span over trailing punctuation tokens and updates width.
 fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usize {
     while j < tokens.len() && tokens[j].chars().all(is_trailing_punct) {
         *width += UnicodeWidthStr::width(tokens[j].as_str());
@@ -71,6 +80,7 @@ fn should_couple_whitespace(kind: SpanKind, next_token: Option<&String>) -> bool
 }
 
 #[inline]
+/// Merges a backtick-opened code span into one grouped span and updates width.
 fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
     debug_assert!(
         tokens[i] == "`",
@@ -89,6 +99,7 @@ fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
     j
 }
 
+/// Returns the exclusive end index and display width of the grouped token span.
 pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
     let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());
@@ -172,14 +183,20 @@ pub(super) fn attach_punctuation_to_previous_line(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Classifies an inline fragment for post-wrap heuristics.
 enum FragmentKind {
+    /// Marks a fragment that contains only whitespace.
     Whitespace,
+    /// Marks a fragment that contains inline code.
     InlineCode,
+    /// Marks a fragment that contains a Markdown link.
     Link,
+    /// Marks a fragment that contains ordinary prose.
     Plain,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Stores rendered fragment text, width, and classification for wrapping.
 struct InlineFragment {
     text: String,
     width: usize,
@@ -187,15 +204,19 @@ struct InlineFragment {
 }
 
 impl InlineFragment {
+    /// Builds a fragment and records its display width and classification.
     fn new(text: String) -> Self {
         let width = UnicodeWidthStr::width(text.as_str());
         let kind = classify_fragment(text.as_str());
         Self { text, width, kind }
     }
+    /// Returns whether the fragment is whitespace-only.
     fn is_whitespace(&self) -> bool { self.kind == FragmentKind::Whitespace }
+    /// Returns whether the fragment must move as an atomic unit.
     fn is_atomic(&self) -> bool {
         matches!(self.kind, FragmentKind::InlineCode | FragmentKind::Link)
     }
+    /// Returns whether the fragment is ordinary prose.
     fn is_plain(&self) -> bool { self.kind == FragmentKind::Plain }
 }
 
@@ -205,22 +226,25 @@ impl Fragment for InlineFragment {
     fn penalty_width(&self) -> f64 { 0.0 }
 }
 
+/// Converts a display width into the `f64` representation required by `textwrap`.
 fn width_as_f64(width: usize) -> f64 { f64::from(u32::try_from(width).unwrap_or(u32::MAX)) }
 
+/// Classifies a rendered fragment once so later passes can use cheap predicates.
 fn classify_fragment(text: &str) -> FragmentKind {
     if is_whitespace_token(text) {
         return FragmentKind::Whitespace;
     }
     let trimmed = text.trim_end_matches(is_trailing_punct);
-    if is_inline_code_token(trimmed) {
+    if is_inline_code_token(text) || is_inline_code_token(trimmed) {
         FragmentKind::InlineCode
-    } else if looks_like_link(trimmed) {
+    } else if looks_like_link(text) || looks_like_link(trimmed) {
         FragmentKind::Link
     } else {
         FragmentKind::Plain
     }
 }
 
+/// Appends the grouped token text into a rendered fragment string.
 fn push_span_text(text: &mut String, tokens: &[String], span: Range<usize>) {
     for token in &tokens[span] {
         if token.len() == 1 && ".?!,:;".contains(token) && text.trim_end().ends_with('`') {
@@ -230,6 +254,7 @@ fn push_span_text(text: &mut String, tokens: &[String], span: Range<usize>) {
     }
 }
 
+/// Builds Markdown-aware inline fragments from the segmented token stream.
 fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
     let mut fragments: Vec<InlineFragment> = Vec::new();
     let mut i = 0;
@@ -254,6 +279,7 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
     fragments
 }
 
+/// Renders a fragment line back into text while preserving Markdown spacing.
 fn render_line(line: &[InlineFragment], is_final_output_line: bool) -> String {
     let mut text = line
         .iter()
@@ -267,6 +293,7 @@ fn render_line(line: &[InlineFragment], is_final_output_line: bool) -> String {
     text
 }
 
+/// Wraps inline Markdown text without splitting code spans or links.
 pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let tokens = tokenize::segment_inline(text);
     if tokens.is_empty() {

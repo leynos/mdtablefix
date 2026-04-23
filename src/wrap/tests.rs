@@ -156,6 +156,14 @@ fn wrap_preserving_code_preserves_carry_whitespace(
 }
 
 #[test]
+fn wrap_with_prefix_single_line() {
+    assert_eq!(
+        wrap_preserving_code("hello world", 80),
+        vec!["hello world".to_string()]
+    );
+}
+
+#[test]
 fn wrap_text_preserves_hyphenated_words() {
     let input = vec!["A word that is very-long-word indeed".to_string()];
     let wrapped = wrap_text(&input, 20);
@@ -340,6 +348,14 @@ fn wrap_text_keeps_trailing_spaces_for_bullet_final_line() {
 }
 
 #[test]
+fn wrap_with_prefix_multiline_uses_continuation() {
+    let input = vec!["> Long text that definitely overflows a very short column width".to_string()];
+    let wrapped = wrap_text(&input, 20);
+    assert!(wrapped.len() > 1);
+    assert!(wrapped.iter().all(|line| line.starts_with("> ")));
+}
+
+#[test]
 fn wrap_text_repeats_nested_blockquote_prefix() {
     let prefix = "> > ";
     let input = vec![
@@ -370,6 +386,13 @@ fn wrap_text_repeats_nested_blockquote_prefix() {
             .strip_prefix(prefix)
             .expect("original test input uses the nested blockquote prefix")
     );
+}
+
+#[test]
+fn wrap_with_prefix_plain_indent_both_lines() {
+    let input = vec!["    short text that wraps".to_string()];
+    let wrapped = wrap_text(&input, 15);
+    assert!(wrapped.iter().all(|line| line.starts_with("    ")));
 }
 
 #[rstest(
