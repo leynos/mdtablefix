@@ -110,7 +110,7 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
 
 - Risk: the architecture docs currently describe the bespoke tokenizer flow and
   module relationships in detail. Severity: low Likelihood: high Mitigation:
-  update the docs as part of the same change so the repository does not
+  update the docs as part of the same change, so the repository does not
   advertise an implementation that no longer exists.
 
 ## Progress
@@ -182,7 +182,7 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
   a fragment without rechecking the destination line width. Evidence:
   `rebalance_atomic_tails` on 2026-04-23 could turn `a four` / `five` into `a`
   / `four five` at width `6`. Impact: any heuristic that mutates fitted lines
-  after wrapping must be width-aware or it can regress downstream layout
+  after wrapping must be width-aware, or it can regress downstream layout
   assumptions.
 
 ## Decision Log
@@ -191,17 +191,18 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
   not the public token API. Rationale: `tokenize_markdown` is public and has
   non-wrap consumers. Keeping that boundary stable preserves safety and lets
   this issue land as the low-risk refactor it was labelled to be. Date/Author:
-  2026-04-22 / Codex
+  2026-04-22 / Codex.
 
 - Decision: use `textwrap` only for line-breaking and keep the existing
   high-level block classification in `wrap_text`. Rationale: fences, indented
   code blocks, headings, tables, and hard line breaks are repository-specific
   policy decisions that already live in `src/wrap.rs` and do not need to move
-  into a third-party crate. Date/Author: 2026-04-22 / Codex
+  into a third-party crate. Date/Author: 2026-04-22 / Codex.
 
 - Decision: prove behaviour with active tests before deleting old internals.
   Rationale: the repository contains inactive wrap tests, so moving directly to
-  clean up would create a false sense of safety. Date/Author: 2026-04-22 / Codex
+  clean up would create a false sense of safety. Date/Author: 2026-04-22 /
+  Codex.
 
 - Decision: use `textwrap::wrap_algorithms::wrap_first_fit` with custom
   Markdown-aware fragments instead of `textwrap::wrap`. Rationale:
@@ -209,7 +210,7 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
   `mdtablefix` to preserve leading carry whitespace, atomic code spans, and
   display-width measurements on grouped fragments. That keeps the refactor
   small without losing the behaviours guarded by the current tests.
-  Date/Author: 2026-04-22 / Codex
+  Date/Author: 2026-04-22 / Codex.
 
 - Decision: treat post-wrap fragment rebalancing as width-constrained, and keep
   fragment classification explicit on `InlineFragment`. Rationale: the
@@ -217,7 +218,7 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
   must not create lines that `wrap_first_fit` would have rejected. Recording
   fragment kind once also makes the whitespace-carry and tail-rebalance passes
   easier to audit than repeating ad hoc string classification in each branch.
-  Date/Author: 2026-04-23 / Codex
+  Date/Author: 2026-04-23 / Codex.
 
 ## Outcomes & Retrospective
 

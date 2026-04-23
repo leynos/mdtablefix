@@ -25,8 +25,8 @@ fragment model built on the `textwrap::core::Fragment` trait. Each token group
 becomes an `InlineFragment` that carries pre-computed display width (via
 `unicode-width`) and a `FragmentKind` tag. `wrap_first_fit` performs greedy
 line fitting over the fragment slice; post-processing in
-`src/wrap/inline/postprocess.rs` normalises whitespace-only lines and
-rebalances atomic tails. Prefix handling is centralised in
+`src/wrap/inline/postprocess.rs` normalizes whitespace-only lines and
+rebalances atomic tails. Prefix handling is centralized in
 `ParagraphWriter::wrap_with_prefix`, which computes available width once and
 prepends the correct prefix to every wrapped output line.
 
@@ -43,7 +43,7 @@ Positive:
   logic and `LineBuffer` state machine are removed entirely.
 - Display widths are computed by `unicode-width` according to Unicode Standard
   Annex `#11`, giving correct column counts for non-ASCII text.
-- `InlineFragment::kind` centralises token classification, so post-processing
+- `InlineFragment::kind` centralizes token classification, so post-processing
   predicates (`is_whitespace`, `is_atomic`, `is_plain`) do not repeat
   classification logic.
 

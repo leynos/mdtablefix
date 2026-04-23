@@ -91,28 +91,45 @@ stay aligned with the documented design constraints.
 
 ## Wrap module architecture
 
-The wrapping pipeline for `--wrap` operates in three stages:
+The wrapping pipeline for `--wrap` is:
 
-1. **Block classification.** Each input line is inspected by `classify_block`
-   in `src/wrap.rs` to determine whether it is a fenced code block, blockquote,
-   bullet, footnote definition, or plain paragraph text. Lines that belong to
-   fenced or indented code blocks are passed through verbatim.
+1. **Block classification.** `classify_block` in `src/wrap.rs` inspects each
+   input line and decides whether it should pass through verbatim or enter the
+   paragraph wrapper. Fenced code blocks, indented code blocks, headings,
+   tables, directives, and blank lines stop paragraph accumulation.
 
-2. **Fragment construction.** Prose lines are tokenised by
-   `tokenize::segment_inline` and grouped into `InlineFragment` values by
-   `build_fragments` in `src/wrap/inline.rs`. Each fragment carries its display
-   width (measured with `unicode-width`) and a `FragmentKind` tag
-   (`Whitespace`, `InlineCode`, `Link`, or `Plain`) computed once at
-   construction time by `classify_fragment`.
+2. **Prefix-aware paragraph handling.** `ParagraphWriter` in
+   `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.
+   `wrap_with_prefix` computes the available content width once from the
+   Unicode display width of the first-line prefix, then feeds the paragraph
+   text into `wrap_preserving_code`.
 
-3. **Line fitting and post-processing.** `wrap_preserving_code` calls
+3. **Fragment construction and line fitting.** `wrap_preserving_code` in
+   `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
+   the tokens into `InlineFragment` values, and calls
    `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
-   buffer, then applies `merge_whitespace_only_lines` and
-   `rebalance_atomic_tails` from `src/wrap/inline/postprocess.rs` to normalise
-   whitespace-only wrap lines and rebalance atomic tails that would otherwise
-   appear isolated at the start of continuation lines.
+   buffer.
+
+4. **Post-processing and rendering.** The `postprocess` module applies
+   `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
+   whitespace-only wrap artefacts and isolated tails are normalized before the
+   fragments are rendered back into output lines.
+
+`InlineFragment` carries the rendered fragment text, its precomputed display
+width, and a `FragmentKind` tag. That construction-time classification lets the
+`is_whitespace`, `is_atomic`, and `is_plain` predicates answer all later
+questions without repeating ad hoc string inspection in the post-processing
+passes.
+
+The `postprocess` module exists because greedy line fitting alone does not
+reproduce the repository's historical whitespace semantics. The first pass
+merges whitespace-only wrap lines into adjacent content, and the second pass
+rebalances a trailing atomic or plain fragment only when the destination line
+still fits within the configured width.
 
 ### Key types and functions
+
+Table: Key types and functions.
 
 | Symbol                                                  | File                             |
 | ------------------------------------------------------- | -------------------------------- |
@@ -128,6 +145,10 @@ The wrapping pipeline for `--wrap` operates in three stages:
   `tokenize_markdown` must not change their signatures or observable behaviour.
 - **Atomic fragments.** Inline code spans and Markdown links are never split
   across lines; they move as a unit when they would overflow the target width.
+- **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
+  line where they occur.
+- **Verbatim blocks.** Fenced code blocks must pass through unchanged, along
+  with the other non-paragraph block kinds detected by `classify_block`.
 - **Prefix width.** The visual width of every prefix string is measured with
   `UnicodeWidthStr::width` before the available text width is computed, so
   non-ASCII prefix characters (e.g. `「` in CJK blockquotes) are accounted for

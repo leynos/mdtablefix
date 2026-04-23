@@ -32,6 +32,11 @@ fn line_has_rebalanceable_tail(line: &[InlineFragment]) -> bool {
 }
 
 /// Merges whitespace-only wrap artefacts into neighbouring content lines.
+///
+/// `lines` is the provisional fragment layout from `wrap_first_fit`, and the
+/// return value folds whitespace-only lines into adjacent content. A single
+/// space after an inline-code tail is carried forward with that atomic
+/// fragment instead of being merged backward. This helper never panics.
 pub(super) fn merge_whitespace_only_lines(
     lines: &[Vec<InlineFragment>],
 ) -> Vec<Vec<InlineFragment>> {
@@ -95,7 +100,13 @@ pub(super) fn merge_whitespace_only_lines(
     merged
 }
 
-/// Moves eligible trailing fragments forward when the destination line still fits.
+/// Moves an eligible tail fragment onto the following line when it still fits.
+///
+/// `lines` is mutated in place after whitespace-line merging, and `width` is
+/// the maximum display width allowed for the destination line. The move is
+/// applied only when the next line starts with a carried single space plus
+/// plain text and the new width stays within `width`. This helper never
+/// panics.
 pub(super) fn rebalance_atomic_tails(lines: &mut [Vec<InlineFragment>], width: usize) {
     for index in 0..lines.len().saturating_sub(1) {
         if !line_starts_with_single_space_then_plain(&lines[index + 1])
@@ -214,6 +225,44 @@ mod tests {
     }
 
     #[test]
+    fn merge_carries_multiple_consecutive_whitespace_lines_forward() {
+        let lines = vec![
+            vec![fragment("hello")],
+            vec![fragment(" ")],
+            vec![fragment("\t")],
+            vec![fragment("world")],
+        ];
+        assert_eq!(
+            merge_whitespace_only_lines(&lines),
+            vec![
+                vec![fragment("hello")],
+                vec![fragment(" "), fragment("\t"), fragment("world")]
+            ]
+        );
+    }
+
+    #[test]
+    fn merge_drops_single_space_before_atomic_starting_line() {
+        let lines = vec![
+            vec![fragment("alpha"), fragment("beta")],
+            vec![fragment(" ")],
+            vec![fragment("`code`")],
+        ];
+        assert_eq!(
+            merge_whitespace_only_lines(&lines),
+            vec![
+                vec![fragment("alpha"), fragment("beta")],
+                vec![fragment("`code`")]
+            ]
+        );
+    }
+
+    #[test]
+    fn merge_empty_input_returns_empty_output() {
+        assert!(merge_whitespace_only_lines(&[]).is_empty());
+    }
+
+    #[test]
     fn rebalance_moves_atomic_tail_when_fits() {
         let mut lines = vec![
             vec![fragment("alpha"), fragment("`code`")],
@@ -247,6 +296,72 @@ mod tests {
         ];
         let original = lines.clone();
         rebalance_atomic_tails(&mut lines, 80);
+        assert_eq!(lines, original);
+    }
+
+    #[test]
+    fn rebalance_moves_atomic_tail_at_exact_width_boundary() {
+        let mut lines = vec![
+            vec![fragment("alpha"), fragment("`tail`")],
+            vec![fragment(" "), fragment("beta")],
+        ];
+        let width = line_width(&lines[1]) + lines[0].last().expect("tail exists").width;
+        rebalance_atomic_tails(&mut lines, width);
+        assert_eq!(lines[0], vec![fragment("alpha")]);
+        assert_eq!(
+            lines[1],
+            vec![fragment("`tail`"), fragment(" "), fragment("beta")]
+        );
+    }
+
+    #[test]
+    fn rebalance_moves_plain_tail_when_fits() {
+        let mut lines = vec![
+            vec![fragment("alpha"), fragment("tail")],
+            vec![fragment(" "), fragment("beta")],
+        ];
+        rebalance_atomic_tails(&mut lines, 20);
+        assert_eq!(lines[0], vec![fragment("alpha")]);
+        assert_eq!(
+            lines[1],
+            vec![fragment("tail"), fragment(" "), fragment("beta")]
+        );
+    }
+
+    #[test]
+    fn rebalance_leaves_single_plain_fragment_line_unchanged() {
+        let mut lines = vec![
+            vec![fragment("tail")],
+            vec![fragment(" "), fragment("beta")],
+        ];
+        let original = lines.clone();
+        rebalance_atomic_tails(&mut lines, 20);
+        assert_eq!(lines, original);
+    }
+
+    #[test]
+    fn rebalance_ignores_empty_input() {
+        let mut lines: Vec<Vec<InlineFragment>> = Vec::new();
+        rebalance_atomic_tails(&mut lines, 10);
+        assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn rebalance_leaves_single_line_input_unchanged() {
+        let mut lines = vec![vec![fragment("alpha"), fragment("tail")]];
+        let original = lines.clone();
+        rebalance_atomic_tails(&mut lines, 10);
+        assert_eq!(lines, original);
+    }
+
+    #[test]
+    fn rebalance_skips_when_next_line_starts_with_space_then_atomic() {
+        let mut lines = vec![
+            vec![fragment("alpha"), fragment("tail")],
+            vec![fragment(" "), fragment("`code`")],
+        ];
+        let original = lines.clone();
+        rebalance_atomic_tails(&mut lines, 20);
         assert_eq!(lines, original);
     }
 }

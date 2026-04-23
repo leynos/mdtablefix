@@ -1,7 +1,5 @@
 //! Unit tests for text wrapping functionality.
-//!
-//! This module contains tests for the `wrap_text` function, verifying correct
-//! behaviour with code spans, links, hyphenated words, and various line widths.
+//! Verifies `wrap_text` with code spans, links, hyphenated words, and widths.
 
 use rstest::rstest;
 
@@ -153,14 +151,6 @@ fn wrap_preserving_code_preserves_carry_whitespace(
         expected.iter().map(|&s| s.to_string()).collect::<Vec<_>>()
     );
     assert_eq!(lines.concat(), input);
-}
-
-#[test]
-fn wrap_with_prefix_single_line() {
-    assert_eq!(
-        wrap_preserving_code("hello world", 80),
-        vec!["hello world".to_string()]
-    );
 }
 
 #[test]
@@ -348,99 +338,6 @@ fn wrap_text_keeps_trailing_spaces_for_bullet_final_line() {
 }
 
 #[test]
-fn wrap_with_prefix_multiline_uses_continuation() {
-    let input = vec!["> Long text that definitely overflows a very short column width".to_string()];
-    let wrapped = wrap_text(&input, 20);
-    assert!(wrapped.len() > 1);
-    assert!(wrapped.iter().all(|line| line.starts_with("> ")));
-}
-
-#[test]
-fn wrap_text_repeats_nested_blockquote_prefix() {
-    let prefix = "> > ";
-    let input = vec![
-        concat!(
-            "> > This nested quote contains enough text to require wrapping so that we can verify ",
-            "multi-level handling."
-        )
-        .to_string(),
-    ];
-    let wrapped = wrap_text(&input, 80);
-    assert!(wrapped.len() > 1);
-    assert!(wrapped.iter().all(|line| line.starts_with("> > ")));
-    let wrapped_payload = wrapped
-        .iter()
-        .map(|line| {
-            line.strip_prefix(prefix)
-                .expect("nested blockquote line keeps its prefix")
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-    let normalized_payload = wrapped_payload
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    assert_eq!(
-        normalized_payload,
-        input[0]
-            .strip_prefix(prefix)
-            .expect("original test input uses the nested blockquote prefix")
-    );
-}
-
-#[test]
-fn wrap_with_prefix_plain_indent_both_lines() {
-    let input = vec!["    short text that wraps".to_string()];
-    let wrapped = wrap_text(&input, 15);
-    assert!(wrapped.iter().all(|line| line.starts_with("    ")));
-}
-
-#[rstest(
-    input,
-    width,
-    expected,
-    case(
-        vec![
-            concat!(
-                "[^5]: Given When Then - Martin Fowler, accessed on 14 July 2025, ",
-                "<https://martinfowler.com/bliki/GivenWhenThen.html>"
-            )
-            .to_string(),
-        ],
-        80,
-        vec![
-            "[^5]: Given When Then - Martin Fowler, accessed on 14 July 2025,"
-                .to_string(),
-            "      <https://martinfowler.com/bliki/GivenWhenThen.html>"
-                .to_string(),
-        ]
-    ),
-    case(
-        vec![
-            concat!(
-                "- [ ] Create a `HttpTravelTimeProvider` struct that implements the ",
-                "`TravelTimeProvider` trait."
-            )
-            .to_string(),
-        ],
-        70,
-        vec![
-            "- [ ] Create a `HttpTravelTimeProvider` struct that implements the"
-                .to_string(),
-            "      `TravelTimeProvider` trait.".to_string(),
-        ]
-    )
-)]
-fn wrap_text_preserves_prefixed_continuation_alignment(
-    input: Vec<String>,
-    width: usize,
-    expected: Vec<String>,
-) {
-    let wrapped = wrap_text(&input, width);
-    assert_eq!(wrapped, expected);
-}
-
-#[test]
 fn wrap_text_preserves_indented_hash_as_text() {
     let input = vec![
         "Paragraph intro.".to_string(),
@@ -500,3 +397,4 @@ fn classify_block_detects_markdown_prefixes(line: &str, expected: Option<BlockKi
 }
 
 mod fence_tracker;
+mod prefix;
