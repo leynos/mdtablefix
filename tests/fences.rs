@@ -123,6 +123,13 @@ fn fixes_orphaned_specifier_with_blank_lines(#[case] input: Vec<String>) {
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }
+
+fn leaves_orphan_specifier_and_blank_lines_unchanged_when_not_attachable(
+    #[case] input: Vec<String>,
+) {
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, input);
+}
 fn fixes_multiple_orphaned_specifiers() {
     let input = lines_vec![
         "Rust",
