@@ -5,6 +5,9 @@
 //! The local `FENCE_RE` defines which delimiter lines this module can
 //! normalize, while `wrap::is_fence` and `FenceTracker` provide the structural
 //! Markdown fence semantics shared with wrapping.
+//! `attach_orphan_specifiers` then finds orphaned fence specifier lines and
+//! attaches them to the following fence, preserving the retained indentation
+//! and normalized language specifier.
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -275,6 +278,24 @@ fn attach_specifier_to_fence(fence_line: &str, specifier: &str, spec_indent: &st
     format!("{final_indent}{fence_marker}{specifier}")
 }
 
+/// Look ahead for the next attachable fence after an orphan specifier line.
+///
+/// This helper scans a `Peekable` iterator of input `lines` after the current
+/// orphan specifier, buffering intervening blank lines until it either finds a
+/// fence that can accept the provided `specifier` or determines attachment is
+/// not possible. The `indent` is retained when building the rewritten fence.
+/// Successful and fallback output is written into `out`, and
+/// `specifier_line` preserves the original orphan line when no matching fence
+/// is found.
+///
+/// # Parameters
+///
+/// - `lines`: peekable iterator over the remaining input lines.
+/// - `specifier`: normalized fence language or specifier to attach.
+/// - `indent`: leading indentation to retain on the rewritten fence.
+/// - `out`: output buffer that receives either the rewritten fence or the original lines.
+/// - `specifier_line`: original line containing the fence specifier.
+/// - `tracker`: structural fence tracker advanced when a fence is consumed.
 fn attach_to_next_fence<'a, I>(
     lines: &mut std::iter::Peekable<I>,
     specifier: &str,
@@ -282,8 +303,7 @@ fn attach_to_next_fence<'a, I>(
     out: &mut Vec<String>,
     specifier_line: &str,
     tracker: &mut FenceTracker,
-) -> bool
-where
+) where
     I: Iterator<Item = &'a String>,
 {
     let mut blank_lines = Vec::new();
@@ -304,7 +324,7 @@ where
                 out.extend(blank_lines);
                 out.push(attach_specifier_to_fence(fence_line, specifier, indent));
                 let _ = tracker.observe(fence_line);
-                return true;
+                return;
             }
         }
 
@@ -313,7 +333,6 @@ where
 
     out.push(specifier_line.to_string());
     out.extend(blank_lines);
-    false
 }
 
 /// Attach orphaned language specifiers to opening fences.
@@ -358,10 +377,7 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
         let (spec, indent) = normalize_specifier(line);
         if ORPHAN_LANG_RE.is_match(&spec) && out.last().is_none_or(|l: &String| l.trim().is_empty())
         {
-            if attach_to_next_fence(&mut lines, &spec, &indent, &mut out, line, &mut tracker) {
-                continue;
-            }
-            let _ = tracker.observe(line);
+            attach_to_next_fence(&mut lines, &spec, &indent, &mut out, line, &mut tracker);
             continue;
         }
 
