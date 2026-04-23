@@ -9,7 +9,6 @@ use regex::Regex;
 static ESCAPED_PIPE_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"\\\|").unwrap());
 
-#[must_use]
 /// Split a Markdown table row into individual cell strings.
 ///
 /// Escaped pipe characters (`\|`) are treated as literals and whitespace
@@ -28,6 +27,7 @@ static ESCAPED_PIPE_RE: std::sync::LazyLock<Regex> =
 ///     vec!["a".to_string(), "b | c".to_string(), "d".to_string()]
 /// );
 /// ```
+#[must_use]
 pub fn split_cells(line: &str) -> Vec<String> {
     let trimmed = line.trim().trim_start_matches('|').trim_end_matches('|');
     let placeholder = '\u{1f}';
@@ -38,9 +38,33 @@ pub fn split_cells(line: &str) -> Vec<String> {
         .collect()
 }
 
+/// Formats separator cells so they match the computed table widths.
+///
+/// Alignment markers from the source separator are preserved while each cell
+/// is widened to at least three dashes, as required by Markdown tables.
+///
+/// # Arguments
+///
+/// - `widths`: Computed display widths for each output column.
+/// - `sep_cells`: Separator cells taken from the parsed Markdown table.
+///
+/// # Returns
+///
+/// Separator cells widened to the target widths while preserving left and
+/// right alignment markers. When the counts do not match, an empty vector is
+/// returned so callers can treat the separator as invalid.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let sep_cells = vec![":--".to_string(), "---:".to_string()];
+/// let formatted = mdtablefix::table::format_separator_cells(&[4, 5], &sep_cells);
+///
+/// assert_eq!(formatted, vec![":---".to_string(), "----:".to_string()]);
+/// ```
 pub(crate) fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String> {
     if sep_cells.len() != widths.len() {
-        return sep_cells.to_vec();
+        return Vec::new();
     }
 
     sep_cells
@@ -83,6 +107,12 @@ fn rows_mismatched(rows: &[Vec<String>], split_within_line: bool) -> bool {
         .any(|row| row.len() != first_len && !row.iter().all(|c| SEP_RE.is_match(c)))
 }
 
+/// Matches Markdown table separator lines made only of pipes, colons, dashes,
+/// and whitespace so parsing can detect and extract the alignment row.
+///
+/// The pattern `^[\s|:-]+$` accepts common separator forms such as
+/// `| --- | :--: | --: |` while rejecting content rows that contain other
+/// characters.
 pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
 
@@ -91,12 +121,10 @@ pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
 /// This is produced by [`parse_and_validate`] and passed to
 /// [`calculate_and_format`].
 ///
-/// * `cleaned` - rows after empty cells are removed
 /// * `output_rows` - rows ready for output (separator removed)
 /// * `sep_cells` - optional separator cells for formatting
 /// * `max_cols` - maximum column count across all rows
 struct ParsedTable {
-    cleaned: Vec<Vec<String>>,
     output_rows: Vec<Vec<String>>,
     sep_cells: Option<Vec<String>>,
     max_cols: usize,
@@ -116,7 +144,7 @@ fn extract_indent_and_trim(lines: &[String]) -> (String, Vec<String>) {
     (indent, trimmed)
 }
 
-/// Removes and return the first separator line detected in `lines`.
+/// Removes and returns the first separator line detected in `lines`.
 fn extract_separator_line(lines: &mut Vec<String>) -> Option<String> {
     let sep_idx = lines.iter().position(|l| SEP_RE.is_match(l));
     sep_idx.map(|idx| lines.remove(idx))
@@ -136,7 +164,6 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
         output_rows.remove(idx);
     }
     Some(ParsedTable {
-        cleaned,
         output_rows,
         sep_cells,
         max_cols,
@@ -144,10 +171,27 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
 }
 
 /// Calculates column widths and formats the final table output.
-fn calculate_and_format(parsed: &ParsedTable, indent: &str) -> Vec<String> {
-    let widths = crate::reflow::calculate_widths(&parsed.cleaned, parsed.max_cols);
+fn calculate_and_format(parsed: &ParsedTable, indent: &str) -> Option<Vec<String>> {
+    let mut widths = crate::reflow::calculate_widths(&parsed.output_rows, parsed.max_cols);
+    if parsed.sep_cells.is_some() {
+        for width in &mut widths {
+            *width = (*width).max(3);
+        }
+    }
+    if parsed
+        .sep_cells
+        .as_ref()
+        .is_some_and(|cells| format_separator_cells(&widths, cells).is_empty())
+    {
+        return None;
+    }
     let out = crate::reflow::format_rows(&parsed.output_rows, &widths, indent);
-    crate::reflow::insert_separator(out, parsed.sep_cells.clone(), &widths, indent)
+    Some(crate::reflow::insert_separator(
+        out,
+        parsed.sep_cells.clone(),
+        &widths,
+        indent,
+    ))
 }
 
 /// Reflow a Markdown table so columns align uniformly.
@@ -182,11 +226,13 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         return lines.to_vec();
     };
 
-    calculate_and_format(&parsed, &indent)
+    calculate_and_format(&parsed, &indent).unwrap_or_else(|| lines.to_vec())
 }
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
     #[test]
@@ -218,5 +264,36 @@ mod tests {
         assert!(!rows_mismatched(&with_sep, false));
 
         assert!(!rows_mismatched(&mismatch, true));
+    }
+
+    #[rstest]
+    #[case(vec![2], vec!["---".to_string()], vec!["---".to_string()])]
+    #[case(vec![5], vec![":---".to_string()], vec![":----".to_string()])]
+    #[case(vec![5], vec!["---:".to_string()], vec!["----:".to_string()])]
+    #[case(vec![5], vec![":--:".to_string()], vec![":---:".to_string()])]
+    fn format_separator_cells_preserves_alignment_markers(
+        #[case] widths: Vec<usize>,
+        #[case] cells: Vec<String>,
+        #[case] expected: Vec<String>,
+    ) {
+        assert_eq!(format_separator_cells(&widths, &cells), expected);
+    }
+
+    #[test]
+    fn format_separator_cells_returns_empty_when_counts_mismatch() {
+        let sep_cells = vec!["---".to_string()];
+
+        assert!(format_separator_cells(&[3, 4], &sep_cells).is_empty());
+    }
+
+    #[test]
+    fn reflow_table_returns_original_lines_for_mismatched_separator_columns() {
+        let lines = vec![
+            "| head |".to_string(),
+            "| --- | --- |".to_string(),
+            "| body |".to_string(),
+        ];
+
+        assert_eq!(reflow_table(&lines), lines);
     }
 }

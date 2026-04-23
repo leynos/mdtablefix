@@ -91,7 +91,7 @@ according to the selected options.
 - [x] (2026-04-09) Update `README.md` and `docs/architecture.md`.
 - [x] (2026-04-09) Run `make check-fmt`, `make lint`, `make test`,
       `make markdownlint`,
-  and `make nixie` if Mermaid content changes.
+  and `make nixie`.
 
 ## Surprises & discoveries
 
@@ -112,12 +112,12 @@ according to the selected options.
   than adding special cases separately in each transform. Rationale: one
   detector keeps the delimiter rules consistent and reduces the chance that a
   later pipeline stage mutates the protected prefix. Date/Author: 2026-04-05
-  22:45Z / Droid
+  22:45Z / Droid.
 
 - Decision: treat unmatched opening delimiters as ordinary Markdown instead of
   partially shielding the document. Rationale: this avoids swallowing the
   entire file into a special mode and preserves current behaviour for malformed
-  input. Date/Author: 2026-04-05 22:45Z / Droid
+  input. Date/Author: 2026-04-05 22:45Z / Droid.
 
 ## Outcomes & retrospective
 
@@ -256,8 +256,7 @@ make markdownlint
 make nixie
 ```
 
-If `docs/architecture.md` does not change any Mermaid content, `make nixie` may
-be skipped.
+`make nixie` is required.
 
 ## Validation and acceptance
 
@@ -278,8 +277,7 @@ Quality criteria:
   passes for the full suite.
 - Lint: `make lint` passes with no warnings.
 - Formatting: `make check-fmt` passes.
-- Docs: `make markdownlint` passes, and `make nixie` passes if Mermaid content
-  changed.
+- Docs: `make markdownlint` passes, and `make nixie` passes.
 
 ## Idempotence and recovery
 

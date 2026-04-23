@@ -3,6 +3,7 @@
 ## Contents
 
 - [Markdown stream processor](#markdown-stream-processor)
+- [Table reflow pipeline](#table-reflow-pipeline)
 - [Footnote conversion](#footnote-conversion)
 - [HTML table support](#html-table-support-in-mdtablefix)
 - [Module relationships](#module-relationships)
@@ -108,6 +109,38 @@ After scanning all lines, the processor performs optional post-processing steps
 such as ellipsis replacement and footnote conversion. See \
 [footnote conversion](#footnote-conversion) for details. The function then
 returns the updated stream for writing to disk or further manipulation.
+
+## Table reflow pipeline
+
+`reflow_table` aligns Markdown tables in four stages:
+
+1. `extract_indent_and_trim` records any leading indentation and removes table
+   escape lines such as `\-`.
+2. `parse_rows` protects continuation rows before the global split. When a row
+   starts with empty cells, `protect_leading_empty_cells` replaces those cells
+   with a private marker so they survive the sentinel-based row splitter.
+3. `clean_rows`, `detect_separator`, and `calculate_widths` rebuild the logical
+   table. Explicit separator lines are preferred, but the second parsed row can
+   be promoted when the source embeds the separator in the body. Widths are
+   measured with `UnicodeWidthStr::width`, so Chinese, Japanese, and Korean
+   (CJK) text, emoji, and accented characters align by display width rather
+   than byte count.
+4. `format_rows` and `insert_separator` emit the final table. Separator cells
+   preserve alignment markers, and each separator column is widened to at least
+   three dashes to keep Markdown linters satisfied.
+
+Continuation-row protection has one extra constraint: once the protected row is
+rebuilt, literal pipe characters inside the non-leading cells are re-escaped as
+`\|`. Without that step, a second parse would treat the restored pipe as a new
+column delimiter and split the row incorrectly.
+
+When `process_stream_inner` flushes a buffered table with `Options::ellipsis`
+enabled, it applies ellipsis replacement before calling `reflow_table`. This
+ordering ensures the width calculation sees the final glyphs, rather than
+aligning for `...` and shrinking the rendered column after the fact.
+
+The rationale for these choices is captured in
+[Architecture Decision Record (ADR) 0001](adrs/0001-table-reflow-pipeline.md).
 
 ## Footnote Conversion
 

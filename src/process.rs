@@ -57,6 +57,7 @@ struct ProcessBuffer {
     out: Vec<String>,
     buf: Vec<String>,
     in_table: bool,
+    ellipsis: bool,
 }
 
 impl ProcessBuffer {
@@ -64,11 +65,16 @@ impl ProcessBuffer {
         if self.buf.is_empty() {
             return;
         }
+        let buffered = std::mem::take(&mut self.buf);
         if self.in_table {
-            self.out.extend(reflow_table(&self.buf));
-            self.buf.clear();
+            let table_lines = if self.ellipsis {
+                replace_ellipsis(&buffered)
+            } else {
+                buffered
+            };
+            self.out.extend(reflow_table(&table_lines));
         } else {
-            self.out.extend(std::mem::take(&mut self.buf));
+            self.out.extend(buffered);
         }
         self.in_table = false;
     }
@@ -127,7 +133,11 @@ impl ProcessBuffer {
 /// ```
 /// use mdtablefix::process::{Options, process_stream_inner};
 ///
-/// let lines = vec!["| a | b |".to_string(), "|---|---|".to_string()];
+/// let lines = vec![
+///     "| a | b |".to_string(),
+///     "|---|---|".to_string(),
+///     "| 1 | 2 |".to_string(),
+/// ];
 /// let out = process_stream_inner(
 ///     &lines,
 ///     Options {
@@ -139,7 +149,14 @@ impl ProcessBuffer {
 ///         headings: false,
 ///     },
 /// );
-/// assert!(out.iter().any(|l| l.contains("| a | b |")));
+/// assert_eq!(
+///     out,
+///     vec![
+///         "| a   | b   |".to_string(),
+///         "| --- | --- |".to_string(),
+///         "| 1   | 2   |".to_string(),
+///     ]
+/// );
 /// ```
 #[must_use]
 pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
@@ -156,6 +173,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         out: Vec::new(),
         buf: Vec::new(),
         in_table: false,
+        ellipsis: opts.ellipsis,
     };
     // Track fences so subsequent logic respects shared semantics.
     let mut fence_tracker = FenceTracker::default();
@@ -213,9 +231,20 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 /// ```
 /// use mdtablefix::process::process_stream;
 ///
-/// let lines = vec!["| a | b |".to_string(), "|---|---|".to_string()];
+/// let lines = vec![
+///     "| a | b |".to_string(),
+///     "|---|---|".to_string(),
+///     "| 1 | 2 |".to_string(),
+/// ];
 /// let out = process_stream(&lines);
-/// assert!(out.iter().any(|l| l.contains("| a | b |")));
+/// assert_eq!(
+///     out,
+///     vec![
+///         "| a   | b   |".to_string(),
+///         "| --- | --- |".to_string(),
+///         "| 1   | 2   |".to_string(),
+///     ]
+/// );
 /// ```
 #[must_use]
 pub fn process_stream(lines: &[String]) -> Vec<String> {
@@ -236,9 +265,20 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 ///
 /// ```
 /// use mdtablefix::process::process_stream_no_wrap;
-/// let lines = vec!["| a | b |".to_string(), "|---|---|".to_string()];
+/// let lines = vec![
+///     "| a | b |".to_string(),
+///     "|---|---|".to_string(),
+///     "| 1 | 2 |".to_string(),
+/// ];
 /// let out = process_stream_no_wrap(&lines);
-/// assert!(out.iter().any(|l| l.contains("| a | b |")));
+/// assert_eq!(
+///     out,
+///     vec![
+///         "| a   | b   |".to_string(),
+///         "| --- | --- |".to_string(),
+///         "| 1   | 2   |".to_string(),
+///     ]
+/// );
 /// ```
 #[must_use]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
@@ -295,8 +335,8 @@ mod tests {
             "| 1 | 2 |".to_string(),
         ];
         let output = process_stream(&input);
-        assert!(output.iter().any(|l| l.contains("| A | B |")));
-        assert!(output.iter().any(|l| l.contains("| X | Y |")));
+        assert!(output.iter().any(|l| l.contains("| A   | B   |")));
+        assert!(output.iter().any(|l| l.contains("| X   | Y   |")));
     }
 
     #[test]
@@ -346,5 +386,28 @@ mod tests {
             enabled,
             vec!["# Heading".to_string(), "Paragraph".to_string()]
         );
+    }
+
+    #[test]
+    fn process_stream_inner_applies_table_ellipsis_before_reflow() {
+        let input = vec![
+            "| example | value |".to_string(),
+            "| ------- | ----- |".to_string(),
+            "| ... | tail |".to_string(),
+        ];
+
+        let with_ellipsis = process_stream_inner(
+            &input,
+            Options {
+                ellipsis: true,
+                ..Default::default()
+            },
+        );
+        let without_ellipsis = process_stream_inner(&input, Options::default());
+
+        assert!(with_ellipsis.iter().any(|line| line.contains('…')));
+        assert!(!with_ellipsis.iter().any(|line| line.contains("...")));
+        assert!(without_ellipsis.iter().any(|line| line.contains("...")));
+        assert!(!without_ellipsis.iter().any(|line| line.contains('…')));
     }
 }

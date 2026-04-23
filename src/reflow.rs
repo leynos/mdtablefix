@@ -4,14 +4,49 @@
 //! aligned output for the main [`reflow_table`] function.
 
 use regex::Regex;
+use unicode_width::UnicodeWidthStr;
 
 use crate::table::{SEP_RE, format_separator_cells, split_cells};
 
 static SENTINEL_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").unwrap());
+const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 
+/// Parses reflow input into rows while preserving continuation-cell boundaries.
+///
+/// Leading empty cells are protected before the global split so continuation
+/// rows keep their original column positions.
+///
+/// # Arguments
+///
+/// - `trimmed`: Trimmed table lines collected from the source document.
+///
+/// # Returns
+///
+/// A tuple containing the parsed rows and a flag indicating whether the
+/// sentinel split crossed an original line boundary.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let trimmed = vec!["| a | b |".to_string(), "| 1 | 2 |".to_string()];
+/// let (rows, split_within_line) = mdtablefix::reflow::parse_rows(&trimmed);
+///
+/// assert_eq!(
+///     rows,
+///     vec![
+///         vec!["a".to_string(), "b".to_string()],
+///         vec!["1".to_string(), "2".to_string()],
+///     ]
+/// );
+/// assert!(!split_within_line);
+/// ```
 pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
-    let raw = trimmed.join(" ");
+    let protected = trimmed
+        .iter()
+        .map(|line| protect_leading_empty_cells(line))
+        .collect::<Vec<_>>();
+    let raw = protected.join(" ");
     let chunks: Vec<&str> = SENTINEL_RE.split(&raw).collect();
     let split_within_line = chunks.len() > trimmed.len();
 
@@ -51,38 +86,148 @@ fn split_into_rows(cells: Vec<String>) -> Vec<Vec<String>> {
     rows
 }
 
+/// Restores parser markers and removes rows that contain only empty cells.
+///
+/// # Arguments
+///
+/// - `rows`: Parsed rows that may still contain continuation markers.
+///
+/// # Returns
+///
+/// Rows with marker cells restored to empty strings and fully empty rows
+/// removed.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let rows = vec![
+///     vec!["\u{1d}".to_string(), "value".to_string()],
+///     vec![String::new(), String::new()],
+/// ];
+/// let cleaned = mdtablefix::reflow::clean_rows(rows);
+///
+/// assert_eq!(cleaned, vec![vec![String::new(), "value".to_string()]]);
+/// ```
 pub(crate) fn clean_rows(rows: Vec<Vec<String>>) -> Vec<Vec<String>> {
-    let mut cleaned = Vec::new();
-    for mut row in rows {
-        row.retain(|c| !c.is_empty());
-        cleaned.push(row);
-    }
-    cleaned
+    rows.into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|cell| {
+                    if cell == LEADING_EMPTY_CELL_MARKER {
+                        String::new()
+                    } else {
+                        cell
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .filter(|row| row.iter().any(|cell| !cell.is_empty()))
+        .collect()
 }
 
+/// Calculates display widths for each column across all parsed rows.
+///
+/// Widths are measured with `unicode-width` so wide glyphs align correctly in
+/// the rendered table output.
+///
+/// # Arguments
+///
+/// - `rows`: Parsed rows whose cell widths should contribute to the final table layout.
+/// - `max_cols`: The number of output columns to size.
+///
+/// # Returns
+///
+/// A vector containing the widest emitted display width for each column.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let rows = vec![
+///     vec!["ASCII".to_string(), "漢".to_string()],
+///     vec!["a | b".to_string(), "wide".to_string()],
+/// ];
+/// let widths = mdtablefix::reflow::calculate_widths(&rows, 2);
+///
+/// assert_eq!(widths, vec![6, 4]);
+/// ```
 pub(crate) fn calculate_widths(rows: &[Vec<String>], max_cols: usize) -> Vec<usize> {
     let mut widths = vec![0; max_cols];
     for row in rows {
         for (idx, cell) in row.iter().enumerate() {
-            widths[idx] = widths[idx].max(cell.len());
+            widths[idx] = widths[idx].max(emitted_cell_width(cell));
         }
     }
     widths
 }
 
+/// Formats each row with the supplied display widths and original indentation.
+///
+/// # Arguments
+///
+/// - `rows`: Output rows to emit.
+/// - `widths`: Display widths calculated for each column.
+/// - `indent`: Leading whitespace that should prefix every emitted row.
+///
+/// # Returns
+///
+/// Fully formatted table rows with escaped literal pipes and padding applied.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let rows = vec![vec!["a".to_string(), "b | c".to_string()]];
+/// let widths = vec![1, 5];
+/// let formatted = mdtablefix::reflow::format_rows(&rows, &widths, "  ");
+///
+/// assert_eq!(formatted, vec!["  | a | b \\| c |".to_string()]);
+/// ```
 pub(crate) fn format_rows(rows: &[Vec<String>], widths: &[usize], indent: &str) -> Vec<String> {
     rows.iter()
         .map(|row| {
             let padded: Vec<String> = row
                 .iter()
                 .enumerate()
-                .map(|(i, c)| format!("{:<width$}", c, width = widths[i]))
+                .map(|(i, cell)| pad_cell_to_width(cell, widths[i]))
                 .collect();
             format!("{}| {} |", indent, padded.join(" | "))
         })
         .collect()
 }
 
+/// Reinserts the separator row, when present, ahead of the table body.
+///
+/// # Arguments
+///
+/// - `out`: Formatted table body rows.
+/// - `sep_cells`: Optional separator cells to reinsert.
+/// - `widths`: Display widths for each column.
+/// - `indent`: Leading whitespace to prefix the separator row.
+///
+/// # Returns
+///
+/// The output rows with a formatted separator inserted after the header row
+/// when separator cells are available.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let out = vec!["| head | body |".to_string(), "| row  | text |".to_string()];
+/// let inserted = mdtablefix::reflow::insert_separator(
+///     out,
+///     Some(vec!["---".to_string(), ":--".to_string()]),
+///     &[4, 4],
+///     "",
+/// );
+///
+/// assert_eq!(
+///     inserted,
+///     vec![
+///         "| head | body |".to_string(),
+///         "| ---- | :--- |".to_string(),
+///         "| row  | text |".to_string(),
+///     ]
+/// );
+/// ```
 pub(crate) fn insert_separator(
     out: Vec<String>,
     sep_cells: Option<Vec<String>>,
@@ -94,6 +239,9 @@ pub(crate) fn insert_separator(
             cells.push(String::new());
         }
         let sep_padded = format_separator_cells(widths, &cells);
+        if sep_padded.is_empty() {
+            return out;
+        }
         let sep_line_out = format!("{}| {} |", indent, sep_padded.join(" | "));
         if let Some(first) = out.first().cloned() {
             let mut with_sep = vec![first, sep_line_out];
@@ -105,6 +253,35 @@ pub(crate) fn insert_separator(
     out
 }
 
+/// Detects which row should act as the table separator, if any.
+///
+/// The explicit separator line is preferred, but the second parsed row can be
+/// promoted when the source omitted a standalone separator line.
+///
+/// # Arguments
+///
+/// - `sep_line`: Optional separator line extracted from the original input.
+/// - `rows`: Parsed table rows.
+/// - `max_cols`: The maximum column count across the parsed rows.
+///
+/// # Returns
+///
+/// A tuple containing the chosen separator cells and the index of the
+/// promoted separator row when one of the parsed rows is reused.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let rows = vec![
+///     vec!["head".to_string(), "body".to_string()],
+///     vec!["---".to_string(), "---".to_string()],
+///     vec!["row".to_string(), "text".to_string()],
+/// ];
+/// let (sep_cells, sep_row_idx) = mdtablefix::reflow::detect_separator(None, &rows, 2);
+///
+/// assert_eq!(sep_cells, Some(vec!["---".to_string(), "---".to_string()]));
+/// assert_eq!(sep_row_idx, Some(1));
+/// ```
 pub(crate) fn detect_separator(
     sep_line: Option<&String>,
     rows: &[Vec<String>],
@@ -136,3 +313,42 @@ fn should_use_second_row_as_separator(sep_invalid: bool, rows: &[Vec<String>]) -
 fn second_row_is_separator(rows: &[Vec<String>]) -> bool {
     rows.len() > 1 && rows[1].iter().all(|c| SEP_RE.is_match(c))
 }
+
+/// Replaces leading empty cells with a marker so continuation rows survive the
+/// global row-splitting pass.
+fn protect_leading_empty_cells(line: &str) -> String {
+    let cells = split_cells(line);
+    let leading_empty_cells = cells.iter().take_while(|cell| cell.is_empty()).count();
+    if leading_empty_cells == 0 {
+        return line.to_string();
+    }
+
+    let protected_cells = cells
+        .into_iter()
+        .enumerate()
+        .map(|(idx, cell)| {
+            if idx < leading_empty_cells {
+                LEADING_EMPTY_CELL_MARKER.to_string()
+            } else {
+                escape_literal_pipes(&cell)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    format!("| {} |", protected_cells.join(" | "))
+}
+
+fn pad_cell_to_width(cell: &str, width: usize) -> String {
+    let escaped = escape_literal_pipes(cell);
+    let padding = width.saturating_sub(emitted_cell_width(cell));
+    format!("{escaped}{}", " ".repeat(padding))
+}
+
+fn escape_literal_pipes(cell: &str) -> String { cell.replace('|', r"\|") }
+
+fn emitted_cell_width(cell: &str) -> usize {
+    UnicodeWidthStr::width(escape_literal_pipes(cell).as_str())
+}
+
+#[cfg(test)]
+mod tests;
