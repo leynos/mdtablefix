@@ -82,6 +82,81 @@ restores the separator row with widths derived from the final table body.
 - `format_separator_cells`: Expands separator cells to the target widths while
   preserving Markdown alignment markers.
 
+## Wrap module architecture
+
+The `--wrap` pipeline is spread across four modules under `src/wrap/`:
+
+- `src/wrap.rs` — entry point; classifies each incoming line (fenced code,
+  table, heading, blank, or paragraph) and routes it to `ParagraphWriter`.
+- `src/wrap/paragraph.rs` — `ParagraphWriter` and `ParagraphState`; buffers
+  paragraph lines and applies prefix-aware wrapping via `wrap_with_prefix`.
+- `src/wrap/inline.rs` — `wrap_preserving_code`; converts a paragraph string
+  into `InlineFragment` values, feeds them to `textwrap::wrap_first_fit`, and
+  post-processes the result.
+- `src/wrap/inline/postprocess.rs` — `merge_whitespace_only_lines` and
+  `rebalance_atomic_tails`; normalises the raw fit output before rendering.
+
+### Key types
+
+`InlineFragment` (in `src/wrap/inline.rs`) implements
+`textwrap::core::Fragment`. Each fragment stores the rendered text, its
+precomputed display-column width, and a `FragmentKind` discriminant:
+
+| `FragmentKind` | Description |
+| :-- | :-- |
+| `Whitespace` | Fragment composed entirely of whitespace characters. |
+| `InlineCode` | Backtick-delimited code span, optionally with trailing punctuation. |
+| `Link` | Markdown inline link or image reference. |
+| `Plain` | Ordinary prose text. |
+
+`PrefixLine` (in `src/wrap/paragraph.rs`) carries a prefix string (e.g. `"> "`
+for blockquotes, `"- "` for bullets), the content after the prefix, and a
+`repeat_prefix` flag that controls whether continuation lines repeat the prefix
+verbatim (blockquotes) or use a space-padded equivalent (bullets, footnotes,
+checkboxes).
+
+### Width accounting
+
+All display-width measurements use `UnicodeWidthStr::width` from the
+`unicode-width` crate. The `textwrap` call receives widths expressed as `f64`
+values through `InlineFragment::width()` so that `wrap_first_fit` never
+measures the byte length of a fragment.
+
+Prefix width is computed once in `wrap_with_prefix` before calling
+`wrap_preserving_code`, ensuring that available content width is derived from
+the rendered prefix width rather than its byte count.
+
+### Post-processing passes
+
+After `wrap_first_fit` assigns fragments to lines, two passes correct edge
+cases that greedy fitting cannot anticipate:
+
+1. `merge_whitespace_only_lines` — absorbs whitespace-only separator lines back
+   into adjacent content lines so that rendered output does not gain spurious
+   blank entries.
+2. `rebalance_atomic_tails` — moves a trailing atomic or plain fragment from
+   one line to the start of the next when the destination line can accommodate
+   it within `width`, preventing orphaned code spans or punctuation.
+
+Both passes are width-constrained: `rebalance_atomic_tails` rechecks the
+destination line width before moving a fragment, so it cannot create a line
+that `wrap_first_fit` would have rejected.
+
+### Public API stability
+
+`wrap_text`, `Token`, and `tokenize_markdown` are re-exported from `src/lib.rs`
+and are used by `src/code_emphasis.rs`, `src/footnotes/mod.rs`,
+`src/footnotes/renumber.rs`, and `src/textproc.rs`. These symbols must remain
+stable across internal refactoring. Any change to their signatures or
+observable behaviour requires an explicit approval step and updated tests.
+
+### Design decisions
+
+The rationale for adopting `textwrap` and the fragment-adapter approach is
+recorded in `docs/adrs/0002-textwrap-inline-wrapping.md`. Refer to that ADR
+when evaluating changes to the fragment model, post-processing passes, or the
+`textwrap` dependency.
+
 ## Design decisions
 
 The rationale for the staged table reflow pipeline is recorded in
