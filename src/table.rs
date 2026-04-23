@@ -107,6 +107,12 @@ fn rows_mismatched(rows: &[Vec<String>], split_within_line: bool) -> bool {
         .any(|row| row.len() != first_len && !row.iter().all(|c| SEP_RE.is_match(c)))
 }
 
+/// Matches Markdown table separator lines made only of pipes, colons, dashes,
+/// and whitespace so parsing can detect and extract the alignment row.
+///
+/// The pattern `^[\s|:-]+$` accepts common separator forms such as
+/// `| --- | :--: | --: |` while rejecting content rows that contain other
+/// characters.
 pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
 
