@@ -191,13 +191,12 @@ two public functions that are called in sequence:
   three or more backticks or tildes to exactly three backticks while preserving
   indentation and any language identifiers.
 - `attach_orphan_specifiers(&[String]) -> Vec<String>` reattaches language
-  specifier lines that appear on their own line before an unlabeled opening
+  specifier lines that appear on their own line before an unlabelled opening
   fence.
 
 Together these helpers make the rest of the processing pipeline deal with a
-single normalized fence form and avoid carrying separate logic for detached
+single normalized fence, and avoid carrying separate logic for detached
 specifier lines.
-
 
 ### Architecture
 
@@ -245,10 +244,10 @@ rewritten opening fence.
 
 - The fence's own indentation is preferred by default.
 - If the fence has no indentation, the specifier's indentation is used.
-- If the specifier's indentation is equal to or extends the fence's, checked
-  via `spec_indent.starts_with(fence_indent)`, the specifier indentation is
-  used. Equality is permitted here, so the same predicate covers both matching
-  and deeper indentation.
+- If `spec_indent.starts_with(fence_indent)`, the implementation treats the
+  specifier's indentation as extending, or matching, the fence's indentation
+  and uses it. Equality is allowed, so `starts_with` covers both exact matches
+  and deeper indentations.
 
 This rule keeps existing fenced block indentation stable while still handling
 the common case where the detached specifier line carried the indentation that
