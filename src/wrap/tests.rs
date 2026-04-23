@@ -273,10 +273,13 @@ fn wrap_text_preserves_hyphenated_words() {
 #[test]
 fn wrap_text_breaks_between_space_separated_code_spans() {
     let input = vec![
-        "The file loader selects the parser based on the extension (`.toml`, `.json`, `.json5`, \
-         `.yaml`, `.yml`). When the `json5` feature is active, both `.json` and `.json5` files \
-         are parsed using the JSON5 format."
-            .to_string(),
+        concat!(
+            "The file loader selects the parser based on the extension ",
+            "(`.toml`, `.json`, `.json5`, `.yaml`, `.yml`). When the `json5` ",
+            "feature is active, both `.json` and `.json5` files are parsed ",
+            "using the JSON5 format."
+        )
+        .to_string(),
     ];
     let wrapped = wrap_text(&input, 80);
 
