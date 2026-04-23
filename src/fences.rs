@@ -275,24 +275,6 @@ fn attach_specifier_to_fence(fence_line: &str, specifier: &str, spec_indent: &st
     format!("{final_indent}{fence_marker}{specifier}")
 }
 
-fn orphan_specifier_target(lines: &[String], start: usize) -> Option<usize> {
-    let mut index = start;
-    while index < lines.len() && lines[index].trim().is_empty() {
-        index += 1;
-    }
-    if index >= lines.len() || FENCE_RE.captures(&lines[index]).is_none() {
-        return None;
-    }
-    Some(index)
-}
-
-fn orphan_specifier_target_without_language(lines: &[String], start: usize) -> Option<usize> {
-    let target = orphan_specifier_target(lines, start)?;
-    let cap = FENCE_RE.captures(&lines[target])?;
-    let lang = cap.get(3).map_or("", |m| m.as_str());
-    is_null_lang(lang).then_some(target)
-}
-
 /// Attach orphaned language specifiers to opening fences.
 ///
 /// After compressing fences, a language may appear on its own line directly
@@ -323,35 +305,54 @@ fn orphan_specifier_target_without_language(lines: &[String], start: usize) -> O
 pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
     let mut tracker = FenceTracker::new();
-    let mut i = 0;
+    let mut lines = lines.iter().peekable();
 
-    while i < lines.len() {
-        let line = &lines[i];
+    while let Some(line) = lines.next() {
         if tracker.in_fence() {
             let _ = tracker.observe(line);
             out.push(line.clone());
-            i += 1;
             continue;
         }
 
         let (spec, indent) = normalize_specifier(line);
         if ORPHAN_LANG_RE.is_match(&spec) && out.last().is_none_or(|l: &String| l.trim().is_empty())
         {
-            if let Some(target) = orphan_specifier_target_without_language(lines, i + 1) {
-                out.push(attach_specifier_to_fence(&lines[target], &spec, &indent));
-                let _ = tracker.observe(&lines[target]);
-                i = target + 1;
+            let mut blank_lines = Vec::new();
+            let mut attached = false;
+
+            while let Some(next_line) = lines.peek() {
+                if next_line.trim().is_empty() {
+                    if let Some(blank_line) = lines.next() {
+                        blank_lines.push(blank_line.clone());
+                    }
+                    continue;
+                }
+
+                if let Some(captures) = FENCE_RE.captures(next_line) {
+                    let lang = captures.get(3).map_or("", |m| m.as_str());
+                    if is_null_lang(lang)
+                        && let Some(fence_line) = lines.next()
+                    {
+                        out.push(attach_specifier_to_fence(fence_line, &spec, &indent));
+                        let _ = tracker.observe(fence_line);
+                        attached = true;
+                    }
+                }
+                break;
+            }
+
+            if attached {
                 continue;
             }
+
             out.push(line.clone());
             let _ = tracker.observe(line);
-            i += 1;
+            out.extend(blank_lines);
             continue;
         }
 
         out.push(line.clone());
         let _ = tracker.observe(line);
-        i += 1;
     }
 
     out
