@@ -51,8 +51,8 @@ pub fn split_cells(line: &str) -> Vec<String> {
 /// # Returns
 ///
 /// Separator cells widened to the target widths while preserving left and
-/// right alignment markers. When the counts do not match, the original cells
-/// are returned unchanged.
+/// right alignment markers. When the counts do not match, an empty vector is
+/// returned so callers can treat the separator as invalid.
 ///
 /// # Examples
 ///
@@ -64,7 +64,7 @@ pub fn split_cells(line: &str) -> Vec<String> {
 /// ```
 pub(crate) fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> Vec<String> {
     if sep_cells.len() != widths.len() {
-        return sep_cells.to_vec();
+        return Vec::new();
     }
 
     sep_cells
@@ -115,12 +115,10 @@ pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
 /// This is produced by [`parse_and_validate`] and passed to
 /// [`calculate_and_format`].
 ///
-/// * `cleaned` - rows after parser markers are cleaned up
 /// * `output_rows` - rows ready for output (separator removed)
 /// * `sep_cells` - optional separator cells for formatting
 /// * `max_cols` - maximum column count across all rows
 struct ParsedTable {
-    cleaned: Vec<Vec<String>>,
     output_rows: Vec<Vec<String>>,
     sep_cells: Option<Vec<String>>,
     max_cols: usize,
@@ -160,7 +158,6 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
         output_rows.remove(idx);
     }
     Some(ParsedTable {
-        cleaned,
         output_rows,
         sep_cells,
         max_cols,
@@ -168,15 +165,27 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
 }
 
 /// Calculates column widths and formats the final table output.
-fn calculate_and_format(parsed: &ParsedTable, indent: &str) -> Vec<String> {
-    let mut widths = crate::reflow::calculate_widths(&parsed.cleaned, parsed.max_cols);
+fn calculate_and_format(parsed: &ParsedTable, indent: &str) -> Option<Vec<String>> {
+    let mut widths = crate::reflow::calculate_widths(&parsed.output_rows, parsed.max_cols);
     if parsed.sep_cells.is_some() {
         for width in &mut widths {
             *width = (*width).max(3);
         }
     }
+    if parsed
+        .sep_cells
+        .as_ref()
+        .is_some_and(|cells| format_separator_cells(&widths, cells).is_empty())
+    {
+        return None;
+    }
     let out = crate::reflow::format_rows(&parsed.output_rows, &widths, indent);
-    crate::reflow::insert_separator(out, parsed.sep_cells.clone(), &widths, indent)
+    Some(crate::reflow::insert_separator(
+        out,
+        parsed.sep_cells.clone(),
+        &widths,
+        indent,
+    ))
 }
 
 /// Reflow a Markdown table so columns align uniformly.
@@ -211,7 +220,7 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
         return lines.to_vec();
     };
 
-    calculate_and_format(&parsed, &indent)
+    calculate_and_format(&parsed, &indent).unwrap_or_else(|| lines.to_vec())
 }
 
 #[cfg(test)]
@@ -265,9 +274,20 @@ mod tests {
     }
 
     #[test]
-    fn format_separator_cells_returns_original_cells_when_counts_mismatch() {
+    fn format_separator_cells_returns_empty_when_counts_mismatch() {
         let sep_cells = vec!["---".to_string()];
 
-        assert_eq!(format_separator_cells(&[3, 4], &sep_cells), sep_cells);
+        assert!(format_separator_cells(&[3, 4], &sep_cells).is_empty());
+    }
+
+    #[test]
+    fn reflow_table_returns_original_lines_for_mismatched_separator_columns() {
+        let lines = vec![
+            "| head |".to_string(),
+            "| --- | --- |".to_string(),
+            "| body |".to_string(),
+        ];
+
+        assert_eq!(reflow_table(&lines), lines);
     }
 }
