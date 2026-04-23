@@ -41,7 +41,7 @@ the next line when it would otherwise exceed the target width.
 Blockquote prefixes (`>`), task-list item markers (`- [ ]`, `- [x]`), and
 footnote definition labels (`[^n]:`) are detected automatically. The first
 wrapped line carries the original prefix; subsequent wrapped lines are indented
-to the same visual column so the text stays aligned.
+to the same visual column, so the text stays aligned.
 
 Fenced code blocks, HTML blocks, indented code blocks (four or more leading
 spaces or a leading tab), and table rows are passed through unchanged. Wrapping
@@ -49,4 +49,4 @@ is applied only to prose paragraphs and prefixed lines.
 
 Two trailing spaces at the end of a line produce a hard line break in rendered
 Markdown. `mdtablefix --wrap` preserves those trailing spaces on the final
-wrapped line so hard-break semantics are not lost after reformatting.
+wrapped line, so hard-break semantics are not lost after reformatting.
