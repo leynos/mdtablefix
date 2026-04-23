@@ -62,20 +62,25 @@ according to the selected options.
 
 - Risk: frontmatter might still be modified by CLI-only transforms such as
   `renumber_lists` or `format_breaks` after the main stream processor returns.
-  Severity: high Likelihood: medium Mitigation: protect the body split at the
-  highest shared pipeline boundary and add a CLI regression that includes
-  `--breaks`.
+  - Severity: high
+  - Likelihood: medium
+  - Mitigation: protect the body split at the highest shared pipeline boundary
+    and add a CLI regression that includes `--breaks`.
 
 - Risk: delimiter detection can become too permissive and accidentally treat a
-  thematic break or ordinary `---` block as frontmatter. Severity: medium
-  Likelihood: medium Mitigation: only detect frontmatter when the very first
-  line is a delimiter and require a matching closing delimiter before shielding
-  the block.
+  thematic break or ordinary `---` block as frontmatter.
+  - Severity: medium
+  - Likelihood: medium
+  - Mitigation: only detect frontmatter when the very first line is a
+    delimiter and require a matching closing delimiter before shielding the
+    block.
 
 - Risk: `src/process.rs` is already close to the repository's file-length
-  ceiling. Severity: medium Likelihood: high Mitigation: place the detector and
-  splitter logic in a new small module instead of extending `src/process.rs`
-  significantly.
+  ceiling.
+  - Severity: medium
+  - Likelihood: high
+  - Mitigation: place the detector and splitter logic in a new small module
+    instead of extending `src/process.rs` significantly.
 
 ## Progress
 
