@@ -36,8 +36,9 @@ The function combines several helpers documented in `docs/`:
 - `html::convert_html_tables` transforms basic HTML tables into Markdown so \
   they can be reflowed like regular tables. See \
   [HTML table support](#html-table-support-in-mdtablefix).
-- `wrap::wrap_text` applies optional line wrapping. It relies on the
-  `unicode-width` crate for accurate character widths.
+- `wrap::wrap_text` applies optional line wrapping. It classifies Markdown
+  block structure locally and delegates greedy line fitting to the `textwrap`
+  crate over Markdown-aware fragments measured with `unicode-width`.
 - `wrap::tokenize_markdown` emits `Token` values for custom processing.
 - `headings::convert_setext_headings` rewrites Setext headings with underline
   markers into ATX headings when the CLI `--headings` flag is provided. The
@@ -374,34 +375,112 @@ module handles filesystem operations, delegating the text processing to
 
 ### Tokenizer flow
 
-The inline tokenizer iterates over the source string lazily, so no duplicate
-`Vec<char>` representation is required. The following diagram summarizes the
-control flow, highlighting the helpers touched during whitespace, code span,
-and link handling.
+The inline tokenizer still iterates over the source string lazily, so no
+duplicate `Vec<char>` representation is required. The resulting tokens are then
+grouped into Markdown-aware fragments and passed to
+`textwrap::wrap_algorithms::wrap_first_fit`, which chooses the breakpoints
+without splitting code spans, links, or punctuation groups.
 
 ```mermaid
 flowchart TD
-    A["Input text (&str)"] --> B["Initialize tokens Vec"]
-    B --> C["Iterate over text by byte index"]
-    C --> D{"Current char is whitespace?"}
-    D -- Yes --> E["scan_while for whitespace"]
-    E --> F["collect_range and push token"]
-    D -- No --> G{"Current char is '`'?"}
-    G -- Yes --> H["Check backslash escape (has_odd_backslash_escape_bytes)"]
-    H -- Escaped --> I["Push '`' as token"]
-    H -- Not escaped --> J["scan_while for code fence"]
-    J --> K["Find closing fence, collect_range and push token"]
-    G -- No --> L{"Current char is '[' or '!['?"}
-    L -- Yes --> M["parse_link_or_image"]
-    M --> N["Push link/image token"]
-    N --> O["scan_while for trailing punctuation"]
-    O --> P["collect_range and push punctuation token"]
-    L -- No --> Q["scan_while for non-whitespace/non-` chars"]
-    Q --> R["collect_range and push token"]
-    F & I & K & P & R --> S["Continue iteration"]
-    S --> C
-    C -->|End| T["Return tokens Vec"]
+    A["Input text (&str)"] --> B["Tokenize into whitespace and inline Markdown tokens"]
+    B --> C["Group tokens into Markdown-aware fragments"]
+    C --> D["Measure fragment widths with unicode-width"]
+    D --> E["Run textwrap wrap_first_fit over current fragments"]
+    E --> F["Merge whitespace-only continuation lines forward"]
+    F --> G["Render wrapped lines, trimming only a single trailing separator space"]
 ```
+
+Figure: Wrap-tokenizer flow. Starting from an input string, the wrapper emits
+whitespace and inline Markdown tokens, groups them into fragments, measures
+their display widths with `unicode-width`, feeds them through
+`textwrap::wrap_algorithms::wrap_first_fit`, and then reconstructs wrapped
+lines while preserving Markdown-aware spacing rules.
+
+### Wrap flow
+
+The higher-level `wrap_text` entry point combines block classification,
+paragraph buffering, prefix-aware wrapping, and inline line fitting. The
+following flow shows how a line moves through those stages before it is either
+preserved verbatim or emitted as wrapped output.
+
+```mermaid
+flowchart TD
+    A[Start: wrap_text called with lines and width] --> B{Classify line}
+
+    B -->|Fenced or indented code block| C[Preserve line verbatim]
+    B -->|Table or heading or directive| C
+    B -->|Blank line| D[Flush active paragraph and emit blank]
+    B -->|Paragraph or prefixed line| E[Send to ParagraphWriter]
+
+    E --> F{Has prefix such as bullet, blockquote, footnote}
+    F -->|Yes| G[wrap_with_prefix computes display width using unicode-width]
+    F -->|No| H[wrap_preserving_code wraps inline content]
+
+    G --> I[fragment-building / post-process helpers]
+    H --> I
+
+    I --> J[textwrap::wrap_algorithms::wrap_first_fit performs line breaking]
+    J --> K[Reconstruct wrapped lines with prefixes and preserved spans]
+    K --> L[Emit wrapped lines to wrap_text]
+
+    C --> M[Append line to output]
+    D --> M
+    L --> M
+
+    M --> N{More input lines?}
+    N -->|Yes| B
+    N -->|No| O[Flush remaining paragraph and finish]
+```
+
+Figure: `wrap_text` control flow. The wrapper classifies each incoming line,
+passes fenced blocks, tables, headings, directives, and indented code through
+unchanged, flushes paragraphs on blanks, routes prose and prefixed lines
+through `ParagraphWriter`, computes visible widths with `unicode-width`, and
+delegates inline line fitting to `textwrap` before reconstructing the emitted
+Markdown lines.
+
+### Wrap sequence
+
+The following sequence diagram focuses on the runtime collaboration between the
+CLI entry point, `wrap_text`, `ParagraphWriter`, the inline wrapper, and
+`textwrap` while a paragraph is being processed.
+
+```mermaid
+sequenceDiagram
+    participant CLI as mdtablefix_CLI
+    participant WT as wrap_text
+    participant PW as ParagraphWriter
+    participant WP as wrap_preserving_code
+    participant IH as inline.rs_helpers
+    participant TW as textwrap::wrap_first_fit
+
+    CLI->>WT: wrap_text(lines, width)
+    loop For each classified paragraph line
+        WT->>PW: handle_prefix_line / flush_paragraph
+        alt Prefixed or plain paragraph content
+            PW->>WP: wrap_preserving_code(text, width)
+            WP->>IH: build_fragments + merge/rebalance
+            IH->>TW: wrap_first_fit(fragments, line_widths)
+            TW-->>IH: wrapped_fragment_groups
+            IH-->>WP: wrapped_lines_with_spans
+            WP-->>PW: wrapped_lines_with_prefixes
+            PW-->>WT: wrapped_lines
+            WT-->>CLI: append wrapped output
+        else Nonwrappable line
+            PW-->>WT: push_verbatim / original_line
+            WT-->>CLI: append original output
+        end
+    end
+    WT-->>CLI: return final wrapped text
+```
+
+Figure: `wrap_text` sequence flow. The CLI calls `wrap_text`, which delegates
+paragraph handling to `ParagraphWriter`; wrappable paragraph content then flows
+through `wrap_preserving_code`, the fragment-building and post-processing
+helpers in `src/wrap/inline.rs`, and the underlying `textwrap` engine before
+wrapped lines return through the same stack to the CLI, while nonwrappable
+lines bypass the inline wrapping path and are emitted unchanged.
 
 The helper `html_table_to_markdown` is retained for backward compatibility but
 is deprecated. New code should call `convert_html_tables` instead.
@@ -444,8 +523,9 @@ sequenceDiagram
 
 `mdtablefix` wraps paragraphs and list items while respecting the display width
 of Unicode characters. The `unicode-width` crate is used to compute the width
-of strings when deciding where to break lines. This prevents emojis or other
-multibyte characters from causing unexpected wraps or truncation.
+of prefixes and Markdown-aware wrapping fragments before `textwrap` performs
+line fitting. This prevents emojis or other multibyte characters from causing
+unexpected wraps or truncation.
 
 Whenever wrapping logic examines the length of a token, it relies on
 `UnicodeWidthStr::width` to measure visible columns rather than byte length.

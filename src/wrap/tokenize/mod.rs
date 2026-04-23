@@ -229,32 +229,6 @@ where
     }
 }
 
-/// Tokenize a Markdown snippet using backtick-delimited code spans.
-///
-/// The function scans the input line by line. Lines matching [`FENCE_RE`]
-/// produce [`Token::Fence`] tokens and toggle fenced mode. Lines inside a
-/// fence are yielded verbatim. Outside fenced regions the scanner searches for
-/// backtick sequences. Text before a backtick becomes [`Token::Text`]. When a
-/// closing backtick follows, the enclosed portion forms a [`Token::Code`]
-/// span. If no closing backtick is found the delimiter and remaining text are
-/// returned as [`Token::Text`]. Whitespace is preserved exactly as it appears.
-///
-/// ```rust
-/// use mdtablefix::wrap::{Token, tokenize_markdown};
-///
-/// let tokens = tokenize_markdown("Example with `code`");
-/// assert_eq!(
-///     tokens,
-///     vec![
-///         Token::Text("Example with "),
-///         Token::Code {
-///             raw: "`code`",
-///             fence: "`",
-///             code: "code"
-///         },
-///     ]
-/// );
-/// ```
 fn push_newline_if_needed<I>(
     tokens: &mut Vec<Token<'_>>,
     lines: &mut std::iter::Peekable<I>,
@@ -272,6 +246,30 @@ fn push_newline_if_needed<I>(
 }
 
 #[must_use]
+/// Tokenizes inline Markdown `source` into an ordered list of [`Token`] values.
+///
+/// The `source` parameter is the inline Markdown text to tokenize. The return
+/// value is `Vec<Token<'_>>`, preserving the token order found in `source`.
+/// Inline code spans, links, and whitespace runs are emitted as distinct token
+/// variants or text slices so callers can perform width-aware or
+/// format-aware processing.
+///
+/// ```rust
+/// use mdtablefix::wrap::{Token, tokenize_markdown};
+///
+/// let tokens = tokenize_markdown("Example with `code`");
+/// assert_eq!(
+///     tokens,
+///     vec![
+///         Token::Text("Example with "),
+///         Token::Code {
+///             raw: "`code`",
+///             fence: "`",
+///             code: "code"
+///         },
+///     ]
+/// );
+/// ```
 pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     if source.is_empty() {
         return Vec::new();

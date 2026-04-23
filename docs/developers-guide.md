@@ -88,3 +88,71 @@ The rationale for the staged table reflow pipeline is recorded in
 `docs/adrs/0001-table-reflow-pipeline.md`. Refer to that ADR when changing the
 parse, width-calculation, or separator-handling flow so implementation changes
 stay aligned with the documented design constraints.
+
+## Wrap module architecture
+
+The wrapping pipeline for `--wrap` is:
+
+1. **Block classification.** `classify_block` in `src/wrap.rs` inspects each
+   input line and decides whether it should pass through verbatim or enter the
+   paragraph wrapper. Fenced code blocks, indented code blocks, headings,
+   tables, directives, and blank lines stop paragraph accumulation.
+
+2. **Prefix-aware paragraph handling.** `ParagraphWriter` in
+   `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.
+   `wrap_with_prefix` computes the available content width once from the
+   Unicode display width of the first-line prefix, then feeds the paragraph
+   text into `wrap_preserving_code`.
+
+3. **Fragment construction and line fitting.** `wrap_preserving_code` in
+   `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
+   the tokens into `InlineFragment` values, and calls
+   `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
+   buffer.
+
+4. **Post-processing and rendering.** The `postprocess` module applies
+   `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
+   whitespace-only wrap artefacts and isolated tails are normalized before the
+   fragments are rendered back into output lines.
+
+`InlineFragment` carries the rendered fragment text, its precomputed display
+width, and a `FragmentKind` tag. That construction-time classification lets the
+`is_whitespace`, `is_atomic`, and `is_plain` predicates answer all later
+questions without repeating ad hoc string inspection in the post-processing
+passes.
+
+The `postprocess` module exists because greedy line fitting alone does not
+reproduce the repository's historical whitespace semantics. The first pass
+merges whitespace-only wrap lines into adjacent content, and the second pass
+rebalances a trailing atomic or plain fragment only when the destination line
+still fits within the configured width.
+
+### Key types and functions
+
+Table: Key types and functions.
+
+| Symbol                                                  | File                             |
+| ------------------------------------------------------- | -------------------------------- |
+| `FragmentKind`, `InlineFragment`, `classify_fragment`   | `src/wrap/inline.rs`             |
+| `build_fragments`, `wrap_preserving_code`               | `src/wrap/inline.rs`             |
+| `merge_whitespace_only_lines`, `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
+| `ParagraphWriter`, `wrap_with_prefix`                   | `src/wrap/paragraph.rs`          |
+| `ParagraphState`, `PrefixLine`                          | `src/wrap/paragraph.rs`          |
+
+### Design constraints
+
+- **Public API stability.** `mdtablefix::wrap::wrap_text`, `Token`, and
+  `tokenize_markdown` must not change their signatures or observable behaviour.
+- **Atomic fragments.** Inline code spans and Markdown links are never split
+  across lines; they move as a unit when they would overflow the target width.
+- **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
+  line where they occur.
+- **Verbatim blocks.** Fenced code blocks must pass through unchanged, along
+  with the other non-paragraph block kinds detected by `classify_block`.
+- **Prefix width.** The visual width of every prefix string is measured with
+  `UnicodeWidthStr::width` before the available text width is computed, so
+  non-ASCII prefix characters (e.g. `「` in CJK blockquotes) are accounted for
+  correctly.
+
+Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
+replacing `LineBuffer` with `textwrap`.

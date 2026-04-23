@@ -1,13 +1,10 @@
 //! Unit tests for text wrapping functionality.
-//!
-//! This module contains tests for the `wrap_text` function, verifying correct
-//! behaviour with code spans, links, hyphenated words, and various line widths.
+//! Verifies `wrap_text` with code spans, links, hyphenated words, and widths.
 
 use rstest::rstest;
 
 use super::{
     inline::{attach_punctuation_to_previous_line, determine_token_span, wrap_preserving_code},
-    line_buffer::{LineBuffer, SplitContext},
     tokenize::segment_inline,
 };
 use crate::wrap::{BlockKind, classify_block, wrap_text};
@@ -92,106 +89,6 @@ fn attach_punctuation_ignores_non_code_suffix() {
         ".",
     ));
     assert_eq!(lines, vec!["plain text".to_string()]);
-}
-
-#[test]
-fn line_buffer_trims_trailing_whitespace_before_punctuation() {
-    let tokens = vec![
-        "wrap".to_string(),
-        " ".to_string(),
-        "`code`".to_string(),
-        "  ".to_string(),
-    ];
-    let mut buffer = LineBuffer::new();
-    buffer.push_span(&tokens, 0, tokens.len());
-    assert_eq!(buffer.text(), "wrap `code`  ");
-
-    let punct = vec!["!".to_string()];
-    buffer.push_span(&punct, 0, punct.len());
-    assert_eq!(buffer.text(), "wrap `code`!");
-}
-
-#[test]
-fn line_buffer_split_preserves_multi_space_lines() {
-    let tokens = vec![
-        "alpha".to_string(),
-        "  ".to_string(),
-        "beta".to_string(),
-        "   ".to_string(),
-    ];
-    let mut buffer = LineBuffer::new();
-    buffer.push_span(&tokens, 0, 2);
-
-    let mut lines = Vec::new();
-    let mut split = SplitContext {
-        lines: &mut lines,
-        width: 8,
-    };
-    assert!(buffer.split_with_span(&mut split, &tokens, 2..4));
-    assert_eq!(lines, vec!["alpha  ".to_string()]);
-    assert_eq!(buffer.text(), "beta   ");
-    assert_eq!(
-        buffer.width(),
-        unicode_width::UnicodeWidthStr::width(buffer.text())
-    );
-}
-
-#[test]
-fn line_buffer_split_trims_single_trailing_space() {
-    let tokens = vec!["alpha".to_string(), " ".to_string(), "beta".to_string()];
-    let mut buffer = LineBuffer::new();
-    buffer.push_span(&tokens, 0, 2);
-
-    let mut lines = Vec::new();
-    let mut split = SplitContext {
-        lines: &mut lines,
-        width: 5,
-    };
-    assert!(buffer.split_with_span(&mut split, &tokens, 2..3));
-    assert_eq!(lines, vec!["alpha".to_string()]);
-    assert_eq!(buffer.text(), "beta");
-    assert_eq!(
-        buffer.width(),
-        unicode_width::UnicodeWidthStr::width(buffer.text())
-    );
-}
-
-#[test]
-fn line_buffer_split_tracks_multiple_whitespace_tokens() {
-    let tokens = vec![
-        "foo".to_string(),
-        " ".to_string(),
-        " ".to_string(),
-        "bar".to_string(),
-    ];
-    let mut buffer = LineBuffer::new();
-    buffer.push_span(&tokens, 0, 3);
-
-    let mut lines = Vec::new();
-    let mut split = SplitContext {
-        lines: &mut lines,
-        width: 4,
-    };
-    assert!(buffer.split_with_span(&mut split, &tokens, 3..4));
-    assert_eq!(lines, vec!["foo  ".to_string()]);
-    assert_eq!(buffer.text(), "bar");
-}
-
-#[test]
-fn line_buffer_trailing_whitespace_flushes_line() {
-    let mut buffer = LineBuffer::new();
-    let words = vec!["foo".to_string()];
-    buffer.push_span(&words, 0, words.len());
-
-    let whitespace_tokens = vec!["  ".to_string()];
-    let mut lines = Vec::new();
-    assert!(buffer.flush_trailing_whitespace(
-        &mut lines,
-        &whitespace_tokens,
-        0..whitespace_tokens.len()
-    ));
-    assert_eq!(lines, vec!["foo  ".to_string()]);
-    assert!(buffer.text().is_empty());
 }
 
 #[test]
@@ -500,3 +397,4 @@ fn classify_block_detects_markdown_prefixes(line: &str, expected: Option<BlockKi
 }
 
 mod fence_tracker;
+mod prefix;

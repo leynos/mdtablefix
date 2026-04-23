@@ -22,3 +22,31 @@ The `--ellipsis` flag replaces `...` inside table cells with the Unicode
 ellipsis character `…` before the table is reflowed. This ensures column widths
 are computed from the final emitted glyph rather than from the three-dot source
 sequence.
+
+## Paragraph wrapping
+
+Pass `--wrap <width>` to reflow prose paragraphs so that every output line fits
+within `<width>` display columns. The width argument is measured in terminal
+columns, not bytes, so it accounts correctly for CJK glyphs, emoji, and
+accented characters.
+
+Line fitting is delegated to the `textwrap` crate using a greedy first-fit
+algorithm: each word is placed on the current line if it fits, and a new line
+is started otherwise. This produces predictable, diff-friendly output.
+
+Inline code spans (`` `…` ``) and Markdown links (`[text](url)`) are treated as
+unbreakable units. A span is never split across lines; it moves as a whole to
+the next line when it would otherwise exceed the target width.
+
+Blockquote prefixes (`>`), task-list item markers (`- [ ]`, `- [x]`), and
+footnote definition labels (`[^n]:`) are detected automatically. The first
+wrapped line carries the original prefix; subsequent wrapped lines are indented
+to the same visual column, so the text stays aligned.
+
+Fenced code blocks, HTML blocks, indented code blocks (four or more leading
+spaces or a leading tab), and table rows are passed through unchanged. Wrapping
+is applied only to prose paragraphs and prefixed lines.
+
+Two trailing spaces at the end of a line produce a hard line break in rendered
+Markdown. `mdtablefix --wrap` preserves those trailing spaces on the final
+wrapped line, so hard-break semantics are not lost after reformatting.

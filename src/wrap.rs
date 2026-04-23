@@ -13,11 +13,16 @@ use std::borrow::Cow;
 mod block;
 mod fence;
 mod inline;
-mod line_buffer;
 mod paragraph;
 mod tokenize;
 use block::{BLOCKQUOTE_RE, BULLET_RE, FOOTNOTE_RE};
 pub(crate) use block::{BlockKind, classify_block};
+/// Fence-detection utilities re-exported for downstream callers.
+///
+/// [`FenceTracker`] maintains fenced code-block state across lines, which is
+/// useful for callers that process Markdown incrementally. [`is_fence`]
+/// inspects one line and returns the fence components (indentation, marker,
+/// info string) when the line opens a fenced code block, or `None` otherwise.
 pub use fence::{FenceTracker, is_fence};
 use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 /// Token emitted by the `tokenize::segment_inline` parser and used by
