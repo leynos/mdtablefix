@@ -191,10 +191,10 @@ two public functions that are called in sequence:
   three or more backticks or tildes to exactly three backticks while preserving
   indentation and any language identifiers.
 - `attach_orphan_specifiers(&[String]) -> Vec<String>` reattaches language
-  specifier lines that appear on their own line before an unlabelled opening
+  specifier lines that appear on a separate line before an unlabelled opening
   fence.
 
-Together these helpers make the rest of the processing pipeline deal with a
+Together, these helpers make the rest of the processing pipeline deal with a
 single normalized fence, and avoid carrying separate logic for detached
 specifier lines.
 
