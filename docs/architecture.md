@@ -452,23 +452,23 @@ sequenceDiagram
     participant WT as wrap_text
     participant PW as ParagraphWriter
     participant WP as wrap_preserving_code
-    participant AD as InlineTextwrapAdapter
-    participant TW as textwrap
+    participant IH as inline.rs_helpers
+    participant TW as textwrap::wrap_first_fit
 
     CLI->>WT: wrap_text(lines, width)
     loop For each classified paragraph line
-        WT->>PW: handle_line(line, width)
+        WT->>PW: handle_prefix_line / flush_paragraph
         alt Prefixed or plain paragraph content
-            PW->>WP: wrap_preserving_code(text, width, prefix_info)
-            WP->>AD: wrap_inline_with_textwrap(text, width, prefix_info)
-            AD->>TW: wrap(text, options)
-            TW-->>AD: wrapped_segments
-            AD-->>WP: wrapped_lines_with_spans
+            PW->>WP: wrap_preserving_code(text, width)
+            WP->>IH: build_fragments + merge/rebalance
+            IH->>TW: wrap_first_fit(fragments, line_widths)
+            TW-->>IH: wrapped_fragment_groups
+            IH-->>WP: wrapped_lines_with_spans
             WP-->>PW: wrapped_lines_with_prefixes
             PW-->>WT: wrapped_lines
             WT-->>CLI: append wrapped output
         else Nonwrappable line
-            PW-->>WT: original_line
+            PW-->>WT: push_verbatim / original_line
             WT-->>CLI: append original output
         end
     end
@@ -477,10 +477,10 @@ sequenceDiagram
 
 Figure: `wrap_text` sequence flow. The CLI calls `wrap_text`, which delegates
 paragraph handling to `ParagraphWriter`; wrappable paragraph content then flows
-through `wrap_preserving_code`, an inline adapter that prepares `textwrap`
-options, and the underlying `textwrap` engine before wrapped lines return
-through the same stack to the CLI, while nonwrappable lines bypass the inline
-wrapping path and are emitted unchanged.
+through `wrap_preserving_code`, the fragment-building and post-processing
+helpers in `src/wrap/inline.rs`, and the underlying `textwrap` engine before
+wrapped lines return through the same stack to the CLI, while nonwrappable
+lines bypass the inline wrapping path and are emitted unchanged.
 
 The helper `html_table_to_markdown` is retained for backward compatibility but
 is deprecated. New code should call `convert_html_tables` instead.

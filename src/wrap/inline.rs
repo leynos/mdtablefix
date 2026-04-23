@@ -4,8 +4,11 @@
 //! inline code, links, and trailing punctuation without reimplementing the
 //! grouping logic in multiple places.
 
+mod postprocess;
+
 use std::ops::Range;
 
+use postprocess::{merge_whitespace_only_lines, rebalance_atomic_tails};
 use textwrap::{core::Fragment, wrap_algorithms::wrap_first_fit};
 use unicode_width::UnicodeWidthStr;
 
@@ -169,29 +172,53 @@ pub(super) fn attach_punctuation_to_previous_line(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum FragmentKind {
+    Whitespace,
+    InlineCode,
+    Link,
+    Plain,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct InlineFragment {
     text: String,
     width: usize,
+    kind: FragmentKind,
 }
 
 impl InlineFragment {
     fn new(text: String) -> Self {
         let width = UnicodeWidthStr::width(text.as_str());
-        Self { text, width }
+        let kind = classify_fragment(text.as_str());
+        Self { text, width, kind }
     }
+    fn is_whitespace(&self) -> bool { self.kind == FragmentKind::Whitespace }
+    fn is_atomic(&self) -> bool {
+        matches!(self.kind, FragmentKind::InlineCode | FragmentKind::Link)
+    }
+    fn is_plain(&self) -> bool { self.kind == FragmentKind::Plain }
 }
 
 impl Fragment for InlineFragment {
     fn width(&self) -> f64 { width_as_f64(self.width) }
-
     fn whitespace_width(&self) -> f64 { 0.0 }
-
     fn penalty_width(&self) -> f64 { 0.0 }
 }
 
-fn width_as_f64(width: usize) -> f64 {
-    let width = u32::try_from(width).unwrap_or(u32::MAX);
-    f64::from(width)
+fn width_as_f64(width: usize) -> f64 { f64::from(u32::try_from(width).unwrap_or(u32::MAX)) }
+
+fn classify_fragment(text: &str) -> FragmentKind {
+    if is_whitespace_token(text) {
+        return FragmentKind::Whitespace;
+    }
+    let trimmed = text.trim_end_matches(is_trailing_punct);
+    if is_inline_code_token(trimmed) {
+        FragmentKind::InlineCode
+    } else if looks_like_link(trimmed) {
+        FragmentKind::Link
+    } else {
+        FragmentKind::Plain
+    }
 }
 
 fn push_span_text(text: &mut String, tokens: &[String], span: Range<usize>) {
@@ -210,133 +237,21 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
     while i < tokens.len() {
         let (group_end, _) = determine_token_span(tokens, i);
         let span = i..group_end;
-        let span_is_whitespace = tokens[span.clone()]
+        let text = if tokens[span.clone()]
             .iter()
-            .all(|token| is_whitespace_token(token));
-
-        if span_is_whitespace {
-            let whitespace = tokens[span.clone()].join("");
-            fragments.push(InlineFragment::new(whitespace));
-            i = group_end;
-            continue;
-        }
-
-        let mut text = String::new();
-        push_span_text(&mut text, tokens, span);
+            .all(|token| is_whitespace_token(token))
+        {
+            tokens[span].join("")
+        } else {
+            let mut text = String::new();
+            push_span_text(&mut text, tokens, span);
+            text
+        };
         fragments.push(InlineFragment::new(text));
         i = group_end;
     }
 
     fragments
-}
-
-fn merge_whitespace_only_lines(lines: &[Vec<InlineFragment>]) -> Vec<Vec<InlineFragment>> {
-    let mut merged: Vec<Vec<InlineFragment>> = Vec::with_capacity(lines.len());
-    let mut pending_whitespace: Vec<InlineFragment> = Vec::new();
-
-    for (index, mut line) in lines.iter().cloned().enumerate() {
-        let is_whitespace_only = line
-            .iter()
-            .all(|fragment| fragment.text.chars().all(char::is_whitespace));
-
-        if is_whitespace_only {
-            let next_starts_atomic = lines
-                .get(index + 1)
-                .and_then(|next_line| next_line.first())
-                .is_some_and(|fragment| {
-                    is_inline_code_token(fragment.text.as_str())
-                        || looks_like_link(fragment.text.as_str())
-                });
-            let line_is_single_space = line
-                .iter()
-                .map(|fragment| fragment.text.as_str())
-                .collect::<String>()
-                == " ";
-            let previous_line_has_single_fragment = merged
-                .last()
-                .is_some_and(|previous_line| previous_line.len() == 1);
-            let mut should_carry_whitespace = !line_is_single_space;
-
-            if line_is_single_space
-                && !next_starts_atomic
-                && let Some(previous_line) = merged.last_mut()
-            {
-                let should_move_previous_atomic = previous_line
-                    .last()
-                    .is_some_and(|fragment| is_inline_code_token(fragment.text.as_str()));
-                if should_move_previous_atomic {
-                    let previous_atomic = previous_line
-                        .pop()
-                        .expect("line with an atomic tail contains that fragment");
-                    pending_whitespace.push(previous_atomic);
-                    if previous_line.is_empty() {
-                        merged.pop();
-                    }
-                    should_carry_whitespace = true;
-                }
-            }
-
-            if line_is_single_space && previous_line_has_single_fragment {
-                should_carry_whitespace = true;
-            }
-
-            if should_carry_whitespace {
-                pending_whitespace.extend(line);
-            }
-            continue;
-        }
-
-        if pending_whitespace.is_empty() {
-            merged.push(line);
-        } else {
-            pending_whitespace.append(&mut line);
-            merged.push(std::mem::take(&mut pending_whitespace));
-        }
-    }
-
-    if !pending_whitespace.is_empty() {
-        if let Some(last_line) = merged.last_mut() {
-            last_line.append(&mut pending_whitespace);
-        } else {
-            merged.push(pending_whitespace);
-        }
-    }
-
-    merged
-}
-
-fn rebalance_atomic_tails(lines: &mut [Vec<InlineFragment>]) {
-    for index in 0..lines.len().saturating_sub(1) {
-        let next_starts_with_single_space = lines[index + 1]
-            .first()
-            .is_some_and(|fragment| fragment.text == " ");
-        let next_continues_with_plain_text = lines[index + 1].get(1).is_some_and(|fragment| {
-            !fragment.text.chars().all(char::is_whitespace)
-                && !is_inline_code_token(fragment.text.as_str())
-                && !looks_like_link(fragment.text.as_str())
-        });
-
-        if !next_starts_with_single_space || !next_continues_with_plain_text {
-            continue;
-        }
-
-        let should_move_atomic_tail = lines[index]
-            .last()
-            .is_some_and(|fragment| is_inline_code_token(fragment.text.as_str()));
-        let should_move_plain_tail = lines[index].len() > 1
-            && lines[index].last().is_some_and(|fragment| {
-                !fragment.text.chars().all(char::is_whitespace)
-                    && !is_inline_code_token(fragment.text.as_str())
-                    && !looks_like_link(fragment.text.as_str())
-            });
-
-        if should_move_atomic_tail || should_move_plain_tail {
-            let trailing_fragment = lines[index]
-                .pop()
-                .expect("line selected for tail rebalancing contains a trailing fragment");
-            lines[index + 1].insert(0, trailing_fragment);
-        }
-    }
 }
 
 fn render_line(line: &[InlineFragment], is_final_output_line: bool) -> String {
@@ -363,26 +278,20 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut buffer: Vec<InlineFragment> = Vec::new();
 
     for fragment in fragments {
-        let mut candidate = buffer.clone();
-        candidate.push(fragment);
-        let wrapped = wrap_first_fit(&candidate, &[width_as_f64(width)]);
+        buffer.push(fragment);
+        let wrapped = wrap_first_fit(&buffer, &[width_as_f64(width)]);
         let raw_lines = wrapped.iter().map(|line| line.to_vec()).collect::<Vec<_>>();
         let mut grouped_lines = merge_whitespace_only_lines(&raw_lines);
-        rebalance_atomic_tails(&mut grouped_lines);
+        rebalance_atomic_tails(&mut grouped_lines, width);
 
         if grouped_lines.len() == 1 {
-            buffer = candidate;
             continue;
         }
 
         for line in &grouped_lines[..grouped_lines.len() - 1] {
             lines.push(render_line(line, false));
         }
-        buffer.clone_from(
-            grouped_lines
-                .last()
-                .expect("merged wrapped lines include a trailing line"),
-        );
+        buffer = grouped_lines.pop().unwrap_or_default();
     }
 
     if !buffer.is_empty() {

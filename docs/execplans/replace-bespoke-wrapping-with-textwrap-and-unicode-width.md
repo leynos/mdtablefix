@@ -50,8 +50,8 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
 - Add `textwrap` using a caret requirement that is compatible with the
   repository's Rust `1.89` minimum version and existing 2024 edition build.
 - Keep touched source files below the repository's 400-line soft ceiling. If
-  the refactor would make a file exceed that limit, split the code into a new
-  small module instead of extending the file.
+  the refactor would make a file exceed that limit, split the code into a small
+  new module instead of extending the file.
 - Update documentation that currently describes the bespoke wrapping engine:
   at minimum `README.md`, `docs/architecture.md`, and `docs/trailing-spaces.md`
   if the named helper or explanation changes.
@@ -137,6 +137,10 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
 - [x] (2026-04-22 00:00Z) Updated the affected documentation and passed
   `make fmt`, `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
   and `make nixie`.
+- [x] (2026-04-23 00:00Z) Tightened `rebalance_atomic_tails` so post-wrap
+  fragment moves no longer create overflow lines, reused the trailing buffer in
+  `wrap_preserving_code` instead of cloning the full prefix per fragment, and
+  added an active regression for the `a four five` / width `6` case.
 
 ## Surprises & Discoveries
 
@@ -172,6 +176,14 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
   its existing Markdown-aware token grouping and whitespace preservation
   without reviving the old mutable `LineBuffer`.
 
+- Observation: the post-processing pass that rebalances trailing atomic or
+  plain fragments can invalidate `wrap_first_fit`'s width guarantee if it moves
+  a fragment without rechecking the destination line width. Evidence:
+  `rebalance_atomic_tails` on 2026-04-23 could turn `a four` / `five` into `a`
+  / `four five` at width `6`. Impact: any heuristic that mutates fitted lines
+  after wrapping must be width-aware or it can regress downstream layout
+  assumptions.
+
 ## Decision Log
 
 - Decision: scope the first delivery to replacing the bespoke wrapping engine,
@@ -188,7 +200,7 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
 
 - Decision: prove behaviour with active tests before deleting old internals.
   Rationale: the repository contains inactive wrap tests, so moving directly to
-  cleanup would create a false sense of safety. Date/Author: 2026-04-22 / Codex
+  clean up would create a false sense of safety. Date/Author: 2026-04-22 / Codex
 
 - Decision: use `textwrap::wrap_algorithms::wrap_first_fit` with custom
   Markdown-aware fragments instead of `textwrap::wrap`. Rationale:
@@ -197,6 +209,14 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
   display-width measurements on grouped fragments. That keeps the refactor
   small without losing the behaviours guarded by the current tests.
   Date/Author: 2026-04-22 / Codex
+
+- Decision: treat post-wrap fragment rebalancing as width-constrained, and keep
+  fragment classification explicit on `InlineFragment`. Rationale: the
+  migration's shielding layer is still part of the line-fitting contract, so it
+  must not create lines that `wrap_first_fit` would have rejected. Recording
+  fragment kind once also makes the whitespace-carry and tail-rebalance passes
+  easier to audit than repeating ad hoc string classification in each branch.
+  Date/Author: 2026-04-23 / Codex
 
 ## Outcomes & Retrospective
 
@@ -212,6 +232,11 @@ replacement for the repository's historic whitespace semantics. Preserving the
 old behaviour required a thin adaptation layer that merges whitespace-only
 overflow lines forward and sometimes rebalances the trailing fragment when the
 correct break only becomes obvious after the following separator arrives.
+
+That adaptation layer still needs the same width discipline as the underlying
+wrapper. The 2026-04-23 follow-up fix confirmed that a seemingly harmless
+tail-rebalancing heuristic can reintroduce overflow unless it rechecks the
+destination line's display width before moving a fragment.
 
 ## Context and orientation
 

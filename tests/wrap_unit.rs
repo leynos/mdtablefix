@@ -5,6 +5,7 @@
 
 use mdtablefix::wrap::wrap_text;
 use rstest::rstest;
+use unicode_width::UnicodeWidthStr;
 
 #[test]
 fn wrap_text_preserves_hyphenated_words() {
@@ -152,4 +153,16 @@ fn wrap_text_preserves_fenced_shell_block_without_blank_line_after_heading() {
     ];
 
     assert_eq!(wrap_text(&input, 80), input);
+}
+
+#[test]
+fn wrap_text_does_not_overflow_after_tail_rebalancing() {
+    let wrapped = wrap_text(&["a four five".to_string()], 6);
+
+    assert_eq!(wrapped.join(""), "a four five");
+    assert!(
+        wrapped
+            .iter()
+            .all(|line| UnicodeWidthStr::width(line.as_str()) <= 6)
+    );
 }

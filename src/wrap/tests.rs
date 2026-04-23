@@ -353,42 +353,49 @@ fn wrap_text_repeats_nested_blockquote_prefix() {
     assert!(wrapped.iter().all(|line| line.starts_with("> > ")));
 }
 
-#[test]
-fn wrap_text_aligns_footnote_url_continuation() {
-    let input = vec![
-        concat!(
-            "[^5]: Given When Then - Martin Fowler, accessed on 14 July 2025, ",
-            "<https://martinfowler.com/bliki/GivenWhenThen.html>"
-        )
-        .to_string(),
-    ];
-    let wrapped = wrap_text(&input, 80);
-    assert_eq!(
-        wrapped,
+#[rstest(
+    input,
+    width,
+    expected,
+    case(
         vec![
-            "[^5]: Given When Then - Martin Fowler, accessed on 14 July 2025,".to_string(),
-            "      <https://martinfowler.com/bliki/GivenWhenThen.html>".to_string(),
+            concat!(
+                "[^5]: Given When Then - Martin Fowler, accessed on 14 July 2025, ",
+                "<https://martinfowler.com/bliki/GivenWhenThen.html>"
+            )
+            .to_string(),
+        ],
+        80,
+        vec![
+            "[^5]: Given When Then - Martin Fowler, accessed on 14 July 2025,"
+                .to_string(),
+            "      <https://martinfowler.com/bliki/GivenWhenThen.html>"
+                .to_string(),
         ]
-    );
-}
-
-#[test]
-fn wrap_text_preserves_checkbox_indentation() {
-    let input = vec![
-        concat!(
-            "- [ ] Create a `HttpTravelTimeProvider` struct that implements the ",
-            "`TravelTimeProvider` trait."
-        )
-        .to_string(),
-    ];
-    let wrapped = wrap_text(&input, 70);
-    assert_eq!(
-        wrapped,
+    ),
+    case(
         vec![
-            "- [ ] Create a `HttpTravelTimeProvider` struct that implements the".to_string(),
+            concat!(
+                "- [ ] Create a `HttpTravelTimeProvider` struct that implements the ",
+                "`TravelTimeProvider` trait."
+            )
+            .to_string(),
+        ],
+        70,
+        vec![
+            "- [ ] Create a `HttpTravelTimeProvider` struct that implements the"
+                .to_string(),
             "      `TravelTimeProvider` trait.".to_string(),
         ]
-    );
+    )
+)]
+fn wrap_text_preserves_prefixed_continuation_alignment(
+    input: Vec<String>,
+    width: usize,
+    expected: Vec<String>,
+) {
+    let wrapped = wrap_text(&input, width);
+    assert_eq!(wrapped, expected);
 }
 
 #[test]
