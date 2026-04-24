@@ -51,22 +51,12 @@ Two trailing spaces at the end of a line produce a hard line break in rendered
 Markdown. `mdtablefix --wrap` preserves those trailing spaces on the final
 wrapped line, so hard-break semantics are not lost after reformatting.
 
-
-## Fence normalisation
-
-Pass `--fences` to normalise fenced code blocks before later processing.
-Delimiter runs of three or more backticks or tildes are reduced to exactly
-three backticks, while indentation and any language identifiers are preserved.
-
-If a language specifier appears on a separate line immediately before an
-unlabelled opening fence, `mdtablefix` attaches it to that fence and drops any
-blank lines in between when the attachment succeeds. If no suitable fence
-follows, the specifier line is left unchanged.
 ## Fence normalization
 
-Pass `--fences` to normalize fenced code block delimiters before other
-processing. Safe outer fences are compressed to three backticks, which keeps
-simple code blocks consistent before later formatting steps run.
+Pass `--fences` to normalize fenced code blocks before later processing. Safe
+outer fences are compressed to three backticks, which keeps simple code blocks
+consistent before later formatting steps run. Indentation and any language
+identifiers are preserved.
 
 Outer delimiters are compressed only when doing so is structurally safe. If
 normalization would turn an inner literal fence into a structural close, the
@@ -74,10 +64,12 @@ outer fence is kept, so the inner content remains literal. Preservation applies
 when the inner fence uses the same marker character as the outer fence, or when
 a tilde outer fence wraps a literal inner backtick fence.
 
-`--fences` also attaches a lone language identifier immediately above an
-unlabelled fence to that fence. This orphan-specifier attachment only happens
-when both the identifier line and the target fence are outside any already-open
-fenced block.
+If a language specifier appears on a separate line before the next unlabelled
+opening fence, with only blank lines in between, `mdtablefix` attaches it to
+that fence and drops the blank lines when attachment succeeds. If no suitable
+fence follows, the specifier line is left unchanged. Orphan-specifier attachment
+only happens when both the identifier line and the target fence are outside any
+already-open fenced block.
 
 Before:
 

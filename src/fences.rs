@@ -389,77 +389,44 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
 }
 
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
-    #[test]
-    fn attach_to_next_fence_immediately_attaches_to_unlabelled_fence() {
-        let lines = ["```".to_string()];
+    #[rstest]
+    #[case(vec!["```"])]
+    #[case(vec!["", "```"])]
+    #[case(vec!["", "", "```"])]
+    fn attach_to_next_fence_attaches_to_unlabelled_fence(#[case] raw_lines: Vec<&str>) {
+        let lines: Vec<String> = raw_lines.into_iter().map(str::to_string).collect();
         let mut lines = lines.iter().peekable();
         let mut out = Vec::new();
+        let mut tracker = FenceTracker::new();
 
-        attach_to_next_fence(&mut lines, "rust", "", &mut out, "Rust");
+        attach_to_next_fence(&mut lines, "rust", "", &mut out, "Rust", &mut tracker);
 
         assert_eq!(out, vec!["```rust".to_string()]);
         assert!(lines.next().is_none());
     }
 
-    #[test]
-    fn attach_to_next_fence_drops_one_blank_line_before_attachment() {
-        let lines = [String::new(), "```".to_string()];
+    #[rstest]
+    #[case(vec!["", "plain text"], vec!["Rust", ""], Some("plain text"))]
+    #[case(vec!["", "```python"], vec!["Rust", ""], Some("```python"))]
+    #[case(vec![], vec!["Rust"], None)]
+    fn attach_to_next_fence_preserves_specifier_when_no_attachment_occurs(
+        #[case] raw_lines: Vec<&str>,
+        #[case] expected_out: Vec<&str>,
+        #[case] expected_next: Option<&str>,
+    ) {
+        let lines: Vec<String> = raw_lines.into_iter().map(str::to_string).collect();
         let mut lines = lines.iter().peekable();
         let mut out = Vec::new();
+        let mut tracker = FenceTracker::new();
 
-        attach_to_next_fence(&mut lines, "rust", "", &mut out, "Rust");
+        attach_to_next_fence(&mut lines, "rust", "", &mut out, "Rust", &mut tracker);
 
-        assert_eq!(out, vec!["```rust".to_string()]);
-        assert!(lines.next().is_none());
-    }
-
-    #[test]
-    fn attach_to_next_fence_drops_multiple_blank_lines_before_attachment() {
-        let lines = [String::new(), String::new(), "```".to_string()];
-        let mut lines = lines.iter().peekable();
-        let mut out = Vec::new();
-
-        attach_to_next_fence(&mut lines, "rust", "", &mut out, "Rust");
-
-        assert_eq!(out, vec!["```rust".to_string()]);
-        assert!(lines.next().is_none());
-    }
-
-    #[test]
-    fn attach_to_next_fence_preserves_specifier_when_next_line_is_not_a_fence() {
-        let lines = [String::new(), "plain text".to_string()];
-        let mut lines = lines.iter().peekable();
-        let mut out = Vec::new();
-
-        attach_to_next_fence(&mut lines, "rust", "", &mut out, "Rust");
-
-        assert_eq!(out, vec!["Rust".to_string(), String::new()]);
-        assert_eq!(lines.next().map(String::as_str), Some("plain text"));
-    }
-
-    #[test]
-    fn attach_to_next_fence_preserves_specifier_when_next_fence_has_a_language() {
-        let lines = [String::new(), "```python".to_string()];
-        let mut lines = lines.iter().peekable();
-        let mut out = Vec::new();
-
-        attach_to_next_fence(&mut lines, "rust", "", &mut out, "Rust");
-
-        assert_eq!(out, vec!["Rust".to_string(), String::new()]);
-        assert_eq!(lines.next().map(String::as_str), Some("```python"));
-    }
-
-    #[test]
-    fn attach_to_next_fence_preserves_specifier_when_iterator_is_exhausted() {
-        let lines: Vec<String> = Vec::new();
-        let mut lines = lines.iter().peekable();
-        let mut out = Vec::new();
-
-        attach_to_next_fence(&mut lines, "rust", "", &mut out, "Rust");
-
-        assert_eq!(out, vec!["Rust".to_string()]);
-        assert!(lines.next().is_none());
+        let expected_out: Vec<String> = expected_out.into_iter().map(str::to_string).collect();
+        assert_eq!(out, expected_out);
+        assert_eq!(lines.next().map(String::as_str), expected_next);
     }
 }
