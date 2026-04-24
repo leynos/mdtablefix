@@ -34,11 +34,11 @@ which must become:
     ```
     ```
 
-Only the outer opening and closing delimiters are compressed. The inner
-triple-backtick lines remain literal content because they are nested inside the
-outer block. The same preservation rule must apply to literal inner tilde
-fences such as `~~~rust` inside an outer four-backtick block, or `~~~` inside
-an outer `~~~~` block.
+The outer opening and closing delimiters stay at four backticks because
+compressing them to three would let the inner triple-backtick close the outer
+block. The same preservation rule must apply to literal inner tilde fences such
+as `~~~rust` inside an outer four-backtick block, or `~~~` inside an outer
+`~~~~` block.
 
 ## Relevant references and skills
 
@@ -108,6 +108,10 @@ not an active Cargo integration target in this repository.
 - Preserve literal nested fence content for both marker families. Inner
   backtick fences and inner tilde fences must survive unchanged unless they are
   the real closing delimiter for the currently open outer fence.
+- Preserve the original outer fence length when shortening it would make a
+  same-marker inner fence line terminate the outer block early. In particular,
+  a four-character outer fence that wraps a three-character inner fence of the
+  same type must remain four characters wide.
 - Reuse the shared fence-state semantics from `FenceTracker` instead of
   creating a second independent nested-fence state machine in `src/fences.rs`.
 - Keep code files under the repository's 400-line limit. If new helper logic
@@ -127,6 +131,9 @@ not an active Cargo integration target in this repository.
 - Semantics: if the current tracker cannot model the preprocessing needs
   without changing its observable behaviour for wrapping, stop and document the
   conflict before proceeding.
+- Compression rule: if the fix requires abandoning fence compression entirely
+  instead of making it conditional on safety, stop and confirm that scope
+  change before proceeding.
 - Tests: if focused regressions still fail after 3 fix iterations, stop and
   record which input shape is still ambiguous.
 - Documentation: if the implementation reveals that
@@ -163,6 +170,16 @@ not an active Cargo integration target in this repository.
     backtick fences and for shorter `~~~` content nested inside longer tilde
     fences such as `~~~~`.
 
+- Risk: even a real outer fence delimiter can be over-compressed. If an outer
+  ` ```` ` block containing an inner ` ``` ` line is rewritten to ` ```
+  `, the inner close will terminate the outer block and corrupt the document structure.
+  - Severity: high
+  - Likelihood: high
+  - Mitigation: add a regression that asserts the outer four-character opening
+    and closing fences remain four characters wide when they contain a
+    same-marker inner triple fence. Mirror the same check for `~~~~` wrapping
+    `~~~`.
+
 - Risk: new regressions might be added in inactive test locations and give
   false confidence.
   - Severity: medium
@@ -184,7 +201,8 @@ not an active Cargo integration target in this repository.
   shared `FenceTracker`, and the active test targets.
 - [ ] Add failing regressions for nested backticks, nested tildes, and mixed
   backtick-versus-tilde nesting.
-- [ ] Refactor `compress_fences` to use shared fence-state tracking.
+- [ ] Refactor `compress_fences` to use shared fence-state tracking and retain
+  original outer fence width when required for same-marker nesting safety.
 - [ ] Refactor `attach_orphan_specifiers` so it ignores content inside active
   fenced blocks.
 - [ ] Extend `FenceTracker` tests to lock in the nested-fence expectations used
@@ -203,6 +221,11 @@ not an active Cargo integration target in this repository.
   `FenceTracker::observe`: only the same fence marker character can close a
   block, and the closing run must be at least as long as the opening run.
 
+- Discovery: preserving nested literal content is not sufficient on its own.
+  A real outer four-character fence must also be preserved when it wraps a
+  three-character inner fence of the same marker type, or the inner close will
+  become a structural close for the outer block after compression.
+
 - Discovery: `tests/wrap/fence_behaviour.rs` looks relevant but is not run by
   Cargo in this repository. New regressions must live in active top-level test
   targets.
@@ -220,28 +243,40 @@ not an active Cargo integration target in this repository.
   other able to mis-handle literal content inside an outer fence. Date/Author:
   2026-04-23 / Codex.
 
+- Decision: define fence compression as a safety-preserving rewrite, not an
+  unconditional reduction to three markers. Rationale: same-marker nested
+  examples require the outer delimiter width to remain greater than the inner
+  literal fence width, otherwise the formatted output becomes structurally
+  incorrect. Date/Author: 2026-04-24 / Codex.
+
 ## Plan of work
 
 Stage A is a regression-first pass. Add failing examples to `tests/fences.rs`
 that prove the current bug in both reported shapes: four-backtick outer fences
 containing inner triple-backtick lines, and triple-tilde outer fences
-containing inner triple-backtick lines. Extend that matrix with explicit tilde
-preservation cases: a four-backtick outer fence containing literal `~~~`
-content, and a longer tilde outer fence such as `~~~~` containing a shorter
-literal `~~~` block that must remain unchanged because it does not close the
-outer fence. Add one case that shows `attach_orphan_specifiers` must not attach
-a specifier-like line when it appears inside an already open outer fence. Add a
-CLI regression in `tests/cli.rs` that exercises `--fences` on one of these
-documents so the user-visible behaviour is covered end to end.
+containing inner triple-backtick lines. Those same-marker cases must assert
+that the outer four-character opening and closing fences remain four characters
+wide after formatting. Extend that matrix with explicit tilde preservation
+cases: a four-backtick outer fence containing literal `~~~` content, and a
+longer tilde outer fence such as `~~~~` containing a shorter literal `~~~`
+block that must remain unchanged because it does not close the outer fence. Add
+one case that shows `attach_orphan_specifiers` must not attach a specifier-like
+line when it appears inside an already open outer fence. Add a CLI regression
+in `tests/cli.rs` that exercises `--fences` on one of these documents so the
+user-visible behaviour is covered end to end.
 
 Stage B is the implementation pass in `src/fences.rs`. Refactor
 `compress_fences` from a stateless `map` into a line-by-line loop that keeps a
 `FenceTracker` for the original input lines. For each line, determine whether
 the line is a real fence delimiter in the current state. Compress only those
-real delimiters. If the tracker is already inside a fence and the current line
-does not close it, preserve the line exactly as written even if it matches the
-old regex. This is what keeps nested literal triple-backtick and triple-tilde
-examples intact.
+delimiters that are safe to shorten. If an outer fence uses four or more
+markers and the block contains a same-marker literal fence line that would
+become a closing delimiter after compression, preserve the original outer
+delimiter width on both the opening and closing lines. If the tracker is
+already inside a fence and the current line does not close it, preserve the
+line exactly as written even if it matches the old regex. This is what keeps
+nested literal triple-backtick and triple-tilde examples intact without making
+the formatted output structurally invalid.
 
 Stage C is the orphan-specifier pass. Update `attach_orphan_specifiers` to
 track fence state while scanning. Candidate orphan specifiers should only be
@@ -257,7 +292,8 @@ inner triple-backtick line appears, an outer fence ignores the other marker
 family entirely, and a longer tilde fence stays open when a shorter inner
 triple-tilde line appears. These tests are not the main user regressions, but
 they document the shared contract that now drives both wrapping and
-preprocessing.
+preprocessing, including the requirement that outer width remains greater than
+same-marker inner literal fence width.
 
 Stage E is the validation and documentation pass. Run focused fence tests
 first, then the broader repository gates required for the touched files. If the
@@ -320,9 +356,13 @@ Expected:
 ## Acceptance criteria
 
 - `compress_fences` compresses only actual outer delimiters and leaves nested
-  fence-like content unchanged.
+  fence-like content unchanged, and preserves outer delimiter width when
+  shortening it would let a same-marker inner fence close the block early.
 - Literal nested tilde fences such as `~~~` inside outer backtick fences or
   inside longer tilde fences remain unchanged.
+- A four-character outer backtick fence wrapping an inner triple-backtick fence
+  remains four backticks wide after formatting. The same safety rule applies to
+  `~~~~` wrapping `~~~`.
 - `attach_orphan_specifiers` does not attach specifiers that appear inside an
   already open fenced block.
 - `FenceTracker` tests explicitly cover the outer-four-backticks and
