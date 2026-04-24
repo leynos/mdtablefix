@@ -42,9 +42,33 @@ fn fence_tracker_ignores_shorter_closing_marker() {
 }
 
 #[test]
+fn fence_tracker_keeps_outer_backticks_open_for_inner_triple_backticks() {
+    let mut tracker = FenceTracker::new();
+    assert!(tracker.observe("````markdown"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("```rust"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("```"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("````"));
+    assert!(!tracker.in_fence());
+}
+
+#[test]
 fn fence_tracker_requires_matching_marker_to_close() {
     let mut tracker = FenceTracker::default();
     assert!(tracker.observe("```"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("~~~"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("````"));
+    assert!(!tracker.in_fence());
+}
+
+#[test]
+fn fence_tracker_ignores_other_marker_family_inside_outer_fence() {
+    let mut tracker = FenceTracker::default();
+    assert!(tracker.observe("````"));
     assert!(tracker.in_fence());
     assert!(tracker.observe("~~~"));
     assert!(tracker.in_fence());
@@ -83,6 +107,19 @@ fn fence_tracker_handles_inline_and_indented_markers() {
 fn fence_tracker_handles_tilde_fences() {
     let mut tracker = FenceTracker::new();
     assert!(tracker.observe("~~~~rust"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("~~~~"));
+    assert!(!tracker.in_fence());
+}
+
+#[test]
+fn fence_tracker_keeps_longer_tildes_open_for_inner_triple_tildes() {
+    let mut tracker = FenceTracker::new();
+    assert!(tracker.observe("~~~~markdown"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("~~~rust"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("~~~"));
     assert!(tracker.in_fence());
     assert!(tracker.observe("~~~~"));
     assert!(!tracker.in_fence());

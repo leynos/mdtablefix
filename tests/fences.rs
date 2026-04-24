@@ -27,6 +27,37 @@ fn compresses_tilde_fences() {
 }
 
 #[test]
+fn preserves_same_marker_nested_backtick_fences() {
+    let input = lines_vec!["````markdown", "```rust", "fn main() {}", "```", "````"];
+    let out = compress_fences(&input);
+    assert_eq!(out, input);
+}
+
+#[test]
+fn preserves_same_marker_nested_tilde_fences() {
+    let input = lines_vec!["~~~~markdown", "~~~rust", "fn main() {}", "~~~", "~~~~"];
+    let out = compress_fences(&input);
+    assert_eq!(out, input);
+}
+
+#[test]
+fn preserves_backtick_fences_nested_inside_tilde_fences() {
+    let input = lines_vec!["~~~markdown", "```rust", "fn main() {}", "```", "~~~"];
+    let out = compress_fences(&input);
+    assert_eq!(out, input);
+}
+
+#[test]
+fn preserves_tilde_content_inside_backtick_fences() {
+    let input = lines_vec!["````markdown", "~~~rust", "fn main() {}", "~~~", "````"];
+    let out = compress_fences(&input);
+    assert_eq!(
+        out,
+        lines_vec!["```markdown", "~~~rust", "fn main() {}", "~~~", "```"]
+    );
+}
+
+#[test]
 fn does_not_compress_mixed_fences() {
     let input = lines_vec!["~~~rust", "code", "```"];
     let out = compress_fences(&input);
@@ -49,6 +80,23 @@ fn fixes_orphaned_specifier() {
     let input = lines_vec!["Rust", "```", "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
+}
+
+#[test]
+fn does_not_attach_orphan_specifier_inside_outer_fence() {
+    let input = lines_vec!["````markdown", "Rust", "```", "fn main() {}", "```", "````"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, input);
+}
+
+#[test]
+fn attaches_orphan_specifier_without_shortening_preserved_outer_fence() {
+    let input = lines_vec!["Rust", "````", "```", "fn main() {}", "```", "````"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(
+        out,
+        lines_vec!["````rust", "```", "fn main() {}", "```", "````"]
+    );
 }
 
 #[test]

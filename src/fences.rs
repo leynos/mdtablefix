@@ -1,12 +1,12 @@
 //! Pre-processing utilities for normalizing fenced code block delimiters.
 //!
-//! `compress_fences` reduces any sequence of three or more backticks or
-//! tildes followed by optional language identifiers to exactly three
-//! backticks.
-//! It preserves indentation and the language list.
+//! `compress_fences` reduces safe outer delimiters to three backticks while
+//! preserving nested fence-like content whose marker runs are literal text.
 use std::sync::LazyLock;
 
 use regex::Regex;
+
+use crate::wrap::{FenceTracker, is_fence};
 
 static FENCE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$").unwrap());
@@ -61,9 +61,109 @@ fn normalize_specifier(line: &str) -> (String, String) {
     (cleaned, indent)
 }
 
-/// Compress backtick fences to exactly three backticks.
+#[derive(Clone, Copy)]
+enum FenceRewrite {
+    Compress,
+    PreserveDelimiters,
+    PreserveAll,
+}
+
+struct OpeningAnalysis {
+    rewrite: FenceRewrite,
+}
+
+fn marker_char(marker: &str) -> Option<char> { marker.chars().next() }
+
+fn fence_line_with_marker(line: &str, marker: &str) -> Option<String> {
+    let cap = FENCE_RE.captures(line)?;
+    let indent = cap.get(1).map_or("", |m| m.as_str());
+    let lang = cap.get(3).map_or("", |m| m.as_str());
+    Some(if is_null_lang(lang) {
+        format!("{indent}{marker}")
+    } else {
+        format!("{indent}{marker}{lang}")
+    })
+}
+
+fn compressed_fence_line(line: &str) -> Option<String> { fence_line_with_marker(line, "```") }
+
+fn preserved_fence_line(line: &str) -> Option<String> {
+    let marker = FENCE_RE
+        .captures(line)
+        .and_then(|cap| cap.get(2))
+        .map(|m| m.as_str())?;
+    fence_line_with_marker(line, marker)
+}
+
+fn interior_fence_requires_preserved_delimiters(opening_marker: &str, line: &str) -> bool {
+    let Some((_indent, marker, _info)) = is_fence(line) else {
+        return false;
+    };
+    let Some(opening_ch) = marker_char(opening_marker) else {
+        return false;
+    };
+    let Some(marker_ch) = marker_char(marker) else {
+        return false;
+    };
+    marker_ch == opening_ch || marker_ch == '`'
+}
+
+fn analyze_opening(lines: &[String], opening_index: usize) -> Option<OpeningAnalysis> {
+    let (_indent, opening_marker, _info) = is_fence(&lines[opening_index])?;
+
+    let mut tracker = FenceTracker::new();
+    if !tracker.observe(&lines[opening_index]) {
+        return None;
+    }
+
+    let mut has_conflicting_interior_fence = false;
+    for line in lines.iter().skip(opening_index + 1) {
+        let was_in_fence = tracker.in_fence();
+        let observed_fence = tracker.observe(line);
+        if observed_fence && was_in_fence && !tracker.in_fence() {
+            return Some(OpeningAnalysis {
+                rewrite: opening_rewrite(lines, opening_index, has_conflicting_interior_fence),
+            });
+        }
+        if was_in_fence && interior_fence_requires_preserved_delimiters(opening_marker, line) {
+            has_conflicting_interior_fence = true;
+        }
+    }
+
+    None
+}
+
+fn opening_rewrite(
+    lines: &[String],
+    index: usize,
+    has_conflicting_interior_fence: bool,
+) -> FenceRewrite {
+    if FENCE_RE.captures(&lines[index]).is_none() {
+        return FenceRewrite::PreserveAll;
+    }
+    if has_conflicting_interior_fence {
+        FenceRewrite::PreserveDelimiters
+    } else {
+        FenceRewrite::Compress
+    }
+}
+
+fn rewrite_fence_line(line: &str, rewrite: FenceRewrite) -> String {
+    match rewrite {
+        FenceRewrite::Compress => compressed_fence_line(line).unwrap_or_else(|| line.to_owned()),
+        FenceRewrite::PreserveDelimiters => {
+            preserved_fence_line(line).unwrap_or_else(|| line.to_owned())
+        }
+        FenceRewrite::PreserveAll => line.to_owned(),
+    }
+}
+
+/// Compress safe outer fences to exactly three backticks.
 ///
 /// Lines that do not start with backtick fences are returned unchanged.
+/// Fence-like lines inside a wider fenced block are literal content and are
+/// returned unchanged. An outer delimiter is also preserved when shortening or
+/// changing it would make an inner literal fence line look structural.
 ///
 /// # Examples
 ///
@@ -74,22 +174,40 @@ fn normalize_specifier(line: &str) -> (String, String) {
 /// ```
 #[must_use]
 pub fn compress_fences(lines: &[String]) -> Vec<String> {
-    lines
-        .iter()
-        .map(|line| {
-            if let Some(cap) = FENCE_RE.captures(line) {
-                let indent = cap.get(1).map_or("", |m| m.as_str());
-                let lang = cap.get(3).map_or("", |m| m.as_str());
-                if is_null_lang(lang) {
-                    format!("{indent}```")
-                } else {
-                    format!("{indent}```{lang}")
-                }
-            } else {
-                line.clone()
-            }
-        })
-        .collect()
+    let mut tracker = FenceTracker::new();
+    let mut active_rewrite = None;
+    let mut out = Vec::with_capacity(lines.len());
+
+    for (index, line) in lines.iter().enumerate() {
+        if !tracker.in_fence() {
+            let Some(analysis) = analyze_opening(lines, index) else {
+                out.push(compressed_fence_line(line).unwrap_or_else(|| line.clone()));
+                continue;
+            };
+
+            let _ = tracker.observe(line);
+            let rewrite = analysis.rewrite;
+            active_rewrite = Some(rewrite);
+            out.push(rewrite_fence_line(line, rewrite));
+            continue;
+        }
+
+        let observed_fence = tracker.observe(line);
+        if !observed_fence {
+            out.push(line.clone());
+            continue;
+        }
+
+        if tracker.in_fence() {
+            out.push(line.clone());
+            continue;
+        }
+
+        let rewrite = active_rewrite.take().unwrap_or(FenceRewrite::PreserveAll);
+        out.push(rewrite_fence_line(line, rewrite));
+    }
+
+    out
 }
 
 /// Combine an opening fence with a language specifier.
@@ -108,16 +226,17 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 /// assert_eq!(attach_specifier_to_fence("  ```", "rust", "    "), "    ```rust");
 /// ```
 fn attach_specifier_to_fence(fence_line: &str, specifier: &str, spec_indent: &str) -> String {
-    let fence_indent = FENCE_RE
-        .captures(fence_line)
-        .and_then(|cap| cap.get(1))
-        .map_or("", |m| m.as_str());
+    let Some(cap) = FENCE_RE.captures(fence_line) else {
+        return fence_line.to_owned();
+    };
+    let fence_indent = cap.get(1).map_or("", |m| m.as_str());
+    let fence_marker = cap.get(2).map_or("```", |m| m.as_str());
     let final_indent = if fence_indent.is_empty() || spec_indent.starts_with(fence_indent) {
         spec_indent
     } else {
         fence_indent
     };
-    format!("{final_indent}```{specifier}")
+    format!("{final_indent}{fence_marker}{specifier}")
 }
 
 fn orphan_specifier_target(lines: &[String], start: usize) -> Option<usize> {
@@ -167,24 +286,35 @@ fn orphan_specifier_target_without_language(lines: &[String], start: usize) -> O
 #[must_use]
 pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
+    let mut tracker = FenceTracker::new();
     let mut i = 0;
 
     while i < lines.len() {
         let line = &lines[i];
-        let (spec, indent) = normalize_specifier(line);
-        if ORPHAN_LANG_RE.is_match(&spec) && out.last().is_none_or(|l: &String| l.trim().is_empty())
-        {
-            if let Some(target) = orphan_specifier_target_without_language(lines, i + 1) {
-                out.push(attach_specifier_to_fence(&lines[target], &spec, &indent));
-                i = target + 1;
-                continue;
-            }
+        if tracker.in_fence() {
+            let _ = tracker.observe(line);
             out.push(line.clone());
             i += 1;
             continue;
         }
 
+        let (spec, indent) = normalize_specifier(line);
+        if ORPHAN_LANG_RE.is_match(&spec) && out.last().is_none_or(|l: &String| l.trim().is_empty())
+        {
+            if let Some(target) = orphan_specifier_target_without_language(lines, i + 1) {
+                out.push(attach_specifier_to_fence(&lines[target], &spec, &indent));
+                let _ = tracker.observe(&lines[target]);
+                i = target + 1;
+                continue;
+            }
+            out.push(line.clone());
+            let _ = tracker.observe(line);
+            i += 1;
+            continue;
+        }
+
         out.push(line.clone());
+        let _ = tracker.observe(line);
         i += 1;
     }
 
