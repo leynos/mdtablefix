@@ -224,6 +224,14 @@ not an active Cargo integration target in this repository.
 - [x] (2026-04-24 00:00Z) Updated `docs/architecture.md` to state that fence
   normalization now shares `FenceTracker` semantics and only compresses outer
   delimiters when doing so is structurally safe.
+- [x] (2026-04-24 00:00Z) Addressed code review feedback by replacing the
+  repeated `analyze_opening` forward scan with a single-pass pending-block
+  implementation, consolidating marker rewriting behind one helper, and adding
+  deeper orphan specifier, symmetric tracker, and broader CLI regressions.
+- [x] (2026-04-24 00:00Z) Ran review follow-up validation:
+  `cargo test --test fences`, `cargo test --test cli_fences`,
+  `cargo test fence_tracker`, `make check-fmt`, `make lint`, `make test`,
+  `make markdownlint`, and `make nixie`.
 
 ## Surprises & discoveries
 
@@ -256,6 +264,13 @@ not an active Cargo integration target in this repository.
   `compress_fences` only enables stateful shielding after confirming the
   opening delimiter has a real matching close in the original input.
 
+- Discovery: a fully linear implementation still needs to delay emitting a
+  matched fenced block until its closing delimiter is seen, because the opening
+  delimiter rewrite depends on whether later literal fence-like lines make
+  compression unsafe. The follow-up implementation buffers only the currently
+  open block and flushes unmatched blocks through the legacy stateless
+  normalization path at end of input.
+
 ## Decision log
 
 - Decision: plan around shared fence-state semantics instead of duplicating the
@@ -285,6 +300,18 @@ not an active Cargo integration target in this repository.
   `tests/cli.rs`. Rationale: `tests/cli.rs` was too close to the 400-line file
   limit, and a separate active integration target preserves coverage without
   creating a file-size violation. Date/Author: 2026-04-24 / Codex.
+
+- Decision: use a single-pass pending-block implementation instead of caching
+  lookahead results. Rationale: each input line is visited once, the current
+  open block carries the only needed safety state, and unmatched malformed
+  inputs can still be flushed with the previous line-by-line normalization
+  behaviour. Date/Author: 2026-04-24 / Codex.
+
+- Decision: keep `FENCE_RE` as the normalization grammar and use
+  `wrap::is_fence`/`FenceTracker` only for structural Markdown fence state.
+  Rationale: preprocessing has narrower language-normalization rules than
+  wrapping, but closure and marker-family semantics must stay shared.
+  Date/Author: 2026-04-24 / Codex.
 
 ## Plan of work
 
@@ -426,3 +453,9 @@ fixing the valid nested-fence cases from issue `#262`.
 
 Validation passed with `make check-fmt`, `make lint`, `make test`,
 `make markdownlint`, and `make nixie`.
+
+Code review follow-up replaced repeated forward scans with a linear
+pending-block pass and added regressions for deeper orphan specifier content,
+outer tilde fences containing inner backticks, and CLI nested-fence variants.
+The follow-up validation passed with the focused tests and full repository
+gates listed in `Progress`.

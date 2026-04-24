@@ -77,6 +77,17 @@ fn fence_tracker_ignores_other_marker_family_inside_outer_fence() {
 }
 
 #[test]
+fn fence_tracker_ignores_backticks_inside_outer_tilde_fence() {
+    let mut tracker = FenceTracker::default();
+    assert!(tracker.observe("~~~~"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("```"));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe("~~~~"));
+    assert!(!tracker.in_fence());
+}
+
+#[test]
 fn fence_tracker_handles_inline_and_indented_markers() {
     let lines = [
         "```rust code fence on one line```",

@@ -2,6 +2,9 @@
 //!
 //! `compress_fences` reduces safe outer delimiters to three backticks while
 //! preserving nested fence-like content whose marker runs are literal text.
+//! The local `FENCE_RE` defines which delimiter lines this module can
+//! normalize, while `wrap::is_fence` and `FenceTracker` provide the structural
+//! Markdown fence semantics shared with wrapping.
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -65,19 +68,31 @@ fn normalize_specifier(line: &str) -> (String, String) {
 enum FenceRewrite {
     Compress,
     PreserveDelimiters,
-    PreserveAll,
 }
 
-struct OpeningAnalysis {
-    rewrite: FenceRewrite,
+#[derive(Clone, Copy)]
+enum MarkerStrategy {
+    Compressed,
+    PreserveDelimiter,
+}
+
+struct PendingFenceBlock {
+    opening_marker: String,
+    has_conflicting_interior_fence: bool,
+    lines: Vec<String>,
 }
 
 fn marker_char(marker: &str) -> Option<char> { marker.chars().next() }
 
-fn fence_line_with_marker(line: &str, marker: &str) -> Option<String> {
+fn rewrite_marker(line: &str, strategy: MarkerStrategy) -> Option<String> {
     let cap = FENCE_RE.captures(line)?;
     let indent = cap.get(1).map_or("", |m| m.as_str());
+    let original_marker = cap.get(2).map_or("", |m| m.as_str());
     let lang = cap.get(3).map_or("", |m| m.as_str());
+    let marker = match strategy {
+        MarkerStrategy::Compressed => "```",
+        MarkerStrategy::PreserveDelimiter => original_marker,
+    };
     Some(if is_null_lang(lang) {
         format!("{indent}{marker}")
     } else {
@@ -85,14 +100,12 @@ fn fence_line_with_marker(line: &str, marker: &str) -> Option<String> {
     })
 }
 
-fn compressed_fence_line(line: &str) -> Option<String> { fence_line_with_marker(line, "```") }
+fn compressed_fence_line(line: &str) -> Option<String> {
+    rewrite_marker(line, MarkerStrategy::Compressed)
+}
 
 fn preserved_fence_line(line: &str) -> Option<String> {
-    let marker = FENCE_RE
-        .captures(line)
-        .and_then(|cap| cap.get(2))
-        .map(|m| m.as_str())?;
-    fence_line_with_marker(line, marker)
+    rewrite_marker(line, MarkerStrategy::PreserveDelimiter)
 }
 
 fn interior_fence_requires_preserved_delimiters(opening_marker: &str, line: &str) -> bool {
@@ -108,39 +121,7 @@ fn interior_fence_requires_preserved_delimiters(opening_marker: &str, line: &str
     marker_ch == opening_ch || marker_ch == '`'
 }
 
-fn analyze_opening(lines: &[String], opening_index: usize) -> Option<OpeningAnalysis> {
-    let (_indent, opening_marker, _info) = is_fence(&lines[opening_index])?;
-
-    let mut tracker = FenceTracker::new();
-    if !tracker.observe(&lines[opening_index]) {
-        return None;
-    }
-
-    let mut has_conflicting_interior_fence = false;
-    for line in lines.iter().skip(opening_index + 1) {
-        let was_in_fence = tracker.in_fence();
-        let observed_fence = tracker.observe(line);
-        if observed_fence && was_in_fence && !tracker.in_fence() {
-            return Some(OpeningAnalysis {
-                rewrite: opening_rewrite(lines, opening_index, has_conflicting_interior_fence),
-            });
-        }
-        if was_in_fence && interior_fence_requires_preserved_delimiters(opening_marker, line) {
-            has_conflicting_interior_fence = true;
-        }
-    }
-
-    None
-}
-
-fn opening_rewrite(
-    lines: &[String],
-    index: usize,
-    has_conflicting_interior_fence: bool,
-) -> FenceRewrite {
-    if FENCE_RE.captures(&lines[index]).is_none() {
-        return FenceRewrite::PreserveAll;
-    }
+fn opening_rewrite(has_conflicting_interior_fence: bool) -> FenceRewrite {
     if has_conflicting_interior_fence {
         FenceRewrite::PreserveDelimiters
     } else {
@@ -154,7 +135,27 @@ fn rewrite_fence_line(line: &str, rewrite: FenceRewrite) -> String {
         FenceRewrite::PreserveDelimiters => {
             preserved_fence_line(line).unwrap_or_else(|| line.to_owned())
         }
-        FenceRewrite::PreserveAll => line.to_owned(),
+    }
+}
+
+fn flush_unmatched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
+    out.extend(
+        block
+            .lines
+            .into_iter()
+            .map(|line| compressed_fence_line(&line).unwrap_or(line)),
+    );
+}
+
+fn flush_matched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
+    let rewrite = opening_rewrite(block.has_conflicting_interior_fence);
+    let closing_index = block.lines.len() - 1;
+    for (index, line) in block.lines.into_iter().enumerate() {
+        if index == 0 || index == closing_index {
+            out.push(rewrite_fence_line(&line, rewrite));
+        } else {
+            out.push(line);
+        }
     }
 }
 
@@ -175,36 +176,57 @@ fn rewrite_fence_line(line: &str, rewrite: FenceRewrite) -> String {
 #[must_use]
 pub fn compress_fences(lines: &[String]) -> Vec<String> {
     let mut tracker = FenceTracker::new();
-    let mut active_rewrite = None;
+    let mut pending_block = None;
     let mut out = Vec::with_capacity(lines.len());
 
-    for (index, line) in lines.iter().enumerate() {
+    for line in lines {
         if !tracker.in_fence() {
-            let Some(analysis) = analyze_opening(lines, index) else {
+            if FENCE_RE.captures(line).is_none() {
+                out.push(line.clone());
+                continue;
+            }
+            let Some((_indent, opening_marker, _info)) = is_fence(line) else {
                 out.push(compressed_fence_line(line).unwrap_or_else(|| line.clone()));
                 continue;
             };
-
             let _ = tracker.observe(line);
-            let rewrite = analysis.rewrite;
-            active_rewrite = Some(rewrite);
-            out.push(rewrite_fence_line(line, rewrite));
+            pending_block = Some(PendingFenceBlock {
+                opening_marker: opening_marker.to_owned(),
+                has_conflicting_interior_fence: false,
+                lines: vec![line.clone()],
+            });
             continue;
         }
 
-        let observed_fence = tracker.observe(line);
-        if !observed_fence {
+        let Some(mut block) = pending_block.take() else {
             out.push(line.clone());
+            continue;
+        };
+
+        let observed_fence = tracker.observe(line);
+        if observed_fence
+            && tracker.in_fence()
+            && interior_fence_requires_preserved_delimiters(&block.opening_marker, line)
+        {
+            block.has_conflicting_interior_fence = true;
+        }
+        block.lines.push(line.clone());
+
+        if !observed_fence {
+            pending_block = Some(block);
             continue;
         }
 
         if tracker.in_fence() {
-            out.push(line.clone());
+            pending_block = Some(block);
             continue;
         }
 
-        let rewrite = active_rewrite.take().unwrap_or(FenceRewrite::PreserveAll);
-        out.push(rewrite_fence_line(line, rewrite));
+        flush_matched_block(block, &mut out);
+    }
+
+    if let Some(block) = pending_block {
+        flush_unmatched_block(block, &mut out);
     }
 
     out

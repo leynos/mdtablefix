@@ -90,6 +90,13 @@ fn does_not_attach_orphan_specifier_inside_outer_fence() {
 }
 
 #[test]
+fn does_not_attach_orphan_specifier_deeper_inside_outer_fence() {
+    let input = lines_vec!["````markdown", "```", "Rust", "fn main() {}", "```", "````",];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, input);
+}
+
+#[test]
 fn attaches_orphan_specifier_without_shortening_preserved_outer_fence() {
     let input = lines_vec!["Rust", "````", "```", "fn main() {}", "```", "````"];
     let out = attach_orphan_specifiers(&compress_fences(&input));
