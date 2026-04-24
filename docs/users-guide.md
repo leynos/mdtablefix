@@ -51,6 +51,17 @@ Two trailing spaces at the end of a line produce a hard line break in rendered
 Markdown. `mdtablefix --wrap` preserves those trailing spaces on the final
 wrapped line, so hard-break semantics are not lost after reformatting.
 
+
+## Fence normalisation
+
+Pass `--fences` to normalise fenced code blocks before later processing.
+Delimiter runs of three or more backticks or tildes are reduced to exactly
+three backticks, while indentation and any language identifiers are preserved.
+
+If a language specifier appears on a separate line immediately before an
+unlabelled opening fence, `mdtablefix` attaches it to that fence and drops any
+blank lines in between when the attachment succeeds. If no suitable fence
+follows, the specifier line is left unchanged.
 ## Fence normalization
 
 Pass `--fences` to normalize fenced code block delimiters before other
