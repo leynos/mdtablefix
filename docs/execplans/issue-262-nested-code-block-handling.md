@@ -14,9 +14,9 @@ Issue: <https://github.com/leynos/mdtablefix/issues/262>
 After this change, `mdtablefix --fences` must normalize only real fenced code
 block delimiters, not fence-like lines that appear as literal content inside an
 larger fenced block. A user should be able to format Markdown that uses four or
-more backticks, or tilde fences, to contain inner triple-backtick examples
-without the inner examples being rewritten or treated as attachment targets for
-orphaned language specifiers.
+more backticks, or longer tilde fences, to contain inner triple-backtick or
+triple-tilde examples without the inner examples being rewritten or treated as
+attachment targets for orphaned language specifiers.
 
 The observable success case is a document such as:
 
@@ -36,7 +36,9 @@ which must become:
 
 Only the outer opening and closing delimiters are compressed. The inner
 triple-backtick lines remain literal content because they are nested inside the
-outer block.
+outer block. The same preservation rule must apply to literal inner tilde
+fences such as `~~~rust` inside an outer four-backtick block, or `~~~` inside
+an outer `~~~~` block.
 
 ## Relevant references and skills
 
@@ -103,6 +105,9 @@ not an active Cargo integration target in this repository.
 - Keep fence normalization semantics stable for existing supported cases:
   backtick fences, tilde fences, null-language normalization, and orphan
   specifier attachment outside fenced blocks.
+- Preserve literal nested fence content for both marker families. Inner
+  backtick fences and inner tilde fences must survive unchanged unless they are
+  the real closing delimiter for the currently open outer fence.
 - Reuse the shared fence-state semantics from `FenceTracker` instead of
   creating a second independent nested-fence state machine in `src/fences.rs`.
 - Keep code files under the repository's 400-line limit. If new helper logic
@@ -146,7 +151,17 @@ not an active Cargo integration target in this repository.
   - Likelihood: high
   - Mitigation: make fence-state tracking explicit in
     `attach_orphan_specifiers`, and add a regression where a specifier-like
-    line appears inside an outer fence before an inner triple-backtick example.
+    line appears inside an outer fence before an inner triple-backtick or
+    triple-tilde example.
+
+- Risk: literal nested tilde fences could still be over-normalized into
+  backticks because `compress_fences` currently rewrites real tilde delimiters
+  to backticks.
+  - Severity: high
+  - Likelihood: medium
+  - Mitigation: add explicit regressions for `~~~` content nested inside outer
+    backtick fences and for shorter `~~~` content nested inside longer tilde
+    fences such as `~~~~`.
 
 - Risk: new regressions might be added in inactive test locations and give
   false confidence.
@@ -167,8 +182,8 @@ not an active Cargo integration target in this repository.
 
 - [x] (2026-04-23 00:00Z) Reviewed the current fence preprocessing code, the
   shared `FenceTracker`, and the active test targets.
-- [ ] Add failing regressions for nested backticks and nested backticks inside
-  tilde fences.
+- [ ] Add failing regressions for nested backticks, nested tildes, and mixed
+  backtick-versus-tilde nesting.
 - [ ] Refactor `compress_fences` to use shared fence-state tracking.
 - [ ] Refactor `attach_orphan_specifiers` so it ignores content inside active
   fenced blocks.
@@ -210,11 +225,14 @@ not an active Cargo integration target in this repository.
 Stage A is a regression-first pass. Add failing examples to `tests/fences.rs`
 that prove the current bug in both reported shapes: four-backtick outer fences
 containing inner triple-backtick lines, and triple-tilde outer fences
-containing inner triple-backtick lines. Add one case that shows
-`attach_orphan_specifiers` must not attach a specifier-like line when it
-appears inside an already open outer fence. Add a CLI regression in
-`tests/cli.rs` that exercises `--fences` on one of these documents so the
-user-visible behaviour is covered end to end.
+containing inner triple-backtick lines. Extend that matrix with explicit tilde
+preservation cases: a four-backtick outer fence containing literal `~~~`
+content, and a longer tilde outer fence such as `~~~~` containing a shorter
+literal `~~~` block that must remain unchanged because it does not close the
+outer fence. Add one case that shows `attach_orphan_specifiers` must not attach
+a specifier-like line when it appears inside an already open outer fence. Add a
+CLI regression in `tests/cli.rs` that exercises `--fences` on one of these
+documents so the user-visible behaviour is covered end to end.
 
 Stage B is the implementation pass in `src/fences.rs`. Refactor
 `compress_fences` from a stateless `map` into a line-by-line loop that keeps a
@@ -222,7 +240,8 @@ Stage B is the implementation pass in `src/fences.rs`. Refactor
 the line is a real fence delimiter in the current state. Compress only those
 real delimiters. If the tracker is already inside a fence and the current line
 does not close it, preserve the line exactly as written even if it matches the
-old regex. This is what keeps nested literal triple-backtick examples intact.
+old regex. This is what keeps nested literal triple-backtick and triple-tilde
+examples intact.
 
 Stage C is the orphan-specifier pass. Update `attach_orphan_specifiers` to
 track fence state while scanning. Candidate orphan specifiers should only be
@@ -234,9 +253,11 @@ fence is found.
 Stage D is the shared-semantics lock-in. Extend
 `src/wrap/tests/fence_tracker.rs` with explicit cases that demonstrate the rule
 preprocessing now depends on: an outer four-backtick fence stays open when an
-inner triple-backtick line appears, and an outer tilde fence ignores inner
-backticks entirely. These tests are not the main user regressions, but they
-document the shared contract that now drives both wrapping and preprocessing.
+inner triple-backtick line appears, an outer fence ignores the other marker
+family entirely, and a longer tilde fence stays open when a shorter inner
+triple-tilde line appears. These tests are not the main user regressions, but
+they document the shared contract that now drives both wrapping and
+preprocessing.
 
 Stage E is the validation and documentation pass. Run focused fence tests
 first, then the broader repository gates required for the touched files. If the
@@ -300,10 +321,13 @@ Expected:
 
 - `compress_fences` compresses only actual outer delimiters and leaves nested
   fence-like content unchanged.
+- Literal nested tilde fences such as `~~~` inside outer backtick fences or
+  inside longer tilde fences remain unchanged.
 - `attach_orphan_specifiers` does not attach specifiers that appear inside an
   already open fenced block.
 - `FenceTracker` tests explicitly cover the outer-four-backticks and
-  outer-tildes cases that govern the new preprocessing behaviour.
+  outer-tildes cases, including shorter inner tilde runs, that govern the new
+  preprocessing behaviour.
 - `cargo test --test fences`, `cargo test --test cli`, `make check-fmt`,
   `make lint`, and `make test` all pass.
 - If architecture documentation is updated, `make fmt`, `make markdownlint`,
