@@ -31,11 +31,12 @@ The function combines several helpers documented in `docs/`:
   delimiters. Fence normalization uses the same `FenceTracker` semantics as
   wrapping, so fence-like lines inside an already open fenced block remain
   literal content. Outer delimiters are only compressed when doing so cannot
-  make a nested literal fence look structural. The latter keeps indentation
-  from the language line when the fence lacks it. Language specifiers
-  explicitly set to `null` (case-insensitive) or consisting solely of
-  whitespace are treated as absent. `compress_fences` also tolerates spaces
-  within comma-separated specifiers, e.g. `TOML, Ini` becomes `toml,ini`.
+  make a nested literal fence look structural. `attach_orphan_specifiers`
+  preserves and propagates indentation from the language line when the target
+  fence lacks indentation. Language specifiers explicitly set to `null`
+  (case-insensitive) or consisting solely of whitespace are treated as absent.
+  `compress_fences` also tolerates spaces within comma-separated specifiers,
+  e.g. `TOML, Ini` becomes `toml,ini`.
 - `html::convert_html_tables` transforms basic HTML tables into Markdown so \
   they can be reflowed like regular tables. See \
   [HTML table support](#html-table-support-in-mdtablefix).

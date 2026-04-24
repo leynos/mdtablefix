@@ -173,9 +173,10 @@ not an active Cargo integration target in this repository.
     backtick fences and for shorter `~~~` content nested inside longer tilde
     fences such as `~~~~`.
 
-- Risk: even a real outer fence delimiter can be over-compressed. If an outer
-  ` ```` ` block containing an inner ` ``` ` line is rewritten to ` ```
-  `, the inner close will terminate the outer block and corrupt the document structure.
+- Risk: even a real outer fence delimiter can be over-compressed.
+  If an outer ````` ```` ````` block containing an inner ```` ``` ```` line is
+  rewritten to ```` ``` ````, the inner close will terminate the outer block
+  and corrupt the document structure.
   - Severity: high
   - Likelihood: high
   - Mitigation: add a regression that asserts the outer four-character opening
@@ -232,6 +233,9 @@ not an active Cargo integration target in this repository.
   `cargo test --test fences`, `cargo test --test cli_fences`,
   `cargo test fence_tracker`, `make check-fmt`, `make lint`, `make test`,
   `make markdownlint`, and `make nixie`.
+- [x] (2026-04-24 00:00Z) Verified and addressed follow-up documentation review
+  comments in `docs/architecture.md`,
+  `docs/execplans/issue-262-nested-code-block-handling.md`, and `src/fences.rs`.
 
 ## Surprises & discoveries
 
@@ -326,8 +330,8 @@ longer tilde outer fence such as `~~~~` containing a shorter literal `~~~`
 block that must remain unchanged because it does not close the outer fence. Add
 one case that shows `attach_orphan_specifiers` must not attach a specifier-like
 line when it appears inside an already open outer fence. Add a CLI regression
-in `tests/cli.rs` that exercises `--fences` on one of these documents so the
-user-visible behaviour is covered end to end.
+in `tests/cli_fences.rs` that exercises `--fences` on one of these documents so
+the user-visible behaviour is covered end to end.
 
 Stage B is the implementation pass in `src/fences.rs`. Refactor
 `compress_fences` from a stateless `map` into a line-by-line loop that keeps a
