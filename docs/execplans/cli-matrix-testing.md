@@ -19,7 +19,11 @@ Observable success means `cargo test --test cli_matrix` runs the matrix through
 the real `mdtablefix` binary with `assert_cmd`, snapshots each case with
 `insta`, and fails clearly when a fixture is missing, a case identifier is
 duplicated, a non-`.dat` fixture is used, or the selected case set no longer
-covers the required option pairs. The developer guide will explain how the
+covers the required option pairs. Each logical option combination is exercised
+twice against the same fixture: once by writing formatted output to stdout and
+once with the repository's existing `--in-place` flag. The harness also treats
+`--wrap` as a required paired variant because earlier `--wrap` and non-`--wrap`
+runs have regressed independently. The developer guide will explain how the
 harness works, why fixtures use `.dat`, and how to update snapshots
 intentionally.
 
@@ -35,6 +39,13 @@ edit `docs/developers-guide.md` yet.
   become hard-to-review string literals.
 - Keep matrix input fixtures in `.dat` files under `tests/data/cli-matrix/` so
   `make fmt` and Markdown formatters do not rewrite them.
+- For every logical transform combination in the matrix, run both stdout
+  formatting and `--in-place` formatting against equivalent temporary-file
+  input. Treat stdout formatting as the ordinary file-to-stdout path, not as a
+  substitute for exercising `--in-place`.
+- For every selected combination of non-wrap transform flags, run both the
+  `--wrap` and no-`--wrap` variants. This is mandatory regression coverage, not
+  an optional pairwise side effect.
 - Add tests for the matrix harness itself. The harness must not rely on review
   discipline alone to preserve fixture naming, case uniqueness, or
   combinatorial coverage.
@@ -58,10 +69,13 @@ edit `docs/developers-guide.md` yet.
   ask for direction.
 - Interfaces: if the matrix requires changing any CLI flag name, CLI exit-code
   rule, or public library function signature, stop and escalate.
-- Coverage: if pairwise coverage across the eight transform flags cannot be
-  achieved in 24 or fewer matrix rows, stop and document why a larger matrix is
-  justified.
-- Snapshot churn: if one fixture change rewrites more than 15 snapshots, stop
+- Coverage: if pairwise coverage across the seven non-wrap transform flags
+  cannot be achieved in 24 or fewer base rows before `--wrap` and execution-mode
+  expansion, stop and document why a larger matrix is justified.
+- Expansion: if the generated matrix exceeds 96 physical command runs after
+  expanding each base row into `--wrap` and no-`--wrap` variants and then into
+  stdout and `--in-place` modes, stop and re-evaluate the base row count.
+- Snapshot churn: if one fixture change rewrites more than 30 snapshots, stop
   and consider whether the fixture is too broad or the matrix should be split.
 - Validation: if `make lint` or `make test` still fails after three focused fix
   cycles, stop and capture the failing command, log path, and likely cause in
@@ -69,11 +83,12 @@ edit `docs/developers-guide.md` yet.
 
 ## Risks
 
-- Risk: a full Cartesian product of the eight transform flags and three
-  execution modes would create hundreds of cases and make snapshot review
-  noisy. Severity: high. Likelihood: high. Mitigation: use a curated pairwise
-  matrix with harness tests that prove every enabled/disabled pair of transform
-  flags is represented at least once.
+- Risk: a full Cartesian product of the eight transform flags, wrapped and
+  unwrapped variants, and paired stdout and `--in-place` execution would create
+  hundreds of cases and make snapshot review noisy. Severity: high.
+  Likelihood: high. Mitigation: use a curated base matrix with generated
+  `--wrap` and execution-mode expansion, plus harness tests that prove every
+  required option pair and expansion rule remains covered.
 
 - Risk: a single overpacked fixture could make failures hard to diagnose.
   Severity: medium. Likelihood: medium. Mitigation: use a small set of named
@@ -90,6 +105,19 @@ edit `docs/developers-guide.md` yet.
   mode because Clap requires a file path when `--in-place` is set. Severity:
   medium. Likelihood: high. Mitigation: model execution mode explicitly in the
   harness and add harness tests that reject invalid `--in-place` cases.
+
+- Risk: the harness might accidentally validate stdout mode and assume
+  `--in-place` behaves the same, missing file rewrite regressions. Severity:
+  high. Likelihood: medium. Mitigation: generate stdout and `--in-place`
+  physical runs from every logical combination and add a harness test proving
+  that the expansion is complete.
+
+- Risk: pairwise coverage could technically include `--wrap` without ensuring
+  every important non-wrap combination is tested both with and without
+  wrapping. Severity: high. Likelihood: medium. Mitigation: keep `--wrap` out
+  of the base combination generator, expand each base row into a wrapped and an
+  unwrapped variant, and add a harness test that proves every non-wrap
+  signature has both variants.
 
 - Risk: `make fmt` runs Markdown formatting and could modify Markdown fixtures
   if they are stored as `.md` or `.txt` files. Severity: medium. Likelihood:
@@ -110,6 +138,9 @@ edit `docs/developers-guide.md` yet.
   `--renumber`, `--breaks`, `--ellipsis`, `--fences`, `--footnotes`,
   `--code-emphasis`, and `--headings`, with `--in-place` as an execution mode
   flag that requires file input.
+- [x] (2026-04-25 14:34Z) Updated the draft plan so every logical combination
+  runs in both stdout and `--in-place` modes and every non-wrap flag
+  combination runs both with and without `--wrap`.
 - [ ] Await approval to implement the harness, fixtures, snapshots, and
   developer-guide documentation.
 
@@ -132,6 +163,16 @@ edit `docs/developers-guide.md` yet.
   Impact: input fixtures must not use Markdown file extensions, and the harness
   should enforce the `.dat` fixture convention directly.
 
+- Observation: the repository flag is named `--in-place`; the requested
+  `--inplace` behaviour maps to that existing flag rather than a new CLI
+  spelling. Impact: the plan uses `--in-place` consistently and does not add an
+  alias.
+
+- Observation: previous regressions have appeared only when comparing wrapped
+  and unwrapped executions. Impact: the matrix must not rely on incidental
+  pairwise coverage for `--wrap`; it must generate explicit wrapped and
+  unwrapped variants for each selected non-wrap combination.
+
 ## Decision log
 
 - Decision: use a curated pairwise matrix rather than a full Cartesian product.
@@ -153,6 +194,13 @@ edit `docs/developers-guide.md` yet.
   satisfies the user requirement that matrix fixtures are not formatted by
   `make fmt`, while keeping test data near the existing integration fixtures.
   Date/Author: 2026-04-25 / Droid.
+
+- Decision: model the catalogue as base combinations over the seven non-wrap
+  transform flags, then expand each base combination into both `--wrap` states
+  and both file execution modes. Rationale: this guarantees the historically
+  sensitive wrapped/unwrapped comparison and ensures every combination is
+  tested through both stdout formatting and `--in-place`. Date/Author:
+  2026-04-25 / Droid.
 
 ## Outcomes & retrospective
 
@@ -181,12 +229,21 @@ transforms run afterwards in the CLI layer. This means the matrix must include
 cases where CLI-only transforms interact with transforms handled inside the
 library pipeline.
 
+The matrix should treat `--wrap` specially. The base catalogue covers the seven
+non-wrap transform flags: `--renumber`, `--breaks`, `--ellipsis`, `--fences`,
+`--footnotes`, `--code-emphasis`, and `--headings`. The harness then generates
+two logical variants from every base row, one without `--wrap` and one with
+`--wrap`. It then generates two physical command executions from each logical
+variant: ordinary file-to-stdout formatting and `--in-place` formatting against
+an equivalent temporary file.
+
 Current integration helpers live in `tests/common/mod.rs` and are re-exported
 through `tests/prelude/mod.rs`. They already provide `run_cli_with_args` and
 `run_cli_with_stdin`, both built on `assert_cmd`. The new matrix can reuse the
-same import pattern but will need richer output capture than the existing
-helpers provide because `insta` snapshots should include all relevant process
-outputs.
+same import pattern but should run its paired stdout and `--in-place`
+executions through temporary files so both physical modes operate on equivalent
+file input. It will need richer output capture than the existing helpers
+provide because `insta` snapshots should include all relevant process outputs.
 
 Existing large fixtures live under `tests/data/`. The matrix should add a
 subdirectory, `tests/data/cli-matrix/`, to keep fixture ownership obvious and
@@ -210,14 +267,17 @@ Start with fixtures for:
   `--breaks`, and frontmatter preservation.
 
 Stage B builds the matrix harness in `tests/cli_matrix.rs`. Define small data
-types for transform flags, execution mode, fixture path, and matrix case. Keep
-the case catalogue as deterministic static data, for example `MATRIX_CASES`.
-Each case must have a stable, filesystem-safe identifier, a fixture path, an
-execution mode, and the transform flags to pass to the CLI. The command runner
-must use `assert_cmd::Command::cargo_bin("mdtablefix")`, feed stdin or a
-temporary file depending on mode, assert success for success cases, and build a
-snapshot envelope containing status, stdout, stderr, and file content when
-relevant.
+types for non-wrap transform flags, wrap variant, execution mode, fixture path,
+base matrix case, logical matrix case, and physical command case. Keep the base
+case catalogue as deterministic static data, for example `BASE_MATRIX_CASES`.
+Each base case must have a stable, filesystem-safe identifier, a fixture path,
+and the non-wrap transform flags to pass to the CLI. The harness must expand
+each base case into wrapped and unwrapped logical variants, then expand each
+logical variant into file-to-stdout and `--in-place` physical runs. The command
+runner must use `assert_cmd::Command::cargo_bin("mdtablefix")`, copy the
+fixture into a temporary file for both physical modes, assert success for
+success cases, and build a snapshot envelope containing status, stdout, stderr,
+and file content when relevant.
 
 Stage C adds harness self-tests before relying on matrix outputs. Add tests
 that verify:
@@ -225,19 +285,21 @@ that verify:
 - every case identifier is unique and contains only lowercase letters, digits,
   hyphens, and underscores;
 - every fixture path exists and ends in `.dat`;
-- no case sets `--in-place` without file execution mode;
-- every transform flag appears enabled and disabled at least once;
-- every pair of transform flags appears in all four enabled/disabled
-  combinations across the case catalogue;
-- every execution mode has at least one multi-transform case.
+- every generated physical case has both a stdout run and an `--in-place` run
+  for the same logical combination;
+- every selected non-wrap flag signature has both a wrapped and an unwrapped
+  logical variant;
+- every non-wrap transform flag appears enabled and disabled at least once;
+- every pair of non-wrap transform flags appears in all four enabled/disabled
+  combinations across the base case catalogue.
 
 Stage D adds the matrix execution test and snapshots. Use
 `insta::assert_snapshot!` with stable snapshot names derived from the case
 identifier. The snapshot value should be a labelled plaintext envelope such as:
 
 ```plaintext
-case: wrap-footnotes-stdin
-mode: stdin
+case: wrap-footnotes-stdout
+mode: stdout
 args: --wrap --footnotes
 status: success
 
@@ -250,6 +312,12 @@ status: success
 [file]
 <not applicable>
 ```
+
+For an `--in-place` physical run, the same logical case should produce a second
+snapshot whose mode is `in-place`, whose stdout and stderr are empty on
+success, and whose `[file]` section contains the rewritten temporary file. The
+harness should also assert that the stdout run's formatted stdout equals the
+`--in-place` run's rewritten file content for the same logical case.
 
 Run the focused matrix test with `INSTA_UPDATE=always` only when creating or
 intentionally updating snapshots. Then rerun without `INSTA_UPDATE` to prove no
@@ -286,11 +354,13 @@ self-tests in `tests/cli_matrix.rs`. Run the focused harness checks first:
 
 ```bash
 cargo test --test cli_matrix matrix_case_ids_are_unique
+cargo test --test cli_matrix matrix_cases_expand_to_stdout_and_in_place
+cargo test --test cli_matrix matrix_cases_expand_to_wrapped_and_unwrapped
 cargo test --test cli_matrix matrix_cases_cover_all_transform_pairs
 ```
 
-Expected result: both tests pass, proving the catalogue can be trusted before
-snapshots are reviewed.
+Expected result: all focused harness tests pass, proving the catalogue can be
+trusted before snapshots are reviewed.
 
 Create initial snapshots intentionally:
 
@@ -334,12 +404,17 @@ the exact failure in this plan and ask for direction before committing.
 - `tests/cli_matrix.rs` uses `assert_cmd` to run the real `mdtablefix` binary.
 - `tests/cli_matrix.rs` uses `insta` to snapshot labelled result envelopes.
 - Harness self-tests fail if case identifiers are duplicated, fixture paths are
-  missing, fixtures do not use `.dat`, invalid execution modes are configured,
-  or pairwise transform coverage is lost.
-- The matrix includes stdin, file-to-stdout, and in-place execution modes.
-- The matrix covers every enabled/disabled pair combination for `--wrap`,
+  missing, fixtures do not use `.dat`, stdout or `--in-place` expansion is
+  incomplete, wrapped or unwrapped expansion is incomplete, or pairwise
+  transform coverage is lost.
+- Every logical matrix combination is executed in both file-to-stdout mode and
+  `--in-place` mode.
+- Every selected non-wrap flag combination is executed both with and without
+  `--wrap`.
+- The base matrix covers every enabled/disabled pair combination for
   `--renumber`, `--breaks`, `--ellipsis`, `--fences`, `--footnotes`,
-  `--code-emphasis`, and `--headings`.
+  `--code-emphasis`, and `--headings`; generated variants then add the
+  required `--wrap` coverage.
 - `docs/developers-guide.md` documents the harness and snapshot update
   workflow.
 - `make fmt`, `make check-fmt`, `make lint`, `make test`,
