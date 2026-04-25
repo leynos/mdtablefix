@@ -1,9 +1,8 @@
 # Preserve nested fenced blocks during fence normalization
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+ `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -236,6 +235,11 @@ not an active Cargo integration target in this repository.
 - [x] (2026-04-24 00:00Z) Verified and addressed follow-up documentation review
   comments in `docs/architecture.md`,
   `docs/execplans/issue-262-nested-code-block-handling.md`, and `src/fences.rs`.
+- [x] (2026-04-25 00:00Z) Verified and addressed follow-up review comments:
+  `compress_fences` now enters fenced-state tracking for openings recognised by
+  `wrap::is_fence` even when they are outside `FENCE_RE`, including spaced info
+  strings; nested `FenceTracker` tests are parameterized with `rstest`; and the
+  CLI validation path consistently points at `tests/cli_fences.rs`.
 
 ## Surprises & discoveries
 
@@ -329,8 +333,8 @@ cases: a four-backtick outer fence containing literal `~~~` content, and a
 longer tilde outer fence such as `~~~~` containing a shorter literal `~~~`
 block that must remain unchanged because it does not close the outer fence. Add
 one case that shows `attach_orphan_specifiers` must not attach a specifier-like
-line when it appears inside an already open outer fence. Add a CLI regression
-in `tests/cli_fences.rs` that exercises `--fences` on one of these documents so
+line when it appears inside an already open outer fence. Add a CLI regression in
+ `tests/cli_fences.rs` that exercises `--fences` on one of these documents so
 the user-visible behaviour is covered end to end.
 
 Stage B is the implementation pass in `src/fences.rs`. Refactor
@@ -387,14 +391,15 @@ Expected before the fix: at least one new nested-fence regression fails.
 
 After adding the CLI regression:
 
-    set -o pipefail && cargo test --test cli nested 2>&1 | tee /tmp/issue-262-cli.log
+    set -o pipefail && cargo test --test cli_fences nested 2>&1 | tee /tmp/issue-262-cli-fences.log
 
-Expected before the fix: the new `--fences` nested-fence case fails.
+Expected before the fix: the new `--fences` nested-fence case in
+`tests/cli_fences.rs` fails.
 
 Once the implementation is in place, rerun the focused suites:
 
     set -o pipefail && cargo test --test fences 2>&1 | tee /tmp/issue-262-fences.log
-    set -o pipefail && cargo test --test cli 2>&1 | tee /tmp/issue-262-cli.log
+    set -o pipefail && cargo test --test cli_fences 2>&1 | tee /tmp/issue-262-cli-fences.log
     set -o pipefail && cargo test fence_tracker 2>&1 | tee /tmp/issue-262-tracker.log
 
 Expected after the fix:
@@ -436,8 +441,9 @@ Expected:
 - `FenceTracker` tests explicitly cover the outer-four-backticks and
   outer-tildes cases, including shorter inner tilde runs, that govern the new
   preprocessing behaviour.
-- `cargo test --test fences`, `cargo test --test cli`, `make check-fmt`,
-  `make lint`, and `make test` all pass.
+- `cargo test --test fences`, `cargo test --test cli_fences` for
+  `tests/cli_fences.rs`, `make check-fmt`, `make lint`, and `make test` all
+  pass.
 - If architecture documentation is updated, `make fmt`, `make markdownlint`,
   and `make nixie` also pass.
 

@@ -42,19 +42,6 @@ fn fence_tracker_ignores_shorter_closing_marker() {
 }
 
 #[test]
-fn fence_tracker_keeps_outer_backticks_open_for_inner_triple_backticks() {
-    let mut tracker = FenceTracker::new();
-    assert!(tracker.observe("````markdown"));
-    assert!(tracker.in_fence());
-    assert!(tracker.observe("```rust"));
-    assert!(tracker.in_fence());
-    assert!(tracker.observe("```"));
-    assert!(tracker.in_fence());
-    assert!(tracker.observe("````"));
-    assert!(!tracker.in_fence());
-}
-
-#[test]
 fn fence_tracker_requires_matching_marker_to_close() {
     let mut tracker = FenceTracker::default();
     assert!(tracker.observe("```"));
@@ -62,28 +49,6 @@ fn fence_tracker_requires_matching_marker_to_close() {
     assert!(tracker.observe("~~~"));
     assert!(tracker.in_fence());
     assert!(tracker.observe("````"));
-    assert!(!tracker.in_fence());
-}
-
-#[test]
-fn fence_tracker_ignores_other_marker_family_inside_outer_fence() {
-    let mut tracker = FenceTracker::default();
-    assert!(tracker.observe("````"));
-    assert!(tracker.in_fence());
-    assert!(tracker.observe("~~~"));
-    assert!(tracker.in_fence());
-    assert!(tracker.observe("````"));
-    assert!(!tracker.in_fence());
-}
-
-#[test]
-fn fence_tracker_ignores_backticks_inside_outer_tilde_fence() {
-    let mut tracker = FenceTracker::default();
-    assert!(tracker.observe("~~~~"));
-    assert!(tracker.in_fence());
-    assert!(tracker.observe("```"));
-    assert!(tracker.in_fence());
-    assert!(tracker.observe("~~~~"));
     assert!(!tracker.in_fence());
 }
 
@@ -123,17 +88,27 @@ fn fence_tracker_handles_tilde_fences() {
     assert!(!tracker.in_fence());
 }
 
-#[test]
-fn fence_tracker_keeps_longer_tildes_open_for_inner_triple_tildes() {
+#[rstest]
+#[case("````markdown", "```rust", "```", "````", false)]
+#[case("````", "~~~", "~~~", "````", false)]
+#[case("~~~~", "```", "```", "~~~~", false)]
+#[case("~~~~markdown", "~~~rust", "~~~", "~~~~", false)]
+fn fence_tracker_keeps_outer_fence_open_for_nested_markers(
+    #[case] outer_start: &str,
+    #[case] inner_start: &str,
+    #[case] inner_end: &str,
+    #[case] outer_end: &str,
+    #[case] expected_final_in_fence: bool,
+) {
     let mut tracker = FenceTracker::new();
-    assert!(tracker.observe("~~~~markdown"));
+    assert!(tracker.observe(outer_start));
     assert!(tracker.in_fence());
-    assert!(tracker.observe("~~~rust"));
+    assert!(tracker.observe(inner_start));
     assert!(tracker.in_fence());
-    assert!(tracker.observe("~~~"));
+    assert!(tracker.observe(inner_end));
     assert!(tracker.in_fence());
-    assert!(tracker.observe("~~~~"));
-    assert!(!tracker.in_fence());
+    assert!(tracker.observe(outer_end));
+    assert_eq!(tracker.in_fence(), expected_final_in_fence);
 }
 
 #[rstest]

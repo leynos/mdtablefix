@@ -1,9 +1,8 @@
 # Replace bespoke wrapping with `textwrap` and `unicode-width`
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+ `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETED
 
@@ -180,8 +179,8 @@ the plan prefers a smaller, safer first delivery and a follow-up issue.
 - Observation: the post-processing pass that rebalances trailing atomic or
   plain fragments can invalidate `wrap_first_fit`'s width guarantee if it moves
   a fragment without rechecking the destination line width. Evidence:
-  `rebalance_atomic_tails` on 2026-04-23 could turn `a four` / `five` into `a`
-  / `four five` at width `6`. Impact: any heuristic that mutates fitted lines
+  `rebalance_atomic_tails` on 2026-04-23 could turn `a four` / `five` into `a` /
+   `four five` at width `6`. Impact: any heuristic that mutates fitted lines
   after wrapping must be width-aware, or it can regress downstream layout
   assumptions.
 

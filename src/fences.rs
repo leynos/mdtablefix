@@ -183,10 +183,6 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 
     for line in lines {
         if !tracker.in_fence() {
-            if FENCE_RE.captures(line).is_none() {
-                out.push(line.clone());
-                continue;
-            }
             let Some((_indent, opening_marker, _info)) = is_fence(line) else {
                 out.push(compressed_fence_line(line).unwrap_or_else(|| line.clone()));
                 continue;

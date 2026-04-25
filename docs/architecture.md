@@ -439,10 +439,10 @@ flowchart TD
 
 Figure: `wrap_text` control flow. The wrapper classifies each incoming line,
 passes fenced blocks, tables, headings, directives, and indented code through
-unchanged, flushes paragraphs on blanks, routes prose and prefixed lines
-through `ParagraphWriter`, computes visible widths with `unicode-width`, and
-delegates inline line fitting to `textwrap` before reconstructing the emitted
-Markdown lines.
+unchanged, flushes paragraphs on blanks, routes prose and prefixed lines through
+ `ParagraphWriter`, computes visible widths with `unicode-width`, and delegates
+inline line fitting to `textwrap` before reconstructing the emitted Markdown
+lines.
 
 ### Wrap sequence
 

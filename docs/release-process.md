@@ -7,8 +7,8 @@ Linux release targets.
 The project targets the stable Rust `1.89.0` toolchain, as specified in
 `rust-toolchain.toml`.
 
-This Minimum Supported Rust Version (MSRV) is also declared in `Cargo.toml`
-(`rust-version = "1.89"`). The `build-test` job in `.github/workflows/ci.yml`
+This Minimum Supported Rust Version (MSRV) is also declared in `Cargo.toml` (
+`rust-version = "1.89"`). The `build-test` job in `.github/workflows/ci.yml`
 uses this toolchain to guard against regressions.
 
 The GitHub Actions workflow `.github/workflows/release.yml` builds and uploads

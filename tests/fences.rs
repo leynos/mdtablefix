@@ -58,6 +58,13 @@ fn preserves_tilde_content_inside_backtick_fences() {
 }
 
 #[test]
+fn preserves_inner_fences_inside_spaced_info_fence() {
+    let input = lines_vec!["``` rust", "~~~example", "code", "~~~", "```"];
+    let out = compress_fences(&input);
+    assert_eq!(out, input);
+}
+
+#[test]
 fn does_not_compress_mixed_fences() {
     let input = lines_vec!["~~~rust", "code", "```"];
     let out = compress_fences(&input);
