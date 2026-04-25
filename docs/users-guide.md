@@ -67,9 +67,10 @@ a tilde outer fence wraps a literal inner backtick fence.
 If a language specifier appears on a separate line before the next unlabelled
 opening fence, with only blank lines in between, `mdtablefix` attaches it to
 that fence and drops the blank lines when attachment succeeds. If no suitable
-fence follows, the specifier line is left unchanged. Orphan-specifier attachment
-only happens when both the identifier line and the target fence are outside any
-already-open fenced block.
+fence follows, the specifier line and any intervening blank lines are left
+unchanged, preserving document spacing. Orphan-specifier attachment only happens
+when both the identifier line and the target fence are outside any already-open
+fenced block.
 
 Before:
 
