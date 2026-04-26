@@ -451,9 +451,13 @@ Expected:
 - `FenceTracker` tests explicitly cover the outer-four-backticks and
   outer-tildes cases, including shorter inner tilde runs, that govern the new
   preprocessing behaviour.
-- `cargo test --test fences`, `cargo test --test cli_fences` for
-  `tests/cli_fences.rs`, `make check-fmt`, `make lint`, and `make test` all
-  pass.
+- Validation commands all pass:
+  - `cargo test --test fences`
+  - `cargo test --test cli_fences` (runs `tests/cli_fences.rs`)
+  - `cargo test fence_tracker` (covers the shared tracker target)
+  - `make check-fmt`
+  - `make lint`
+  - `make test`
 - If architecture documentation is updated, `make fmt`, `make markdownlint`,
   and `make nixie` also pass.
 
