@@ -13,8 +13,8 @@ use tempfile::tempdir;
 #[path = "invariants.rs"]
 mod invariants;
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 /// Represents a non-wrap CLI transform flag.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum TransformFlag {
     /// Renumbers ordered list items.
     Renumber,
