@@ -47,7 +47,7 @@ fn carry_previous_inline_code_tail(
     }
 
     let Some(previous_atomic) = previous_line.pop() else {
-        return false;
+        unreachable!("expected previous tail to exist for inline code: previous_line empty");
     };
     pending_whitespace.push(previous_atomic);
     if previous_line.is_empty() {
