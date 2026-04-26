@@ -6,7 +6,7 @@ use std::{
     process::Output,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context as _, Result};
 use assert_cmd::Command;
 use tempfile::tempdir;
 
@@ -300,9 +300,9 @@ pub(crate) fn stage_fixture(case: &PhysicalCase, dir: &Path) -> Result<PathBuf> 
         .with_extension(fixture.extension().unwrap_or_default());
     fs::copy(&fixture, &file_path).with_context(|| {
         format!(
-            "staging fixture {} for case {}",
-            fixture.display(),
-            case.logical.id,
+            "copy fixture '{}' to '{}'",
+            case.logical.fixture,
+            file_path.display(),
         )
     })?;
     Ok(file_path)
@@ -314,13 +314,10 @@ pub(crate) fn collect_result(
     file_path: &Path,
     mode: ExecutionMode,
 ) -> Result<RunResult> {
-    let mode_name = mode.id_part();
-    let file_content = fs::read(file_path).with_context(|| {
-        format!(
-            "reading staged input file {} for {mode_name} mode",
-            file_path.display(),
-        )
-    })?;
+    let file_content = match mode {
+        ExecutionMode::Stdout | ExecutionMode::InPlace => fs::read(file_path)
+            .with_context(|| format!("read file '{}' after {:?} run", file_path.display(), mode))?,
+    };
     Ok(RunResult {
         output,
         file_content,
@@ -329,19 +326,15 @@ pub(crate) fn collect_result(
 
 /// Runs a physical matrix case through the real `mdtablefix` binary.
 pub(crate) fn run_physical_case(case: &PhysicalCase) -> Result<RunResult> {
-    let case_name = case.snapshot_name();
-    let dir = tempdir().with_context(|| format!("creating temporary directory for {case_name}"))?;
-    let file_path = stage_fixture(case, dir.path())
-        .with_context(|| format!("staging fixture for {case_name}"))?;
+    let dir = tempdir().context("create temporary directory for matrix case")?;
+    let file_path = stage_fixture(case, dir.path())?;
 
-    let mut command = Command::cargo_bin("mdtablefix")
-        .with_context(|| format!("creating mdtablefix command for {case_name}"))?;
+    let mut command = Command::cargo_bin("mdtablefix").context("create mdtablefix test command")?;
     command.args(case.args()).arg(&file_path);
     let output = command
         .output()
-        .with_context(|| format!("running mdtablefix for {case_name}"))?;
+        .context("execute mdtablefix for matrix case")?;
     collect_result(output, &file_path, case.mode)
-        .with_context(|| format!("collecting mdtablefix output for {case_name}"))
 }
 
 /// Returns the repository-relative path to a matrix fixture.
