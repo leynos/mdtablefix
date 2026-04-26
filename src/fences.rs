@@ -388,6 +388,7 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
     out
 }
 
+#[cfg(test)]
 mod tests {
     use rstest::rstest;
 

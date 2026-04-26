@@ -119,17 +119,25 @@ fn attaches_orphan_specifier_with_blank_line_unit() {
     assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }
 
+#[rstest]
+#[case(lines_vec!["Rust", "", "```", "fn main() {}", "```"])]
+#[case(lines_vec!["Rust", "", "", "```", "fn main() {}", "```"])]
 fn fixes_orphaned_specifier_with_blank_lines(#[case] input: Vec<String>) {
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }
 
+#[rstest]
+#[case(lines_vec!["Rust", "", "", "```python", "print('hi')", "```"])]
+#[case(lines_vec!["Rust", "", "not a fence"])]
 fn leaves_orphan_specifier_and_blank_lines_unchanged_when_not_attachable(
     #[case] input: Vec<String>,
 ) {
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, input);
 }
+
+#[test]
 fn fixes_multiple_orphaned_specifiers() {
     let input = lines_vec![
         "Rust",
@@ -256,6 +264,8 @@ fn attaches_orphan_specifier_with_mismatched_indent(
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, expected);
 }
+
+#[test]
 fn attaches_orphan_specifier_allows_spaces() {
     let input = lines_vec!["TOML, Ini", "```", "a=1", "```"];
     let out = attach_orphan_specifiers(&compress_fences(&input));
