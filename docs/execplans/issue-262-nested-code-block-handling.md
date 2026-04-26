@@ -19,19 +19,19 @@ attachment targets for orphaned language specifiers.
 
 The observable success case is a document such as:
 
-    ```markdown
+    ````markdown
     ```rust
     fn main() {}
     ```
-    ```
+    ````
 
 which must become:
 
-    ```markdown
+    ````markdown
     ```rust
     fn main() {}
     ```
-    ```
+    ````
 
 The outer opening and closing delimiters stay at four backticks because
 compressing them to three would let the inner triple-backtick close the outer
@@ -244,6 +244,10 @@ not an active Cargo integration target in this repository.
   Markdown token wrapping and spaced-info fence rewriting. `compress_fences`
   now preserves matched blocks unchanged when either outer delimiter is not
   supported by the rewrite regex.
+- [x] (2026-04-26 00:00Z) Updated the user guide and developer guide to
+  document nested-fence preservation, including the tilde-outer/backtick-inner
+  case. Re-ran documentation validation with `make markdownlint` and
+  `make nixie`.
 
 ## Surprises & discoveries
 
@@ -336,10 +340,10 @@ wide after formatting. Extend that matrix with explicit tilde preservation
 cases: a four-backtick outer fence containing literal `~~~` content, and a
 longer tilde outer fence such as `~~~~` containing a shorter literal `~~~`
 block that must remain unchanged because it does not close the outer fence. Add
-one case that shows `attach_orphan_specifiers` must not attach a
-specifier-like line when it appears inside an already open outer fence. Add a
-CLI regression in `tests/cli_fences.rs` that exercises `--fences` on one of
-these documents so the user-visible behaviour is covered end to end.
+one case that shows `attach_orphan_specifiers` must not attach a specifier-like
+line when it appears inside an already open outer fence. Add a CLI regression in
+ `tests/cli_fences.rs` that exercises `--fences` on one of these documents so
+the user-visible behaviour is covered end to end.
 
 Stage B is the implementation pass in `src/fences.rs`. Refactor
 `compress_fences` from a stateless `map` into a line-by-line loop that keeps a

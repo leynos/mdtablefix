@@ -88,15 +88,17 @@ restores the separator row with widths derived from the final table body.
 
 - `compress_fences(lines: &[String]) -> Vec<String>` performs
   `FenceTracker`-driven conditional rewriting. For each matched fenced block,
-  it determines whether compressing the outer delimiter would make a
-  same-marker inner fence line structural. If so, it preserves the original
-  outer delimiter width and marker family. Unmatched or malformed delimiter
-  runs fall through the legacy stateless normalisation path.
+  it determines whether normalising the outer delimiter would make an inner
+  fence line structural. This covers same-marker inner fences and the
+  cross-marker case where an inner backtick fence would become structural after
+  an outer tilde fence is converted to backticks. If so, it preserves the
+  original outer delimiter width and marker family. Unmatched or malformed
+  delimiter runs fall through the legacy stateless normalisation path.
 - `attach_orphan_specifiers(lines: &[String]) -> Vec<String>` attaches a lone
   language identifier line to the following unlabelled fence, but only when the
   scanner is outside any active fenced block. It uses `FenceTracker` to skip
   attachment for specifier-like lines and target fences that appear inside an
-  open block.
+  open block, including nested cases preserved by `compress_fences`.
 
 Both functions reuse `FenceTracker` from
 [src/wrap/fence.rs](../src/wrap/fence.rs) for structural fence detection. This

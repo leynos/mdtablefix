@@ -230,10 +230,10 @@ project:
 
 ### Dependency Management
 
-- **Mandate caret requirements for all dependencies.** All crate versions in
-  `Cargo.toml` must use SemVer-compatible caret requirements
-  (e.g., `some-crate = "1.2.3"`). This allows safe, non-breaking minor and
-  patch updates while preventing breaking changes from new major versions.
+- **Mandate caret requirements.** Use caret requirements (e.g.,
+  `some-crate = "1.2.3"`) in `Cargo.toml`; they must be SemVer-compatible.
+  This allows safe, non-breaking minor and patch updates while preventing
+  breaking changes from new major versions.
 - **Prohibit unstable version specifiers.** The use of wildcard (`*`) or
   open-ended inequality (`>=`) version requirements is strictly forbidden.
   Tilde requirements (`~`) should only be used where a dependency must be

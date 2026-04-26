@@ -166,12 +166,18 @@ fn flush_original_block(block: PendingFenceBlock, out: &mut Vec<String>) {
 
 /// Normalize safe outer fence delimiters to exactly three backticks.
 ///
-/// Lines that are not fence delimiters are returned unchanged. Compatible
-/// backtick or tilde delimiters may be rewritten to three backticks when doing
-/// so preserves the document structure.
-/// Fence-like lines inside a wider fenced block are literal content and are
-/// returned unchanged. An outer delimiter is also preserved when shortening or
-/// changing it would make an inner literal fence line look structural.
+/// `compress_fences` returns non-fence lines unchanged. Compatible backtick or
+/// tilde delimiters in matched fenced blocks may be rewritten to three
+/// backticks when doing so preserves the document structure.
+/// Fence-like lines inside a wider matched fenced block are literal content and
+/// are returned unchanged. An outer delimiter is also preserved when
+/// shortening or changing it would make an inner literal fence line look
+/// structural.
+///
+/// Matched-block preservation does not apply to unclosed input. When input ends
+/// inside an unclosed fence, `compress_fences` uses `flush_unmatched_block` to
+/// fall back to stateless per-line rewriting, so fence-like lines inside that
+/// unclosed block may still be rewritten.
 ///
 /// # Examples
 ///

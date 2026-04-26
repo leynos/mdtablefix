@@ -26,49 +26,37 @@ fn compresses_tilde_fences() {
     assert_eq!(out, lines_vec!["```rust", "code", "```"]);
 }
 
-#[test]
-fn preserves_same_marker_nested_backtick_fences() {
-    let input = lines_vec!["````markdown", "```rust", "fn main() {}", "```", "````"];
+#[rstest]
+#[case(
+    lines_vec!["````markdown", "```rust", "fn main() {}", "```", "````"],
+    lines_vec!["````markdown", "```rust", "fn main() {}", "```", "````"]
+)]
+#[case(
+    lines_vec!["~~~~markdown", "~~~rust", "fn main() {}", "~~~", "~~~~"],
+    lines_vec!["~~~~markdown", "~~~rust", "fn main() {}", "~~~", "~~~~"]
+)]
+#[case(
+    lines_vec!["~~~markdown", "```rust", "fn main() {}", "```", "~~~"],
+    lines_vec!["~~~markdown", "```rust", "fn main() {}", "```", "~~~"]
+)]
+#[case(
+    lines_vec!["````markdown", "~~~rust", "fn main() {}", "~~~", "````"],
+    lines_vec!["```markdown", "~~~rust", "fn main() {}", "~~~", "```"]
+)]
+#[case(
+    lines_vec!["``` rust", "~~~example", "code", "~~~", "```"],
+    lines_vec!["``` rust", "~~~example", "code", "~~~", "```"]
+)]
+#[case(
+    lines_vec!["```` rust", "code", "````"],
+    lines_vec!["```` rust", "code", "````"]
+)]
+fn preserves_nested_or_spaced_fence_blocks(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+) {
     let out = compress_fences(&input);
-    assert_eq!(out, input);
-}
-
-#[test]
-fn preserves_same_marker_nested_tilde_fences() {
-    let input = lines_vec!["~~~~markdown", "~~~rust", "fn main() {}", "~~~", "~~~~"];
-    let out = compress_fences(&input);
-    assert_eq!(out, input);
-}
-
-#[test]
-fn preserves_backtick_fences_nested_inside_tilde_fences() {
-    let input = lines_vec!["~~~markdown", "```rust", "fn main() {}", "```", "~~~"];
-    let out = compress_fences(&input);
-    assert_eq!(out, input);
-}
-
-#[test]
-fn preserves_tilde_content_inside_backtick_fences() {
-    let input = lines_vec!["````markdown", "~~~rust", "fn main() {}", "~~~", "````"];
-    let out = compress_fences(&input);
-    assert_eq!(
-        out,
-        lines_vec!["```markdown", "~~~rust", "fn main() {}", "~~~", "```"]
-    );
-}
-
-#[test]
-fn preserves_inner_fences_inside_spaced_info_fence() {
-    let input = lines_vec!["``` rust", "~~~example", "code", "~~~", "```"];
-    let out = compress_fences(&input);
-    assert_eq!(out, input);
-}
-
-#[test]
-fn preserves_four_backtick_spaced_info_outer_fence() {
-    let input = lines_vec!["```` rust", "code", "````"];
-    let out = compress_fences(&input);
-    assert_eq!(out, input);
+    assert_eq!(out, expected);
 }
 
 #[test]

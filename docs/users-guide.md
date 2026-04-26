@@ -57,10 +57,10 @@ Pass `--fences` to normalise fenced code block delimiters before other
 processing. Safe outer fences are compressed to three backticks, which keeps
 simple code blocks consistent before later formatting steps run.
 
-Outer delimiters are compressed only when doing so is structurally safe. If a
-four-or-more-backtick fence, or a longer tilde fence, wraps literal inner
-fence-like content from the same marker family, the outer delimiter width is
-kept, so the inner content does not become a structural close after formatting.
+Outer delimiters are compressed only when doing so is structurally safe. If
+normalisation would turn an inner literal fence into a structural close, the
+outer fence is kept. This includes same-marker nested fences and the mixed case
+where a tilde outer fence wraps a literal inner backtick fence.
 
 `--fences` also attaches a lone language identifier immediately above an
 unlabelled fence to that fence. This orphan-specifier attachment only happens
