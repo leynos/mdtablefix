@@ -51,16 +51,17 @@ Two trailing spaces at the end of a line produce a hard line break in rendered
 Markdown. `mdtablefix --wrap` preserves those trailing spaces on the final
 wrapped line, so hard-break semantics are not lost after reformatting.
 
-## Fence normalisation
+## Fence normalization
 
-Pass `--fences` to normalise fenced code block delimiters before other
+Pass `--fences` to normalize fenced code block delimiters before other
 processing. Safe outer fences are compressed to three backticks, which keeps
 simple code blocks consistent before later formatting steps run.
 
 Outer delimiters are compressed only when doing so is structurally safe. If
-normalisation would turn an inner literal fence into a structural close, the
-outer fence is kept. This includes same-marker nested fences and the mixed case
-where a tilde outer fence wraps a literal inner backtick fence.
+normalization would turn an inner literal fence into a structural close, the
+outer fence is kept, so the inner content remains literal. Preservation applies
+when the inner fence uses the same marker character as the outer fence, or when
+a tilde outer fence wraps a literal inner backtick fence.
 
 `--fences` also attaches a lone language identifier immediately above an
 unlabelled fence to that fence. This orphan-specifier attachment only happens
@@ -82,3 +83,15 @@ After running `mdtablefix --fences`:
     fn main() {}
     ```
     ````
+
+Before:
+
+    ````rust
+    fn main() {}
+    ````
+
+After running `mdtablefix --fences`:
+
+    ```rust
+    fn main() {}
+    ```
