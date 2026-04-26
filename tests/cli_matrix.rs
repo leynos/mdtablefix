@@ -153,6 +153,7 @@ fn cli_matrix_snapshots() {
             in_place_case.snapshot_name(),
             String::from_utf8_lossy(&in_place_result.output.stderr),
         );
+        assert_transform_invariants(&in_place_case.logical, &in_place_result.file_content);
 
         assert_eq!(
             stdout_result.output.stdout, in_place_result.file_content,

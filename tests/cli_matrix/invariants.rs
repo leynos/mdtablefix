@@ -6,6 +6,11 @@ use super::{LogicalCase, TransformFlag, fixture_path};
 
 const ELLIPSIS_UTF8: &[u8] = b"\xE2\x80\xA6";
 
+struct OrderedMarker {
+    indent: String,
+    number: usize,
+}
+
 /// Asserts output properties that prove enabled transforms changed matching input.
 pub(crate) fn assert_transform_invariants(logical: &LogicalCase, stdout: &[u8]) {
     let fixture = fs::read_to_string(fixture_path(logical.fixture)).expect("read matrix fixture");
@@ -51,19 +56,24 @@ fn fixture_has_fence_candidate(fixture: &str) -> bool {
 
 fn unordered_fixture_markers(fixture: &str) -> Vec<String> {
     let mut markers = Vec::new();
-    for (expected, line) in (1..).zip(fixture.lines().filter_map(ordered_marker)) {
-        if line != expected {
-            markers.push(format!("{line}. "));
+    for (expected, marker) in (1..).zip(fixture.lines().filter_map(ordered_marker)) {
+        if marker.number != expected {
+            markers.push(format!("{}{}. ", marker.indent, marker.number));
         }
     }
     markers
 }
 
-fn ordered_marker(line: &str) -> Option<usize> {
-    let (digits, rest) = line.split_once('.')?;
+fn ordered_marker(line: &str) -> Option<OrderedMarker> {
+    let indent_length = line.len() - line.trim_start().len();
+    let (digits, rest) = line[indent_length..].split_once('.')?;
     rest.starts_with(' ')
         .then_some(digits)
         .filter(|digits| !digits.is_empty())?
         .parse()
         .ok()
+        .map(|number| OrderedMarker {
+            indent: line[..indent_length].to_string(),
+            number,
+        })
 }
