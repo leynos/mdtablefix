@@ -11,6 +11,7 @@ use support::{
     ExecutionMode,
     PhysicalCase,
     WrapVariant,
+    assert_transform_invariants,
     fixture_path,
     has_flag,
     is_case_id,
@@ -143,6 +144,7 @@ fn cli_matrix_snapshots() {
             stdout_case.snapshot_name(),
             String::from_utf8_lossy(&stdout_result.output.stderr),
         );
+        assert_transform_invariants(&stdout_case.logical, &stdout_result.output.stdout);
 
         let in_place_result = run_physical_case(&in_place_case).expect("run physical case");
         assert!(

@@ -10,6 +10,9 @@ use std::{
 use assert_cmd::Command;
 use tempfile::tempdir;
 
+#[path = "invariants.rs"]
+mod invariants;
+
 /// Represents a non-wrap CLI transform flag.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum TransformFlag {
@@ -280,6 +283,11 @@ pub(crate) fn physical_cases() -> Vec<PhysicalCase> {
             })
         })
         .collect()
+}
+
+/// Asserts output properties that prove enabled transforms changed matching input.
+pub(crate) fn assert_transform_invariants(logical: &LogicalCase, stdout: &[u8]) {
+    invariants::assert_transform_invariants(logical, stdout);
 }
 
 /// Copies a matrix fixture into the temporary command directory.
