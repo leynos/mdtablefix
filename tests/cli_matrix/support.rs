@@ -9,18 +9,27 @@ use std::{
 use assert_cmd::Command;
 use tempfile::tempdir;
 
+/// Represents a non-wrap CLI transform flag.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum TransformFlag {
+    /// Renumbers ordered list items.
     Renumber,
+    /// Reformats thematic breaks.
     Breaks,
+    /// Replaces textual ellipsis sequences.
     Ellipsis,
+    /// Normalizes fenced code block delimiters.
     Fences,
+    /// Converts bare numeric references to footnotes.
     Footnotes,
+    /// Fixes emphasis markers adjacent to inline code.
     CodeEmphasis,
+    /// Converts Setext headings to ATX headings.
     Headings,
 }
 
 impl TransformFlag {
+    /// Returns the command-line argument for this transform flag.
     pub(crate) fn as_arg(self) -> &'static str {
         match self {
             Self::Renumber => "--renumber",
@@ -34,16 +43,23 @@ impl TransformFlag {
     }
 }
 
+/// Defines one curated base row before wrap and execution-mode expansion.
 #[derive(Clone, Copy)]
 pub(crate) struct BaseCase {
+    /// Stable identifier for the base matrix row.
     pub(crate) id: &'static str,
+    /// Fixture filename under `tests/data/cli-matrix/`.
     pub(crate) fixture: &'static str,
+    /// Non-wrap transform flags enabled for this base row.
     pub(crate) flags: &'static [TransformFlag],
 }
 
+/// Represents whether `--wrap` is active.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum WrapVariant {
+    /// Enables `--wrap` for the logical case.
     Wrapped,
+    /// Leaves `--wrap` disabled for the logical case.
     Unwrapped,
 }
 
@@ -56,9 +72,12 @@ impl WrapVariant {
     }
 }
 
+/// Represents how the binary is invoked.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum ExecutionMode {
+    /// Writes formatted output to stdout.
     Stdout,
+    /// Rewrites the temporary input file with `--in-place`.
     InPlace,
 }
 
@@ -71,24 +90,36 @@ impl ExecutionMode {
     }
 }
 
+/// Represents one base row after wrap expansion.
 #[derive(Clone)]
 pub(crate) struct LogicalCase {
+    /// Stable logical identifier used in snapshot names.
     pub(crate) id: String,
+    /// Fixture filename under `tests/data/cli-matrix/`.
     pub(crate) fixture: &'static str,
+    /// Whether the logical case includes `--wrap`.
     pub(crate) is_wrapped: bool,
+    /// Non-wrap transform flags enabled for the logical case.
     pub(crate) flags: Vec<TransformFlag>,
 }
 
+/// Represents one executable matrix case after mode expansion.
 pub(crate) struct PhysicalCase {
+    /// Logical case being executed.
     pub(crate) logical: LogicalCase,
+    /// Invocation mode for this physical command run.
     pub(crate) mode: ExecutionMode,
 }
 
+/// Captures command output and any rewritten file content.
 pub(crate) struct RunResult {
+    /// Process output returned by the `mdtablefix` binary.
     pub(crate) output: Output,
+    /// Bytes read from the temporary input file after execution.
     pub(crate) file_content: Vec<u8>,
 }
 
+/// Ordered slice of every non-wrap transform flag.
 pub(crate) const ALL_FLAGS: &[TransformFlag] = &[
     TransformFlag::Renumber,
     TransformFlag::Breaks,
@@ -99,6 +130,7 @@ pub(crate) const ALL_FLAGS: &[TransformFlag] = &[
     TransformFlag::Headings,
 ];
 
+/// Curated pairwise base matrix rows.
 pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
     BaseCase {
         id: "row_000",
@@ -178,6 +210,7 @@ pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
 ];
 
 impl RunResult {
+    /// Builds the labelled text snapshot for a physical command run.
     pub(crate) fn envelope(&self, case: &PhysicalCase) -> String {
         let stdout = String::from_utf8_lossy(&self.output.stdout);
         let stderr = String::from_utf8_lossy(&self.output.stderr);
@@ -201,10 +234,12 @@ impl RunResult {
 }
 
 impl PhysicalCase {
+    /// Returns the stable snapshot name for this physical command run.
     pub(crate) fn snapshot_name(&self) -> String {
         format!("{}_{}", self.logical.id, self.mode.id_part())
     }
 
+    /// Builds the CLI argument list for this physical command run.
     pub(crate) fn args(&self) -> Vec<&'static str> {
         let mut args = Vec::new();
         if self.logical.is_wrapped {
@@ -218,6 +253,7 @@ impl PhysicalCase {
     }
 }
 
+/// Expands every base row into wrapped and unwrapped logical cases.
 pub(crate) fn logical_cases() -> Vec<LogicalCase> {
     BASE_MATRIX_CASES
         .iter()
@@ -232,6 +268,7 @@ pub(crate) fn logical_cases() -> Vec<LogicalCase> {
         .collect()
 }
 
+/// Expands every logical case into stdout and `--in-place` command runs.
 pub(crate) fn physical_cases() -> Vec<PhysicalCase> {
     logical_cases()
         .into_iter()
@@ -244,6 +281,7 @@ pub(crate) fn physical_cases() -> Vec<PhysicalCase> {
         .collect()
 }
 
+/// Runs a physical matrix case through the real `mdtablefix` binary.
 pub(crate) fn run_physical_case(case: &PhysicalCase) -> RunResult {
     let dir = tempdir().expect("create temporary directory");
     let file_path = dir.path().join(case.logical.fixture);
@@ -266,6 +304,7 @@ pub(crate) fn run_physical_case(case: &PhysicalCase) -> RunResult {
     }
 }
 
+/// Returns the repository-relative path to a matrix fixture.
 pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -274,6 +313,7 @@ pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
         .join(file_name)
 }
 
+/// Returns whether a matrix case identifier uses the documented character set.
 pub(crate) fn is_case_id(id: &str) -> bool {
     !id.is_empty()
         && id.bytes().all(|byte| {
@@ -281,6 +321,7 @@ pub(crate) fn is_case_id(id: &str) -> bool {
         })
 }
 
+/// Builds a signature that ignores the wrap variant.
 pub(crate) fn non_wrap_signature(fixture: &str, flags: &[TransformFlag]) -> String {
     let args = flags
         .iter()
@@ -290,4 +331,5 @@ pub(crate) fn non_wrap_signature(fixture: &str, flags: &[TransformFlag]) -> Stri
     format!("{fixture}:{args}")
 }
 
+/// Returns whether a base row enables the given transform flag.
 pub(crate) fn has_flag(case: &BaseCase, flag: TransformFlag) -> bool { case.flags.contains(&flag) }
