@@ -180,7 +180,6 @@ Table: Key types and functions.
 Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
 replacing `LineBuffer` with `textwrap`.
 
-
 ## Fences module
 
 The `fences` module in [src/fences.rs](../src/fences.rs) is responsible for
@@ -212,7 +211,6 @@ and centralizes the forward scan in one private helper, `attach_to_next_fence`.
 candidate orphan specifier, delegates lookahead to the helper, and otherwise
 just pushes unchanged lines into the output.
 
-
 ### `attach_to_next_fence` semantics
 
 `attach_to_next_fence` receives a `Peekable` iterator positioned immediately
@@ -235,7 +233,6 @@ It follows these rules:
 This structure keeps the one non-trivial lookahead path local to the helper
 instead of spreading it between the main loop and several index-based search
 utilities.
-
 
 ### Indentation selection
 
