@@ -82,18 +82,18 @@ restores the separator row with widths derived from the final table body.
 - `format_separator_cells`: Expands separator cells to the target widths while
   preserving Markdown alignment markers.
 
-## Fence normalisation module
+## Fence normalization module
 
 `src/fences.rs` exposes the preprocessing helpers used by the `--fences` option.
 
 - `compress_fences(lines: &[String]) -> Vec<String>` performs
   `FenceTracker`-driven conditional rewriting. For each matched fenced block,
-  it determines whether normalising the outer delimiter would make an inner
+  it determines whether normalizing the outer delimiter would make an inner
   fence line structural. This covers same-marker inner fences and the
   cross-marker case where an inner backtick fence would become structural after
   an outer tilde fence is converted to backticks. If so, it preserves the
   original outer delimiter width and marker family. Unmatched or malformed
-  delimiter runs fall through the legacy stateless normalisation path.
+  delimiter runs fall through the legacy stateless normalization path.
 - `attach_orphan_specifiers(lines: &[String]) -> Vec<String>` attaches a lone
   language identifier line to the following unlabelled fence, but only when the
   scanner is outside any active fenced block. It uses `FenceTracker` to skip

@@ -84,28 +84,25 @@ fn fixes_orphaned_specifier() {
     assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }
 
-#[test]
-fn does_not_attach_orphan_specifier_inside_outer_fence() {
-    let input = lines_vec!["````markdown", "Rust", "```", "fn main() {}", "```", "````"];
+#[rstest]
+#[case(
+    lines_vec!["````markdown", "Rust", "```", "fn main() {}", "```", "````"],
+    lines_vec!["````markdown", "Rust", "```", "fn main() {}", "```", "````"]
+)]
+#[case(
+    lines_vec!["````markdown", "```", "Rust", "fn main() {}", "```", "````"],
+    lines_vec!["````markdown", "```", "Rust", "fn main() {}", "```", "````"]
+)]
+#[case(
+    lines_vec!["Rust", "````", "```", "fn main() {}", "```", "````"],
+    lines_vec!["````rust", "```", "fn main() {}", "```", "````"]
+)]
+fn handles_orphan_specifiers_around_outer_fences(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+) {
     let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(out, input);
-}
-
-#[test]
-fn does_not_attach_orphan_specifier_deeper_inside_outer_fence() {
-    let input = lines_vec!["````markdown", "```", "Rust", "fn main() {}", "```", "````",];
-    let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(out, input);
-}
-
-#[test]
-fn attaches_orphan_specifier_without_shortening_preserved_outer_fence() {
-    let input = lines_vec!["Rust", "````", "```", "fn main() {}", "```", "````"];
-    let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(
-        out,
-        lines_vec!["````rust", "```", "fn main() {}", "```", "````"]
-    );
+    assert_eq!(out, expected);
 }
 
 #[test]

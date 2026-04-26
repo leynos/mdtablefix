@@ -66,9 +66,9 @@ Use these skills while implementing the plan:
 
 The current fence preprocessing logic lives in
 [`src/fences.rs`](../../src/fences.rs). Two functions matter:
-`compress_fences(lines)` compresses any matching backtick or tilde fence to
-exactly three backticks, and `attach_orphan_specifiers(lines)` rewrites a lone
-language line such as `Rust` onto the following unlabeled fence.
+`compress_fences(lines)` performs conditional outer-fence normalization, and
+`attach_orphan_specifiers(lines)` rewrites a lone language line such as `Rust`
+onto the following unlabelled fence.
 
 The shared fence-state logic already exists in
 [`src/wrap/fence.rs`](../../src/wrap/fence.rs). `FenceTracker::observe(line)`
