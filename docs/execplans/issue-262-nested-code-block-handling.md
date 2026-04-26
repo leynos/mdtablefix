@@ -333,17 +333,19 @@ not an active Cargo integration target in this repository.
 
 Stage A is a regression-first pass. Add failing examples to `tests/fences.rs`
 that prove the current bug in both reported shapes: four-backtick outer fences
-containing inner triple-backtick lines, and triple-tilde outer fences
-containing inner triple-backtick lines. Those same-marker cases must assert
-that the outer four-character opening and closing fences remain four characters
-wide after formatting. Extend that matrix with explicit tilde preservation
-cases: a four-backtick outer fence containing literal `~~~` content, and a
-longer tilde outer fence such as `~~~~` containing a shorter literal `~~~`
-block that must remain unchanged because it does not close the outer fence. Add
-one case that shows `attach_orphan_specifiers` must not attach a specifier-like
-line when it appears inside an already open outer fence. Add a CLI regression in
- `tests/cli_fences.rs` that exercises `--fences` on one of these documents so
-the user-visible behaviour is covered end to end.
+containing inner triple-backtick lines as the same-marker case, and
+triple-tilde outer fences containing inner triple-backtick lines as the
+mixed-marker case. The same-marker case must assert that the outer
+four-character opening and closing fences remain four characters wide after
+formatting, and the tilde-outer cases must preserve their tilde width. Extend
+that matrix with explicit tilde preservation cases: a four-backtick outer fence
+containing literal `~~~` content, and a longer tilde outer fence such as `~~~~`
+containing a shorter literal `~~~` block that must remain unchanged because it
+does not close the outer fence. Add one case that shows
+`attach_orphan_specifiers` must not attach a specifier-like line when it
+appears inside an already open outer fence. Add a CLI regression in
+`tests/cli_fences.rs` that exercises `--fences` on one of these documents so the
+user-visible behaviour is covered end to end.
 
 Stage B is the implementation pass in `src/fences.rs`. Refactor
 `compress_fences` from a stateless `map` into a line-by-line loop that keeps a
