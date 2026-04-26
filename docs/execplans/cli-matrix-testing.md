@@ -1,11 +1,10 @@
 # Add a CLI option matrix test harness
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+ `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -70,8 +69,8 @@ edit `docs/developers-guide.md` yet.
 - Interfaces: if the matrix requires changing any CLI flag name, CLI exit-code
   rule, or public library function signature, stop and escalate.
 - Coverage: if pairwise coverage across the seven non-wrap transform flags
-  cannot be achieved in 24 or fewer base rows before `--wrap` and execution-mode
-  expansion, stop and document why a larger matrix is justified.
+  cannot be achieved in 24 or fewer base rows before `--wrap` and
+  execution-mode expansion, stop and document why a larger matrix is justified.
 - Expansion: if the generated matrix exceeds 96 physical command runs after
   expanding each base row into `--wrap` and no-`--wrap` variants and then into
   stdout and `--in-place` modes, stop and re-evaluate the base row count.
@@ -85,10 +84,10 @@ edit `docs/developers-guide.md` yet.
 
 - Risk: a full Cartesian product of the eight transform flags, wrapped and
   unwrapped variants, and paired stdout and `--in-place` execution would create
-  hundreds of cases and make snapshot review noisy. Severity: high.
-  Likelihood: high. Mitigation: use a curated base matrix with generated
-  `--wrap` and execution-mode expansion, plus harness tests that prove every
-  required option pair and expansion rule remains covered.
+  hundreds of cases and make snapshot review noisy. Severity: high. Likelihood:
+  high. Mitigation: use a curated base matrix with generated `--wrap` and
+  execution-mode expansion, plus harness tests that prove every required option
+  pair and expansion rule remains covered.
 
 - Risk: a single overpacked fixture could make failures hard to diagnose.
   Severity: medium. Likelihood: medium. Mitigation: use a small set of named
@@ -141,8 +140,17 @@ edit `docs/developers-guide.md` yet.
 - [x] (2026-04-25 14:34Z) Updated the draft plan so every logical combination
   runs in both stdout and `--in-place` modes and every non-wrap flag
   combination runs both with and without `--wrap`.
-- [ ] Await approval to implement the harness, fixtures, snapshots, and
-  developer-guide documentation.
+- [x] (2026-04-26 15:30Z) Received approval to implement the harness,
+  fixtures, snapshots, and developer-guide documentation.
+- [x] (2026-04-26 15:35Z) Added the `insta` dev dependency and `.dat` matrix
+  fixtures.
+- [x] (2026-04-26 15:36Z) Implemented `tests/cli_matrix.rs` with harness
+  self-tests and snapshot execution.
+- [x] (2026-04-26 15:38Z) Generated 32 initial snapshots and verified
+  `cargo test --test cli_matrix` passes without `INSTA_UPDATE`.
+- [x] (2026-04-26 15:43Z) Documented the harness in
+  `docs/developers-guide.md`.
+- [x] (2026-04-26 15:50Z) Ran full validation gates and recorded results.
 
 ## Surprises & discoveries
 
@@ -173,6 +181,29 @@ edit `docs/developers-guide.md` yet.
   pairwise coverage for `--wrap`; it must generate explicit wrapped and
   unwrapped variants for each selected non-wrap combination.
 
+- Observation: the first full `cargo test --test cli_matrix` run failed only
+  because no `insta` snapshots existed yet, after the harness self-tests
+  passed. Impact: proceed with the planned `INSTA_UPDATE=always` snapshot
+  creation step and then rerun the target without `INSTA_UPDATE`.
+
+- Observation: the first `tests/cli_matrix.rs` draft was 418 lines, exceeding
+  the repository's 400-line source-file limit. Impact: split reusable matrix
+  types, fixtures, and command-running helpers into
+  `tests/cli_matrix/support.rs`, leaving `tests/cli_matrix.rs` focused on the
+  test assertions.
+
+- Observation: the first `make lint` run failed on
+  `clippy::excessive_nesting` in `src/wrap/inline/postprocess.rs`, outside the
+  new matrix harness. Impact: refactor that existing nested block into a small
+  helper so the required warning-deny lint gate can pass without suppressing
+  the lint.
+
+- Observation: `make fmt` completed successfully but formatted existing
+  Markdown files outside the scope of this change. Impact: restore unrelated
+  formatter churn and keep the commit focused on the matrix harness,
+  developer-guide documentation, ExecPlan updates, dependency lockfile changes,
+  and the required lint refactor.
+
 ## Decision log
 
 - Decision: use a curated pairwise matrix rather than a full Cartesian product.
@@ -202,11 +233,57 @@ edit `docs/developers-guide.md` yet.
   tested through both stdout formatting and `--in-place`. Date/Author:
   2026-04-25 / Droid.
 
+- Decision: use eight base rows named `row_000` through `row_111`, with each
+  bit pattern mapped across the seven non-wrap flags, then generate 32 physical
+  command runs after `--wrap` and execution-mode expansion. Rationale: this
+  gives every pair of non-wrap flags all four enabled/disabled combinations
+  while staying well below the 96-run expansion tolerance. Date/Author:
+  2026-04-26 / Droid.
+
+- Decision: split the matrix test support into `tests/cli_matrix/support.rs`.
+  Rationale: the first implementation of `tests/cli_matrix.rs` exceeded the
+  repository's 400-line file limit; moving reusable case definitions and
+  runners into a focused support module keeps both files under the limit.
+  Date/Author: 2026-04-26 / Droid.
+
 ## Outcomes & retrospective
 
-No implementation has been started. This section must be updated after the
-approved plan is executed with the files changed, validation results, and any
-lessons from maintaining the matrix.
+The planned harness is implemented. `Cargo.toml` and `Cargo.lock` now include
+the `insta` dev dependency. `tests/data/cli-matrix/` contains four `.dat`
+fixtures, and `tests/cli_matrix.rs` plus `tests/cli_matrix/support.rs` define
+the base catalogue, expansion checks, command runner, and `insta` snapshots.
+
+The harness now verifies case identifier uniqueness, `.dat` fixture use,
+stdout and `--in-place` expansion, wrapped and unwrapped expansion, per-flag
+enabled/disabled coverage, and pairwise coverage for the seven non-wrap
+transform flags. The snapshot test executes 32 physical command runs and
+asserts that file-to-stdout output matches the corresponding `--in-place`
+rewritten file.
+
+`docs/developers-guide.md` now documents the harness purpose, fixture
+convention, expansion model, self-tests, and snapshot update workflow.
+
+Validation passed with these commands and logs:
+
+```plaintext
+cargo test --test cli_matrix matrix_case_ids_are_unique | tee /tmp/cargo-test-cli-matrix-ids-mdtablefix-cli-matrix-testing.out
+cargo test --test cli_matrix matrix_cases_expand_to_stdout_and_in_place | tee /tmp/cargo-test-cli-matrix-modes-mdtablefix-cli-matrix-testing.out
+cargo test --test cli_matrix matrix_cases_expand_to_wrapped_and_unwrapped | tee /tmp/cargo-test-cli-matrix-wraps-mdtablefix-cli-matrix-testing.out
+cargo test --test cli_matrix matrix_cases_cover_all_transform_pairs | tee /tmp/cargo-test-cli-matrix-pairs-mdtablefix-cli-matrix-testing.out
+INSTA_UPDATE=always cargo test --test cli_matrix cli_matrix_snapshots | tee /tmp/cargo-test-cli-matrix-snapshot-update-mdtablefix-cli-matrix-testing.out
+cargo test --test cli_matrix | tee /tmp/cargo-test-cli-matrix-mdtablefix-cli-matrix-testing.out
+make fmt | tee /tmp/fmt-mdtablefix-cli-matrix-testing.out
+make check-fmt | tee /tmp/check-fmt-mdtablefix-cli-matrix-testing.out
+make lint | tee /tmp/lint-mdtablefix-cli-matrix-testing.out
+make test | tee /tmp/test-mdtablefix-cli-matrix-testing.out
+make markdownlint | tee /tmp/markdownlint-mdtablefix-cli-matrix-testing.out
+make nixie | tee /tmp/nixie-mdtablefix-cli-matrix-testing.out
+git diff --check | tee /tmp/diff-check-mdtablefix-cli-matrix-testing.out
+```
+
+The only implementation surprise was the existing `clippy::excessive_nesting`
+finding in `src/wrap/inline/postprocess.rs`; extracting
+`carry_previous_inline_code_tail` resolved it without suppressing the lint.
 
 ## Context and orientation
 
@@ -413,8 +490,8 @@ the exact failure in this plan and ask for direction before committing.
   `--wrap`.
 - The base matrix covers every enabled/disabled pair combination for
   `--renumber`, `--breaks`, `--ellipsis`, `--fences`, `--footnotes`,
-  `--code-emphasis`, and `--headings`; generated variants then add the
-  required `--wrap` coverage.
+  `--code-emphasis`, and `--headings`; generated variants then add the required
+  `--wrap` coverage.
 - `docs/developers-guide.md` documents the harness and snapshot update
   workflow.
 - `make fmt`, `make check-fmt`, `make lint`, `make test`,

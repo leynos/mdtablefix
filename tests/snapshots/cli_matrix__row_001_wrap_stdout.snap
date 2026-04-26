@@ -1,0 +1,26 @@
+---
+source: tests/cli_matrix.rs
+expression: stdout_result.envelope(&stdout_case)
+---
+case: row_001_wrap
+mode: stdout
+args: --wrap --ellipsis --footnotes --code-emphasis --headings
+status: exit status: 0
+
+[stdout]
+Rust
+~~~~
+fn main() {
+    println!("dots...");
+}
+~~~~
+
+Outside… text.
+
+1. first
+4. second
+
+[stderr]
+
+[file]
+<not applicable>

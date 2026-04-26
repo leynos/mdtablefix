@@ -156,3 +156,55 @@ Table: Key types and functions.
 
 Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
 replacing `LineBuffer` with `textwrap`.
+
+## CLI matrix harness
+
+The CLI matrix harness in [tests/cli_matrix.rs](../tests/cli_matrix.rs) checks
+that important option combinations keep working through the real `mdtablefix`
+binary. It uses `assert_cmd` to run the command and `insta` to snapshot a
+labelled envelope containing the case identifier, execution mode, arguments,
+exit status, stdout, stderr, and rewritten file content where relevant.
+
+The base catalogue lives in
+[tests/cli_matrix/support.rs](../tests/cli_matrix/support.rs). It covers the
+seven non-wrap transform flags:
+
+- `--renumber`
+- `--breaks`
+- `--ellipsis`
+- `--fences`
+- `--footnotes`
+- `--code-emphasis`
+- `--headings`
+
+The harness expands every base row into both `--wrap` and no-`--wrap` variants.
+It then runs each logical variant twice: once as file-to-stdout formatting and
+once with `--in-place` against an equivalent temporary file. The snapshot test
+also asserts that stdout output and the `--in-place` rewritten file are
+identical for the same logical case.
+
+Matrix input fixtures live under `tests/data/cli-matrix/` and must use the
+`.dat` extension. Do not use `.md` or `.txt` for these fixtures because
+`make fmt` runs Markdown formatting and must not rewrite matrix inputs. The
+harness has a self-test that rejects non-`.dat` fixtures.
+
+Before changing snapshots, run the harness self-tests:
+
+```bash
+cargo test --test cli_matrix matrix_case_ids_are_unique
+cargo test --test cli_matrix matrix_cases_expand_to_stdout_and_in_place
+cargo test --test cli_matrix matrix_cases_expand_to_wrapped_and_unwrapped
+cargo test --test cli_matrix matrix_cases_cover_all_transform_pairs
+```
+
+Create or update snapshots only when the behaviour change is intentional:
+
+```bash
+INSTA_UPDATE=always cargo test --test cli_matrix cli_matrix_snapshots
+cargo test --test cli_matrix
+```
+
+Review the generated `tests/snapshots/cli_matrix__*.snap` files before
+committing. Snapshot churn across many cases usually means the fixture is too
+broad or a shared transform changed behaviour; inspect the labelled case, mode,
+and arguments before accepting the new output.

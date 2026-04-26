@@ -1,0 +1,25 @@
+---
+source: tests/cli_matrix.rs
+expression: stdout_result.envelope(&stdout_case)
+---
+case: row_101_nowrap
+mode: stdout
+args: --renumber --ellipsis --fences --code-emphasis
+status: exit status: 0
+
+[stdout]
+```rust
+fn main() {
+    println!("dots...");
+}
+```
+
+Outside… text.
+
+1. first
+2. second
+
+[stderr]
+
+[file]
+<not applicable>

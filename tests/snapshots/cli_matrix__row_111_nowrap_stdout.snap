@@ -1,0 +1,24 @@
+---
+source: tests/cli_matrix.rs
+expression: stdout_result.envelope(&stdout_case)
+---
+case: row_111_nowrap
+mode: stdout
+args: --renumber --breaks --ellipsis --headings
+status: exit status: 0
+
+[stdout]
+---
+title: Matrix
+---
+
+## Heading
+
+______________________________________________________________________
+
+Text… after break.
+
+[stderr]
+
+[file]
+<not applicable>
