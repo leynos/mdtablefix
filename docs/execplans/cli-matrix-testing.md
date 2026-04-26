@@ -22,7 +22,7 @@ duplicated, a non-`.dat` fixture is used, or the selected case set no longer
 covers the required option pairs. Each logical option combination is exercised
 twice against the same fixture: once by writing formatted output to stdout and
 once with the repository's existing `--in-place` flag. The harness also treats
-`--wrap` as a required paired variant because earlier `--wrap` and non-`--wrap`
+`--wrap` as required to be paired because earlier `--wrap` and non-`--wrap`
 runs have regressed independently. The developer guide will explain how the
 harness works, why fixtures use `.dat`, and how to update snapshots
 intentionally.
@@ -339,7 +339,7 @@ Work from the repository root:
 
 ```bash
 pwd
-git branch --show
+git branch --show-current
 ```
 
 Expected:
