@@ -13,8 +13,8 @@ use tempfile::tempdir;
 #[path = "invariants.rs"]
 mod invariants;
 
-/// Represents a non-wrap CLI transform flag.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+/// Represents a non-wrap CLI transform flag.
 pub(crate) enum TransformFlag {
     /// Renumbers ordered list items.
     Renumber,
@@ -47,8 +47,8 @@ impl TransformFlag {
     }
 }
 
-/// Defines one curated base row before wrap and execution-mode expansion.
 #[derive(Clone, Copy)]
+/// Defines one curated base row before wrap and execution-mode expansion.
 pub(crate) struct BaseCase {
     /// Stable identifier for the base matrix row.
     pub(crate) id: &'static str,
@@ -58,8 +58,8 @@ pub(crate) struct BaseCase {
     pub(crate) flags: &'static [TransformFlag],
 }
 
-/// Represents whether `--wrap` is active.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+/// Represents whether `--wrap` is active.
 pub(crate) enum WrapVariant {
     /// Enables `--wrap` for the logical case.
     Wrapped,
@@ -76,8 +76,8 @@ impl WrapVariant {
     }
 }
 
-/// Represents how the binary is invoked.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+/// Represents how the binary is invoked.
 pub(crate) enum ExecutionMode {
     /// Writes formatted output to stdout.
     Stdout,
@@ -94,8 +94,8 @@ impl ExecutionMode {
     }
 }
 
-/// Represents one base row after wrap expansion.
 #[derive(Clone)]
+/// Represents one base row after wrap expansion.
 pub(crate) struct LogicalCase {
     /// Stable logical identifier used in snapshot names.
     pub(crate) id: String,
