@@ -292,8 +292,10 @@ pub(crate) fn assert_transform_invariants(logical: &LogicalCase, stdout: &[u8]) 
 
 /// Copies a matrix fixture into the temporary command directory.
 pub(crate) fn stage_fixture(case: &PhysicalCase, dir: &Path) -> Result<PathBuf> {
-    let file_path = dir.join("input.md");
     let fixture = fixture_path(case.logical.fixture);
+    let file_path = dir
+        .join("input")
+        .with_extension(fixture.extension().unwrap_or_default());
     fs::copy(&fixture, &file_path).with_context(|| {
         format!(
             "staging fixture {} for case {}",
