@@ -60,7 +60,7 @@ simple code blocks consistent before later formatting steps run.
 Outer delimiters are compressed only when doing so is structurally safe. If a
 four-or-more-backtick fence, or a longer tilde fence, wraps literal inner
 fence-like content from the same marker family, the outer delimiter width is
-kept so the inner content does not become a structural close after formatting.
+kept, so the inner content does not become a structural close after formatting.
 
 `--fences` also attaches a lone language identifier immediately above an
 unlabelled fence to that fence. This orphan-specifier attachment only happens
