@@ -30,6 +30,11 @@ fn matrix_case_ids_are_unique() {
 }
 
 #[test]
+fn matrix_case_ids_accept_documented_characters() {
+    assert!(is_case_id("row-001_alpha2"));
+}
+
+#[test]
 fn matrix_case_fixtures_are_dat_files() {
     for case in BASE_MATRIX_CASES {
         let fixture = fixture_path(case.fixture);

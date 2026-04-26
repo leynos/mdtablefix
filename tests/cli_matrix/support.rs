@@ -246,7 +246,7 @@ pub(crate) fn physical_cases() -> Vec<PhysicalCase> {
 
 pub(crate) fn run_physical_case(case: &PhysicalCase) -> RunResult {
     let dir = tempdir().expect("create temporary directory");
-    let file_path = dir.path().join("input.md");
+    let file_path = dir.path().join(case.logical.fixture);
     fs::copy(fixture_path(case.logical.fixture), &file_path).expect("copy matrix fixture");
 
     let mut command = Command::cargo_bin("mdtablefix").expect("create mdtablefix command");
