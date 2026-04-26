@@ -1,8 +1,8 @@
 # Preserve nested fenced blocks during fence normalization
 
-This ExecPlan (execution plan) is a living document. The sections `Constraints`,
- `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
-and `Outcomes & Retrospective` must be kept up to date as work proceeds.
+This ExecPlan (execution plan) is a living document. Keep these sections
+current as work proceeds: `Constraints`, `Tolerances`, `Risks`, `Progress`,
+`Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective`.
 
 Status: COMPLETE
 
@@ -88,9 +88,9 @@ The active regression targets are:
   integration-style behaviour.
 - [`tests/cli.rs`](../../tests/cli.rs) for end-to-end CLI behaviour with
   `--fences`.
-- [`tests/cli_fences.rs`](../../tests/cli_fences.rs) for additional
-  end-to-end CLI fence regressions, because `tests/cli.rs` is already close to
-  the repository's 400-line limit.
+- [`tests/cli_fences.rs`](../../tests/cli_fences.rs) for additional end-to-end
+  CLI fence regressions, because `tests/cli.rs` is already close to the
+  repository's 400-line limit.
 - [`src/wrap/tests/fence_tracker.rs`](../../src/wrap/tests/fence_tracker.rs)
   for the shared tracker semantics.
 - [`tests/wrap_unit.rs`](../../tests/wrap_unit.rs) if one additional wrapping
@@ -236,10 +236,14 @@ not an active Cargo integration target in this repository.
   comments in `docs/architecture.md`,
   `docs/execplans/issue-262-nested-code-block-handling.md`, and `src/fences.rs`.
 - [x] (2026-04-25 00:00Z) Verified and addressed follow-up review comments:
-  `compress_fences` now enters fenced-state tracking for openings recognised by
+  `compress_fences` now enters fenced-state tracking for openings recognized by
   `wrap::is_fence` even when they are outside `FENCE_RE`, including spaced info
   strings; nested `FenceTracker` tests are parameterized with `rstest`; and the
   CLI validation path consistently points at `tests/cli_fences.rs`.
+- [x] (2026-04-26 00:00Z) Verified and addressed follow-up review comments for
+  Markdown token wrapping and spaced-info fence rewriting. `compress_fences`
+  now preserves matched blocks unchanged when either outer delimiter is not
+  supported by the rewrite regex.
 
 ## Surprises & discoveries
 
@@ -332,10 +336,10 @@ wide after formatting. Extend that matrix with explicit tilde preservation
 cases: a four-backtick outer fence containing literal `~~~` content, and a
 longer tilde outer fence such as `~~~~` containing a shorter literal `~~~`
 block that must remain unchanged because it does not close the outer fence. Add
-one case that shows `attach_orphan_specifiers` must not attach a specifier-like
-line when it appears inside an already open outer fence. Add a CLI regression in
- `tests/cli_fences.rs` that exercises `--fences` on one of these documents so
-the user-visible behaviour is covered end to end.
+one case that shows `attach_orphan_specifiers` must not attach a
+specifier-like line when it appears inside an already open outer fence. Add a
+CLI regression in `tests/cli_fences.rs` that exercises `--fences` on one of
+these documents so the user-visible behaviour is covered end to end.
 
 Stage B is the implementation pass in `src/fences.rs`. Refactor
 `compress_fences` from a stateless `map` into a line-by-line loop that keeps a
@@ -453,7 +457,7 @@ Implemented nested-fence-safe normalization for `mdtablefix --fences`.
 `compress_fences` now analyses matched fenced blocks with `FenceTracker`,
 preserves literal nested fence-like lines, and keeps outer delimiters unchanged
 when shortening or changing their marker family would make nested literal
-content structural. `attach_orphan_specifiers` now tracks active fenced blocks
+content structural. `attach_orphan_specifiers` now tracks active fenced blocks,
 so specifier-like lines inside an outer fence remain content.
 
 The implementation kept existing legacy behaviour for unmatched mixed-marker

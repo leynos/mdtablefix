@@ -25,8 +25,8 @@ Managing this setup and teardown logic within each test function can lead to
 considerable boilerplate code and repetition, making tests harder to read and
 maintain.
 
-Fixtures address this by encapsulating these dependencies and their setup logic.
-[^1] For instance, if multiple tests require a logged-in user object or a
+Fixtures address this by encapsulating these dependencies and their setup
+logic.[^1] For instance, if multiple tests require a logged-in user object or a
 pre-populated database, instead of creating these in every test, a fixture can
 provide them. This approach allows developers to focus on the specific logic
 being tested rather than the auxiliary utilities.
@@ -768,8 +768,8 @@ To improve the ergonomics of working with async fixtures and values in tests,
   its type is `impl Future<Output = T>`. The `#[future]` attribute on such an
   argument allows developers to refer to it with type `T` directly in the test
   signature, removing the `impl Future` boilerplate. However, the value still
-  needs to be `.await`ed explicitly within the test body or by using `#[awt]`.[
-  ^4]
+  needs to be `.await`ed explicitly within the test body or by using
+  `#[awt]`.[^4]
 - `#[awt]` (or `#[future(awt)]`): This attribute, when applied to the entire
   test function (`#[awt]`) or a specific `#[future]` argument (
   `#[future(awt)]`), tells `rstest` to automatically insert `.await` calls for
@@ -1284,15 +1284,15 @@ tests.
 
 The `test-with` crate allows for conditional execution of tests based on
 various runtime conditions, such as the presence of environment variables, the
-existence of specific files or folders, or the availability of network services.
-[^22] It can be used in conjunction with `rstest`. For example, an `rstest`
-test could be further annotated with `test-with` attributes to ensure it only
-runs if a particular database configuration file exists or if a dependent web
-service is reachable. The order of macros is important: `rstest` should
-typically generate the test cases first, and then `test-with` can apply its
-conditional execution logic to these generated tests.[^22] This allows `rstest`
-to focus on test structure and data provision, while `test-with` provides an
-orthogonal layer of control over test execution conditions.
+existence of specific files or folders, or the availability of network
+services. [^22] It can be used in conjunction with `rstest`. For example, an
+`rstest` test could be further annotated with `test-with` attributes to ensure
+it only runs if a particular database configuration file exists or if a
+dependent web service is reachable. The order of macros is important: `rstest`
+should typically generate the test cases first, and then `test-with` can apply
+its conditional execution logic to these generated tests.[^22] This allows
+`rstest` to focus on test structure and data provision, while `test-with`
+provides an orthogonal layer of control over test execution conditions.
 
 ## XI. Conclusion and Further Resources
 

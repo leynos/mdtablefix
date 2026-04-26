@@ -65,6 +65,13 @@ fn preserves_inner_fences_inside_spaced_info_fence() {
 }
 
 #[test]
+fn preserves_four_backtick_spaced_info_outer_fence() {
+    let input = lines_vec!["```` rust", "code", "````"];
+    let out = compress_fences(&input);
+    assert_eq!(out, input);
+}
+
+#[test]
 fn does_not_compress_mixed_fences() {
     let input = lines_vec!["~~~rust", "code", "```"];
     let out = compress_fences(&input);

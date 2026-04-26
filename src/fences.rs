@@ -78,6 +78,7 @@ enum MarkerStrategy {
 
 struct PendingFenceBlock {
     opening_marker: String,
+    opening_rewritable: bool,
     has_conflicting_interior_fence: bool,
     lines: Vec<String>,
 }
@@ -159,6 +160,10 @@ fn flush_matched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
     }
 }
 
+fn flush_original_block(block: PendingFenceBlock, out: &mut Vec<String>) {
+    out.extend(block.lines);
+}
+
 /// Normalize safe outer fence delimiters to exactly three backticks.
 ///
 /// Lines that are not fence delimiters are returned unchanged. Compatible
@@ -190,6 +195,7 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
             let _ = tracker.observe(line);
             pending_block = Some(PendingFenceBlock {
                 opening_marker: opening_marker.to_owned(),
+                opening_rewritable: compressed_fence_line(line).is_some(),
                 has_conflicting_interior_fence: false,
                 lines: vec![line.clone()],
             });
@@ -220,7 +226,11 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        flush_matched_block(block, &mut out);
+        if block.opening_rewritable && compressed_fence_line(line).is_some() {
+            flush_matched_block(block, &mut out);
+        } else {
+            flush_original_block(block, &mut out);
+        }
     }
 
     if let Some(block) = pending_block {

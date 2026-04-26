@@ -69,20 +69,16 @@ fenced block.
 
 Before:
 
-`````markdown
-````markdown
-```rust
-fn main() {}
-```
-````
-`````
+    ````markdown
+    ```rust
+    fn main() {}
+    ```
+    ````
 
 After running `mdtablefix --fences`:
 
-`````markdown
-````markdown
-```rust
-fn main() {}
-```
-````
-`````
+    ````markdown
+    ```rust
+    fn main() {}
+    ```
+    ````

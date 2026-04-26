@@ -84,8 +84,7 @@ restores the separator row with widths derived from the final table body.
 
 ## Fence normalisation module
 
-`src/fences.rs` exposes the preprocessing helpers used by the `--fences`
-option.
+`src/fences.rs` exposes the preprocessing helpers used by the `--fences` option.
 
 - `compress_fences(lines: &[String]) -> Vec<String>` performs
   `FenceTracker`-driven conditional rewriting. For each matched fenced block,
@@ -99,10 +98,10 @@ option.
   attachment for specifier-like lines and target fences that appear inside an
   open block.
 
-Both functions reuse `FenceTracker` from [src/wrap/fence.rs](../src/wrap/fence.rs)
-for structural fence detection. This keeps preprocessing semantics consistent
-with the wrapping pipeline. See [docs/architecture.md](architecture.md) for the
-processing pipeline context.
+Both functions reuse `FenceTracker` from
+[src/wrap/fence.rs](../src/wrap/fence.rs) for structural fence detection. This
+keeps preprocessing semantics consistent with the wrapping pipeline. See
+[docs/architecture.md](architecture.md) for the processing pipeline context.
 
 ## Design decisions
 
