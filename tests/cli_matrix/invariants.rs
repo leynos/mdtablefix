@@ -97,3 +97,80 @@ fn ordered_marker(line: &str) -> Option<OrderedMarker> {
             number,
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{fixture_has_fence_candidate, ordered_marker, unordered_fixture_markers};
+
+    #[test]
+    fn ordered_marker_returns_none_for_plain_prose() {
+        assert!(ordered_marker("plain prose").is_none());
+    }
+
+    #[test]
+    fn ordered_marker_returns_none_without_dot_space_suffix() {
+        assert!(ordered_marker("123 item").is_none());
+    }
+
+    #[test]
+    fn ordered_marker_returns_indent_and_number() {
+        let marker = ordered_marker("  3. item").expect("parse ordered marker");
+
+        assert_eq!(marker.indent, "  ");
+        assert_eq!(marker.number, 3);
+    }
+
+    #[test]
+    fn ordered_marker_returns_none_for_empty_string() {
+        assert!(ordered_marker("").is_none());
+    }
+
+    #[test]
+    fn fixture_has_fence_candidate_detects_backtick_fence() {
+        assert!(fixture_has_fence_candidate("```rust\ncode\n```"));
+    }
+
+    #[test]
+    fn fixture_has_fence_candidate_detects_tilde_fence() {
+        assert!(fixture_has_fence_candidate("~~~rust\ncode\n~~~"));
+    }
+
+    #[test]
+    fn fixture_has_fence_candidate_detects_indented_code() {
+        assert!(fixture_has_fence_candidate("    code"));
+    }
+
+    #[test]
+    fn fixture_has_fence_candidate_rejects_plain_text() {
+        assert!(!fixture_has_fence_candidate("plain prose\nmore prose"));
+    }
+
+    #[test]
+    fn unordered_fixture_markers_accepts_numbered_flat_list() {
+        assert!(unordered_fixture_markers("1. a\n2. b\n3. c").is_empty());
+    }
+
+    #[test]
+    fn unordered_fixture_markers_flags_flat_out_of_order_marker() {
+        assert_eq!(unordered_fixture_markers("1. a\n3. b"), ["3. "]);
+    }
+
+    #[test]
+    fn unordered_fixture_markers_resets_counter_after_blank_line() {
+        assert_eq!(unordered_fixture_markers("1. a\n\n3. b"), ["3. "]);
+    }
+
+    #[test]
+    fn unordered_fixture_markers_tracks_nested_counters_independently() {
+        let fixture = "1. outer\n   1. inner\n   2. inner2\n2. outer2";
+
+        assert!(unordered_fixture_markers(fixture).is_empty());
+    }
+
+    #[test]
+    fn unordered_fixture_markers_flags_nested_out_of_order_marker() {
+        let fixture = "1. outer\n   1. inner\n   3. inner2\n2. outer2";
+
+        assert_eq!(unordered_fixture_markers(fixture), ["   3. "]);
+    }
+}
