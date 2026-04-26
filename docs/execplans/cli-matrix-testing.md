@@ -26,8 +26,8 @@ runs have regressed independently. The developer guide will explain how the
 harness works, why fixtures use `.dat`, and how to update snapshots
 intentionally.
 
-This plan is draft-only until approved. It does not implement the harness or
-edit `docs/developers-guide.md` yet.
+This ExecPlan is complete and approved. The CLI matrix harness is implemented,
+and `docs/developers-guide.md` documents how maintainers use and extend it.
 
 ## Constraints
 
