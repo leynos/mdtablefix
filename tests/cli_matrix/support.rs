@@ -286,8 +286,8 @@ pub(crate) fn physical_cases() -> Vec<PhysicalCase> {
 }
 
 /// Asserts output properties that prove enabled transforms changed matching input.
-pub(crate) fn assert_transform_invariants(logical: &LogicalCase, stdout: &[u8]) {
-    invariants::assert_transform_invariants(logical, stdout);
+pub(crate) fn assert_transform_invariants(logical: &LogicalCase, stdout: &[u8]) -> Result<()> {
+    invariants::assert_transform_invariants(logical, stdout)
 }
 
 /// Copies a matrix fixture into the temporary command directory.

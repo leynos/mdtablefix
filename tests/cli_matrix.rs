@@ -126,7 +126,7 @@ fn matrix_cases_enable_and_disable_each_transform() {
 }
 
 #[test]
-fn cli_matrix_snapshots() {
+fn cli_matrix_snapshots() -> anyhow::Result<()> {
     for logical in logical_cases() {
         let stdout_case = PhysicalCase {
             logical: logical.clone(),
@@ -144,7 +144,7 @@ fn cli_matrix_snapshots() {
             stdout_case.snapshot_name(),
             String::from_utf8_lossy(&stdout_result.output.stderr),
         );
-        assert_transform_invariants(&stdout_case.logical, &stdout_result.output.stdout);
+        assert_transform_invariants(&stdout_case.logical, &stdout_result.output.stdout)?;
 
         let in_place_result = run_physical_case(&in_place_case).expect("run physical case");
         assert!(
@@ -153,7 +153,7 @@ fn cli_matrix_snapshots() {
             in_place_case.snapshot_name(),
             String::from_utf8_lossy(&in_place_result.output.stderr),
         );
-        assert_transform_invariants(&in_place_case.logical, &in_place_result.file_content);
+        assert_transform_invariants(&in_place_case.logical, &in_place_result.file_content)?;
 
         assert_eq!(
             stdout_result.output.stdout, in_place_result.file_content,
@@ -170,4 +170,5 @@ fn cli_matrix_snapshots() {
             in_place_result.envelope(&in_place_case),
         );
     }
+    Ok(())
 }
