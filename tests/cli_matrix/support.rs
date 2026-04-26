@@ -331,9 +331,12 @@ pub(crate) fn run_physical_case(case: &PhysicalCase) -> Result<RunResult> {
 
     let mut command = Command::cargo_bin("mdtablefix").context("create mdtablefix test command")?;
     command.args(case.args()).arg(&file_path);
-    let output = command
-        .output()
-        .context("execute mdtablefix for matrix case")?;
+    let output = command.output().with_context(|| {
+        format!(
+            "execute mdtablefix for matrix case '{}'",
+            case.snapshot_name()
+        )
+    })?;
     collect_result(output, &file_path, case.mode)
 }
 
@@ -367,29 +370,28 @@ pub(crate) fn non_wrap_signature(fixture: &str, flags: &[TransformFlag]) -> Stri
 /// Returns whether a base row enables the given transform flag.
 pub(crate) fn has_flag(case: &BaseCase, flag: TransformFlag) -> bool { case.flags.contains(&flag) }
 
-#[cfg(test)] #[rustfmt::skip]
+#[cfg(test)]
+#[rustfmt::skip]
 mod tests { use super::{BaseCase, TransformFlag, has_flag, is_case_id, non_wrap_signature};
-    macro_rules! case_id_test {
-        ($name:ident, $id:expr, $expected:expr) => {
-            #[test] fn $name() { assert_eq!(is_case_id($id), $expected); }
-        };
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("row_001", true)] #[case("row-001", true)] #[case("abc123", true)]
+    #[case("", false)] #[case("Row_001", false)] #[case("row 001", false)]
+    fn is_case_id_returns_expected_value(#[case] id: &str, #[case] expected: bool) {
+        assert_eq!(is_case_id(id), expected);
     }
-    macro_rules! has_flag_test {
-        ($name:ident, $flag:expr, $expected:expr) => {
-            #[test] fn $name() { let case = BaseCase { id: "row_001", fixture: "fixture.dat", flags: &[TransformFlag::Renumber] }; assert_eq!(has_flag(&case, $flag), $expected); }
-        };
-    }
-    case_id_test!(is_case_id_accepts_underscore_id, "row_001", true);
-    case_id_test!(is_case_id_accepts_hyphen_id, "row-001", true);
-    case_id_test!(is_case_id_accepts_lowercase_alphanumeric_id, "abc123", true);
-    case_id_test!(is_case_id_rejects_empty_string, "", false);
-    case_id_test!(is_case_id_rejects_uppercase_letter, "Row_001", false);
-    case_id_test!(is_case_id_rejects_space, "row 001", false);
+
     #[test] fn non_wrap_signature_ignores_wrap_variant() {
         let flags = [TransformFlag::Renumber, TransformFlag::Fences]; let (unwrapped, wrapped) = (false, true);
         assert_ne!(unwrapped, wrapped); assert_eq!(non_wrap_signature("fixture.dat", &flags), non_wrap_signature("fixture.dat", &flags)); }
     #[test] fn non_wrap_signature_distinguishes_flag_lists() {
         assert_ne!(non_wrap_signature("fixture.dat", &[TransformFlag::Renumber]), non_wrap_signature("fixture.dat", &[TransformFlag::Fences])); }
-    has_flag_test!(has_flag_returns_true_for_present_flag, TransformFlag::Renumber, true);
-    has_flag_test!(has_flag_returns_false_for_absent_flag, TransformFlag::Fences, false);
+
+    #[rstest]
+    #[case(TransformFlag::Renumber, true)] #[case(TransformFlag::Fences, false)]
+    fn has_flag_returns_expected_value(#[case] flag: TransformFlag, #[case] expected: bool) {
+        let case = BaseCase { id: "row_001", fixture: "fixture.dat", flags: &[TransformFlag::Renumber] };
+        assert_eq!(has_flag(&case, flag), expected);
+    }
 }
