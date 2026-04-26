@@ -46,9 +46,9 @@ fn carry_previous_inline_code_tail(
         return false;
     }
 
-    let Some(previous_atomic) = previous_line.pop() else {
-        unreachable!("expected previous tail to exist for inline code: previous_line empty");
-    };
+    let previous_atomic = previous_line
+        .pop()
+        .expect("inline code tail must be present after last() check");
     pending_whitespace.push(previous_atomic);
     if previous_line.is_empty() {
         merged.pop();
