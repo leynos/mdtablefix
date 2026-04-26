@@ -89,6 +89,29 @@ fn fence_tracker_handles_tilde_fences() {
 }
 
 #[rstest]
+#[case("````markdown", "```rust", "```", "````", false)]
+#[case("````", "~~~", "~~~", "````", false)]
+#[case("~~~~", "```", "```", "~~~~", false)]
+#[case("~~~~markdown", "~~~rust", "~~~", "~~~~", false)]
+fn fence_tracker_keeps_outer_fence_open_for_nested_markers(
+    #[case] outer_start: &str,
+    #[case] inner_start: &str,
+    #[case] inner_end: &str,
+    #[case] outer_end: &str,
+    #[case] expected_final_in_fence: bool,
+) {
+    let mut tracker = FenceTracker::new();
+    assert!(tracker.observe(outer_start));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe(inner_start));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe(inner_end));
+    assert!(tracker.in_fence());
+    assert!(tracker.observe(outer_end));
+    assert_eq!(tracker.in_fence(), expected_final_in_fence);
+}
+
+#[rstest]
 #[case("`")]
 #[case("``")]
 #[case("`~~`")]

@@ -1,9 +1,8 @@
 # Preserve leading YAML frontmatter while formatting Markdown
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+ `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: DELIVERED
 
@@ -181,8 +180,8 @@ Stage D adds regression coverage. Put detector-specific unit tests in
 `src/frontmatter.rs` and a pipeline regression in `src/process.rs` or a small
 new test module. Add at least one behavioural CLI test in `tests/cli.rs`
 covering a document with leading frontmatter plus a paragraph or table body.
-The CLI test should enable `--breaks` and one ordinary formatting option such
-as `--wrap` so it proves both preservation and continued formatting.
+The CLI test should enable `--breaks` and one ordinary formatting option such as
+ `--wrap` so it proves both preservation and continued formatting.
 
 Stage E updates the docs. Add a short YAML frontmatter note and example to
 `README.md` so users know the block is preserved. Update `docs/architecture.md`

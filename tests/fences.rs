@@ -26,6 +26,39 @@ fn compresses_tilde_fences() {
     assert_eq!(out, lines_vec!["```rust", "code", "```"]);
 }
 
+#[rstest]
+#[case(
+    lines_vec!["````markdown", "```rust", "fn main() {}", "```", "````"],
+    lines_vec!["````markdown", "```rust", "fn main() {}", "```", "````"]
+)]
+#[case(
+    lines_vec!["~~~~markdown", "~~~rust", "fn main() {}", "~~~", "~~~~"],
+    lines_vec!["~~~~markdown", "~~~rust", "fn main() {}", "~~~", "~~~~"]
+)]
+#[case(
+    lines_vec!["~~~markdown", "```rust", "fn main() {}", "```", "~~~"],
+    lines_vec!["~~~markdown", "```rust", "fn main() {}", "```", "~~~"]
+)]
+#[case(
+    lines_vec!["````markdown", "~~~rust", "fn main() {}", "~~~", "````"],
+    lines_vec!["```markdown", "~~~rust", "fn main() {}", "~~~", "```"]
+)]
+#[case(
+    lines_vec!["``` rust", "~~~example", "code", "~~~", "```"],
+    lines_vec!["``` rust", "~~~example", "code", "~~~", "```"]
+)]
+#[case(
+    lines_vec!["```` rust", "code", "````"],
+    lines_vec!["```` rust", "code", "````"]
+)]
+fn preserves_nested_or_spaced_fence_blocks(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+) {
+    let out = compress_fences(&input);
+    assert_eq!(out, expected);
+}
+
 #[test]
 fn does_not_compress_mixed_fences() {
     let input = lines_vec!["~~~rust", "code", "```"];
@@ -49,6 +82,27 @@ fn fixes_orphaned_specifier() {
     let input = lines_vec!["Rust", "```", "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
+}
+
+#[rstest]
+#[case(
+    lines_vec!["````markdown", "Rust", "```", "fn main() {}", "```", "````"],
+    lines_vec!["````markdown", "Rust", "```", "fn main() {}", "```", "````"]
+)]
+#[case(
+    lines_vec!["````markdown", "```", "Rust", "fn main() {}", "```", "````"],
+    lines_vec!["````markdown", "```", "Rust", "fn main() {}", "```", "````"]
+)]
+#[case(
+    lines_vec!["Rust", "````", "```", "fn main() {}", "```", "````"],
+    lines_vec!["````rust", "```", "fn main() {}", "```", "````"]
+)]
+fn handles_orphan_specifiers_around_outer_fences(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+) {
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+    assert_eq!(out, expected);
 }
 
 #[test]

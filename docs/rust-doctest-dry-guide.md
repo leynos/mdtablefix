@@ -41,7 +41,7 @@ block found in the documentation comments[^3]:
 4. **Execution and Verification**: Finally, if compilation succeeds, the
    resulting executable is run. The test is considered to have passed if the
    program runs to completion without panicking. The executable is then
-   deleted.[^2]
+   deleted. [^2]
 
 The significance of this model cannot be overstated. It effectively transforms
 every doctest into a true integration test.[^6] The test code does not have
@@ -104,8 +104,8 @@ Doctests reside within documentation comments. Rust recognizes two types:
   (e.g., a module or the crate itself). They are typically used at the top of
   `lib.rs` or `mod.rs` to provide crate- or module-level documentation.[^8]
 
-Within these comments, a code block is denoted by triple back-ticks (```).
-While `rustdoc` defaults to Rust syntax, explicitly add the `rust` language
+Within these comments, a code block is denoted by triple back-ticks (```). While
+ `rustdoc` defaults to Rust syntax, explicitly add the `rust` language
 specifier for clarity.[^3] A doctest "passes" when it compiles and runs without
 panicking. To assert specific outcomes, use the standard macros `assert!`,
 `assert_eq!`, and `assert_ne!`.[^3]
@@ -147,10 +147,10 @@ function within the doctest that returns a Result. This leverages the
 Termination trait, which is implemented for Result. The surrounding boilerplate
 can then be hidden from the rendered documentation.
 
-```Rust
+```rust
 /// # Examples
 ///
-/// ```
+/// ```rust
 /// # use std::error::Error;
 /// #
 /// # fn main() -> Result<(), Box<dyn Error>> {
@@ -171,10 +171,10 @@ rustdoc provides a lesser-known but more concise shorthand for this exact
 scenario. If a code block ends with the literal token (()), rustdoc will
 automatically wrap the code in a main function that returns a Result.
 
-```Rust
+```rust
 /// # Examples
 ///
-/// ```
+/// ```rust
 /// let config = "key=value".parse::<MyConfig>()?;
 /// assert_eq!(config.get("key"), Some("value"));
 /// (()) // Note: No whitespace between parentheses
@@ -200,8 +200,7 @@ primary use cases include:
 
 1. **Hiding** `main` **Wrappers**: As demonstrated in the error-handling
    examples, the entire `fn main() -> Result<...> {... }` and `Ok(())`
-   scaffolding can be hidden, presenting the user with only the relevant
-   code.[^9]
+   scaffolding can be hidden, showing only the relevant code.[^9]
 
 2. **Hiding Setup Code**: If an example requires some preliminary setup—like
    creating a temporary file, defining a helper struct for the test, or
@@ -274,7 +273,7 @@ table provides a comparative reference for the most common doctest attributes.
 - `edition20xx`: This attribute allows an example to be tested against a
   specific Rust edition. This is important for crates that support multiple
   editions and need to demonstrate edition-specific features or migration
-  paths.[^4]
+  paths. [^4]
 
 ## The DRY Principle in Doctests: Managing Shared and Complex Logic
 
@@ -311,14 +310,14 @@ any pollution of the final binary or the public API.
 The typical implementation pattern is to create a private helper module within
 the library:
 
-```Rust
+```rust
 // In lib.rs or a submodule
 
 /// A function that requires a complex environment to test.
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
 /// # use crate::doctest_helpers::setup_test_environment;
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let mut ctx = setup_test_environment()?;
@@ -397,16 +396,16 @@ builds.[^13]
 
 **The Pattern**:
 
-```Rust
+```rust
 /// A socket that is only available on Unix platforms.
 #[cfg(any(target_os = "unix", doc))]
 pub struct UnixSocket;
 ```
 
-This `any` directive ensures the struct is compiled either when the target OS
-is `unix` OR when `rustdoc` is running. This correctly makes the item visible
-in the generated HTML. However, it is crucial to understand that this **does
-not** make the doctest for `UnixSocket` pass on non-Unix platforms.
+This `any` directive ensures the struct is compiled either when the target OS is
+ `unix` OR when `rustdoc` is running. This correctly makes the item visible in
+the generated HTML. However, it is crucial to understand that this **does not**
+make the doctest for `UnixSocket` pass on non-Unix platforms.
 
 This distinction highlights the "cfg duality." The `#[cfg(doc)]` attribute
 controls the *table of contents* of the documentation; it determines which
@@ -431,10 +430,10 @@ Pattern 1: #\[cfg\] Inside the Code Block
 This pattern involves placing a #\[cfg\] attribute directly on the code within
 the doctest itself.
 
-```Rust
+```rust
 /// This example only runs if the "serde" feature is enabled.
 ///
-/// ```
+/// ```rust
 /// # #[cfg(feature = "serde")]
 /// # {
 /// #   let my_struct = MyStruct::new();
@@ -455,7 +454,7 @@ A more explicit and accurate pattern uses the cfg_attr attribute to
 conditionally add the ignore flag to the doctest's header. This is typically
 done with inner doc comments (//!).
 
-```Rust
+```rust
 //! #![cfg_attr(not(feature = "serde"), doc = "```ignore")]
 //! #![cfg_attr(feature = "serde", doc = "```")]
 //! // Example code that requires the "serde" feature.
@@ -479,7 +478,7 @@ feature-gated items in the generated documentation. This is achieved with the
 `#[doc(cfg(...))]` attribute, which requires enabling the
 `#![feature(doc_cfg)]` feature gate at the crate root.
 
-```Rust
+```rust
 // At the crate root (lib.rs)
 #![feature(doc_cfg)]
 

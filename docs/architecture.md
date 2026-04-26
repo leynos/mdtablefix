@@ -28,8 +28,12 @@ The function combines several helpers documented in `docs/`:
   processed. This shielding also applies to CLI-only transforms such as
   `renumber_lists` and `format_breaks`.
 - `fences::compress_fences` and `attach_orphan_specifiers` normalize code block
-  delimiters. The latter keeps indentation from the language line when the
-  fence lacks it. Language specifiers explicitly set to `null`
+  delimiters. Fence normalization uses the same `FenceTracker` semantics as
+  wrapping, so fence-like lines inside an already open fenced block remain
+  literal content. Outer delimiters are only compressed when doing so cannot
+  make a nested literal fence look structural. `attach_orphan_specifiers`
+  preserves and propagates indentation from the language line when the target
+  fence lacks indentation. Language specifiers explicitly set to `null`
   (case-insensitive) or consisting solely of whitespace are treated as absent.
   `compress_fences` also tolerates spaces within comma-separated specifiers,
   e.g. `TOML, Ini` becomes `toml,ini`.
@@ -435,10 +439,10 @@ flowchart TD
 
 Figure: `wrap_text` control flow. The wrapper classifies each incoming line,
 passes fenced blocks, tables, headings, directives, and indented code through
-unchanged, flushes paragraphs on blanks, routes prose and prefixed lines
-through `ParagraphWriter`, computes visible widths with `unicode-width`, and
-delegates inline line fitting to `textwrap` before reconstructing the emitted
-Markdown lines.
+unchanged, flushes paragraphs on blanks, routes prose and prefixed lines through
+ `ParagraphWriter`, computes visible widths with `unicode-width`, and delegates
+inline line fitting to `textwrap` before reconstructing the emitted Markdown
+lines.
 
 ### Wrap sequence
 

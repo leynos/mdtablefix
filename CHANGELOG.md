@@ -13,12 +13,12 @@
   hard break semantics. See [trailing spaces](docs/trailing-spaces.md) for
   details. ([#65](https://github.com/leynos/mdtablefix/issues/65))
 - Preserve fenced and indented code blocks verbatim when `--wrap` is used, so
-  commands inside code examples are not joined or re-wrapped.
-  ([#261](https://github.com/leynos/mdtablefix/issues/261))
+  commands inside code examples are not joined or re-wrapped. (
+  [#261](https://github.com/leynos/mdtablefix/issues/261))
 - Keep trailing punctuation attached to inline code spans during wrapping to
   maintain readability.
 - Allow wrapping between space-separated inline code spans instead of treating
-  the full sequence as a single unbreakable unit.
-  ([#252](https://github.com/leynos/mdtablefix/issues/252))
+  the full sequence as a single unbreakable unit. (
+  [#252](https://github.com/leynos/mdtablefix/issues/252))
 - Avoid converting numeric references in ATX heading text (including headings in
   blockquotes and list items) when the `--footnotes` option is enabled.
