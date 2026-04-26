@@ -1,6 +1,6 @@
 //! Independent output invariants for CLI matrix snapshots.
 
-use std::{collections::HashMap, fs};
+use std::fs;
 
 use anyhow::{Context as _, Result};
 
@@ -61,14 +61,25 @@ fn fixture_has_fence_candidate(fixture: &str) -> bool {
 
 fn unordered_fixture_markers(fixture: &str) -> Vec<String> {
     let mut markers = Vec::new();
-    let mut expected_by_indent = HashMap::new();
+    let mut expected_by_indent: std::collections::BTreeMap<usize, usize> =
+        std::collections::BTreeMap::new();
 
-    for marker in fixture.lines().filter_map(ordered_marker) {
-        let expected = expected_by_indent.entry(marker.indent.clone()).or_insert(1);
-        if marker.number != *expected {
+    for line in fixture.lines() {
+        if line.trim().is_empty() {
+            expected_by_indent.clear();
+            continue;
+        }
+        let Some(marker) = ordered_marker(line) else {
+            continue;
+        };
+        let indent_len = marker.indent.len();
+        // Remove deeper-nested counters when we return to a shallower level.
+        expected_by_indent.retain(|&k, _| k <= indent_len);
+        let expected = *expected_by_indent.get(&indent_len).unwrap_or(&1);
+        if marker.number != expected {
             markers.push(format!("{}{}. ", marker.indent, marker.number));
         }
-        *expected += 1;
+        expected_by_indent.insert(indent_len, expected + 1);
     }
     markers
 }
