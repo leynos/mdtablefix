@@ -1,6 +1,7 @@
 //! Support types and runners for the CLI matrix integration test.
 
 use std::{
+    error::Error,
     fs,
     path::{Path, PathBuf},
     process::Output,
@@ -281,27 +282,37 @@ pub(crate) fn physical_cases() -> Vec<PhysicalCase> {
         .collect()
 }
 
-/// Runs a physical matrix case through the real `mdtablefix` binary.
-pub(crate) fn run_physical_case(case: &PhysicalCase) -> RunResult {
-    let dir = tempdir().expect("create temporary directory");
-    let file_path = dir.path().join(case.logical.fixture);
-    fs::copy(fixture_path(case.logical.fixture), &file_path).expect("copy matrix fixture");
+/// Copies a matrix fixture into the temporary command directory.
+pub(crate) fn stage_fixture(case: &PhysicalCase, dir: &Path) -> Result<PathBuf, Box<dyn Error>> {
+    let file_path = dir.join("input.md");
+    fs::copy(fixture_path(case.logical.fixture), &file_path)?;
+    Ok(file_path)
+}
 
-    let mut command = Command::cargo_bin("mdtablefix").expect("create mdtablefix command");
-    command.args(case.args()).arg(&file_path);
-    let output = command.output().expect("run mdtablefix");
-    assert!(
-        output.status.success(),
-        "{} failed with stderr:\n{}",
-        case.snapshot_name(),
-        String::from_utf8_lossy(&output.stderr),
-    );
-
-    let file_content = fs::read(&file_path).expect("read matrix output file");
-    RunResult {
+/// Builds a run result from process output and the temporary input file.
+pub(crate) fn collect_result(
+    output: Output,
+    file_path: &Path,
+    mode: ExecutionMode,
+) -> Result<RunResult, Box<dyn Error>> {
+    let file_content = match mode {
+        ExecutionMode::Stdout | ExecutionMode::InPlace => fs::read(file_path)?,
+    };
+    Ok(RunResult {
         output,
         file_content,
-    }
+    })
+}
+
+/// Runs a physical matrix case through the real `mdtablefix` binary.
+pub(crate) fn run_physical_case(case: &PhysicalCase) -> Result<RunResult, Box<dyn Error>> {
+    let dir = tempdir()?;
+    let file_path = stage_fixture(case, dir.path())?;
+
+    let mut command = Command::cargo_bin("mdtablefix")?;
+    command.args(case.args()).arg(&file_path);
+    let output = command.output()?;
+    collect_result(output, &file_path, case.mode)
 }
 
 /// Returns the repository-relative path to a matrix fixture.

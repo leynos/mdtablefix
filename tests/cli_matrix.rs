@@ -136,8 +136,22 @@ fn cli_matrix_snapshots() {
             mode: ExecutionMode::InPlace,
         };
 
-        let stdout_result = run_physical_case(&stdout_case);
-        let in_place_result = run_physical_case(&in_place_case);
+        let stdout_result = run_physical_case(&stdout_case).expect("run physical case");
+        assert!(
+            stdout_result.output.status.success(),
+            "{} failed with stderr:\n{}",
+            stdout_case.snapshot_name(),
+            String::from_utf8_lossy(&stdout_result.output.stderr),
+        );
+
+        let in_place_result = run_physical_case(&in_place_case).expect("run physical case");
+        assert!(
+            in_place_result.output.status.success(),
+            "{} failed with stderr:\n{}",
+            in_place_case.snapshot_name(),
+            String::from_utf8_lossy(&in_place_result.output.stderr),
+        );
+
         assert_eq!(
             stdout_result.output.stdout, in_place_result.file_content,
             "{} stdout must match in-place file output",
