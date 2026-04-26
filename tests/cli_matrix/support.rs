@@ -276,9 +276,9 @@ pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
 
 pub(crate) fn is_case_id(id: &str) -> bool {
     !id.is_empty()
-        && id
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        && id.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' || byte == b'-'
+        })
 }
 
 pub(crate) fn non_wrap_signature(fixture: &str, flags: &[TransformFlag]) -> String {
