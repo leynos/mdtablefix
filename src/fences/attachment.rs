@@ -3,9 +3,15 @@
 use super::{FENCE_RE, is_null_lang};
 use crate::wrap::FenceTracker;
 
+/// Result of an orphan fence specifier attachment operation.
+///
+/// This outcome is visible across fence modules so callers can distinguish
+/// successful attachment from preserving the original input.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum AttachmentOutcome {
+    /// An item was attached to the following fence.
     Attached,
+    /// Existing input was preserved instead of attaching it.
     Preserved,
 }
 
