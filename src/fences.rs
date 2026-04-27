@@ -14,6 +14,10 @@ use regex::Regex;
 
 use crate::wrap::{FenceTracker, is_fence};
 
+mod attachment;
+
+use attachment::attach_to_next_fence;
+
 static FENCE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$").unwrap());
 
@@ -249,92 +253,6 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
     out
 }
 
-/// Combine an opening fence with a language specifier.
-///
-/// The fence's indentation is retained whenever present. If the specifier's
-/// indentation extends the fence's, the deeper specifier indentation is used.
-/// When the fence lacks indentation, the specifier's indentation becomes the fence's.
-/// If the indentations differ without one extending the other (e.g., tabs vs spaces),
-/// the fence's indentation wins.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use mdtablefix::fences::attach_specifier_to_fence;
-/// assert_eq!(attach_specifier_to_fence("```", "rust", "  "), "  ```rust");
-/// assert_eq!(attach_specifier_to_fence("  ```", "rust", "    "), "    ```rust");
-/// ```
-fn attach_specifier_to_fence(fence_line: &str, specifier: &str, spec_indent: &str) -> String {
-    let Some(cap) = FENCE_RE.captures(fence_line) else {
-        return fence_line.to_owned();
-    };
-    let fence_indent = cap.get(1).map_or("", |m| m.as_str());
-    let fence_marker = cap.get(2).map_or("```", |m| m.as_str());
-    let final_indent = if fence_indent.is_empty() || spec_indent.starts_with(fence_indent) {
-        spec_indent
-    } else {
-        fence_indent
-    };
-    format!("{final_indent}{fence_marker}{specifier}")
-}
-
-/// Look ahead for the next attachable fence after an orphan specifier line.
-///
-/// This helper scans a `Peekable` iterator of input `lines` after the current
-/// orphan specifier, buffering intervening blank lines until it either finds a
-/// fence that can accept the provided `specifier` or determines attachment is
-/// not possible. The `indent` is retained when building the rewritten fence.
-/// On a successful attachment the buffered blank lines are dropped so the
-/// specifier stays directly attached to the rewritten fence. Fallback output is
-/// written into `out`, and `specifier_line` preserves the original orphan line
-/// when no matching fence is found.
-///
-/// # Parameters
-///
-/// - `lines`: peekable iterator over the remaining input lines.
-/// - `specifier`: normalized fence language or specifier to attach.
-/// - `indent`: leading indentation to retain on the rewritten fence.
-/// - `out`: output buffer that receives either the rewritten fence or the original lines.
-/// - `specifier_line`: original line containing the fence specifier.
-/// - `tracker`: structural fence tracker advanced when a fence is consumed.
-fn attach_to_next_fence<'a, I>(
-    lines: &mut std::iter::Peekable<I>,
-    specifier: &str,
-    indent: &str,
-    out: &mut Vec<String>,
-    specifier_line: &str,
-    tracker: &mut FenceTracker,
-) where
-    I: Iterator<Item = &'a String>,
-{
-    let mut blank_lines = Vec::new();
-
-    while let Some(next_line) = lines.peek() {
-        if next_line.trim().is_empty() {
-            if let Some(blank_line) = lines.next() {
-                blank_lines.push(blank_line.clone());
-            }
-            continue;
-        }
-
-        if let Some(captures) = FENCE_RE.captures(next_line) {
-            let lang = captures.get(3).map_or("", |m| m.as_str());
-            if is_null_lang(lang)
-                && let Some(fence_line) = lines.next()
-            {
-                out.push(attach_specifier_to_fence(fence_line, specifier, indent));
-                let _ = tracker.observe(fence_line);
-                return;
-            }
-        }
-
-        break;
-    }
-
-    out.push(specifier_line.to_string());
-    out.extend(blank_lines);
-}
-
 /// Attach orphaned language specifiers to opening fences.
 ///
 /// After compressing fences, a language may appear on its own line directly
@@ -389,45 +307,4 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use rstest::rstest;
-
-    use super::*;
-
-    #[rstest]
-    #[case(vec!["```"])]
-    #[case(vec!["", "```"])]
-    #[case(vec!["", "", "```"])]
-    fn attach_to_next_fence_attaches_to_unlabelled_fence(#[case] raw_lines: Vec<&str>) {
-        let lines: Vec<String> = raw_lines.into_iter().map(str::to_string).collect();
-        let mut lines = lines.iter().peekable();
-        let mut out = Vec::new();
-        let mut tracker = FenceTracker::new();
-
-        attach_to_next_fence(&mut lines, "rust", "", &mut out, "Rust", &mut tracker);
-
-        assert_eq!(out, vec!["```rust".to_string()]);
-        assert!(lines.next().is_none());
-    }
-
-    #[rstest]
-    #[case(vec!["", "plain text"], vec!["Rust", ""], Some("plain text"))]
-    #[case(vec!["", "```python"], vec!["Rust", ""], Some("```python"))]
-    #[case(vec![], vec!["Rust"], None)]
-    fn attach_to_next_fence_preserves_specifier_when_no_attachment_occurs(
-        #[case] raw_lines: Vec<&str>,
-        #[case] expected_out: Vec<&str>,
-        #[case] expected_next: Option<&str>,
-    ) {
-        let lines: Vec<String> = raw_lines.into_iter().map(str::to_string).collect();
-        let mut lines = lines.iter().peekable();
-        let mut out = Vec::new();
-        let mut tracker = FenceTracker::new();
-
-        attach_to_next_fence(&mut lines, "rust", "", &mut out, "Rust", &mut tracker);
-
-        let expected_out: Vec<String> = expected_out.into_iter().map(str::to_string).collect();
-        assert_eq!(out, expected_out);
-        assert_eq!(lines.next().map(String::as_str), expected_next);
-    }
-}
+mod tests;
