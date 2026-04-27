@@ -180,6 +180,78 @@ Table: Key types and functions.
 Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
 replacing `LineBuffer` with `textwrap`.
 
+## Fences module
+
+The `fences` module in [src/fences.rs](../src/fences.rs) is responsible for
+normalizing fenced code blocks before later Markdown transforms run. It exposes
+two public functions that are called in sequence:
+
+- `compress_fences(&[String]) -> Vec<String>` conditionally compresses fence
+  delimiters of three or more backticks or tildes to exactly three backticks
+  when doing so preserves the structural interpretation of the inner content. If
+  compression would make inner fence-like content become structural, the
+  original outer delimiters are preserved.
+- `attach_orphan_specifiers(&[String]) -> Vec<String>` reattaches language
+  specifier lines that appear on a separate line before an unlabelled opening
+  fence.
+
+Together, these helpers make the rest of the processing pipeline deal with a
+single normalized fence, and avoid carrying separate logic for detached
+specifier lines.
+
+### Architecture
+
+The earlier implementation used two slice-and-index helpers,
+`orphan_specifier_target` and `orphan_specifier_target_without_language`, to
+search forward from the current position. That approach worked, but it split
+the lookahead rules across multiple helpers and kept the main loop tied to
+manual index management.
+
+The current implementation converts slice traversal into a `Peekable` iterator
+and centralizes the forward scan in one private helper, `attach_to_next_fence`.
+`attach_orphan_specifiers` now acts as the coordinator: it identifies a
+candidate orphan specifier, delegates lookahead to the helper, and otherwise
+just pushes unchanged lines into the output.
+
+### `attach_to_next_fence` semantics
+
+`attach_to_next_fence` receives a `Peekable` iterator positioned immediately
+after the current orphan specifier line.
+
+It follows these rules:
+
+1. Peek at the next line. If it is blank, consume it, buffer it, and continue
+   scanning.
+2. If the next non-blank line is a fence whose language is absent, meaning the
+   language is empty or the case-insensitive string `null`, consume that fence,
+   rewrite it with the normalized specifier and selected indentation, push the
+   rewritten fence into the output buffer, and drop the buffered blank lines.
+   This preserves the historical skip-blank-lines semantics, so no intervening
+   blank lines appear in the output when attachment succeeds.
+3. If the next non-blank line is not an attachable fence, stop scanning, push
+   the original specifier line to the output, then extend the output with the
+   buffered blank lines verbatim.
+
+This structure keeps the one non-trivial lookahead path local to the helper
+instead of spreading it between the main loop and several index-based search
+utilities.
+
+### Indentation selection
+
+`attach_specifier_to_fence` controls which indentation is retained on the
+rewritten opening fence.
+
+- The fence's own indentation is preferred by default.
+- If the fence has no indentation, the specifier's indentation is used.
+- If `spec_indent.starts_with(fence_indent)`, the implementation treats the
+  specifier's indentation as extending, or matching, the fence's indentation
+  and uses it. Equality is allowed, so `starts_with` covers both exact matches
+  and deeper indentations.
+
+This rule keeps existing fenced block indentation stable while still handling
+the common case where the detached specifier line carried the indentation that
+should apply to the fence.
+
 ## CLI matrix harness
 
 The CLI matrix harness in [tests/cli_matrix.rs](../tests/cli_matrix.rs) checks

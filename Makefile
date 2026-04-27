@@ -1,10 +1,10 @@
 .PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie
 
 APP ?= mdtablefix
-CARGO ?= cargo
+CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
-MDLINT ?= markdownlint-cli2
+MDLINT ?= $(or $(shell command -v markdownlint-cli2 2>/dev/null),$(HOME)/.bun/bin/markdownlint-cli2)
 NIXIE ?= nixie
 
 build: target/debug/$(APP) ## Build debug binary

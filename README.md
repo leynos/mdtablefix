@@ -61,9 +61,12 @@ mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
   character (`…`). Longer runs are processed left-to-right, so any leftover
   dots are preserved.
 
-- Use `--fences` to normalize code block delimiters. Outer fences are
-  compressed to three backticks where safe; when same-marker nested fence
-  content would become structural, the outer delimiter width is preserved.
+- Use `--fences` to normalize fenced code blocks by reducing delimiter runs to
+  three backticks where safe. Same-marker nested fence content keeps the outer
+  delimiter width when compression would make the nested content structural.
+  Indentation and language identifiers are preserved, and orphan language
+  specifiers attach to the following unlabelled opening fence while dropping
+  any intervening blank lines on successful attachment.
 
 - Use `--footnotes` to convert bare numeric references and the final numbered
   list into GitHub-flavoured footnote links.

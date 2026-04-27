@@ -5,11 +5,18 @@
 //! The local `FENCE_RE` defines which delimiter lines this module can
 //! normalize, while `wrap::is_fence` and `FenceTracker` provide the structural
 //! Markdown fence semantics shared with wrapping.
+//! `attach_orphan_specifiers` then finds orphaned fence specifier lines and
+//! attaches them to the following fence, preserving the retained indentation
+//! and normalized language specifier.
 use std::sync::LazyLock;
 
 use regex::Regex;
 
 use crate::wrap::{FenceTracker, is_fence};
+
+mod attachment;
+
+use attachment::attach_to_next_fence;
 
 static FENCE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$").unwrap());
@@ -246,61 +253,14 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
     out
 }
 
-/// Combine an opening fence with a language specifier.
-///
-/// The fence's indentation is retained whenever present. If the specifier's
-/// indentation extends the fence's, the deeper specifier indentation is used.
-/// When the fence lacks indentation, the specifier's indentation becomes the fence's.
-/// If the indentations differ without one extending the other (e.g., tabs vs spaces),
-/// the fence's indentation wins.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use mdtablefix::fences::attach_specifier_to_fence;
-/// assert_eq!(attach_specifier_to_fence("```", "rust", "  "), "  ```rust");
-/// assert_eq!(attach_specifier_to_fence("  ```", "rust", "    "), "    ```rust");
-/// ```
-fn attach_specifier_to_fence(fence_line: &str, specifier: &str, spec_indent: &str) -> String {
-    let Some(cap) = FENCE_RE.captures(fence_line) else {
-        return fence_line.to_owned();
-    };
-    let fence_indent = cap.get(1).map_or("", |m| m.as_str());
-    let fence_marker = cap.get(2).map_or("```", |m| m.as_str());
-    let final_indent = if fence_indent.is_empty() || spec_indent.starts_with(fence_indent) {
-        spec_indent
-    } else {
-        fence_indent
-    };
-    format!("{final_indent}{fence_marker}{specifier}")
-}
-
-fn orphan_specifier_target(lines: &[String], start: usize) -> Option<usize> {
-    let mut index = start;
-    while index < lines.len() && lines[index].trim().is_empty() {
-        index += 1;
-    }
-    if index >= lines.len() || FENCE_RE.captures(&lines[index]).is_none() {
-        return None;
-    }
-    Some(index)
-}
-
-fn orphan_specifier_target_without_language(lines: &[String], start: usize) -> Option<usize> {
-    let target = orphan_specifier_target(lines, start)?;
-    let cap = FENCE_RE.captures(&lines[target])?;
-    let lang = cap.get(3).map_or("", |m| m.as_str());
-    is_null_lang(lang).then_some(target)
-}
-
 /// Attach orphaned language specifiers to opening fences.
 ///
 /// After compressing fences, a language may appear on its own line directly
 /// before a fence. This function removes that line and applies the specifier
-/// to the following opening fence. Blank lines between the specifier and the
-/// fence are skipped. When the fence is unindented, the specifier's indentation
-/// is used. If the specifier's indentation extends the fence's, the deeper
-/// indentation is retained.
+/// to the following opening fence, dropping any intervening blank lines when
+/// attachment succeeds. When the fence is unindented, the specifier's
+/// indentation is used. If the specifier's indentation extends the fence's, the
+/// deeper indentation is retained.
 ///
 /// Specifiers containing spaces are accepted and normalised. Fences labelled
 /// `null` are normalised to empty by `compress_fences`, so only empty languages
@@ -323,35 +283,24 @@ fn orphan_specifier_target_without_language(lines: &[String], start: usize) -> O
 pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
     let mut tracker = FenceTracker::new();
-    let mut i = 0;
+    let mut lines = lines.iter().peekable();
 
-    while i < lines.len() {
-        let line = &lines[i];
+    while let Some(line) = lines.next() {
         if tracker.in_fence() {
             let _ = tracker.observe(line);
             out.push(line.clone());
-            i += 1;
             continue;
         }
 
         let (spec, indent) = normalize_specifier(line);
         if ORPHAN_LANG_RE.is_match(&spec) && out.last().is_none_or(|l: &String| l.trim().is_empty())
         {
-            if let Some(target) = orphan_specifier_target_without_language(lines, i + 1) {
-                out.push(attach_specifier_to_fence(&lines[target], &spec, &indent));
-                let _ = tracker.observe(&lines[target]);
-                i = target + 1;
-                continue;
-            }
-            out.push(line.clone());
-            let _ = tracker.observe(line);
-            i += 1;
+            attach_to_next_fence(&mut lines, &spec, &indent, &mut out, line, &mut tracker);
             continue;
         }
 
         out.push(line.clone());
         let _ = tracker.observe(line);
-        i += 1;
     }
 
     out
