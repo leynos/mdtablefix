@@ -31,6 +31,35 @@ fn line_has_rebalanceable_tail(line: &[InlineFragment]) -> bool {
         || (line.len() > 1 && line.last().is_some_and(InlineFragment::is_plain))
 }
 
+/// Moves a previous inline-code tail into pending whitespace handling.
+fn carry_previous_inline_code_tail(
+    merged: &mut Vec<Vec<InlineFragment>>,
+    pending_whitespace: &mut Vec<InlineFragment>,
+) -> bool {
+    let Some(previous_line) = merged.last_mut() else {
+        return false;
+    };
+    if !previous_line
+        .last()
+        .is_some_and(|fragment| fragment.kind == FragmentKind::InlineCode)
+    {
+        return false;
+    }
+
+    let Some(previous_atomic) = previous_line.pop() else {
+        debug_assert!(
+            false,
+            "inline code tail vanished after successful tail-kind check"
+        );
+        return false;
+    };
+    pending_whitespace.push(previous_atomic);
+    if previous_line.is_empty() {
+        merged.pop();
+    }
+    true
+}
+
 /// Merges whitespace-only wrap artefacts into neighbouring content lines.
 ///
 /// `lines` is the provisional fragment layout from `wrap_first_fit`, and the
@@ -56,18 +85,8 @@ pub(super) fn merge_whitespace_only_lines(
 
             if line_is_single_space
                 && !next_starts_atomic
-                && let Some(previous_line) = merged.last_mut()
-                && previous_line
-                    .last()
-                    .is_some_and(|fragment| fragment.kind == FragmentKind::InlineCode)
+                && carry_previous_inline_code_tail(&mut merged, &mut pending_whitespace)
             {
-                let Some(previous_atomic) = previous_line.pop() else {
-                    continue;
-                };
-                pending_whitespace.push(previous_atomic);
-                if previous_line.is_empty() {
-                    merged.pop();
-                }
                 should_carry_whitespace = true;
             }
 

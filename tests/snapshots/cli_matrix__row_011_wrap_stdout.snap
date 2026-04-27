@@ -1,0 +1,25 @@
+---
+source: tests/cli_matrix.rs
+expression: stdout_result.envelope(&stdout_case)
+---
+case: row_011_wrap
+mode: stdout
+args: --wrap --breaks --ellipsis --fences --footnotes
+status: exit status: 0
+
+[stdout]
+---
+title: Matrix
+---
+
+Heading
+______________________________________________________________________
+
+______________________________________________________________________
+
+Text… after break.
+
+[stderr]
+
+[file]
+<not applicable>

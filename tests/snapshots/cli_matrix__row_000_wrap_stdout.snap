@@ -1,0 +1,24 @@
+---
+source: tests/cli_matrix.rs
+expression: stdout_result.envelope(&stdout_case)
+---
+case: row_000_wrap
+mode: stdout
+args: --wrap
+status: exit status: 0
+
+[stdout]
+| Name  | Notes                                |
+| ----- | ------------------------------------ |
+| alpha | Use *`cargo test`* before merging... |
+
+1. first item
+3. second item with enough text to wrap around the configured column width when
+   wrapping is enabled for the matrix harness.
+
+Title =====
+
+[stderr]
+
+[file]
+<not applicable>

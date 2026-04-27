@@ -1,0 +1,19 @@
+---
+source: tests/cli_matrix.rs
+expression: stdout_result.envelope(&stdout_case)
+---
+case: row_110_nowrap
+mode: stdout
+args: --renumber --breaks --footnotes --code-emphasis
+status: exit status: 0
+
+[stdout]
+This paragraph references item 1 and uses enough words to demonstrate wrapping behaviour when the wrap variant is enabled.
+
+1. https://example.com/alpha
+2. https://example.com/beta
+
+[stderr]
+
+[file]
+<not applicable>
