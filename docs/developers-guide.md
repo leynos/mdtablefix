@@ -186,9 +186,11 @@ The `fences` module in [src/fences.rs](../src/fences.rs) is responsible for
 normalizing fenced code blocks before later Markdown transforms run. It exposes
 two public functions that are called in sequence:
 
-- `compress_fences(&[String]) -> Vec<String>` maps every fence delimiter of
-  three or more backticks or tildes to exactly three backticks while preserving
-  indentation and any language identifiers.
+- `compress_fences(&[String]) -> Vec<String>` conditionally compresses fence
+  delimiters of three or more backticks or tildes to exactly three backticks
+  when doing so preserves the structural interpretation of the inner content. If
+  compression would make inner fence-like content become structural, the
+  original outer delimiters are preserved.
 - `attach_orphan_specifiers(&[String]) -> Vec<String>` reattaches language
   specifier lines that appear on a separate line before an unlabelled opening
   fence.
