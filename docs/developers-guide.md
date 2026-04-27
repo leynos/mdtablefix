@@ -249,6 +249,7 @@ rewritten opening fence.
 This rule keeps existing fenced block indentation stable while still handling
 the common case where the detached specifier line carried the indentation that
 should apply to the fence.
+
 ## CLI matrix harness
 
 The CLI matrix harness in [tests/cli_matrix.rs](../tests/cli_matrix.rs) checks
