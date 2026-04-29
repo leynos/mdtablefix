@@ -126,7 +126,7 @@ jobs:
               "${artifact_dir}/${archive_name}.sha256"
           fi
       - name: Upload release artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}
           path: artifacts/${{ matrix.os }}-${{ matrix.arch }}
