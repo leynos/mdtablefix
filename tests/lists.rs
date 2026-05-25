@@ -1,11 +1,12 @@
 //! Integration tests for list renumbering.
 
+use assert_cmd::Command;
 use mdtablefix::renumber_lists;
 use rstest::rstest;
 
 #[macro_use]
-mod prelude;
-use prelude::*;
+#[path = "common/mod.rs"]
+mod common;
 
 #[test]
 fn restart_after_equal_indent_paragraph() {

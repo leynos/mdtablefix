@@ -2,12 +2,14 @@
 
 use std::{fs::File, io::Write};
 
+use assert_cmd::Command;
 use rstest::rstest;
 use tempfile::tempdir;
 
 #[macro_use]
-mod prelude;
-use prelude::*;
+#[path = "common/mod.rs"]
+mod common;
+use common::{broken_table, run_cli_with_args};
 
 #[rstest]
 fn test_cli_parallel_empty_file_list() { run_cli_with_args(&[]).success().stdout("\n"); }

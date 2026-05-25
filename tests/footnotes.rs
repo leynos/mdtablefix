@@ -2,20 +2,20 @@
 //!
 //! Each test processes a complete Markdown document using
 //! `convert_footnotes`. Inputs are loaded from fixture files through the
-//! `include_lines!` and `lines_vec!` macros re-exported by `tests::prelude`.
+//! `include_lines!` and `lines_vec!` macros from the shared test utilities.
 //! The cases mix headings, code blocks and ordinary text to confirm that
 //! inline references become footnote links; eligible trailing numeric lists are
 //! rewritten as definition-style footnotes when at least one footnote reference exists;
 //! footnotes are renumbered sequentially with definitions reordered to match.
 //!
-//! A simple check ensures these macros are available so the prelude exports
-//! are correctly wired for all integration tests.
+//! A simple check ensures these macros are available for integration tests.
 
 use mdtablefix::{convert_footnotes, process_stream};
 use rstest::rstest;
 
 #[macro_use]
-mod prelude;
+#[path = "common/mod.rs"]
+mod common;
 
 #[test]
 fn macros_available() {

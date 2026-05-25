@@ -1,7 +1,8 @@
 //! Tests for fence normalisation functionality.
 
 #[macro_use]
-mod prelude;
+#[path = "common/mod.rs"]
+mod common;
 use mdtablefix::{attach_orphan_specifiers, compress_fences};
 use rstest::rstest;
 
