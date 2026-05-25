@@ -554,3 +554,14 @@ Review the generated `tests/snapshots/cli_matrix__*.snap` files before
 committing. Snapshot churn across many cases usually means the fixture is too
 broad or a shared transform changed behaviour; inspect the labelled case, mode,
 and arguments before accepting the new output.
+
+
+## Breaks module – Cow allocation strategy
+
+`format_breaks` in [src/breaks.rs](../src/breaks.rs) returns
+`Vec<Cow<'_, str>>` so unchanged lines can be forwarded without allocating.
+Lines that do not match a thematic break are emitted as `Cow::Borrowed` slices
+into the input `&[String]`. Synthesized thematic-break lines are also emitted
+as `Cow::Borrowed`, pointing to the shared `LazyLock<String>` static
+`THEMATIC_BREAK_LINE`. Callers that need owned `String` values should call
+`.into_owned()` on each item.
