@@ -34,9 +34,10 @@ Line fitting is delegated to the `textwrap` crate using a greedy first-fit
 algorithm: each word is placed on the current line if it fits, and a new line
 is started otherwise. This produces predictable, diff-friendly output.
 
-Inline code spans (`` `…` ``) and Markdown links (`[text](url)`) are treated as
-unbreakable units. A span is never split across lines; it moves as a whole to
-the next line when it would otherwise exceed the target width.
+Inline code spans (`` `…` ``), Markdown links (`[text](url)`), and inline GFM
+footnote references (`[^label]`) are treated as unbreakable units. A span is
+never split across lines; it moves as a whole to the next line when it would
+otherwise exceed the target width.
 
 Blockquote prefixes (`>`), task-list item markers (`- [ ]`, `- [x]`), and
 footnote definition labels (`[^n]:`) are detected automatically. The first

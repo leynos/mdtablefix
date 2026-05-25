@@ -9,6 +9,8 @@
 
 ### Fixed
 
+- Preserve inline GFM footnote references as unbreakable tokens when wrapping
+  Markdown paragraphs. ([#277](https://github.com/leynos/mdtablefix/issues/277))
 - Preserve trailing spaces on the final line when wrapping Markdown, retaining
   hard break semantics. See [trailing spaces](docs/trailing-spaces.md) for
   details. ([#65](https://github.com/leynos/mdtablefix/issues/65))

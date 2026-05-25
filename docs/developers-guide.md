@@ -154,7 +154,9 @@ The wrapping pipeline for `--wrap` is:
 width, and a `FragmentKind` tag. That construction-time classification lets the
 `is_whitespace`, `is_atomic`, and `is_plain` predicates answer all later
 questions without repeating ad hoc string inspection in the post-processing
-passes.
+passes. Inline code spans, Markdown links, and GFM footnote references use
+atomic fragment kinds so the wrapper never inserts a break inside their
+Markdown syntax.
 
 The `postprocess` module exists because greedy line fitting alone does not
 reproduce the repository's historical whitespace semantics. The first pass
@@ -168,7 +170,7 @@ Table: Key types and functions.
 
 | Symbol                                                  | File                             |
 | ------------------------------------------------------- | -------------------------------- |
-| `FragmentKind`, `InlineFragment`, `classify_fragment`   | `src/wrap/inline.rs`             |
+| `FragmentKind`, `InlineFragment`, `classify_fragment`   | `src/wrap/inline/fragment.rs`    |
 | `build_fragments`, `wrap_preserving_code`               | `src/wrap/inline.rs`             |
 | `merge_whitespace_only_lines`, `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
 | `ParagraphWriter`, `wrap_with_prefix`                   | `src/wrap/paragraph.rs`          |
@@ -178,8 +180,9 @@ Table: Key types and functions.
 
 - **Public API stability.** `mdtablefix::wrap::wrap_text`, `Token`, and
   `tokenize_markdown` must not change their signatures or observable behaviour.
-- **Atomic fragments.** Inline code spans and Markdown links are never split
-  across lines; they move as a unit when they would overflow the target width.
+- **Atomic fragments.** Inline code spans, Markdown links, and GFM footnote
+  references are never split across lines; they move as a unit when they would
+  overflow the target width.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur.
 - **Verbatim blocks.** Fenced code blocks must pass through unchanged, along

@@ -23,6 +23,20 @@ fn inline_fragment_new_marks_markdown_links_as_links() {
 }
 
 #[test]
+fn inline_fragment_new_marks_footnote_refs_as_footnote_refs() {
+    let fragment = InlineFragment::new("[^label]".into());
+    assert_eq!(fragment.kind, FragmentKind::FootnoteRef);
+    assert!(fragment.is_atomic());
+}
+
+#[test]
+fn inline_fragment_new_marks_punctuated_footnote_refs_as_footnote_refs() {
+    let fragment = InlineFragment::new("word.[^label]".into());
+    assert_eq!(fragment.kind, FragmentKind::FootnoteRef);
+    assert!(fragment.is_atomic());
+}
+
+#[test]
 fn inline_fragment_new_marks_plain_words_as_plain() {
     let fragment = InlineFragment::new("word".into());
     assert_eq!(fragment.kind, FragmentKind::Plain);
