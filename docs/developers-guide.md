@@ -155,7 +155,7 @@ width, and a `FragmentKind` tag. That construction-time classification lets the
 `is_whitespace`, `is_atomic`, and `is_plain` predicates answer all later
 questions without repeating ad hoc string inspection in the post-processing
 passes. Inline code spans, Markdown links, and GFM footnote references use
-atomic fragment kinds so the wrapper never inserts a break inside their
+atomic fragment kinds, so the wrapper never inserts a break inside their
 Markdown syntax.
 
 The `postprocess` module exists because greedy line fitting alone does not
