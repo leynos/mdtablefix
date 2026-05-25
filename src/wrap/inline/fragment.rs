@@ -1,4 +1,15 @@
 //! Inline fragment types used by Markdown-aware wrapping.
+//!
+//! This module defines the small units passed from `wrap_preserving_code` to
+//! `textwrap`. Each `InlineFragment` stores rendered text, display width, and
+//! a `FragmentKind` classification so the wrapper can distinguish whitespace,
+//! ordinary prose, and Markdown syntax that must remain atomic.
+//!
+//! The classification here feeds `inline::postprocess`, which uses cheap
+//! predicates such as `is_atomic` and `is_plain` to merge whitespace artefacts
+//! and rebalance tails after greedy line fitting. Keeping the fragment model in
+//! one module avoids repeating link, code, and GFM footnote-reference detection
+//! throughout the wrapping pipeline.
 
 use textwrap::core::Fragment;
 use unicode_width::UnicodeWidthStr;

@@ -1,4 +1,15 @@
 //! Post-wrap normalization helpers for inline fragment lines.
+//!
+//! `wrap_preserving_code` first lets `textwrap` perform greedy line fitting
+//! over `InlineFragment` values. That provisional layout can expose
+//! whitespace-only lines or leave an atomic tail, such as an inline code span,
+//! link, or GFM footnote reference, stranded at the end of the previous line.
+//!
+//! This module repairs those artefacts before rendering text back to Markdown.
+//! It depends on the fragment classification from `inline::fragment`, but it
+//! does not re-tokenize source text; its job is only to preserve the wrapper's
+//! historical whitespace behaviour and keep eligible atomic fragments attached
+//! to the line where they fit.
 
 use super::fragment::{FragmentKind, InlineFragment};
 
