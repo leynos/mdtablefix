@@ -31,11 +31,12 @@ static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
 ///
 /// let lines = vec!["foo".to_string(), "***".to_string(), "bar".to_string()];
 /// let out = format_breaks(&lines);
+/// let break_line = "_".repeat(THEMATIC_BREAK_LEN);
 /// assert_eq!(
 ///     out,
 ///     vec![
 ///         Cow::Borrowed("foo"),
-///         Cow::Owned("_".repeat(THEMATIC_BREAK_LEN)),
+///         Cow::Borrowed(break_line.as_str()),
 ///         Cow::Borrowed("bar"),
 ///     ]
 /// );
