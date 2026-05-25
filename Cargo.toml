@@ -25,7 +25,7 @@ rayon = "1.11"
 html5ever = "0.39.0"
 # `markup5ever_rcdom` must stay on the same parser stack as `html5ever`
 # because `RcDom` implements `TreeSink` from that shared `markup5ever` line.
-markup5ever_rcdom = "=0.39.0"
+markup5ever_rcdom = "0.39.0"
 textwrap = "0.16.2"
 unicode-width = "0.2"
 
