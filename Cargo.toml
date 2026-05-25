@@ -25,7 +25,7 @@ rayon = "1.11"
 html5ever = "0.27"
 markup5ever_rcdom = "0.3"
 textwrap = "0.16.2"
-unicode-width = "0.1"
+unicode-width = "0.2"
 
 
 [dev-dependencies]
