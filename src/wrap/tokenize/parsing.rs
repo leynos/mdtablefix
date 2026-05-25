@@ -23,6 +23,12 @@ use super::scanning::{collect_range, has_odd_backslash_escape_bytes, scan_while}
 pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize) {
     let start = idx;
 
+    if text[idx..].starts_with("[^")
+        && let Some(text_end) = parse_link_text(text, idx)
+    {
+        return (collect_range(text, start, text_end), text_end);
+    }
+
     if text[idx..].starts_with('!') {
         idx += '!'.len_utf8();
     }
@@ -188,5 +194,13 @@ mod tests {
         let (token, idx) = parse_link_or_image(text, 0);
         assert_eq!(token, "[");
         assert_eq!(idx, 1);
+    }
+
+    #[test]
+    fn parse_link_or_image_preserves_footnote_reference() {
+        let text = "[^4] tail";
+        let (token, idx) = parse_link_or_image(text, 0);
+        assert_eq!(token, "[^4]");
+        assert_eq!(idx, token.len());
     }
 }

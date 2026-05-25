@@ -7,6 +7,13 @@ use mdtablefix::wrap::wrap_text;
 use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
 
+fn assert_footnote_reference_is_intact(output: &[String], marker: &str) {
+    let rendered = output.join("\n");
+    assert!(rendered.contains(marker));
+    assert!(!rendered.contains("[\n"));
+    assert!(!rendered.contains("\n^"));
+}
+
 #[test]
 fn wrap_text_preserves_hyphenated_words() {
     let input = vec!["A word that is very-long-word indeed".to_string()];
@@ -109,6 +116,31 @@ fn wrap_text_preserves_links() {
         wrapped
             .iter()
             .any(|l| l.contains("https://falcon.readthedocs.io"))
+    );
+}
+
+#[rstest]
+#[case("[^4]")]
+#[case("[^25]")]
+#[case("[^note]")]
+fn wrap_text_preserves_inline_footnote_references(#[case] marker: &str) {
+    let input = vec![format!(
+        concat!(
+            "This sentence has enough preceding text to make the formatter choose ",
+            "a bad wrap point near this reference ",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.",
+            "{} This sentence follows the reference marker.",
+        ),
+        marker,
+    )];
+
+    let wrapped = wrap_text(&input, 80);
+
+    assert_footnote_reference_is_intact(&wrapped, marker);
+    assert!(
+        wrapped
+            .iter()
+            .any(|line| line.contains(&format!(".{marker}")))
     );
 }
 

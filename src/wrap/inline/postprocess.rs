@@ -1,6 +1,6 @@
 //! Post-wrap normalization helpers for inline fragment lines.
 
-use super::{FragmentKind, InlineFragment};
+use super::fragment::{FragmentKind, InlineFragment};
 
 /// Returns whether every fragment on the line is whitespace-only.
 fn is_whitespace_only_line(line: &[InlineFragment]) -> bool {
@@ -151,7 +151,7 @@ pub(super) fn rebalance_atomic_tails(lines: &mut [Vec<InlineFragment>], width: u
 #[cfg(test)]
 mod tests {
     use super::{
-        super::{FragmentKind, InlineFragment},
+        super::fragment::{FragmentKind, InlineFragment},
         *,
     };
 

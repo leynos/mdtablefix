@@ -2,7 +2,7 @@
 
 use unicode_width::UnicodeWidthStr;
 
-use super::{FragmentKind, InlineFragment};
+use super::fragment::{FragmentKind, InlineFragment};
 
 #[test]
 fn inline_fragment_new_marks_spaces_as_whitespace() {

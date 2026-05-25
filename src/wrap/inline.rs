@@ -4,6 +4,9 @@
 //! inline code, links, and trailing punctuation without reimplementing the
 //! grouping logic in multiple places.
 
+#[cfg(test)]
+mod footnote_tests;
+mod fragment;
 mod postprocess;
 #[cfg(test)]
 mod test_support;
@@ -11,8 +14,9 @@ mod test_support;
 mod tests;
 use std::ops::Range;
 
+use fragment::{InlineFragment, width_as_f64};
 use postprocess::{merge_whitespace_only_lines, rebalance_atomic_tails};
-use textwrap::{core::Fragment, wrap_algorithms::wrap_first_fit};
+use textwrap::wrap_algorithms::wrap_first_fit;
 use unicode_width::UnicodeWidthStr;
 
 use super::tokenize;
@@ -26,6 +30,8 @@ enum SpanKind {
     Code,
     /// Treat the span as a Markdown link or image link.
     Link,
+    /// Treat the span as a GitHub Flavoured Markdown footnote reference.
+    FootnoteRef,
 }
 
 /// Returns whether a character should stay attached as trailing punctuation.
@@ -52,6 +58,31 @@ fn looks_like_link(token: &str) -> bool {
     (token.starts_with('[') || token.starts_with("!["))
         && token.contains("](")
         && token.ends_with(')')
+}
+
+/// Returns whether `token` looks like a complete GFM footnote reference.
+///
+/// The `token` parameter is the rendered fragment text to inspect. The return
+/// value is `true` for the compact `[^label]` shape when `label` is non-empty.
+/// This helper intentionally leaves label validation to the Markdown parser.
+fn looks_like_footnote_ref(token: &str) -> bool {
+    token
+        .strip_prefix("[^")
+        .and_then(|label| label.strip_suffix(']'))
+        .is_some_and(|label| !label.is_empty())
+}
+
+/// Returns whether `token` ends with an inline footnote reference.
+///
+/// The wrapper can group `word.[^label]` into a single fragment to avoid
+/// separating sentence punctuation from the marker. This predicate recognises
+/// that suffix shape without treating arbitrary prose as a standalone marker.
+fn ends_with_footnote_ref(token: &str) -> bool {
+    let Some(start) = token.rfind("[^") else {
+        return false;
+    };
+
+    looks_like_footnote_ref(&token[start..])
 }
 
 /// Returns whether `token` contains only Unicode whitespace.
@@ -153,6 +184,9 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     } else if looks_like_link(&tokens[start]) {
         kind = SpanKind::Link;
         end = extend_punctuation(tokens, end, &mut width);
+    } else if looks_like_footnote_ref(&tokens[start]) {
+        kind = SpanKind::FootnoteRef;
+        end = extend_punctuation(tokens, end, &mut width);
     }
 
     while end < tokens.len() {
@@ -168,7 +202,10 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
         }
 
         if token.chars().all(is_trailing_punct) {
-            if matches!(kind, SpanKind::Code | SpanKind::Link) {
+            if matches!(
+                kind,
+                SpanKind::Code | SpanKind::Link | SpanKind::FootnoteRef
+            ) {
                 width += UnicodeWidthStr::width(token.as_str());
                 end += 1;
                 continue;
@@ -178,6 +215,21 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
 
         let is_link = looks_like_link(token);
         let is_code = is_inline_code_token(token);
+        let is_footnote_ref = looks_like_footnote_ref(token);
+
+        if kind == SpanKind::General
+            && is_footnote_ref
+            && tokens[end - 1]
+                .chars()
+                .last()
+                .is_some_and(is_trailing_punct)
+        {
+            kind = SpanKind::FootnoteRef;
+            width += UnicodeWidthStr::width(token.as_str());
+            end += 1;
+            end = extend_punctuation(tokens, end, &mut width);
+            continue;
+        }
 
         if kind == SpanKind::Link && is_link {
             width += UnicodeWidthStr::width(token.as_str());
@@ -203,95 +255,6 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
 /// line when `current` is empty.
 #[cfg(test)]
 pub(super) use test_support::attach_punctuation_to_previous_line;
-
-/// Classifies an inline fragment for post-wrap heuristics.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum FragmentKind {
-    /// Marks a fragment that contains only whitespace.
-    Whitespace,
-    /// Marks a fragment that contains inline code.
-    InlineCode,
-    /// Marks a fragment that contains a Markdown link.
-    Link,
-    /// Marks a fragment that contains ordinary prose.
-    Plain,
-}
-
-/// Stores rendered fragment text, width, and classification for wrapping.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct InlineFragment {
-    /// Holds the rendered fragment text that will be emitted unchanged.
-    text: String,
-    /// Stores the precomputed Unicode display width for `text`.
-    width: usize,
-    /// Records the fragment classification used by post-processing predicates.
-    kind: FragmentKind,
-}
-
-impl InlineFragment {
-    /// Builds a fragment from rendered `text`.
-    ///
-    /// The parameter is stored verbatim, while the return value carries the
-    /// same text together with its Unicode display width and `FragmentKind`.
-    /// This constructor never panics and preserves the invariant that `width`
-    /// and `kind` are derived from `text` exactly once.
-    fn new(text: String) -> Self {
-        let width = UnicodeWidthStr::width(text.as_str());
-        let kind = classify_fragment(text.as_str());
-        Self { text, width, kind }
-    }
-    /// Returns whether this fragment contains only whitespace.
-    ///
-    /// The return value is `true` only for `FragmentKind::Whitespace`. This
-    /// query never panics and does not inspect `text` again.
-    fn is_whitespace(&self) -> bool { self.kind == FragmentKind::Whitespace }
-    /// Returns whether this fragment must move as an atomic unit.
-    ///
-    /// The return value is `true` for inline code spans and links. This query
-    /// never panics and relies on the invariant that `kind` was set at
-    /// construction time.
-    fn is_atomic(&self) -> bool {
-        matches!(self.kind, FragmentKind::InlineCode | FragmentKind::Link)
-    }
-    /// Returns whether this fragment is ordinary prose.
-    ///
-    /// The return value is `true` only for `FragmentKind::Plain`. This query
-    /// never panics and does not inspect `text` again.
-    fn is_plain(&self) -> bool { self.kind == FragmentKind::Plain }
-}
-
-impl Fragment for InlineFragment {
-    fn width(&self) -> f64 { width_as_f64(self.width) }
-    fn whitespace_width(&self) -> f64 { 0.0 }
-    fn penalty_width(&self) -> f64 { 0.0 }
-}
-
-/// Converts a display width into the `f64` representation required by
-/// `textwrap`.
-///
-/// `width` is the precomputed display width of one fragment or line. The
-/// return value is a saturating `f64` conversion for `wrap_first_fit`; values
-/// above `u32::MAX` clamp to that limit. This helper never panics.
-fn width_as_f64(width: usize) -> f64 { f64::from(u32::try_from(width).unwrap_or(u32::MAX)) }
-
-/// Classifies rendered fragment `text` for later post-processing.
-///
-/// The parameter is the rendered fragment string, and the return value is a
-/// `FragmentKind` used by cheap predicate helpers. This helper never panics
-/// and keeps the invariant that classification is centralised in one place.
-fn classify_fragment(text: &str) -> FragmentKind {
-    if is_whitespace_token(text) {
-        return FragmentKind::Whitespace;
-    }
-    let trimmed = text.trim_end_matches(is_trailing_punct);
-    if is_inline_code_token(text) || is_inline_code_token(trimmed) {
-        FragmentKind::InlineCode
-    } else if looks_like_link(text) || looks_like_link(trimmed) {
-        FragmentKind::Link
-    } else {
-        FragmentKind::Plain
-    }
-}
 
 /// Appends the token span into the rendered fragment buffer `text`.
 ///
