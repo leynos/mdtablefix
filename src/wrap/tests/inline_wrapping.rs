@@ -2,7 +2,54 @@
 
 use rstest::rstest;
 
-use super::super::inline::{attach_punctuation_to_previous_line, wrap_preserving_code};
+use super::{
+    super::inline::{attach_punctuation_to_previous_line, wrap_preserving_code},
+    TRAILING_PUNCTUATION_CHARS,
+};
+
+proptest::proptest! {
+    #[test]
+    fn wrap_preserving_code_keeps_supported_punctuation_with_links(
+        punctuation_index in 0..TRAILING_PUNCTUATION_CHARS.len(),
+        pad_len in 0usize..24,
+    ) {
+        let punctuation = TRAILING_PUNCTUATION_CHARS[punctuation_index];
+        let prefix = "lead ".repeat(pad_len);
+        let link = format!("[link](docs/{pad_len}.md){punctuation}");
+        let input = format!("{prefix}{link} trailing words force wrapping");
+        let lines = wrap_preserving_code(&input, 24);
+
+        assert!(
+            lines.iter().any(|line| line.contains(&link)),
+            "expected {link:?} to stay attached in {lines:?}",
+        );
+        assert!(
+            lines.iter().all(|line| line.trim() != punctuation.to_string()),
+            "punctuation was orphaned in {lines:?}",
+        );
+    }
+
+    #[test]
+    fn wrap_preserving_code_keeps_supported_punctuation_with_code_spans(
+        punctuation_index in 0..TRAILING_PUNCTUATION_CHARS.len(),
+        pad_len in 0usize..24,
+    ) {
+        let punctuation = TRAILING_PUNCTUATION_CHARS[punctuation_index];
+        let prefix = "lead ".repeat(pad_len);
+        let code_span = format!("`code-{pad_len}`{punctuation}");
+        let input = format!("{prefix}{code_span} trailing words force wrapping");
+        let lines = wrap_preserving_code(&input, 24);
+
+        assert!(
+            lines.iter().any(|line| line.contains(&code_span)),
+            "expected {code_span:?} to stay attached in {lines:?}",
+        );
+        assert!(
+            lines.iter().all(|line| line.trim() != punctuation.to_string()),
+            "punctuation was orphaned in {lines:?}",
+        );
+    }
+}
 
 #[test]
 fn attach_punctuation_appends_to_previous_code_line() {
