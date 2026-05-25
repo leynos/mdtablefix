@@ -37,6 +37,7 @@ insta = "1.47"
 tempfile = "3"
 libc = "0.2.174"
 predicates = "3"
+trybuild = "1"
 
 [lints.clippy]
 pedantic = "warn"
