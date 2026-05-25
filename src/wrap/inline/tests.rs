@@ -1,5 +1,6 @@
 //! Unit tests for inline fragment classification helpers.
 
+use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
 
 use super::fragment::{FragmentKind, InlineFragment};
@@ -22,16 +23,11 @@ fn inline_fragment_new_marks_markdown_links_as_links() {
     assert_eq!(fragment.kind, FragmentKind::Link);
 }
 
-#[test]
-fn inline_fragment_new_marks_footnote_refs_as_footnote_refs() {
-    let fragment = InlineFragment::new("[^label]".into());
-    assert_eq!(fragment.kind, FragmentKind::FootnoteRef);
-    assert!(fragment.is_atomic());
-}
-
-#[test]
-fn inline_fragment_new_marks_punctuated_footnote_refs_as_footnote_refs() {
-    let fragment = InlineFragment::new("word.[^label]".into());
+#[rstest]
+#[case("[^label]")]
+#[case("word.[^label]")]
+fn inline_fragment_new_marks_footnote_refs_as_footnote_refs(#[case] input: &str) {
+    let fragment = InlineFragment::new(input.into());
     assert_eq!(fragment.kind, FragmentKind::FootnoteRef);
     assert!(fragment.is_atomic());
 }

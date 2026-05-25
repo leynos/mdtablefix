@@ -8,6 +8,10 @@ use super::scanning::{collect_range, has_odd_backslash_escape_bytes, scan_while}
 
 /// Parse a Markdown link or image starting at `i`.
 ///
+/// Recognizes GFM footnote references of the form `[^label]` and returns them
+/// immediately when they are not followed by a URL. Caret-labelled links with
+/// a following URL, such as `[^label](url)`, are still parsed as normal links.
+///
 /// Handles nested parentheses within URLs by tracking the depth of opening and
 /// closing delimiters. Returns the parsed slice and the index after the closing
 /// parenthesis if one is found.
