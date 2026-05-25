@@ -25,6 +25,7 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
 
     if text[idx..].starts_with("[^")
         && let Some(text_end) = parse_link_text(text, idx)
+        && !text[text_end..].starts_with('(')
     {
         return (collect_range(text, start, text_end), text_end);
     }
@@ -201,6 +202,14 @@ mod tests {
         let text = "[^4] tail";
         let (token, idx) = parse_link_or_image(text, 0);
         assert_eq!(token, "[^4]");
+        assert_eq!(idx, token.len());
+    }
+
+    #[test]
+    fn parse_link_or_image_treats_caret_label_with_url_as_link() {
+        let text = "[^label](url) tail";
+        let (token, idx) = parse_link_or_image(text, 0);
+        assert_eq!(token, "[^label](url)");
         assert_eq!(idx, token.len());
     }
 }
