@@ -2,7 +2,35 @@
 
 use rstest::rstest;
 
-use crate::wrap::wrap_text;
+use crate::wrap::{prefix_line, wrap_text};
+
+#[rstest]
+#[case("- item", "- ", "item", false)]
+#[case("  1. item", "  1. ", "item", false)]
+#[case("> quote", "> ", "quote", true)]
+#[case("> - item", "> ", "- item", true)]
+#[case("[^7]: note", "[^7]: ", "note", false)]
+fn prefix_line_extracts_supported_prefixes(
+    #[case] input: &str,
+    #[case] expected_prefix: &str,
+    #[case] expected_rest: &str,
+    #[case] expected_repeat: bool,
+) {
+    let prefix = prefix_line(input).expect("supported prefix should parse");
+    assert_eq!(prefix.prefix.as_ref(), expected_prefix);
+    assert_eq!(prefix.rest, expected_rest);
+    assert_eq!(prefix.repeat_prefix, expected_repeat);
+}
+
+#[rstest]
+#[case("")]
+#[case("plain text")]
+#[case("    code")]
+#[case("| table |")]
+#[case("# Heading")]
+fn prefix_line_rejects_non_prefixed_lines(#[case] input: &str) {
+    assert!(prefix_line(input).is_none());
+}
 
 #[test]
 fn wrap_with_prefix_single_line() {
