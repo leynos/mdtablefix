@@ -1,5 +1,4 @@
 //! Utility helpers shared across integration tests.
-#![allow(unfulfilled_lint_expectations)]
 
 use assert_cmd::{Command, assert::Assert};
 use rstest::fixture;
@@ -8,21 +7,10 @@ use rstest::fixture;
 ///
 /// This macro is primarily used in tests to reduce boilerplate when
 /// constructing example tables or other collections of lines.
-#[expect(unused_macros, reason = "macros are optional helpers across modules")]
+#[allow(unused_macros, reason = "macros are optional helpers across modules")]
 macro_rules! lines_vec {
     ($($line:expr),* $(,)?) => {
         vec![$($line.to_string()),*]
-    };
-}
-
-/// Collect a list of string-like values into a `Vec<String>`.
-///
-/// Useful for building small inline datasets without verbose `.to_string()`
-/// calls.
-#[expect(unused_macros, reason = "macros are optional helpers across modules")]
-macro_rules! string_vec {
-    ( $($elem:expr),* $(,)? ) => {
-        vec![ $( ::std::string::ToString::to_string(&$elem) ),* ]
     };
 }
 
@@ -32,7 +20,7 @@ macro_rules! string_vec {
 /// ```
 /// let input: Vec<String> = include_lines!("data/bold_header_input.txt"); 
 /// ```
-#[expect(unused_macros, reason = "macros are optional helpers across modules")]
+#[allow(unused_macros, reason = "macros are optional helpers across modules")]
 macro_rules! include_lines {
     ($path:literal $(,)?) => {{
         const _TXT: &str = include_str!($path);
@@ -49,7 +37,7 @@ macro_rules! include_lines {
 ///
 /// Panics if the output slice is empty, expected count is zero, or if the lines
 /// do not meet the asserted conditions.
-#[expect(dead_code, reason = "helper used selectively across modules")]
+#[allow(dead_code, reason = "helper used selectively across modules")]
 pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize) {
     assert!(expected > 0, "expected line count must be positive");
     assert!(!output.is_empty(), "output slice is empty");
@@ -106,7 +94,7 @@ fn toggle_code_span(open: &mut Option<usize>, len: usize) {
 /// # Panics
 ///
 /// Panics if the output slice is empty or the prefix is missing from any line.
-#[expect(dead_code, reason = "helper used selectively across modules")]
+#[allow(dead_code, reason = "helper used selectively across modules")]
 pub fn assert_wrapped_blockquote(output: &[String], prefix: &str, expected: usize) {
     assert!(!output.is_empty(), "output slice is empty");
     assert_eq!(output.len(), expected);
@@ -115,7 +103,7 @@ pub fn assert_wrapped_blockquote(output: &[String], prefix: &str, expected: usiz
 }
 
 /// Fixture representing a simple broken table.
-#[expect(dead_code, reason = "helper used selectively across modules")]
+#[allow(dead_code, reason = "helper used selectively across modules")]
 #[fixture]
 pub fn broken_table() -> Vec<String> {
     vec![
@@ -127,7 +115,7 @@ pub fn broken_table() -> Vec<String> {
 /// Run the `mdtablefix` binary with the provided arguments.
 ///
 /// Returns an [`Assert`] handle for chaining output and status checks.
-#[expect(dead_code, reason = "used selectively across integration tests")]
+#[allow(dead_code, reason = "used selectively across integration tests")]
 pub fn run_cli_with_args(args: &[&str]) -> Assert {
     Command::cargo_bin("mdtablefix")
         .expect("failed to create command")
@@ -138,7 +126,7 @@ pub fn run_cli_with_args(args: &[&str]) -> Assert {
 /// Run the `mdtablefix` binary with the provided arguments and standard input.
 ///
 /// Returns an [`Assert`] handle for chaining output and status checks.
-#[expect(dead_code, reason = "used selectively across integration tests")]
+#[allow(dead_code, reason = "used selectively across integration tests")]
 pub fn run_cli_with_stdin(args: &[&str], input: &str) -> Assert {
     Command::cargo_bin("mdtablefix")
         .expect("failed to create command")

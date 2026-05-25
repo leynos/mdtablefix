@@ -69,18 +69,26 @@ mod tests {
 
     use super::*;
 
+    macro_rules! assert_borrowed_value {
+        ($line:expr, $expected:expr $(,)?) => {
+            match &$line {
+                Cow::Borrowed(value) => assert_eq!(*value, $expected),
+                Cow::Owned(value) => panic!("expected borrowed value, got owned {value:?}"),
+            }
+        };
+    }
+
     #[test]
     fn basic_formatting() {
         let input = vec!["foo", "***", "bar"]
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>();
-        let expected: Vec<Cow<str>> = vec![
-            input[0].as_str().into(),
-            Cow::Borrowed(THEMATIC_BREAK_LINE.as_str()),
-            input[2].as_str().into(),
-        ];
-        assert_eq!(format_breaks(&input), expected);
+        let output = format_breaks(&input);
+
+        assert_borrowed_value!(output[0], "foo");
+        assert_borrowed_value!(output[1], THEMATIC_BREAK_LINE.as_str());
+        assert_borrowed_value!(output[2], "bar");
     }
 
     #[test]
@@ -89,7 +97,10 @@ mod tests {
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>();
-        let expected: Vec<Cow<str>> = input.iter().map(|s| s.as_str().into()).collect();
-        assert_eq!(format_breaks(&input), expected);
+        let output = format_breaks(&input);
+
+        assert_borrowed_value!(output[0], "```");
+        assert_borrowed_value!(output[1], "---");
+        assert_borrowed_value!(output[2], "```");
     }
 }
