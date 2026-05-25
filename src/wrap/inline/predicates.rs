@@ -16,6 +16,23 @@ pub(in crate::wrap::inline) fn is_trailing_punct(c: char) -> bool {
     ) || "…—–»›）］】》」』、。，：；！？”.’".contains(c)
 }
 
+/// Returns whether `token` is a non-empty run of trailing punctuation.
+///
+/// The wrapper uses this to keep trailing punctuation attached to the
+/// preceding link or code span during wrapping, rather than letting the
+/// punctuation break onto the next line.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert!(is_trailing_punctuation_token("."));
+/// assert!(is_trailing_punctuation_token("!?"));
+/// assert!(!is_trailing_punctuation_token(""));
+/// ```
+pub(in crate::wrap::inline) fn is_trailing_punctuation_token(token: &str) -> bool {
+    !token.is_empty() && token.chars().all(is_trailing_punct)
+}
+
 /// Returns whether `token` already looks like a complete Markdown link.
 pub(in crate::wrap::inline) fn looks_like_link(token: &str) -> bool {
     (token.starts_with('[') || token.starts_with("!["))

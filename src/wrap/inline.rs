@@ -35,6 +35,7 @@ pub(in crate::wrap::inline) use predicates::{
     is_inline_code_token,
     is_opening_punct,
     is_trailing_punct,
+    is_trailing_punctuation_token,
     is_whitespace_token,
     looks_like_footnote_ref,
 };
@@ -121,7 +122,7 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
             break;
         }
 
-        if token.chars().all(is_trailing_punct) {
+        if is_trailing_punctuation_token(token) {
             if matches!(
                 kind,
                 SpanKind::Code | SpanKind::Link | SpanKind::FootnoteRef
