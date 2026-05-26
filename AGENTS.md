@@ -210,7 +210,7 @@ project:
   `newt-hype` for the common case, tuple structs for outliers, and
   `the-newtype` to unify behaviour when owning the trait definitions.
 - Use `cap_std` and `cap_std::fs_utf8` / `camino` in place of `std::fs` and
-  `std::path` for enhanced cross-platform support and capabilities oriented
+  `std::path` for enhanced cross-platform support and capabilities-oriented
   filesystem access.
 
 ### Testing
@@ -233,7 +233,7 @@ project:
   changes from new major versions. This approach is critical for ensuring build
   stability and reproducibility.
 - **Prohibit unstable version specifiers.** The use of wildcard (`*`) or
-  open-ended inequality (`>=`) version requirements is strictly forbidden, as
+  open-ended inequality (`>=`) version requirements are strictly forbidden, as
   they introduce unacceptable risk and unpredictability. Tilde requirements (
   `~`) should only be used where a dependency must be locked to patch-level
   updates for a specific, documented reason.

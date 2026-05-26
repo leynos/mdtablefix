@@ -104,7 +104,7 @@ fn cli_wrap_in_place_preserves_inline_footnote_references() -> Result<(), Box<dy
 
     let actual = run_wrap_in_place_and_read_back(input)?;
 
-    assert!(actual.contains("[^4]"));
+    assert_eq!(actual.matches("[^4]").count(), 2);
     assert!(!actual.contains("[\n"));
     assert!(!actual.contains("\n^4]"));
     Ok(())
