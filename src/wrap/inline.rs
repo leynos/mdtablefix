@@ -162,6 +162,29 @@ fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
     j
 }
 
+/// Promotes a general prose span into a footnote-reference span when adjacent
+/// sentence punctuation should stay attached to the marker.
+fn promote_footnote_span(
+    tokens: &[String],
+    end: usize,
+    width: &mut usize,
+) -> Option<(SpanKind, usize)> {
+    let token = tokens.get(end)?;
+    let previous = end
+        .checked_sub(1)
+        .and_then(|previous| tokens.get(previous))?;
+
+    if looks_like_footnote_ref(token) && previous.chars().last().is_some_and(is_trailing_punct) {
+        *width += UnicodeWidthStr::width(token.as_str());
+        return Some((
+            SpanKind::FootnoteRef,
+            extend_punctuation(tokens, end + 1, width),
+        ));
+    }
+
+    None
+}
+
 /// Finds the next logical token group starting at `start`.
 ///
 /// `tokens` is the segmented inline token stream and `start` is the first
@@ -215,19 +238,12 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
 
         let is_link = looks_like_link(token);
         let is_code = is_inline_code_token(token);
-        let is_footnote_ref = looks_like_footnote_ref(token);
-
         if kind == SpanKind::General
-            && is_footnote_ref
-            && tokens[end - 1]
-                .chars()
-                .last()
-                .is_some_and(is_trailing_punct)
+            && let Some((promoted_kind, promoted_end)) =
+                promote_footnote_span(tokens, end, &mut width)
         {
-            kind = SpanKind::FootnoteRef;
-            width += UnicodeWidthStr::width(token.as_str());
-            end += 1;
-            end = extend_punctuation(tokens, end, &mut width);
+            kind = promoted_kind;
+            end = promoted_end;
             continue;
         }
 

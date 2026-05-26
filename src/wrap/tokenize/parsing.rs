@@ -27,8 +27,7 @@ use super::scanning::{collect_range, has_odd_backslash_escape_bytes, scan_while}
 pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize) {
     let start = idx;
 
-    if text[idx..].starts_with("[^")
-        && let Some(text_end) = parse_link_text(text, idx)
+    if let Some(text_end) = find_footnote_end(text, idx)
         && (text_end == text.len() || !text[text_end..].starts_with('('))
     {
         return (collect_range(text, start, text_end), text_end);
@@ -52,6 +51,31 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
     }
 
     fallback_single_char(text, start)
+}
+
+fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
+    if idx >= text.len() || !text[idx..].starts_with("[^") {
+        return None;
+    }
+
+    let mut cursor = idx + "[^".len();
+    while cursor < text.len() {
+        let ch = text[cursor..].chars().next()?;
+        cursor += ch.len_utf8();
+
+        if ch == '\\' {
+            if let Some(escaped) = text[cursor..].chars().next() {
+                cursor += escaped.len_utf8();
+            }
+            continue;
+        }
+
+        if ch == ']' {
+            return Some(cursor);
+        }
+    }
+
+    None
 }
 
 fn parse_link_text(text: &str, idx: usize) -> Option<usize> {
@@ -159,7 +183,23 @@ pub(super) fn handle_backtick_fence(text: &str, bytes: &[u8], start_idx: usize) 
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
+
+    fn footnote_label_part_strategy() -> impl Strategy<Value = String> {
+        prop::collection::vec(
+            prop_oneof![
+                (b'a'..=b'z').prop_map(char::from),
+                (b'A'..=b'Z').prop_map(char::from),
+                (b'0'..=b'9').prop_map(char::from),
+                Just('-'),
+                Just('_')
+            ],
+            0..12,
+        )
+        .prop_map(|chars| chars.into_iter().collect())
+    }
 
     #[test]
     fn parse_link_or_image_handles_nested_parentheses() {
@@ -210,6 +250,14 @@ mod tests {
     }
 
     #[test]
+    fn parse_link_or_image_preserves_footnote_reference_with_escaped_bracket() {
+        let text = r"[^a\]b] tail";
+        let (token, idx) = parse_link_or_image(text, 0);
+        assert_eq!(token, r"[^a\]b]");
+        assert_eq!(idx, token.len());
+    }
+
+    #[test]
     fn parse_link_or_image_preserves_footnote_at_end() {
         let text = "[^4]";
         let (token, idx) = parse_link_or_image(text, 0);
@@ -223,5 +271,22 @@ mod tests {
         let (token, idx) = parse_link_or_image(text, 0);
         assert_eq!(token, "[^label](https://example.com)");
         assert_eq!(idx, token.len());
+    }
+
+    proptest! {
+        #[test]
+        fn parse_link_or_image_preserves_footnote_references_with_escaped_brackets(
+            prefix in footnote_label_part_strategy(),
+            suffix in footnote_label_part_strategy(),
+        ) {
+            let expected = format!(r"[^{prefix}\]{suffix}]");
+            let expected_len = expected.len();
+            let text = format!("{expected} tail");
+
+            let (token, idx) = parse_link_or_image(&text, 0);
+
+            prop_assert_eq!(token, expected);
+            prop_assert_eq!(idx, expected_len);
+        }
     }
 }
