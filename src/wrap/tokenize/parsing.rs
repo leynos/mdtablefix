@@ -210,6 +210,14 @@ mod tests {
     }
 
     #[test]
+    fn parse_link_or_image_preserves_footnote_at_end() {
+        let text = "[^4]";
+        let (token, idx) = parse_link_or_image(text, 0);
+        assert_eq!(token, "[^4]");
+        assert_eq!(idx, token.len());
+    }
+
+    #[test]
     fn parse_link_or_image_keeps_caret_text_links_as_links() {
         let text = "[^label](https://example.com) tail";
         let (token, idx) = parse_link_or_image(text, 0);
