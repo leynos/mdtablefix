@@ -164,13 +164,17 @@ proptest! {
     fn wrap_text_keeps_generated_footnote_references_atomic(
         label in footnote_label_strategy(),
         prefix_words in 2usize..30,
-        suffix_words in 1usize..20,
+        suffix_words in 0usize..=20,
         width in 24usize..96,
     ) {
         let marker = format!("[^{label}]");
         let prefix = std::iter::repeat_n("prefix", prefix_words).collect::<Vec<_>>().join(" ");
         let suffix = std::iter::repeat_n("suffix", suffix_words).collect::<Vec<_>>().join(" ");
-        let input = vec![format!("{prefix} xxxxxxxxxxxxxxxxxxxxx.{marker} {suffix}")];
+        let input = if suffix.is_empty() {
+            vec![format!("{prefix} xxxxxxxxxxxxxxxxxxxxx.{marker}")]
+        } else {
+            vec![format!("{prefix} xxxxxxxxxxxxxxxxxxxxx.{marker} {suffix}")]
+        };
 
         let wrapped = wrap_text(&input, width);
         let rendered = wrapped.join("\n");
