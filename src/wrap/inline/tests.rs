@@ -1,4 +1,10 @@
 //! Unit tests for inline fragment classification helpers.
+//!
+//! This module covers the fragment classification rules that feed the inline
+//! wrapping pipeline. It verifies how `InlineFragment` identifies whitespace,
+//! inline code, links, footnote references, and plain text, and it checks the
+//! recorded display width that the wrapper uses when measuring candidate
+//! breaks.
 
 use rstest::rstest;
 use unicode_width::UnicodeWidthStr;

@@ -1,4 +1,10 @@
 //! Regression tests for inline GFM footnote-reference wrapping.
+//!
+//! This module exercises the inline tokenisation and span-selection logic
+//! used by the wrapping code when Markdown footnote references appear in
+//! running text. It keeps footnote references atomic, verifies that adjacent
+//! punctuation stays with the reference when appropriate, and protects the
+//! segmenter from splitting references into invalid wrap points.
 
 use rstest::rstest;
 
