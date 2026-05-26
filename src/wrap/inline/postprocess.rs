@@ -1,4 +1,4 @@
-//! Post-wrap normalization helpers for inline fragment lines.
+//! Post-wrap normalisation helpers for inline fragment lines.
 //!
 //! `wrap_preserving_code` first lets `textwrap` perform greedy line fitting
 //! over `InlineFragment` values. That provisional layout can expose
