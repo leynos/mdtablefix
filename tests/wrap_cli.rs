@@ -89,3 +89,23 @@ fn cli_wrap_in_place_preserves_fenced_block_without_final_newline()
     assert_eq!(actual, expected);
     Ok(())
 }
+
+#[test]
+fn cli_wrap_in_place_preserves_inline_footnote_references() -> Result<(), Box<dyn std::error::Error>>
+{
+    let input = concat!(
+        "This sentence has enough preceding text to make the formatter choose ",
+        "a bad wrap point near this reference ",
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.",
+        "[^4] This sentence follows the reference marker.\n",
+        "\n",
+        "[^4]: Footnote body.\n",
+    );
+
+    let actual = run_wrap_in_place_and_read_back(input)?;
+
+    assert!(actual.contains("[^4]"));
+    assert!(!actual.contains("[\n"));
+    assert!(!actual.contains("\n^4]"));
+    Ok(())
+}
