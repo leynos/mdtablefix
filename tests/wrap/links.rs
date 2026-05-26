@@ -1,6 +1,9 @@
 //! Link handling during wrapping.
-
-use rstest::rstest;
+//!
+//! These integration-style cases cover Markdown links and image links in prose
+//! reflowed through `process_stream`. They protect link token boundaries,
+//! nested URL parentheses, and trailing punctuation that must stay attached to
+//! links instead of being orphaned during wrapping.
 
 use super::*;
 

@@ -254,6 +254,12 @@ passes. Inline code spans, Markdown links, and GFM footnote references use
 atomic fragment kinds, so the wrapper never inserts a break inside their
 Markdown syntax.
 
+The inline span builder uses the private `is_trailing_punctuation_token`
+helper, via `extend_punctuation`, to keep trailing punctuation attached to
+links and code spans while token groups are being formed. Markdown delimiters
+that open syntax are not treated as trailing punctuation, which avoids
+classifying arbitrary ASCII punctuation as link suffixes.
+
 The `postprocess` module exists because greedy line fitting alone does not
 reproduce the repository's historical whitespace semantics. The first pass
 merges whitespace-only wrap lines into adjacent content, and the second pass
