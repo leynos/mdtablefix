@@ -6,7 +6,7 @@
 
 use rstest::rstest;
 
-use super::*;
+use super::cli_stdin::run_cli_with_stdin;
 
 #[test]
 fn test_cli_wrap_option() {

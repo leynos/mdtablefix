@@ -4,7 +4,7 @@
 //! indentation is maintained and inline code spans are not broken across lines.
 //! Tests various footnote formats including those with URLs and code.
 
-use super::*;
+use super::{wrap_assertions::assert_wrapped_list_item, *};
 
 #[test]
 fn test_wrap_footnote_multiline() {

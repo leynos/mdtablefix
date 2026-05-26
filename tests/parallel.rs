@@ -9,7 +9,13 @@ use tempfile::tempdir;
 #[macro_use]
 #[path = "common/mod.rs"]
 mod common;
-use common::{broken_table, run_cli_with_args};
+
+#[path = "support/cli_args.rs"]
+mod cli_args;
+#[path = "support/fixtures.rs"]
+mod fixtures;
+use cli_args::run_cli_with_args;
+use fixtures::broken_table;
 
 #[rstest]
 fn test_cli_parallel_empty_file_list() { run_cli_with_args(&[]).success().stdout("\n"); }
