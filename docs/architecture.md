@@ -257,7 +257,10 @@ immediately follows an H2 heading when these conditions are met.
 
 `mdtablefix` can format simple HTML `<table>` elements embedded in Markdown.
 These HTML tables are transformed into Markdown before the main table reflow
-logic runs. That preprocessing is handled by the `convert_html_tables` function.
+logic runs. That preprocessing is handled by the `convert_html_tables`
+function. The parser path uses `html5ever` to build a temporary `RcDom` tree
+through `markup5ever_rcdom`, then walks that tree to extract table rows and
+cells.
 
 Only straightforward tables with `<tr>`, `<th>` and `<td>` tags are detected.
 Attributes and tag casing are ignored, and complex nested or styled tables are

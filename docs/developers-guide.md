@@ -82,6 +82,18 @@ restores the separator row with widths derived from the final table body.
 - `format_separator_cells`: Expands separator cells to the target widths while
   preserving Markdown alignment markers.
 
+## HTML parser dependency coupling
+
+HTML table conversion uses `html5ever` for parsing and `markup5ever_rcdom` for
+the temporary DOM sink. These crates must stay on the same `markup5ever` parser
+stack because `RcDom` implements the `TreeSink` trait from that shared
+dependency line. If `html5ever` is upgraded, update `markup5ever_rcdom` in the
+same change and run the compile-time parser integration test before merging.
+
+The manifest uses caret requirements rather than exact pins, so compatible
+patch updates remain available. The lockfile records the concrete crate release
+selected for the branch.
+
 ## Fence normalization module
 
 `src/fences.rs` exposes the preprocessing helpers used by the `--fences` option.

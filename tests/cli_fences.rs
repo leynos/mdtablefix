@@ -1,8 +1,9 @@
 //! CLI regression tests for fence normalization edge cases.
 
 #[macro_use]
-mod prelude;
-use prelude::*;
+#[path = "common/mod.rs"]
+mod common;
+use common::run_cli_with_stdin;
 
 #[test]
 fn test_cli_fences_preserves_nested_backtick_block() {

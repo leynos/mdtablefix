@@ -5,7 +5,8 @@
 //! after processing. Regular comments should still be wrapped normally.
 
 #[macro_use]
-mod prelude;
+#[path = "common/mod.rs"]
+mod common;
 use mdtablefix::process_stream;
 use rstest::rstest;
 

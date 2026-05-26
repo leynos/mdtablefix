@@ -22,8 +22,10 @@ clap = { version = "4", features = ["derive"] }
 regex = "1"
 once_cell = "1"
 rayon = "1.11"
-html5ever = "0.27"
-markup5ever_rcdom = "0.3"
+html5ever = "0.39.0"
+# `markup5ever_rcdom` must stay on the same parser stack as `html5ever`
+# because `RcDom` implements `TreeSink` from that shared `markup5ever` line.
+markup5ever_rcdom = "0.39.0"
 textwrap = "0.16.2"
 unicode-width = "0.2"
 
@@ -35,6 +37,7 @@ insta = "1.47"
 tempfile = "3"
 libc = "0.2.174"
 predicates = "3"
+trybuild = "1"
 
 [lints.clippy]
 pedantic = "warn"

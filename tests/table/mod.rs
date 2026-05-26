@@ -17,10 +17,11 @@
 //! across different scenarios whilst avoiding duplication.
 
 use mdtablefix::{convert_html_tables, process_stream, reflow_table};
+use rstest::fixture;
 
 #[macro_use]
-mod prelude;
-use prelude::*;
+#[path = "../common/mod.rs"]
+mod common;
 
 #[fixture]
 fn malformed_table() -> Vec<String> {

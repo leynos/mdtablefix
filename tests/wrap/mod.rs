@@ -6,8 +6,9 @@
 use mdtablefix::process_stream;
 
 #[macro_use]
-mod prelude;
-use prelude::*;
+#[path = "../common/mod.rs"]
+mod common;
+use common::{assert_wrapped_blockquote, assert_wrapped_list_item, run_cli_with_stdin};
 
 mod paragraphs;
 mod lists;

@@ -4,11 +4,12 @@
 
 use std::borrow::Cow;
 
+use assert_cmd::Command;
 use mdtablefix::{THEMATIC_BREAK_LEN, format_breaks};
 
 #[macro_use]
-mod prelude;
-use prelude::*;
+#[path = "common/mod.rs"]
+mod common;
 
 #[test]
 fn test_format_breaks_basic() {

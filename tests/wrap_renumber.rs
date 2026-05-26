@@ -3,7 +3,8 @@
 use mdtablefix::{process_stream, renumber_lists};
 
 #[macro_use]
-mod prelude;
+#[path = "common/mod.rs"]
+mod common;
 
 #[test]
 fn wrap_then_renumber_preserves_order() {

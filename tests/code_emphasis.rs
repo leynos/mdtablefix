@@ -2,10 +2,11 @@
 //!
 //! Verifies that emphasis markers adjacent to inline code are normalised.
 
-mod prelude;
 use std::fs;
 
-use prelude::{run_cli_with_args, run_cli_with_stdin};
+#[path = "common/mod.rs"]
+mod common;
+use common::{run_cli_with_args, run_cli_with_stdin};
 use tempfile::tempdir;
 
 #[test]

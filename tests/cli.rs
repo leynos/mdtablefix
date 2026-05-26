@@ -11,12 +11,14 @@ use std::{
     io::Write,
 };
 
+use assert_cmd::Command;
 use rstest::rstest;
 use tempfile::tempdir;
 
 #[macro_use]
-mod prelude;
-use prelude::*;
+#[path = "common/mod.rs"]
+mod common;
+use common::broken_table;
 
 /// Verifies that the CLI fails when the `--in-place` flag is used without specifying a file.
 ///
