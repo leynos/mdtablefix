@@ -2,7 +2,7 @@
 
 use rstest::rstest;
 
-use super::*;
+use super::{wrap_assertions::assert_wrapped_list_item, *};
 
 #[test]
 fn test_wrap_list_item() {

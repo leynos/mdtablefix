@@ -1,13 +1,10 @@
-//! Utility helpers shared across integration tests.
-
-use assert_cmd::{Command, assert::Assert};
-use rstest::fixture;
+//! Utility macros shared across integration tests.
 
 /// Build a `Vec<String>` from a list of string slices.
 ///
 /// This macro is primarily used in tests to reduce boilerplate when
 /// constructing example tables or other collections of lines.
-#[allow(unused_macros, reason = "macros are optional helpers across modules")]
+#[macro_export]
 macro_rules! lines_vec {
     ($($line:expr),* $(,)?) => {
         vec![$($line.to_string()),*]
@@ -20,117 +17,10 @@ macro_rules! lines_vec {
 /// ```
 /// let input: Vec<String> = include_lines!("data/bold_header_input.txt"); 
 /// ```
-#[allow(unused_macros, reason = "macros are optional helpers across modules")]
+#[macro_export]
 macro_rules! include_lines {
     ($path:literal $(,)?) => {{
         const _TXT: &str = include_str!($path);
         _TXT.lines().map(str::to_owned).collect()
     }};
-}
-
-/// Assert common wrapping expectations for list items.
-///
-/// Verifies the number of lines, prefix on the first line, length of all lines,
-/// and indentation of continuation lines.
-///
-/// # Panics
-///
-/// Panics if the output slice is empty, expected count is zero, or if the lines
-/// do not meet the asserted conditions.
-#[allow(dead_code, reason = "helper used selectively across modules")]
-pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize) {
-    assert!(expected > 0, "expected line count must be positive");
-    assert!(!output.is_empty(), "output slice is empty");
-    assert_eq!(output.len(), expected);
-    assert!(output.first().is_some_and(|line| line.starts_with(prefix)));
-    assert!(output.iter().all(|l| l.len() <= 80));
-    let indent = " ".repeat(prefix.len());
-    for line in output.iter().skip(1) {
-        assert!(line.starts_with(&indent));
-    }
-
-    let mut open: Option<usize> = None;
-    for line in output {
-        scan_code_spans(line, &mut open);
-        assert!(open.is_none(), "code span split across lines");
-    }
-    assert!(open.is_none(), "unclosed code span");
-}
-
-fn scan_code_spans(line: &str, open: &mut Option<usize>) {
-    let chars: Vec<char> = line.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        if chars[i] != '`' {
-            i += 1;
-            continue;
-        }
-
-        let len = count_backticks(&chars, &mut i);
-        toggle_code_span(open, len);
-    }
-}
-
-fn count_backticks(chars: &[char], index: &mut usize) -> usize {
-    let mut len = 0;
-    while *index < chars.len() && chars[*index] == '`' {
-        len += 1;
-        *index += 1;
-    }
-    len
-}
-
-fn toggle_code_span(open: &mut Option<usize>, len: usize) {
-    if open.is_some_and(|open_len| open_len == len) {
-        *open = None;
-    } else {
-        *open = Some(len);
-    }
-}
-
-/// Assert that every line in a blockquote starts with the given prefix and is at most 80
-/// characters.
-///
-/// # Panics
-///
-/// Panics if the output slice is empty or the prefix is missing from any line.
-#[allow(dead_code, reason = "helper used selectively across modules")]
-pub fn assert_wrapped_blockquote(output: &[String], prefix: &str, expected: usize) {
-    assert!(!output.is_empty(), "output slice is empty");
-    assert_eq!(output.len(), expected);
-    assert!(output.iter().all(|l| l.starts_with(prefix)));
-    assert!(output.iter().all(|l| l.len() <= 80));
-}
-
-/// Fixture representing a simple broken table.
-#[allow(dead_code, reason = "helper used selectively across modules")]
-#[fixture]
-pub fn broken_table() -> Vec<String> {
-    vec![
-        "| A | B |    |".to_string(),
-        "| 1 | 2 |  | 3 | 4 |".to_string(),
-    ]
-}
-
-/// Run the `mdtablefix` binary with the provided arguments.
-///
-/// Returns an [`Assert`] handle for chaining output and status checks.
-#[allow(dead_code, reason = "used selectively across integration tests")]
-pub fn run_cli_with_args(args: &[&str]) -> Assert {
-    Command::cargo_bin("mdtablefix")
-        .expect("failed to create command")
-        .args(args)
-        .assert()
-}
-
-/// Run the `mdtablefix` binary with the provided arguments and standard input.
-///
-/// Returns an [`Assert`] handle for chaining output and status checks.
-#[allow(dead_code, reason = "used selectively across integration tests")]
-pub fn run_cli_with_stdin(args: &[&str], input: &str) -> Assert {
-    Command::cargo_bin("mdtablefix")
-        .expect("failed to create command")
-        .args(args)
-        .write_stdin(input.to_owned())
-        .assert()
 }
