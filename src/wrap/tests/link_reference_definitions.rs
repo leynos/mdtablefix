@@ -54,3 +54,37 @@ fn wrap_text_treats_title_after_blank_line_as_prose() {
     assert_eq!(wrapped[1], "");
     assert!(wrapped.len() > 3);
 }
+
+#[test]
+fn wrap_text_clears_awaiting_link_title_at_fence_opener() {
+    let input = vec![
+        "[foo]: https://example.com".to_string(),
+        "```python".to_string(),
+        "code".to_string(),
+        "```".to_string(),
+    ];
+    assert_eq!(wrap_text(&input, 80), input);
+}
+
+#[test]
+fn wrap_text_reflows_prose_after_bare_link_reference_definition() {
+    let input = vec![
+        "[foo]: https://example.com".to_string(),
+        "Paragraph text here.".to_string(),
+    ];
+    let wrapped = wrap_text(&input, 80);
+
+    assert_eq!(wrapped[0], input[0]);
+    assert_eq!(wrapped[1], input[1]);
+}
+
+#[test]
+fn wrap_text_does_not_apply_awaiting_link_title_inside_fence() {
+    let input = vec![
+        "```".to_string(),
+        "[foo]: https://example.com".to_string(),
+        "\"A title\"".to_string(),
+        "```".to_string(),
+    ];
+    assert_eq!(wrap_text(&input, 80), input);
+}

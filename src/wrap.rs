@@ -57,10 +57,10 @@ fn is_table_or_separator(line: &str) -> bool {
     line.trim_start().starts_with('|') || crate::table::SEP_RE.is_match(line.trim())
 }
 
-fn is_passthrough_block(line: &str) -> bool {
+fn is_passthrough_block(block_kind: Option<BlockKind>, line: &str) -> bool {
     is_table_or_separator(line)
         || matches!(
-            classify_block(line),
+            block_kind,
             Some(
                 BlockKind::Heading
                     | BlockKind::MarkdownlintDirective
@@ -163,11 +163,10 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
         }
         awaiting_link_title = false;
 
-        if is_passthrough_block(line) {
-            if matches!(
-                classify_block(line),
-                Some(BlockKind::LinkReferenceDefinition)
-            ) {
+        let block_kind = classify_block(line);
+
+        if is_passthrough_block(block_kind, line) {
+            if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
                 awaiting_link_title = block::link_ref_needs_title(line);
             }
             writer.push_verbatim(&mut state, line);

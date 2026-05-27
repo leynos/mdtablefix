@@ -14,6 +14,7 @@ mod paragraphs;
 mod lists;
 mod footnotes;
 mod link_reference_definitions;
+mod link_ref_snapshots;
 mod blockquotes;
 mod hard_line_breaks;
 mod links;

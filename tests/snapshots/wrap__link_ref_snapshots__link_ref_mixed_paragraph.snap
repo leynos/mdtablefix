@@ -1,0 +1,9 @@
+---
+source: tests/wrap/link_ref_snapshots.rs
+expression: wrap_lines(input)
+---
+First paragraph text here.
+
+[foo]: https://example.com
+
+Second paragraph text here.
