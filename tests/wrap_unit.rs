@@ -44,9 +44,29 @@ fn wrap_text_joins_cross_line_code_spans(#[case] input: Vec<String>, #[case] exp
 
 fn wrap_text_joins_split_version_code_span_without_inserting_fence() {
     let input = lines_vec!["- Release `4.1.1", "  rc1` candidate."];
+||||||| base
+#[test]
+fn wrap_text_joins_split_version_code_span_without_inserting_fence() {
+    let input = lines_vec!["- Release `4.1.1", "  rc1` candidate."];
+#[rstest]
+#[case("- Release `4.1.1", "  rc1` candidate.", "`4.1.1 rc1`", "`4.1.1` rc1")]
+#[case("- Version `1.2", "  beta` works.", "`1.2 beta`", "`1.2` beta")]
+fn wrap_text_joins_split_version_code_spans_without_inserting_fence(
+    #[case] first: &str,
+    #[case] second: &str,
+    #[case] expected_span: &str,
+    #[case] invalid_span: &str,
+) {
+    let input = lines_vec![first, second];
     let rendered = wrap_text(&input, 80).join("\n");
-    assert!(rendered.contains("`4.1.1 rc1`"));
-    assert!(!rendered.contains("`4.1.1` rc1"));
+    assert!(
+        rendered.contains(expected_span),
+        "expected joined span {expected_span:?}, got: {rendered}"
+    );
+    assert!(
+        !rendered.contains(invalid_span),
+        "must not synthesise a closing fence before {invalid_span:?}, got: {rendered}"
+    );
 }
 
 fn wrap_text_joins_indented_ordered_list_code_span_continuation() {

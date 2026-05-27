@@ -131,6 +131,10 @@ fn line_break_parts(line: &str) -> (String, bool) {
 }
 
 /// Join a soft-wrapped continuation onto pending prefixed text.
+///
+/// Never synthesises closing fences. Only backticks present in the source may
+/// close an open span; when the continuation does not begin with the matching
+/// closing fence run, a single space is inserted before appending.
 fn join_pending_continuation(existing: &mut String, continuation: &str) {
     if continuation.is_empty() {
         return;

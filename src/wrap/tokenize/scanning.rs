@@ -310,6 +310,21 @@ mod tests {
     }
 
     #[rstest]
+    #[case("Version `1.2", "beta` works.", false)]
+    #[case("Release `4.1.1", "rc1` candidate.", false)]
+    #[case("text `open", "`close rest", true)]
+    fn continuation_begins_with_closing_fence_matches_literal_closers_only(
+        #[case] existing: &str,
+        #[case] continuation: &str,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            continuation_begins_with_closing_fence(existing, continuation),
+            expected
+        );
+    }
+
+    #[rstest]
     #[case("`a``b`", false)]
     #[case("``ab``", false)]
     #[case("``a`b`", true)]
