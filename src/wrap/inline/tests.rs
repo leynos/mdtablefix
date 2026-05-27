@@ -47,6 +47,24 @@ fn inline_fragment_new_marks_footnote_refs_as_footnote_refs(#[case] input: &str)
     assert!(fragment.is_atomic());
 }
 
+#[rstest]
+#[case("`code`s")]
+#[case("`class`'s")]
+#[case("`fetch`ed")]
+#[case("`run`ning")]
+fn inline_fragment_new_marks_code_with_suffix_as_inline_code(#[case] text: &str) {
+    let fragment = InlineFragment::new(text.into());
+    assert_eq!(fragment.kind, FragmentKind::InlineCode);
+    assert!(fragment.is_atomic());
+}
+
+#[rstest]
+#[case("`code`s,")]
+fn inline_fragment_new_marks_code_with_suffix_and_punctuation_as_inline_code(#[case] text: &str) {
+    let fragment = InlineFragment::new(text.into());
+    assert_eq!(fragment.kind, FragmentKind::InlineCode);
+}
+
 #[test]
 fn inline_fragment_new_marks_plain_words_as_plain() {
     let fragment = InlineFragment::new("word".into());

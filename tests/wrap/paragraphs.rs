@@ -141,3 +141,33 @@ fn test_wrap_preserves_escaped_backticks_in_paragraph() {
     assert!(flattened.contains("[link](https://ex.com)"));
     assert!(flattened.contains("*still ok*"));
 }
+
+#[rstest]
+#[case("`VarGuard`s")]
+#[case("`class`'s")]
+#[case("`fetch`ed")]
+#[case("`run`ning")]
+fn test_wrap_keeps_inline_code_suffix_on_same_line(#[case] snippet: &str) {
+    let close_backtick = snippet
+        .rfind('`')
+        .expect("snippet must contain inline code");
+    let orphaned_suffix = &snippet[close_backtick + 1..];
+
+    let prefix = concat!(
+        "When a scenario requires batched cleanup, collect the original values and ",
+        "restore them with `restore_many()` from `TestWorld::drop`, or keep "
+    );
+    let suffix = " alive for the scenario lifetime. For BDD scenarios specifically,";
+    let input = lines_vec![format!("{prefix}{snippet}{suffix}")];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    for line in output.iter().skip(1) {
+        let trimmed = line.trim_start();
+        assert!(
+            !trimmed.starts_with(orphaned_suffix),
+            "inflectional suffix must not appear alone at line start: {output:?}"
+        );
+    }
+    let flattened = output.join("\n");
+    assert!(flattened.contains(snippet));
+}
