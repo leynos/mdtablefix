@@ -13,6 +13,7 @@ use common::{assert_wrapped_blockquote, assert_wrapped_list_item, run_cli_with_s
 mod paragraphs;
 mod lists;
 mod footnotes;
+mod link_reference_definitions;
 mod blockquotes;
 mod hard_line_breaks;
 mod links;

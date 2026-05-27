@@ -61,7 +61,11 @@ fn is_passthrough_block(line: &str) -> bool {
     is_table_or_separator(line)
         || matches!(
             classify_block(line),
-            Some(BlockKind::Heading | BlockKind::MarkdownlintDirective)
+            Some(
+                BlockKind::Heading
+                    | BlockKind::MarkdownlintDirective
+                    | BlockKind::LinkReferenceDefinition,
+            )
         )
         || line.trim().is_empty()
         || is_indented_code_line(line)

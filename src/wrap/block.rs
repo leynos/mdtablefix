@@ -39,6 +39,11 @@ pub(super) static FOOTNOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     "footnote pattern regex should compile",
 );
 
+/// Matches link reference definition prefixes so they remain verbatim during wrapping.
+pub(super) static LINK_REF_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^(\s*)(\[[^\]]+\]:\s*)(.*)$",
+    "link reference definition regex should compile",
+);
 /// Matches blockquote prefixes, capturing the marker run and the remainder for reuse.
 pub(super) static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*(?:>\s*)+)(.*)$",
@@ -70,6 +75,8 @@ pub(crate) enum BlockKind {
     Blockquote,
     /// Footnote definitions recognised by [`FOOTNOTE_RE`].
     FootnoteDefinition,
+    /// Link reference definitions recognised by [`LINK_REF_RE`].
+    LinkReferenceDefinition,
     /// HTML-style markdownlint directives recognised by [`is_markdownlint_directive`].
     MarkdownlintDirective,
     /// Lines whose first non-whitespace character is an ASCII digit.
@@ -80,7 +87,8 @@ pub(crate) enum BlockKind {
 ///
 /// Detection order determines precedence when a line could match multiple prefixes.
 /// The current precedence is: heading, bullet, blockquote, footnote definition,
-/// markdownlint directive, digit prefix. Headings outrank bullets and blockquotes,
+/// link reference definition, markdownlint directive, digit prefix. Headings
+/// outrank bullets and blockquotes,
 /// so inputs such as "# 1" remain headings rather than list items. Headings ignore
 /// indentation of four or more spaces so indented code remains untouched.
 /// For example, passing "> quote" returns `Some(BlockKind::Blockquote)` while
@@ -100,6 +108,9 @@ pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
     }
     if indent_width < 4 && FOOTNOTE_RE.is_match(line) {
         return Some(BlockKind::FootnoteDefinition);
+    }
+    if indent_width < 4 && LINK_REF_RE.is_match(line) {
+        return Some(BlockKind::LinkReferenceDefinition);
     }
     if indent_width < 4 && is_markdownlint_directive(line) {
         return Some(BlockKind::MarkdownlintDirective);
@@ -141,6 +152,19 @@ mod tests {
         case("1. item", Some(BlockKind::Bullet)),
         case("> quote", Some(BlockKind::Blockquote)),
         case("[^1]: footnote", Some(BlockKind::FootnoteDefinition)),
+        case(
+            "[ansible]: <https://docs.ansible.com/>",
+            Some(BlockKind::LinkReferenceDefinition)
+        ),
+        case(
+            "[label]: https://example.com",
+            Some(BlockKind::LinkReferenceDefinition)
+        ),
+        case(
+            "[label]: https://example.com \"Optional title\"",
+            Some(BlockKind::LinkReferenceDefinition)
+        ),
+        case("    [label]: https://example.com", None),
         case(
             "<!-- markdownlint-disable -->",
             Some(BlockKind::MarkdownlintDirective)
