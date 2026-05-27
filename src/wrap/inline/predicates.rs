@@ -47,7 +47,7 @@ pub(in crate::wrap::inline) fn is_whitespace_token(token: &str) -> bool {
 
 /// Returns whether `token` is a complete inline code span.
 pub(in crate::wrap::inline) fn is_inline_code_token(token: &str) -> bool {
-    token.starts_with('`') && token.ends_with('`')
+    token.len() > 1 && token.starts_with('`') && token.ends_with('`')
 }
 
 /// Returns the substring beginning at the first Markdown link opener after any
