@@ -29,6 +29,8 @@ pub(super) struct PendingPrefix {
     pub(super) rest_width: usize,
     /// Marks whether continuation lines should repeat the full prefix.
     pub(super) repeat_prefix: bool,
+    /// Marks whether the closing continuation ended with a Markdown hard break.
+    pub(super) hard_break: bool,
 }
 
 #[derive(Default)]
@@ -173,6 +175,12 @@ impl<'a> ParagraphWriter<'a> {
                 repeat_prefix: pending.repeat_prefix,
             };
             self.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
+            if pending.hard_break
+                && let Some(last) = self.out.last_mut()
+                && !last.ends_with("  ")
+            {
+                last.push_str("  ");
+            }
         }
 
         if state.buf.is_empty() {
@@ -237,6 +245,7 @@ impl<'a> ParagraphWriter<'a> {
                 rest: prefix_line.rest.to_string(),
                 rest_width: self.width.saturating_sub(prefix_width).max(1),
                 repeat_prefix: prefix_line.repeat_prefix,
+                hard_break: false,
             });
             return;
         }

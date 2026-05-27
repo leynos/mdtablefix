@@ -159,7 +159,13 @@ fn handle_pending_continuation(
             && prefix_line.repeat_prefix
             && pending.prefix == prefix_line.prefix.as_ref()
         {
-            join_pending_continuation(&mut pending.rest, prefix_line.rest);
+            let (text, hard_break) = line_break_parts(prefix_line.rest);
+            if !text.is_empty() {
+                join_pending_continuation(&mut pending.rest, &text);
+            }
+            if hard_break {
+                pending.hard_break = true;
+            }
             if !has_unclosed_code_span(pending.rest.as_str()) {
                 writer.flush_paragraph(state);
             }
@@ -190,13 +196,16 @@ fn handle_pending_continuation(
         return;
     }
 
-    let (text, _hard_break) = line_break_parts(line);
+    let (text, hard_break) = line_break_parts(line);
     let Some(pending) = state.pending_prefix.as_mut() else {
         return;
     };
 
     if !text.is_empty() {
         join_pending_continuation(&mut pending.rest, &text);
+    }
+    if hard_break {
+        pending.hard_break = true;
     }
 
     if !has_unclosed_code_span(pending.rest.as_str()) {

@@ -74,23 +74,26 @@ fn test_wrap_spanning_code_span_footnote_definition() {
     assert!(rendered.contains("`interpreter`"));
 }
 
-#[rstest]
-#[case("- `open", " span` closes.", 1_usize)]
-fn test_wrap_joins_unclosed_span_continuation(
-    #[case] first: &str,
-    #[case] second: &str,
-    #[case] expected_lines: usize,
-) {
-    let input = lines_vec![first, second];
+#[test]
+fn test_wrap_joins_unclosed_span_continuation() {
+    let input = lines_vec!["- `open", " span` closes."];
     let output = wrap_text(&input, 80);
-    assert_eq!(output.len(), expected_lines);
+    assert_eq!(output.len(), 1);
     assert!(output[0].contains("`open span`"));
 }
 
-#[rstest]
-#[case("- `done` and `open", " span` continues.")]
-fn test_wrap_defers_while_any_span_stays_open(#[case] first: &str, #[case] second: &str) {
-    let input = lines_vec![first, second];
+#[test]
+fn test_wrap_preserves_hard_break_when_buffered_span_closes() {
+    let input = lines_vec!["- `foo", "bar` continues.  ", "next"];
+    let output = wrap_text(&input, 80);
+    assert_eq!(output.len(), 2);
+    assert_eq!(output[0], "- `foo bar` continues.  ");
+    assert_eq!(output[1], "next");
+}
+
+#[test]
+fn test_wrap_defers_while_any_span_stays_open() {
+    let input = lines_vec!["- `done` and `open", " span` continues."];
     let output = wrap_text(&input, 80);
     let rendered = output.join("\n");
     assert!(rendered.contains("`done`"));
