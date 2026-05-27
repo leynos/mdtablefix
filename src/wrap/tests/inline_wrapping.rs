@@ -129,10 +129,10 @@ fn wrap_preserving_code_retains_punctuation_after_separate_spans() {
 }
 
 #[rstest]
-#[case("alpha beta", 5, &["alpha", " beta"])]
-#[case("alpha  beta", 5, &["alpha", "  beta"])]
-#[case("alpha `beta`", 5, &["alpha", " `beta`"])]
-fn wrap_preserving_code_preserves_carry_whitespace(
+#[case("alpha beta", 5, &["alpha", "beta"])]
+#[case("alpha  beta", 5, &["alpha", "beta"])]
+#[case("alpha `beta`", 5, &["alpha", "`beta`"])]
+fn wrap_preserving_code_strips_leading_carry_whitespace(
     #[case] input: &str,
     #[case] width: usize,
     #[case] expected: &[&str],
@@ -142,7 +142,12 @@ fn wrap_preserving_code_preserves_carry_whitespace(
         lines,
         expected.iter().map(|&s| s.to_string()).collect::<Vec<_>>()
     );
-    assert_eq!(lines.concat(), input);
+    for line in &lines {
+        assert!(
+            !line.starts_with(' '),
+            "wrapped lines must not begin with carry whitespace: {line:?}"
+        );
+    }
 }
 
 #[rstest]

@@ -92,6 +92,47 @@ fn test_wrap_preserves_escaped_triple_backticks() {
 }
 
 #[test]
+fn test_wrap_no_leading_spaces_on_continuation_lines() {
+    let input = lines_vec![
+        concat!(
+            "This ExecPlan (execution plan) is a living document. The sections ",
+            "`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, ",
+            "`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work ",
+            "proceeds."
+        ),
+    ];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    for line in &output {
+        assert!(
+            !line.starts_with(' '),
+            "reflowed line must not begin with a spurious leading space: {line:?}"
+        );
+    }
+}
+
+#[rstest]
+#[case("`Constraints`, `Tolerances`, and `Risks`.")]
+#[case("See `alpha` and `beta` for details.")]
+#[case("(`code`) with opening parenthesis.")]
+fn test_wrap_no_leading_spaces_with_inline_code(#[case] snippet: &str) {
+    let prefix = concat!(
+        "This paragraph is deliberately long enough to force wrapping across ",
+        "multiple output lines while preserving inline code spans near the ",
+        "wrap boundary. "
+    );
+    let input = lines_vec![format!("{prefix}{snippet}")];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    for line in &output {
+        assert!(
+            !line.starts_with(' '),
+            "reflowed line must not begin with a spurious leading space: {line:?}"
+        );
+    }
+}
+
+#[test]
 fn test_wrap_preserves_escaped_backticks_in_paragraph() {
     let input = lines_vec![r"This deliberately verbose paragraph holds escaped ticks like \`code\` alongside [link](https://ex.com) markup and emphasis *still ok* so that wrapping must retain the literal ticks."];
     let output = process_stream(&input);

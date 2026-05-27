@@ -398,7 +398,8 @@ fn render_line(line: &[InlineFragment], is_final_output_line: bool) -> String {
         text.pop();
     }
 
-    text
+    // Wrapped continuation lines must not retain carry whitespace at the start.
+    text.trim_start().to_string()
 }
 
 /// Wraps inline Markdown `text` without splitting code spans or links.
