@@ -20,6 +20,53 @@ fn determine_token_span_groups_punctuation_with_footnote_reference() {
     assert_eq!(width, unicode_width::UnicodeWidthStr::width("word.[^4]"));
 }
 
+#[rstest]
+#[case("`fn!()`.[^1]")]
+#[case("`value`,[^2]")]
+#[case("`result`?[^3]")]
+#[case("[text](url).[^1]")]
+#[case("[text](url),[^2]")]
+#[case("(`code`).[^1]")]
+#[case("([link](url)).[^1]")]
+#[case("`assert_ne!`.[^3]")]
+#[case("[click here](https://example.com).[^1]")]
+fn determine_token_span_groups_footnote_reference_after_atomic_span(#[case] input: &str) {
+    let tokens = segment_inline(input);
+    let (end, width) = determine_token_span(&tokens, 0);
+    let grouped = tokens[..end].join("");
+    assert_eq!(grouped, input);
+    assert_eq!(width, unicode_width::UnicodeWidthStr::width(input));
+}
+
+#[rstest]
+#[case("`assert_ne!`. [^3]", "`assert_ne!`.")]
+#[case("`assert_ne!` [^3]", "`assert_ne!`")]
+fn determine_token_span_does_not_group_whitespace_separated_footnote_reference(
+    #[case] input: &str,
+    #[case] expected_group: &str,
+) {
+    let tokens = segment_inline(input);
+    let (end, width) = determine_token_span(&tokens, 0);
+    let grouped = tokens[..end].join("");
+    assert_eq!(grouped, expected_group);
+    assert_eq!(width, unicode_width::UnicodeWidthStr::width(expected_group));
+}
+
+#[test]
+fn determine_token_span_groups_footnote_reference_after_opener_coupled_code() {
+    let input = "See (`code`).[^1] for details";
+    let tokens = segment_inline(input);
+    let open_paren = tokens
+        .iter()
+        .position(|token| token == "(")
+        .expect("opening parenthesis token");
+    let (end, width) = determine_token_span(&tokens, open_paren);
+    let grouped = tokens[open_paren..end].join("");
+    let expected = "(`code`).[^1]";
+    assert_eq!(grouped, expected);
+    assert_eq!(width, unicode_width::UnicodeWidthStr::width(expected));
+}
+
 #[test]
 fn segment_inline_splits_before_embedded_footnote_reference() {
     let tokens = segment_inline("word[^4]");

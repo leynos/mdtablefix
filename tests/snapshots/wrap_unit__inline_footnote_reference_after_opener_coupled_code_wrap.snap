@@ -1,0 +1,6 @@
+---
+source: tests/wrap_unit.rs
+expression: "wrapped.join(\"\\n\")"
+---
+See the standard macros (`assert!`, `assert_eq!`, and `assert_ne!`).[^3] This
+sentence follows the reference marker.

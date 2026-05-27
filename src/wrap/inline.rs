@@ -8,227 +8,39 @@
 mod footnote_tests;
 mod fragment;
 mod postprocess;
+mod predicates;
+mod span_helpers;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod tests;
+
 use std::ops::Range;
 
 use fragment::{InlineFragment, width_as_f64};
 use postprocess::{merge_whitespace_only_lines, rebalance_atomic_tails};
+use predicates::looks_like_link;
+pub(in crate::wrap::inline) use predicates::{
+    ends_with_footnote_ref,
+    fragment_is_link,
+    is_inline_code_token,
+    is_opening_punct,
+    is_trailing_punct,
+    is_whitespace_token,
+    looks_like_footnote_ref,
+};
+use span_helpers::{
+    SpanKind,
+    absorb_token_and_trailing_punctuation,
+    extend_punctuation,
+    merge_code_span,
+    should_couple_whitespace,
+    try_couple_footnote_reference,
+};
 use textwrap::wrap_algorithms::wrap_first_fit;
 use unicode_width::UnicodeWidthStr;
 
 use super::tokenize;
-
-/// Marks how a grouped token span should behave during wrapping.
-#[derive(Copy, Clone, PartialEq, Eq)]
-enum SpanKind {
-    /// Treat the span as ordinary prose.
-    General,
-    /// Treat the span as an inline code sequence.
-    Code,
-    /// Treat the span as a Markdown link or image link.
-    Link,
-    /// Treat the span as a GitHub Flavoured Markdown footnote reference.
-    FootnoteRef,
-}
-fn is_opening_punct(c: char) -> bool { matches!(c, '(' | '[') || "（［【《「『".contains(c) }
-fn is_trailing_punct(c: char) -> bool {
-    // ASCII closers + common Unicode closers and word-final punctuation
-    matches!(
-        c,
-        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '"' | '\''
-    ) || "…—–»›）］】》」』、。，：；！？”.’".contains(c)
-}
-
-/// Returns whether `token` already looks like a complete Markdown link.
-///
-/// The `token` parameter is the rendered fragment text to inspect. The return
-/// value is `true` only for complete inline links or image links, and this
-/// helper never panics.
-fn looks_like_link(token: &str) -> bool {
-    (token.starts_with('[') || token.starts_with("!["))
-        && token.contains("](")
-        && token.ends_with(')')
-}
-
-/// Returns whether `token` looks like a complete GFM footnote reference.
-///
-/// The `token` parameter is the rendered fragment text to inspect. The return
-/// value is `true` for the compact `[^label]` shape when `label` is non-empty.
-/// This helper intentionally leaves label validation to the Markdown parser.
-fn looks_like_footnote_ref(token: &str) -> bool {
-    token
-        .strip_prefix("[^")
-        .and_then(|label| label.strip_suffix(']'))
-        .is_some_and(|label| !label.is_empty())
-}
-
-/// Returns whether `token` ends with an inline footnote reference.
-///
-/// The wrapper can group `word.[^label]` into a single fragment to avoid
-/// separating sentence punctuation from the marker. This predicate recognises
-/// that suffix shape without treating arbitrary prose as a standalone marker.
-fn ends_with_footnote_ref(token: &str) -> bool {
-    let Some(start) = token.rfind("[^") else {
-        return false;
-    };
-
-    looks_like_footnote_ref(&token[start..])
-}
-
-/// Returns whether `token` contains only Unicode whitespace.
-///
-/// The `token` parameter is the rendered fragment text to inspect. The return
-/// value is `true` when every character is whitespace, and this helper never
-/// panics.
-fn is_whitespace_token(token: &str) -> bool { token.chars().all(char::is_whitespace) }
-
-/// Returns whether `token` is a complete inline code span.
-///
-/// The `token` parameter is the rendered fragment text to inspect. The return
-/// value is `true` only for complete backtick-delimited spans, and this helper
-/// never panics.
-fn is_inline_code_token(token: &str) -> bool { token.starts_with('`') && token.ends_with('`') }
-
-/// Returns the substring beginning at the first Markdown link opener after any
-/// leading opener punctuation.
-///
-/// Non-link openers such as `(` are skipped, but a leading `[` or `![` that
-/// begins a link is preserved so opener-coupled links classify correctly.
-fn link_text_after_leading_openers(text: &str) -> &str {
-    let mut rest = text;
-    while !rest.is_empty() {
-        if rest.starts_with('[') || rest.starts_with("![") {
-            return rest;
-        }
-        let Some(ch) = rest.chars().next() else {
-            break;
-        };
-        if is_opening_punct(ch) {
-            rest = &rest[ch.len_utf8()..];
-        } else {
-            break;
-        }
-    }
-    rest
-}
-
-/// Strips one outer wrapper closing character from a link candidate when present.
-fn strip_outer_link_wrapper_suffix(text: &str) -> Option<&str> {
-    let last = text.chars().next_back()?;
-    if matches!(last, ')' | ']' | '）' | '］' | '」' | '』' | '》') {
-        Some(&text[..text.len() - last.len_utf8()])
-    } else {
-        None
-    }
-}
-
-/// Returns whether rendered fragment text contains a Markdown link, including
-/// links wrapped in outer opener punctuation.
-fn fragment_is_link(text: &str) -> bool {
-    if looks_like_link(text) {
-        return true;
-    }
-    let mut candidate = link_text_after_leading_openers(text);
-    while !candidate.is_empty() {
-        if looks_like_link(candidate) {
-            return true;
-        }
-        let Some(next) = strip_outer_link_wrapper_suffix(candidate) else {
-            break;
-        };
-        candidate = next;
-    }
-    false
-}
-
-/// Extends a grouped span over trailing punctuation tokens and updates `width`.
-///
-/// `tokens` supplies the token stream, `j` is the next token index to inspect,
-/// and `width` accumulates the display width of the current span. The return
-/// value is the exclusive end index after any attached punctuation, and the
-/// caller must pass a valid starting index within `tokens`.
-fn extend_punctuation(tokens: &[String], mut j: usize, width: &mut usize) -> usize {
-    while j < tokens.len() && tokens[j].chars().all(is_trailing_punct) {
-        *width += UnicodeWidthStr::width(tokens[j].as_str());
-        j += 1;
-    }
-    j
-}
-
-/// Decide whether whitespace between grouped tokens should stay attached to the
-/// current span.
-///
-/// Links absorb following whitespace when another link, inline code span, or
-/// punctuation immediately follows so that rendered Markdown keeps those items
-/// together. Code spans are only coupled with trailing punctuation so that two
-/// adjacent code spans can break across lines, but `code`, style suffixes still
-/// cling to the preceding span.
-fn should_couple_whitespace(kind: SpanKind, next_token: Option<&String>) -> bool {
-    match (kind, next_token) {
-        (SpanKind::Link, Some(next))
-            if looks_like_link(next)
-                || is_inline_code_token(next)
-                || next.chars().all(is_trailing_punct) =>
-        {
-            true
-        }
-        (SpanKind::Code, Some(next)) if next.chars().all(is_trailing_punct) => true,
-        _ => false,
-    }
-}
-
-/// Merges a backtick-opened code span into one grouped span and updates
-/// `width`.
-///
-/// `tokens` is the token stream, `i` is the index of a lone backtick opener,
-/// and `width` accumulates the grouped display width. The return value is the
-/// exclusive end index after the closing backtick and any attached
-/// punctuation. This helper relies on the invariant that `tokens[i]` is a lone
-/// backtick token.
-#[inline]
-fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
-    debug_assert!(
-        tokens[i] == "`",
-        "merge_code_span requires a single backtick opener"
-    );
-    let mut j = i + 1;
-    while j < tokens.len() && tokens[j] != "`" {
-        *width += UnicodeWidthStr::width(tokens[j].as_str());
-        j += 1;
-    }
-    if j < tokens.len() {
-        *width += UnicodeWidthStr::width(tokens[j].as_str());
-        j += 1;
-        j = extend_punctuation(tokens, j, width);
-    }
-    j
-}
-
-/// Promotes a general prose span into a footnote-reference span when adjacent
-/// sentence punctuation should stay attached to the marker.
-fn promote_footnote_span(
-    tokens: &[String],
-    end: usize,
-    width: &mut usize,
-) -> Option<(SpanKind, usize)> {
-    let token = tokens.get(end)?;
-    let previous = end
-        .checked_sub(1)
-        .and_then(|previous| tokens.get(previous))?;
-
-    if looks_like_footnote_ref(token) && previous.chars().last().is_some_and(is_trailing_punct) {
-        *width += UnicodeWidthStr::width(token.as_str());
-        return Some((
-            SpanKind::FootnoteRef,
-            extend_punctuation(tokens, end + 1, width),
-        ));
-    }
-
-    None
-}
 
 /// Finds the next logical token group starting at `start`.
 ///
@@ -245,23 +57,19 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
 
     // Forward-couple opening punctuation to the next atomic span so wrapping
     // never leaves a lone `(` at the end of a line before inline code or a link.
-    if tokens[start].chars().all(is_opening_punct) {
-        if let Some(next) = tokens.get(start + 1) {
-            if is_inline_code_token(next) {
-                kind = SpanKind::Code;
-                end += 1;
-                width += UnicodeWidthStr::width(next.as_str());
-                end = extend_punctuation(tokens, end, &mut width);
-            } else if looks_like_link(next) {
-                kind = SpanKind::Link;
-                end += 1;
-                width += UnicodeWidthStr::width(next.as_str());
-                end = extend_punctuation(tokens, end, &mut width);
-            }
-        }
-
-        if matches!(kind, SpanKind::Code | SpanKind::Link) {
-            return (end, width);
+    if tokens[start].chars().all(is_opening_punct)
+        && let Some(next) = tokens.get(start + 1)
+    {
+        if is_inline_code_token(next) {
+            kind = SpanKind::Code;
+            end += 1;
+            width += UnicodeWidthStr::width(next.as_str());
+            end = extend_punctuation(tokens, end, &mut width);
+        } else if looks_like_link(next) {
+            kind = SpanKind::Link;
+            end += 1;
+            width += UnicodeWidthStr::width(next.as_str());
+            end = extend_punctuation(tokens, end, &mut width);
         }
     }
 
@@ -305,26 +113,24 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
 
         let is_link = looks_like_link(token);
         let is_code = is_inline_code_token(token);
-        if kind == SpanKind::General
-            && let Some((promoted_kind, promoted_end)) =
-                promote_footnote_span(tokens, end, &mut width)
+        // Footnote markers must be coupled before consecutive link/code chaining;
+        // otherwise `[^N]` stays a separate wrap token even when punctuation is
+        // already attached to the preceding atomic span.
+        if let Some((next_kind, next_end)) =
+            try_couple_footnote_reference(tokens, end, kind, &mut width)
         {
-            kind = promoted_kind;
-            end = promoted_end;
+            kind = next_kind;
+            end = next_end;
             continue;
         }
 
         if kind == SpanKind::Link && is_link {
-            width += UnicodeWidthStr::width(token.as_str());
-            end += 1;
-            end = extend_punctuation(tokens, end, &mut width);
+            end = absorb_token_and_trailing_punctuation(tokens, end, &mut width);
             continue;
         }
 
         if kind == SpanKind::Code && is_code {
-            width += UnicodeWidthStr::width(token.as_str());
-            end += 1;
-            end = extend_punctuation(tokens, end, &mut width);
+            end = absorb_token_and_trailing_punctuation(tokens, end, &mut width);
             continue;
         }
 
