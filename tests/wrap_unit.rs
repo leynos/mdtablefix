@@ -49,6 +49,13 @@ fn wrap_text_joins_split_version_code_span_without_inserting_fence() {
     assert!(!rendered.contains("`4.1.1` rc1"));
 }
 
+fn wrap_text_joins_indented_ordered_list_code_span_continuation() {
+    let input = lines_vec!["10. Use `cargo kani", "    --version` for smoke checks.",];
+    let rendered = wrap_text(&input, 80).join("\n");
+    assert!(rendered.contains("`cargo kani --version`"));
+}
+// hint: Renamed and reformatted. Prefer the structural change, verify formatting.
+
 fn wrap_text_preserves_hyphenated_words() {
     let input = lines_vec!["A word that is very-long-word indeed"];
     let wrapped = wrap_text(&input, 20);

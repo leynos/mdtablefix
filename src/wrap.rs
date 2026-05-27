@@ -142,6 +142,64 @@ fn join_pending_continuation(existing: &mut String, continuation: &str) {
     existing.push_str(continuation);
 }
 
+fn handle_pending_continuation(
+    line: &str,
+    block_kind: Option<BlockKind>,
+    writer: &mut ParagraphWriter<'_>,
+    state: &mut ParagraphState,
+    link_matcher: LinkReferenceMatcher,
+    link_title_window: &mut link_reference::LinkTitleWindow,
+) {
+    if let Some(prefix_line) = prefix_line(line) {
+        if let Some(pending) = state.pending_prefix.as_mut()
+            && prefix_line.repeat_prefix
+            && pending.prefix == prefix_line.prefix.as_ref()
+        {
+            join_pending_continuation(&mut pending.rest, prefix_line.rest);
+            if !has_unclosed_code_span(pending.rest.as_str()) {
+                writer.flush_paragraph(state);
+            }
+            return;
+        }
+
+        writer.handle_prefix_line(state, &prefix_line);
+        return;
+    }
+
+    if is_table_or_separator(line)
+        || matches!(
+            block_kind,
+            Some(
+                BlockKind::Heading
+                    | BlockKind::MarkdownlintDirective
+                    | BlockKind::LinkReferenceDefinition,
+            )
+        )
+        || line.trim().is_empty()
+    {
+        if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition))
+            && link_matcher.standalone_title_need(line) == Some(true)
+        {
+            link_title_window.observe_bare_definition();
+        }
+        writer.push_verbatim(state, line);
+        return;
+    }
+
+    let (text, _hard_break) = line_break_parts(line);
+    let Some(pending) = state.pending_prefix.as_mut() else {
+        return;
+    };
+
+    if !text.is_empty() {
+        join_pending_continuation(&mut pending.rest, &text);
+    }
+
+    if !has_unclosed_code_span(pending.rest.as_str()) {
+        writer.flush_paragraph(state);
+    }
+}
+
 /// Wrap text lines to the given width.
 ///
 /// # Panics
@@ -177,6 +235,18 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 
         let block_kind = classify_block(line, link_matcher);
 
+        if state.pending_prefix.is_some() {
+            handle_pending_continuation(
+                line,
+                block_kind,
+                &mut writer,
+                &mut state,
+                link_matcher,
+                &mut link_title_window,
+            );
+            continue;
+        }
+
         if is_passthrough_block(block_kind, line) {
             if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition))
                 && link_matcher.standalone_title_need(line) == Some(true)
@@ -188,30 +258,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
         }
 
         if let Some(prefix_line) = prefix_line(line) {
-            if let Some(pending) = state.pending_prefix.as_mut()
-                && prefix_line.repeat_prefix
-                && pending.prefix == prefix_line.prefix.as_ref()
-            {
-                join_pending_continuation(&mut pending.rest, prefix_line.rest);
-                if !has_unclosed_code_span(pending.rest.as_str()) {
-                    writer.flush_paragraph(&mut state);
-                }
-                continue;
-            }
-
             writer.handle_prefix_line(&mut state, &prefix_line);
-            continue;
-        }
-
-        if let Some(pending) = state.pending_prefix.as_mut() {
-            let (text, _hard_break) = line_break_parts(line);
-            if !text.is_empty() {
-                join_pending_continuation(&mut pending.rest, &text);
-            }
-
-            if !has_unclosed_code_span(pending.rest.as_str()) {
-                writer.flush_paragraph(&mut state);
-            }
             continue;
         }
 
