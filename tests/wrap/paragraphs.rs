@@ -4,6 +4,7 @@
 //! of long words that exceed the 80-column limit and cannot be broken.
 
 use rstest::rstest;
+
 use super::*;
 
 #[test]
@@ -17,7 +18,6 @@ fn test_wrap_paragraph() {
     assert!(output.iter().all(|l| l.len() <= 80));
 }
 
-#[test]
 #[rstest]
 #[case(100)]
 #[case(150)]
@@ -32,8 +32,8 @@ fn test_wrap_paragraph_with_long_word_parameterised(#[case] word_length: usize) 
 
 #[test]
 fn test_wrap_preserves_inline_code_with_trailing_punctuation() {
-    let input: Vec<String> = include_lines!("data/fsm_paragraph_input.txt");
-    let expected: Vec<String> = include_lines!("data/fsm_paragraph_expected.txt");
+    let input: Vec<String> = include_lines!("../data/fsm_paragraph_input.txt");
+    let expected: Vec<String> = include_lines!("../data/fsm_paragraph_expected.txt");
     let output = process_stream(&input);
     assert_eq!(output, expected);
 }
@@ -51,8 +51,7 @@ fn test_wrap_preserves_inline_code_with_trailing_punctuation() {
 #[case("`useState`?!")]
 #[case("`isError?`.")]
 fn test_wrap_inline_code_trailing_punct_cases(#[case] snippet: &str) {
-    let prefix =
-        "This line is long enough that wrapping will occur near the end, ensuring ";
+    let prefix = "This line is long enough that wrapping will occur near the end, ensuring ";
     let input = lines_vec![&format!("{prefix}{snippet}")];
     let output = process_stream(&input);
     // Ensure the snippet remains intact and not split between lines.
@@ -92,8 +91,49 @@ fn test_wrap_preserves_escaped_triple_backticks() {
 }
 
 #[test]
+fn test_wrap_no_leading_spaces_on_continuation_lines() {
+    let input = lines_vec![concat!(
+        "This ExecPlan (execution plan) is a living document. The sections ",
+        "`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, ",
+        "`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work ",
+        "proceeds."
+    ),];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    for line in &output {
+        assert!(
+            !line.starts_with(' '),
+            "reflowed line must not begin with a spurious leading space: {line:?}"
+        );
+    }
+}
+
+#[rstest]
+#[case("`Constraints`, `Tolerances`, and `Risks`.")]
+#[case("See `alpha` and `beta` for details.")]
+#[case("(`code`) with opening parenthesis.")]
+fn test_wrap_no_leading_spaces_with_inline_code(#[case] snippet: &str) {
+    let prefix = concat!(
+        "This paragraph is deliberately long enough to force wrapping across ",
+        "multiple output lines while preserving inline code spans near the ",
+        "wrap boundary. "
+    );
+    let input = lines_vec![format!("{prefix}{snippet}")];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    for line in &output {
+        assert!(
+            !line.starts_with(' '),
+            "reflowed line must not begin with a spurious leading space: {line:?}"
+        );
+    }
+}
+
+#[test]
 fn test_wrap_preserves_escaped_backticks_in_paragraph() {
-    let input = lines_vec![r"This deliberately verbose paragraph holds escaped ticks like \`code\` alongside [link](https://ex.com) markup and emphasis *still ok* so that wrapping must retain the literal ticks."];
+    let input = lines_vec![
+        r"This deliberately verbose paragraph holds escaped ticks like \`code\` alongside [link](https://ex.com) markup and emphasis *still ok* so that wrapping must retain the literal ticks."
+    ];
     let output = process_stream(&input);
     assert!(output.len() > 1);
     let flattened = output.join(" ");
@@ -101,4 +141,3 @@ fn test_wrap_preserves_escaped_backticks_in_paragraph() {
     assert!(flattened.contains("[link](https://ex.com)"));
     assert!(flattened.contains("*still ok*"));
 }
-

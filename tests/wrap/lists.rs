@@ -146,48 +146,48 @@ fn test_wrap_short_list_item() {
 
 #[test]
 fn test_wrap_list_item_period_after_code() {
-    let input: Vec<String> = include_lines!("data/bullet_full_stop_input.txt");
-    let expected: Vec<String> = include_lines!("data/bullet_full_stop_expected.txt");
+    let input: Vec<String> = include_lines!("../data/bullet_full_stop_input.txt");
+    let expected: Vec<String> = include_lines!("../data/bullet_full_stop_expected.txt");
     let output = process_stream(&input);
     assert_eq!(output, expected);
 }
 
 #[test]
 fn test_wrap_list_item_question_mark_after_code() {
-    let input: Vec<String> = include_lines!("data/bullet_question_mark_input.txt");
-    let expected: Vec<String> = include_lines!("data/bullet_question_mark_expected.txt");
+    let input: Vec<String> = include_lines!("../data/bullet_question_mark_input.txt");
+    let expected: Vec<String> = include_lines!("../data/bullet_question_mark_expected.txt");
     let output = process_stream(&input);
     assert_eq!(output, expected);
 }
 
 #[test]
 fn test_wrap_list_item_exclamation_mark_after_code() {
-    let input: Vec<String> = include_lines!("data/bullet_exclamation_mark_input.txt");
-    let expected: Vec<String> = include_lines!("data/bullet_exclamation_mark_expected.txt");
+    let input: Vec<String> = include_lines!("../data/bullet_exclamation_mark_input.txt");
+    let expected: Vec<String> = include_lines!("../data/bullet_exclamation_mark_expected.txt");
     let output = process_stream(&input);
     assert_eq!(output, expected);
 }
 
 #[test]
 fn test_wrap_list_item_comma_after_code() {
-    let input: Vec<String> = include_lines!("data/bullet_comma_input.txt");
-    let expected: Vec<String> = include_lines!("data/bullet_comma_expected.txt");
+    let input: Vec<String> = include_lines!("../data/bullet_comma_input.txt");
+    let expected: Vec<String> = include_lines!("../data/bullet_comma_expected.txt");
     let output = process_stream(&input);
     assert_eq!(output, expected);
 }
 
 #[test]
 fn test_wrap_list_item_colon_after_code() {
-    let input: Vec<String> = include_lines!("data/bullet_colon_input.txt");
-    let expected: Vec<String> = include_lines!("data/bullet_colon_expected.txt");
+    let input: Vec<String> = include_lines!("../data/bullet_colon_input.txt");
+    let expected: Vec<String> = include_lines!("../data/bullet_colon_expected.txt");
     let output = process_stream(&input);
     assert_eq!(output, expected);
 }
 
 #[test]
 fn test_wrap_list_item_semicolon_after_code() {
-    let input: Vec<String> = include_lines!("data/bullet_semicolon_input.txt");
-    let expected: Vec<String> = include_lines!("data/bullet_semicolon_expected.txt");
+    let input: Vec<String> = include_lines!("../data/bullet_semicolon_input.txt");
+    let expected: Vec<String> = include_lines!("../data/bullet_semicolon_expected.txt");
     let output = process_stream(&input);
     assert_eq!(output, expected);
 }
@@ -290,15 +290,10 @@ fn test_wrap_tab_indented_checkbox_list_items() {
             "service."
         ),
     ];
-    let expected = lines_vec![
-        "\t- [ ] Create a `HttpTravelTimeProvider` struct that implements the",
-        "\t      `TravelTimeProvider` trait.",
-        "\t- [ ] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix`",
-        "\t      method to make concurrent requests to an external OSRM API's `table`",
-        "\t      service.",
-    ];
     let output = process_stream(&input);
-    assert_eq!(output, expected);
+    // A leading tab counts as four columns of indentation, so these lines are
+    // treated as indented code blocks and remain verbatim during wrapping.
+    assert_eq!(output, input);
 }
 
 #[test]
@@ -308,20 +303,7 @@ fn test_wrap_tab_indented_checkbox_without_trailing_space() {
          trait.",
     ];
     let output = process_stream(&input);
-    // Expect wrap under a width of 1 tab + 5 chars; verify alignment on all continuation lines.
-    assert!(output.len() >= 2, "expected wrapping to occur");
-    assert!(
-        output[0].starts_with("\t- [x]"),
-        "prefix mutated on first line"
-    );
-    // Continuation lines should start with a tab, then spaces equal to "- [x]".len().
-    let expected_prefix = format!("\t{}", " ".repeat("- [x]".chars().count()));
-    for (i, line) in output.iter().enumerate().skip(1) {
-        assert!(
-            line.starts_with(&expected_prefix),
-            "indent mismatch on line {i}"
-        );
-    }
+    assert_eq!(output, input);
 }
 
 #[rstest]

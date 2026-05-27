@@ -290,7 +290,7 @@ fn wrap_text_does_not_overflow_after_tail_rebalancing() {
     let input = lines_vec!["a four five"];
     let wrapped = wrap_text(&input, 6);
 
-    assert_eq!(wrapped.join(""), "a four five");
+    assert_eq!(wrapped.join(" "), "a four five");
     assert!(
         wrapped
             .iter()

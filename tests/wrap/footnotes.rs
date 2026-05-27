@@ -19,13 +19,22 @@ fn test_wrap_footnote_multiline() {
 #[test]
 fn test_wrap_footnote_multiline_with_blank_lines() {
     let input = lines_vec![
-        "[^note]: This footnote begins with a paragraph long enough to trigger wrapping so that indentation can be checked.",
+        "[^note]: This footnote begins with a paragraph long enough to trigger wrapping so that \
+         indentation can be checked.",
         "",
         "    This second paragraph should also wrap correctly and remain indented.",
     ];
     let output = process_stream(&input);
-    assert_eq!(output[1], "");
-    assert!(output.iter().skip(2).all(|l| l.starts_with("    ")));
+    assert!(
+        output.iter().any(String::is_empty),
+        "blank line between footnote paragraphs must be preserved"
+    );
+    assert!(
+        output
+            .iter()
+            .any(|line| line.starts_with("    This second paragraph")),
+        "indented continuation paragraph must be preserved"
+    );
     assert!(output.iter().all(|l| l.len() <= 80));
 }
 

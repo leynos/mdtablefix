@@ -1,0 +1,2 @@
+If the file does not exist or fails to parse, the resulting error is appended
+to `errors` and discovery does not continue.

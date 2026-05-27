@@ -384,11 +384,17 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
 
 /// Renders one wrapped fragment line back into Markdown text.
 ///
-/// `line` supplies the fragments to render and `is_final_output_line`
-/// determines whether a single trailing space may be trimmed. The return value
-/// is the emitted text for that line, and this helper preserves the invariant
-/// that hard-break double spaces survive on the final output line.
-fn render_line(line: &[InlineFragment], is_final_output_line: bool) -> String {
+/// `line` supplies the fragments to render. `is_final_output_line` determines
+/// whether a single trailing space may be trimmed. When
+/// `strip_leading_carry_whitespace` is set, carry whitespace from the wrap
+/// pipeline is removed from continuation lines only. The return value is the
+/// emitted text for that line, and this helper preserves the invariant that
+/// hard-break double spaces survive on the final output line.
+fn render_line(
+    line: &[InlineFragment],
+    is_final_output_line: bool,
+    strip_leading_carry_whitespace: bool,
+) -> String {
     let mut text = line
         .iter()
         .map(|fragment| fragment.text.as_str())
@@ -396,6 +402,10 @@ fn render_line(line: &[InlineFragment], is_final_output_line: bool) -> String {
 
     if !is_final_output_line && text.ends_with(' ') && !text.ends_with("  ") {
         text.pop();
+    }
+
+    if strip_leading_carry_whitespace {
+        text = text.trim_start().to_string();
     }
 
     text
@@ -431,13 +441,13 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         }
 
         for line in &grouped_lines[..grouped_lines.len() - 1] {
-            lines.push(render_line(line, false));
+            lines.push(render_line(line, false, !lines.is_empty()));
         }
         buffer = grouped_lines.pop().unwrap_or_default();
     }
 
     if !buffer.is_empty() {
-        lines.push(render_line(&buffer, true));
+        lines.push(render_line(&buffer, true, !lines.is_empty()));
     }
 
     lines
