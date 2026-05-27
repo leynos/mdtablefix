@@ -1,6 +1,6 @@
 //! Link reference definition matching and standalone title continuation state.
 //!
-//! [`LinkReferenceMatcher`] centralises regex access for link reference queries,
+//! [`LinkReferenceMatcher`] centralizes regex access for link reference queries,
 //! and [`LinkTitleWindow`] tracks whether the next line may be a standalone title.
 
 use regex::Regex;
@@ -27,7 +27,7 @@ pub(super) static LINK_TITLE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
 
 /// Injected regex pair for link reference definition queries.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct LinkReferenceMatcher {
+pub(crate) struct LinkReferenceMatcher {
     link_ref: &'static Regex,
     link_title: &'static Regex,
 }
@@ -35,7 +35,7 @@ pub(super) struct LinkReferenceMatcher {
 impl LinkReferenceMatcher {
     /// Returns the production matcher backed by compiled workspace regexes.
     #[must_use]
-    pub(super) fn production() -> Self {
+    pub(crate) fn production() -> Self {
         Self {
             link_ref: &LINK_REF_RE,
             link_title: &LINK_TITLE_RE,
@@ -66,7 +66,7 @@ impl LinkReferenceMatcher {
 
 /// Outcome of observing one line while awaiting a standalone title.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum LinkTitleWindowOutcome {
+pub(crate) enum LinkTitleWindowOutcome {
     /// Emit the line verbatim and continue without reflow.
     EmitVerbatim,
     /// Close the window and reprocess the line through normal wrapping.
@@ -75,7 +75,7 @@ pub(super) enum LinkTitleWindowOutcome {
 
 /// Tracks whether the line after a bare link reference may be a standalone title.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(super) enum LinkTitleWindow {
+pub(crate) enum LinkTitleWindow {
     /// No standalone title continuation is expected.
     #[default]
     Closed,

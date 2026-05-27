@@ -2,7 +2,7 @@
 
 use rstest::rstest;
 
-use crate::wrap::{BlockKind, classify_block};
+use crate::wrap::{BlockKind, LinkReferenceMatcher, classify_block};
 
 #[rstest(
     line,
@@ -28,5 +28,6 @@ use crate::wrap::{BlockKind, classify_block};
     case("plain text", None)
 )]
 fn classify_block_detects_markdown_prefixes(line: &str, expected: Option<BlockKind>) {
-    assert_eq!(classify_block(line), expected);
+    let matcher = LinkReferenceMatcher::production();
+    assert_eq!(classify_block(line, matcher), expected);
 }

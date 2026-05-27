@@ -130,9 +130,10 @@ The wrapping pipeline for `--wrap` is:
 
 1. **Block classification.** `classify_block` in `src/wrap/block.rs` inspects
    each input line and decides whether it should pass through verbatim or enter
-   the paragraph wrapper. Fenced code blocks, indented code blocks, headings,
-   tables, directives, link reference definitions, and blank lines stop
-   paragraph accumulation.
+   the paragraph wrapper. `wrap_text` injects a shared [`LinkReferenceMatcher`]
+   into each call. Fenced code blocks, indented code blocks, headings, tables,
+   directives, link reference definitions, and blank lines stop paragraph
+   accumulation.
 
 2. **Prefix-aware paragraph handling.** `ParagraphWriter` in
    `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.
@@ -163,7 +164,7 @@ Classified when indentation is fewer than four columns and
 
 **`LinkReferenceMatcher`**
 
-Centralises link reference regex access. `production()` returns the workspace
+Centralizes link reference regex access. `production()` returns the workspace
 matcher; callers inject `&LinkReferenceMatcher` (or a copy) into query methods
 rather than reading global statics directly. `is_definition(line)` classifies
 link reference definitions. `standalone_title_need(line)` returns `None` when
@@ -180,9 +181,9 @@ Explicit state for standalone title continuation in `wrap_text`. Starts
 `Closed`. After a bare link reference definition, `observe_bare_definition()`
 opens `AwaitingStandaloneTitle`. While open, `observe_next_line(line, matcher)`
 returns `Some(EmitVerbatim)` for blank or title lines (and closes the window),
-or `Some(Reprocess)` when the line is ordinary prose (closing the window so the
-caller reflows it). Fence entry calls `observe_fence_context()` to reset the
-window.
+or `Some(Reprocess)` when the line is ordinary prose (closing the window, so
+the caller reflows it). Fence entry calls `observe_fence_context()` to reset
+the window.
 
 `InlineFragment` carries the rendered fragment text, its precomputed display
 width, and a `FragmentKind` tag. That construction-time classification lets the
@@ -202,14 +203,19 @@ still fits within the configured width.
 
 Table: Key types and functions.
 
-| Symbol                                                  | File                             |
-| ------------------------------------------------------- | -------------------------------- |
-| `FragmentKind`, `InlineFragment`, `classify_fragment`   | `src/wrap/inline/fragment.rs`    |
-| `build_fragments`, `wrap_preserving_code`               | `src/wrap/inline.rs`             |
-| `determine_token_span`                                  | `src/wrap/inline.rs`             |
-| `merge_whitespace_only_lines`, `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
-| `ParagraphWriter`, `wrap_with_prefix`                   | `src/wrap/paragraph.rs`          |
-| `ParagraphState`, `PrefixLine`                          | `src/wrap/paragraph.rs`          |
+| Symbol | File |
+| --- | --- |
+| `LinkReferenceMatcher` | `src/wrap/link_reference.rs` |
+| `LinkTitleWindow` | `src/wrap/link_reference.rs` |
+| `classify_block` | `src/wrap/block.rs` |
+| `FragmentKind`, `InlineFragment` | `src/wrap/inline/fragment.rs` |
+| `classify_fragment` | `src/wrap/inline/fragment.rs` |
+| `build_fragments`, `wrap_preserving_code` | `src/wrap/inline.rs` |
+| `determine_token_span` | `src/wrap/inline.rs` |
+| `merge_whitespace_only_lines` | `src/wrap/inline/postprocess.rs` |
+| `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
+| `ParagraphWriter`, `wrap_with_prefix` | `src/wrap/paragraph.rs` |
+| `ParagraphState`, `PrefixLine` | `src/wrap/paragraph.rs` |
 
 ### Design constraints
 

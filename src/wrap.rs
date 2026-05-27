@@ -25,6 +25,7 @@ pub(crate) use block::{BlockKind, classify_block};
 /// inspects one line and returns the fence components (indentation, marker,
 /// info string) when the line opens a fenced code block, or `None` otherwise.
 pub use fence::{FenceTracker, is_fence};
+pub(crate) use link_reference::LinkReferenceMatcher;
 use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
@@ -159,7 +160,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
-        let block_kind = classify_block(line);
+        let block_kind = classify_block(line, link_matcher);
 
         if is_passthrough_block(block_kind, line) {
             if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition))
