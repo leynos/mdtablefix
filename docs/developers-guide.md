@@ -174,7 +174,7 @@ trailing whitespace.
 **`link_ref_needs_title(line)`**
 
 Returns `true` when a `LinkReferenceDefinition` line carries no inline title,
-signaling that the immediately following line may be a standalone title
+signalling that the immediately following line may be a standalone title
 continuation.
 
 **`is_link_title_line(line)`**
