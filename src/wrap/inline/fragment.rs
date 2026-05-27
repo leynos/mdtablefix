@@ -105,6 +105,23 @@ pub(super) fn width_as_f64(width: usize) -> f64 {
     f64::from(u32::try_from(width).unwrap_or(u32::MAX))
 }
 
+/// Returns whether `text` begins with a matched inline code fence, optionally
+/// followed by a non-whitespace suffix such as an inflectional affix.
+pub(super) fn has_inline_code_structure(text: &str) -> bool {
+    fn matched_fence(text: &str) -> bool {
+        let fence_len = text.chars().take_while(|&ch| ch == '`').count();
+        if fence_len == 0 {
+            return false;
+        }
+        let fence = &text[..fence_len];
+        text[fence_len..].contains(fence)
+    }
+
+    let trimmed = text.trim_end_matches(is_trailing_punct);
+    let without_opening = trimmed.trim_start_matches(is_opening_punct);
+    matched_fence(text) || matched_fence(trimmed) || matched_fence(without_opening)
+}
+
 /// Classifies rendered fragment `text` for later post-processing.
 ///
 /// `classify_fragment` checks both the original text and a copy trimmed of
@@ -121,6 +138,7 @@ fn classify_fragment(text: &str) -> FragmentKind {
     if is_inline_code_token(text)
         || is_inline_code_token(trimmed)
         || is_inline_code_token(without_opening)
+        || has_inline_code_structure(text)
     {
         FragmentKind::InlineCode
     } else if fragment_is_link(text) {

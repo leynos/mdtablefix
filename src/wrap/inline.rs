@@ -15,6 +15,14 @@ mod test_support;
 #[cfg(test)]
 mod tests;
 
+/// Returns whether `token` begins with a matched inline code fence, optionally
+/// followed by a non-whitespace suffix such as an inflectional affix.
+fn has_inline_code_structure(token: &str) -> bool { fragment::has_inline_code_structure(token) }
+
+fn is_code_token(token: &str) -> bool {
+    is_inline_code_token(token) || has_inline_code_structure(token)
+}
+
 use std::ops::Range;
 
 use fragment::{InlineFragment, width_as_f64};
@@ -31,11 +39,10 @@ pub(in crate::wrap::inline) use predicates::{
 };
 use span_helpers::{
     SpanKind,
-    absorb_token_and_trailing_punctuation,
     extend_punctuation,
     merge_code_span,
+    promote_footnote_span,
     should_couple_whitespace,
-    try_couple_footnote_reference,
 };
 use textwrap::wrap_algorithms::wrap_first_fit;
 use unicode_width::UnicodeWidthStr;
@@ -57,26 +64,30 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
 
     // Forward-couple opening punctuation to the next atomic span so wrapping
     // never leaves a lone `(` at the end of a line before inline code or a link.
-    if tokens[start].chars().all(is_opening_punct)
-        && let Some(next) = tokens.get(start + 1)
-    {
-        if is_inline_code_token(next) {
-            kind = SpanKind::Code;
-            end += 1;
-            width += UnicodeWidthStr::width(next.as_str());
-            end = extend_punctuation(tokens, end, &mut width);
-        } else if looks_like_link(next) {
-            kind = SpanKind::Link;
-            end += 1;
-            width += UnicodeWidthStr::width(next.as_str());
-            end = extend_punctuation(tokens, end, &mut width);
+    if tokens[start].chars().all(is_opening_punct) {
+        if let Some(next) = tokens.get(start + 1) {
+            if is_code_token(next) {
+                kind = SpanKind::Code;
+                end += 1;
+                width += UnicodeWidthStr::width(next.as_str());
+                end = extend_punctuation(tokens, end, &mut width);
+            } else if looks_like_link(next) {
+                kind = SpanKind::Link;
+                end += 1;
+                width += UnicodeWidthStr::width(next.as_str());
+                end = extend_punctuation(tokens, end, &mut width);
+            }
+        }
+
+        if matches!(kind, SpanKind::Code | SpanKind::Link) {
+            return (end, width);
         }
     }
 
     if tokens[start] == "`" {
         kind = SpanKind::Code;
         end = merge_code_span(tokens, start, &mut width);
-    } else if is_inline_code_token(&tokens[start]) {
+    } else if is_code_token(&tokens[start]) {
         kind = SpanKind::Code;
         end = extend_punctuation(tokens, end, &mut width);
     } else if looks_like_link(&tokens[start]) {
@@ -112,25 +123,27 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
         }
 
         let is_link = looks_like_link(token);
-        let is_code = is_inline_code_token(token);
-        // Footnote markers must be coupled before consecutive link/code chaining;
-        // otherwise `[^N]` stays a separate wrap token even when punctuation is
-        // already attached to the preceding atomic span.
-        if let Some((next_kind, next_end)) =
-            try_couple_footnote_reference(tokens, end, kind, &mut width)
+        let is_code = is_code_token(token);
+        if kind == SpanKind::General
+            && let Some((promoted_kind, promoted_end)) =
+                promote_footnote_span(tokens, end, &mut width)
         {
-            kind = next_kind;
-            end = next_end;
+            kind = promoted_kind;
+            end = promoted_end;
             continue;
         }
 
         if kind == SpanKind::Link && is_link {
-            end = absorb_token_and_trailing_punctuation(tokens, end, &mut width);
+            width += UnicodeWidthStr::width(token.as_str());
+            end += 1;
+            end = extend_punctuation(tokens, end, &mut width);
             continue;
         }
 
         if kind == SpanKind::Code && is_code {
-            end = absorb_token_and_trailing_punctuation(tokens, end, &mut width);
+            width += UnicodeWidthStr::width(token.as_str());
+            end += 1;
+            end = extend_punctuation(tokens, end, &mut width);
             continue;
         }
 
