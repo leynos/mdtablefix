@@ -31,6 +31,41 @@ where
     idx
 }
 
+/// Advance past an inflectional suffix glued to a closing inline-code fence.
+///
+/// Recognises alphabetic affixes (`s`, `ed`, `ing`), possessives (`'s`), and
+/// hyphenated compounds (`-style`). Returns `start` when no suffix is present.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let text = "`VarGuard`s alive";
+/// let close = text.find('`').unwrap() + "`VarGuard`".len();
+/// assert_eq!(scan_code_suffix_end(text, close), close + 1);
+/// ```
+pub(super) fn scan_code_suffix_end(text: &str, start: usize) -> usize {
+    if start >= text.len() {
+        return start;
+    }
+
+    let rest = &text[start..];
+    if rest.starts_with('-') {
+        let after_hyphen = scan_while(text, start + 1, |ch| ch.is_alphanumeric() || ch == '-');
+        if after_hyphen > start + 1 {
+            return after_hyphen;
+        }
+    }
+
+    if rest.starts_with('\'') {
+        let after_apostrophe = scan_while(text, start + 1, char::is_alphanumeric);
+        if after_apostrophe > start + 1 {
+            return after_apostrophe;
+        }
+    }
+
+    scan_while(text, start, char::is_alphabetic)
+}
+
 /// Collect a range of characters into a [`String`].
 ///
 /// # Examples
@@ -114,5 +149,19 @@ mod tests {
         } else {
             panic!("Invalid test case configuration");
         }
+    }
+
+    #[rstest]
+    #[case("`VarGuard`s alive", "`VarGuard`".len(), "`VarGuard`s".len())]
+    #[case("`class`'s field", "`class`".len(), "`class`'s".len())]
+    #[case("`code`-style name", "`code`".len(), "`code`-style".len())]
+    #[case("`code`.", "`code`".len(), "`code`".len())]
+    #[case("`code`**", "`code`".len(), "`code`".len())]
+    fn scan_code_suffix_end_cases(
+        #[case] text: &str,
+        #[case] start: usize,
+        #[case] expected: usize,
+    ) {
+        assert_eq!(scan_code_suffix_end(text, start), expected);
     }
 }

@@ -16,6 +16,7 @@ use scanning::{
     bracket_follows_escaped_bang,
     collect_range,
     has_odd_backslash_escape_bytes,
+    scan_code_suffix_end,
     scan_while,
 };
 
@@ -81,6 +82,7 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
             }
 
             let (token, new_i) = handle_backtick_fence(text, bytes, i);
+            let (token, new_i) = extend_closed_code_token(text, i, token, new_i);
             tokens.push(token);
             i = new_i;
             continue;
@@ -142,6 +144,28 @@ fn should_stop_plain_text(text: &str, bytes: &[u8], index: usize, current: (char
     looks_like_image_start(text, index, ch) && !is_escaped
 }
 
+fn is_closed_inline_code_span(token: &str) -> bool {
+    let fence_len = token.chars().take_while(|&ch| ch == '`').count();
+    fence_len > 0 && token.len() > fence_len * 2 && token.ends_with(&"`".repeat(fence_len))
+}
+
+fn extend_closed_code_token(
+    text: &str,
+    start: usize,
+    token: String,
+    code_end: usize,
+) -> (String, usize) {
+    if !is_closed_inline_code_span(&token) {
+        return (token, code_end);
+    }
+    let suffix_end = scan_code_suffix_end(text, code_end);
+    if suffix_end > code_end {
+        (collect_range(text, start, suffix_end), suffix_end)
+    } else {
+        (token, code_end)
+    }
+}
+
 fn next_token(line: &str, offset: usize) -> Option<(Token<'_>, usize)> {
     if offset >= line.len() {
         return None;
@@ -184,9 +208,15 @@ fn next_token(line: &str, offset: usize) -> Option<(Token<'_>, usize)> {
         let candidate = search_start + pos;
         if !has_odd_backslash_escape_bytes(bytes, offset + candidate) {
             let raw_end = candidate + delim_len;
+            let token = &rest[..raw_end];
+            let suffix_end = if is_closed_inline_code_span(token) {
+                scan_code_suffix_end(rest, raw_end)
+            } else {
+                raw_end
+            };
             let code = &rest[delim_len..candidate];
-            let raw = &rest[..raw_end];
-            return Some((Token::Code { raw, fence, code }, raw_end));
+            let raw = &rest[..suffix_end];
+            return Some((Token::Code { raw, fence, code }, suffix_end));
         }
         search_start = candidate + 1;
     }
