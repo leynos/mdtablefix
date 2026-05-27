@@ -197,11 +197,21 @@ proptest! {
         tail in prose_word_strategy(),
     ) {
         let body = format!("{prose} {code} {tail}");
-        let input = vec![format!("{prefix}{body}")];
+        let line = format!("{prefix}{body}");
+        let leading_spaces = line.chars().take_while(|&c| c == ' ').count();
+        prop_assume!(leading_spaces < 4);
+        prop_assume!(line.len() > 80);
+        let input = vec![line];
         let output = process_stream(&input);
+        prop_assert!(output.len() > 1, "expected wrapping to occur");
+        prop_assert!(
+            output[0].starts_with(&prefix),
+            "list prefix must be preserved on the first line"
+        );
+        prop_assert!(
+            output.iter().all(|line| line.len() <= 80),
+            "wrapped lines must not exceed 80 columns"
+        );
         assert_no_spurious_leading_spaces(&output);
-        prop_assume!(output.iter().all(|line| line.len() <= 80));
-        prop_assume!(output[0].starts_with(&prefix));
-        prop_assume!(output.len() > 1);
     }
 }
