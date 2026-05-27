@@ -125,7 +125,7 @@ mod tests {
 
     fn footnote_label_strategy() -> BoxedStrategy<String> {
         prop::string::string_regex("[a-zA-Z0-9_-]+")
-            .unwrap()
+            .expect("failed to build footnote label regex strategy")
             .boxed()
     }
 

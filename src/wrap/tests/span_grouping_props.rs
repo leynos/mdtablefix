@@ -10,7 +10,8 @@ use super::super::{inline::determine_token_span, tokenize::segment_inline};
 
 fn inline_text_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
-        prop::string::string_regex(r"[\w\s.,;:!?`()\[\]^-]{0,80}").unwrap(),
+        prop::string::string_regex(r"[\w\s.,;:!?`()\[\]^-]{0,80}")
+            .expect("invalid regex for span grouping property strategy"),
         Just("`code`.[^1]".to_string()),
         Just("[text](url).[^2]".to_string()),
         Just("(`code`).[^3]".to_string()),
