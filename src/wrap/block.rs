@@ -48,6 +48,16 @@ pub(super) static LINK_REF_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*)(\[[^\]]+\]:\s*)(.*)$",
     "link reference definition regex should compile",
 );
+
+/// Matches a standalone link reference title continuation line.
+///
+/// Per `CommonMark` spec §4.7 the title may appear on the line immediately
+/// following the URL and must be enclosed in `"…"`, `'…'`, or `(…)`,
+/// with at most three leading spaces and only optional trailing whitespace.
+pub(super) static LINK_TITLE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r#"^\s{0,3}("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\))\s*$"#,
+    "link reference standalone title regex should compile",
+);
 /// Matches blockquote prefixes, capturing the marker run and the remainder for reuse.
 pub(super) static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*(?:>\s*)+)(.*)$",
@@ -125,16 +135,19 @@ pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
     None
 }
 
-/// Returns `true` when `line` matches a recognised `markdownlint` directive comment.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use crate::wrap::block::is_markdownlint_directive;
-/// assert!(is_markdownlint_directive("<!-- markdownlint-disable -->"));
-/// assert!(!is_markdownlint_directive("<!-- regular comment -->"));
-/// ```
-#[inline]
+/// Returns `true` when a [`BlockKind::LinkReferenceDefinition`] line carries
+/// no inline title, meaning a standalone title continuation line may follow
+/// immediately on the next line (`CommonMark` spec §4.7).
+pub(super) fn link_ref_needs_title(line: &str) -> bool {
+    let Some(cap) = LINK_REF_RE.captures(line) else {
+        return false;
+    };
+    let remainder = cap.get(3).map_or("", |m| m.as_str()).trim();
+    !matches!(remainder.chars().last(), Some('"' | '\'' | ')'))
+}
+
+/// Returns `true` when `line` is a valid standalone link reference title.
+pub(super) fn is_link_title_line(line: &str) -> bool { LINK_TITLE_RE.is_match(line) }
 pub(super) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
 }
@@ -193,5 +206,32 @@ mod tests {
     #[case("<!-- just a comment -->", false)]
     fn detects_markdownlint_directives(#[case] line: &str, #[case] expected: bool) {
         assert_eq!(is_markdownlint_directive(line), expected);
+    }
+
+    #[rstest(
+        line,
+        expected,
+        case("[ansible]: <https://docs.ansible.com/>", true),
+        case("[label]: https://example.com", true),
+        case("[label]: https://example.com \"Inline title\"", false),
+        case("[label]: https://example.com 'Inline title'", false),
+        case("[label]: https://example.com (Inline title)", false)
+    )]
+    fn link_ref_needs_title_detects_bare_urls(line: &str, expected: bool) {
+        assert_eq!(link_ref_needs_title(line), expected);
+    }
+
+    #[rstest(
+        line,
+        expected,
+        case("  \"a title\"", true),
+        case("'a title'", true),
+        case("(a title)", true),
+        case("", false),
+        case("plain prose", false),
+        case("    \"indented title\"", false)
+    )]
+    fn is_link_title_line_detects_standalone_titles(line: &str, expected: bool) {
+        assert_eq!(is_link_title_line(line), expected);
     }
 }

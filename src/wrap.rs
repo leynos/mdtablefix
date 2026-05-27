@@ -136,18 +136,40 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut writer = ParagraphWriter::new(&mut out, width);
     // Track fenced code blocks so wrapping honours shared fence semantics.
     let mut fence_tracker = FenceTracker::default();
+    let mut awaiting_link_title = false;
 
     for line in lines {
         if fence::handle_fence_line(line, &mut writer, &mut state, &mut fence_tracker) {
+            awaiting_link_title = false;
             continue;
         }
 
         if fence_tracker.in_fence() {
+            awaiting_link_title = false;
             writer.push_verbatim(&mut state, line);
             continue;
         }
 
+        if awaiting_link_title && line.trim().is_empty() {
+            awaiting_link_title = false;
+            writer.push_verbatim(&mut state, line);
+            continue;
+        }
+
+        if awaiting_link_title && block::is_link_title_line(line) {
+            writer.push_verbatim(&mut state, line);
+            awaiting_link_title = false;
+            continue;
+        }
+        awaiting_link_title = false;
+
         if is_passthrough_block(line) {
+            if matches!(
+                classify_block(line),
+                Some(BlockKind::LinkReferenceDefinition)
+            ) {
+                awaiting_link_title = block::link_ref_needs_title(line);
+            }
             writer.push_verbatim(&mut state, line);
             continue;
         }
