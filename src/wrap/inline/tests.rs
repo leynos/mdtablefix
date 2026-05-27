@@ -30,6 +30,15 @@ fn inline_fragment_new_marks_markdown_links_as_links() {
 }
 
 #[rstest]
+#[case("([label](url))")]
+#[case("[[label](url)]")]
+#[case("（[label](url)）")]
+fn inline_fragment_new_marks_opener_coupled_links_as_links(#[case] text: &str) {
+    let fragment = InlineFragment::new(text.into());
+    assert_eq!(fragment.kind, FragmentKind::Link);
+}
+
+#[rstest]
 #[case("[^label]")]
 #[case("word.[^label]")]
 fn inline_fragment_new_marks_footnote_refs_as_footnote_refs(#[case] input: &str) {

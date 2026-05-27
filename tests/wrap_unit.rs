@@ -3,7 +3,11 @@
 //! This module covers the core wrapping behaviour for prose and the regression
 //! guards for issue `#261`, ensuring verbatim code blocks remain untouched.
 
-use mdtablefix::wrap::wrap_text;
+#[macro_use]
+#[path = "common/mod.rs"]
+mod common;
+
+use mdtablefix::{process_stream, wrap::wrap_text};
 use proptest::prelude::*;
 use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
@@ -31,98 +35,106 @@ fn footnote_label_strategy() -> impl Strategy<Value = String> {
 
 #[test]
 fn wrap_text_preserves_hyphenated_words() {
-    let input = vec!["A word that is very-long-word indeed".to_string()];
+    let input = lines_vec!["A word that is very-long-word indeed"];
     let wrapped = wrap_text(&input, 20);
     assert_eq!(
         wrapped,
-        vec![
-            "A word that is".to_string(),
-            "very-long-word".to_string(),
-            "indeed".to_string(),
-        ]
+        lines_vec!["A word that is", "very-long-word", "indeed"]
+    );
+}
+
+#[test]
+fn wrap_text_breaks_between_space_separated_code_spans() {
+    let input = lines_vec![concat!(
+        "The file loader selects the parser based on the extension ",
+        "(`.toml`, `.json`, `.json5`, `.yaml`, `.yml`). When the `json5` ",
+        "feature is active, both `.json` and `.json5` files are parsed ",
+        "using the JSON5 format."
+    )];
+    let wrapped = wrap_text(&input, 80);
+
+    for line in &wrapped {
+        assert!(
+            UnicodeWidthStr::width(line.as_str()) <= 80,
+            "line too wide ({} cols): {line:?}",
+            UnicodeWidthStr::width(line.as_str())
+        );
+    }
+
+    assert!(
+        wrapped[0].ends_with("`.toml`,") || wrapped[0].ends_with("`.json`,"),
+        "expected first line to break inside the code-span list, got: {:?}",
+        wrapped[0]
     );
 }
 
 #[test]
 fn wrap_text_does_not_insert_spaces_in_hyphenated_words() {
-    let input = vec![
-        concat!(
-            "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec tincidunt ",
-            "elit-sed fermentum congue. Vivamus dictum nulla sed consectetur ",
-            "volutpat."
-        )
-        .to_string(),
-    ];
+    let input = lines_vec![concat!(
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec tincidunt ",
+        "elit-sed fermentum congue. Vivamus dictum nulla sed consectetur ",
+        "volutpat."
+    )];
     let wrapped = wrap_text(&input, 80);
     assert_eq!(
         wrapped,
-        vec![
-            "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec tincidunt".to_string(),
-            "elit-sed fermentum congue. Vivamus dictum nulla sed consectetur volutpat.".to_string(),
+        lines_vec![
+            "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec tincidunt",
+            "elit-sed fermentum congue. Vivamus dictum nulla sed consectetur volutpat."
         ]
     );
 }
 
 #[test]
 fn wrap_text_preserves_code_spans() {
-    let input = vec![
-        "with their own escaping rules. On Windows, scripts default to `powershell -Command` \
-         unless the manifest's `interpreter` field overrides the setting."
-            .to_string(),
-    ];
+    let input = lines_vec![concat!(
+        "with their own escaping rules. On Windows, scripts default to `powershell -Command` ",
+        "unless the manifest's `interpreter` field overrides the setting."
+    )];
     let wrapped = wrap_text(&input, 60);
     assert_eq!(
         wrapped,
-        vec![
-            "with their own escaping rules. On Windows, scripts default".to_string(),
-            "to `powershell -Command` unless the manifest's".to_string(),
-            "`interpreter` field overrides the setting.".to_string(),
+        lines_vec![
+            "with their own escaping rules. On Windows, scripts default",
+            "to `powershell -Command` unless the manifest's",
+            "`interpreter` field overrides the setting."
         ]
     );
 }
 
 #[test]
 fn wrap_text_multiple_code_spans() {
-    let input = vec!["combine `foo bar` and `baz qux` in one line".to_string()];
+    let input = lines_vec!["combine `foo bar` and `baz qux` in one line"];
     let wrapped = wrap_text(&input, 25);
     assert_eq!(
         wrapped,
-        vec![
-            "combine `foo bar` and".to_string(),
-            "`baz qux` in one line".to_string(),
-        ]
+        lines_vec!["combine `foo bar` and", "`baz qux` in one line"]
     );
 }
 
 #[test]
 fn wrap_text_nested_backticks() {
-    let input = vec!["Use `` `code` `` to quote backticks".to_string()];
+    let input = lines_vec!["Use `` `code` `` to quote backticks"];
     let wrapped = wrap_text(&input, 20);
     assert_eq!(
         wrapped,
-        vec![
-            "Use `` `code` `` to".to_string(),
-            "quote backticks".to_string()
-        ]
+        lines_vec!["Use `` `code` `` to", "quote backticks"]
     );
 }
 
 #[test]
 fn wrap_text_unmatched_backticks() {
-    let input = vec!["This has a `dangling code span.".to_string()];
+    let input = lines_vec!["This has a `dangling code span."];
     let wrapped = wrap_text(&input, 20);
-    assert_eq!(
-        wrapped,
-        vec!["This has a".to_string(), "`dangling code span.".to_string()]
-    );
+    assert_eq!(wrapped, lines_vec!["This has a", "`dangling code span."]);
 }
 
 #[test]
 fn wrap_text_preserves_links() {
-    let input = vec![
-        "`falcon-pachinko` is an extension library for the".to_string(),
-        "[Falcon](https://falcon.readthedocs.io) web framework. It adds a structured".to_string(),
-        "approach to asynchronous WebSocket routing and background worker integration.".to_string(),
+    let input = lines_vec![
+        "`falcon-pachinko` is an extension library for the",
+        "[Falcon](https://falcon.readthedocs.io) web framework. It adds a structured",
+        "approach to asynchronous WebSocket routing and background worker integration."
     ];
     let wrapped = wrap_text(&input, 80);
     let joined = wrapped.join("\n");
@@ -134,12 +146,42 @@ fn wrap_text_preserves_links() {
     );
 }
 
+#[test]
+fn wrap_text_keeps_trailing_spaces_for_blockquote_final_line() {
+    // "> " is the prefix; available width = 10 - 2 = 8.
+    let input = lines_vec!["> word1 word2  "];
+    let wrapped = wrap_text(&input, 10);
+    assert_eq!(wrapped, lines_vec!["> word1", "> word2  "]);
+}
+
+#[test]
+fn wrap_text_keeps_trailing_spaces_for_bullet_final_line() {
+    // "- " is the prefix; continuation lines are indented with two spaces.
+    let input = lines_vec!["- word1 word2  "];
+    let wrapped = wrap_text(&input, 10);
+    assert_eq!(wrapped, lines_vec!["- word1", "  word2  "]);
+}
+
+#[test]
+fn wrap_text_preserves_indented_hash_as_text() {
+    let input = lines_vec!["Paragraph intro.", "    # code", "Continuation."];
+    let wrapped = wrap_text(&input, 40);
+    assert_eq!(input, wrapped);
+}
+
+#[test]
+fn wrap_text_flushes_before_heading() {
+    let input = lines_vec!["Paragraph intro.", "# Heading", "Continuation."];
+    let wrapped = wrap_text(&input, 40);
+    assert_eq!(input, wrapped);
+}
+
 #[rstest]
 #[case("[^4]")]
 #[case("[^25]")]
 #[case("[^note]")]
 fn wrap_text_preserves_inline_footnote_references(#[case] marker: &str) {
-    let input = vec![format!(
+    let input = lines_vec![format!(
         concat!(
             "This sentence has enough preceding text to make the formatter choose ",
             "a bad wrap point near this reference ",
@@ -187,15 +229,12 @@ proptest! {
 
 #[test]
 fn wrap_text_snapshots_inline_footnote_reference_outputs() {
-    let input = vec![
-        concat!(
-            "This sentence has enough preceding text to make the formatter choose ",
-            "a bad wrap point near this reference ",
-            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.",
-            "[^4] This sentence follows the reference marker.",
-        )
-        .to_string(),
-    ];
+    let input = lines_vec![concat!(
+        "This sentence has enough preceding text to make the formatter choose ",
+        "a bad wrap point near this reference ",
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.",
+        "[^4] This sentence follows the reference marker.",
+    )];
 
     insta::assert_snapshot!(
         "inline_footnote_reference_wrap",
@@ -233,14 +272,14 @@ fn wrap_text_preserves_shell_block_after_heading(#[case] input: Vec<String>) {
 /// even when the heading is immediately followed by the opening fence.
 #[test]
 fn wrap_text_preserves_fenced_shell_block_without_blank_line_after_heading() {
-    let input = vec![
-        "## Verification".to_string(),
-        "```bash".to_string(),
-        "set -o pipefail".to_string(),
-        "make check-fmt 2>&1 | tee /tmp/fmt.log".to_string(),
-        "make lint 2>&1 | tee /tmp/lint.log".to_string(),
-        "make test 2>&1 | tee /tmp/test.log".to_string(),
-        "```".to_string(),
+    let input = lines_vec![
+        "## Verification",
+        "```bash",
+        "set -o pipefail",
+        "make check-fmt 2>&1 | tee /tmp/fmt.log",
+        "make lint 2>&1 | tee /tmp/lint.log",
+        "make test 2>&1 | tee /tmp/test.log",
+        "```",
     ];
 
     assert_eq!(wrap_text(&input, 80), input);
@@ -248,12 +287,75 @@ fn wrap_text_preserves_fenced_shell_block_without_blank_line_after_heading() {
 
 #[test]
 fn wrap_text_does_not_overflow_after_tail_rebalancing() {
-    let wrapped = wrap_text(&["a four five".to_string()], 6);
+    let input = lines_vec!["a four five"];
+    let wrapped = wrap_text(&input, 6);
 
     assert_eq!(wrapped.join(""), "a four five");
     assert!(
         wrapped
             .iter()
             .all(|line| UnicodeWidthStr::width(line.as_str()) <= 6)
+    );
+}
+
+#[test]
+fn wrap_stream_couples_opening_paren_before_inline_code_in_list() {
+    let input = lines_vec![concat!(
+        "- `src/cli/mod.rs` (240 lines): defines the `Cli` struct with ",
+        "`#[derive(Parser, Serialize, Deserialize, OrthoConfig)]`, its subcommands ",
+        "(`Commands` enum), and the `parse_with_localizer_from` function that creates ",
+        "a localized clap command and parses arguments."
+    )];
+    let output = process_stream(&input);
+    for window in output.windows(2) {
+        assert!(
+            !window[0].ends_with('('),
+            "opening parenthesis must not be stranded at line end: {output:?}"
+        );
+    }
+}
+
+#[rstest]
+#[case("(`code`)", '(')]
+#[case("[`code`]", '[')]
+#[case("（`code`）", '（')]
+#[case("「`code`」", '「')]
+fn wrap_stream_keeps_opening_bracket_with_inline_code_in_list(
+    #[case] fragment: &str,
+    #[case] opener: char,
+) {
+    let input = lines_vec![format!(
+        concat!(
+            "- Leading prose that is long enough to force wrapping before {} and ",
+            "trailing text."
+        ),
+        fragment,
+    )];
+    let output = process_stream(&input);
+    for line in &output {
+        if line.contains('`') {
+            assert!(
+                !line.ends_with(opener),
+                "opening bracket must stay with inline code on line: {line:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn wrap_stream_future_attribute_punctuation() {
+    let input = lines_vec![concat!(
+        "- Test function (`#[awt]`) or a specific `#[future]` argument ",
+        "(`#[future(awt)]`), tells `rstest` to automatically insert `.await` ",
+        "calls for those futures."
+    )];
+    let output = process_stream(&input);
+    assert_eq!(
+        output,
+        lines_vec![
+            "- Test function (`#[awt]`) or a specific `#[future]` argument",
+            "  (`#[future(awt)]`), tells `rstest` to automatically insert `.await` calls for",
+            "  those futures."
+        ]
     );
 }

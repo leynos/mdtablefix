@@ -39,6 +39,11 @@ footnote references (`[^label]`) are treated as unbreakable units. A span is
 never split across lines; it moves as a whole to the next line when it would
 otherwise exceed the target width.
 
+Opening brackets and other opening punctuation (`(`, `[`, and CJK openers such
+as `（` and `「`) that immediately precede an inline code span or Markdown link
+stay coupled to that span during wrapping. This prevents a lone opener from
+being stranded at the end of a line before the code or link that follows it.
+
 Blockquote prefixes (`>`), task-list item markers (`- [ ]`, `- [x]`), and
 footnote definition labels (`[^n]:`) are detected automatically. The first
 wrapped line carries the original prefix; subsequent wrapped lines are indented
@@ -68,12 +73,12 @@ a tilde outer fence wraps a literal inner backtick fence.
 If a language specifier starts a block, either at the start of the file or
 immediately after a blank line, and appears before the next unlabelled opening
 fence with only blank lines in between, `mdtablefix` attaches it to that fence
-and drops the blank lines when attachment succeeds. Specifiers that follow prose
-or other content are intentionally not attached. If no suitable fence follows,
-the specifier line and any intervening blank lines are left unchanged,
+and drops the blank lines when attachment succeeds. Specifiers that follow
+prose or other content are intentionally not attached. If no suitable fence
+follows, the specifier line and any intervening blank lines are left unchanged,
 preserving document spacing. Orphan-specifier attachment only happens when the
-identifier line starts a block and both the identifier line and the target fence
-are outside any already-open fenced block.
+identifier line starts a block and both the identifier line and the target
+fence are outside any already-open fenced block.
 
 Before:
 
@@ -93,9 +98,9 @@ After running `mdtablefix --fences`:
 
 Before:
 
-    ````rust
+    ```rust
     fn main() {}
-    ````
+    ```
 
 After running `mdtablefix --fences`:
 
