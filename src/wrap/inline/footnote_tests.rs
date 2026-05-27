@@ -21,6 +21,40 @@ fn determine_token_span_groups_punctuation_with_footnote_reference() {
 }
 
 #[test]
+fn determine_token_span_groups_footnote_reference_after_inline_code() {
+    let input = "`assert_ne!`.[^3]";
+    let tokens = segment_inline(input);
+    let (end, width) = determine_token_span(&tokens, 0);
+    let grouped = tokens[..end].join("");
+    assert_eq!(grouped, input);
+    assert_eq!(width, unicode_width::UnicodeWidthStr::width(input));
+}
+
+#[test]
+fn determine_token_span_groups_footnote_reference_after_link() {
+    let input = "[click here](https://example.com).[^1]";
+    let tokens = segment_inline(input);
+    let (end, width) = determine_token_span(&tokens, 0);
+    let grouped = tokens[..end].join("");
+    assert_eq!(grouped, input);
+    assert_eq!(width, unicode_width::UnicodeWidthStr::width(input));
+}
+
+#[rstest]
+#[case("`fn!()`.[^1]")]
+#[case("`value`,[^2]")]
+#[case("`result`?[^3]")]
+#[case("[text](url).[^1]")]
+#[case("[text](url),[^2]")]
+fn determine_token_span_groups_footnote_reference_after_atomic_span(#[case] input: &str) {
+    let tokens = segment_inline(input);
+    let (end, width) = determine_token_span(&tokens, 0);
+    let grouped = tokens[..end].join("");
+    assert_eq!(grouped, input);
+    assert_eq!(width, unicode_width::UnicodeWidthStr::width(input));
+}
+
+#[test]
 fn segment_inline_splits_before_embedded_footnote_reference() {
     let tokens = segment_inline("word[^4]");
     let actual: Vec<&str> = tokens.iter().map(String::as_str).collect();

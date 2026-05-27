@@ -242,6 +242,28 @@ fn wrap_text_snapshots_inline_footnote_reference_outputs() {
     );
 }
 
+#[test]
+fn wrap_text_keeps_footnote_reference_with_preceding_inline_code() {
+    let input = lines_vec![concat!(
+        "To assert specific outcomes, use the standard macros `assert!`, `assert_eq!`, and ",
+        "`assert_ne!`.[^3] This sentence follows the reference marker.",
+    )];
+
+    let wrapped = wrap_text(&input, 80);
+
+    assert_footnote_reference_is_intact(&wrapped, "[^3]");
+    assert!(
+        wrapped
+            .iter()
+            .any(|line| line.contains("`assert_ne!`.[^3]"))
+    );
+
+    insta::assert_snapshot!(
+        "inline_footnote_reference_after_code_wrap",
+        wrapped.join("\n")
+    );
+}
+
 /// Guards issue `#261` by asserting both fenced and four-space indented shell
 /// blocks remain byte-identical after `wrap_text` processes surrounding
 /// Markdown.
