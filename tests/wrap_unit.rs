@@ -37,26 +37,18 @@ fn has_unclosed_code_span_detects_open_fences(#[case] text: &str, #[case] expect
     assert_eq!(mdtablefix::wrap::has_unclosed_code_span(text), expected);
 }
 
-fn wrap_text_joins_cross_line_bullet_code_span() {
-    let input = lines_vec![
-        "- Decision: Make `make kani` a Kani command smoke check using `cargo kani",
-        "  --version` until real harnesses land.",
-    ];
-    let output = wrap_text(&input, 80);
-    let rendered = output.join("\n");
-    assert!(rendered.contains("`cargo kani --version`"));
+fn wrap_text_joins_cross_line_code_spans(#[case] input: Vec<String>, #[case] expected: &str) {
+    let rendered = wrap_text(&input, 80).join("\n");
+    assert!(rendered.contains(expected));
 }
 
-fn wrap_text_joins_cross_line_ordered_code_span() {
-    let input = lines_vec![
-        "1. Users select a theme via (`CLI >",
-        "   environment > config file >",
-        "   defaults`) parsing.",
-    ];
-    let output = wrap_text(&input, 80);
-    let rendered = output.join("\n");
-    assert!(rendered.contains("(`CLI > environment > config file > defaults`)"));
+fn wrap_text_joins_split_version_code_span_without_inserting_fence() {
+    let input = lines_vec!["- Release `4.1.1", "  rc1` candidate."];
+    let rendered = wrap_text(&input, 80).join("\n");
+    assert!(rendered.contains("`4.1.1 rc1`"));
+    assert!(!rendered.contains("`4.1.1` rc1"));
 }
+
 fn wrap_text_preserves_hyphenated_words() {
     let input = lines_vec!["A word that is very-long-word indeed"];
     let wrapped = wrap_text(&input, 20);

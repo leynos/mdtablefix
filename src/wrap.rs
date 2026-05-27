@@ -37,10 +37,11 @@ use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 /// Re-export these so callers of [`crate::textproc`] can implement custom
 /// transformations without depending on internal modules.
 pub use tokenize::Token;
-#[doc(hidden)]
-pub use tokenize::has_unclosed_code_span;
+use tokenize::continuation_begins_with_closing_fence;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
+#[doc(hidden)]
+pub use tokenize::{has_unclosed_code_span, parse_open_code_span};
 
 // Permit GFM task list markers with flexible spacing and missing post-marker
 // spaces in Markdown.
@@ -130,42 +131,15 @@ fn line_break_parts(line: &str) -> (String, bool) {
 }
 
 /// Join a soft-wrapped continuation onto pending prefixed text.
-///
-/// When a source line break falls between a short inline code token and the
-/// prose that follows it, insert the missing closing backtick before joining.
 fn join_pending_continuation(existing: &mut String, continuation: &str) {
     if continuation.is_empty() {
         return;
     }
 
-    if should_close_code_span_before_continuation(existing, continuation) {
-        existing.push('`');
-    }
-
-    if !existing.is_empty() {
+    if !existing.is_empty() && !continuation_begins_with_closing_fence(existing, continuation) {
         existing.push(' ');
     }
     existing.push_str(continuation);
-}
-
-fn should_close_code_span_before_continuation(existing: &str, continuation: &str) -> bool {
-    if !has_unclosed_code_span(existing) || existing.ends_with('`') {
-        return false;
-    }
-
-    if !continuation
-        .chars()
-        .next()
-        .is_some_and(|ch| ch.is_ascii_lowercase())
-    {
-        return false;
-    }
-
-    let Some(content) = existing.rfind('`').map(|index| &existing[index + 1..]) else {
-        return false;
-    };
-
-    !content.is_empty() && content.chars().all(|ch| ch.is_ascii_digit() || ch == '.')
 }
 
 /// Wrap text lines to the given width.
@@ -216,6 +190,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
         if let Some(prefix_line) = prefix_line(line) {
             if let Some(pending) = state.pending_prefix.as_mut()
                 && prefix_line.repeat_prefix
+                && pending.prefix == prefix_line.prefix.as_ref()
             {
                 join_pending_continuation(&mut pending.rest, prefix_line.rest);
                 if !has_unclosed_code_span(pending.rest.as_str()) {

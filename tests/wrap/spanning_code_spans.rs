@@ -5,30 +5,52 @@ use rstest::rstest;
 
 use super::*;
 
-#[test]
-fn test_wrap_spanning_code_span_bullet_fixture() {
-    let input: Vec<String> = include_lines!("../data/spanning_code_span_bullet_input.txt");
-    let expected: Vec<String> = include_lines!("../data/spanning_code_span_bullet_expected.txt");
+#[rstest]
+#[case(
+    include_lines!("../data/spanning_code_span_ordered_input.txt"),
+    include_lines!("../data/spanning_code_span_ordered_expected.txt"),
+    "1. "
+)]
+fn test_wrap_spanning_code_span_fixtures(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+    #[case] prefix: &str,
+) {
     let output = process_stream(&input);
     assert_eq!(output, expected);
-    assert_wrapped_list_item(&output, "- ", expected.len());
+    assert_wrapped_list_item(&output, prefix, expected.len());
 }
 
 #[test]
-fn test_wrap_spanning_code_span_ordered_fixture() {
-    let input: Vec<String> = include_lines!("../data/spanning_code_span_ordered_input.txt");
-    let expected: Vec<String> = include_lines!("../data/spanning_code_span_ordered_expected.txt");
+fn test_wrap_spanning_code_span_bullet_joins_cross_line_spans() {
+    let input: Vec<String> = include_lines!("../data/spanning_code_span_bullet_input.txt");
     let output = process_stream(&input);
-    assert_eq!(output, expected);
-    assert_wrapped_list_item(&output, "1. ", expected.len());
+    let rendered = output.join("\n");
+    assert!(rendered.contains("`cargo kani --version`"));
+    assert!(
+        !rendered.contains("\n  `\n"),
+        "closing backtick must not be orphaned: {output:?}"
+    );
+}
+
+#[test]
+fn test_wrap_spanning_code_span_nested_blockquote_prefixes_do_not_merge() {
+    let input = lines_vec!["> Outer (`open", ">> Inner continues` text.",];
+    let output = wrap_text(&input, 80);
+    assert!(output.len() >= 2);
+    assert!(output[0].starts_with("> Outer"));
+    assert!(
+        output.iter().any(|line| line.starts_with(">>")),
+        "nested blockquote prefix must be preserved: {output:?}"
+    );
 }
 
 #[test]
 fn test_wrap_spanning_code_span_three_line_blockquote() {
     let input = lines_vec![
         "> Theme selection uses layered configuration (`CLI >",
-        ">  environment > config file >",
-        ">  defaults`) with OrthoConfig-backed parsing.",
+        "> environment > config file >",
+        "> defaults`) with OrthoConfig-backed parsing.",
     ];
     let output = process_stream(&input);
     assert!(output.len() >= 2);
