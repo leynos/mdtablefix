@@ -154,7 +154,6 @@ The wrapping pipeline for `--wrap` is:
    whitespace-only wrap artefacts and isolated tails are normalized before the
    fragments are rendered back into output lines.
 
-
 ### Block classification
 
 **`BlockKind::LinkReferenceDefinition`**
