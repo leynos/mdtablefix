@@ -114,7 +114,48 @@ pub(super) fn bracket_follows_escaped_bang(bytes: &[u8], idx: usize) -> bool {
     has_odd_backslash_escape_bytes(bytes, idx - 1)
 }
 
-#[cfg(test)]
+pub fn has_unclosed_code_span(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    while index < text.len() {
+        let Some(ch) = text[index..].chars().next() else {
+            break;
+        };
+        if ch != '`' || has_odd_backslash_escape_bytes(bytes, index) {
+            index += ch.len_utf8();
+            continue;
+        }
+
+        let fence_start = index;
+        let fence_end = scan_while(text, index, |candidate| candidate == '`');
+        let fence_len = fence_end - fence_start;
+        let mut search = fence_end;
+        let mut found_close = false;
+
+        while search < text.len() {
+            let candidate_end = scan_while(text, search, |candidate| candidate == '`');
+            if candidate_end > search
+                && candidate_end - search == fence_len
+                && !has_odd_backslash_escape_bytes(bytes, search)
+            {
+                found_close = true;
+                index = candidate_end;
+                break;
+            }
+
+            if let Some(next) = text[search..].chars().next() {
+                search += next.len_utf8();
+            } else {
+                break;
+            }
+        }
+
+        if !found_close {
+            return true;
+        }
+    }
+    false
+}
 mod tests {
     use rstest::rstest;
 

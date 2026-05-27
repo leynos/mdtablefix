@@ -33,7 +33,9 @@ fn footnote_label_strategy() -> impl Strategy<Value = String> {
     .prop_map(|chars| chars.into_iter().collect())
 }
 
-#[test]
+fn has_unclosed_code_span_detects_open_fences(#[case] text: &str, #[case] expected: bool) {
+    assert_eq!(mdtablefix::wrap::has_unclosed_code_span(text), expected);
+}
 fn wrap_text_preserves_hyphenated_words() {
     let input = lines_vec!["A word that is very-long-word indeed"];
     let wrapped = wrap_text(&input, 20);
