@@ -1,0 +1,5 @@
+---
+source: tests/wrap/link_ref_snapshots.rs
+expression: wrap_lines(input)
+---
+[foo]: https://example.com

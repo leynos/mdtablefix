@@ -70,6 +70,8 @@ pub(crate) enum BlockKind {
     Blockquote,
     /// Footnote definitions recognised by [`FOOTNOTE_RE`].
     FootnoteDefinition,
+    /// Link reference definitions recognised by [`super::link_reference::LinkReferenceMatcher`].
+    LinkReferenceDefinition,
     /// HTML-style markdownlint directives recognised by [`is_markdownlint_directive`].
     MarkdownlintDirective,
     /// Lines whose first non-whitespace character is an ASCII digit.
@@ -80,12 +82,16 @@ pub(crate) enum BlockKind {
 ///
 /// Detection order determines precedence when a line could match multiple prefixes.
 /// The current precedence is: heading, bullet, blockquote, footnote definition,
-/// markdownlint directive, digit prefix. Headings outrank bullets and blockquotes,
+/// link reference definition, markdownlint directive, digit prefix. Headings
+/// outrank bullets and blockquotes,
 /// so inputs such as "# 1" remain headings rather than list items. Headings ignore
 /// indentation of four or more spaces so indented code remains untouched.
 /// For example, passing "> quote" returns `Some(BlockKind::Blockquote)` while
 /// "| cell |" yields `None` because the line is part of a table.
-pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
+pub(crate) fn classify_block(
+    line: &str,
+    link_matcher: super::link_reference::LinkReferenceMatcher,
+) -> Option<BlockKind> {
     let (indent_width, indent_bytes) = leading_indent(line);
     let trimmed = line[indent_bytes..].trim_start();
 
@@ -101,6 +107,9 @@ pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
     if indent_width < 4 && FOOTNOTE_RE.is_match(line) {
         return Some(BlockKind::FootnoteDefinition);
     }
+    if indent_width < 4 && link_matcher.is_definition(line) {
+        return Some(BlockKind::LinkReferenceDefinition);
+    }
     if indent_width < 4 && is_markdownlint_directive(line) {
         return Some(BlockKind::MarkdownlintDirective);
     }
@@ -110,16 +119,6 @@ pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
     None
 }
 
-/// Returns `true` when `line` matches a recognised `markdownlint` directive comment.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use crate::wrap::block::is_markdownlint_directive;
-/// assert!(is_markdownlint_directive("<!-- markdownlint-disable -->"));
-/// assert!(!is_markdownlint_directive("<!-- regular comment -->"));
-/// ```
-#[inline]
 pub(super) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
 }
@@ -129,6 +128,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::wrap::LinkReferenceMatcher;
 
     #[rstest(
         line,
@@ -142,6 +142,19 @@ mod tests {
         case("> quote", Some(BlockKind::Blockquote)),
         case("[^1]: footnote", Some(BlockKind::FootnoteDefinition)),
         case(
+            "[ansible]: <https://docs.ansible.com/>",
+            Some(BlockKind::LinkReferenceDefinition)
+        ),
+        case(
+            "[label]: https://example.com",
+            Some(BlockKind::LinkReferenceDefinition)
+        ),
+        case(
+            "[label]: https://example.com \"Optional title\"",
+            Some(BlockKind::LinkReferenceDefinition)
+        ),
+        case("    [label]: https://example.com", None),
+        case(
             "<!-- markdownlint-disable -->",
             Some(BlockKind::MarkdownlintDirective)
         ),
@@ -154,7 +167,8 @@ mod tests {
         case("    1. code", None)
     )]
     fn classify_block_identifies_prefixes(line: &str, expected: Option<BlockKind>) {
-        assert_eq!(classify_block(line), expected);
+        let matcher = LinkReferenceMatcher::production();
+        assert_eq!(classify_block(line, matcher), expected);
     }
 
     #[rstest]

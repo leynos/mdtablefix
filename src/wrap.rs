@@ -13,6 +13,7 @@ use std::borrow::Cow;
 mod block;
 mod fence;
 mod inline;
+mod link_reference;
 mod paragraph;
 mod tokenize;
 use block::{BLOCKQUOTE_RE, BULLET_RE, FOOTNOTE_RE};
@@ -24,6 +25,7 @@ pub(crate) use block::{BlockKind, classify_block};
 /// inspects one line and returns the fence components (indentation, marker,
 /// info string) when the line opens a fenced code block, or `None` otherwise.
 pub use fence::{FenceTracker, is_fence};
+pub(crate) use link_reference::LinkReferenceMatcher;
 use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
@@ -57,11 +59,15 @@ fn is_table_or_separator(line: &str) -> bool {
     line.trim_start().starts_with('|') || crate::table::SEP_RE.is_match(line.trim())
 }
 
-fn is_passthrough_block(line: &str) -> bool {
+fn is_passthrough_block(block_kind: Option<BlockKind>, line: &str) -> bool {
     is_table_or_separator(line)
         || matches!(
-            classify_block(line),
-            Some(BlockKind::Heading | BlockKind::MarkdownlintDirective)
+            block_kind,
+            Some(
+                BlockKind::Heading
+                    | BlockKind::MarkdownlintDirective
+                    | BlockKind::LinkReferenceDefinition,
+            )
         )
         || line.trim().is_empty()
         || is_indented_code_line(line)
@@ -132,18 +138,36 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut writer = ParagraphWriter::new(&mut out, width);
     // Track fenced code blocks so wrapping honours shared fence semantics.
     let mut fence_tracker = FenceTracker::default();
+    let link_matcher = link_reference::LinkReferenceMatcher::production();
+    let mut link_title_window = link_reference::LinkTitleWindow::default();
 
     for line in lines {
         if fence::handle_fence_line(line, &mut writer, &mut state, &mut fence_tracker) {
+            link_title_window.observe_fence_context();
             continue;
         }
 
         if fence_tracker.in_fence() {
+            link_title_window.observe_fence_context();
             writer.push_verbatim(&mut state, line);
             continue;
         }
 
-        if is_passthrough_block(line) {
+        if let Some(outcome) = link_title_window.observe_next_line(line, link_matcher)
+            && outcome == link_reference::LinkTitleWindowOutcome::EmitVerbatim
+        {
+            writer.push_verbatim(&mut state, line);
+            continue;
+        }
+
+        let block_kind = classify_block(line, link_matcher);
+
+        if is_passthrough_block(block_kind, line) {
+            if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition))
+                && link_matcher.standalone_title_need(line) == Some(true)
+            {
+                link_title_window.observe_bare_definition();
+            }
             writer.push_verbatim(&mut state, line);
             continue;
         }

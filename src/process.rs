@@ -7,7 +7,7 @@ use crate::{
     frontmatter::split_leading_yaml_frontmatter,
     html::convert_html_tables,
     table::reflow_table,
-    wrap::{FenceTracker, classify_block, wrap_text},
+    wrap::{FenceTracker, LinkReferenceMatcher, classify_block, wrap_text},
 };
 
 /// Column width used when wrapping text.
@@ -110,7 +110,7 @@ impl ProcessBuffer {
             return true;
         }
         if self.in_table {
-            if classify_block(line).is_some() {
+            if classify_block(line, LinkReferenceMatcher::production()).is_some() {
                 // Flush when a new Markdown block begins so wrapping and table
                 // detection stay aligned.
                 self.flush();
