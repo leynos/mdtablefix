@@ -21,3 +21,4 @@ mod link_reference_definitions;
 mod links;
 mod lists;
 mod paragraphs;
+mod spanning_code_spans;
