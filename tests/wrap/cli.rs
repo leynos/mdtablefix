@@ -187,7 +187,11 @@ fn test_cli_wrap_preserves_inline_code_span_with_quotes() {
 /// Ensures `--wrap` preserves emphasised step definition guidance with inline code spans.
 #[test]
 fn test_cli_wrap_preserves_step_definitions_guidance() {
-    let input = "- **Step Definitions:** Mirror the feature file structure in your `tests/steps/` directory.\n  Create a Rust module for each feature area (e.g., `tests/steps/authentication_steps.rs`,\n  `tests/steps/catalog_steps.rs`). This prevents having a single, massive step definition file\n  and makes it easier to find the code corresponding to a Gherkin step.\n";
+    let input = "- **Step Definitions:** Mirror the feature file structure in your `tests/steps/` \
+                 directory.\n  Create a Rust module for each feature area (e.g., \
+                 `tests/steps/authentication_steps.rs`,\n  `tests/steps/catalog_steps.rs`). This \
+                 prevents having a single, massive step definition file\n  and makes it easier to \
+                 find the code corresponding to a Gherkin step.\n";
     let assertion = run_cli_with_stdin(&["--wrap"], input).success();
     let output = String::from_utf8_lossy(&assertion.get_output().stdout);
     for snippet in [
