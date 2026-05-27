@@ -145,10 +145,17 @@ The wrapping pipeline for `--wrap` is:
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
    the tokens into `InlineFragment` values via `determine_token_span`, and calls
     `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
-   buffer. `determine_token_span` forward-couples opening punctuation tokens (
-   `(`, `[`, and CJK openers) to the next inline code span or Markdown link so
-   wrapping never leaves a lone opener at the end of a line. Trailing
-   punctuation after those atomic spans is grouped in the same pass.
+   buffer. Token predicates in `src/wrap/inline/predicates.rs` classify
+   punctuation, links, code spans, and footnote markers. Span grouping helpers
+   in `src/wrap/inline/span_helpers.rs` extend grouped spans over trailing
+   punctuation, couple adjacent footnote references, and merge chained inline
+   code or link tokens. `determine_token_span` forward-couples opening
+   punctuation tokens (`(`, `[`, and CJK openers) to the next inline code span
+   or Markdown link so wrapping never leaves a lone opener at the end of a
+   line. Trailing punctuation after those atomic spans is grouped in the same
+   pass, and GFM footnote references that immediately follow inline code or
+   links (including opener-coupled spans) stay attached to the preceding
+   punctuation cluster.
 
 4. **Post-processing and rendering.** The `postprocess` module applies
    `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
@@ -217,12 +224,20 @@ Table: Key types and functions.
 | `classify_block` | `src/wrap/block.rs` |
 | `FragmentKind`, `InlineFragment` | `src/wrap/inline/fragment.rs` |
 | `classify_fragment` | `src/wrap/inline/fragment.rs` |
+| Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, …) | `src/wrap/inline/predicates.rs` |
+| `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, …) | `src/wrap/inline/span_helpers.rs` |
 | `build_fragments`, `wrap_preserving_code`, `render_line` | `src/wrap/inline.rs` |
 | `determine_token_span` | `src/wrap/inline.rs` |
 | `merge_whitespace_only_lines` | `src/wrap/inline/postprocess.rs` |
 | `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
 | `ParagraphWriter`, `wrap_with_prefix` | `src/wrap/paragraph.rs` |
 | `ParagraphState`, `PrefixLine` | `src/wrap/paragraph.rs` |
+
+`SpanKind` in `src/wrap/inline/span_helpers.rs` records how a grouped token
+span behaves while `determine_token_span` walks the stream: `General` for
+ordinary prose, `Code` and `Link` for atomic inline spans, and `FootnoteRef`
+when a footnote marker has been promoted or grouped with preceding
+punctuation.
 
 ### Design constraints
 
@@ -233,7 +248,10 @@ Table: Key types and functions.
   overflow the target width. Opening punctuation that immediately precedes an
   inline code span or link is grouped with that span during token grouping so
   the opener is not left on the previous line. Trailing punctuation after those
-  spans follows the same grouping rules.
+  spans follows the same grouping rules. GFM footnote references that immediately
+  follow inline code or link spans without intervening whitespace are coupled
+  to the preceding punctuation cluster so the marker is not wrapped onto the
+  next line alone.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur.
 - **Verbatim blocks.** Fenced code blocks must pass through unchanged, along

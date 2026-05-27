@@ -98,3 +98,86 @@ pub(in crate::wrap::inline) fn fragment_is_link(text: &str) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::{
+        is_inline_code_token,
+        is_opening_punct,
+        is_trailing_punct,
+        is_whitespace_token,
+        looks_like_footnote_ref,
+    };
+
+    fn backtick_run_strategy() -> BoxedStrategy<String> {
+        prop::collection::vec(Just('`'), 1..8)
+            .prop_map(|chars| chars.into_iter().collect::<String>())
+            .boxed()
+    }
+
+    fn arbitrary_short_string_strategy() -> BoxedStrategy<String> {
+        prop::collection::vec(any::<char>(), 0..24)
+            .prop_map(|chars| chars.into_iter().collect::<String>())
+            .boxed()
+    }
+
+    fn footnote_label_strategy() -> BoxedStrategy<String> {
+        prop::string::string_regex("[a-zA-Z0-9_-]+")
+            .unwrap()
+            .boxed()
+    }
+
+    #[test]
+    fn is_inline_code_token_rejects_lone_backtick_delimiter() {
+        let delimiter = char::from(b'`');
+        assert!(!is_inline_code_token(&delimiter.to_string()));
+    }
+
+    #[test]
+    fn is_inline_code_token_accepts_complete_span() {
+        let delimiter = char::from(b'`');
+        let token = format!("{delimiter}code{delimiter}");
+        assert!(is_inline_code_token(&token));
+    }
+
+    #[test]
+    fn is_inline_code_token_matches_backtick_delimited_length_rule() {
+        proptest!(|(token in backtick_run_strategy())| {
+            let expected = token.len() > 1 && token.starts_with('`') && token.ends_with('`');
+            prop_assert_eq!(is_inline_code_token(&token), expected);
+        });
+    }
+
+    #[test]
+    fn is_whitespace_token_matches_char_classification() {
+        proptest!(|(token in arbitrary_short_string_strategy())| {
+            prop_assert_eq!(
+                is_whitespace_token(&token),
+                token.chars().all(char::is_whitespace)
+            );
+        });
+    }
+
+    #[test]
+    fn opening_and_trailing_punct_are_mutually_exclusive_for_ascii_letters() {
+        for c in 'a'..='z' {
+            assert!(!is_opening_punct(c));
+            assert!(!is_trailing_punct(c));
+        }
+    }
+
+    #[test]
+    fn looks_like_footnote_ref_implies_non_empty_label() {
+        proptest!(|(label in footnote_label_strategy())| {
+            let token = format!("[^{label}]");
+            prop_assert!(looks_like_footnote_ref(&token));
+        });
+    }
+
+    #[test]
+    fn looks_like_footnote_ref_rejects_empty_label() {
+        assert!(!looks_like_footnote_ref("[^]"));
+    }
+}

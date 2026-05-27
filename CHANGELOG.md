@@ -9,6 +9,10 @@
 
 ### Fixed
 
+- Keep GFM footnote references coupled to sentence-ending punctuation on inline
+  code spans and Markdown links during wrapping, including when the span is
+  preceded by opening punctuation.
+  ([#299](https://github.com/leynos/mdtablefix/issues/299))
 - Keep opening brackets attached to following inline code spans and links during
   wrapping instead of stranding punctuation at line ends. (
   [#293](https://github.com/leynos/mdtablefix/issues/293))

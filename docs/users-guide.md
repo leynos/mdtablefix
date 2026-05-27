@@ -39,6 +39,12 @@ footnote references (`[^label]`) are treated as unbreakable units. A span is
 never split across lines; it moves as a whole to the next line when it would
 otherwise exceed the target width.
 
+When a footnote reference immediately follows an inline code span or Markdown
+link without intervening whitespace—for example `` `code`.[^ref] `` or
+`[text](url).[^ref]`—the reference stays on the same line as the preceding
+punctuation during wrapping. The same rule applies when opening punctuation is
+coupled to the span, such as `` (`code`).[^ref] ``.
+
 Opening brackets and other opening punctuation (`(`, `[`, and CJK openers such
 as `（` and `「`) that immediately precede an inline code span or Markdown link
 stay coupled to that span during wrapping. This prevents a lone opener from
