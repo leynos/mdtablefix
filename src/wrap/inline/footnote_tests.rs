@@ -54,6 +54,20 @@ fn determine_token_span_groups_footnote_reference_after_atomic_span(#[case] inpu
     assert_eq!(width, unicode_width::UnicodeWidthStr::width(input));
 }
 
+#[rstest]
+#[case("`assert_ne!`. [^3]", "`assert_ne!`.")]
+#[case("`assert_ne!` [^3]", "`assert_ne!`")]
+fn determine_token_span_does_not_group_whitespace_separated_footnote_reference(
+    #[case] input: &str,
+    #[case] expected_group: &str,
+) {
+    let tokens = segment_inline(input);
+    let (end, width) = determine_token_span(&tokens, 0);
+    let grouped = tokens[..end].join("");
+    assert_eq!(grouped, expected_group);
+    assert_eq!(width, unicode_width::UnicodeWidthStr::width(expected_group));
+}
+
 #[test]
 fn segment_inline_splits_before_embedded_footnote_reference() {
     let tokens = segment_inline("word[^4]");

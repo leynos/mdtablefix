@@ -207,27 +207,51 @@ fn merge_code_span(tokens: &[String], i: usize, width: &mut usize) -> usize {
     j
 }
 
-/// Promotes a general prose span into a footnote-reference span when adjacent
-/// sentence punctuation should stay attached to the marker.
-fn promote_footnote_span(
+/// Extends `end` by one token and any trailing punctuation that follows it.
+fn absorb_token_and_trailing_punctuation(
     tokens: &[String],
     end: usize,
     width: &mut usize,
+) -> usize {
+    *width += UnicodeWidthStr::width(tokens[end].as_str());
+    extend_punctuation(tokens, end + 1, width)
+}
+
+/// Couples an adjacent footnote reference into the current span when appropriate.
+///
+/// General prose spans require sentence punctuation immediately before the
+/// marker. Code and link spans already absorb trailing punctuation, so an
+/// adjacent footnote reference is always coupled.
+fn try_couple_footnote_reference(
+    tokens: &[String],
+    end: usize,
+    kind: SpanKind,
+    width: &mut usize,
 ) -> Option<(SpanKind, usize)> {
     let token = tokens.get(end)?;
-    let previous = end
-        .checked_sub(1)
-        .and_then(|previous| tokens.get(previous))?;
-
-    if looks_like_footnote_ref(token) && previous.chars().last().is_some_and(is_trailing_punct) {
-        *width += UnicodeWidthStr::width(token.as_str());
-        return Some((
-            SpanKind::FootnoteRef,
-            extend_punctuation(tokens, end + 1, width),
-        ));
+    if !looks_like_footnote_ref(token) {
+        return None;
     }
 
-    None
+    match kind {
+        SpanKind::General => {
+            let previous = end
+                .checked_sub(1)
+                .and_then(|previous| tokens.get(previous))?;
+            if !previous.chars().last().is_some_and(is_trailing_punct) {
+                return None;
+            }
+            Some((
+                SpanKind::FootnoteRef,
+                absorb_token_and_trailing_punctuation(tokens, end, width),
+            ))
+        }
+        SpanKind::Code | SpanKind::Link => Some((
+            kind,
+            absorb_token_and_trailing_punctuation(tokens, end, width),
+        )),
+        SpanKind::FootnoteRef => None,
+    }
 }
 
 /// Finds the next logical token group starting at `start`.
@@ -305,33 +329,24 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
 
         let is_link = looks_like_link(token);
         let is_code = is_inline_code_token(token);
-        if kind == SpanKind::General
-            && let Some((promoted_kind, promoted_end)) =
-                promote_footnote_span(tokens, end, &mut width)
+        // Footnote markers must be coupled before consecutive link/code chaining;
+        // otherwise `[^N]` stays a separate wrap token even when punctuation is
+        // already attached to the preceding atomic span.
+        if let Some((next_kind, next_end)) =
+            try_couple_footnote_reference(tokens, end, kind, &mut width)
         {
-            kind = promoted_kind;
-            end = promoted_end;
-            continue;
-        }
-
-        if matches!(kind, SpanKind::Code | SpanKind::Link) && looks_like_footnote_ref(token) {
-            width += UnicodeWidthStr::width(token.as_str());
-            end += 1;
-            end = extend_punctuation(tokens, end, &mut width);
+            kind = next_kind;
+            end = next_end;
             continue;
         }
 
         if kind == SpanKind::Link && is_link {
-            width += UnicodeWidthStr::width(token.as_str());
-            end += 1;
-            end = extend_punctuation(tokens, end, &mut width);
+            end = absorb_token_and_trailing_punctuation(tokens, end, &mut width);
             continue;
         }
 
         if kind == SpanKind::Code && is_code {
-            width += UnicodeWidthStr::width(token.as_str());
-            end += 1;
-            end = extend_punctuation(tokens, end, &mut width);
+            end = absorb_token_and_trailing_punctuation(tokens, end, &mut width);
             continue;
         }
 
