@@ -40,6 +40,10 @@ pub(super) static FOOTNOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
 );
 
 /// Matches link reference definition prefixes so they remain verbatim during wrapping.
+///
+/// The pattern does not handle balanced nested brackets or escaped brackets in
+/// link labels (for example, `[label [nested]]` or `[\[escaped\]]`). That
+/// limitation is acceptable for issue #292 and the current regression tests.
 pub(super) static LINK_REF_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*)(\[[^\]]+\]:\s*)(.*)$",
     "link reference definition regex should compile",
