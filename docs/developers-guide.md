@@ -153,7 +153,14 @@ The wrapping pipeline for `--wrap` is:
 4. **Post-processing and rendering.** The `postprocess` module applies
    `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
    whitespace-only wrap artefacts and isolated tails are normalized before the
-   fragments are rendered back into output lines.
+   fragments are rendered back into output lines. `render_line` in
+   `src/wrap/inline.rs` converts each finished fragment line into Markdown
+   text. Its `strip_leading_carry_whitespace` flag removes carry whitespace
+   that the fitter attaches to the start of wrapped continuation lines; it is
+   set only when `wrap_preserving_code` has already emitted at least one line,
+   so intentional leading whitespace on the first output line is preserved.
+   Non-final lines may also drop a single trailing space unless the line ends
+   with a hard-break double space.
 
 ### Block classification
 
@@ -210,7 +217,7 @@ Table: Key types and functions.
 | `classify_block` | `src/wrap/block.rs` |
 | `FragmentKind`, `InlineFragment` | `src/wrap/inline/fragment.rs` |
 | `classify_fragment` | `src/wrap/inline/fragment.rs` |
-| `build_fragments`, `wrap_preserving_code` | `src/wrap/inline.rs` |
+| `build_fragments`, `wrap_preserving_code`, `render_line` | `src/wrap/inline.rs` |
 | `determine_token_span` | `src/wrap/inline.rs` |
 | `merge_whitespace_only_lines` | `src/wrap/inline/postprocess.rs` |
 | `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
