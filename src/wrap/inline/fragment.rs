@@ -17,6 +17,7 @@ use unicode_width::UnicodeWidthStr;
 use super::{
     ends_with_footnote_ref,
     is_inline_code_token,
+    is_opening_punct,
     is_trailing_punct,
     is_whitespace_token,
     looks_like_footnote_ref,
@@ -116,7 +117,11 @@ fn classify_fragment(text: &str) -> FragmentKind {
         return FragmentKind::Whitespace;
     }
     let trimmed = text.trim_end_matches(is_trailing_punct);
-    if is_inline_code_token(text) || is_inline_code_token(trimmed) {
+    let without_opening = trimmed.trim_start_matches(is_opening_punct);
+    if is_inline_code_token(text)
+        || is_inline_code_token(trimmed)
+        || is_inline_code_token(without_opening)
+    {
         FragmentKind::InlineCode
     } else if looks_like_link(text) || looks_like_link(trimmed) {
         FragmentKind::Link
@@ -126,6 +131,13 @@ fn classify_fragment(text: &str) -> FragmentKind {
     {
         FragmentKind::FootnoteRef
     } else {
-        FragmentKind::Plain
+        let after_openers = trimmed.trim_start_matches(is_opening_punct);
+        if (after_openers.starts_with('[') || after_openers.starts_with("!["))
+            && looks_like_link(after_openers)
+        {
+            FragmentKind::Link
+        } else {
+            FragmentKind::Plain
+        }
     }
 }
