@@ -57,7 +57,7 @@ pub(super) fn scan_code_suffix_end(text: &str, start: usize) -> usize {
     }
 
     if rest.starts_with('\'') {
-        let after_apostrophe = scan_while(text, start + 1, char::is_alphanumeric);
+        let after_apostrophe = scan_while(text, start + 1, char::is_alphabetic);
         if after_apostrophe > start + 1 {
             return after_apostrophe;
         }
@@ -157,6 +157,7 @@ mod tests {
     #[case("`code`-style name", "`code`".len(), "`code`-style".len())]
     #[case("`code`.", "`code`".len(), "`code`".len())]
     #[case("`code`**", "`code`".len(), "`code`".len())]
+    #[case("`code`'2 next", "`code`".len(), "`code`".len())]
     fn scan_code_suffix_end_cases(
         #[case] text: &str,
         #[case] start: usize,

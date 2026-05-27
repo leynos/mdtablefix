@@ -163,8 +163,13 @@ fn test_wrap_keeps_inline_code_suffix_on_same_line(#[case] snippet: &str) {
     assert!(output.len() > 1);
     for line in output.iter().skip(1) {
         let trimmed = line.trim_start();
+        let orphaned_at_start = trimmed.starts_with(orphaned_suffix) && {
+            let rest = &trimmed[orphaned_suffix.len()..];
+            rest.is_empty()
+                || rest.starts_with(|ch: char| ch.is_whitespace() || ch.is_ascii_punctuation())
+        };
         assert!(
-            !trimmed.starts_with(orphaned_suffix),
+            !orphaned_at_start,
             "inflectional suffix must not appear alone at line start: {output:?}"
         );
     }

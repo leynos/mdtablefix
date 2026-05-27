@@ -66,13 +66,13 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     // never leaves a lone `(` at the end of a line before inline code or a link.
     if tokens[start].chars().all(is_opening_punct) {
         if let Some(next) = tokens.get(start + 1) {
-            if is_code_token(next) {
-                kind = SpanKind::Code;
+            if looks_like_link(next) {
+                kind = SpanKind::Link;
                 end += 1;
                 width += UnicodeWidthStr::width(next.as_str());
                 end = extend_punctuation(tokens, end, &mut width);
-            } else if looks_like_link(next) {
-                kind = SpanKind::Link;
+            } else if is_code_token(next) {
+                kind = SpanKind::Code;
                 end += 1;
                 width += UnicodeWidthStr::width(next.as_str());
                 end = extend_punctuation(tokens, end, &mut width);
@@ -87,11 +87,11 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     if tokens[start] == "`" {
         kind = SpanKind::Code;
         end = merge_code_span(tokens, start, &mut width);
-    } else if is_code_token(&tokens[start]) {
-        kind = SpanKind::Code;
-        end = extend_punctuation(tokens, end, &mut width);
     } else if looks_like_link(&tokens[start]) {
         kind = SpanKind::Link;
+        end = extend_punctuation(tokens, end, &mut width);
+    } else if is_code_token(&tokens[start]) {
+        kind = SpanKind::Code;
         end = extend_punctuation(tokens, end, &mut width);
     } else if looks_like_footnote_ref(&tokens[start]) {
         kind = SpanKind::FootnoteRef;

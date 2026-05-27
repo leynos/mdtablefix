@@ -48,6 +48,15 @@ fn inline_fragment_new_marks_footnote_refs_as_footnote_refs(#[case] input: &str)
 }
 
 #[rstest]
+#[case("[`code`](url)")]
+#[case("([`code`](url))")]
+fn inline_fragment_new_marks_link_with_inline_code_label_as_link(#[case] text: &str) {
+    let fragment = InlineFragment::new(text.into());
+    assert_eq!(fragment.kind, FragmentKind::Link);
+    assert!(fragment.is_atomic());
+}
+
+#[rstest]
 #[case("`code`s")]
 #[case("`class`'s")]
 #[case("`fetch`ed")]

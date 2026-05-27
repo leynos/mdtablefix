@@ -135,14 +135,14 @@ fn classify_fragment(text: &str) -> FragmentKind {
     }
     let trimmed = text.trim_end_matches(is_trailing_punct);
     let without_opening = trimmed.trim_start_matches(is_opening_punct);
-    if is_inline_code_token(text)
+    if fragment_is_link(text) {
+        FragmentKind::Link
+    } else if is_inline_code_token(text)
         || is_inline_code_token(trimmed)
         || is_inline_code_token(without_opening)
         || has_inline_code_structure(text)
     {
         FragmentKind::InlineCode
-    } else if fragment_is_link(text) {
-        FragmentKind::Link
     } else if looks_like_footnote_ref(text)
         || looks_like_footnote_ref(trimmed)
         || ends_with_footnote_ref(text)
