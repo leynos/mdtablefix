@@ -1,0 +1,1 @@
+1. This ordered list item documents `netsuke manifest FILE` and `--file` options with enough additional prose to force wrapping across multiple output lines while preserving inline code spans near the wrap boundary.

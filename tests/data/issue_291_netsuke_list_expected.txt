@@ -1,0 +1,4 @@
+- Observation: the README still documents `netsuke manifest FILE` and
+  `--file`. Evidence: the README CLI block lists `netsuke manifest FILE` and the
+  `--file` option. Impact: user-facing docs need a planned-surface update
+  after the design and roadmap are aligned.
