@@ -53,10 +53,10 @@ fn test_wrap_paragraph_with_nested_link() {
 
 #[test]
 fn test_wrap_link_with_trailing_punctuation() {
-    let input = lines_vec![
-        "[`rust-multithreaded-logging-framework-for-python-design.md`](./\
-         rust-multithreaded-logging-framework-for-python-design.md).",
-    ];
+    let input = lines_vec![concat!(
+        "[`rust-multithreaded-logging-framework-for-python-design.md`](./",
+        "rust-multithreaded-logging-framework-for-python-design.md).",
+    )];
     let output = process_stream(&input);
     assert_eq!(output, input);
 }
