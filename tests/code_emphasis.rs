@@ -25,6 +25,14 @@ fn cli_without_flag_is_noop_for_code_emphasis_input() {
 }
 
 #[test]
+fn cli_preserves_emphasised_code_with_inflectional_suffix() {
+    let input = "*`VarGuard`s*\n";
+    run_cli_with_stdin(&["--code-emphasis"], input)
+        .success()
+        .stdout(input);
+}
+
+#[test]
 fn cli_preserves_emphasised_code_only() {
     let input = "**`code`**\n";
     run_cli_with_stdin(&["--code-emphasis"], input)
