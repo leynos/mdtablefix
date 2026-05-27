@@ -269,23 +269,19 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
 
     // Forward-couple opening punctuation to the next atomic span so wrapping
     // never leaves a lone `(` at the end of a line before inline code or a link.
-    if tokens[start].chars().all(is_opening_punct) {
-        if let Some(next) = tokens.get(start + 1) {
-            if is_inline_code_token(next) {
-                kind = SpanKind::Code;
-                end += 1;
-                width += UnicodeWidthStr::width(next.as_str());
-                end = extend_punctuation(tokens, end, &mut width);
-            } else if looks_like_link(next) {
-                kind = SpanKind::Link;
-                end += 1;
-                width += UnicodeWidthStr::width(next.as_str());
-                end = extend_punctuation(tokens, end, &mut width);
-            }
-        }
-
-        if matches!(kind, SpanKind::Code | SpanKind::Link) {
-            return (end, width);
+    if tokens[start].chars().all(is_opening_punct)
+        && let Some(next) = tokens.get(start + 1)
+    {
+        if is_inline_code_token(next) {
+            kind = SpanKind::Code;
+            end += 1;
+            width += UnicodeWidthStr::width(next.as_str());
+            end = extend_punctuation(tokens, end, &mut width);
+        } else if looks_like_link(next) {
+            kind = SpanKind::Link;
+            end += 1;
+            width += UnicodeWidthStr::width(next.as_str());
+            end = extend_punctuation(tokens, end, &mut width);
         }
     }
 
