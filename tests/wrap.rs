@@ -1,4 +1,3 @@
-#![allow(unfulfilled_lint_expectations)]
 //! Wrap integration tests (see the `wrap/` submodule directory).
 
 #[path = "wrap/mod.rs"]
