@@ -169,4 +169,33 @@ mod tests {
     ) {
         assert_eq!(scan_code_suffix_end(text, start), expected);
     }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        /// scan_code_suffix_end must always return a byte index within the string.
+        #[test]
+        fn scan_code_suffix_end_result_in_bounds(
+            text in "\\PC*",            // any non-control Unicode string
+            start in 0usize..=128usize,
+        ) {
+            let start = start.min(text.len());
+            let start = text.floor_char_boundary(start);
+            let result = scan_code_suffix_end(&text, start);
+            prop_assert!(result >= start, "result must be >= start");
+            prop_assert!(result <= text.len(), "result must be <= text.len()");
+        }
+
+        /// scan_code_suffix_end must not advance past a non-suffix character.
+        #[test]
+        fn scan_code_suffix_end_no_advance_on_whitespace_start(
+            suffix in " [a-z]{0,8}",
+        ) {
+            // A suffix beginning with whitespace should not be absorbed.
+            let text = format!("`code`{suffix}");
+            let start = 6usize; // index immediately after the closing backtick
+            let result = scan_code_suffix_end(&text, start);
+            prop_assert_eq!(result, start, "whitespace-led suffix must not be absorbed");
+        }
+    }
 }

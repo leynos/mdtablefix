@@ -16,6 +16,11 @@
 - Keep opening brackets attached to following inline code spans and links during
   wrapping instead of stranding punctuation at line ends. (
   [#293](https://github.com/leynos/mdtablefix/issues/293))
+- Keep inflectional affixes (`s`, `'s`, `ed`, `ing`) and hyphenated compounds
+  attached to the preceding inline code span during paragraph reflow.
+  A suffix that directly follows a closing backtick fence is absorbed into the
+  code token so the two never end up on separate lines after wrapping.
+  ([`#300`](https://github.com/leynos/mdtablefix/issues/300))
 - Preserve inline GFM footnote references as unbreakable tokens when wrapping
   Markdown paragraphs. ([#277](https://github.com/leynos/mdtablefix/issues/277))
 - Preserve link reference definitions verbatim when `--wrap` is used, so

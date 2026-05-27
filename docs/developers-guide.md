@@ -82,6 +82,24 @@ restores the separator row with widths derived from the final table body.
 - `format_separator_cells`: Expands separator cells to the target widths while
   preserving Markdown alignment markers.
 
+`src/wrap/tokenize/scanning.rs`:
+
+- `scan_code_suffix_end(text: &str, start: usize) -> usize` advances `start`
+  past any recognised inflectional or possessive suffix that is directly
+  attached to a closing inline-code fence at that position. Recognised shapes
+  are: a hyphenated compound where the word after the hyphen starts with a
+  lowercase letter (e.g. `-style`), a possessive `'s`, and bare alphabetic
+  suffixes (`s`, `ed`, `ing`, and any other run of ASCII letters). Returns the
+  original `start` when no suffix is recognised.
+
+`src/wrap/inline/fragment.rs`:
+
+- `has_inline_code_structure(text: &str) -> bool` returns `true` when `text`
+  begins with a backtick fence (optionally preceded by an opening bracket or
+  punctuation) and contains a corresponding closing fence, with or without a
+  trailing inflectional suffix. Used by `classify_fragment` and `inline.rs` to
+  identify combined code+suffix tokens as atomic inline code.
+
 ## HTML parser dependency coupling
 
 HTML table conversion uses `html5ever` for parsing and `markup5ever_rcdom` for
@@ -232,6 +250,8 @@ Table: Key types and functions.
 | `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
 | `ParagraphWriter`, `wrap_with_prefix` | `src/wrap/paragraph.rs` |
 | `ParagraphState`, `PrefixLine` | `src/wrap/paragraph.rs` |
+| `scan_code_suffix_end` | `src/wrap/tokenize/scanning.rs` |
+| `has_inline_code_structure` | `src/wrap/inline/fragment.rs` |
 
 `SpanKind` in `src/wrap/inline/span_helpers.rs` records how a grouped token
 span behaves while `determine_token_span` walks the stream: `General` for
@@ -251,7 +271,12 @@ punctuation.
   spans follows the same grouping rules. GFM footnote references that immediately
   follow inline code or link spans without intervening whitespace are coupled
   to the preceding punctuation cluster so the marker is not wrapped onto the
-  next line alone.
+  next line alone. Inflectional affixes (`s`, `'s`, `ed`,
+  `ing`) and hyphenated compounds that immediately follow a closed backtick
+  fence are absorbed into the code token by `scan_code_suffix_end` in
+  `src/wrap/tokenize/scanning.rs`; the combined token is recognised as atomic
+  by `has_inline_code_structure` in `src/wrap/inline/fragment.rs` so wrapping
+  treats the full string as one unit.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur.
 - **Verbatim blocks.** Fenced code blocks must pass through unchanged, along

@@ -50,6 +50,13 @@ as `（` and `「`) that immediately precede an inline code span or Markdown lin
 stay coupled to that span during wrapping. This prevents a lone opener from
 being stranded at the end of a line before the code or link that follows it.
 
+Inflectional affixes and possessives that appear immediately after a closing
+inline code fence — for example `` `VarGuard`s ``, `` `class`'s ``,
+`` `fetch`ed ``, or `` `run`ning `` — are kept on the same line as the code
+span during wrapping. The tokenizer treats the backtick fence together with its
+directly attached suffix as a single unbreakable unit, so no line break is ever
+inserted between the closing backtick and the following letters.
+
 Blockquote prefixes (`>`), task-list item markers (`- [ ]`, `- [x]`), and
 footnote definition labels (`[^n]:`) are detected automatically. The first
 wrapped line carries the original prefix; subsequent wrapped lines are indented

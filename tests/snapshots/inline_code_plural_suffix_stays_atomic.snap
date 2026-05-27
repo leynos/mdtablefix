@@ -1,0 +1,6 @@
+---
+source: tests/wrap/inline_code_suffix_snapshots.rs
+expression: "wrap_lines(input, width)"
+---
+The list of `VarGuard`s is validated at
+startup by the configuration loader.

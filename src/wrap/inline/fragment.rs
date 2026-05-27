@@ -152,3 +152,28 @@ fn classify_fragment(text: &str) -> FragmentKind {
         FragmentKind::Plain
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        /// has_inline_code_structure must not panic on arbitrary Unicode input.
+        #[test]
+        fn has_inline_code_structure_never_panics(text in "\\PC*") {
+            let _ = has_inline_code_structure(&text);
+        }
+
+        /// A string that starts and ends with a matching backtick fence and
+        /// contains no embedded fence of the same length must satisfy the predicate.
+        #[test]
+        fn has_inline_code_structure_detects_simple_fence(
+            inner in "[^`]{1,40}",
+        ) {
+            let text = format!("`{inner}`");
+            prop_assert!(has_inline_code_structure(&text));
+        }
+    }
+}
