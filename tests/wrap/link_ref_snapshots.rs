@@ -8,7 +8,10 @@ fn wrap_lines(input: &str) -> String {
 }
 
 fn assert_wrap_snapshot(name: &str, input: &str) {
-    insta::with_settings!({snapshot_path => "../snapshots"}, {
+    insta::with_settings!({
+        snapshot_path => "../snapshots",
+        prepend_module_to_snapshot => false,
+    }, {
         insta::assert_snapshot!(name, wrap_lines(input));
     });
 }
