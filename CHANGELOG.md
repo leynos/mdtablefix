@@ -9,6 +9,9 @@
 
 ### Fixed
 
+- Keep opening brackets attached to following inline code spans and links during
+  wrapping instead of stranding punctuation at line ends. (
+  [#293](https://github.com/leynos/mdtablefix/issues/293))
 - Preserve inline GFM footnote references as unbreakable tokens when wrapping
   Markdown paragraphs. ([#277](https://github.com/leynos/mdtablefix/issues/277))
 - Preserve trailing spaces on the final line when wrapping Markdown, retaining

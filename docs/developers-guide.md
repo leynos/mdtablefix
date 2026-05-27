@@ -141,9 +141,12 @@ The wrapping pipeline for `--wrap` is:
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
-   the tokens into `InlineFragment` values, and calls
-   `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
-   buffer.
+   the tokens into `InlineFragment` values via `determine_token_span`, and calls
+    `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
+   buffer. `determine_token_span` forward-couples opening punctuation tokens (
+   `(`, `[`, and CJK openers) to the next inline code span or Markdown link so
+   wrapping never leaves a lone opener at the end of a line. Trailing
+   punctuation after those atomic spans is grouped in the same pass.
 
 4. **Post-processing and rendering.** The `postprocess` module applies
    `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
@@ -168,13 +171,14 @@ still fits within the configured width.
 
 Table: Key types and functions.
 
-| Symbol                                                  | File                             |
-| ------------------------------------------------------- | -------------------------------- |
-| `FragmentKind`, `InlineFragment`, `classify_fragment`   | `src/wrap/inline/fragment.rs`    |
-| `build_fragments`, `wrap_preserving_code`               | `src/wrap/inline.rs`             |
-| `merge_whitespace_only_lines`, `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
-| `ParagraphWriter`, `wrap_with_prefix`                   | `src/wrap/paragraph.rs`          |
-| `ParagraphState`, `PrefixLine`                          | `src/wrap/paragraph.rs`          |
+| Symbol                                                            | File                             |
+| ----------------------------------------------------------------- | -------------------------------- |
+| `FragmentKind`, `InlineFragment`, `classify_fragment`             | `src/wrap/inline/fragment.rs`    |
+| `build_fragments`, `wrap_preserving_code`                         | `src/wrap/inline.rs`             |
+| `determine_token_span`                                            | `src/wrap/inline.rs`             |
+| `merge_whitespace_only_lines`, `rebalance_atomic_tails`           | `src/wrap/inline/postprocess.rs` |
+| `ParagraphWriter`, `wrap_with_prefix`                             | `src/wrap/paragraph.rs`          |
+| `ParagraphState`, `PrefixLine`                                    | `src/wrap/paragraph.rs`          |
 
 ### Design constraints
 
@@ -182,7 +186,10 @@ Table: Key types and functions.
   `tokenize_markdown` must not change their signatures or observable behaviour.
 - **Atomic fragments.** Inline code spans, Markdown links, and GFM footnote
   references are never split across lines; they move as a unit when they would
-  overflow the target width.
+  overflow the target width. Opening punctuation that immediately precedes an
+  inline code span or link is grouped with that span during token grouping so
+  the opener is not left on the previous line. Trailing punctuation after those
+  spans follows the same grouping rules.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur.
 - **Verbatim blocks.** Fenced code blocks must pass through unchanged, along
@@ -203,8 +210,8 @@ two public functions that are called in sequence:
 
 - `compress_fences(&[String]) -> Vec<String>` conditionally compresses fence
   delimiters of three or more backticks or tildes to exactly three backticks
-  when doing so preserves the structural interpretation of the inner content. If
-  compression would make inner fence-like content become structural, the
+  when doing so preserves the structural interpretation of the inner content.
+  If compression would make inner fence-like content become structural, the
   original outer delimiters are preserved.
 - `attach_orphan_specifiers(&[String]) -> Vec<String>` reattaches language
   specifier lines that appear on a separate line before an unlabelled opening
