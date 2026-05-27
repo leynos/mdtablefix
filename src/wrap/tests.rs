@@ -7,4 +7,3 @@ mod fence_tracker;
 mod inline_wrapping;
 mod prefix;
 mod token_grouping;
-mod wrap_text_integration;
