@@ -22,7 +22,6 @@ use super::{
     is_trailing_punct,
     is_whitespace_token,
     looks_like_footnote_ref,
-    looks_like_link,
 };
 
 /// Classifies an inline fragment for post-wrap heuristics.
