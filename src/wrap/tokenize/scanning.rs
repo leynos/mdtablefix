@@ -40,7 +40,7 @@ where
 ///
 /// ```rust,ignore
 /// let text = "`VarGuard`s alive";
-/// let close = text.find('`').unwrap() + "`VarGuard`".len();
+/// let close = 0 + "`VarGuard`".len();
 /// assert_eq!(scan_code_suffix_end(text, close), close + 1);
 /// ```
 pub(super) fn scan_code_suffix_end(text: &str, start: usize) -> usize {
@@ -50,9 +50,12 @@ pub(super) fn scan_code_suffix_end(text: &str, start: usize) -> usize {
 
     let rest = &text[start..];
     if rest.starts_with('-') {
-        let after_hyphen = scan_while(text, start + 1, |ch| ch.is_alphanumeric() || ch == '-');
-        if after_hyphen > start + 1 {
-            return after_hyphen;
+        let first = rest.chars().nth(1);
+        if first.is_some_and(char::is_alphabetic) {
+            let after_hyphen = scan_while(text, start + 1, |ch| ch.is_alphabetic() || ch == '-');
+            if after_hyphen > start + 1 {
+                return after_hyphen;
+            }
         }
     }
 
@@ -155,6 +158,7 @@ mod tests {
     #[case("`VarGuard`s alive", "`VarGuard`".len(), "`VarGuard`s".len())]
     #[case("`class`'s field", "`class`".len(), "`class`'s".len())]
     #[case("`code`-style name", "`code`".len(), "`code`-style".len())]
+    #[case("`code`-2 next", "`code`".len(), "`code`".len())]
     #[case("`code`.", "`code`".len(), "`code`".len())]
     #[case("`code`**", "`code`".len(), "`code`".len())]
     #[case("`code`'2 next", "`code`".len(), "`code`".len())]
