@@ -314,6 +314,13 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
             continue;
         }
 
+        if matches!(kind, SpanKind::Code | SpanKind::Link) && looks_like_footnote_ref(token) {
+            width += UnicodeWidthStr::width(token.as_str());
+            end += 1;
+            end = extend_punctuation(tokens, end, &mut width);
+            continue;
+        }
+
         if kind == SpanKind::Link && is_link {
             width += UnicodeWidthStr::width(token.as_str());
             end += 1;
