@@ -92,6 +92,58 @@ fn is_whitespace_token(token: &str) -> bool { token.chars().all(char::is_whitesp
 /// never panics.
 fn is_inline_code_token(token: &str) -> bool { token.starts_with('`') && token.ends_with('`') }
 
+/// Returns the substring beginning at the first Markdown link opener after any
+/// leading opener punctuation.
+///
+/// Non-link openers such as `(` are skipped, but a leading `[` or `![` that
+/// begins a link is preserved so opener-coupled links classify correctly.
+fn link_text_after_leading_openers(text: &str) -> &str {
+    let mut rest = text;
+    while !rest.is_empty() {
+        if rest.starts_with('[') || rest.starts_with("![") {
+            return rest;
+        }
+        let Some(ch) = rest.chars().next() else {
+            break;
+        };
+        if is_opening_punct(ch) {
+            rest = &rest[ch.len_utf8()..];
+        } else {
+            break;
+        }
+    }
+    rest
+}
+
+/// Strips one outer wrapper closing character from a link candidate when present.
+fn strip_outer_link_wrapper_suffix(text: &str) -> Option<&str> {
+    let last = text.chars().next_back()?;
+    if matches!(last, ')' | ']' | '）' | '］' | '」' | '』' | '》') {
+        Some(&text[..text.len() - last.len_utf8()])
+    } else {
+        None
+    }
+}
+
+/// Returns whether rendered fragment text contains a Markdown link, including
+/// links wrapped in outer opener punctuation.
+fn fragment_is_link(text: &str) -> bool {
+    if looks_like_link(text) {
+        return true;
+    }
+    let mut candidate = link_text_after_leading_openers(text);
+    while !candidate.is_empty() {
+        if looks_like_link(candidate) {
+            return true;
+        }
+        let Some(next) = strip_outer_link_wrapper_suffix(candidate) else {
+            break;
+        };
+        candidate = next;
+    }
+    false
+}
+
 /// Extends a grouped span over trailing punctuation tokens and updates `width`.
 ///
 /// `tokens` supplies the token stream, `j` is the next token index to inspect,
