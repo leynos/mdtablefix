@@ -7,7 +7,7 @@ use std::borrow::Cow;
 
 use unicode_width::UnicodeWidthStr;
 
-use super::inline::wrap_preserving_code;
+use super::{inline::wrap_preserving_code, tokenize::has_unclosed_code_span};
 
 /// Carries the parsed prefix metadata for a line that should be wrapped.
 pub(super) struct PrefixLine<'a> {
@@ -19,6 +19,18 @@ pub(super) struct PrefixLine<'a> {
     pub(super) repeat_prefix: bool,
 }
 
+/// Buffers a prefixed line whose inline code span continues on later source lines.
+pub(super) struct PendingPrefix {
+    /// Stores the bullet/blockquote/footnote marker plus any leading indent.
+    pub(super) prefix: String,
+    /// Stores the line content after the prefix, including any open code span.
+    pub(super) rest: String,
+    /// Stores the precomputed content width available on the first line.
+    pub(super) rest_width: usize,
+    /// Marks whether continuation lines should repeat the full prefix.
+    pub(super) repeat_prefix: bool,
+}
+
 #[derive(Default)]
 /// Tracks buffered paragraph content and its shared indentation.
 pub(super) struct ParagraphState {
@@ -26,6 +38,8 @@ pub(super) struct ParagraphState {
     buf: Vec<(String, bool)>,
     /// Stores the leading indentation reused for wrapped continuation lines.
     indent: String,
+    /// Stores a prefixed line waiting for a cross-line code span to close.
+    pub(super) pending_prefix: Option<PendingPrefix>,
 }
 
 impl ParagraphState {
@@ -37,6 +51,7 @@ impl ParagraphState {
     pub(super) fn clear(&mut self) {
         self.buf.clear();
         self.indent.clear();
+        self.pending_prefix = None;
     }
 
     /// Records the paragraph indent from `line` when the buffer is still empty.
@@ -111,6 +126,13 @@ impl<'a> ParagraphWriter<'a> {
     fn append_wrapped_with_prefix(&mut self, line: &PrefixLine<'_>) {
         let prefix = line.prefix.as_ref();
         let prefix_width = UnicodeWidthStr::width(prefix);
+        let available = self.width.saturating_sub(prefix_width).max(1);
+        self.append_wrapped_with_prefix_width(line, available);
+    }
+
+    fn append_wrapped_with_prefix_width(&mut self, line: &PrefixLine<'_>, available: usize) {
+        let prefix = line.prefix.as_ref();
+        let prefix_width = UnicodeWidthStr::width(prefix);
         let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
         let indent_width = UnicodeWidthStr::width(indent_str.as_str());
         let continuation_prefix = if line.repeat_prefix {
@@ -119,7 +141,20 @@ impl<'a> ParagraphWriter<'a> {
             format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width))
         };
 
-        self.wrap_with_prefix(prefix, continuation_prefix.as_str(), line.rest);
+        let lines = wrap_preserving_code(line.rest, available);
+        if lines.is_empty() {
+            self.out.push(prefix.to_string());
+            return;
+        }
+
+        for (index, wrapped_line) in lines.iter().enumerate() {
+            if index == 0 {
+                self.out.push(format!("{prefix}{wrapped_line}"));
+            } else {
+                self.out
+                    .push(format!("{continuation_prefix}{wrapped_line}"));
+            }
+        }
     }
 
     /// Flushes the buffered paragraph into wrapped output lines.
@@ -128,6 +163,18 @@ impl<'a> ParagraphWriter<'a> {
     /// method returns no value, clears the state when flushing completes, and
     /// preserves hard-break segments as distinct wrapped emissions.
     pub(super) fn flush_paragraph(&mut self, state: &mut ParagraphState) {
+        if let Some(pending) = state.pending_prefix.take() {
+            state.buf.clear();
+            state.indent.clear();
+
+            let prefix_line = PrefixLine {
+                prefix: Cow::Owned(pending.prefix),
+                rest: pending.rest.as_str(),
+                repeat_prefix: pending.repeat_prefix,
+            };
+            self.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
+        }
+
         if state.buf.is_empty() {
             return;
         }
@@ -181,6 +228,19 @@ impl<'a> ParagraphWriter<'a> {
         prefix_line: &PrefixLine<'_>,
     ) {
         self.flush_paragraph(state);
+
+        if has_unclosed_code_span(prefix_line.rest) {
+            let prefix = prefix_line.prefix.as_ref().to_string();
+            let prefix_width = UnicodeWidthStr::width(prefix.as_str());
+            state.pending_prefix = Some(PendingPrefix {
+                prefix,
+                rest: prefix_line.rest.to_string(),
+                rest_width: self.width.saturating_sub(prefix_width).max(1),
+                repeat_prefix: prefix_line.repeat_prefix,
+            });
+            return;
+        }
+
         self.append_wrapped_with_prefix(prefix_line);
     }
 }

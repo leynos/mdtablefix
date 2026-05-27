@@ -129,6 +129,45 @@ fn line_break_parts(line: &str) -> (String, bool) {
     (text, hard_break)
 }
 
+/// Join a soft-wrapped continuation onto pending prefixed text.
+///
+/// When a source line break falls between a short inline code token and the
+/// prose that follows it, insert the missing closing backtick before joining.
+fn join_pending_continuation(existing: &mut String, continuation: &str) {
+    if continuation.is_empty() {
+        return;
+    }
+
+    if should_close_code_span_before_continuation(existing, continuation) {
+        existing.push('`');
+    }
+
+    if !existing.is_empty() {
+        existing.push(' ');
+    }
+    existing.push_str(continuation);
+}
+
+fn should_close_code_span_before_continuation(existing: &str, continuation: &str) -> bool {
+    if !has_unclosed_code_span(existing) || existing.ends_with('`') {
+        return false;
+    }
+
+    if !continuation
+        .chars()
+        .next()
+        .is_some_and(|ch| ch.is_ascii_lowercase())
+    {
+        return false;
+    }
+
+    let Some(content) = existing.rfind('`').map(|index| &existing[index + 1..]) else {
+        return false;
+    };
+
+    !content.is_empty() && content.chars().all(|ch| ch.is_ascii_digit() || ch == '.')
+}
+
 /// Wrap text lines to the given width.
 ///
 /// # Panics
@@ -175,7 +214,29 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
         }
 
         if let Some(prefix_line) = prefix_line(line) {
+            if let Some(pending) = state.pending_prefix.as_mut()
+                && prefix_line.repeat_prefix
+            {
+                join_pending_continuation(&mut pending.rest, prefix_line.rest);
+                if !has_unclosed_code_span(pending.rest.as_str()) {
+                    writer.flush_paragraph(&mut state);
+                }
+                continue;
+            }
+
             writer.handle_prefix_line(&mut state, &prefix_line);
+            continue;
+        }
+
+        if let Some(pending) = state.pending_prefix.as_mut() {
+            let (text, _hard_break) = line_break_parts(line);
+            if !text.is_empty() {
+                join_pending_continuation(&mut pending.rest, &text);
+            }
+
+            if !has_unclosed_code_span(pending.rest.as_str()) {
+                writer.flush_paragraph(&mut state);
+            }
             continue;
         }
 
