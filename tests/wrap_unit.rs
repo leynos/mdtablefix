@@ -242,48 +242,38 @@ fn wrap_text_snapshots_inline_footnote_reference_outputs() {
     );
 }
 
-#[test]
-fn wrap_text_keeps_footnote_reference_with_preceding_inline_code() {
-    let input = lines_vec![concat!(
+#[rstest]
+#[case(
+    concat!(
         "To assert specific outcomes, use the standard macros `assert!`, `assert_eq!`, and ",
         "`assert_ne!`.[^3] This sentence follows the reference marker.",
-    )];
-
-    let wrapped = wrap_text(&input, 80);
-
-    assert_footnote_reference_is_intact(&wrapped, "[^3]");
-    assert!(
-        wrapped
-            .iter()
-            .any(|line| line.contains("`assert_ne!`.[^3]"))
-    );
-
-    insta::assert_snapshot!(
-        "inline_footnote_reference_after_code_wrap",
-        wrapped.join("\n")
-    );
-}
-
-#[test]
-fn wrap_text_keeps_footnote_reference_with_opener_coupled_inline_code() {
-    let input = lines_vec![concat!(
+    ),
+    "[^3]",
+    "`assert_ne!`.[^3]",
+    "inline_footnote_reference_after_code_wrap"
+)]
+#[case(
+    concat!(
         "See the standard macros (`assert!`, `assert_eq!`, and `assert_ne!`).[^3] ",
         "This sentence follows the reference marker.",
-    )];
-
+    ),
+    "[^3]",
+    "`assert_ne!`).[^3]",
+    "inline_footnote_reference_after_opener_coupled_code_wrap"
+)]
+fn wrap_text_keeps_footnote_reference_with_preceding_atomic_span(
+    #[case] paragraph: &str,
+    #[case] marker: &str,
+    #[case] expected_snippet: &str,
+    #[case] snapshot_name: &str,
+) {
+    let input = lines_vec![paragraph];
     let wrapped = wrap_text(&input, 80);
 
-    assert_footnote_reference_is_intact(&wrapped, "[^3]");
-    assert!(
-        wrapped
-            .iter()
-            .any(|line| line.contains("`assert_ne!`).[^3]"))
-    );
+    assert_footnote_reference_is_intact(&wrapped, marker);
+    assert!(wrapped.iter().any(|line| line.contains(expected_snippet)));
 
-    insta::assert_snapshot!(
-        "inline_footnote_reference_after_opener_coupled_code_wrap",
-        wrapped.join("\n")
-    );
+    insta::assert_snapshot!(snapshot_name, wrapped.join("\n"));
 }
 
 /// Guards issue `#261` by asserting both fenced and four-space indented shell

@@ -20,26 +20,6 @@ fn determine_token_span_groups_punctuation_with_footnote_reference() {
     assert_eq!(width, unicode_width::UnicodeWidthStr::width("word.[^4]"));
 }
 
-#[test]
-fn determine_token_span_groups_footnote_reference_after_inline_code() {
-    let input = "`assert_ne!`.[^3]";
-    let tokens = segment_inline(input);
-    let (end, width) = determine_token_span(&tokens, 0);
-    let grouped = tokens[..end].join("");
-    assert_eq!(grouped, input);
-    assert_eq!(width, unicode_width::UnicodeWidthStr::width(input));
-}
-
-#[test]
-fn determine_token_span_groups_footnote_reference_after_link() {
-    let input = "[click here](https://example.com).[^1]";
-    let tokens = segment_inline(input);
-    let (end, width) = determine_token_span(&tokens, 0);
-    let grouped = tokens[..end].join("");
-    assert_eq!(grouped, input);
-    assert_eq!(width, unicode_width::UnicodeWidthStr::width(input));
-}
-
 #[rstest]
 #[case("`fn!()`.[^1]")]
 #[case("`value`,[^2]")]
@@ -48,6 +28,8 @@ fn determine_token_span_groups_footnote_reference_after_link() {
 #[case("[text](url),[^2]")]
 #[case("(`code`).[^1]")]
 #[case("([link](url)).[^1]")]
+#[case("`assert_ne!`.[^3]")]
+#[case("[click here](https://example.com).[^1]")]
 fn determine_token_span_groups_footnote_reference_after_atomic_span(#[case] input: &str) {
     let tokens = segment_inline(input);
     let (end, width) = determine_token_span(&tokens, 0);
