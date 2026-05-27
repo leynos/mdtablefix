@@ -81,6 +81,12 @@ impl InlineFragment {
 }
 
 impl Fragment for InlineFragment {
+    /// Returns this fragment's display width as required by `textwrap`.
+    ///
+    /// Widths larger than `u32::MAX` are clamped by `width_as_f64` before
+    /// conversion. Real fragments are measured from strings, so reaching that
+    /// cap would require pathological input; the clamp keeps conversion
+    /// infallible for the trait method.
     fn width(&self) -> f64 { width_as_f64(self.width) }
     fn whitespace_width(&self) -> f64 { 0.0 }
     fn penalty_width(&self) -> f64 { 0.0 }
