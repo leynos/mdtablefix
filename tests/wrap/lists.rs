@@ -1,6 +1,7 @@
 //! List item wrapping tests.
 
 use rstest::rstest;
+
 use super::*;
 
 #[test]
@@ -77,6 +78,47 @@ fn test_wrap_long_inline_code_item() {
 }
 
 #[test]
+fn test_wrap_opening_paren_before_inline_code() {
+    let input = lines_vec![concat!(
+        "- `src/cli/mod.rs` (240 lines): defines the `Cli` struct with ",
+        "`#[derive(Parser, Serialize, Deserialize, OrthoConfig)]`, its subcommands ",
+        "(`Commands` enum), and the `parse_with_localizer_from` function that creates ",
+        "a localized clap command and parses arguments."
+    )];
+    let output = process_stream(&input);
+    for window in output.windows(2) {
+        assert!(
+            !window[0].ends_with('('),
+            "opening parenthesis must not be stranded at line end: {output:?}"
+        );
+    }
+}
+
+#[rstest]
+#[case("(`code`)", '(')]
+#[case("[`code`]", '[')]
+#[case("（`code`）", '（')]
+#[case("「`code`」", '「')]
+fn test_wrap_opening_bracket_variants_before_inline_code(
+    #[case] fragment: &str,
+    #[case] opener: char,
+) {
+    let input = lines_vec![format!(
+        "- Leading prose that is long enough to force wrapping before {fragment} and trailing \
+         text."
+    )];
+    let output = process_stream(&input);
+    for line in &output {
+        if line.contains('`') {
+            assert!(
+                !line.ends_with(opener),
+                "opening bracket must stay with inline code on line: {line:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn test_wrap_future_attribute_punctuation() {
     let input = lines_vec![concat!(
         "- Test function (`#[awt]`) or a specific `#[future]` argument ",
@@ -88,7 +130,8 @@ fn test_wrap_future_attribute_punctuation() {
         output,
         vec![
             "- Test function (`#[awt]`) or a specific `#[future]` argument".to_string(),
-            "  (`#[future(awt)]`), tells `rstest` to automatically insert `.await` calls for".to_string(),
+            "  (`#[future(awt)]`), tells `rstest` to automatically insert `.await` calls for"
+                .to_string(),
             "  those futures.".to_string(),
         ]
     );
@@ -152,7 +195,8 @@ fn test_wrap_list_item_semicolon_after_code() {
 #[test]
 fn test_wrap_list_items_with_checkboxes() {
     let input = lines_vec![
-        "- [ ] Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        "- [ ] Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` \
+         trait.",
         concat!(
             "- [ ] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix` ",
             "method to make concurrent requests to an external OSRM API's `table` ",
@@ -173,7 +217,8 @@ fn test_wrap_list_items_with_checkboxes() {
 #[test]
 fn test_wrap_indented_list_items_with_checkboxes() {
     let input = lines_vec![
-        "  - [ ] Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        "  - [ ] Create a `HttpTravelTimeProvider` struct that implements the \
+         `TravelTimeProvider` trait.",
         concat!(
             "  - [ ] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix` ",
             "method to make concurrent requests to an external OSRM API's `table` ",
@@ -199,8 +244,8 @@ fn test_wrap_indented_list_items_with_checkboxes() {
 #[case("- [x]")]
 #[case("- [X]")]
 #[case("- [x ] ")]
-#[case("- [ X] ")]     // asymmetric inner space before X
-#[case("- [X ] ")]     // asymmetric inner space after X
+#[case("- [ X] ")] // asymmetric inner space before X
+#[case("- [X ] ")] // asymmetric inner space after X
 #[case("- [ x ] ")]
 #[case("- [  ] ")]
 #[case("- [ ]  ")]
@@ -213,7 +258,8 @@ fn test_wrap_indented_list_items_with_checkboxes() {
 #[case("* [ ] ")]
 #[case("+ [ ] ")]
 fn test_wrap_checkbox_prefixes(#[case] prefix: &str) {
-    let body = "Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.";
+    let body =
+        "Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.";
     let input = lines_vec![format!("{prefix}{body}")];
     let output = process_stream(&input);
     assert!(
@@ -233,11 +279,11 @@ fn test_wrap_checkbox_prefixes(#[case] prefix: &str) {
     }
 }
 
-
 #[test]
 fn test_wrap_tab_indented_checkbox_list_items() {
     let input = lines_vec![
-        "\t- [ ] Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        "\t- [ ] Create a `HttpTravelTimeProvider` struct that implements the \
+         `TravelTimeProvider` trait.",
         concat!(
             "\t- [ ] Using `tokio` and `reqwest`, implement the `get_travel_time_matrix` ",
             "method to make concurrent requests to an external OSRM API's `table` ",
@@ -258,12 +304,16 @@ fn test_wrap_tab_indented_checkbox_list_items() {
 #[test]
 fn test_wrap_tab_indented_checkbox_without_trailing_space() {
     let input = lines_vec![
-        "\t- [x]Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.",
+        "\t- [x]Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` \
+         trait.",
     ];
     let output = process_stream(&input);
     // Expect wrap under a width of 1 tab + 5 chars; verify alignment on all continuation lines.
     assert!(output.len() >= 2, "expected wrapping to occur");
-    assert!(output[0].starts_with("\t- [x]"), "prefix mutated on first line");
+    assert!(
+        output[0].starts_with("\t- [x]"),
+        "prefix mutated on first line"
+    );
     // Continuation lines should start with a tab, then spaces equal to "- [x]".len().
     let expected_prefix = format!("\t{}", " ".repeat("- [x]".chars().count()));
     for (i, line) in output.iter().enumerate().skip(1) {
@@ -274,14 +324,14 @@ fn test_wrap_tab_indented_checkbox_without_trailing_space() {
     }
 }
 
-
 #[rstest]
 #[case("- [y] ", 2)]
 #[case("- [Y] ", 2)]
 #[case("- [✓] ", 2)]
 #[case("- [] ", 2)]
 fn test_wrap_non_task_markers_do_not_expand_prefix(#[case] prefix: &str, #[case] indent: usize) {
-    let body = "Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.";
+    let body =
+        "Create a `HttpTravelTimeProvider` struct that implements the `TravelTimeProvider` trait.";
     let input = lines_vec![format!("{prefix}{body}")];
     let output = process_stream(&input);
     assert!(
@@ -299,5 +349,3 @@ fn test_wrap_non_task_markers_do_not_expand_prefix(#[case] prefix: &str, #[case]
         );
     }
 }
-
-

@@ -3,7 +3,7 @@
 //! This module covers the core wrapping behaviour for prose and the regression
 //! guards for issue `#261`, ensuring verbatim code blocks remain untouched.
 
-use mdtablefix::wrap::wrap_text;
+use mdtablefix::{process_stream, wrap::wrap_text};
 use proptest::prelude::*;
 use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
@@ -255,5 +255,71 @@ fn wrap_text_does_not_overflow_after_tail_rebalancing() {
         wrapped
             .iter()
             .all(|line| UnicodeWidthStr::width(line.as_str()) <= 6)
+    );
+}
+
+#[test]
+fn wrap_stream_couples_opening_paren_before_inline_code_in_list() {
+    let input = vec![
+        concat!(
+            "- `src/cli/mod.rs` (240 lines): defines the `Cli` struct with ",
+            "`#[derive(Parser, Serialize, Deserialize, OrthoConfig)]`, its subcommands ",
+            "(`Commands` enum), and the `parse_with_localizer_from` function that creates ",
+            "a localized clap command and parses arguments."
+        )
+        .to_string(),
+    ];
+    let output = process_stream(&input);
+    for window in output.windows(2) {
+        assert!(
+            !window[0].ends_with('('),
+            "opening parenthesis must not be stranded at line end: {output:?}"
+        );
+    }
+}
+
+#[rstest]
+#[case("(`code`)", '(')]
+#[case("[`code`]", '[')]
+#[case("（`code`）", '（')]
+#[case("「`code`」", '「')]
+fn wrap_stream_keeps_opening_bracket_with_inline_code_in_list(
+    #[case] fragment: &str,
+    #[case] opener: char,
+) {
+    let input = vec![format!(
+        "- Leading prose that is long enough to force wrapping before {fragment} and trailing \
+         text."
+    )];
+    let output = process_stream(&input);
+    for line in &output {
+        if line.contains('`') {
+            assert!(
+                !line.ends_with(opener),
+                "opening bracket must stay with inline code on line: {line:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn wrap_stream_future_attribute_punctuation() {
+    let input = vec![
+        concat!(
+            "- Test function (`#[awt]`) or a specific `#[future]` argument ",
+            "(`#[future(awt)]`), tells `rstest` to automatically insert `.await` ",
+            "calls for those futures."
+        )
+        .to_string(),
+    ];
+    let output = process_stream(&input);
+    assert_eq!(
+        output,
+        vec![
+            "- Test function (`#[awt]`) or a specific `#[future]` argument".to_string(),
+            "  (`#[future(awt)]`), tells `rstest` to automatically insert `.await` calls for"
+                .to_string(),
+            "  those futures.".to_string(),
+        ]
     );
 }

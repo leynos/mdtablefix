@@ -25,6 +25,11 @@ use crate::wrap::{BlockKind, classify_block, wrap_text};
 #[case("[link](url) .", "[link](url) .")]
 #[case("`code!`", "`code!`")]
 #[case("[link!](url)", "[link!](url)")]
+#[case("(`code`)", "(`code`)")]
+#[case("[`code`]", "[`code`]")]
+#[case("（`code`）", "（`code`）")]
+#[case("「`code`」", "「`code`」")]
+#[case("([link](url))", "([link](url))")]
 fn determine_token_span_groups_related_tokens(#[case] input: &str, #[case] expected_group: &str) {
     let tokens = segment_inline(input);
     let (end, width) = determine_token_span(&tokens, 0);
@@ -102,6 +107,47 @@ fn wrap_preserving_code_splits_after_consecutive_whitespace() {
             "gamma".to_string()
         ]
     );
+}
+
+#[test]
+fn wrap_preserving_code_couples_opening_paren_before_inline_code() {
+    let text = concat!(
+        "- `src/cli/mod.rs` (240 lines): defines the `Cli` struct with ",
+        "`#[derive(Parser, Serialize, Deserialize, OrthoConfig)]`, its subcommands ",
+        "(`Commands` enum), and the `parse_with_localizer_from` function that creates ",
+        "a localized clap command and parses arguments."
+    );
+    let lines = wrap_preserving_code(text, 80);
+    for window in lines.windows(2) {
+        assert!(
+            !window[0].ends_with('('),
+            "opening parenthesis must not be stranded at line end: {lines:?}"
+        );
+    }
+}
+
+#[rstest]
+#[case("(`code`)", 10)]
+#[case("[`code`]", 10)]
+#[case("（`code`）", 10)]
+#[case("「`code`」", 10)]
+fn wrap_preserving_code_keeps_opening_bracket_with_inline_code(
+    #[case] fragment: &str,
+    #[case] width: usize,
+) {
+    let text = format!("prefix text {fragment} suffix.");
+    let lines = wrap_preserving_code(&text, width);
+    for line in &lines {
+        if line.contains('`') {
+            assert!(
+                !line.ends_with('(')
+                    && !line.ends_with('[')
+                    && !line.ends_with('（')
+                    && !line.ends_with('「'),
+                "opening bracket must stay with inline code on line: {line:?}"
+            );
+        }
+    }
 }
 
 #[test]

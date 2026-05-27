@@ -33,14 +33,7 @@ enum SpanKind {
     /// Treat the span as a GitHub Flavoured Markdown footnote reference.
     FootnoteRef,
 }
-
-/// Returns whether a character should stay attached as trailing punctuation.
-///
-/// The `c` parameter is the candidate trailing character. The return value is
-/// `true` only for punctuation that should remain coupled with a preceding
-/// atomic span. This helper has no panics and assumes `c` is a single scalar
-/// value from an already-tokenised fragment.
-#[inline]
+fn is_opening_punct(c: char) -> bool { matches!(c, '(' | '[') || "（［【《「『".contains(c) }
 fn is_trailing_punct(c: char) -> bool {
     // ASCII closers + common Unicode closers and word-final punctuation
     matches!(
@@ -197,6 +190,28 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());
     let mut kind = SpanKind::General;
+
+    // Forward-couple opening punctuation to the next atomic span so wrapping
+    // never leaves a lone `(` at the end of a line before inline code or a link.
+    if tokens[start].chars().all(is_opening_punct) {
+        if let Some(next) = tokens.get(start + 1) {
+            if is_inline_code_token(next) {
+                kind = SpanKind::Code;
+                end += 1;
+                width += UnicodeWidthStr::width(next.as_str());
+                end = extend_punctuation(tokens, end, &mut width);
+            } else if looks_like_link(next) {
+                kind = SpanKind::Link;
+                end += 1;
+                width += UnicodeWidthStr::width(next.as_str());
+                end = extend_punctuation(tokens, end, &mut width);
+            }
+        }
+
+        if matches!(kind, SpanKind::Code | SpanKind::Link) {
+            return (end, width);
+        }
+    }
 
     if tokens[start] == "`" {
         kind = SpanKind::Code;
