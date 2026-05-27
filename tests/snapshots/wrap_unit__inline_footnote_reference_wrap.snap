@@ -1,0 +1,8 @@
+---
+source: tests/wrap_unit.rs
+expression: "wrap_text(&input, 80).join(\"\\n\")"
+---
+This sentence has enough preceding text to make the formatter choose a bad wrap
+point near this reference
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.[^4]
+ This sentence follows the reference marker.

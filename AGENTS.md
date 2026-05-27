@@ -22,14 +22,14 @@
 - **Group by feature, not layer.** Colocate views, logic, fixtures, and helpers
   related to a domain concept rather than splitting by type.
 - **Use consistent spelling and grammar.** Comments must use en-GB-oxendict
-  ("-ize" / "-yse" / "-our") spelling and grammar, except for references to
-  external APIs.
+  ("-ize" / "-yse" / "-our") spelling and grammar, with the exception of
+  references to external APIs.
 - **Illustrate with clear examples.** Function documentation must include clear
   examples demonstrating the usage and outcome of the function. Test
   documentation should omit examples where the example serves only to reiterate
   the test logic.
 - **Keep file size manageable.** No single code file may be longer than 400
-  lines. Long switch statements or dispatch tables should be broken up by
+  lines.  Long switch statements or dispatch tables should be broken up by
   feature and constituents colocated with targets. Large blocks of test data
   should be moved to external data files.
 
@@ -118,7 +118,6 @@ project:
 - Run `make check-fmt`, `make lint`, and `make test` before committing. These
   targets wrap the following commands, so contributors understand the exact
   behaviour and policy enforced:
-
   - `make check-fmt` executes:
 
     ```sh
@@ -126,7 +125,6 @@ project:
     ```
 
     validating formatting across the entire workspace without modifying files.
-
   - `make lint` executes:
 
     ```sh
@@ -135,7 +133,6 @@ project:
 
     linting every target with all features enabled and denying all Clippy
     warnings.
-
   - `make test` executes:
 
     ```sh
@@ -145,60 +142,45 @@ project:
     running the full workspace test suite. Use `make fmt`
     (`cargo fmt --workspace`) to apply formatting fixes reported by the
     formatter check.
-
 - Clippy warnings MUST be disallowed.
-
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
-
 - Where a function is too long, extract meaningfully named helper functions
   adhering to separation of concerns and CQRS.
-
 - Where a function has too many parameters, group related parameters in
   meaningfully named structs.
-
 - Where a function is returning a large error, consider using `Arc` to reduce
   the amount of data returned.
-
-- Write unit and behavioural tests for new functionality. Run both before and
-  after making any change.
-
+- Ensure that new features are validated with unit tests using `rstest` and
+  behavioural tests using `rstest-bdd` where applicable. Cover happy paths,
+  unhappy paths, and relevant edge cases.
+- Add end-to-end tests where a change affects externally observable workflows,
+  integration contracts, persistence, command-line behaviour, network
+  boundaries, UI flows, or other system-level behaviour.
+- Use property tests with `proptest` or a bounded model checker with `kani`
+  when a change introduces an invariant over a range of inputs, states,
+  orderings, or transitions. Use judgement to choose the appropriate level of
+  rigour.
+- Use an exhaustive proof with `verus` for introduced lemmas or contractual
+  business logic. Proofs must be substantive, rigorous, and well-founded, not
+  merely a restatement of the assumed property.
+- Run relevant unit, behavioural, property, model-checking, proof, and
+  end-to-end suites before and after making any change.
 - Every module **must** begin with a module level (`//!`) comment explaining the
   module's purpose and utility.
-
 - Document public APIs using Rustdoc comments (`///`) so documentation can be
   generated with cargo doc.
-
 - Prefer immutable data and avoid unnecessary `mut` bindings.
-
-- Handle errors with the `Result` type instead of panicking where feasible.
-
 - Use explicit version ranges in `Cargo.toml` and keep dependencies up-to-date.
-
 - Avoid `unsafe` code unless absolutely necessary, and document any usage
-  clearly.
-
+  clearly with a "SAFETY" comment.
 - Place function attributes **after** doc comments.
-
 - Do not use `return` in single-line functions.
-
 - Use predicate functions for conditional criteria with more than two branches.
-
 - Lints must not be silenced except as a **last resort**.
-
 - Lint rule suppressions must be tightly scoped and include a clear reason.
-
-- Prefer `expect` over `allow`.
-
-- Use `rstest` fixtures for shared setup.
-
-- Replace duplicated tests with `#[rstest(...)]` parameterized cases.
-
-- Prefer `mockall` for mocks/stubs.
-
 - Use `concat!()` to combine long string literals rather than escaping newlines
   with a backslash.
-
 - Prefer single line versions of functions where appropriate. i.e.,
 
   ```rust
@@ -227,17 +209,34 @@ project:
   consistent without per-type boilerplate. Combine approaches: lean on
   `newt-hype` for the common case, tuple structs for outliers, and
   `the-newtype` to unify behaviour when owning the trait definitions.
+- Use `cap_std` and `cap_std::fs_utf8` / `camino` in place of `std::fs` and
+  `std::path` for enhanced cross-platform support and capabilities-oriented
+  filesystem access.
+
+### Testing
+
+- Use `rstest` fixtures for shared setup.
+- Replace duplicated tests with `#[rstest(...)]` parameterized cases.
+- Prefer `mockall` for ad hoc mocks/stubs.
+- For testing of functionality depending upon environment variables, dependency
+  injection and the `mockable` crate are the preferred option.
+- If mockable cannot be used, env mutations in tests MUST be wrapped in shared
+  guards and mutexes placed in a shared `test_utils` or `test_helpers` crate.
+  Direct environment mutation is FORBIDDEN in tests.
 
 ### Dependency Management
 
-- **Mandate caret requirements.** Use caret requirements (e.g.,
-  `some-crate = "1.2.3"`) in `Cargo.toml`; they must be SemVer-compatible.
-  This allows safe, non-breaking minor and patch updates while preventing
-  breaking changes from new major versions.
+- **Mandate caret requirements for all dependencies.** All crate versions
+  specified in `Cargo.toml` must use SemVer-compatible caret requirements (e.g.,
+   `some-crate = "1.2.3"`). This is Cargo's default and allows for safe,
+  non-breaking updates to minor and patch versions while preventing breaking
+  changes from new major versions. This approach is critical for ensuring build
+  stability and reproducibility.
 - **Prohibit unstable version specifiers.** The use of wildcard (`*`) or
-  open-ended inequality (`>=`) version requirements is strictly forbidden.
-  Tilde requirements (`~`) should only be used where a dependency must be
-  locked to patch-level updates for a specific, documented reason.
+  open-ended inequality (`>=`) version requirements are strictly forbidden, as
+  they introduce unacceptable risk and unpredictability. Tilde requirements (
+  `~`) should only be used where a dependency must be locked to patch-level
+  updates for a specific, documented reason.
 
 ### Error Handling
 
@@ -262,6 +261,30 @@ project:
 - Consume fallible fixtures in `rstest` by **making the test return `Result`**
   and applying `?` to the fixture.
 
+### Observability
+
+- Use `tracing` for logging and diagnostics. Prefer structured
+  `tracing::{trace, debug, info, warn, error}` events and spans over `println!`,
+   `eprintln!`, or direct `log` macros. Add fields for identifiers, state, and
+  error context so downstream subscribers can filter and correlate events
+  without parsing message text.
+- Use `#[tracing::instrument]` or explicit spans around request handling,
+  command execution, retries, background jobs, and other meaningful units of
+  work. Do not hold `Span::enter()` guards across `.await`; use
+  `Instrument::instrument` or scoped synchronous spans instead.
+- Use the `metrics` crate for metric emission where usage, uptake, failure,
+  or mitigation metrics are required. Prefer `counter!` for cumulative events,
+  `gauge!` for values that rise and fall, and `histogram!` for distributions
+  such as latency or payload size.
+- Describe emitted metrics with `describe_counter!`, `describe_gauge!`, or
+  `describe_histogram!` where the unit or purpose is not obvious from the
+  metric name. Keep metric names stable and labels low-cardinality; do not put
+  user input, request IDs, paths with unbounded parameters, or raw error
+  strings into labels.
+- Libraries may emit `metrics` and `tracing` instrumentation, but must not
+  install global recorders or subscribers. Applications should initialize
+  exporters/subscribers once, as early as practical in startup.
+
 ## Markdown Guidance
 
 - Validate Markdown files using `make markdownlint`.
@@ -274,6 +297,17 @@ project:
 - Use dashes (`-`) for list bullets.
 - Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
   footnotes.
+
+## Project Documentation
+
+Record design decisions in the design document. Where a decision is
+substantive, record it in an ADR document following the documentation style
+guide, then reference that ADR from the design document.
+
+Update `docs/users-guide.md` for any change to application behaviour or user
+interface that a user should know about. Document internally facing interfaces
+or practices in the relevant component architecture document. Document
+internally facing conventions or practices in `docs/developers-guide.md`.
 
 ## Additional tooling
 
