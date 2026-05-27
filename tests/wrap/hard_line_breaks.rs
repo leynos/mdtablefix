@@ -13,8 +13,8 @@ fn test_preserve_hard_line_breaks() {
 
 #[test]
 fn test_wrap_hard_linebreak_backslash() {
-    let input: Vec<String> = include_lines!("data/hard_linebreak_input.txt");
-    let expected: Vec<String> = include_lines!("data/hard_linebreak_expected.txt");
+    let input: Vec<String> = include_lines!("../data/hard_linebreak_input.txt");
+    let expected: Vec<String> = include_lines!("../data/hard_linebreak_expected.txt");
     assert_eq!(process_stream(&input), expected);
 }
 

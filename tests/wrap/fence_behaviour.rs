@@ -19,21 +19,34 @@ fn wrap_respects_fence_boundaries_in_paragraphs() {
     );
     let input = lines_vec![first_paragraph, "```", code_line, "```", closing_paragraph];
     let output = process_stream(&input);
-    assert!(!output.iter().any(|l| l.starts_with("``") && l.len() == 2), "no false 2-tick fences");
+    assert!(
+        !output.iter().any(|l| l.starts_with("``") && l.len() == 2),
+        "no false 2-tick fences"
+    );
 
     let fence_positions: Vec<usize> = output
         .iter()
         .enumerate()
         .filter_map(|(idx, line)| (line == "```").then_some(idx))
         .collect();
-    assert_eq!(fence_positions.len(), 2, "expected exactly two fence markers");
-    assert!(output.contains(&code_line.to_string()), "expected code line to remain intact");
+    assert_eq!(
+        fence_positions.len(),
+        2,
+        "expected exactly two fence markers"
+    );
+    assert!(
+        output.contains(&code_line.to_string()),
+        "expected code line to remain intact"
+    );
 
     let before_fence = &output[..fence_positions[0]];
     assert!(before_fence.len() > 1, "prose before the fence should wrap");
 
     let after_fence = &output[fence_positions[1] + 1..];
-    assert!(after_fence.len() > 1, "prose after the fence should resume wrapping");
+    assert!(
+        after_fence.len() > 1,
+        "prose after the fence should resume wrapping"
+    );
     assert!(
         after_fence
             .iter()
@@ -56,9 +69,8 @@ fn wrap_respects_fences_with_info_strings_and_whitespace() {
         "    println!(\"This line deliberately exceeds eighty characters to prove that wrapping ",
         "remains disabled inside the fenced block.\");"
     );
-    let json_line = concat!(
-        "{ \"message\": \"This JSON object should stay on one line even though it is wordy\" }"
-    );
+    let json_line =
+        "{ \"message\": \"This JSON object should stay on one line even though it is wordy\" }";
     let input = lines_vec![
         intro,
         "    ```rust   lineno=1",
@@ -117,11 +129,13 @@ fn wrap_does_not_close_on_shorter_closing_marker() {
         "before the fenced block."
     );
     let code_line = concat!(
-        "print(\"short marker test that remains inside the code fence even when the closing marker ",
+        "print(\"short marker test that remains inside the code fence even when the closing \
+         marker ",
         "is too short\")"
     );
     let long_code_after_short = concat!(
-        "print(\"this line should stay intact because the shorter closing fence should not end the ",
+        "print(\"this line should stay intact because the shorter closing fence should not end \
+         the ",
         "block prematurely even though the content is wide\")"
     );
     let outro = concat!(
@@ -174,5 +188,3 @@ fn wrap_does_not_close_on_shorter_closing_marker() {
         "trailing paragraph must not be treated as fenced content"
     );
 }
-
-

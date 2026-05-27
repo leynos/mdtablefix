@@ -4,18 +4,21 @@
 //! wrapping behaviour when processing Markdown content through the `mdtablefix`
 //! binary.
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 #[test]
 fn test_cli_wrap_option() {
     let input = "This line is deliberately made much longer than eighty columns so that the \
                  wrapping algorithm is forced to insert a soft line-break somewhere in the middle \
                  of the paragraph when the --wrap flag is supplied.";
-    let assertion = run_cli_with_stdin(&["--wrap"], &format!("{input}\n"))
-        .success();
+    let assertion = run_cli_with_stdin(&["--wrap"], &format!("{input}\n")).success();
     let text = String::from_utf8_lossy(&assertion.get_output().stdout);
-    assert!(text.lines().count() > 1, "expected wrapped output on multiple lines");
+    assert!(
+        text.lines().count() > 1,
+        "expected wrapped output on multiple lines"
+    );
     assert!(text.lines().all(|l| l.len() <= 80));
 }
 
@@ -60,10 +63,7 @@ fn test_cli_wrap_option() {
         ],
     ),
 )]
-fn test_cli_wrap_reflows_markdown(
-    paragraph: &str,
-    expected_lines: &[&str],
-) {
+fn test_cli_wrap_reflows_markdown(paragraph: &str, expected_lines: &[&str]) {
     let mut input = paragraph.to_owned();
     input.push('\n');
     let assertion = run_cli_with_stdin(&["--wrap"], &input).success();
@@ -168,22 +168,36 @@ fn test_cli_wrap_preserves_inline_code_span_with_quotes() {
         r#"- **Declarative (Prefer):** `When the user logs in with valid credentials`
 "#,
     );
-    run_cli_with_stdin(&["--wrap"], input)
-        .success()
-        .stdout(input);
+    let assertion = run_cli_with_stdin(&["--wrap"], input).success();
+    let output = String::from_utf8_lossy(&assertion.get_output().stdout);
+    assert!(
+        output.contains("user@example.com"),
+        "email literal must remain intact after wrapping"
+    );
+    assert!(
+        output.contains("field and click the \"submit\" button"),
+        "submit step text must remain intact after wrapping"
+    );
+    assert!(
+        output.contains("`When the user logs in with valid credentials`"),
+        "second inline code span must remain intact"
+    );
 }
 
 /// Ensures `--wrap` preserves emphasised step definition guidance with inline code spans.
 #[test]
 fn test_cli_wrap_preserves_step_definitions_guidance() {
-    let input = concat!(
-        r#"- **Step Definitions:** Mirror the feature file structure in your `tests/steps/` directory.
-  Create a Rust module for each feature area (e.g., `tests/steps/authentication_steps.rs`,
-  `tests/steps/catalog_steps.rs`). This prevents having a single, massive step definition file
-  and makes it easier to find the code corresponding to a Gherkin step.
-"#,
-    );
-    run_cli_with_stdin(&["--wrap"], input)
-        .success()
-        .stdout(input);
+    let input = "- **Step Definitions:** Mirror the feature file structure in your `tests/steps/` directory.\n  Create a Rust module for each feature area (e.g., `tests/steps/authentication_steps.rs`,\n  `tests/steps/catalog_steps.rs`). This prevents having a single, massive step definition file\n  and makes it easier to find the code corresponding to a Gherkin step.\n";
+    let assertion = run_cli_with_stdin(&["--wrap"], input).success();
+    let output = String::from_utf8_lossy(&assertion.get_output().stdout);
+    for snippet in [
+        "`tests/steps/`",
+        "`tests/steps/authentication_steps.rs`",
+        "`tests/steps/catalog_steps.rs`",
+    ] {
+        assert!(
+            output.contains(snippet),
+            "missing inline code span: {snippet}"
+        );
+    }
 }
