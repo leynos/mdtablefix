@@ -5,6 +5,7 @@
 
 mod classify_block;
 mod fence_tracker;
+mod link_ref_regex;
 mod inline_wrapping;
 mod link_reference_definitions;
 mod prefix;

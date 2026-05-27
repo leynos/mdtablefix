@@ -128,10 +128,11 @@ stay aligned with the documented design constraints.
 
 The wrapping pipeline for `--wrap` is:
 
-1. **Block classification.** `classify_block` in `src/wrap.rs` inspects each
-   input line and decides whether it should pass through verbatim or enter the
-   paragraph wrapper. Fenced code blocks, indented code blocks, headings,
-   tables, directives, and blank lines stop paragraph accumulation.
+1. **Block classification.** `classify_block` in `src/wrap/block.rs` inspects
+   each input line and decides whether it should pass through verbatim or enter
+   the paragraph wrapper. Fenced code blocks, indented code blocks, headings,
+   tables, directives, link reference definitions, and blank lines stop
+   paragraph accumulation.
 
 2. **Prefix-aware paragraph handling.** `ParagraphWriter` in
    `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.
@@ -152,6 +153,42 @@ The wrapping pipeline for `--wrap` is:
    `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
    whitespace-only wrap artefacts and isolated tails are normalized before the
    fragments are rendered back into output lines.
+
+
+### Block classification
+
+**`BlockKind::LinkReferenceDefinition`**
+
+Matched by `LINK_REF_RE` when the line's indentation is fewer than four
+columns. The pattern recognises the forms `[label]: <URL>` and
+`[label]: URL`, with an optional inline title enclosed in `"…"`, `'…'`, or
+`(…)`. Known limitation: the regex does not handle balanced nested brackets
+or escaped brackets inside link labels (for example, `[label [nested]]` or
+`[\[escaped\]]`).
+
+**`LINK_TITLE_RE`**
+
+Matches a standalone title continuation line (`CommonMark` spec §4.7): at most
+three leading spaces, a title enclosed in `"…"`, `'…'`, or `(…)`, and optional
+trailing whitespace.
+
+**`link_ref_needs_title(line)`**
+
+Returns `true` when a `LinkReferenceDefinition` line carries no inline title,
+signalling that the immediately following line may be a standalone title
+continuation.
+
+**`is_link_title_line(line)`**
+
+Returns `true` when `line` is a valid standalone link reference title per
+`LINK_TITLE_RE`.
+
+**`awaiting_link_title` state in `wrap_text`**
+
+Set to `true` after emitting a passthrough `LinkReferenceDefinition` whose
+`link_ref_needs_title` returns `true`. While this flag is set, the next
+non-blank line is also emitted verbatim if it satisfies `is_link_title_line`; a
+blank line resets the flag without consuming the blank.
 
 `InlineFragment` carries the rendered fragment text, its precomputed display
 width, and a `FragmentKind` tag. That construction-time classification lets the

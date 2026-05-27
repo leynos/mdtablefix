@@ -53,6 +53,10 @@ Fenced code blocks, HTML blocks, indented code blocks (four or more leading
 spaces or a leading tab), and table rows are passed through unchanged. Wrapping
 is applied only to prose paragraphs and prefixed lines.
 
+**Link reference definitions** — lines of the form `[label]: <URL>` or
+`[label]: URL` (with an optional title) are left untouched by the reflow pass.
+Each definition remains a single logical line.
+
 Two trailing spaces at the end of a line produce a hard line break in rendered
 Markdown. `mdtablefix --wrap` preserves those trailing spaces on the final
 wrapped line, so hard-break semantics are not lost after reformatting.
