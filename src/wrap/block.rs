@@ -45,7 +45,7 @@ pub(super) static FOOTNOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
 /// link labels (for example, `[label [nested]]` or `[\[escaped\]]`). That
 /// limitation is acceptable for issue #292 and the current regression tests.
 pub(super) static LINK_REF_RE: std::sync::LazyLock<Regex> = lazy_regex!(
-    r"^(\s*)(\[[^\]]+\]:\s*)(.*)$",
+    r#"^(\s*)(\[[^\]]+\]:\s*)(.+?)(?:\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\)))?\s*$"#,
     "link reference definition regex should compile",
 );
 
@@ -142,8 +142,7 @@ pub(super) fn link_ref_needs_title(line: &str) -> bool {
     let Some(cap) = LINK_REF_RE.captures(line) else {
         return false;
     };
-    let remainder = cap.get(3).map_or("", |m| m.as_str()).trim();
-    !matches!(remainder.chars().last(), Some('"' | '\'' | ')'))
+    cap.get(4).is_none()
 }
 
 /// Returns `true` when `line` is a valid standalone link reference title.
@@ -213,6 +212,7 @@ mod tests {
         expected,
         case("[ansible]: <https://docs.ansible.com/>", true),
         case("[label]: https://example.com", true),
+        case("[label]: path_(v1)", true),
         case("[label]: https://example.com \"Inline title\"", false),
         case("[label]: https://example.com 'Inline title'", false),
         case("[label]: https://example.com (Inline title)", false)
