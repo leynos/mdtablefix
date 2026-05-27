@@ -159,7 +159,7 @@ The wrapping pipeline for `--wrap` is:
 **`BlockKind::LinkReferenceDefinition`**
 
 Matched by `LINK_REF_RE` when the line's indentation is fewer than four
-columns. The pattern recognises the forms `[label]: <URL>` and
+columns. The pattern recognizes the forms `[label]: <URL>` and
 `[label]: URL`, with an optional inline title enclosed in `"…"`, `'…'`, or
 `(…)`. Known limitation: the regex does not handle balanced nested brackets
 or escaped brackets inside link labels (for example, `[label [nested]]` or
@@ -174,7 +174,7 @@ trailing whitespace.
 **`link_ref_needs_title(line)`**
 
 Returns `true` when a `LinkReferenceDefinition` line carries no inline title,
-signalling that the immediately following line may be a standalone title
+signaling that the immediately following line may be a standalone title
 continuation.
 
 **`is_link_title_line(line)`**

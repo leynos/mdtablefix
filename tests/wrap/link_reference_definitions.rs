@@ -3,41 +3,24 @@
 //! Validates that CommonMark link reference definitions remain verbatim during
 //! wrapping and are not collapsed into prose paragraphs.
 
+use rstest::rstest;
+
 use super::*;
 
-#[test]
-fn test_wrap_single_link_reference_definition() {
-    let input = lines_vec!["[ansible]: <https://docs.ansible.com/projects/ansible/latest/>"];
-    let output = process_stream(&input);
-    assert_eq!(output, input);
-}
-
-#[test]
-fn test_wrap_multiple_link_reference_definitions() {
-    let input = lines_vec![
-        "[ansible]: <https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_conditionals.html>",
-        "[bazel]: <https://bazel.build/docs/configurable-attributes>",
-        "[cargo-make]: <https://sagiegurari.github.io/cargo-make/>",
-        "[github-actions]: <https://docs.github.com/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflow>",
-        "[gnu-make]: <https://web.mit.edu/gnu/doc/html/make_7.html>",
-        "[just]: <https://just.systems/man/en/conditional-expressions.html>",
-        "[taskfile]: <https://taskfile.dev/docs/guide>",
-    ];
-
-    let output = process_stream(&input);
-    assert_eq!(output, input);
-}
-
-#[test]
-fn test_wrap_link_reference_definition_bare_url() {
-    let input = lines_vec!["[example]: https://example.com/path"];
-    let output = process_stream(&input);
-    assert_eq!(output, input);
-}
-
-#[test]
-fn test_wrap_link_reference_definition_with_title() {
-    let input = lines_vec!["[example]: https://example.com \"Example site\""];
+#[rstest]
+#[case(lines_vec!["[ansible]: <https://docs.ansible.com/projects/ansible/latest/>"])]
+#[case(lines_vec![
+    "[ansible]: <https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_conditionals.html>",
+    "[bazel]: <https://bazel.build/docs/configurable-attributes>",
+    "[cargo-make]: <https://sagiegurari.github.io/cargo-make/>",
+    "[github-actions]: <https://docs.github.com/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflow>",
+    "[gnu-make]: <https://web.mit.edu/gnu/doc/html/make_7.html>",
+    "[just]: <https://just.systems/man/en/conditional-expressions.html>",
+    "[taskfile]: <https://taskfile.dev/docs/guide>",
+])]
+#[case(lines_vec!["[example]: https://example.com/path"])]
+#[case(lines_vec!["[example]: https://example.com \"Example site\""])]
+fn test_wrap_link_reference_definitions_passthrough(input: Vec<String>) {
     let output = process_stream(&input);
     assert_eq!(output, input);
 }

@@ -68,14 +68,21 @@ fn wrap_text_clears_awaiting_link_title_at_fence_opener() {
 
 #[test]
 fn wrap_text_reflows_prose_after_bare_link_reference_definition() {
+    let paragraph = concat!(
+        "Paragraph text here continues with enough words to require ",
+        "reflow when wrapped at a narrow width."
+    );
     let input = vec![
         "[foo]: https://example.com".to_string(),
-        "Paragraph text here.".to_string(),
+        paragraph.to_string(),
     ];
-    let wrapped = wrap_text(&input, 80);
+    let wrapped = wrap_text(&input, 20);
 
     assert_eq!(wrapped[0], input[0]);
-    assert_eq!(wrapped[1], input[1]);
+    assert!(wrapped.len() > 2);
+    for line in wrapped.iter().skip(1) {
+        assert!(line.len() <= 20);
+    }
 }
 
 #[test]
