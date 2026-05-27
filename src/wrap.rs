@@ -13,6 +13,7 @@ use std::borrow::Cow;
 mod block;
 mod fence;
 mod inline;
+mod link_reference;
 mod paragraph;
 mod tokenize;
 use block::{BLOCKQUOTE_RE, BULLET_RE, FOOTNOTE_RE};
@@ -136,38 +137,35 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut writer = ParagraphWriter::new(&mut out, width);
     // Track fenced code blocks so wrapping honours shared fence semantics.
     let mut fence_tracker = FenceTracker::default();
-    let mut awaiting_link_title = false;
+    let link_matcher = link_reference::LinkReferenceMatcher::production();
+    let mut link_title_window = link_reference::LinkTitleWindow::default();
 
     for line in lines {
         if fence::handle_fence_line(line, &mut writer, &mut state, &mut fence_tracker) {
-            awaiting_link_title = false;
+            link_title_window.observe_fence_context();
             continue;
         }
 
         if fence_tracker.in_fence() {
-            awaiting_link_title = false;
+            link_title_window.observe_fence_context();
             writer.push_verbatim(&mut state, line);
             continue;
         }
 
-        if awaiting_link_title && line.trim().is_empty() {
-            awaiting_link_title = false;
+        if let Some(outcome) = link_title_window.observe_next_line(line, link_matcher)
+            && outcome == link_reference::LinkTitleWindowOutcome::EmitVerbatim
+        {
             writer.push_verbatim(&mut state, line);
             continue;
         }
-
-        if awaiting_link_title && block::is_link_title_line(line) {
-            writer.push_verbatim(&mut state, line);
-            awaiting_link_title = false;
-            continue;
-        }
-        awaiting_link_title = false;
 
         let block_kind = classify_block(line);
 
         if is_passthrough_block(block_kind, line) {
-            if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
-                awaiting_link_title = block::link_ref_needs_title(line);
+            if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition))
+                && link_matcher.standalone_title_need(line) == Some(true)
+            {
+                link_title_window.observe_bare_definition();
             }
             writer.push_verbatim(&mut state, line);
             continue;

@@ -39,25 +39,6 @@ pub(super) static FOOTNOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     "footnote pattern regex should compile",
 );
 
-/// Matches link reference definition prefixes so they remain verbatim during wrapping.
-///
-/// The pattern does not handle balanced nested brackets or escaped brackets in
-/// link labels (for example, `[label [nested]]` or `[\[escaped\]]`). That
-/// limitation is acceptable for issue #292 and the current regression tests.
-pub(super) static LINK_REF_RE: std::sync::LazyLock<Regex> = lazy_regex!(
-    r#"^(\s*)(\[[^\]]+\]:\s*)(.+?)(?:\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\)))?\s*$"#,
-    "link reference definition regex should compile",
-);
-
-/// Matches a standalone link reference title continuation line.
-///
-/// Per `CommonMark` spec §4.7 the title may appear on the line immediately
-/// following the URL and must be enclosed in `"…"`, `'…'`, or `(…)`,
-/// with at most three leading spaces and only optional trailing whitespace.
-pub(super) static LINK_TITLE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
-    r#"^\s{0,3}("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\))\s*$"#,
-    "link reference standalone title regex should compile",
-);
 /// Matches blockquote prefixes, capturing the marker run and the remainder for reuse.
 pub(super) static BLOCKQUOTE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^(\s*(?:>\s*)+)(.*)$",
@@ -89,7 +70,7 @@ pub(crate) enum BlockKind {
     Blockquote,
     /// Footnote definitions recognised by [`FOOTNOTE_RE`].
     FootnoteDefinition,
-    /// Link reference definitions recognised by [`LINK_REF_RE`].
+    /// Link reference definitions recognised by [`super::link_reference::LinkReferenceMatcher`].
     LinkReferenceDefinition,
     /// HTML-style markdownlint directives recognised by [`is_markdownlint_directive`].
     MarkdownlintDirective,
@@ -123,7 +104,8 @@ pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
     if indent_width < 4 && FOOTNOTE_RE.is_match(line) {
         return Some(BlockKind::FootnoteDefinition);
     }
-    if indent_width < 4 && LINK_REF_RE.is_match(line) {
+    let link_matcher = super::link_reference::LinkReferenceMatcher::production();
+    if indent_width < 4 && link_matcher.is_definition(line) {
         return Some(BlockKind::LinkReferenceDefinition);
     }
     if indent_width < 4 && is_markdownlint_directive(line) {
@@ -135,18 +117,6 @@ pub(crate) fn classify_block(line: &str) -> Option<BlockKind> {
     None
 }
 
-/// Returns `true` when a [`BlockKind::LinkReferenceDefinition`] line carries
-/// no inline title, meaning a standalone title continuation line may follow
-/// immediately on the next line (`CommonMark` spec §4.7).
-pub(super) fn link_ref_needs_title(line: &str) -> bool {
-    let Some(cap) = LINK_REF_RE.captures(line) else {
-        return false;
-    };
-    cap.get(4).is_none()
-}
-
-/// Returns `true` when `line` is a valid standalone link reference title.
-pub(super) fn is_link_title_line(line: &str) -> bool { LINK_TITLE_RE.is_match(line) }
 pub(super) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
 }
@@ -205,33 +175,5 @@ mod tests {
     #[case("<!-- just a comment -->", false)]
     fn detects_markdownlint_directives(#[case] line: &str, #[case] expected: bool) {
         assert_eq!(is_markdownlint_directive(line), expected);
-    }
-
-    #[rstest(
-        line,
-        expected,
-        case("[ansible]: <https://docs.ansible.com/>", true),
-        case("[label]: https://example.com", true),
-        case("[label]: path_(v1)", true),
-        case("[label]: https://example.com \"Inline title\"", false),
-        case("[label]: https://example.com 'Inline title'", false),
-        case("[label]: https://example.com (Inline title)", false)
-    )]
-    fn link_ref_needs_title_detects_bare_urls(line: &str, expected: bool) {
-        assert_eq!(link_ref_needs_title(line), expected);
-    }
-
-    #[rstest(
-        line,
-        expected,
-        case("  \"a title\"", true),
-        case("'a title'", true),
-        case("(a title)", true),
-        case("", false),
-        case("plain prose", false),
-        case("    \"indented title\"", false)
-    )]
-    fn is_link_title_line_detects_standalone_titles(line: &str, expected: bool) {
-        assert_eq!(is_link_title_line(line), expected);
     }
 }

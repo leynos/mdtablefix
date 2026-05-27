@@ -158,36 +158,31 @@ The wrapping pipeline for `--wrap` is:
 
 **`BlockKind::LinkReferenceDefinition`**
 
-Matched by `LINK_REF_RE` when the line's indentation is fewer than four
-columns. The pattern recognizes the forms `[label]: <URL>` and
-`[label]: URL`, with an optional inline title enclosed in `"…"`, `'…'`, or
-`(…)`. Known limitation: the regex does not handle balanced nested brackets
-or escaped brackets inside link labels (for example, `[label [nested]]` or
-`[\[escaped\]]`).
+Classified when indentation is fewer than four columns and
+`LinkReferenceMatcher::is_definition` matches the line.
 
-**`LINK_TITLE_RE`**
+**`LinkReferenceMatcher`**
 
-Matches a standalone title continuation line (`CommonMark` spec §4.7): at most
-three leading spaces, a title enclosed in `"…"`, `'…'`, or `(…)`, and optional
-trailing whitespace.
+Centralises link reference regex access. `production()` returns the workspace
+matcher; callers inject `&LinkReferenceMatcher` (or a copy) into query methods
+rather than reading global statics directly. `is_definition(line)` classifies
+link reference definitions. `standalone_title_need(line)` returns `None` when
+the line is not a definition, `Some(true)` when no inline title is present, and
+`Some(false)` when a title is already on the same line.
+`is_standalone_title_line(line)` matches title continuation lines per
+`CommonMark` spec §4.7 (at most three leading spaces, title in `"…"`, `'…'`, or
+`(…)`). Known limitation: nested or escaped brackets inside link labels are not
+supported (for example, `[label [nested]]` or `[\[escaped\]]`).
 
-**`link_ref_needs_title(line)`**
+**`LinkTitleWindow`**
 
-Returns `true` when a `LinkReferenceDefinition` line carries no inline title,
-signalling that the immediately following line may be a standalone title
-continuation.
-
-**`is_link_title_line(line)`**
-
-Returns `true` when `line` is a valid standalone link reference title per
-`LINK_TITLE_RE`.
-
-**`awaiting_link_title` state in `wrap_text`**
-
-Set to `true` after emitting a passthrough `LinkReferenceDefinition` whose
-`link_ref_needs_title` returns `true`. While this flag is set, the next
-non-blank line is also emitted verbatim if it satisfies `is_link_title_line`; a
-blank line resets the flag without consuming the blank.
+Explicit state for standalone title continuation in `wrap_text`. Starts
+`Closed`. After a bare link reference definition, `observe_bare_definition()`
+opens `AwaitingStandaloneTitle`. While open, `observe_next_line(line, matcher)`
+returns `Some(EmitVerbatim)` for blank or title lines (and closes the window),
+or `Some(Reprocess)` when the line is ordinary prose (closing the window so the
+caller reflows it). Fence entry calls `observe_fence_context()` to reset the
+window.
 
 `InlineFragment` carries the rendered fragment text, its precomputed display
 width, and a `FragmentKind` tag. That construction-time classification lets the
@@ -207,14 +202,14 @@ still fits within the configured width.
 
 Table: Key types and functions.
 
-| Symbol                                                            | File                             |
-| ----------------------------------------------------------------- | -------------------------------- |
-| `FragmentKind`, `InlineFragment`, `classify_fragment`             | `src/wrap/inline/fragment.rs`    |
-| `build_fragments`, `wrap_preserving_code`                         | `src/wrap/inline.rs`             |
-| `determine_token_span`                                            | `src/wrap/inline.rs`             |
-| `merge_whitespace_only_lines`, `rebalance_atomic_tails`           | `src/wrap/inline/postprocess.rs` |
-| `ParagraphWriter`, `wrap_with_prefix`                             | `src/wrap/paragraph.rs`          |
-| `ParagraphState`, `PrefixLine`                                    | `src/wrap/paragraph.rs`          |
+| Symbol                                                  | File                             |
+| ------------------------------------------------------- | -------------------------------- |
+| `FragmentKind`, `InlineFragment`, `classify_fragment`   | `src/wrap/inline/fragment.rs`    |
+| `build_fragments`, `wrap_preserving_code`               | `src/wrap/inline.rs`             |
+| `determine_token_span`                                  | `src/wrap/inline.rs`             |
+| `merge_whitespace_only_lines`, `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
+| `ParagraphWriter`, `wrap_with_prefix`                   | `src/wrap/paragraph.rs`          |
+| `ParagraphState`, `PrefixLine`                          | `src/wrap/paragraph.rs`          |
 
 ### Design constraints
 
