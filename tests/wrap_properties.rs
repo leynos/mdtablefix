@@ -123,4 +123,78 @@ proptest! {
             );
         }
     }
+
+    #[test]
+    fn wrap_text_deferred_span_closing_backtick_not_orphaned_for_generated_prefixes(
+        n in 1usize..=3,
+        prefix_kind in 0usize..3,
+        before in "[a-z]{1,20}",
+        inside in "[a-z][a-z ]{0,29}",
+        after in "[a-z]{1,20}",
+        width in 30usize..=120,
+    ) {
+        let (line1_prefix, cont_prefix) = match prefix_kind {
+            0 => ("- ".to_owned(),  "  ".to_owned()),
+            1 => ("1. ".to_owned(), "   ".to_owned()),
+            _ => ("> ".to_owned(),  "> ".to_owned()),
+        };
+        let fence = "`".repeat(n);
+        let line1 = format!("{line1_prefix}{before} {fence}{inside}");
+        let line2 = format!("{cont_prefix}{inside}{fence} {after}");
+        let output = wrap_text(&[line1, line2], width);
+        for line in &output {
+            let body = line.trim_start_matches(|c: char| {
+                c.is_ascii_digit() || matches!(c, ' ' | '-' | '>' | '.')
+            });
+            if body.starts_with(fence.as_str()) {
+                prop_assert!(
+                    body.len() > fence.len(),
+                    "orphaned closing backtick on line: {line:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn wrap_text_deferred_span_preserves_hard_break(
+        n in 1usize..=2,
+        before in "[a-z]{1,15}",
+        inside in "[a-z][a-z ]{0,19}",
+        after in "[a-z]{1,15}",
+        width in 50usize..=120,
+    ) {
+        let fence = "`".repeat(n);
+        let line1 = format!("- {before} {fence}{inside}");
+        // Hard break after the closing fence on the continuation line.
+        let line2 = format!("  {inside}{fence} {after}  ");
+        let output = wrap_text(&[line1, line2], width);
+        let rendered = output.join("\n");
+        prop_assert!(
+            output.iter().any(|l| l.ends_with("  ")),
+            "hard-break marker lost; rendered:\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn wrap_text_deferred_blockquote_span_stays_atomic(
+        n in 1usize..=3,
+        before in "[a-z ]{1,25}",
+        inside in "[a-z][a-z ]{0,24}",
+        after in "[a-z ]{1,25}",
+        width in 40usize..=120,
+    ) {
+        let fence = "`".repeat(n);
+        let line1 = format!("> {before} {fence}{inside}");
+        let line2 = format!("> {inside}{fence} {after}");
+        let output = wrap_text(&[line1, line2], width);
+        let bare_closer = format!("> {fence}");
+        for line in &output {
+            prop_assert!(
+                line != &bare_closer,
+                "bare closing fence on its own line: {line:?}"
+            );
+        }
+        let rendered = output.join("\n");
+        prop_assert!(rendered.contains(&fence), "fence lost; rendered:\n{rendered}");
+    }
 }
