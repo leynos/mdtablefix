@@ -6,6 +6,7 @@
 use proptest::prelude::*;
 
 use super::super::{continuation_begins_with_closing_fence, has_unclosed_code_span};
+use crate::wrap::tokenize::{opening_fence_run_len, scan_continuation_span_state};
 
 proptest! {
     #[test]
@@ -70,6 +71,68 @@ proptest! {
                 "shorter closing fence must not match"
             );
         }
+    }
+
+    #[test]
+    fn opening_fence_run_len_detects_unescaped_backtick_run(
+        n in 1usize..=4,
+        suffix in "[^`]*",
+    ) {
+        let fence = "`".repeat(n);
+        let text = format!("{fence}{suffix}");
+        let bytes = text.as_bytes();
+        let result = opening_fence_run_len(bytes, &text);
+        prop_assert_eq!(result, Some(n));
+    }
+
+    #[test]
+    fn opening_fence_run_len_rejects_escaped_backtick(
+        n in 1usize..=3,
+        suffix in "[^`]*",
+    ) {
+        // A backslash immediately before the backtick run means the run
+        // is escaped.
+        let fence = "`".repeat(n);
+        let text = format!("\\{fence}{suffix}");
+        let bytes = text.as_bytes();
+        prop_assert!(
+            opening_fence_run_len(bytes, &text).is_none(),
+            "escaped backtick run must not be detected as opener; text={text:?}"
+        );
+    }
+
+    #[test]
+    fn scan_continuation_span_state_none_when_balanced(
+        n in 1usize..=3,
+        content in "[^`]+",
+    ) {
+        // Reject content ending with backslash so the closing fence is not
+        // escaped.
+        prop_assume!(!content.ends_with('\\'));
+        let fence = "`".repeat(n);
+        let continuation = format!("{fence}{content}");
+        let result = scan_continuation_span_state(&continuation, n);
+        prop_assert!(
+            result.is_none(),
+            "span of length {n} should close at start of continuation; \
+             continuation={continuation:?} result={result:?}"
+        );
+    }
+
+    #[test]
+    fn scan_continuation_span_state_some_when_no_closer(
+        n in 1usize..=3,
+        content in "[^`]+",
+    ) {
+        // Continuation has no matching closing fence; span should remain open.
+        let fence_wrong_len = "`".repeat(n + 1);
+        let continuation = format!("{fence_wrong_len}{content}");
+        let result = scan_continuation_span_state(&continuation, n);
+        prop_assert!(
+            result.is_some(),
+            "span of length {n} should stay open when no matching closer; \
+             continuation={continuation:?} result={result:?}"
+        );
     }
 }
 
