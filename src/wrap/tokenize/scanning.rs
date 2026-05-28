@@ -288,7 +288,12 @@ pub(crate) fn continuation_begins_with_closing_fence(existing: &str, continuatio
 
     open_fence_len == run_len
 }
+#[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
     struct ScanCollectCase {
         text: &'static str,
         start: usize,
