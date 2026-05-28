@@ -202,6 +202,9 @@ fn next_token(line: &str, offset: usize) -> Option<(Token<'_>, usize)> {
         return None;
     }
 
+    // SAFETY: backtick (U+0060) is a one-byte ASCII codepoint, so the
+    // character count from `take_while` equals the byte length of the
+    // fence delimiter. Slicing by `delim_len` is a valid UTF-8 boundary.
     let fence = &rest[..delim_len];
     let mut search_start = delim_len;
     while let Some(pos) = rest[search_start..].find(fence) {

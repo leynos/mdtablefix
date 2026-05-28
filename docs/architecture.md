@@ -567,3 +567,13 @@ spans remains a valid break opportunity, so sequences such as `.toml`, `.json`,
 `.json5`, `.yaml`, and `.yml` can wrap between spans when required. The
 coupling rule only keeps immediately trailing punctuation with the preceding
 code span.
+
+Inflectional affixes and possessive markers (`s`, `'s`, `ed`, `ing`) and
+hyphenated compounds that appear immediately after a closing backtick fence are
+absorbed into the code token during tokenisation by `scan_code_suffix_end` in
+`src/wrap/tokenize/scanning.rs`. The combined code-and-suffix token is then
+classified as atomic by `has_inline_code_structure` in
+`src/wrap/inline/fragment.rs`, so wrapping treats the full string — for example,
+`` `VarGuard`s ``, `` `class`'s ``, `` `fetch`ed ``, or `` `run`ning `` — as an
+unbreakable unit. No line break is inserted between the closing backtick and the
+following letters.
