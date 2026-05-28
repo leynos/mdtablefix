@@ -160,13 +160,14 @@ fn handle_pending_continuation(
             && pending.prefix == prefix_line.prefix.as_ref()
         {
             let (text, hard_break) = line_break_parts(prefix_line.rest);
+            let had_open = parse_open_code_span(&pending.rest).is_some();
             if !text.is_empty() {
                 join_pending_continuation(&mut pending.rest, &text);
             }
             if hard_break {
                 pending.hard_break = true;
             }
-            if !has_unclosed_code_span(pending.rest.as_str()) {
+            if !has_unclosed_code_span(pending.rest.as_str()) && (!had_open || pending.hard_break) {
                 writer.flush_paragraph(state);
             }
             return;
@@ -201,6 +202,7 @@ fn handle_pending_continuation(
         return;
     };
 
+    let had_open = parse_open_code_span(&pending.rest).is_some();
     if !text.is_empty() {
         join_pending_continuation(&mut pending.rest, &text);
     }
@@ -208,7 +210,7 @@ fn handle_pending_continuation(
         pending.hard_break = true;
     }
 
-    if !has_unclosed_code_span(pending.rest.as_str()) {
+    if !has_unclosed_code_span(pending.rest.as_str()) && (!had_open || pending.hard_break) {
         writer.flush_paragraph(state);
     }
 }
