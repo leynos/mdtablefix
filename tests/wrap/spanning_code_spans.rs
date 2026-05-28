@@ -7,35 +7,24 @@ use super::*;
 
 #[rstest]
 #[case(
+    "1_",
     include_lines!("../data/spanning_code_span_ordered_input.txt"),
-    include_lines!("../data/spanning_code_span_ordered_expected.txt"),
-    "1. "
 )]
 #[case(
+    "-",
     include_lines!("../data/spanning_code_span_bullet_input.txt"),
-    include_lines!("../data/spanning_code_span_bullet_expected.txt"),
-    "- "
 )]
-fn test_wrap_spanning_code_span_fixtures(
-    #[case] input: Vec<String>,
-    #[case] expected: Vec<String>,
-    #[case] prefix: &str,
-) {
+fn test_wrap_spanning_code_span_fixtures(#[case] prefix: &str, #[case] input: Vec<String>) {
     let output = process_stream(&input);
-    assert_eq!(output, expected);
-
-    // The bullet fixture exercises an edge case where two consecutive
-    // code spans share a backtick character; the current tokeniser does
-    // not perfectly handle this, so the line-length check is relaxed.
-    if prefix == "- " {
-        let indent = " ".repeat(prefix.len());
-        assert!(output.first().is_some_and(|l| l.starts_with(prefix)));
-        for line in output.iter().skip(1) {
-            assert!(line.starts_with(&indent));
-        }
-    } else {
-        assert_wrapped_list_item(&output, prefix, expected.len());
-    }
+    insta::with_settings!({
+        snapshot_path => "../snapshots",
+        prepend_module_to_snapshot => false,
+    }, {
+        insta::assert_snapshot!(
+            format!("spanning_code_span_{}", prefix.trim()),
+            output.join("\n")
+        );
+    });
 }
 
 #[test]

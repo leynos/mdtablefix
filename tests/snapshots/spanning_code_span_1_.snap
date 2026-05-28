@@ -1,0 +1,7 @@
+---
+source: tests/wrap/spanning_code_spans.rs
+expression: "output.join(\"\\n\")"
+---
+1. Users can select a CLI theme via layered configuration
+   (`CLI > environment > config file > defaults`) using OrthoConfig-backed
+   parsing and localized help text.
