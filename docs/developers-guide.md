@@ -270,7 +270,7 @@ punctuation.
   the opener is not left on the previous line. Trailing punctuation after those
   spans follows the same grouping rules. GFM footnote references that immediately
   follow inline code or link spans without intervening whitespace are coupled
-  to the preceding punctuation cluster so the marker is not wrapped onto the
+  to the preceding punctuation cluster, so the marker is not wrapped onto the
   next line alone. Inflectional affixes (`s`, `'s`, `ed`,
   `ing`) and hyphenated compounds that immediately follow a closed backtick
   fence are absorbed into the code token by `scan_code_suffix_end` in
