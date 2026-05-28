@@ -85,12 +85,12 @@ restores the separator row with widths derived from the final table body.
 `src/wrap/tokenize/scanning.rs`:
 
 - `scan_code_suffix_end(text: &str, start: usize) -> usize` advances `start`
-  past any recognised inflectional or possessive suffix that is directly
-  attached to a closing inline-code fence at that position. Recognised shapes
+  past any recognized inflectional or possessive suffix that is directly
+  attached to a closing inline-code fence at that position. Recognized shapes
   are: a hyphenated compound where the word after the hyphen starts with a
   lowercase letter (e.g. `-style`), a possessive `'s`, and bare alphabetic
   suffixes (`s`, `ed`, `ing`, and any other run of ASCII letters). Returns the
-  original `start` when no suffix is recognised.
+  original `start` when no suffix is recognized.
 
 `src/wrap/inline/fragment.rs`:
 
@@ -274,8 +274,8 @@ punctuation.
   next line alone. Inflectional affixes (`s`, `'s`, `ed`,
   `ing`) and hyphenated compounds that immediately follow a closed backtick
   fence are absorbed into the code token by `scan_code_suffix_end` in
-  `src/wrap/tokenize/scanning.rs`; the combined token is recognised as atomic
-  by `has_inline_code_structure` in `src/wrap/inline/fragment.rs` so wrapping
+  `src/wrap/tokenize/scanning.rs`; the combined token is recognized as atomic
+  by `has_inline_code_structure` in `src/wrap/inline/fragment.rs`, so wrapping
   treats the full string as one unit.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur.
