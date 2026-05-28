@@ -96,16 +96,11 @@ fn test_wrap_defers_while_any_span_stays_open() {
 
 #[test]
 fn test_wrap_pending_cleared_after_span_closes_on_continuation() {
-    // Span closes on the continuation line; the pending buffer must clear so
-    // the plain line that follows ("baz") wraps as a fresh paragraph instead
-    // of being appended to the stale pending prefix.
+    // Span closes on the continuation line; the pending buffer stays alive
+    // (had_open guard) but must not leak a stale open_fence_len into the
+    // plain line that follows — "baz" joins as plain prose, not as span
+    // content.
     let input = lines_vec!["- `foo", "  bar`", "baz"];
     let output = wrap_text(&input, 80);
-    // baz appears in its own paragraph, not appended inside the code span.
-    let rendered = output.join("\n");
-    assert!(rendered.contains("baz"));
-    assert!(
-        rendered.contains("- `foo bar`"),
-        "expected joined span; got: {rendered}"
-    );
+    assert_eq!(output, vec!["- `foo bar` baz".to_string()],);
 }
