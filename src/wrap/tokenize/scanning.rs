@@ -200,7 +200,7 @@ pub(super) fn bracket_follows_escaped_bang(bytes: &[u8], idx: usize) -> bool {
     has_odd_backslash_escape_bytes(bytes, idx - 1)
 }
 
-pub fn has_unclosed_code_span(text: &str) -> bool {
+pub(crate) fn has_unclosed_code_span(text: &str) -> bool {
     let bytes = text.as_bytes();
     let mut index = 0;
     while index < text.len() {
@@ -273,8 +273,11 @@ pub(crate) fn scan_continuation_span_state(continuation: &str, fence_len: usize)
 
     current_fence
 }
+/// Returns whether `continuation` begins with a closing fence for the open span
+/// in `existing`.
 #[cfg(test)]
-pub fn continuation_begins_with_closing_fence(existing: &str, continuation: &str) -> bool {
+#[must_use]
+pub(crate) fn continuation_begins_with_closing_fence(existing: &str, continuation: &str) -> bool {
     let Some((open_fence_len, _content)) = parse_open_code_span(existing) else {
         return false;
     };

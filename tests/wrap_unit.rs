@@ -19,10 +19,57 @@ fn assert_footnote_reference_is_intact(output: &[String], marker: &str) {
 }
 // hint: Renamed and reformatted. Prefer the structural change, verify formatting.
 
+<<<<<<< ours
 fn has_unclosed_code_span_detects_open_fences(#[case] text: &str, #[case] expected: bool) {
     assert_eq!(mdtablefix::wrap::has_unclosed_code_span(text), expected);
 }
 
+||||||| base
+#[rstest]
+#[case("`foo`", false)]
+#[case("`foo", true)]
+#[case("`` foo ``", false)]
+#[case("`` foo `", true)]
+#[case(r"\`foo", false)]
+#[case("`done` `open", true)]
+fn has_unclosed_code_span_detects_open_fences(#[case] text: &str, #[case] expected: bool) {
+    assert_eq!(mdtablefix::wrap::has_unclosed_code_span(text), expected);
+}
+
+#[rstest]
+#[case(
+    lines_vec![
+        "- Decision: Make `make kani` a Kani command smoke check using `cargo kani",
+        "  --version` until real harnesses land.",
+    ],
+    "`cargo kani --version`"
+)]
+#[case(
+    lines_vec![
+        "1. Users select a theme via (`CLI >",
+        "   environment > config file >",
+        "   defaults`) parsing.",
+    ],
+    "(`CLI > environment > config file > defaults`)"
+)]
+=======
+#[rstest]
+#[case(
+    lines_vec![
+        "- Decision: Make `make kani` a Kani command smoke check using `cargo kani",
+        "  --version` until real harnesses land.",
+    ],
+    "`cargo kani --version`"
+)]
+#[case(
+    lines_vec![
+        "1. Users select a theme via (`CLI >",
+        "   environment > config file >",
+        "   defaults`) parsing.",
+    ],
+    "(`CLI > environment > config file > defaults`)"
+)]
+>>>>>>> theirs
 fn wrap_text_joins_cross_line_code_spans(#[case] input: Vec<String>, #[case] expected: &str) {
     let rendered = wrap_text(&input, 80).join("\n");
     assert!(rendered.contains(expected));

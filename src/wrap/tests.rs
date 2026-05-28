@@ -9,5 +9,6 @@ mod inline_wrapping;
 mod link_ref_regex;
 mod link_reference_definitions;
 mod prefix;
+mod span_state;
 mod span_grouping_props;
 mod token_grouping;

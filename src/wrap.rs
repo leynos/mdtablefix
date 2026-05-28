@@ -37,10 +37,10 @@ use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 /// Re-export these so callers of [`crate::textproc`] can implement custom
 /// transformations without depending on internal modules.
 pub use tokenize::Token;
-#[doc(hidden)]
-pub use tokenize::continuation_begins_with_closing_fence;
-#[doc(hidden)]
-pub use tokenize::has_unclosed_code_span;
+// Re-exported for unit tests; not used in production code.
+#[allow(unused_imports)]
+pub(crate) use tokenize::continuation_begins_with_closing_fence;
+pub(crate) use tokenize::has_unclosed_code_span;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
 use tokenize::{parse_open_code_span, scan_continuation_span_state};

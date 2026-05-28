@@ -1,6 +1,6 @@
 //! Proptest property tests for wrapping invariants.
 
-use mdtablefix::wrap::{continuation_begins_with_closing_fence, has_unclosed_code_span, wrap_text};
+use mdtablefix::wrap::wrap_text;
 use proptest::prelude::*;
 
 fn footnote_label_strategy() -> impl Strategy<Value = String> {
@@ -43,29 +43,6 @@ proptest! {
     }
 
     #[test]
-    fn has_unclosed_code_span_is_false_for_closed_span(
-        n in 1usize..=3,
-        content in "[^`]+",
-    ) {
-        // Reject content that ends with a backslash so the closing
-        // backtick is not escaped.
-        prop_assume!(!content.ends_with('\\'));
-        let fence = "`".repeat(n);
-        let text = format!("{fence}{content}{fence}");
-        prop_assert!(!has_unclosed_code_span(&text));
-    }
-
-    #[test]
-    fn has_unclosed_code_span_is_true_when_closer_absent(
-        n in 1usize..=3,
-        content in "[^`]+",
-    ) {
-        let fence = "`".repeat(n);
-        let text = format!("{fence}{content}");
-        prop_assert!(has_unclosed_code_span(&text));
-    }
-
-    #[test]
     fn wrap_text_never_orphans_closing_backtick(
         content in "[a-z]{1,40}",
         width in 20usize..=100,
@@ -80,47 +57,6 @@ proptest! {
                     "orphaned closing backtick fragment on line: {line:?}"
                 );
             }
-        }
-    }
-
-    #[test]
-    fn continuation_begins_with_closing_fence_accepts_exact_match(
-        n in 1usize..=3,
-        prefix in "[^`]*",
-        suffix in "[^`]*",
-    ) {
-        let fence = "`".repeat(n);
-        let existing = format!("{fence}{prefix}");
-        let continuation = format!("{fence}{suffix}");
-        prop_assert!(
-            continuation_begins_with_closing_fence(&existing, &continuation)
-        );
-    }
-
-    #[test]
-    fn continuation_begins_with_closing_fence_rejects_length_mismatch(
-        n in 1usize..=3,
-        delta in 1usize..=3,
-        prefix in "[^`]*",
-        suffix in "[^`]*",
-    ) {
-        let open_fence = "`".repeat(n);
-        let existing = format!("{open_fence}{prefix}");
-
-        let close_long = "`".repeat(n + delta);
-        let continuation_long = format!("{close_long}{suffix}");
-        prop_assert!(
-            !continuation_begins_with_closing_fence(&existing, &continuation_long),
-            "longer closing fence must not match"
-        );
-
-        if n > delta {
-            let close_short = "`".repeat(n - delta);
-            let continuation_short = format!("{close_short}{suffix}");
-            prop_assert!(
-                !continuation_begins_with_closing_fence(&existing, &continuation_short),
-                "shorter closing fence must not match"
-            );
         }
     }
 
