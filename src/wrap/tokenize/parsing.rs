@@ -37,7 +37,9 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
     if let Some(text_end) = find_footnote_end(text, idx)
         && (text_end == text.len() || !text[text_end..].starts_with('('))
     {
-        debug!(token = %&text[start..text_end], "footnote reference parsed");
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(token = %&text[start..text_end], "footnote reference parsed");
+        }
         return (collect_range(text, start, text_end), text_end);
     }
 
@@ -51,8 +53,10 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
 
     if text_end < text.len() && text[text_end..].starts_with('(') {
         if let Some(url_end) = parse_link_url(text, text_end) {
-            let is_image = text[start..].starts_with('!');
-            trace!(token = %&text[start..url_end], is_image, "link or image parsed");
+            if tracing::enabled!(tracing::Level::TRACE) {
+                let is_image = text[start..].starts_with('!');
+                trace!(token = %&text[start..url_end], is_image, "link or image parsed");
+            }
             return (collect_range(text, start, url_end), url_end);
         }
         // Unbalanced URL: mirror the original behaviour by returning
@@ -66,11 +70,13 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
 #[tracing::instrument(level = "trace", skip(text), ret)]
 fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
     if idx >= text.len() || !text[idx..].starts_with("[^") {
-        trace!(
-            start = idx,
-            reason = "prefix_mismatch",
-            "footnote end not found"
-        );
+        if tracing::enabled!(tracing::Level::TRACE) {
+            trace!(
+                start = idx,
+                reason = "prefix_mismatch",
+                "footnote end not found"
+            );
+        }
         return None;
     }
 
@@ -87,21 +93,25 @@ fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
         }
 
         if ch == ']' {
-            trace!(
-                start = idx,
-                end = cursor,
-                token = %&text[idx..cursor],
-                "footnote label span recognised"
-            );
+            if tracing::enabled!(tracing::Level::TRACE) {
+                trace!(
+                    start = idx,
+                    end = cursor,
+                    token = %&text[idx..cursor],
+                    "footnote label span recognised"
+                );
+            }
             return Some(cursor);
         }
     }
 
-    trace!(
-        start = idx,
-        reason = "unterminated_bracket",
-        "footnote end not found"
-    );
+    if tracing::enabled!(tracing::Level::TRACE) {
+        trace!(
+            start = idx,
+            reason = "unterminated_bracket",
+            "footnote end not found"
+        );
+    }
     None
 }
 
