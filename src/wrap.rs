@@ -41,9 +41,9 @@ pub use tokenize::Token;
 pub use tokenize::continuation_begins_with_closing_fence;
 #[doc(hidden)]
 pub use tokenize::has_unclosed_code_span;
-use tokenize::scan_continuation_span_state;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
+use tokenize::{parse_open_code_span, scan_continuation_span_state};
 
 // Permit GFM task list markers with flexible spacing and missing post-marker
 // spaces in Markdown.
@@ -173,19 +173,12 @@ fn handle_pending_continuation(
             let (text, hard_break) = line_break_parts(prefix_line.rest);
             let fence_before = pending.open_fence_len;
             if !text.is_empty() {
-                join_pending_continuation(&mut pending.rest, &text, fence_before);
+                join_pending_continuation(&mut pending.rest, &text, fence_before.unwrap_or(0));
             }
             if hard_break {
                 pending.hard_break = true;
             }
-            match scan_continuation_span_state(&text, fence_before) {
-                Some(new_len) => pending.open_fence_len = new_len,
-                None => {
-                    if hard_break {
-                        writer.flush_paragraph(state);
-                    }
-                }
-            }
+            update_span_state_and_maybe_flush(&text, fence_before, state, writer);
             return;
         }
 
@@ -220,17 +213,48 @@ fn handle_pending_continuation(
 
     let fence_before = pending.open_fence_len;
     if !text.is_empty() {
-        join_pending_continuation(&mut pending.rest, &text, fence_before);
+        join_pending_continuation(&mut pending.rest, &text, fence_before.unwrap_or(0));
     }
     if hard_break {
         pending.hard_break = true;
     }
+    update_span_state_and_maybe_flush(&text, fence_before, state, writer);
+}
 
-    match scan_continuation_span_state(&text, fence_before) {
-        Some(new_len) => pending.open_fence_len = new_len,
-        None => {
-            if hard_break {
-                writer.flush_paragraph(state);
+/// Updates the cached open fence length from the incremental scan result and
+/// decides whether the pending prefix paragraph should be flushed.
+///
+/// When `scan_continuation_span_state` indicates the prior span closed, this
+/// falls back to `has_unclosed_code_span` on the full joined text to detect a
+/// new span that may have opened in the same continuation. Flushing is
+/// deferred (by the `had_open` guard) when the prior span was open, unless a
+/// hard break forces emission.
+fn update_span_state_and_maybe_flush(
+    continuation: &str,
+    fence_before: Option<usize>,
+    state: &mut ParagraphState,
+    writer: &mut ParagraphWriter<'_>,
+) {
+    let pending = state
+        .pending_prefix
+        .as_mut()
+        .expect("pending_prefix must be set");
+    let raw_fence = fence_before.unwrap_or(0);
+    match scan_continuation_span_state(continuation, raw_fence) {
+        Some(n) if n > 0 => {
+            pending.open_fence_len = Some(n);
+        }
+        _ => {
+            pending.open_fence_len = None;
+            if has_unclosed_code_span(pending.rest.as_str()) {
+                if let Some((new_len, _)) = parse_open_code_span(&pending.rest) {
+                    pending.open_fence_len = Some(new_len);
+                }
+            } else {
+                let had_open = fence_before.is_some();
+                if !had_open || pending.hard_break {
+                    writer.flush_paragraph(state);
+                }
             }
         }
     }

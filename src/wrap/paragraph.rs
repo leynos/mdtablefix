@@ -31,8 +31,8 @@ pub(super) struct PendingPrefix {
     pub(super) repeat_prefix: bool,
     /// Marks whether the closing continuation ended with a Markdown hard break.
     pub(super) hard_break: bool,
-    /// Fence length of the inline code span that is currently open (≥ 1).
-    pub(super) open_fence_len: usize,
+    /// Fence length of the inline code span that is currently open, if any.
+    pub(super) open_fence_len: Option<usize>,
 }
 
 #[derive(Default)]
@@ -248,7 +248,7 @@ impl<'a> ParagraphWriter<'a> {
                 rest_width: self.width.saturating_sub(prefix_width).max(1),
                 repeat_prefix: prefix_line.repeat_prefix,
                 hard_break: false,
-                open_fence_len: fence_len,
+                open_fence_len: Some(fence_len),
             });
             return;
         }
