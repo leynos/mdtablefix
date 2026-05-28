@@ -250,10 +250,7 @@ mod tests {
         ) {
             // A plain link with no backticks in the label must not match.
             let text = format!("[{label}]({url})");
-            // The heuristic may or may not match this (it's not guaranteed to be
-            // false), but it must not panic and the fragment classifier must still
-            // prefer Link over InlineCode when fragment_is_link is true.
-            let _ = has_inline_code_structure(&text);
+            assert!(!has_inline_code_structure(&text));
         }
     }
 }
