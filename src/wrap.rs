@@ -225,8 +225,8 @@ fn handle_pending_continuation(
             }
             if update_span_state(&text, pending) {
                 if let Some((split_at, new_len)) = split_reopen_span(pending, &text) {
-                    emit_pending_prefix_segment(writer, pending, split_at + new_len);
-                    pending.rest = pending.rest[split_at..].to_string();
+                    emit_pending_prefix_segment(writer, pending, split_at);
+                    pending.rest = pending.rest[split_at + new_len..].to_string();
                     pending.open_fence_len = Some(new_len);
                     pending.hard_break = false;
                 } else {
@@ -267,8 +267,8 @@ fn handle_pending_continuation(
     }
     if update_span_state(&text, pending) {
         if let Some((split_at, new_len)) = split_reopen_span(pending, &text) {
-            emit_pending_prefix_segment(writer, pending, split_at + new_len);
-            pending.rest = pending.rest[split_at..].to_string();
+            emit_pending_prefix_segment(writer, pending, split_at);
+            pending.rest = pending.rest[split_at + new_len..].to_string();
             pending.open_fence_len = Some(new_len);
             pending.hard_break = false;
         } else {
