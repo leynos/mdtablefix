@@ -105,11 +105,22 @@ proptest! {
         suffix in "[^`]*",
     ) {
         let open_fence = "`".repeat(n);
-        let close_fence = "`".repeat(n + delta);
         let existing = format!("{open_fence}{prefix}");
-        let continuation = format!("{close_fence}{suffix}");
+
+        let close_long = "`".repeat(n + delta);
+        let continuation_long = format!("{close_long}{suffix}");
         prop_assert!(
-            !continuation_begins_with_closing_fence(&existing, &continuation)
+            !continuation_begins_with_closing_fence(&existing, &continuation_long),
+            "longer closing fence must not match"
         );
+
+        if n > delta {
+            let close_short = "`".repeat(n - delta);
+            let continuation_short = format!("{close_short}{suffix}");
+            prop_assert!(
+                !continuation_begins_with_closing_fence(&existing, &continuation_short),
+                "shorter closing fence must not match"
+            );
+        }
     }
 }
