@@ -112,7 +112,7 @@ fn closing_fence_end(bytes: &[u8], text: &str, search: usize, fence_len: usize) 
 }
 
 /// Returns the fence length when `text` begins with a backtick run.
-pub(super) fn opening_fence_run_len(bytes: &[u8], text: &str) -> Option<usize> {
+pub(crate) fn opening_fence_run_len(bytes: &[u8], text: &str) -> Option<usize> {
     if text.is_empty() {
         return None;
     }
@@ -239,6 +239,41 @@ pub fn has_unclosed_code_span(text: &str) -> bool {
     false
 }
 
+pub(crate) fn scan_continuation_span_state(continuation: &str, fence_len: usize) -> Option<usize> {
+    let bytes = continuation.as_bytes();
+    let mut index = 0;
+    let mut current_fence: Option<usize> = Some(fence_len);
+
+    while index < continuation.len() {
+        let Some(ch) = continuation[index..].chars().next() else {
+            break;
+        };
+
+        if ch == '`' && !has_odd_backslash_escape_bytes(bytes, index) {
+            if let Some(open_len) = current_fence {
+                if let Some(end) = closing_fence_end(bytes, continuation, index, open_len) {
+                    current_fence = None;
+                    index = end;
+                    continue;
+                }
+            } else {
+                let fence_end = scan_while(continuation, index, |c| c == '`');
+                let run = fence_end - index;
+                let isolated = fence_end >= bytes.len() || bytes[fence_end] != BACKTICK_BYTE;
+                if isolated && !has_odd_backslash_escape_bytes(bytes, index) {
+                    current_fence = Some(run);
+                    index = fence_end;
+                    continue;
+                }
+            }
+        }
+
+        index += ch.len_utf8();
+    }
+
+    current_fence
+}
+#[cfg(test)]
 pub fn continuation_begins_with_closing_fence(existing: &str, continuation: &str) -> bool {
     let Some((open_fence_len, _content)) = parse_open_code_span(existing) else {
         return false;

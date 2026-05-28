@@ -41,7 +41,7 @@ pub use tokenize::Token;
 pub use tokenize::continuation_begins_with_closing_fence;
 #[doc(hidden)]
 pub use tokenize::has_unclosed_code_span;
-use tokenize::parse_open_code_span;
+use tokenize::scan_continuation_span_state;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
 
@@ -137,12 +137,21 @@ fn line_break_parts(line: &str) -> (String, bool) {
 /// Never synthesises closing fences. Only backticks present in the source may
 /// close an open span; when the continuation does not begin with the matching
 /// closing fence run, a single space is inserted before appending.
-fn join_pending_continuation(existing: &mut String, continuation: &str) {
+fn join_pending_continuation(existing: &mut String, continuation: &str, fence_len: usize) {
     if continuation.is_empty() {
         return;
     }
 
-    if !existing.is_empty() && !continuation_begins_with_closing_fence(existing, continuation) {
+    let bytes = continuation.as_bytes();
+    let needs_space = !{
+        if let Some(run_len) = tokenize::opening_fence_run_len(bytes, continuation) {
+            run_len == fence_len
+        } else {
+            false
+        }
+    };
+
+    if !existing.is_empty() && needs_space {
         existing.push(' ');
     }
     existing.push_str(continuation);
@@ -162,15 +171,20 @@ fn handle_pending_continuation(
             && pending.prefix == prefix_line.prefix.as_ref()
         {
             let (text, hard_break) = line_break_parts(prefix_line.rest);
-            let had_open = parse_open_code_span(&pending.rest).is_some();
+            let fence_before = pending.open_fence_len;
             if !text.is_empty() {
-                join_pending_continuation(&mut pending.rest, &text);
+                join_pending_continuation(&mut pending.rest, &text, fence_before);
             }
             if hard_break {
                 pending.hard_break = true;
             }
-            if !has_unclosed_code_span(pending.rest.as_str()) && (!had_open || pending.hard_break) {
-                writer.flush_paragraph(state);
+            match scan_continuation_span_state(&text, fence_before) {
+                Some(new_len) => pending.open_fence_len = new_len,
+                None => {
+                    if hard_break {
+                        writer.flush_paragraph(state);
+                    }
+                }
             }
             return;
         }
@@ -204,16 +218,21 @@ fn handle_pending_continuation(
         return;
     };
 
-    let had_open = parse_open_code_span(&pending.rest).is_some();
+    let fence_before = pending.open_fence_len;
     if !text.is_empty() {
-        join_pending_continuation(&mut pending.rest, &text);
+        join_pending_continuation(&mut pending.rest, &text, fence_before);
     }
     if hard_break {
         pending.hard_break = true;
     }
 
-    if !has_unclosed_code_span(pending.rest.as_str()) && (!had_open || pending.hard_break) {
-        writer.flush_paragraph(state);
+    match scan_continuation_span_state(&text, fence_before) {
+        Some(new_len) => pending.open_fence_len = new_len,
+        None => {
+            if hard_break {
+                writer.flush_paragraph(state);
+            }
+        }
     }
 }
 

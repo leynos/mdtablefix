@@ -7,7 +7,7 @@ use std::borrow::Cow;
 
 use unicode_width::UnicodeWidthStr;
 
-use super::{inline::wrap_preserving_code, tokenize::has_unclosed_code_span};
+use super::{inline::wrap_preserving_code, tokenize::parse_open_code_span};
 
 /// Carries the parsed prefix metadata for a line that should be wrapped.
 pub(super) struct PrefixLine<'a> {
@@ -31,6 +31,8 @@ pub(super) struct PendingPrefix {
     pub(super) repeat_prefix: bool,
     /// Marks whether the closing continuation ended with a Markdown hard break.
     pub(super) hard_break: bool,
+    /// Fence length of the inline code span that is currently open (≥ 1).
+    pub(super) open_fence_len: usize,
 }
 
 #[derive(Default)]
@@ -237,7 +239,7 @@ impl<'a> ParagraphWriter<'a> {
     ) {
         self.flush_paragraph(state);
 
-        if has_unclosed_code_span(prefix_line.rest) {
+        if let Some((fence_len, _)) = parse_open_code_span(prefix_line.rest) {
             let prefix = prefix_line.prefix.as_ref().to_string();
             let prefix_width = UnicodeWidthStr::width(prefix.as_str());
             state.pending_prefix = Some(PendingPrefix {
@@ -246,6 +248,7 @@ impl<'a> ParagraphWriter<'a> {
                 rest_width: self.width.saturating_sub(prefix_width).max(1),
                 repeat_prefix: prefix_line.repeat_prefix,
                 hard_break: false,
+                open_fence_len: fence_len,
             });
             return;
         }
