@@ -570,7 +570,7 @@ code span.
 
 Inflectional affixes and possessive markers (`s`, `'s`, `ed`, `ing`) and
 hyphenated compounds that appear immediately after a closing backtick fence are
-absorbed into the code token during tokenisation by `scan_code_suffix_end` in
+absorbed into the code token during tokenization by `scan_code_suffix_end` in
 `src/wrap/tokenize/scanning.rs`. The combined code-and-suffix token is then
 classified as atomic by `has_inline_code_structure` in
 `src/wrap/inline/fragment.rs`, so wrapping treats the full string — for example,
