@@ -1,6 +1,7 @@
 //! Tests for the tokenize_markdown helper.
 
 use mdtablefix::wrap::{self, Token};
+use rstest::rstest;
 
 #[test]
 fn unclosed_fence_yields_fence_tokens() {
@@ -91,6 +92,69 @@ fn multibyte_characters_round_trip() {
                 code: "λ",
             },
             Token::Text(" fin"),
+        ]
+    );
+}
+
+#[rstest]
+#[case(
+    "`VarGuard`s",
+    Token::Code {
+        raw: "`VarGuard`s",
+        fence: "`",
+        code: "VarGuard",
+    }
+)]
+#[case(
+    "`class`'s",
+    Token::Code {
+        raw: "`class`'s",
+        fence: "`",
+        code: "class",
+    }
+)]
+#[case(
+    "`fetch`ed",
+    Token::Code {
+        raw: "`fetch`ed",
+        fence: "`",
+        code: "fetch",
+    }
+)]
+#[case(
+    "`run`ning",
+    Token::Code {
+        raw: "`run`ning",
+        fence: "`",
+        code: "run",
+    }
+)]
+#[case(
+    "`code`-style",
+    Token::Code {
+        raw: "`code`-style",
+        fence: "`",
+        code: "code",
+    }
+)]
+fn inline_code_with_suffix_emits_single_token(#[case] source: &str, #[case] expected: Token<'_>) {
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(tokens, vec![expected]);
+}
+
+#[test]
+fn inline_code_followed_by_whitespace_does_not_absorb_suffix() {
+    let source = "`code` word";
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(
+        tokens,
+        vec![
+            Token::Code {
+                raw: "`code`",
+                fence: "`",
+                code: "code",
+            },
+            Token::Text(" word"),
         ]
     );
 }

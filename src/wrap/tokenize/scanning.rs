@@ -31,6 +31,44 @@ where
     idx
 }
 
+/// Advance past an inflectional suffix glued to a closing inline-code fence.
+///
+/// Recognises alphabetic affixes (`s`, `ed`, `ing`), possessives (`'s`), and
+/// hyphenated compounds (`-style`). Returns `start` when no suffix is present.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let text = "`VarGuard`s alive";
+/// let close = 0 + "`VarGuard`".len();
+/// assert_eq!(scan_code_suffix_end(text, close), close + 1);
+/// ```
+pub(super) fn scan_code_suffix_end(text: &str, start: usize) -> usize {
+    if start >= text.len() {
+        return start;
+    }
+
+    let rest = &text[start..];
+    if rest.starts_with('-') {
+        let first = rest.chars().nth(1);
+        if first.is_some_and(char::is_alphabetic) {
+            let after_hyphen = scan_while(text, start + 1, |ch| ch.is_alphabetic() || ch == '-');
+            if after_hyphen > start + 1 {
+                return after_hyphen;
+            }
+        }
+    }
+
+    if rest.starts_with('\'') {
+        let after_apostrophe = scan_while(text, start + 1, char::is_alphabetic);
+        if after_apostrophe > start + 1 {
+            return after_apostrophe;
+        }
+    }
+
+    scan_while(text, start, char::is_alphabetic)
+}
+
 /// Collect a range of characters into a [`String`].
 ///
 /// # Examples
@@ -113,6 +151,51 @@ mod tests {
             }
         } else {
             panic!("Invalid test case configuration");
+        }
+    }
+
+    #[rstest]
+    #[case("`VarGuard`s alive", "`VarGuard`".len(), "`VarGuard`s".len())]
+    #[case("`class`'s field", "`class`".len(), "`class`'s".len())]
+    #[case("`code`-style name", "`code`".len(), "`code`-style".len())]
+    #[case("`code`-2 next", "`code`".len(), "`code`".len())]
+    #[case("`code`.", "`code`".len(), "`code`".len())]
+    #[case("`code`**", "`code`".len(), "`code`".len())]
+    #[case("`code`'2 next", "`code`".len(), "`code`".len())]
+    fn scan_code_suffix_end_cases(
+        #[case] text: &str,
+        #[case] start: usize,
+        #[case] expected: usize,
+    ) {
+        assert_eq!(scan_code_suffix_end(text, start), expected);
+    }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        /// scan_code_suffix_end must always return a byte index within the string.
+        #[test]
+        fn scan_code_suffix_end_result_in_bounds(
+            text in "\\PC*",            // any non-control Unicode string
+            start in 0usize..=128usize,
+        ) {
+            let start = start.min(text.len());
+            let start = text.floor_char_boundary(start);
+            let result = scan_code_suffix_end(&text, start);
+            prop_assert!(result >= start, "result must be >= start");
+            prop_assert!(result <= text.len(), "result must be <= text.len()");
+        }
+
+        /// scan_code_suffix_end must not advance past a non-suffix character.
+        #[test]
+        fn scan_code_suffix_end_no_advance_on_whitespace_start(
+            suffix in " [a-z]{0,8}",
+        ) {
+            // A suffix beginning with whitespace should not be absorbed.
+            let text = format!("`code`{suffix}");
+            let start = 6usize; // index immediately after the closing backtick
+            let result = scan_code_suffix_end(&text, start);
+            prop_assert_eq!(result, start, "whitespace-led suffix must not be absorbed");
         }
     }
 }

@@ -51,6 +51,29 @@ fn push_code(code: &str, out: &mut String) {
     out.push_str(&fence);
 }
 
+/// Returns any inflectional suffix absorbed into a closed inline-code token.
+fn inline_code_suffix<'a>(raw: &'a str, code: &'a str) -> &'a str {
+    let fence_len = raw.chars().take_while(|&ch| ch == '`').count();
+    if fence_len == 0 {
+        return "";
+    }
+    let body_start = fence_len;
+    let code_end = body_start + code.len();
+    if raw.get(body_start..code_end) != Some(code) {
+        return "";
+    }
+    let close_end = code_end + fence_len;
+    if raw.get(code_end..close_end) != Some(&raw[..fence_len]) {
+        return "";
+    }
+    raw.get(close_end..).unwrap_or("")
+}
+
+fn push_code_with_suffix(raw: &str, code: &str, out: &mut String) {
+    push_code(code, out);
+    out.push_str(inline_code_suffix(raw, code));
+}
+
 fn has_code_emphasis_adjacent(source: &str) -> bool {
     source.contains("`*") || source.contains("`_") || source.contains("*`") || source.contains("_`")
 }
@@ -80,6 +103,7 @@ fn handle_text_token<'a>(
 fn try_fold_matching_emphasis<'a>(
     tokens: &mut Peekable<IntoIter<Token<'a>>>,
     pending: &mut &'a str,
+    raw: &'a str,
     code: &str,
     out: &mut String,
 ) -> bool {
@@ -89,7 +113,7 @@ fn try_fold_matching_emphasis<'a>(
     let (lead, mid, trail) = split_marks(next);
     if *pending == lead && mid.is_empty() && trail.is_empty() {
         out.push_str(pending);
-        push_code(code, out);
+        push_code_with_suffix(raw, code, out);
         out.push_str(lead);
         *pending = "";
         tokens.next();
@@ -134,14 +158,14 @@ fn handle_code_token<'a>(
     pending: &mut &'a str,
 ) {
     let (raw, code) = code_token;
-    if !pending.is_empty() && try_fold_matching_emphasis(tokens, pending, code, out) {
+    if !pending.is_empty() && try_fold_matching_emphasis(tokens, pending, raw, code, out) {
         return;
     }
 
     let (prefix, suffix, modified) = consume_code_affixes(tokens, pending);
     out.push_str(prefix);
     if modified {
-        push_code(code, out);
+        push_code_with_suffix(raw, code, out);
     } else {
         out.push_str(raw);
     }
@@ -211,6 +235,12 @@ mod tests {
     #[test]
     fn ignores_simple_text() {
         let input = vec!["nothing here".to_string()];
+        assert_eq!(fix_code_emphasis(&input), input);
+    }
+
+    #[test]
+    fn preserves_emphasised_code_with_inflectional_suffix() {
+        let input = vec!["*`VarGuard`s*".to_string(), "**`fetch`ed**".to_string()];
         assert_eq!(fix_code_emphasis(&input), input);
     }
 

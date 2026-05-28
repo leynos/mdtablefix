@@ -1,0 +1,6 @@
+---
+source: tests/wrap/inline_code_suffix_snapshots.rs
+expression: "wrap_lines(input, width)"
+---
+Use a `code`-style identifier when
+naming configuration keys.

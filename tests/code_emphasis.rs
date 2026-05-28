@@ -4,6 +4,8 @@
 
 use std::fs;
 
+use rstest::rstest;
+
 #[path = "common/mod.rs"]
 mod common;
 use common::{run_cli_with_args, run_cli_with_stdin};
@@ -24,9 +26,10 @@ fn cli_without_flag_is_noop_for_code_emphasis_input() {
     run_cli_with_stdin(&[], input).success().stdout(input);
 }
 
-#[test]
-fn cli_preserves_emphasised_code_only() {
-    let input = "**`code`**\n";
+#[rstest]
+#[case("*`VarGuard`s*\n")]
+#[case("**`code`**\n")]
+fn cli_preserves_emphasised_code(#[case] input: &'static str) {
     run_cli_with_stdin(&["--code-emphasis"], input)
         .success()
         .stdout(input);

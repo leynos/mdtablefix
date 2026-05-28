@@ -105,6 +105,27 @@ pub(super) fn width_as_f64(width: usize) -> f64 {
     f64::from(u32::try_from(width).unwrap_or(u32::MAX))
 }
 
+/// Returns whether `text` begins with a matched inline code fence, optionally
+/// followed by a non-whitespace suffix such as an inflectional affix.
+pub(super) fn has_inline_code_structure(text: &str) -> bool {
+    fn matched_fence(text: &str) -> bool {
+        let fence_len = text.chars().take_while(|&ch| ch == '`').count();
+        if fence_len == 0 {
+            return false;
+        }
+        // SAFETY: backtick (U+0060) is a one-byte ASCII codepoint, so the
+        // character count from `take_while` equals the byte length of the
+        // fence prefix. Slicing by `fence_len` is therefore a valid UTF-8
+        // boundary and will not panic.
+        let fence = &text[..fence_len];
+        text[fence_len..].contains(fence)
+    }
+
+    let trimmed = text.trim_end_matches(is_trailing_punct);
+    let without_opening = trimmed.trim_start_matches(is_opening_punct);
+    matched_fence(text) || matched_fence(trimmed) || matched_fence(without_opening)
+}
+
 /// Classifies rendered fragment `text` for later post-processing.
 ///
 /// `classify_fragment` checks both the original text and a copy trimmed of
@@ -118,13 +139,14 @@ fn classify_fragment(text: &str) -> FragmentKind {
     }
     let trimmed = text.trim_end_matches(is_trailing_punct);
     let without_opening = trimmed.trim_start_matches(is_opening_punct);
-    if is_inline_code_token(text)
+    if fragment_is_link(text) {
+        FragmentKind::Link
+    } else if is_inline_code_token(text)
         || is_inline_code_token(trimmed)
         || is_inline_code_token(without_opening)
+        || has_inline_code_structure(text)
     {
         FragmentKind::InlineCode
-    } else if fragment_is_link(text) {
-        FragmentKind::Link
     } else if looks_like_footnote_ref(text)
         || looks_like_footnote_ref(trimmed)
         || ends_with_footnote_ref(text)
@@ -132,5 +154,103 @@ fn classify_fragment(text: &str) -> FragmentKind {
         FragmentKind::FootnoteRef
     } else {
         FragmentKind::Plain
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        /// has_inline_code_structure must not panic on arbitrary Unicode input.
+        #[test]
+        fn has_inline_code_structure_never_panics(text in "\\PC*") {
+            let _ = has_inline_code_structure(&text);
+        }
+
+        /// A string that starts and ends with a matching backtick fence and
+        /// contains no embedded fence of the same length must satisfy the predicate.
+        #[test]
+        fn has_inline_code_structure_detects_simple_fence(
+            inner in "[^`]{1,40}",
+        ) {
+            let text = format!("`{inner}`");
+            prop_assert!(has_inline_code_structure(&text));
+        }
+    }
+
+    // Fence preceded by an opening bracket is still detected (without_opening path).
+    proptest! {
+        #[test]
+        fn has_inline_code_structure_detects_opening_punct_prefix(
+            inner in "[^`]{1,40}",
+        ) {
+            // Opening punctuation trimmed before fence detection.
+            let text = format!("(`{inner}`)");
+            prop_assert!(has_inline_code_structure(&text));
+        }
+    }
+
+    // Fence followed by trailing punctuation is still detected (trimmed path).
+    proptest! {
+        #[test]
+        fn has_inline_code_structure_detects_trailing_punct_suffix(
+            inner in "[^`]{1,40}",
+        ) {
+            let text = format!("`{inner}`.");
+            prop_assert!(has_inline_code_structure(&text));
+        }
+    }
+
+    // Fences longer than one backtick are detected.
+    proptest! {
+        #[test]
+        fn has_inline_code_structure_detects_multi_char_fence(
+            inner in "[^`]{1,20}",
+            fence_len in 2usize..=4usize,
+        ) {
+            let fence: String = "`".repeat(fence_len);
+            let text = format!("{fence}{inner}{fence}");
+            prop_assert!(has_inline_code_structure(&text));
+        }
+    }
+
+    // Possessive suffix does not prevent detection.
+    proptest! {
+        #[test]
+        fn has_inline_code_structure_with_possessive_suffix(
+            inner in "[^`]{1,20}",
+        ) {
+            let text = format!("`{inner}`'s");
+            prop_assert!(has_inline_code_structure(&text));
+        }
+    }
+
+    // Hyphenated compound suffix does not prevent detection.
+    proptest! {
+        #[test]
+        fn has_inline_code_structure_with_hyphen_suffix(
+            inner in "[^`]{1,20}",
+            word  in "[a-z]{2,10}",
+        ) {
+            let text = format!("`{inner}`-{word}");
+            prop_assert!(has_inline_code_structure(&text));
+        }
+    }
+
+    // A Markdown link must NOT be classified as inline code structure.
+    // This guards against false positives when link text contains backticks.
+    proptest! {
+        #[test]
+        fn has_inline_code_structure_does_not_match_plain_link(
+            label in "[a-zA-Z]{1,20}",
+            url   in "https://[a-z]{3,10}\\.[a-z]{2,4}",
+        ) {
+            // A plain link with no backticks in the label must not match.
+            let text = format!("[{label}]({url})");
+            assert!(!has_inline_code_structure(&text));
+        }
     }
 }

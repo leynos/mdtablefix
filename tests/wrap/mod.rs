@@ -15,6 +15,7 @@ mod cli;
 mod fence_behaviour;
 mod footnotes;
 mod hard_line_breaks;
+mod inline_code_suffix_snapshots;
 mod link_ref_snapshots;
 mod link_reference_definitions;
 mod links;

@@ -1,0 +1,6 @@
+---
+source: tests/wrap/inline_code_suffix_snapshots.rs
+expression: "wrap_lines(input, width)"
+---
+The scheduler keeps `run`ning until the
+queue is drained.

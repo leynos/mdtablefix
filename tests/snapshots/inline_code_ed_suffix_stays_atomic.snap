@@ -1,0 +1,6 @@
+---
+source: tests/wrap/inline_code_suffix_snapshots.rs
+expression: "wrap_lines(input, width)"
+---
+Values are `fetch`ed lazily on first
+access by the runtime.

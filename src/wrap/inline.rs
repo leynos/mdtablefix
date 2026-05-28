@@ -15,6 +15,14 @@ mod test_support;
 #[cfg(test)]
 mod tests;
 
+/// Returns whether `token` begins with a matched inline code fence, optionally
+/// followed by a non-whitespace suffix such as an inflectional affix.
+fn has_inline_code_structure(token: &str) -> bool { fragment::has_inline_code_structure(token) }
+
+fn is_code_token(token: &str) -> bool {
+    is_inline_code_token(token) || has_inline_code_structure(token)
+}
+
 use std::ops::Range;
 
 use fragment::{InlineFragment, width_as_f64};
@@ -60,7 +68,7 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     if tokens[start].chars().all(is_opening_punct)
         && let Some(next) = tokens.get(start + 1)
     {
-        if is_inline_code_token(next) {
+        if is_code_token(next) {
             kind = SpanKind::Code;
             end += 1;
             width += UnicodeWidthStr::width(next.as_str());
@@ -76,7 +84,7 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     if tokens[start] == "`" {
         kind = SpanKind::Code;
         end = merge_code_span(tokens, start, &mut width);
-    } else if is_inline_code_token(&tokens[start]) {
+    } else if is_code_token(&tokens[start]) {
         kind = SpanKind::Code;
         end = extend_punctuation(tokens, end, &mut width);
     } else if looks_like_link(&tokens[start]) {
@@ -112,7 +120,7 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
         }
 
         let is_link = looks_like_link(token);
-        let is_code = is_inline_code_token(token);
+        let is_code = is_code_token(token);
         // Footnote markers must be coupled before consecutive link/code chaining;
         // otherwise `[^N]` stays a separate wrap token even when punctuation is
         // already attached to the preceding atomic span.
