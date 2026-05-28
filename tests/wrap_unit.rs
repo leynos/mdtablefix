@@ -17,24 +17,6 @@ fn assert_footnote_reference_is_intact(output: &[String], marker: &str) {
     assert!(!rendered.contains("[\n"));
     assert!(!rendered.contains("\n^"));
 }
-// hint: Renamed and reformatted. Prefer the structural change, verify formatting.
-
-<<<<<<< ours
-fn has_unclosed_code_span_detects_open_fences(#[case] text: &str, #[case] expected: bool) {
-    assert_eq!(mdtablefix::wrap::has_unclosed_code_span(text), expected);
-}
-
-||||||| base
-#[rstest]
-#[case("`foo`", false)]
-#[case("`foo", true)]
-#[case("`` foo ``", false)]
-#[case("`` foo `", true)]
-#[case(r"\`foo", false)]
-#[case("`done` `open", true)]
-fn has_unclosed_code_span_detects_open_fences(#[case] text: &str, #[case] expected: bool) {
-    assert_eq!(mdtablefix::wrap::has_unclosed_code_span(text), expected);
-}
 
 #[rstest]
 #[case(
@@ -52,35 +34,11 @@ fn has_unclosed_code_span_detects_open_fences(#[case] text: &str, #[case] expect
     ],
     "(`CLI > environment > config file > defaults`)"
 )]
-=======
-#[rstest]
-#[case(
-    lines_vec![
-        "- Decision: Make `make kani` a Kani command smoke check using `cargo kani",
-        "  --version` until real harnesses land.",
-    ],
-    "`cargo kani --version`"
-)]
-#[case(
-    lines_vec![
-        "1. Users select a theme via (`CLI >",
-        "   environment > config file >",
-        "   defaults`) parsing.",
-    ],
-    "(`CLI > environment > config file > defaults`)"
-)]
->>>>>>> theirs
 fn wrap_text_joins_cross_line_code_spans(#[case] input: Vec<String>, #[case] expected: &str) {
     let rendered = wrap_text(&input, 80).join("\n");
     assert!(rendered.contains(expected));
 }
 
-fn wrap_text_joins_split_version_code_span_without_inserting_fence() {
-    let input = lines_vec!["- Release `4.1.1", "  rc1` candidate."];
-||||||| base
-#[test]
-fn wrap_text_joins_split_version_code_span_without_inserting_fence() {
-    let input = lines_vec!["- Release `4.1.1", "  rc1` candidate."];
 #[rstest]
 #[case("- Release `4.1.1", "  rc1` candidate.", "`4.1.1 rc1`", "`4.1.1` rc1")]
 #[case("- Version `1.2", "  beta` works.", "`1.2 beta`", "`1.2` beta")]
@@ -102,13 +60,14 @@ fn wrap_text_joins_split_version_code_spans_without_inserting_fence(
     );
 }
 
+#[test]
 fn wrap_text_joins_indented_ordered_list_code_span_continuation() {
-    let input = lines_vec!["10. Use `cargo kani", "    --version` for smoke checks.",];
+    let input = lines_vec!["10. Use `cargo kani", "    --version` for smoke checks."];
     let rendered = wrap_text(&input, 80).join("\n");
     assert!(rendered.contains("`cargo kani --version`"));
 }
-// hint: Renamed and reformatted. Prefer the structural change, verify formatting.
 
+#[test]
 fn wrap_text_preserves_hyphenated_words() {
     let input = lines_vec!["A word that is very-long-word indeed"];
     let wrapped = wrap_text(&input, 20);

@@ -37,12 +37,11 @@ use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 /// Re-export these so callers of [`crate::textproc`] can implement custom
 /// transformations without depending on internal modules.
 pub use tokenize::Token;
-// Re-exported for unit tests; not used in production code.
-#[allow(unused_imports)]
-pub(crate) use tokenize::continuation_begins_with_closing_fence;
-pub(crate) use tokenize::has_unclosed_code_span;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
+// Re-exported for unit tests; not used in production code.
+#[cfg(test)]
+pub(crate) use tokenize::{continuation_begins_with_closing_fence, has_unclosed_code_span};
 use tokenize::{parse_open_code_span, scan_continuation_span_state};
 
 // Permit GFM task list markers with flexible spacing and missing post-marker
@@ -186,17 +185,7 @@ fn handle_pending_continuation(
         return;
     }
 
-    if is_table_or_separator(line)
-        || matches!(
-            block_kind,
-            Some(
-                BlockKind::Heading
-                    | BlockKind::MarkdownlintDirective
-                    | BlockKind::LinkReferenceDefinition,
-            )
-        )
-        || line.trim().is_empty()
-    {
+    if is_passthrough_block(block_kind, line) && !is_indented_code_line(line) {
         if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition))
             && link_matcher.standalone_title_need(line) == Some(true)
         {
@@ -246,7 +235,7 @@ fn update_span_state_and_maybe_flush(
         }
         _ => {
             pending.open_fence_len = None;
-            if has_unclosed_code_span(pending.rest.as_str()) {
+            if tokenize::has_unclosed_code_span(pending.rest.as_str()) {
                 if let Some((new_len, _)) = parse_open_code_span(&pending.rest) {
                     pending.open_fence_len = Some(new_len);
                 }
