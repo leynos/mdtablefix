@@ -293,10 +293,12 @@ replacing `LineBuffer` with `textwrap`.
 
 ### Dependency
 
-`tracing = "0.1"` is the sole observability dependency. The library does not
-install a global subscriber or metrics recorder. Executables and test harnesses
-that want log output must install their own subscriber (e.g.
-`tracing_subscriber::fmt::init()` in `main`, or `#[traced_test]` in tests).
+`tracing = "0.1"` is the runtime observability dependency, used by both the
+library and executables. `tracing-test = "0.2"` is a test-only dev-dependency;
+use it only in tests (e.g. `#[traced_test]`). The crate does not install a
+global subscriber or metrics recorder. Executables and test harnesses that want
+log output must install their own subscriber (e.g.
+`tracing_subscriber::fmt::init()` in `main`).
 
 ### Log levels
 
