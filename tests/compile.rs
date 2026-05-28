@@ -5,3 +5,9 @@ fn html5ever_rcdom_parser_stack_compiles() {
     let cases = trybuild::TestCases::new();
     cases.pass("tests/ui/html5ever_rcdom_pass.rs");
 }
+
+#[test]
+fn tracing_instrument_attributes_compile() {
+    let cases = trybuild::TestCases::new();
+    cases.pass("tests/ui/tracing_instrument_pass.rs");
+}

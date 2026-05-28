@@ -12,6 +12,7 @@
 //! throughout the wrapping pipeline.
 
 use textwrap::core::Fragment;
+use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
 use super::{
@@ -59,6 +60,7 @@ impl InlineFragment {
     pub(super) fn new(text: String) -> Self {
         let width = UnicodeWidthStr::width(text.as_str());
         let kind = classify_fragment(text.as_str());
+        log_fragment_classification(text.as_str(), &kind);
         Self { text, width, kind }
     }
 
@@ -157,6 +159,41 @@ fn classify_fragment(text: &str) -> FragmentKind {
     }
 }
 
+/// Returns a UTF-8-safe prefix of `text` for debug logging.
+///
+/// The prefix contains at most 80 bytes and never splits a multi-byte
+/// character. The second tuple element is `true` when `text` was shortened.
+fn trace_text_snippet(text: &str) -> (&str, bool) {
+    const MAX_TRACE_BYTES: usize = 80;
+    if text.len() <= MAX_TRACE_BYTES {
+        return (text, false);
+    }
+
+    let mut byte_end = 0;
+    for (idx, ch) in text.char_indices() {
+        let next_end = idx + ch.len_utf8();
+        if next_end > MAX_TRACE_BYTES {
+            break;
+        }
+        byte_end = next_end;
+    }
+
+    (&text[..byte_end], true)
+}
+
+/// Emits a structured trace when fragment classification logging is enabled.
+fn log_fragment_classification(text: &str, kind: &FragmentKind) {
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        let (snippet, truncated) = trace_text_snippet(text);
+        debug!(
+            token = %snippet,
+            truncated,
+            kind = ?kind,
+            "fragment classified"
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
@@ -251,6 +288,71 @@ mod tests {
             // A plain link with no backticks in the label must not match.
             let text = format!("[{label}]({url})");
             assert!(!has_inline_code_structure(&text));
+        }
+    }
+}
+
+#[cfg(test)]
+mod trace_snippet_tests {
+    use super::trace_text_snippet;
+
+    #[test]
+    fn trace_text_snippet_truncates_on_char_boundary() {
+        let ascii = "a".repeat(79);
+        let text = format!("{ascii}étail");
+        let (snippet, truncated) = trace_text_snippet(&text);
+
+        assert!(truncated);
+        assert_eq!(snippet, ascii.as_str());
+        assert!(snippet.is_char_boundary(snippet.len()));
+    }
+}
+
+#[cfg(test)]
+mod tracing_tests {
+    use rstest::rstest;
+    use tracing_test::traced_test;
+
+    use super::{FragmentKind, InlineFragment};
+
+    #[traced_test]
+    #[rstest]
+    #[case("[^1]", "FootnoteRef")]
+    #[case("`code`", "InlineCode")]
+    #[case("[text](https://example.com)", "Link")]
+    #[case("   ", "Whitespace")]
+    #[case("plain", "Plain")]
+    fn fragment_classification_logs_kind(#[case] input: &str, #[case] expected: &str) {
+        let _fragment = InlineFragment::new(input.to_string());
+        assert!(logs_contain("fragment classified"));
+        assert!(logs_contain(&format!("kind={expected}")));
+        assert!(logs_contain("token="));
+        assert!(logs_contain("truncated="));
+    }
+
+    #[test]
+    fn fragment_classification_does_not_require_subscriber() {
+        let fragment = InlineFragment::new("[^1]".to_string());
+        assert_eq!(fragment.kind, FragmentKind::FootnoteRef);
+    }
+}
+
+#[cfg(test)]
+mod proptests {
+    use proptest::prelude::*;
+
+    use super::trace_text_snippet;
+
+    proptest! {
+        #[test]
+        fn trace_text_snippet_never_panics(s in "\\PC*") {
+            let (snippet, truncated) = trace_text_snippet(&s);
+            // Invariant 1: result is always valid UTF-8 at a char boundary.
+            assert!(snippet.is_char_boundary(snippet.len()));
+            // Invariant 2: result never exceeds 80 bytes.
+            assert!(snippet.len() <= 80);
+            // Invariant 3: truncation flag is accurate.
+            assert_eq!(truncated, s.len() > 80);
         }
     }
 }

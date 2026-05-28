@@ -24,6 +24,10 @@ pub(in crate::wrap::inline) fn looks_like_link(token: &str) -> bool {
 }
 
 /// Returns whether `token` looks like a complete GFM footnote reference.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value automatically.
+#[tracing::instrument(level = "trace", ret)]
 pub(in crate::wrap::inline) fn looks_like_footnote_ref(token: &str) -> bool {
     token
         .strip_prefix("[^")
@@ -32,6 +36,10 @@ pub(in crate::wrap::inline) fn looks_like_footnote_ref(token: &str) -> bool {
 }
 
 /// Returns whether `token` ends with an inline footnote reference.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value automatically.
+#[tracing::instrument(level = "trace", ret)]
 pub(in crate::wrap::inline) fn ends_with_footnote_ref(token: &str) -> bool {
     let Some(start) = token.rfind("[^") else {
         return false;
@@ -179,5 +187,25 @@ mod tests {
     #[test]
     fn looks_like_footnote_ref_rejects_empty_label() {
         assert!(!looks_like_footnote_ref("[^]"));
+    }
+
+    mod tracing_tests {
+        use tracing_test::traced_test;
+
+        use super::super::{ends_with_footnote_ref, looks_like_footnote_ref};
+
+        #[traced_test]
+        #[test]
+        fn looks_like_footnote_ref_emits_trace_event() {
+            let _ = looks_like_footnote_ref("[^1]");
+            assert!(logs_contain("looks_like_footnote_ref"));
+        }
+
+        #[traced_test]
+        #[test]
+        fn ends_with_footnote_ref_emits_trace_event() {
+            let _ = ends_with_footnote_ref("word.[^1]");
+            assert!(logs_contain("ends_with_footnote_ref"));
+        }
     }
 }

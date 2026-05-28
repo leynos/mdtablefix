@@ -14,7 +14,7 @@ use super::predicates::{
 };
 
 /// Marks how a grouped token span should behave during wrapping.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(in crate::wrap::inline) enum SpanKind {
     /// Treat the span as ordinary prose.
     General,

@@ -4,6 +4,8 @@
 //! public API surface area while giving the parsing logic a contained space for
 //! documentation and direct unit tests.
 
+use tracing::{debug, trace};
+
 use super::scanning::{collect_range, has_odd_backslash_escape_bytes, scan_while};
 
 /// Parse a Markdown link or image starting at `i`.
@@ -16,6 +18,10 @@ use super::scanning::{collect_range, has_odd_backslash_escape_bytes, scan_while}
 /// closing delimiters. Returns the parsed slice and the index after the closing
 /// parenthesis if one is found.
 ///
+/// The `#[tracing::instrument]` attribute records the entry, arguments, and
+/// return value automatically so callers can observe classification decisions
+/// without the function body managing its own span events.
+///
 /// # Examples
 ///
 /// ```rust,ignore
@@ -24,12 +30,14 @@ use super::scanning::{collect_range, has_odd_backslash_escape_bytes, scan_while}
 /// assert_eq!(tok, "![alt](a(b)c)");
 /// assert_eq!(idx, text.len());
 /// ```
+#[tracing::instrument(level = "debug", skip(text), ret)]
 pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize) {
     let start = idx;
 
     if let Some(text_end) = find_footnote_end(text, idx)
         && (text_end == text.len() || !text[text_end..].starts_with('('))
     {
+        debug!(token = %&text[start..text_end], "footnote reference parsed");
         return (collect_range(text, start, text_end), text_end);
     }
 
@@ -43,6 +51,8 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
 
     if text_end < text.len() && text[text_end..].starts_with('(') {
         if let Some(url_end) = parse_link_url(text, text_end) {
+            let is_image = text[start..].starts_with('!');
+            trace!(token = %&text[start..url_end], is_image, "link or image parsed");
             return (collect_range(text, start, url_end), url_end);
         }
         // Unbalanced URL: mirror the original behaviour by returning
@@ -53,8 +63,14 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
     fallback_single_char(text, start)
 }
 
+#[tracing::instrument(level = "trace", skip(text), ret)]
 fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
     if idx >= text.len() || !text[idx..].starts_with("[^") {
+        trace!(
+            start = idx,
+            reason = "prefix_mismatch",
+            "footnote end not found"
+        );
         return None;
     }
 
@@ -71,10 +87,21 @@ fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
         }
 
         if ch == ']' {
+            trace!(
+                start = idx,
+                end = cursor,
+                token = %&text[idx..cursor],
+                "footnote label span recognised"
+            );
             return Some(cursor);
         }
     }
 
+    trace!(
+        start = idx,
+        reason = "unterminated_bracket",
+        "footnote end not found"
+    );
     None
 }
 
@@ -287,6 +314,33 @@ mod tests {
 
             prop_assert_eq!(token, expected);
             prop_assert_eq!(idx, expected_len);
+        }
+    }
+
+    mod tracing_tests {
+        use tracing_test::traced_test;
+
+        use super::*;
+
+        #[traced_test]
+        #[test]
+        fn parse_link_or_image_logs_footnote_reference() {
+            let _ = parse_link_or_image("[^4] tail", 0);
+            assert!(logs_contain("footnote reference parsed"));
+        }
+
+        #[traced_test]
+        #[test]
+        fn parse_link_or_image_logs_link_parsed() {
+            let _ = parse_link_or_image("[link](url)", 0);
+            assert!(logs_contain("link or image parsed"));
+        }
+
+        #[traced_test]
+        #[test]
+        fn find_footnote_end_logs_prefix_mismatch() {
+            let _ = find_footnote_end("no-caret", 0);
+            assert!(logs_contain("prefix_mismatch"));
         }
     }
 }
