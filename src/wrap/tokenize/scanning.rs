@@ -131,7 +131,7 @@ pub(super) fn opening_fence_run_len(bytes: &[u8], text: &str) -> Option<usize> {
     Some(fence_len)
 }
 
-pub fn parse_open_code_span(text: &str) -> Option<(usize, &str)> {
+pub(crate) fn parse_open_code_span(text: &str) -> Option<(usize, &str)> {
     let bytes = text.as_bytes();
     let mut index = 0;
     while index < text.len() {
