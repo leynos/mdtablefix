@@ -26,7 +26,7 @@ pub(crate) use block::{BlockKind, classify_block};
 /// info string) when the line opens a fenced code block, or `None` otherwise.
 pub use fence::{FenceTracker, is_fence};
 pub(crate) use link_reference::LinkReferenceMatcher;
-use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
+use paragraph::{ParagraphState, ParagraphWriter, PendingPrefix, PrefixLine};
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
 ///
@@ -156,6 +156,49 @@ fn join_pending_continuation(existing: &mut String, continuation: &str, fence_le
     existing.push_str(continuation);
 }
 
+fn split_reopen_span(pending: &PendingPrefix, continuation: &str) -> Option<(usize, usize)> {
+    let continuation_offset = pending.rest.len().saturating_sub(continuation.len());
+    let (open_len, open_tail) = parse_open_code_span(continuation)?;
+    if open_tail.is_empty() {
+        return None;
+    }
+    if let Some(first) = open_tail.chars().next()
+        && (first.is_whitespace() || first == ')')
+    {
+        return None;
+    }
+    let split_at = continuation_offset
+        .checked_add(continuation.len())
+        .and_then(|len| len.checked_sub(open_tail.len() + open_len))
+        .unwrap_or(0);
+    Some((split_at, open_len))
+}
+
+fn emit_pending_prefix_segment(
+    writer: &mut ParagraphWriter<'_>,
+    pending: &PendingPrefix,
+    split_at: usize,
+) {
+    if split_at == 0 {
+        return;
+    }
+
+    let flushed = &pending.rest[..split_at];
+    if flushed.is_empty() {
+        return;
+    }
+
+    let prefix_line = PrefixLine {
+        prefix: Cow::Borrowed(pending.prefix.as_str()),
+        rest: flushed,
+        repeat_prefix: pending.repeat_prefix,
+    };
+    writer.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
+    if pending.hard_break {
+        writer.ensure_trailing_hard_break_on_last_line();
+    }
+}
+
 fn handle_pending_continuation(
     line: &str,
     block_kind: Option<BlockKind>,
@@ -170,14 +213,26 @@ fn handle_pending_continuation(
             && pending.prefix == prefix_line.prefix.as_ref()
         {
             let (text, hard_break) = line_break_parts(prefix_line.rest);
-            let fence_before = pending.open_fence_len;
             if !text.is_empty() {
-                join_pending_continuation(&mut pending.rest, &text, fence_before.unwrap_or(0));
+                join_pending_continuation(
+                    &mut pending.rest,
+                    &text,
+                    pending.open_fence_len.unwrap_or(0),
+                );
             }
             if hard_break {
                 pending.hard_break = true;
             }
-            update_span_state_and_maybe_flush(&text, fence_before, state, writer);
+            if update_span_state(&text, pending) {
+                if let Some((split_at, new_len)) = split_reopen_span(pending, &text) {
+                    emit_pending_prefix_segment(writer, pending, split_at + new_len);
+                    pending.rest = pending.rest[split_at..].to_string();
+                    pending.open_fence_len = Some(new_len);
+                    pending.hard_break = false;
+                } else {
+                    writer.flush_paragraph(state);
+                }
+            }
             return;
         }
 
@@ -200,51 +255,49 @@ fn handle_pending_continuation(
         return;
     };
 
-    let fence_before = pending.open_fence_len;
     if !text.is_empty() {
-        join_pending_continuation(&mut pending.rest, &text, fence_before.unwrap_or(0));
+        join_pending_continuation(
+            &mut pending.rest,
+            &text,
+            pending.open_fence_len.unwrap_or(0),
+        );
     }
     if hard_break {
         pending.hard_break = true;
     }
-    update_span_state_and_maybe_flush(&text, fence_before, state, writer);
+    if update_span_state(&text, pending) {
+        if let Some((split_at, new_len)) = split_reopen_span(pending, &text) {
+            emit_pending_prefix_segment(writer, pending, split_at + new_len);
+            pending.rest = pending.rest[split_at..].to_string();
+            pending.open_fence_len = Some(new_len);
+            pending.hard_break = false;
+        } else {
+            writer.flush_paragraph(state);
+        }
+    }
 }
 
-/// Updates the cached open fence length from the incremental scan result and
-/// decides whether the pending prefix paragraph should be flushed.
+/// Updates the cached open fence length from the incremental span scan result and
+/// returns whether the buffered pending-prefixed paragraph should be flushed.
 ///
-/// When `scan_continuation_span_state` indicates the prior span closed, this
-/// falls back to `has_unclosed_code_span` on the full joined text to detect a
-/// new span that may have opened in the same continuation. Flushing is
-/// deferred (by the `had_open` guard) when the prior span was open, unless a
-/// hard break forces emission.
-fn update_span_state_and_maybe_flush(
-    continuation: &str,
-    fence_before: Option<usize>,
-    state: &mut ParagraphState,
-    writer: &mut ParagraphWriter<'_>,
-) {
-    let pending = state
-        .pending_prefix
-        .as_mut()
-        .expect("pending_prefix must be set");
-    let raw_fence = fence_before.unwrap_or(0);
+/// When `scan_continuation_span_state` reports no active span, this falls back
+/// to detecting whether a new opener begins in the latest continuation chunk so
+/// a newly opened span can continue deferral.
+fn update_span_state(continuation: &str, pending: &mut PendingPrefix) -> bool {
+    let raw_fence = pending.open_fence_len.unwrap_or(0);
     match scan_continuation_span_state(continuation, raw_fence) {
         Some(n) if n > 0 => {
             pending.open_fence_len = Some(n);
+            false
         }
         _ => {
             pending.open_fence_len = None;
-            if tokenize::has_unclosed_code_span(pending.rest.as_str()) {
-                if let Some((new_len, _)) = parse_open_code_span(&pending.rest) {
-                    pending.open_fence_len = Some(new_len);
-                }
-            } else {
-                let had_open = fence_before.is_some();
-                if !had_open || pending.hard_break {
-                    writer.flush_paragraph(state);
-                }
+            if let Some((_, new_len)) = split_reopen_span(pending, continuation) {
+                pending.open_fence_len = Some(new_len);
+                return true;
             }
+            let had_open = raw_fence != 0;
+            !had_open || pending.hard_break
         }
     }
 }

@@ -200,6 +200,7 @@ pub(super) fn bracket_follows_escaped_bang(bytes: &[u8], idx: usize) -> bool {
     has_odd_backslash_escape_bytes(bytes, idx - 1)
 }
 
+#[cfg(test)]
 pub(crate) fn has_unclosed_code_span(text: &str) -> bool {
     let bytes = text.as_bytes();
     let mut index = 0;

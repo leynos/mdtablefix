@@ -1,5 +1,6 @@
 - Decision: Make `make kani` a Kani command smoke check using
   `cargo kani --version` until real harnesses land. Rationale: this keeps
   `4.1.1 honest as a tooling item, avoids adding a vacuous proof, and leaves `
-  `make kani-full` as the future full-suite entry point. Date/Author: 2026-05-11 /
+- `make kani-full` as the future full-suite entry point. Date/Author:
+  2026-05-11 /
   implementation agent.

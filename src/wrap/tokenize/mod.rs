@@ -14,6 +14,8 @@ use parsing::{
 };
 #[cfg(test)]
 pub(crate) use scanning::continuation_begins_with_closing_fence;
+#[cfg(test)]
+pub(crate) use scanning::has_unclosed_code_span;
 use scanning::{
     bracket_follows_escaped_bang,
     collect_range,
@@ -22,7 +24,6 @@ use scanning::{
     scan_while,
 };
 pub(crate) use scanning::{
-    has_unclosed_code_span,
     opening_fence_run_len,
     parse_open_code_span,
     scan_continuation_span_state,

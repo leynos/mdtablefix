@@ -1,4 +1,19 @@
-//! Proptest property tests for wrapping invariants.
+//! Proptest property-based tests for wrapping invariants.
+//!
+//! These tests exercise `mdtablefix::wrap::wrap_text` with randomly generated
+//! inputs and assert that key invariants always hold:
+//!
+//! - Inline footnote references are never split across lines.
+//! - Closing backtick fragments are never orphaned on their own line.
+//! - Cross-line inline code spans reflowed under the `PendingPrefix` deferral mechanism produce
+//!   atomic output regardless of prefix kind (bullet, ordered list, blockquote) or target width.
+//! - Markdown hard-break markers (`  ` trailing spaces) survive flushing of deferred pending-prefix
+//!   segments.
+//!
+//! Related modules:
+//! - `tests/wrap/spanning_code_spans.rs` — fixture and unit tests for the same deferral mechanism
+//! - `src/wrap/tests/span_state.rs` — unit-level proptest coverage for `has_unclosed_code_span` and
+//!   `continuation_begins_with_closing_fence`
 
 use mdtablefix::wrap::wrap_text;
 use proptest::prelude::*;
@@ -94,15 +109,21 @@ proptest! {
     #[test]
     fn wrap_text_deferred_span_preserves_hard_break(
         n in 1usize..=2,
+        prefix_kind in 0usize..3,
         before in "[a-z]{1,15}",
         inside in "[a-z][a-z ]{0,19}",
         after in "[a-z]{1,15}",
         width in 50usize..=120,
     ) {
         let fence = "`".repeat(n);
-        let line1 = format!("- {before} {fence}{inside}");
+        let (line1_prefix, cont_prefix) = match prefix_kind {
+            0 => ("- ".to_owned(), "  ".to_owned()),
+            1 => ("1. ".to_owned(), "   ".to_owned()),
+            _ => ("> ".to_owned(), "> ".to_owned()),
+        };
+        let line1 = format!("{line1_prefix}{before} {fence}{inside}");
         // Hard break after the closing fence on the continuation line.
-        let line2 = format!("  {inside}{fence} {after}  ");
+        let line2 = format!("{cont_prefix}{inside}{fence} {after}  ");
         let output = wrap_text(&[line1, line2], width);
         let rendered = output.join("\n");
         prop_assert!(

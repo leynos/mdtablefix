@@ -134,7 +134,11 @@ impl<'a> ParagraphWriter<'a> {
         self.append_wrapped_with_prefix_width(line, available);
     }
 
-    fn append_wrapped_with_prefix_width(&mut self, line: &PrefixLine<'_>, available: usize) {
+    pub(super) fn append_wrapped_with_prefix_width(
+        &mut self,
+        line: &PrefixLine<'_>,
+        available: usize,
+    ) {
         let prefix = line.prefix.as_ref();
         let prefix_width = UnicodeWidthStr::width(prefix);
         let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
@@ -158,6 +162,14 @@ impl<'a> ParagraphWriter<'a> {
                 self.out
                     .push(format!("{continuation_prefix}{wrapped_line}"));
             }
+        }
+    }
+
+    pub(super) fn ensure_trailing_hard_break_on_last_line(&mut self) {
+        if let Some(last) = self.out.last_mut()
+            && !last.ends_with("  ")
+        {
+            last.push_str("  ");
         }
     }
 

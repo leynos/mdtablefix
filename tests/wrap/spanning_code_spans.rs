@@ -1,4 +1,20 @@
-//! Regression tests for inline code spans soft-wrapped across source lines.
+//! Regression and integration tests for inline code spans that are
+//! soft-wrapped across source lines.
+//!
+//! These tests cover the `PendingPrefix` deferral mechanism introduced in
+//! `src/wrap/paragraph.rs` and the orchestration logic in `src/wrap.rs`
+//! (`handle_pending_continuation`, `update_span_state`).
+//!
+//! Fixture-driven cases (`test_wrap_spanning_code_span_fixtures`) use input
+//! files from `tests/data/` and are verified against committed `insta`
+//! snapshots in `tests/snapshots/`. Focused unit tests assert structural
+//! invariants (no orphaned closing backticks, prefix preservation, hard-break
+//! retention) that complement the snapshot coverage.
+//!
+//! Related modules:
+//! - `tests/wrap_unit.rs` — table-driven unit tests for `wrap_text`
+//! - `tests/wrap_properties.rs` — property-based tests for the same invariants
+//! - `src/wrap/tests/span_state.rs` — unit tests for scanning helpers
 
 use mdtablefix::wrap::wrap_text;
 use rstest::rstest;
