@@ -172,11 +172,12 @@ The wrapping pipeline for `--wrap` is:
    (detected by `continuation_begins_with_closing_fence`).  Blockquote
    continuations are only joined when their prefix exactly matches the pending
    prefix.  Once `has_unclosed_code_span` returns `false` for the accumulated
-   rest, or the accumulated text ends with a Markdown hard break,
-   `flush_paragraph` emits the entire buffered segment atomically using
-   `append_wrapped_with_prefix_width`.  If `hard_break` is set, two trailing
-   spaces are appended to the last emitted line.  `clear()` on
-   `ParagraphState` also resets `pending_prefix` to `None`.
+   rest, closure is confirmed and `flush_paragraph` emits the entire buffered
+   segment atomically using `append_wrapped_with_prefix_width`; a deferred
+   open span (detected by `parse_open_code_span` before the join) suppresses
+   emission unless a pending Markdown hard break forces it.  When `hard_break`
+   is set, two trailing spaces are appended to the last emitted line.
+   `clear()` on `ParagraphState` also resets `pending_prefix` to `None`.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
