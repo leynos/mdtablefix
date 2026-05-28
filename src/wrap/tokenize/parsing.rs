@@ -53,9 +53,9 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
 
     if text_end < text.len() && text[text_end..].starts_with('(') {
         if let Some(url_end) = parse_link_url(text, text_end) {
-            if tracing::enabled!(tracing::Level::TRACE) {
+            if tracing::enabled!(tracing::Level::DEBUG) {
                 let is_image = text[start..].starts_with('!');
-                trace!(token = %&text[start..url_end], is_image, "link or image parsed");
+                debug!(token = %&text[start..url_end], is_image, "link or image parsed");
             }
             return (collect_range(text, start, url_end), url_end);
         }
