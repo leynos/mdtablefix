@@ -136,9 +136,9 @@ fn line_break_parts(line: &str) -> (String, bool) {
 /// Never synthesises closing fences. Only backticks present in the source may
 /// close an open span; when the continuation does not begin with the matching
 /// closing fence run, a single space is inserted before appending.
-fn join_pending_continuation(existing: &mut String, continuation: &str, fence_len: usize) {
+fn join_pending_continuation(existing: &mut String, continuation: &str, fence_len: usize) -> bool {
     if continuation.is_empty() {
-        return;
+        return false;
     }
 
     let bytes = continuation.as_bytes();
@@ -154,24 +154,35 @@ fn join_pending_continuation(existing: &mut String, continuation: &str, fence_le
         existing.push(' ');
     }
     existing.push_str(continuation);
+
+    true
 }
 
-fn split_reopen_span(pending: &PendingPrefix, continuation: &str) -> Option<(usize, usize)> {
-    let continuation_offset = pending.rest.len().saturating_sub(continuation.len());
+fn split_reopen_span(continuation: &str, continuation_offset: usize) -> Option<(usize, usize)> {
     let (open_len, open_tail) = parse_open_code_span(continuation)?;
     if open_tail.is_empty() {
         return None;
     }
+
     if let Some(first) = open_tail.chars().next()
         && (first.is_whitespace() || first == ')')
     {
         return None;
     }
-    let split_at = continuation_offset
-        .checked_add(continuation.len())
-        .and_then(|len| len.checked_sub(open_tail.len() + open_len))
-        .unwrap_or(0);
-    Some((split_at, open_len))
+
+    let open_run_end = continuation.len().checked_sub(open_tail.len() + open_len)?;
+    continuation_offset
+        .checked_add(open_run_end)
+        .map(|split_at| (split_at, open_len))
+}
+
+fn continuation_needs_leading_space(continuation: &str, open_fence_len: usize) -> bool {
+    let run_len = tokenize::opening_fence_run_len(continuation.as_bytes(), continuation);
+    if let Some(run_len) = run_len {
+        run_len != open_fence_len
+    } else {
+        true
+    }
 }
 
 fn emit_pending_prefix_segment(
@@ -213,24 +224,33 @@ fn handle_pending_continuation(
             && pending.prefix == prefix_line.prefix.as_ref()
         {
             let (text, hard_break) = line_break_parts(prefix_line.rest);
-            if !text.is_empty() {
-                join_pending_continuation(
-                    &mut pending.rest,
-                    &text,
-                    pending.open_fence_len.unwrap_or(0),
-                );
-            }
+            let open_fence_len = pending.open_fence_len.unwrap_or(0);
+            let continuation_offset = {
+                let pending_len = pending.rest.len();
+                let needs_space = continuation_needs_leading_space(&text, open_fence_len);
+                pending_len + usize::from(pending_len > 0 && needs_space)
+            };
+            let joined = join_pending_continuation(&mut pending.rest, &text, open_fence_len);
             if hard_break {
                 pending.hard_break = true;
             }
-            if update_span_state(&text, pending) {
-                if let Some((split_at, new_len)) = split_reopen_span(pending, &text) {
-                    emit_pending_prefix_segment(writer, pending, split_at);
-                    pending.rest = pending.rest[split_at + new_len..].to_string();
-                    pending.open_fence_len = Some(new_len);
-                    pending.hard_break = false;
-                } else {
-                    writer.flush_paragraph(state);
+            if joined {
+                match update_span_state(&text, continuation_offset, pending) {
+                    SpanStateUpdate::StillOpen => {}
+                    SpanStateUpdate::ClosedAndReopened { split_at, new_len } => {
+                        emit_pending_prefix_segment(writer, pending, split_at);
+                        let pending_rest = format!(
+                            "{ticks}{tail}",
+                            ticks = "`".repeat(new_len),
+                            tail = &pending.rest[split_at + new_len..],
+                        );
+                        pending.rest = pending_rest;
+                        pending.open_fence_len = Some(new_len);
+                        pending.hard_break = false;
+                    }
+                    SpanStateUpdate::Flush => {
+                        writer.flush_paragraph(state);
+                    }
                 }
             }
             return;
@@ -255,49 +275,75 @@ fn handle_pending_continuation(
         return;
     };
 
-    if !text.is_empty() {
-        join_pending_continuation(
-            &mut pending.rest,
-            &text,
-            pending.open_fence_len.unwrap_or(0),
-        );
-    }
+    let open_fence_len = pending.open_fence_len.unwrap_or(0);
+    let continuation_offset = {
+        let pending_len = pending.rest.len();
+        let needs_space = continuation_needs_leading_space(&text, open_fence_len);
+        pending_len + usize::from(pending_len > 0 && needs_space)
+    };
+    let joined = join_pending_continuation(&mut pending.rest, &text, open_fence_len);
     if hard_break {
         pending.hard_break = true;
     }
-    if update_span_state(&text, pending) {
-        if let Some((split_at, new_len)) = split_reopen_span(pending, &text) {
-            emit_pending_prefix_segment(writer, pending, split_at);
-            pending.rest = pending.rest[split_at + new_len..].to_string();
-            pending.open_fence_len = Some(new_len);
-            pending.hard_break = false;
-        } else {
-            writer.flush_paragraph(state);
+    if joined {
+        match update_span_state(&text, continuation_offset, pending) {
+            SpanStateUpdate::StillOpen => {}
+            SpanStateUpdate::ClosedAndReopened { split_at, new_len } => {
+                emit_pending_prefix_segment(writer, pending, split_at);
+                let pending_rest = format!(
+                    "{ticks}{tail}",
+                    ticks = "`".repeat(new_len),
+                    tail = &pending.rest[split_at + new_len..],
+                );
+                pending.rest = pending_rest;
+                pending.open_fence_len = Some(new_len);
+                pending.hard_break = false;
+            }
+            SpanStateUpdate::Flush => {
+                writer.flush_paragraph(state);
+            }
         }
     }
 }
 
 /// Updates the cached open fence length from the incremental span scan result and
-/// returns whether the buffered pending-prefixed paragraph should be flushed.
+/// returns what to do with the deferred prefix buffer.
 ///
 /// When `scan_continuation_span_state` reports no active span, this falls back
 /// to detecting whether a new opener begins in the latest continuation chunk so
 /// a newly opened span can continue deferral.
-fn update_span_state(continuation: &str, pending: &mut PendingPrefix) -> bool {
+enum SpanStateUpdate {
+    /// The span remains open and should keep deferring.
+    StillOpen,
+    /// The existing span closed and a new one opened at `split_at`.
+    ClosedAndReopened { split_at: usize, new_len: usize },
+    /// The buffered paragraph should be flushed now.
+    Flush,
+}
+
+fn update_span_state(
+    continuation: &str,
+    continuation_offset: usize,
+    pending: &mut PendingPrefix,
+) -> SpanStateUpdate {
     let raw_fence = pending.open_fence_len.unwrap_or(0);
     match scan_continuation_span_state(continuation, raw_fence) {
         Some(n) if n > 0 => {
             pending.open_fence_len = Some(n);
-            false
+            SpanStateUpdate::StillOpen
         }
         _ => {
             pending.open_fence_len = None;
-            if let Some((_, new_len)) = split_reopen_span(pending, continuation) {
-                pending.open_fence_len = Some(new_len);
-                return true;
+            if let Some((split_at, new_len)) = split_reopen_span(continuation, continuation_offset)
+            {
+                return SpanStateUpdate::ClosedAndReopened { split_at, new_len };
             }
             let had_open = raw_fence != 0;
-            !had_open || pending.hard_break
+            if !had_open || pending.hard_break {
+                SpanStateUpdate::Flush
+            } else {
+                SpanStateUpdate::StillOpen
+            }
         }
     }
 }
