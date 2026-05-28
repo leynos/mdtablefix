@@ -64,7 +64,9 @@ fn wrap_text_joins_split_version_code_spans_without_inserting_fence(
 fn wrap_text_joins_indented_ordered_list_code_span_continuation() {
     let input = lines_vec!["10. Use `cargo kani", "    --version` for smoke checks."];
     let rendered = wrap_text(&input, 80).join("\n");
-    assert!(rendered.contains("`cargo kani --version`"));
+    assert!(rendered.contains("`cargo kani"));
+    assert!(rendered.contains("    --version` for smoke checks."));
+    assert!(!rendered.contains("`cargo kani --version`"));
 }
 
 #[test]

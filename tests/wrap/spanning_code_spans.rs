@@ -104,3 +104,16 @@ fn test_wrap_pending_cleared_after_span_closes_on_continuation() {
     let output = wrap_text(&input, 80);
     assert_eq!(output, vec!["- `foo bar` baz".to_string()],);
 }
+
+#[test]
+fn test_wrap_prefixed_open_span_leaves_indented_code_verbatim() {
+    let input = lines_vec!["- `open", "    --version", "text"];
+    let output = process_stream(&input);
+    let rendered = output.join("\n");
+
+    assert!(output.iter().any(|line| line == "    --version"));
+    assert!(
+        !rendered.contains("`open --version"),
+        "indented line was merged into span text: {rendered:?}"
+    );
+}

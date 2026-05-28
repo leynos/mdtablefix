@@ -185,7 +185,7 @@ fn handle_pending_continuation(
         return;
     }
 
-    if is_passthrough_block(block_kind, line) && !is_indented_code_line(line) {
+    if is_passthrough_block(block_kind, line) {
         if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition))
             && link_matcher.standalone_title_need(line) == Some(true)
         {
