@@ -159,6 +159,25 @@ The wrapping pipeline for `--wrap` is:
    Unicode display width of the first-line prefix, then feeds the paragraph
    text into `wrap_preserving_code`.
 
+   **Pending prefix deferral.** When `handle_prefix_line` processes a line
+   whose text contains an unclosed inline code span (checked by
+   `has_unclosed_code_span`), it clears the current paragraph buffer and saves
+   the prefix, rest text, available width, `repeat_prefix`, and `hard_break`
+   flag into `ParagraphState::pending_prefix` as a `PendingPrefix` value rather
+   than wrapping immediately.  Subsequent source lines are routed through
+   `handle_pending_continuation` (in `src/wrap.rs`) instead of the normal
+   wrapping path.  Each continuation is joined onto
+   `pending_prefix.rest` via `join_pending_continuation`, which inserts a
+   space unless the continuation begins with the exact matching closing fence
+   (detected by `continuation_begins_with_closing_fence`).  Blockquote
+   continuations are only joined when their prefix exactly matches the pending
+   prefix.  Once `has_unclosed_code_span` returns `false` for the accumulated
+   rest, or the accumulated text ends with a Markdown hard break,
+   `flush_paragraph` emits the entire buffered segment atomically using
+   `append_wrapped_with_prefix_width`.  If `hard_break` is set, two trailing
+   spaces are appended to the last emitted line.  `clear()` on
+   `ParagraphState` also resets `pending_prefix` to `None`.
+
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
    the tokens into `InlineFragment` values via `determine_token_span`, and calls
@@ -250,6 +269,9 @@ Table: Key types and functions.
 | `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
 | `ParagraphWriter`, `wrap_with_prefix` | `src/wrap/paragraph.rs` |
 | `ParagraphState`, `PrefixLine` | `src/wrap/paragraph.rs` |
+| `PendingPrefix` | `src/wrap/paragraph.rs` |
+| `join_pending_continuation` | `src/wrap.rs` |
+| `handle_pending_continuation` | `src/wrap.rs` |
 | `scan_code_suffix_end` | `src/wrap/tokenize/scanning.rs` |
 | `has_inline_code_structure` | `src/wrap/inline/fragment.rs` |
 
@@ -285,6 +307,11 @@ punctuation.
   `UnicodeWidthStr::width` before the available text width is computed, so
   non-ASCII prefix characters (e.g. `「` in CJK blockquotes) are accounted for
   correctly.
+- **Cross-line code spans.** When a prefixed line contains an unclosed inline
+  code span, the entire continuation is buffered in `PendingPrefix` and
+  emitted atomically once the span closes. No line break may be inserted
+  inside the span, and the closing backtick must remain on the same line as
+  the span content.
 
 Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
 replacing `LineBuffer` with `textwrap`.
