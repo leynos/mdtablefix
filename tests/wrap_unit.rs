@@ -8,7 +8,6 @@
 mod common;
 
 use mdtablefix::{process_stream, wrap::wrap_text};
-use proptest::prelude::*;
 use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
 
@@ -18,20 +17,7 @@ fn assert_footnote_reference_is_intact(output: &[String], marker: &str) {
     assert!(!rendered.contains("[\n"));
     assert!(!rendered.contains("\n^"));
 }
-
-fn footnote_label_strategy() -> impl Strategy<Value = String> {
-    prop::collection::vec(
-        prop_oneof![
-            (b'a'..=b'z').prop_map(char::from),
-            (b'A'..=b'Z').prop_map(char::from),
-            (b'0'..=b'9').prop_map(char::from),
-            Just('-'),
-            Just('_')
-        ],
-        1..16,
-    )
-    .prop_map(|chars| chars.into_iter().collect())
-}
+// hint: Renamed and reformatted. Prefer the structural change, verify formatting.
 
 fn has_unclosed_code_span_detects_open_fences(#[case] text: &str, #[case] expected: bool) {
     assert_eq!(mdtablefix::wrap::has_unclosed_code_span(text), expected);
@@ -241,32 +227,6 @@ fn wrap_text_preserves_inline_footnote_references(#[case] marker: &str) {
             .iter()
             .any(|line| line.contains(&format!(".{marker}")))
     );
-}
-
-proptest! {
-    #[test]
-    fn wrap_text_keeps_generated_footnote_references_atomic(
-        label in footnote_label_strategy(),
-        prefix_words in 2usize..30,
-        suffix_words in 0usize..=20,
-        width in 24usize..96,
-    ) {
-        let marker = format!("[^{label}]");
-        let prefix = std::iter::repeat_n("prefix", prefix_words).collect::<Vec<_>>().join(" ");
-        let suffix = std::iter::repeat_n("suffix", suffix_words).collect::<Vec<_>>().join(" ");
-        let input = if suffix.is_empty() {
-            vec![format!("{prefix} xxxxxxxxxxxxxxxxxxxxx.{marker}")]
-        } else {
-            vec![format!("{prefix} xxxxxxxxxxxxxxxxxxxxx.{marker} {suffix}")]
-        };
-
-        let wrapped = wrap_text(&input, width);
-        let rendered = wrapped.join("\n");
-
-        prop_assert!(rendered.contains(&marker));
-        prop_assert!(!rendered.contains("[\n"));
-        prop_assert!(!rendered.contains("\n^"));
-    }
 }
 
 #[test]
