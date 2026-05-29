@@ -9,6 +9,11 @@
 
 ### Fixed
 
+- Keep hyphenated compounds containing an inline code span atomic during
+  wrapping, including the leading-hyphen forms such as `` pre-`LLMPort` `` and
+  `` (API-`Foo`) ``. The hyphen-prefix token is coupled forward to the
+  following code span, mirroring the existing opening-punctuation behaviour.
+  ([#307](https://github.com/leynos/mdtablefix/issues/307))
 - Keep GFM footnote references coupled to sentence-ending punctuation on inline
   code spans and Markdown links during wrapping, including when the span is
   preceded by opening punctuation.
