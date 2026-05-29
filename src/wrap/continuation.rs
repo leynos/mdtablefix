@@ -5,7 +5,7 @@
 //! subsequent lines, [`super::wrap_text`] defers emission into a
 //! [`PendingPrefix`] buffer. This module owns the join/update/dispatch
 //! state machine that reconciles each continuation chunk with the buffer:
-//! it joins the chunks, tracks open-fence state across them, synthesises
+//! it joins the chunks, tracks open-fence state across them, synthesizes
 //! closers for spans that close-then-reopen within one chunk, and flushes
 //! the buffered paragraph atomically once the span is fully resolved.
 
@@ -34,12 +34,17 @@ pub(super) fn apply_continuation_chunk(
     };
 
     let open_fence_len = pending.open_fence_len.unwrap_or(0);
+    // Compute the leading backtick run once; both the offset calculation and
+    // `join_pending_continuation` need it, and a fresh scan from each would
+    // double-walk `text`.
+    let leading_run_len = tokenize::opening_fence_run_len(text.as_bytes(), text);
+    let needs_space = leading_run_needs_space(leading_run_len, open_fence_len);
     let continuation_offset = {
         let pending_len = pending.rest.len();
-        let needs_space = continuation_needs_leading_space(text, open_fence_len);
         pending_len + usize::from(pending_len > 0 && needs_space)
     };
-    let joined = join_pending_continuation(&mut pending.rest, text, open_fence_len);
+    let joined =
+        join_pending_continuation(&mut pending.rest, text, open_fence_len, leading_run_len);
     if hard_break {
         pending.hard_break = true;
     }
@@ -67,23 +72,23 @@ pub(super) fn apply_continuation_chunk(
 
 /// Join a soft-wrapped continuation onto pending prefixed text.
 ///
-/// Never synthesises closing fences. Only backticks present in the source may
+/// Never synthesizes closing fences. Only backticks present in the source may
 /// close an open span; when the continuation does not begin with the matching
-/// closing fence run, a single space is inserted before appending.
-fn join_pending_continuation(existing: &mut String, continuation: &str, fence_len: usize) -> bool {
+/// closing fence run, a single space is inserted before appending. The caller
+/// is responsible for measuring the leading backtick run with
+/// `tokenize::opening_fence_run_len` and threading it in via
+/// `leading_run_len` so we avoid double-walking `continuation`.
+fn join_pending_continuation(
+    existing: &mut String,
+    continuation: &str,
+    fence_len: usize,
+    leading_run_len: Option<usize>,
+) -> bool {
     if continuation.is_empty() {
         return false;
     }
 
-    let bytes = continuation.as_bytes();
-    let needs_space = !{
-        if let Some(run_len) = tokenize::opening_fence_run_len(bytes, continuation) {
-            run_len == fence_len
-        } else {
-            false
-        }
-    };
-
+    let needs_space = leading_run_needs_space(leading_run_len, fence_len);
     if !existing.is_empty() && needs_space {
         existing.push(' ');
     }
@@ -127,12 +132,17 @@ fn split_reopen_span(
         .map(|split_at| (split_at, open_len))
 }
 
-fn continuation_needs_leading_space(continuation: &str, open_fence_len: usize) -> bool {
-    let run_len = tokenize::opening_fence_run_len(continuation.as_bytes(), continuation);
-    if let Some(run_len) = run_len {
-        run_len != open_fence_len
-    } else {
-        true
+/// Decide whether a continuation chunk needs a leading space when joined
+/// onto the pending buffer.
+///
+/// A space is required unless the chunk starts with a backtick run whose
+/// length matches the currently open fence (i.e. the chunk begins with the
+/// span's closing fence). `leading_run_len` is the precomputed length of any
+/// such opening backtick run, as returned by `opening_fence_run_len`.
+fn leading_run_needs_space(leading_run_len: Option<usize>, open_fence_len: usize) -> bool {
+    match leading_run_len {
+        Some(run_len) => run_len != open_fence_len,
+        None => true,
     }
 }
 
@@ -188,7 +198,7 @@ fn update_span_state(
             // span B opened within this same continuation. Detect that
             // boundary so the trailing opener does not silently grow the
             // pending buffer across both spans. The closer for span B is
-            // not in the source, so synthesise one at the end of the
+            // not in the source, so synthesize one at the end of the
             // buffer; this keeps span B atomic ("`4.1.1`") and lets
             // subsequent continuations be appended as plain text.
             if let Some((_, new_len)) =
