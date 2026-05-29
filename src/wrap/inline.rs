@@ -30,6 +30,7 @@ use postprocess::{merge_whitespace_only_lines, rebalance_atomic_tails};
 use predicates::looks_like_link;
 pub(in crate::wrap::inline) use predicates::{
     ends_with_footnote_ref,
+    ends_with_hyphen_prefix,
     fragment_is_link,
     is_inline_code_token,
     is_opening_punct,
@@ -79,6 +80,19 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
             width += UnicodeWidthStr::width(next.as_str());
             end = extend_punctuation(tokens, end, &mut width);
         }
+    }
+
+    // Forward-couple a hyphen-prefix token to the next inline code span so
+    // wrapping never splits compounds such as `pre-`code`` at the hyphen.
+    if kind == SpanKind::General
+        && ends_with_hyphen_prefix(&tokens[start])
+        && let Some(next) = tokens.get(end)
+        && is_code_token(next)
+    {
+        kind = SpanKind::Code;
+        width += UnicodeWidthStr::width(next.as_str());
+        end += 1;
+        end = extend_punctuation(tokens, end, &mut width);
     }
 
     if tokens[start] == "`" {
