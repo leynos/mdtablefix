@@ -345,6 +345,7 @@ mod tests {
         fn parse_link_or_image_logs_footnote_reference() {
             let _ = parse_link_or_image("[^4] tail", 0);
             assert!(logs_contain("footnote reference parsed"));
+            assert!(logs_contain("token="));
         }
 
         #[traced_test]
@@ -352,12 +353,16 @@ mod tests {
         fn parse_link_or_image_logs_link_parsed() {
             let _ = parse_link_or_image("[link](url)", 0);
             assert!(logs_contain("link or image parsed"));
+            assert!(logs_contain("token="));
+            assert!(logs_contain("is_image="));
         }
 
         #[traced_test]
         #[test]
         fn find_footnote_end_logs_prefix_mismatch() {
             let _ = find_footnote_end("no-caret", 0);
+            assert!(logs_contain("footnote end not found"));
+            assert!(logs_contain("reason="));
             assert!(logs_contain("prefix_mismatch"));
         }
 
@@ -366,12 +371,17 @@ mod tests {
         fn parse_link_or_image_logs_footnote_label_span() {
             let _ = parse_link_or_image("[^4] tail", 0);
             assert!(logs_contain("footnote label span recognised"));
+            assert!(logs_contain("start="));
+            assert!(logs_contain("end="));
+            assert!(logs_contain("token="));
         }
 
         #[traced_test]
         #[test]
         fn find_footnote_end_logs_unterminated_bracket() {
             let _ = find_footnote_end("[^unterminated", 0);
+            assert!(logs_contain("footnote end not found"));
+            assert!(logs_contain("reason="));
             assert!(logs_contain("unterminated_bracket"));
         }
     }
