@@ -11,6 +11,7 @@
 use std::borrow::Cow;
 
 mod block;
+mod continuation;
 mod fence;
 mod inline;
 mod link_reference;
@@ -18,6 +19,7 @@ mod paragraph;
 mod tokenize;
 use block::{BLOCKQUOTE_RE, BULLET_RE, FOOTNOTE_RE};
 pub(crate) use block::{BlockKind, classify_block};
+use continuation::apply_continuation_chunk;
 /// Fence-detection utilities re-exported for downstream callers.
 ///
 /// [`FenceTracker`] maintains fenced code-block state across lines, which is
@@ -39,6 +41,9 @@ use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 pub use tokenize::Token;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
+// Re-exported for unit tests; not used in production code.
+#[cfg(test)]
+pub(crate) use tokenize::{continuation_begins_with_closing_fence, has_unclosed_code_span};
 
 // Permit GFM task list markers with flexible spacing and missing post-marker
 // spaces in Markdown.
@@ -127,6 +132,45 @@ fn line_break_parts(line: &str) -> (String, bool) {
     (text, hard_break)
 }
 
+fn handle_pending_continuation(
+    line: &str,
+    block_kind: Option<BlockKind>,
+    writer: &mut ParagraphWriter<'_>,
+    state: &mut ParagraphState,
+    link_matcher: LinkReferenceMatcher,
+    link_title_window: &mut link_reference::LinkTitleWindow,
+) {
+    if let Some(prefix_line) = prefix_line(line) {
+        let matches_pending = state.pending_prefix.as_ref().is_some_and(|pending| {
+            prefix_line.repeat_prefix && pending.prefix == prefix_line.prefix.as_ref()
+        });
+        if matches_pending {
+            let (text, hard_break) = line_break_parts(prefix_line.rest);
+            apply_continuation_chunk(&text, hard_break, writer, state);
+            return;
+        }
+
+        writer.handle_prefix_line(state, &prefix_line);
+        return;
+    }
+
+    if is_passthrough_block(block_kind, line) {
+        if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition))
+            && link_matcher.standalone_title_need(line) == Some(true)
+        {
+            link_title_window.observe_bare_definition();
+        }
+        writer.push_verbatim(state, line);
+        return;
+    }
+
+    let (text, hard_break) = line_break_parts(line);
+    if state.pending_prefix.is_none() {
+        return;
+    }
+    apply_continuation_chunk(&text, hard_break, writer, state);
+}
+
 /// Wrap text lines to the given width.
 ///
 /// # Panics
@@ -161,6 +205,18 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
         }
 
         let block_kind = classify_block(line, link_matcher);
+
+        if state.pending_prefix.is_some() {
+            handle_pending_continuation(
+                line,
+                block_kind,
+                &mut writer,
+                &mut state,
+                link_matcher,
+                &mut link_title_window,
+            );
+            continue;
+        }
 
         if is_passthrough_block(block_kind, line) {
             if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition))

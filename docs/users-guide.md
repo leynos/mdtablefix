@@ -39,6 +39,14 @@ footnote references (`[^label]`) are treated as unbreakable units. A span is
 never split across lines; it moves as a whole to the next line when it would
 otherwise exceed the target width.
 
+When an inline code span is split across two or more soft-wrapped source lines,
+`--wrap` first joins the continuation lines into a single span before applying
+any line-length limit. The joined span is then treated as an indivisible unit:
+no line break is inserted inside it, and the closing backtick always remains on
+the same line as the span content. This behaviour applies in all prefixed
+contexts — bulleted lists, ordered lists, blockquotes, and footnote definitions
+— as well as in plain paragraphs.
+
 When a footnote reference immediately follows an inline code span or Markdown
 link without intervening whitespace—for example `` `code`.[^ref] `` or
 `[text](url).[^ref]`—the reference stays on the same line as the preceding

@@ -12,12 +12,22 @@ use parsing::{
     looks_like_image_start,
     parse_link_or_image,
 };
+#[cfg(test)]
+pub(crate) use scanning::continuation_begins_with_closing_fence;
+#[cfg(test)]
+pub(crate) use scanning::has_unclosed_code_span;
 use scanning::{
     bracket_follows_escaped_bang,
     collect_range,
     has_odd_backslash_escape_bytes,
     scan_code_suffix_end,
     scan_while,
+};
+pub(crate) use scanning::{
+    opening_fence_run_len,
+    parse_open_code_span,
+    position_after_close,
+    scan_continuation_span_state,
 };
 
 /// Markdown token emitted by the `segment_inline` tokenizer.

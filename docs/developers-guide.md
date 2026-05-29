@@ -159,6 +159,34 @@ The wrapping pipeline for `--wrap` is:
    Unicode display width of the first-line prefix, then feeds the paragraph
    text into `wrap_preserving_code`.
 
+   **Pending prefix deferral.** When `handle_prefix_line` processes a line
+   whose text contains an unclosed inline code span (checked by
+   `has_unclosed_code_span`), it clears the current paragraph buffer and saves
+   the prefix, rest text, available width, `repeat_prefix`, and `hard_break`
+   flag into `ParagraphState::pending_prefix` as a `PendingPrefix` value rather
+   than wrapping immediately.  Subsequent source lines are routed through
+   `handle_pending_continuation` (in `src/wrap.rs`) instead of the normal
+   wrapping path. `handle_pending_continuation` classifies the line and
+   delegates each soft-wrapped continuation chunk to `apply_continuation_chunk`
+   in `src/wrap/continuation.rs`, the module that owns the join/update/dispatch
+   state machine. Each continuation is joined onto `pending_prefix.rest` via
+   `join_pending_continuation`, which inserts a space unless the continuation
+   begins with the exact matching closing fence (detected by
+   `continuation_begins_with_closing_fence`). Blockquote continuations are only
+   joined when their prefix exactly matches the pending prefix. After joining,
+   `apply_continuation_chunk` consults `update_span_state` to drive a
+   `SpanStateUpdate` (`StillOpen`, `ClosedAndReopened`, or `Flush`); when the
+   same chunk both closes the pre-existing span and opens a new one, the helper
+   synthesizes a closer for the new span so it stays atomic in the buffer, and
+   subsequent lines append as plain prose. Once `has_unclosed_code_span` returns
+   `false` for the accumulated rest, closure is confirmed and
+   `flush_paragraph` emits the entire buffered segment atomically using
+   `append_wrapped_with_prefix_width`; a deferred open span (detected by
+   `parse_open_code_span` before the join) suppresses emission unless a pending
+   Markdown hard break forces it.  When `hard_break` is set, two trailing
+   spaces are appended to the last emitted line. `clear()` on `ParagraphState`
+   also resets `pending_prefix` to `None`.
+
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
    the tokens into `InlineFragment` values via `determine_token_span`, and calls
@@ -235,29 +263,34 @@ still fits within the configured width.
 
 Table: Key types and functions.
 
-| Symbol | File |
-| --- | --- |
-| `LinkReferenceMatcher` | `src/wrap/link_reference.rs` |
-| `LinkTitleWindow` | `src/wrap/link_reference.rs` |
-| `classify_block` | `src/wrap/block.rs` |
-| `FragmentKind`, `InlineFragment` | `src/wrap/inline/fragment.rs` |
-| `classify_fragment` | `src/wrap/inline/fragment.rs` |
-| Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, …) | `src/wrap/inline/predicates.rs` |
-| `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, …) | `src/wrap/inline/span_helpers.rs` |
-| `build_fragments`, `wrap_preserving_code`, `render_line` | `src/wrap/inline.rs` |
-| `determine_token_span` | `src/wrap/inline.rs` |
-| `merge_whitespace_only_lines` | `src/wrap/inline/postprocess.rs` |
-| `rebalance_atomic_tails` | `src/wrap/inline/postprocess.rs` |
-| `ParagraphWriter`, `wrap_with_prefix` | `src/wrap/paragraph.rs` |
-| `ParagraphState`, `PrefixLine` | `src/wrap/paragraph.rs` |
-| `scan_code_suffix_end` | `src/wrap/tokenize/scanning.rs` |
-| `has_inline_code_structure` | `src/wrap/inline/fragment.rs` |
+| Symbol                                                                                                                                                                                                                                                       | File                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
+| `LinkReferenceMatcher`                                                                                                                                                                                                                                       | `src/wrap/link_reference.rs`      |
+| `LinkTitleWindow`                                                                                                                                                                                                                                            | `src/wrap/link_reference.rs`      |
+| `classify_block`                                                                                                                                                                                                                                             | `src/wrap/block.rs`               |
+| `FragmentKind`, `InlineFragment`                                                                                                                                                                                                                             | `src/wrap/inline/fragment.rs`     |
+| `classify_fragment`                                                                                                                                                                                                                                          | `src/wrap/inline/fragment.rs`     |
+| Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, …)                                                                                                                                                  | `src/wrap/inline/predicates.rs`   |
+| `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, …)                                                                                                                                                                    | `src/wrap/inline/span_helpers.rs` |
+| `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                     | `src/wrap/inline.rs`              |
+| `determine_token_span`                                                                                                                                                                                                                                       | `src/wrap/inline.rs`              |
+| `merge_whitespace_only_lines`                                                                                                                                                                                                                                | `src/wrap/inline/postprocess.rs`  |
+| `rebalance_atomic_tails`                                                                                                                                                                                                                                     | `src/wrap/inline/postprocess.rs`  |
+| `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                        | `src/wrap/paragraph.rs`           |
+| `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                               | `src/wrap/paragraph.rs`           |
+| `PendingPrefix`                                                                                                                                                                                                                                              | `src/wrap/paragraph.rs`           |
+| `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                | `src/wrap/continuation.rs`        |
+| `join_pending_continuation`                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`        |
+| `opening_fence_run_len` — Measures the length of an unescaped backtick run at the start of a byte slice; used to identify opening code-span fences.                                                                                                          | `src/wrap/tokenize/scanning.rs`   |
+| `scan_continuation_span_state` — Incrementally scans a continuation string given a known open fence length, returning the remaining open fence length or `None` when all spans are balanced; used to avoid O(N²) rescanning of the accumulated pending text. | `src/wrap/tokenize/scanning.rs`   |
+| `handle_pending_continuation`                                                                                                                                                                                                                                | `src/wrap.rs`                     |
+| `scan_code_suffix_end`                                                                                                                                                                                                                                       | `src/wrap/tokenize/scanning.rs`   |
+| `has_inline_code_structure`                                                                                                                                                                                                                                  | `src/wrap/inline/fragment.rs`     |
 
 `SpanKind` in `src/wrap/inline/span_helpers.rs` records how a grouped token
 span behaves while `determine_token_span` walks the stream: `General` for
 ordinary prose, `Code` and `Link` for atomic inline spans, and `FootnoteRef`
-when a footnote marker has been promoted or grouped with preceding
-punctuation.
+when a footnote marker has been promoted or grouped with preceding punctuation.
 
 ### Design constraints
 
@@ -268,14 +301,14 @@ punctuation.
   overflow the target width. Opening punctuation that immediately precedes an
   inline code span or link is grouped with that span during token grouping so
   the opener is not left on the previous line. Trailing punctuation after those
-  spans follows the same grouping rules. GFM footnote references that immediately
-  follow inline code or link spans without intervening whitespace are coupled
-  to the preceding punctuation cluster, so the marker is not wrapped onto the
-  next line alone. Inflectional affixes (`s`, `'s`, `ed`,
+  spans follows the same grouping rules. GFM footnote references that
+  immediately follow inline code or link spans without intervening whitespace
+  are coupled to the preceding punctuation cluster, so the marker is not
+  wrapped onto the next line alone. Inflectional affixes (`s`, `'s`, `ed`,
   `ing`) and hyphenated compounds that immediately follow a closed backtick
   fence are absorbed into the code token by `scan_code_suffix_end` in
-  `src/wrap/tokenize/scanning.rs`; the combined token is recognized as atomic
-  by `has_inline_code_structure` in `src/wrap/inline/fragment.rs`, so wrapping
+  `src/wrap/tokenize/scanning.rs`; the combined token is recognized as atomic by
+  `has_inline_code_structure` in `src/wrap/inline/fragment.rs`, so wrapping
   treats the full string as one unit.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur.
@@ -285,6 +318,11 @@ punctuation.
   `UnicodeWidthStr::width` before the available text width is computed, so
   non-ASCII prefix characters (e.g. `「` in CJK blockquotes) are accounted for
   correctly.
+- **Cross-line code spans.** When a prefixed line contains an unclosed inline
+  code span, the entire continuation is buffered in `PendingPrefix` and emitted
+  atomically once the span closes. No line break may be inserted inside the
+  span, and the closing backtick must remain on the same line as the span
+  content.
 
 Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
 replacing `LineBuffer` with `textwrap`.

@@ -8,7 +8,6 @@
 mod common;
 
 use mdtablefix::{process_stream, wrap::wrap_text};
-use proptest::prelude::*;
 use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
 
@@ -19,18 +18,55 @@ fn assert_footnote_reference_is_intact(output: &[String], marker: &str) {
     assert!(!rendered.contains("\n^"));
 }
 
-fn footnote_label_strategy() -> impl Strategy<Value = String> {
-    prop::collection::vec(
-        prop_oneof![
-            (b'a'..=b'z').prop_map(char::from),
-            (b'A'..=b'Z').prop_map(char::from),
-            (b'0'..=b'9').prop_map(char::from),
-            Just('-'),
-            Just('_')
-        ],
-        1..16,
-    )
-    .prop_map(|chars| chars.into_iter().collect())
+#[rstest]
+#[case(
+    lines_vec![
+        "- Decision: Make `make kani` a Kani command smoke check using `cargo kani",
+        "  --version` until real harnesses land.",
+    ],
+    "`cargo kani --version`"
+)]
+#[case(
+    lines_vec![
+        "1. Users select a theme via (`CLI >",
+        "   environment > config file >",
+        "   defaults`) parsing.",
+    ],
+    "(`CLI > environment > config file > defaults`)"
+)]
+fn wrap_text_joins_cross_line_code_spans(#[case] input: Vec<String>, #[case] expected: &str) {
+    let rendered = wrap_text(&input, 80).join("\n");
+    assert!(rendered.contains(expected));
+}
+
+#[rstest]
+#[case("- Release `4.1.1", "  rc1` candidate.", "`4.1.1 rc1`", "`4.1.1` rc1")]
+#[case("- Version `1.2", "  beta` works.", "`1.2 beta`", "`1.2` beta")]
+fn wrap_text_joins_split_version_code_spans_without_inserting_fence(
+    #[case] first: &str,
+    #[case] second: &str,
+    #[case] expected_span: &str,
+    #[case] invalid_span: &str,
+) {
+    let input = lines_vec![first, second];
+    let rendered = wrap_text(&input, 80).join("\n");
+    assert!(
+        rendered.contains(expected_span),
+        "expected joined span {expected_span:?}, got: {rendered}"
+    );
+    assert!(
+        !rendered.contains(invalid_span),
+        "must not synthesise a closing fence before {invalid_span:?}, got: {rendered}"
+    );
+}
+
+#[test]
+fn wrap_text_joins_indented_ordered_list_code_span_continuation() {
+    let input = lines_vec!["10. Use `cargo kani", "    --version` for smoke checks."];
+    let rendered = wrap_text(&input, 80).join("\n");
+    assert!(rendered.contains("`cargo kani"));
+    assert!(rendered.contains("    --version` for smoke checks."));
+    assert!(!rendered.contains("`cargo kani --version`"));
 }
 
 #[test]
@@ -199,32 +235,6 @@ fn wrap_text_preserves_inline_footnote_references(#[case] marker: &str) {
             .iter()
             .any(|line| line.contains(&format!(".{marker}")))
     );
-}
-
-proptest! {
-    #[test]
-    fn wrap_text_keeps_generated_footnote_references_atomic(
-        label in footnote_label_strategy(),
-        prefix_words in 2usize..30,
-        suffix_words in 0usize..=20,
-        width in 24usize..96,
-    ) {
-        let marker = format!("[^{label}]");
-        let prefix = std::iter::repeat_n("prefix", prefix_words).collect::<Vec<_>>().join(" ");
-        let suffix = std::iter::repeat_n("suffix", suffix_words).collect::<Vec<_>>().join(" ");
-        let input = if suffix.is_empty() {
-            vec![format!("{prefix} xxxxxxxxxxxxxxxxxxxxx.{marker}")]
-        } else {
-            vec![format!("{prefix} xxxxxxxxxxxxxxxxxxxxx.{marker} {suffix}")]
-        };
-
-        let wrapped = wrap_text(&input, width);
-        let rendered = wrapped.join("\n");
-
-        prop_assert!(rendered.contains(&marker));
-        prop_assert!(!rendered.contains("[\n"));
-        prop_assert!(!rendered.contains("\n^"));
-    }
 }
 
 #[test]

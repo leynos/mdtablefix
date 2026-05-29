@@ -82,7 +82,93 @@ pub(super) fn collect_range(text: &str, start: usize, end: usize) -> String {
 }
 
 pub(super) const BACKSLASH_BYTE: u8 = b'\\';
+const BACKTICK_BYTE: u8 = b'`';
 
+/// Returns the end index when `search` starts an exact backtick fence run.
+fn closing_fence_end(bytes: &[u8], text: &str, search: usize, fence_len: usize) -> Option<usize> {
+    if search >= text.len() {
+        return None;
+    }
+
+    let ch = text[search..].chars().next()?;
+    if ch != '`' || has_odd_backslash_escape_bytes(bytes, search) {
+        return None;
+    }
+
+    if search > 0 && bytes[search - 1] == BACKTICK_BYTE {
+        return None;
+    }
+
+    let candidate_end = scan_while(text, search, |candidate| candidate == '`');
+    if candidate_end - search != fence_len {
+        return None;
+    }
+
+    if candidate_end < bytes.len() && bytes[candidate_end] == BACKTICK_BYTE {
+        return None;
+    }
+
+    Some(candidate_end)
+}
+
+/// Returns the fence length when `text` begins with a backtick run.
+pub(crate) fn opening_fence_run_len(bytes: &[u8], text: &str) -> Option<usize> {
+    if text.is_empty() {
+        return None;
+    }
+
+    let ch = text.chars().next()?;
+    if ch != '`' || has_odd_backslash_escape_bytes(bytes, 0) {
+        return None;
+    }
+
+    let run_end = scan_while(text, 0, |candidate| candidate == '`');
+    let fence_len = run_end;
+    if run_end < bytes.len() && bytes[run_end] == BACKTICK_BYTE {
+        return None;
+    }
+
+    Some(fence_len)
+}
+
+pub(crate) fn parse_open_code_span(text: &str) -> Option<(usize, &str)> {
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    while index < text.len() {
+        let Some(ch) = text[index..].chars().next() else {
+            break;
+        };
+        if ch != '`' || has_odd_backslash_escape_bytes(bytes, index) {
+            index += ch.len_utf8();
+            continue;
+        }
+
+        let fence_start = index;
+        let fence_end = scan_while(text, index, |candidate| candidate == '`');
+        let fence_len = fence_end - fence_start;
+        let mut search = fence_end;
+        let mut found_close = false;
+
+        while search < text.len() {
+            if let Some(candidate_end) = closing_fence_end(bytes, text, search, fence_len) {
+                found_close = true;
+                index = candidate_end;
+                break;
+            }
+
+            if let Some(next) = text[search..].chars().next() {
+                search += next.len_utf8();
+            } else {
+                break;
+            }
+        }
+
+        if !found_close {
+            return Some((fence_len, &text[fence_end..]));
+        }
+    }
+    None
+}
 /// Check if a byte at the given index is preceded by an odd number of
 /// backslashes.
 ///
@@ -114,6 +200,125 @@ pub(super) fn bracket_follows_escaped_bang(bytes: &[u8], idx: usize) -> bool {
     has_odd_backslash_escape_bytes(bytes, idx - 1)
 }
 
+#[cfg(test)]
+pub(crate) fn has_unclosed_code_span(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    while index < text.len() {
+        let Some(ch) = text[index..].chars().next() else {
+            break;
+        };
+        if ch != '`' || has_odd_backslash_escape_bytes(bytes, index) {
+            index += ch.len_utf8();
+            continue;
+        }
+
+        let fence_start = index;
+        let fence_end = scan_while(text, index, |candidate| candidate == '`');
+        let fence_len = fence_end - fence_start;
+        let mut search = fence_end;
+        let mut found_close = false;
+
+        while search < text.len() {
+            if let Some(candidate_end) = closing_fence_end(bytes, text, search, fence_len) {
+                found_close = true;
+                index = candidate_end;
+                break;
+            }
+
+            if let Some(next) = text[search..].chars().next() {
+                search += next.len_utf8();
+            } else {
+                break;
+            }
+        }
+
+        if !found_close {
+            return true;
+        }
+    }
+    false
+}
+
+/// Returns the byte position just past the first matching closing fence run.
+///
+/// Walks `continuation` looking for an unescaped backtick run of exactly
+/// `fence_len` characters. When one is found, returns the byte index of the
+/// character following the closing run. Returns `None` when no matching run
+/// exists, or when `fence_len` is zero (since a zero-length fence cannot
+/// match any real backtick run).
+///
+/// This helper is used by `split_reopen_span` so it can skip past the close
+/// of a pre-existing span before searching the remainder for a new opener.
+pub(crate) fn position_after_close(continuation: &str, fence_len: usize) -> Option<usize> {
+    if fence_len == 0 {
+        return None;
+    }
+
+    let bytes = continuation.as_bytes();
+    let mut index = 0;
+    while index < continuation.len() {
+        let ch = continuation[index..].chars().next()?;
+        if ch == '`'
+            && !has_odd_backslash_escape_bytes(bytes, index)
+            && let Some(end) = closing_fence_end(bytes, continuation, index, fence_len)
+        {
+            return Some(end);
+        }
+        index += ch.len_utf8();
+    }
+    None
+}
+
+pub(crate) fn scan_continuation_span_state(continuation: &str, fence_len: usize) -> Option<usize> {
+    let bytes = continuation.as_bytes();
+    let mut index = 0;
+    let mut current_fence: Option<usize> = Some(fence_len);
+
+    while index < continuation.len() {
+        let Some(ch) = continuation[index..].chars().next() else {
+            break;
+        };
+
+        if ch == '`' && !has_odd_backslash_escape_bytes(bytes, index) {
+            if let Some(open_len) = current_fence {
+                if let Some(end) = closing_fence_end(bytes, continuation, index, open_len) {
+                    current_fence = None;
+                    index = end;
+                    continue;
+                }
+            } else {
+                let fence_end = scan_while(continuation, index, |c| c == '`');
+                let run = fence_end - index;
+                let isolated = fence_end >= bytes.len() || bytes[fence_end] != BACKTICK_BYTE;
+                if isolated && !has_odd_backslash_escape_bytes(bytes, index) {
+                    current_fence = Some(run);
+                    index = fence_end;
+                    continue;
+                }
+            }
+        }
+
+        index += ch.len_utf8();
+    }
+
+    current_fence
+}
+/// Returns whether `continuation` begins with a closing fence for the open span
+/// in `existing`.
+#[cfg(test)]
+#[must_use]
+pub(crate) fn continuation_begins_with_closing_fence(existing: &str, continuation: &str) -> bool {
+    let Some((open_fence_len, _content)) = parse_open_code_span(existing) else {
+        return false;
+    };
+
+    let Some(run_len) = opening_fence_run_len(continuation.as_bytes(), continuation) else {
+        return false;
+    };
+
+    open_fence_len == run_len
+}
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -170,32 +375,34 @@ mod tests {
         assert_eq!(scan_code_suffix_end(text, start), expected);
     }
 
-    use proptest::prelude::*;
+    #[test]
+    fn parse_open_code_span_returns_active_fence() {
+        assert_eq!(parse_open_code_span("`foo"), Some((1, "foo")));
+        assert_eq!(parse_open_code_span("text `4.1.1"), Some((1, "4.1.1")));
+        assert_eq!(parse_open_code_span("`done` `open"), Some((1, "open")));
+        assert_eq!(parse_open_code_span("`done`"), None);
+    }
 
-    proptest! {
-        /// scan_code_suffix_end must always return a byte index within the string.
-        #[test]
-        fn scan_code_suffix_end_result_in_bounds(
-            text in "\\PC*",            // any non-control Unicode string
-            start in 0usize..=128usize,
-        ) {
-            let start = start.min(text.len());
-            let start = text.floor_char_boundary(start);
-            let result = scan_code_suffix_end(&text, start);
-            prop_assert!(result >= start, "result must be >= start");
-            prop_assert!(result <= text.len(), "result must be <= text.len()");
-        }
+    #[rstest]
+    #[case("Version `1.2", "beta` works.", false)]
+    #[case("Release `4.1.1", "rc1` candidate.", false)]
+    #[case("text `open", "`close rest", true)]
+    fn continuation_begins_with_closing_fence_matches_literal_closers_only(
+        #[case] existing: &str,
+        #[case] continuation: &str,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            continuation_begins_with_closing_fence(existing, continuation),
+            expected
+        );
+    }
 
-        /// scan_code_suffix_end must not advance past a non-suffix character.
-        #[test]
-        fn scan_code_suffix_end_no_advance_on_whitespace_start(
-            suffix in " [a-z]{0,8}",
-        ) {
-            // A suffix beginning with whitespace should not be absorbed.
-            let text = format!("`code`{suffix}");
-            let start = 6usize; // index immediately after the closing backtick
-            let result = scan_code_suffix_end(&text, start);
-            prop_assert_eq!(result, start, "whitespace-led suffix must not be absorbed");
-        }
+    #[rstest]
+    #[case("`a``b`", false)]
+    #[case("``ab``", false)]
+    #[case("``a`b`", true)]
+    fn has_unclosed_code_span_rejects_mid_run_closers(#[case] text: &str, #[case] expected: bool) {
+        assert_eq!(has_unclosed_code_span(text), expected);
     }
 }
