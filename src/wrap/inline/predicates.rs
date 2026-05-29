@@ -62,7 +62,11 @@ pub(in crate::wrap::inline) fn is_inline_code_token(token: &str) -> bool {
 /// following inline code span (for example `pre-`, `LLM-`, or `(API-`).
 ///
 /// Bare punctuation such as `-` or `---` is rejected so that ordinary dash
-/// runs are not absorbed into the next atomic span.
+/// runs are not absorbed into the next atomic span. The alphabetic check uses
+/// `char::is_alphabetic`, so Unicode-letter compounds (`pré-`, `naïve-`,
+/// `字-`) are intentionally accepted alongside ASCII prefixes. Internal hyphen
+/// chains (`state-of-the-art-`) are also accepted because such compounds
+/// remain a single atomic wrap token by design.
 pub(in crate::wrap::inline) fn ends_with_hyphen_prefix(token: &str) -> bool {
     token.ends_with('-') && token.chars().any(char::is_alphabetic)
 }
@@ -218,9 +222,13 @@ mod tests {
     #[case("pre-", true)]
     #[case("LLM-", true)]
     #[case("(pre-", true)]
+    #[case("pré-", true)]
+    #[case("字-", true)]
+    #[case("state-of-the-art-", true)]
     #[case("-", false)]
     #[case("---", false)]
     #[case("foo", false)]
+    #[case("2024-", false)]
     fn ends_with_hyphen_prefix_classifies_tokens(#[case] token: &str, #[case] expected: bool) {
         assert_eq!(ends_with_hyphen_prefix(token), expected);
     }
