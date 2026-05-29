@@ -118,7 +118,7 @@
     pass before and after, unit tests added for new units).
   - Ensure the refactoring commit itself passes all quality gates.
 
-## Rust specific guidance
+## Rust-specific guidance
 
 This repository is written in Rust and uses Cargo for building and dependency
 management. Contributors should follow these best practices when working on the
@@ -291,7 +291,7 @@ project:
   user input, request IDs, paths with unbounded parameters, or raw error
   strings into labels.
 - Libraries may emit `metrics` and `tracing` instrumentation, but must not
-  install global recorders or subscribers. Applications should initialise
+  install global recorders or subscribers. Applications should initialize
   exporters/subscribers once, as early as practical in startup.
 
 ## Markdown guidance
