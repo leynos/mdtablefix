@@ -117,16 +117,6 @@ pub(in crate::wrap::inline) fn fragment_is_link(text: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
-
-    use super::{
-        is_inline_code_token,
-        is_opening_punct,
-        is_trailing_punct,
-        is_whitespace_token,
-        looks_like_footnote_ref,
-    };
-
     fn backtick_run_strategy() -> BoxedStrategy<String> {
         prop::collection::vec(Just('`'), 1..8)
             .prop_map(|chars| chars.into_iter().collect::<String>())
@@ -222,5 +212,16 @@ mod tests {
             let _ = ends_with_footnote_ref("word.[^1]");
             assert!(logs_contain("ends_with_footnote_ref"));
         }
+    }
+
+    #[rstest]
+    #[case("pre-", true)]
+    #[case("LLM-", true)]
+    #[case("(pre-", true)]
+    #[case("-", false)]
+    #[case("---", false)]
+    #[case("foo", false)]
+    fn ends_with_hyphen_prefix_classifies_tokens(#[case] token: &str, #[case] expected: bool) {
+        assert_eq!(ends_with_hyphen_prefix(token), expected);
     }
 }
