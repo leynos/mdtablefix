@@ -70,6 +70,7 @@ pub(in crate::wrap::inline) fn is_inline_code_token(token: &str) -> bool {
 pub(in crate::wrap::inline) fn ends_with_hyphen_prefix(token: &str) -> bool {
     token.ends_with('-') && token.chars().any(char::is_alphabetic)
 }
+
 /// Returns the substring beginning at the first Markdown link opener after any
 /// leading opener punctuation.
 pub(in crate::wrap::inline) fn link_text_after_leading_openers(text: &str) -> &str {
@@ -121,6 +122,18 @@ pub(in crate::wrap::inline) fn fragment_is_link(text: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+    use rstest::rstest;
+
+    use super::{
+        ends_with_hyphen_prefix,
+        is_inline_code_token,
+        is_opening_punct,
+        is_trailing_punct,
+        is_whitespace_token,
+        looks_like_footnote_ref,
+    };
+
     fn backtick_run_strategy() -> BoxedStrategy<String> {
         prop::collection::vec(Just('`'), 1..8)
             .prop_map(|chars| chars.into_iter().collect::<String>())
