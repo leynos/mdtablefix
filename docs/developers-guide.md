@@ -166,18 +166,26 @@ The wrapping pipeline for `--wrap` is:
    flag into `ParagraphState::pending_prefix` as a `PendingPrefix` value rather
    than wrapping immediately.  Subsequent source lines are routed through
    `handle_pending_continuation` (in `src/wrap.rs`) instead of the normal
-   wrapping path.  Each continuation is joined onto `pending_prefix.rest` via
+   wrapping path. `handle_pending_continuation` classifies the line and
+   delegates each soft-wrapped continuation chunk to `apply_continuation_chunk`
+   in `src/wrap/continuation.rs`, the module that owns the join/update/dispatch
+   state machine. Each continuation is joined onto `pending_prefix.rest` via
    `join_pending_continuation`, which inserts a space unless the continuation
    begins with the exact matching closing fence (detected by
-   `continuation_begins_with_closing_fence`).  Blockquote continuations are
-   only joined when their prefix exactly matches the pending prefix.  Once
-   `has_unclosed_code_span` returns `false` for the accumulated rest, closure
-   is confirmed and `flush_paragraph` emits the entire buffered segment
-   atomically using `append_wrapped_with_prefix_width`; a deferred open span
-   (detected by `parse_open_code_span` before the join) suppresses emission
-   unless a pending Markdown hard break forces it.  When `hard_break` is set,
-   two trailing spaces are appended to the last emitted line. `clear()` on
-   `ParagraphState` also resets `pending_prefix` to `None`.
+   `continuation_begins_with_closing_fence`). Blockquote continuations are only
+   joined when their prefix exactly matches the pending prefix. After joining,
+   `apply_continuation_chunk` consults `update_span_state` to drive a
+   `SpanStateUpdate` (`StillOpen`, `ClosedAndReopened`, or `Flush`); when the
+   same chunk both closes the pre-existing span and opens a new one, the helper
+   synthesizes a closer for the new span so it stays atomic in the buffer, and
+   subsequent lines append as plain prose. Once `has_unclosed_code_span` returns
+   `false` for the accumulated rest, closure is confirmed and
+   `flush_paragraph` emits the entire buffered segment atomically using
+   `append_wrapped_with_prefix_width`; a deferred open span (detected by
+   `parse_open_code_span` before the join) suppresses emission unless a pending
+   Markdown hard break forces it.  When `hard_break` is set, two trailing
+   spaces are appended to the last emitted line. `clear()` on `ParagraphState`
+   also resets `pending_prefix` to `None`.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
@@ -271,7 +279,8 @@ Table: Key types and functions.
 | `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                        | `src/wrap/paragraph.rs`           |
 | `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                               | `src/wrap/paragraph.rs`           |
 | `PendingPrefix`                                                                                                                                                                                                                                              | `src/wrap/paragraph.rs`           |
-| `join_pending_continuation`                                                                                                                                                                                                                                  | `src/wrap.rs`                     |
+| `apply_continuation_chunk` — Centralised join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                | `src/wrap/continuation.rs`        |
+| `join_pending_continuation`                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`        |
 | `opening_fence_run_len` — Measures the length of an unescaped backtick run at the start of a byte slice; used to identify opening code-span fences.                                                                                                          | `src/wrap/tokenize/scanning.rs`   |
 | `scan_continuation_span_state` — Incrementally scans a continuation string given a known open fence length, returning the remaining open fence length or `None` when all spans are balanced; used to avoid O(N²) rescanning of the accumulated pending text. | `src/wrap/tokenize/scanning.rs`   |
 | `handle_pending_continuation`                                                                                                                                                                                                                                | `src/wrap.rs`                     |
