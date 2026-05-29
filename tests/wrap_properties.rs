@@ -17,6 +17,7 @@
 
 use mdtablefix::wrap::wrap_text;
 use proptest::prelude::*;
+use unicode_width::UnicodeWidthStr;
 
 fn footnote_label_strategy() -> impl Strategy<Value = String> {
     prop::collection::vec(
@@ -157,12 +158,12 @@ proptest! {
 
     #[test]
     fn wrap_keeps_leading_hyphen_compound_atomic(
-        prefix in "[a-zA-Z]{1,12}",
-        inner in "[a-zA-Z]{1,12}",
+        prefix in "\\p{L}{1,12}",
+        inner in "\\p{L}{1,12}",
         width in 20usize..120,
     ) {
         let compound = format!("{prefix}-`{inner}`");
-        let compound_width = prefix.len() + inner.len() + 3;
+        let compound_width = UnicodeWidthStr::width(compound.as_str());
 
         let sentence = format!(
             "This sentence has the compound {compound} embedded within it and \

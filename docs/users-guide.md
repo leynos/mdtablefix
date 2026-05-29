@@ -73,7 +73,7 @@ strands the prefix at the end of a line or the code span at the start of the
 next. This mirrors the opening-punctuation coupling rule but applies to any
 token that ends with a hyphen and contains at least one alphabetic character,
 including Unicode alphabetic characters such as `` pré-`code` `` or
-`` 字-`code` ``. If the compound alone exceeds the target width it may be
+`` 字-`code` ``. If the compound alone exceeds the target width, it may be
 broken. Trailing-hyphen compounds such as `` `code`-style `` continue to be
 absorbed by the tokenizer at the closing fence.
 
