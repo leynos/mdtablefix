@@ -337,6 +337,35 @@ Guard any expression that allocates (e.g. `String` truncation) with
 `tracing::enabled!(Level::DEBUG)` or `tracing::enabled!(Level::TRACE)` before
 computing the value.
 
+### Security considerations
+
+The `token` field records raw text slices from the input document, including
+URL tokens parsed by `parse_link_or_image`.  URLs may embed API keys, session
+identifiers, or other sensitive values.
+
+When enabling DEBUG or TRACE logging from this library in a production
+environment, configure the subscriber to redact or drop the `token` field
+before writing to any persistent sink.  For example, with
+`tracing-subscriber`:
+
+```rust
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::layer::SubscriberExt as _;
+use tracing_subscriber::util::SubscriberInitExt as _;
+
+tracing_subscriber::registry()
+    .with(
+        tracing_subscriber::fmt::layer()
+            .with_span_events(FmtSpan::NONE)
+            // Add a field-filtering layer here to drop `token` in production.
+    )
+    .init();
+```
+
+Do not enable DEBUG or TRACE logging from this library without a redacting
+subscriber in any environment where the input documents may contain
+confidential URLs.
+
 ### Instrumented functions
 
 Functions decorated with `#[tracing::instrument]` are listed below with their

@@ -294,6 +294,11 @@ mod tests {
 
 #[cfg(test)]
 mod trace_snippet_tests {
+    //! Tests for the `trace_text_snippet` helper.
+    //!
+    //! Verifies that the UTF-8-safe truncation helper produces a slice at a
+    //! valid character boundary and sets the truncation flag correctly.
+
     use super::trace_text_snippet;
 
     #[test]
@@ -310,6 +315,13 @@ mod trace_snippet_tests {
 
 #[cfg(test)]
 mod tracing_tests {
+    //! Traced-event tests for `InlineFragment` classification.
+    //!
+    //! Each test verifies that constructing an `InlineFragment` emits a DEBUG
+    //! `fragment classified` event with the correct structured fields (`kind`,
+    //! `token`, `truncated`).  One test verifies that construction succeeds
+    //! without any tracing subscriber installed.
+
     use rstest::rstest;
     use tracing_test::traced_test;
 
@@ -339,6 +351,12 @@ mod tracing_tests {
 
 #[cfg(test)]
 mod proptests {
+    //! Property tests for `trace_text_snippet` invariants.
+    //!
+    //! Verifies on arbitrary Unicode input that the helper never panics, the
+    //! result is a valid UTF-8 slice of at most 80 bytes, and the truncation
+    //! flag accurately reflects whether the input exceeded that limit.
+
     use proptest::prelude::*;
 
     use super::trace_text_snippet;

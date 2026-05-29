@@ -190,6 +190,13 @@ mod tests {
     }
 
     mod tracing_tests {
+        //! Traced-event tests for predicate helpers.
+        //!
+        //! Verifies that `looks_like_footnote_ref` and
+        //! `ends_with_footnote_ref` emit TRACE events when called,
+        //! confirming that the `#[tracing::instrument]` attribute is
+        //! effective at the declared log level.
+
         use tracing_test::traced_test;
 
         use super::super::{ends_with_footnote_ref, looks_like_footnote_ref};

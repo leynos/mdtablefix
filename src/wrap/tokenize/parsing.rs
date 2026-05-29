@@ -328,6 +328,14 @@ mod tests {
     }
 
     mod tracing_tests {
+        //! Traced-event tests for the parsing helpers.
+        //!
+        //! Verifies that `parse_link_or_image` and `find_footnote_end` emit
+        //! the expected DEBUG and TRACE events, including structured fields,
+        //! for all reachable branches: footnote reference parsed, link or
+        //! image parsed, prefix mismatch, footnote label span recognised, and
+        //! unterminated bracket.
+
         use tracing_test::traced_test;
 
         use super::*;
