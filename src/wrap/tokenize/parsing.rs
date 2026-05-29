@@ -352,5 +352,19 @@ mod tests {
             let _ = find_footnote_end("no-caret", 0);
             assert!(logs_contain("prefix_mismatch"));
         }
+
+        #[traced_test]
+        #[test]
+        fn parse_link_or_image_logs_footnote_label_span() {
+            let _ = parse_link_or_image("[^4] tail", 0);
+            assert!(logs_contain("footnote label span recognised"));
+        }
+
+        #[traced_test]
+        #[test]
+        fn find_footnote_end_logs_unterminated_bracket() {
+            let _ = find_footnote_end("[^unterminated", 0);
+            assert!(logs_contain("unterminated_bracket"));
+        }
     }
 }
