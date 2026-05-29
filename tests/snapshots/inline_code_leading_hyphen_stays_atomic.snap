@@ -1,0 +1,6 @@
+---
+source: tests/wrap/inline_code_suffix_snapshots.rs
+expression: "wrap_lines(input, width)"
+---
+The pre-`LLMPort` interface defines the
+contract for model invocations.

@@ -176,3 +176,22 @@ fn test_wrap_keeps_inline_code_suffix_on_same_line(#[case] snippet: &str) {
     let flattened = output.join("\n");
     assert!(flattened.contains(snippet));
 }
+
+#[rstest]
+#[case("pre-`LLMPort`")]
+#[case("LLM-`Port`")]
+#[case("(API-`Foo`)")]
+fn test_wrap_keeps_inline_code_leading_hyphen_on_same_line(#[case] snippet: &str) {
+    let prefix = concat!(
+        "When the scaffold includes an adapter-facing slice, document the seam ",
+        "and route the behavioural coverage for that task through the "
+    );
+    let suffix = " interface so that the wrapping logic keeps the compound atomic.";
+    let input = lines_vec![format!("{prefix}{snippet}{suffix}")];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    assert!(
+        output.iter().any(|line| line.contains(snippet)),
+        "expected compound {snippet:?} preserved on a single line: {output:?}"
+    );
+}

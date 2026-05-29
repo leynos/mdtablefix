@@ -43,6 +43,16 @@ fn assert_wrap_snapshot(name: &str, input: &str, width: usize) {
     "Use a `code`-style identifier when naming configuration keys.",
     40
 )]
+#[case(
+    "inline_code_leading_hyphen_stays_atomic",
+    "The pre-`LLMPort` interface defines the contract for model invocations.",
+    40
+)]
+#[case(
+    "inline_code_leading_hyphen_with_paren_stays_atomic",
+    "Use the (pre-`LLMPort`) interface for testing stubs.",
+    40
+)]
 fn inline_code_suffix_wrap_snapshots(
     #[case] name: &str,
     #[case] input: &str,

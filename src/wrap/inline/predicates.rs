@@ -58,6 +58,23 @@ pub(in crate::wrap::inline) fn is_inline_code_token(token: &str) -> bool {
     token.len() > 1 && token.starts_with('`') && token.ends_with('`')
 }
 
+/// Returns whether `token` is a hyphen-terminated prefix that should bind to a
+/// following inline code span (for example `pre-`, `LLM-`, or `(API-`).
+///
+/// Bare punctuation such as `-` or `---` is rejected so that ordinary dash
+/// runs are not absorbed into the next atomic span. The alphabetic check uses
+/// `char::is_alphabetic`, so Unicode-letter compounds (`pré-`, `naïve-`,
+/// `字-`) are intentionally accepted alongside ASCII prefixes. Internal hyphen
+/// chains (`state-of-the-art-`) are also accepted because such compounds
+/// remain a single atomic wrap token by design.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value as a TRACE-level event.
+#[tracing::instrument(level = "trace", ret)]
+pub(in crate::wrap::inline) fn ends_with_hyphen_prefix(token: &str) -> bool {
+    token.ends_with('-') && token.chars().any(char::is_alphabetic)
+}
+
 /// Returns the substring beginning at the first Markdown link opener after any
 /// leading opener punctuation.
 pub(in crate::wrap::inline) fn link_text_after_leading_openers(text: &str) -> &str {
@@ -110,8 +127,10 @@ pub(in crate::wrap::inline) fn fragment_is_link(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
+    use rstest::rstest;
 
     use super::{
+        ends_with_hyphen_prefix,
         is_inline_code_token,
         is_opening_punct,
         is_trailing_punct,
@@ -199,7 +218,11 @@ mod tests {
 
         use tracing_test::traced_test;
 
-        use super::super::{ends_with_footnote_ref, looks_like_footnote_ref};
+        use super::super::{
+            ends_with_footnote_ref,
+            ends_with_hyphen_prefix,
+            looks_like_footnote_ref,
+        };
 
         #[traced_test]
         #[test]
@@ -214,5 +237,27 @@ mod tests {
             let _ = ends_with_footnote_ref("word.[^1]");
             assert!(logs_contain("ends_with_footnote_ref"));
         }
+
+        #[traced_test]
+        #[test]
+        fn ends_with_hyphen_prefix_emits_trace_event() {
+            let _ = ends_with_hyphen_prefix("pre-");
+            assert!(logs_contain("ends_with_hyphen_prefix"));
+        }
+    }
+
+    #[rstest]
+    #[case("pre-", true)]
+    #[case("LLM-", true)]
+    #[case("(pre-", true)]
+    #[case("pré-", true)]
+    #[case("字-", true)]
+    #[case("state-of-the-art-", true)]
+    #[case("-", false)]
+    #[case("---", false)]
+    #[case("foo", false)]
+    #[case("2024-", false)]
+    fn ends_with_hyphen_prefix_classifies_tokens(#[case] token: &str, #[case] expected: bool) {
+        assert_eq!(ends_with_hyphen_prefix(token), expected);
     }
 }

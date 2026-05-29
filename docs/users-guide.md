@@ -65,6 +65,18 @@ span during wrapping. The tokenizer treats the backtick fence together with its
 directly attached suffix as a single unbreakable unit, so no line break is ever
 inserted between the closing backtick and the following letters.
 
+Hyphenated compounds where a word ends with a hyphen immediately before an
+inline code span — for example `` pre-`LLMPort` ``, `` LLM-`Port` ``, or
+`` (API-`Foo`) `` — are also kept on the same line during wrapping. The
+hyphen-prefix token is coupled to the following code span, so wrapping never
+strands the prefix at the end of a line or the code span at the start of the
+next. This mirrors the opening-punctuation coupling rule but applies to any
+token that ends with a hyphen and contains at least one alphabetic character,
+including Unicode alphabetic characters such as `` pré-`code` `` or
+`` 字-`code` ``. If the compound alone exceeds the target width, it may be
+broken. Trailing-hyphen compounds such as `` `code`-style `` continue to be
+absorbed by the tokenizer at the closing fence.
+
 Blockquote prefixes (`>`), task-list item markers (`- [ ]`, `- [x]`), and
 footnote definition labels (`[^n]:`) are detected automatically. The first
 wrapped line carries the original prefix; subsequent wrapped lines are indented

@@ -17,6 +17,7 @@
 
 use mdtablefix::wrap::wrap_text;
 use proptest::prelude::*;
+use unicode_width::UnicodeWidthStr;
 
 fn footnote_label_strategy() -> impl Strategy<Value = String> {
     prop::collection::vec(
@@ -153,5 +154,35 @@ proptest! {
         }
         let rendered = output.join("\n");
         prop_assert!(rendered.contains(&fence), "fence lost; rendered:\n{rendered}");
+    }
+
+    #[test]
+    fn wrap_keeps_leading_hyphen_compound_atomic(
+        prefix in "\\p{L}{1,12}",
+        inner in "\\p{L}{1,12}",
+        width in 20usize..120,
+    ) {
+        let compound = format!("{prefix}-`{inner}`");
+        let compound_width = UnicodeWidthStr::width(compound.as_str());
+
+        let sentence = format!(
+            "This sentence has the compound {compound} embedded within it and \
+             contains enough trailing prose to force the wrapping algorithm to \
+             reflow the text across multiple lines when the target width is \
+             sufficiently narrow."
+        );
+        let input = vec![sentence];
+        let output = wrap_text(&input, width);
+
+        if compound_width <= width {
+            let rendered = output.join("\n");
+            prop_assert!(
+                rendered.contains(&compound),
+                "compound {compound:?} (width {compound_width}) must appear intact \
+                 at target width {width}: {output:?}"
+            );
+        } else {
+            prop_assert!(!output.is_empty(), "wrap_text must not panic or return empty output");
+        }
     }
 }
