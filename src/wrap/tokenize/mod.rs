@@ -26,6 +26,7 @@ use scanning::{
 pub(crate) use scanning::{
     opening_fence_run_len,
     parse_open_code_span,
+    position_after_close,
     scan_continuation_span_state,
 };
 

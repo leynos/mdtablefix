@@ -240,6 +240,36 @@ pub(crate) fn has_unclosed_code_span(text: &str) -> bool {
     false
 }
 
+/// Returns the byte position just past the first matching closing fence run.
+///
+/// Walks `continuation` looking for an unescaped backtick run of exactly
+/// `fence_len` characters. When one is found, returns the byte index of the
+/// character following the closing run. Returns `None` when no matching run
+/// exists, or when `fence_len` is zero (since a zero-length fence cannot
+/// match any real backtick run).
+///
+/// This helper is used by `split_reopen_span` so it can skip past the close
+/// of a pre-existing span before searching the remainder for a new opener.
+pub(crate) fn position_after_close(continuation: &str, fence_len: usize) -> Option<usize> {
+    if fence_len == 0 {
+        return None;
+    }
+
+    let bytes = continuation.as_bytes();
+    let mut index = 0;
+    while index < continuation.len() {
+        let ch = continuation[index..].chars().next()?;
+        if ch == '`'
+            && !has_odd_backslash_escape_bytes(bytes, index)
+            && let Some(end) = closing_fence_end(bytes, continuation, index, fence_len)
+        {
+            return Some(end);
+        }
+        index += ch.len_utf8();
+    }
+    None
+}
+
 pub(crate) fn scan_continuation_span_state(continuation: &str, fence_len: usize) -> Option<usize> {
     let bytes = continuation.as_bytes();
     let mut index = 0;

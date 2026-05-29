@@ -122,6 +122,45 @@ fn test_wrap_pending_cleared_after_span_closes_on_continuation() {
 }
 
 #[test]
+fn test_wrap_reopen_with_whitespace_tail_is_split_atomically() {
+    // The reopen detector must accept new openers whose first content
+    // character is whitespace; CommonMark allows leading whitespace inside
+    // a code span (it is stripped during rendering). Regression test:
+    // `split_reopen_span` previously rejected these reopens via an
+    // unjustified `is_whitespace()` early return, leaving span B unsplit
+    // and growing the pending buffer across both spans.
+    let input = lines_vec!["- foo `open", "  closed` and ` more"];
+    let output = wrap_text(&input, 80);
+    let rendered = output.join("\n");
+    assert!(
+        rendered.contains("`open closed`"),
+        "span A must close atomically: {rendered:?}"
+    );
+    assert!(
+        rendered.contains("` more`"),
+        "span B (whitespace-prefixed) must be synthesised closed: {rendered:?}"
+    );
+}
+
+#[test]
+fn test_wrap_reopen_with_close_paren_tail_is_split_atomically() {
+    // Same as the whitespace case, but the new opener is immediately
+    // followed by ')'. Regression test for the symmetric heuristic that
+    // also rejected ')' as a leading character.
+    let input = lines_vec!["- foo `open", "  closed` and `)done"];
+    let output = wrap_text(&input, 80);
+    let rendered = output.join("\n");
+    assert!(
+        rendered.contains("`open closed`"),
+        "span A must close atomically: {rendered:?}"
+    );
+    assert!(
+        rendered.contains("`)done`"),
+        "span B (')'-prefixed) must be synthesised closed: {rendered:?}"
+    );
+}
+
+#[test]
 fn test_wrap_prefixed_open_span_leaves_indented_code_verbatim() {
     let input = lines_vec!["- `open", "    --version", "text"];
     let output = process_stream(&input);

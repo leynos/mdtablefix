@@ -6,7 +6,11 @@
 use proptest::prelude::*;
 
 use super::super::{continuation_begins_with_closing_fence, has_unclosed_code_span};
-use crate::wrap::tokenize::{opening_fence_run_len, scan_continuation_span_state};
+use crate::wrap::tokenize::{
+    opening_fence_run_len,
+    parse_open_code_span,
+    scan_continuation_span_state,
+};
 
 proptest! {
     #[test]
@@ -86,18 +90,19 @@ proptest! {
     }
 
     #[test]
-    fn opening_fence_run_len_rejects_escaped_backtick(
-        n in 1usize..=3,
-        suffix in "[^`]*",
-    ) {
-        // A backslash immediately before the backtick run means the run
-        // is escaped.
-        let fence = "`".repeat(n);
-        let text = format!("\\{fence}{suffix}");
-        let bytes = text.as_bytes();
+    fn parse_open_code_span_rejects_escaped_backtick(suffix in "[^`]*") {
+        // A backslash escapes only the immediately following character, so
+        // we limit the fence to a single backtick: "\\`{suffix}" has no
+        // unescaped backticks at all. `parse_open_code_span` walks each
+        // position and consults `has_odd_backslash_escape_bytes`, so it
+        // actually exercises escape handling — unlike
+        // `opening_fence_run_len`, which never sees the backtick because
+        // the leading backslash sits at byte 0 and short-circuits the
+        // first-character check.
+        let text = format!("\\`{suffix}");
         prop_assert!(
-            opening_fence_run_len(bytes, &text).is_none(),
-            "escaped backtick run must not be detected as opener; text={text:?}"
+            parse_open_code_span(&text).is_none(),
+            "escaped backtick must not be detected as opener; text={text:?}"
         );
     }
 

@@ -42,7 +42,7 @@ pub use tokenize::tokenize_markdown;
 // Re-exported for unit tests; not used in production code.
 #[cfg(test)]
 pub(crate) use tokenize::{continuation_begins_with_closing_fence, has_unclosed_code_span};
-use tokenize::{parse_open_code_span, scan_continuation_span_state};
+use tokenize::{parse_open_code_span, position_after_close, scan_continuation_span_state};
 
 // Permit GFM task list markers with flexible spacing and missing post-marker
 // spaces in Markdown.
@@ -158,21 +158,38 @@ fn join_pending_continuation(existing: &mut String, continuation: &str, fence_le
     true
 }
 
-fn split_reopen_span(continuation: &str, continuation_offset: usize) -> Option<(usize, usize)> {
-    let (open_len, open_tail) = parse_open_code_span(continuation)?;
+/// Locates the byte offset of a newly opened code span inside `continuation`.
+///
+/// When `existing_fence` is non-zero, the helper first advances past the
+/// matching close of the pre-existing span before searching for the new
+/// opener. This prevents `parse_open_code_span` from pairing the closer of
+/// the existing span with the opener of the new span, which would otherwise
+/// hide the close/reopen boundary.
+///
+/// Returns the absolute byte offset of the new opener (relative to the
+/// surrounding pending buffer, derived from `continuation_offset`) and the
+/// fence length of the new opener.
+fn split_reopen_span(
+    continuation: &str,
+    continuation_offset: usize,
+    existing_fence: usize,
+) -> Option<(usize, usize)> {
+    let search_offset = if existing_fence > 0 {
+        position_after_close(continuation, existing_fence)?
+    } else {
+        0
+    };
+
+    let remainder = &continuation[search_offset..];
+    let (open_len, open_tail) = parse_open_code_span(remainder)?;
     if open_tail.is_empty() {
         return None;
     }
 
-    if let Some(first) = open_tail.chars().next()
-        && (first.is_whitespace() || first == ')')
-    {
-        return None;
-    }
-
-    let open_run_end = continuation.len().checked_sub(open_tail.len() + open_len)?;
+    let open_run_end = remainder.len().checked_sub(open_tail.len() + open_len)?;
+    let in_continuation = search_offset.checked_add(open_run_end)?;
     continuation_offset
-        .checked_add(open_run_end)
+        .checked_add(in_continuation)
         .map(|split_at| (split_at, open_len))
 }
 
@@ -219,40 +236,12 @@ fn handle_pending_continuation(
     link_title_window: &mut link_reference::LinkTitleWindow,
 ) {
     if let Some(prefix_line) = prefix_line(line) {
-        if let Some(pending) = state.pending_prefix.as_mut()
-            && prefix_line.repeat_prefix
-            && pending.prefix == prefix_line.prefix.as_ref()
-        {
+        let matches_pending = state.pending_prefix.as_ref().is_some_and(|pending| {
+            prefix_line.repeat_prefix && pending.prefix == prefix_line.prefix.as_ref()
+        });
+        if matches_pending {
             let (text, hard_break) = line_break_parts(prefix_line.rest);
-            let open_fence_len = pending.open_fence_len.unwrap_or(0);
-            let continuation_offset = {
-                let pending_len = pending.rest.len();
-                let needs_space = continuation_needs_leading_space(&text, open_fence_len);
-                pending_len + usize::from(pending_len > 0 && needs_space)
-            };
-            let joined = join_pending_continuation(&mut pending.rest, &text, open_fence_len);
-            if hard_break {
-                pending.hard_break = true;
-            }
-            if joined {
-                match update_span_state(&text, continuation_offset, pending) {
-                    SpanStateUpdate::StillOpen => {}
-                    SpanStateUpdate::ClosedAndReopened { split_at, new_len } => {
-                        emit_pending_prefix_segment(writer, pending, split_at);
-                        let pending_rest = format!(
-                            "{ticks}{tail}",
-                            ticks = "`".repeat(new_len),
-                            tail = &pending.rest[split_at + new_len..],
-                        );
-                        pending.rest = pending_rest;
-                        pending.open_fence_len = Some(new_len);
-                        pending.hard_break = false;
-                    }
-                    SpanStateUpdate::Flush => {
-                        writer.flush_paragraph(state);
-                    }
-                }
-            }
+            apply_continuation_chunk(&text, hard_break, writer, state);
             return;
         }
 
@@ -271,6 +260,24 @@ fn handle_pending_continuation(
     }
 
     let (text, hard_break) = line_break_parts(line);
+    if state.pending_prefix.is_none() {
+        return;
+    }
+    apply_continuation_chunk(&text, hard_break, writer, state);
+}
+
+/// Joins `text` onto the active pending-prefix buffer and reacts to the
+/// resulting span-state update.
+///
+/// Centralises the join/update/dispatch path shared by the prefixed and
+/// non-prefixed continuation branches in `handle_pending_continuation`.
+/// Caller must ensure `state.pending_prefix` is `Some` before invoking.
+fn apply_continuation_chunk(
+    text: &str,
+    hard_break: bool,
+    writer: &mut ParagraphWriter<'_>,
+    state: &mut ParagraphState,
+) {
     let Some(pending) = state.pending_prefix.as_mut() else {
         return;
     };
@@ -278,30 +285,31 @@ fn handle_pending_continuation(
     let open_fence_len = pending.open_fence_len.unwrap_or(0);
     let continuation_offset = {
         let pending_len = pending.rest.len();
-        let needs_space = continuation_needs_leading_space(&text, open_fence_len);
+        let needs_space = continuation_needs_leading_space(text, open_fence_len);
         pending_len + usize::from(pending_len > 0 && needs_space)
     };
-    let joined = join_pending_continuation(&mut pending.rest, &text, open_fence_len);
+    let joined = join_pending_continuation(&mut pending.rest, text, open_fence_len);
     if hard_break {
         pending.hard_break = true;
     }
-    if joined {
-        match update_span_state(&text, continuation_offset, pending) {
-            SpanStateUpdate::StillOpen => {}
-            SpanStateUpdate::ClosedAndReopened { split_at, new_len } => {
-                emit_pending_prefix_segment(writer, pending, split_at);
-                let pending_rest = format!(
-                    "{ticks}{tail}",
-                    ticks = "`".repeat(new_len),
-                    tail = &pending.rest[split_at + new_len..],
-                );
-                pending.rest = pending_rest;
-                pending.open_fence_len = Some(new_len);
-                pending.hard_break = false;
-            }
-            SpanStateUpdate::Flush => {
-                writer.flush_paragraph(state);
-            }
+    if !joined {
+        return;
+    }
+    match update_span_state(text, continuation_offset, pending) {
+        SpanStateUpdate::StillOpen => {}
+        SpanStateUpdate::ClosedAndReopened { split_at, new_len } => {
+            emit_pending_prefix_segment(writer, pending, split_at);
+            let pending_rest = format!(
+                "{ticks}{tail}",
+                ticks = "`".repeat(new_len),
+                tail = &pending.rest[split_at + new_len..],
+            );
+            pending.rest = pending_rest;
+            pending.open_fence_len = Some(new_len);
+            pending.hard_break = false;
+        }
+        SpanStateUpdate::Flush => {
+            writer.flush_paragraph(state);
         }
     }
 }
@@ -329,12 +337,28 @@ fn update_span_state(
     let raw_fence = pending.open_fence_len.unwrap_or(0);
     match scan_continuation_span_state(continuation, raw_fence) {
         Some(n) if n > 0 => {
+            // A span is still open at the end of the chunk, but it may be
+            // a *different* span: the pre-existing span A closed and a new
+            // span B opened within this same continuation. Detect that
+            // boundary so the trailing opener does not silently grow the
+            // pending buffer across both spans. The closer for span B is
+            // not in the source, so synthesise one at the end of the
+            // buffer; this keeps span B atomic ("`4.1.1`") and lets
+            // subsequent continuations be appended as plain text.
+            if let Some((_, new_len)) =
+                split_reopen_span(continuation, continuation_offset, raw_fence)
+            {
+                pending.rest.push_str(&"`".repeat(new_len));
+                pending.open_fence_len = None;
+                return SpanStateUpdate::StillOpen;
+            }
             pending.open_fence_len = Some(n);
             SpanStateUpdate::StillOpen
         }
         _ => {
             pending.open_fence_len = None;
-            if let Some((split_at, new_len)) = split_reopen_span(continuation, continuation_offset)
+            if let Some((split_at, new_len)) =
+                split_reopen_span(continuation, continuation_offset, raw_fence)
             {
                 return SpanStateUpdate::ClosedAndReopened { split_at, new_len };
             }
