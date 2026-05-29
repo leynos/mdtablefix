@@ -427,6 +427,7 @@ Table: Instrumented functions and their logging levels and fields.
 | --- | --- | --- |
 | `looks_like_footnote_ref` | trace | `token` (in), return value (out) |
 | `ends_with_footnote_ref` | trace | `token` (in), return value (out) |
+| `ends_with_hyphen_prefix` | trace | `token` (in), return value (out) |
 | `parse_link_or_image` | debug | `idx` (in), `skip(text)`, return value (out) |
 | `find_footnote_end` | trace | `idx` (in), `skip(text)`, return value (out) |
 

@@ -181,6 +181,8 @@ proptest! {
                 "compound {compound:?} (width {compound_width}) must appear intact \
                  at target width {width}: {output:?}"
             );
+        } else {
+            prop_assert!(!output.is_empty(), "wrap_text must not panic or return empty output");
         }
     }
 }

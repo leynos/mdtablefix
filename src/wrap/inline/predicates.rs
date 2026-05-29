@@ -67,6 +67,10 @@ pub(in crate::wrap::inline) fn is_inline_code_token(token: &str) -> bool {
 /// `字-`) are intentionally accepted alongside ASCII prefixes. Internal hyphen
 /// chains (`state-of-the-art-`) are also accepted because such compounds
 /// remain a single atomic wrap token by design.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value as a TRACE-level event.
+#[tracing::instrument(level = "trace", ret)]
 pub(in crate::wrap::inline) fn ends_with_hyphen_prefix(token: &str) -> bool {
     token.ends_with('-') && token.chars().any(char::is_alphabetic)
 }
@@ -214,7 +218,11 @@ mod tests {
 
         use tracing_test::traced_test;
 
-        use super::super::{ends_with_footnote_ref, looks_like_footnote_ref};
+        use super::super::{
+            ends_with_footnote_ref,
+            ends_with_hyphen_prefix,
+            looks_like_footnote_ref,
+        };
 
         #[traced_test]
         #[test]
@@ -228,6 +236,13 @@ mod tests {
         fn ends_with_footnote_ref_emits_trace_event() {
             let _ = ends_with_footnote_ref("word.[^1]");
             assert!(logs_contain("ends_with_footnote_ref"));
+        }
+
+        #[traced_test]
+        #[test]
+        fn ends_with_hyphen_prefix_emits_trace_event() {
+            let _ = ends_with_hyphen_prefix("pre-");
+            assert!(logs_contain("ends_with_hyphen_prefix"));
         }
     }
 
