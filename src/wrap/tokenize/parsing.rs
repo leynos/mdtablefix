@@ -98,7 +98,7 @@ fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
                     start = idx,
                     end = cursor,
                     token = %&text[idx..cursor],
-                    "footnote label span recognised"
+                    "footnote label span recognized"
                 );
             }
             return Some(cursor);
@@ -333,7 +333,7 @@ mod tests {
         //! Verifies that `parse_link_or_image` and `find_footnote_end` emit
         //! the expected DEBUG and TRACE events, including structured fields,
         //! for all reachable branches: footnote reference parsed, link or
-        //! image parsed, prefix mismatch, footnote label span recognised, and
+        //! image parsed, prefix mismatch, footnote label span recognized, and
         //! unterminated bracket.
 
         use tracing_test::traced_test;
@@ -370,7 +370,7 @@ mod tests {
         #[test]
         fn parse_link_or_image_logs_footnote_label_span() {
             let _ = parse_link_or_image("[^4] tail", 0);
-            assert!(logs_contain("footnote label span recognised"));
+            assert!(logs_contain("footnote label span recognized"));
             assert!(logs_contain("start="));
             assert!(logs_contain("end="));
             assert!(logs_contain("token="));

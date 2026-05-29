@@ -340,12 +340,12 @@ computing the value.
 ### Security considerations
 
 The `token` field records raw text slices from the input document, including
-URL tokens parsed by `parse_link_or_image`.  URLs may embed API keys, session
+URL tokens parsed by `parse_link_or_image`. URLs may embed API keys, session
 identifiers, or other sensitive values.
 
 When enabling DEBUG or TRACE logging from this library in a production
 environment, configure the subscriber to redact or drop the `token` field
-before writing to any persistent sink.  For example, with
+before writing to any persistent sink. For example, with
 `tracing-subscriber`:
 
 ```rust
