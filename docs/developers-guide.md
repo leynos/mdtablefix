@@ -289,6 +289,98 @@ punctuation.
 Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
 replacing `LineBuffer` with `textwrap`.
 
+## Observability
+
+### Dependency
+
+`tracing = "0.1"` is the runtime observability dependency, used by both the
+library and executables. `tracing-test = "0.2"` is a test-only dev-dependency;
+use it only in tests (e.g. `#[traced_test]`). The crate does not install a
+global subscriber or metrics recorder. Executables and test harnesses that want
+log output must install their own subscriber (e.g.
+`tracing_subscriber::fmt::init()` in `main`).
+
+### Log levels
+
+Use `debug!` for high-value classification outcomes: fragment kind, parsed
+token, span promotion result. Use `trace!` for branch-level checks: predicate
+matched, prefix mismatch, unterminated bracket. Never emit at `info!` or above
+from library code.
+
+### Field naming
+
+Use the stable structured field names `token`, `kind`, `start`, `end`,
+`width`, `truncated`, `reason`, and `is_image`.
+
+Table: Structured field names emitted by tracing instrumentation.
+
+| Field | Type | Used in | Meaning |
+| --- | --- | --- | --- |
+| `token` | `%str` | fragment, link, footnote events | The text slice that was classified or parsed |
+| `kind` | `?FragmentKind` | `fragment classified` | The computed fragment classification |
+| `start` | `usize` | span events | Byte offset where the span begins |
+| `end` | `usize` | span events | Byte offset where the span ends (exclusive) |
+| `width` | `usize` | span events | Display-column width of the span |
+| `truncated` | `bool` | `fragment classified` | Whether `token` was shortened to <= 80 bytes |
+| `reason` | `&str` | `footnote end not found` | Diagnostic tag: `"prefix_mismatch"` or `"unterminated_bracket"` |
+| `is_image` | `bool` | `link or image parsed` | `true` when the link token is an image literal (`![]()`) |
+
+For example:
+
+```rust
+debug!(token = %token, kind = ?kind, "fragment classified");
+```
+
+### Performance discipline
+
+Guard any expression that allocates (e.g. `String` truncation) with
+`tracing::enabled!(Level::DEBUG)` or `tracing::enabled!(Level::TRACE)` before
+computing the value.
+
+### Security considerations
+
+The `token` field records raw text slices from the input document, including
+URL tokens parsed by `parse_link_or_image`. URLs may embed API keys, session
+identifiers, or other sensitive values.
+
+When enabling DEBUG or TRACE logging from this library in a production
+environment, configure the subscriber to redact or drop the `token` field
+before writing to any persistent sink. For example, with
+`tracing-subscriber`:
+
+```rust
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::layer::SubscriberExt as _;
+use tracing_subscriber::util::SubscriberInitExt as _;
+
+tracing_subscriber::registry()
+    .with(
+        tracing_subscriber::fmt::layer()
+            .with_span_events(FmtSpan::NONE)
+            // Add a field-filtering layer here to drop `token` in production.
+    )
+    .init();
+```
+
+Do not enable DEBUG or TRACE logging from this library without a redacting
+subscriber in any environment where the input documents may contain
+confidential URLs.
+
+### Instrumented functions
+
+Functions decorated with `#[tracing::instrument]` are listed below with their
+level and notable fields. Update this list when adding new instrumented entry
+points.
+
+Table: Instrumented functions and their logging levels and fields.
+
+| Function | Level | Fields |
+| --- | --- | --- |
+| `looks_like_footnote_ref` | trace | `token` (in), return value (out) |
+| `ends_with_footnote_ref` | trace | `token` (in), return value (out) |
+| `parse_link_or_image` | debug | `idx` (in), `skip(text)`, return value (out) |
+| `find_footnote_end` | trace | `idx` (in), `skip(text)`, return value (out) |
+
 ## Fences module
 
 The `fences` module in [src/fences.rs](../src/fences.rs) is responsible for
