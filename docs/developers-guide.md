@@ -196,9 +196,10 @@ The wrapping pipeline for `--wrap` is:
    in `src/wrap/inline/span_helpers.rs` extend grouped spans over trailing
    punctuation, couple adjacent footnote references, and merge chained inline
    code or link tokens. `determine_token_span` forward-couples opening
-   punctuation tokens (`(`, `[`, and CJK openers) to the next inline code span
-   or Markdown link so wrapping never leaves a lone opener at the end of a
-   line. Trailing punctuation after those atomic spans is grouped in the same
+   punctuation tokens (`(`, `[`, and CJK openers) and hyphen-prefix tokens
+   to the next inline code span or Markdown link so wrapping never leaves a
+   lone opener or prefix at the end of a line. Trailing punctuation after
+   those atomic spans is grouped in the same
    pass, and GFM footnote references that immediately follow inline code or
    links (including opener-coupled spans) stay attached to the preceding
    punctuation cluster.
@@ -301,15 +302,25 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   overflow the target width. Opening punctuation that immediately precedes an
   inline code span or link is grouped with that span during token grouping so
   the opener is not left on the previous line. Trailing punctuation after those
-  spans follows the same grouping rules. GFM footnote references that
-  immediately follow inline code or link spans without intervening whitespace
-  are coupled to the preceding punctuation cluster, so the marker is not
-  wrapped onto the next line alone. Inflectional affixes (`s`, `'s`, `ed`,
+  spans follows the same grouping rules. GFM footnote references that immediately
+  follow inline code or link spans without intervening whitespace are coupled
+  to the preceding punctuation cluster, so the marker is not wrapped onto the
+  next line alone. Inflectional affixes (`s`, `'s`, `ed`,
   `ing`) and hyphenated compounds that immediately follow a closed backtick
   fence are absorbed into the code token by `scan_code_suffix_end` in
-  `src/wrap/tokenize/scanning.rs`; the combined token is recognized as atomic by
-  `has_inline_code_structure` in `src/wrap/inline/fragment.rs`, so wrapping
-  treats the full string as one unit.
+  `src/wrap/tokenize/scanning.rs`; the combined token is recognized as atomic
+  by `has_inline_code_structure` in `src/wrap/inline/fragment.rs`, so wrapping
+  treats the full string as one unit. Leading-hyphen compounds — a token that
+  ends with a hyphen and contains at least one alphabetic character (for
+  example `pre-`, `LLM-`, `(API-`) — are coupled forward to the next inline
+  code span during span grouping by the `ends_with_hyphen_prefix` predicate in
+  `src/wrap/inline/predicates.rs`, applied in `determine_token_span` in
+  `src/wrap/inline.rs`. The coupling mirrors the existing opening-punctuation
+  pattern, so compounds such as `` pre-`LLMPort` `` and `` (API-`Foo`) ``
+  remain atomic during wrapping. Internal hyphen chains (e.g.
+  `state-of-the-art-`) are accepted by design; bare dash runs such as `-`
+  or `---` are rejected. Unicode alphabetic characters (e.g. `pré-`,
+  `字-`) are intentionally supported.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur.
 - **Verbatim blocks.** Fenced code blocks must pass through unchanged, along
