@@ -154,4 +154,32 @@ proptest! {
         let rendered = output.join("\n");
         prop_assert!(rendered.contains(&fence), "fence lost; rendered:\n{rendered}");
     }
+
+    #[test]
+    fn wrap_keeps_leading_hyphen_compound_atomic(
+        prefix in "[a-zA-Z]{1,12}",
+        inner in "[a-zA-Z]{1,12}",
+        width in 20usize..120,
+    ) {
+        let compound = format!("{prefix}-`{inner}`");
+        let compound_width = prefix.len() + inner.len() + 3;
+
+        let sentence = format!(
+            "This sentence has the compound {compound} embedded within it and \
+             contains enough trailing prose to force the wrapping algorithm to \
+             reflow the text across multiple lines when the target width is \
+             sufficiently narrow."
+        );
+        let input = vec![sentence];
+        let output = wrap_text(&input, width);
+
+        if compound_width <= width {
+            let rendered = output.join("\n");
+            prop_assert!(
+                rendered.contains(&compound),
+                "compound {compound:?} (width {compound_width}) must appear intact \
+                 at target width {width}: {output:?}"
+            );
+        }
+    }
 }
