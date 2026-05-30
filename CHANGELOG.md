@@ -32,7 +32,7 @@
   labels, URLs, and optional titles are never collapsed into prose or split
   across lines.
   ([`#292`](https://github.com/leynos/mdtablefix/issues/292))
-- Normalise whitespace-only artefacts during wrapping by rebalancing atomic
+- Normalize whitespace-only artefacts during wrapping by rebalancing atomic
   tails.
 - Preserve trailing spaces on the final line when wrapping Markdown, retaining
   hard break semantics. See [trailing spaces](docs/trailing-spaces.md) for

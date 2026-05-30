@@ -77,6 +77,7 @@ fn wrap_text_preserves_hyphenated_words() {
         wrapped,
         lines_vec!["A word that is", "very-long-word", "indeed"]
     );
+    assert_eq!(wrapped.join(" "), input[0]);
 }
 
 #[test]
