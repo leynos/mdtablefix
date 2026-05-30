@@ -218,7 +218,14 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             {
                 link_title_window.observe_bare_definition();
             }
-            writer.push_verbatim(&mut state, line);
+            // Whitespace-only lines act as paragraph breaks; emit them as empty
+            // strings so downstream consumers see a uniform separator.
+            let emitted = if !line.is_empty() && line.trim().is_empty() {
+                ""
+            } else {
+                line.as_str()
+            };
+            writer.push_verbatim(&mut state, emitted);
             continue;
         }
 
