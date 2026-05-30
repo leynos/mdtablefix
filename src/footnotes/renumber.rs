@@ -5,6 +5,11 @@ use std::{collections::HashMap, sync::LazyLock};
 use regex::{Captures, Match, Regex};
 
 mod definitions;
+/// Re-exports the [`DefinitionParts`](super::parsing::DefinitionParts) shape
+/// from the sibling `parsing` module so the [`definitions`] submodule can
+/// reach it through `super::parsing::DefinitionParts` without taking a direct
+/// dependency on the grandparent path. Treat this as an internal alias only;
+/// no new types belong here.
 mod parsing {
     pub(super) use super::super::parsing::DefinitionParts;
 }
@@ -186,6 +191,24 @@ fn apply_mapping_to_lines(
     }
 }
 
+/// Sequentially renumbers GFM footnote references and definitions in `lines`.
+///
+/// The input is mutated in place. Each distinct `[^n]` reference encountered
+/// in document order is mapped to the next available positive integer,
+/// starting at `1`, with the very first reference always becoming `[^1]`.
+/// Repeat references share the previously assigned number. Definitions are
+/// rewritten using the same mapping; if a numeric ordered-list item is being
+/// promoted into a definition it is also assigned the next available number.
+///
+/// If no references and no definitions are found the input is left untouched.
+/// If references exist but no definitions do, and the document already
+/// contains an explicit `[^n]:` block elsewhere, references are also left
+/// untouched to avoid clobbering an externally maintained block.
+///
+/// When the document carries a footnote-definition block its contents are
+/// reordered so definitions appear sorted by their new sequential numbers,
+/// with continuation lines kept attached to their definition. Lines inside
+/// fenced code blocks are never rewritten.
 pub(super) fn renumber_footnotes(lines: &mut [String]) {
     let mut mapping = collect_reference_mapping(lines);
     let DefinitionUpdates {

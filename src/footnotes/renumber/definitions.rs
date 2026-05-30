@@ -16,23 +16,53 @@ use super::{
     rewrite_tokens,
 };
 
+/// Rewrite plan for a single footnote-definition line.
+///
+/// Each instance describes one definition that should replace the source
+/// line at `index` once renumbering completes. Fields are populated once at
+/// construction; the parent module treats the value as read-only state.
 #[derive(Clone)]
 pub(super) struct DefinitionLine {
+    /// Zero-based row of the definition within the original `lines` slice.
     pub(super) index: usize,
+    /// New sequential footnote number assigned to this definition.
     pub(super) new_number: usize,
+    /// Fully rewritten line, including any leading indent and prefix, ready
+    /// to be stored back into `lines[index]`.
     pub(super) line: String,
 }
 
+/// Buffered numeric-list line that may become a footnote definition.
+///
+/// Candidates are collected on the first pass and finalised in reverse so
+/// they pick up sequential numbers after explicit `[^n]:` definitions have
+/// been assigned. All fields are populated at construction and not mutated
+/// afterwards.
 pub(super) struct NumericCandidate {
+    /// Zero-based row in the original `lines` slice.
     index: usize,
+    /// Original ordered-list number to renumber.
     number: usize,
+    /// Indentation preserved from the source line.
     indent: String,
+    /// Whitespace separating the ordered-list marker from the body.
     whitespace: String,
+    /// Definition body, still containing any inline `[^n]` references that
+    /// will be rewritten using the final mapping.
     rest: String,
 }
 
+/// Aggregated output of a single definition scan.
+///
+/// Returned by [`collect_definition_updates`]. Treat both fields as a
+/// matched pair: `is_definition_line` is indexed by source row and
+/// `definitions` is keyed by `DefinitionLine::index`.
 pub(super) struct DefinitionUpdates {
+    /// Rewrite plans for every definition encountered, in scan order.
     pub(super) definitions: Vec<DefinitionLine>,
+    /// `is_definition_line[i]` is `true` when row `i` of the source slice is
+    /// the header of a footnote definition (existing or freshly promoted),
+    /// so the caller can skip reference rewriting on that line.
     pub(super) is_definition_line: Vec<bool>,
 }
 
@@ -115,6 +145,9 @@ fn definition_line_from_parts(
     }
 }
 
+/// Parses `line` at row `index` into a [`NumericCandidate`] if it matches
+/// the footnote-line pattern. Returns `None` when the line is not an
+/// ordered-list candidate or the captured number fails to parse.
 pub(super) fn numeric_candidate_from_line(line: &str, index: usize) -> Option<NumericCandidate> {
     let caps = FOOTNOTE_LINE_RE.captures(line)?;
     let indent = caps.name("indent").map_or("", |m| m.as_str()).to_string();
@@ -195,6 +228,14 @@ fn finalize_numeric_candidates(state: &mut DefinitionScanState<'_>) {
     }
 }
 
+/// Scans `lines` for footnote definitions and numeric candidates, updating
+/// the shared reference `mapping` as numbers are assigned.
+///
+/// `mapping` is mutated in place to record every `(original, new)` pairing
+/// discovered while building the [`DefinitionUpdates`] plan. Returns one
+/// [`DefinitionLine`] per definition or promoted candidate, in scan order,
+/// together with a per-row `is_definition_line` bitmap so the caller can
+/// suppress reference rewriting on those rows.
 pub(super) fn collect_definition_updates(
     lines: &[String],
     mapping: &mut HashMap<usize, usize>,
@@ -222,12 +263,24 @@ pub(super) fn collect_definition_updates(
     }
 }
 
+/// Applies the rewrite plan in `definitions` to `lines`, replacing each
+/// `lines[definition.index]` with `definition.line`. Other rows are left
+/// untouched.
 pub(super) fn rewrite_definition_headers(lines: &mut [String], definitions: &[DefinitionLine]) {
     for definition in definitions {
         lines[definition.index].clone_from(&definition.line);
     }
 }
 
+/// Reorders the definition block in `lines[start..end]` so its definitions
+/// appear in ascending `new_number` order, ties broken by original `index`.
+///
+/// `definitions` supplies the new numbering. Continuation lines stay
+/// attached to their definition, the block prefix (any rows before the
+/// first definition) is preserved, and leading blank lines on the first
+/// reordered segment are migrated to the boundary between the first and
+/// second segments so block-level spacing is not lost. The slice is mutated
+/// in place; if reordering would change row count it is silently skipped.
 pub(super) fn reorder_definition_block(
     lines: &mut [String],
     start: usize,
@@ -313,148 +366,4 @@ pub(super) fn reorder_definition_block(
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-
-    use rstest::rstest;
-
-    use super::{
-        DefinitionLine,
-        assign_new_number,
-        collect_definition_updates,
-        definition_segment_end,
-        reorder_definition_block,
-        rewrite_definition_headers,
-        should_convert_numeric_line,
-    };
-
-    fn strings(lines: &[&str]) -> Vec<String> {
-        lines.iter().map(|line| (*line).to_string()).collect()
-    }
-
-    #[test]
-    fn assign_new_number_reuses_existing_mapping() {
-        let mut mapping = HashMap::from([(7, 2)]);
-        let mut next_number = 3;
-
-        assert_eq!(assign_new_number(&mut mapping, 7, &mut next_number), 2);
-        assert_eq!(assign_new_number(&mut mapping, 9, &mut next_number), 3);
-        assert_eq!(mapping.get(&9), Some(&3));
-        assert_eq!(next_number, 4);
-    }
-
-    #[rstest]
-    #[case(2, Some((1, 4)), false, true)]
-    #[case(4, Some((1, 4)), false, false)]
-    #[case(2, Some((1, 4)), true, false)]
-    #[case(2, None, false, false)]
-    fn should_convert_numeric_line_respects_range_and_skip_flag(
-        #[case] index: usize,
-        #[case] range: Option<(usize, usize)>,
-        #[case] skip: bool,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(should_convert_numeric_line(index, range, skip), expected);
-    }
-
-    #[test]
-    fn definition_segment_end_includes_continuations_and_separating_blanks() {
-        let lines = strings(&[
-            "[^1]: First",
-            "    continuation",
-            "",
-            "still part",
-            "[^2]: Second",
-        ]);
-
-        assert_eq!(definition_segment_end(&lines, 0, lines.len()), 3);
-    }
-
-    #[test]
-    fn collect_definition_updates_rewrites_existing_definitions() {
-        let lines = strings(&["Reference.[^7]", "", "[^7]: Existing"]);
-        let mut mapping = HashMap::from([(7, 1)]);
-
-        let updates = collect_definition_updates(&lines, &mut mapping);
-
-        assert_eq!(updates.is_definition_line, vec![false, false, true]);
-        assert_eq!(
-            updates
-                .definitions
-                .iter()
-                .map(|definition| definition.line.as_str())
-                .collect::<Vec<_>>(),
-            vec!["[^1]: Existing"]
-        );
-    }
-
-    #[test]
-    fn collect_definition_updates_converts_numeric_candidates() {
-        let lines = strings(&["Reference.[^7]", "", "9. Numeric note"]);
-        let mut mapping = HashMap::from([(7, 1)]);
-
-        let updates = collect_definition_updates(&lines, &mut mapping);
-
-        assert_eq!(updates.is_definition_line, vec![false, false, true]);
-        assert_eq!(
-            updates
-                .definitions
-                .iter()
-                .map(|definition| definition.line.as_str())
-                .collect::<Vec<_>>(),
-            vec!["[^2]: Numeric note"]
-        );
-    }
-
-    #[test]
-    fn rewrite_definition_headers_updates_only_known_definition_lines() {
-        let mut lines = strings(&["[^7]: Old", "text"]);
-        let definitions = vec![DefinitionLine {
-            index: 0,
-            new_number: 1,
-            line: "[^1]: New".to_string(),
-        }];
-
-        rewrite_definition_headers(&mut lines, &definitions);
-
-        assert_eq!(lines, strings(&["[^1]: New", "text"]));
-    }
-
-    #[test]
-    fn reorder_definition_block_sorts_segments_by_new_number() {
-        let mut lines = strings(&[
-            "## Footnotes",
-            "",
-            "[^7]: Second",
-            "    continuation",
-            "",
-            "[^3]: First",
-        ]);
-        let definitions = vec![
-            DefinitionLine {
-                index: 2,
-                new_number: 2,
-                line: "[^2]: Second".to_string(),
-            },
-            DefinitionLine {
-                index: 5,
-                new_number: 1,
-                line: "[^1]: First".to_string(),
-            },
-        ];
-
-        reorder_definition_block(&mut lines, 0, 6, &definitions);
-
-        assert_eq!(
-            lines,
-            strings(&[
-                "## Footnotes",
-                "",
-                "[^1]: First",
-                "",
-                "[^2]: Second",
-                "    continuation",
-            ])
-        );
-    }
-}
+mod tests;
