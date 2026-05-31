@@ -5,6 +5,7 @@
 //! nested URL parentheses, and trailing punctuation that must stay attached to
 //! links instead of being orphaned during wrapping.
 
+use insta::assert_snapshot;
 use rstest::rstest;
 
 use super::*;
@@ -234,4 +235,50 @@ fn test_wrap_link_at_exact_wrap_boundary_is_not_split() {
         output.iter().any(|l| l.contains(link)),
         "link at the exact wrap boundary should remain intact in {output:?}",
     );
+}
+
+#[rstest]
+#[case(
+    "long_link_trailing_period",
+    lines_vec![concat!(
+        "See [HTML table support for more ",
+        "details](docs/architecture.md#html-table-support-in-mdtablefix).",
+    )]
+)]
+#[case(
+    "multiple_trailing_marks",
+    lines_vec![concat!(
+        "Check this [link](foo.md)!? Additional words are added so this line ",
+        "exceeds the eighty character limit for wrapping."
+    )]
+)]
+#[case(
+    "colon_after_link",
+    lines_vec![concat!(
+        "Reference [doc](bar.md): an extended line that ensures the wrapping ",
+        "logic triggers because it exceeds eighty characters easily."
+    )]
+)]
+#[case(
+    "leading_quote_before_link",
+    lines_vec![concat!(
+        "\"[Quoted link](quote.md)\" is important for understanding the ",
+        "overall design because it provides context to the guidelines."
+    )]
+)]
+#[case(
+    "leading_and_trailing_punctuation",
+    lines_vec![concat!(
+        "\"[Link](foo.md)!\" demonstrates punctuation around a link and ",
+        "includes plenty of extra words to exceed the wrapping limit."
+    )]
+)]
+fn snapshot_link_punctuation_wrapping(#[case] name: &str, #[case] input: Vec<String>) {
+    let rendered = process_stream(&input).join("\n");
+    insta::with_settings!({
+        description => format!("link punctuation wrapping: {name}"),
+        omit_expression => true,
+    }, {
+        assert_snapshot!(name, rendered);
+    });
 }
