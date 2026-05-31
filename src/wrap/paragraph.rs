@@ -308,6 +308,26 @@ mod tests {
             out,
             vec!["- [ ] alpha".to_string(), "      beta".to_string()]
         );
+
+        let mut quoted_out = Vec::new();
+        let mut quoted_writer = ParagraphWriter::new(&mut quoted_out, 10);
+        let mut quoted_state = ParagraphState::default();
+        quoted_writer.handle_prefix_line(
+            &mut quoted_state,
+            &PrefixLine {
+                prefix: Cow::Borrowed("> "),
+                rest: "alpha beta gamma",
+                repeat_prefix: true,
+            },
+        );
+        assert_eq!(
+            quoted_out,
+            vec![
+                "> alpha".to_string(),
+                "> beta".to_string(),
+                "> gamma".to_string(),
+            ]
+        );
     }
 
     #[test]

@@ -380,6 +380,26 @@ provides streaming helpers that combine the lower-level functions. The `io`
 module handles filesystem operations, delegating the text processing to
 `process`.
 
+### Stateful helpers
+
+`ParagraphWriter` owns paragraph buffering and flush boundaries for wrapping.
+It keeps the current indent, emits wrapped or verbatim lines into the caller's
+output buffer, and leaves inline fitting to the wrapping helpers.
+
+`HtmlTableState` buffers candidate HTML table lines until the surrounding
+table closes. Its depth counter tracks nested `<table>` blocks so only the
+outermost table is converted at once, while incomplete input can still be
+flushed back verbatim.
+
+The `footnotes::renumber::definitions` submodule owns definition scanning and
+rewriting. `DefinitionScanState` coordinates the number mapping, collects
+already-parsed definitions, and stages numeric candidates for later
+conversion without cluttering the top-level renumber flow.
+
+`ListState` tracks the active indentation stack and per-indent counters for
+ordered list renumbering. It resets on headings and thematic breaks, and it
+uses paragraph boundaries to decide when numbering should restart.
+
 ### Tokenizer flow
 
 The inline tokenizer still iterates over the source string lazily, so no

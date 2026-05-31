@@ -32,6 +32,8 @@
   labels, URLs, and optional titles are never collapsed into prose or split
   across lines.
   ([`#292`](https://github.com/leynos/mdtablefix/issues/292))
+- Normalize whitespace-only artefacts during wrapping by rebalancing atomic
+  tails.
 - Preserve trailing spaces on the final line when wrapping Markdown, retaining
   hard break semantics. See [trailing spaces](docs/trailing-spaces.md) for
   details. ([#65](https://github.com/leynos/mdtablefix/issues/65))
@@ -45,3 +47,12 @@
   [#252](https://github.com/leynos/mdtablefix/issues/252))
 - Avoid converting numeric references in ATX heading text (including headings in
   blockquotes and list items) when the `--footnotes` option is enabled.
+- Compute continuation-line indentation from Unicode display width (via
+  `UnicodeWidthStr::width`) rather than byte or character count, so prefixes
+  containing full-width characters no longer misalign wrapped output.
+- Convert `<table>...</table>` blocks that span multiple lines and carry
+  leading indentation, leaving surrounding non-table lines at the same
+  indentation level untouched.
+- Correct the `cargo-binstall` Linux GNU `bin-dir` override so binaries are
+  installed from the archive's current directory (`.`) rather than a derived
+  `{ bin }{ binary-ext }` path, restoring `cargo binstall` on Linux.
