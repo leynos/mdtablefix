@@ -36,7 +36,7 @@ pub(super) struct DefinitionLine {
 
 /// Buffered numeric-list line that may become a footnote definition.
 ///
-/// Candidates are collected on the first pass and finalised in reverse so
+/// Candidates are collected on the first pass and finalized in reverse so
 /// they pick up sequential numbers after explicit `[^n]:` definitions have
 /// been assigned. All fields are populated at construction and not mutated
 /// afterwards.
