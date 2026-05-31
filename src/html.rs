@@ -376,4 +376,29 @@ mod tests {
         assert!(is_table_cell(&th));
         assert!(is_table_cell(&td));
     }
+
+    mod proptest_tests {
+        use proptest::prelude::*;
+
+        use super::HtmlTableState;
+
+        proptest! {
+            #[test]
+            fn html_table_state_depth_never_goes_negative(
+                events in proptest::collection::vec(any::<bool>(), 1..=20),
+            ) {
+                let mut state = HtmlTableState::default();
+                let mut out = Vec::new();
+                for is_open in events {
+                    let line = if is_open { "<table>" } else { "</table>" };
+                    state.push_html_line(line, &mut out);
+                    // `depth` is `usize` and `saturating_sub` guards the close
+                    // path, so the count cannot wrap or panic. Once `depth`
+                    // returns to zero the buffer is flushed, so `in_html()`
+                    // must agree with `depth > 0` after every push.
+                    prop_assert_eq!(state.in_html(), state.depth > 0);
+                }
+            }
+        }
+    }
 }

@@ -157,7 +157,12 @@ fn handle_pending_continuation(
         {
             link_title_window.observe_bare_definition();
         }
-        writer.push_verbatim(state, line);
+        let emitted = if !line.is_empty() && line.trim().is_empty() {
+            ""
+        } else {
+            line
+        };
+        writer.push_verbatim(state, emitted);
         return;
     }
 

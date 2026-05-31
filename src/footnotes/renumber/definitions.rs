@@ -6,6 +6,8 @@
 
 use std::collections::HashMap;
 
+use tracing::warn;
+
 use super::{
     FOOTNOTE_LINE_RE,
     footnote_block_range,
@@ -158,7 +160,12 @@ pub(super) fn numeric_candidate_from_line(line: &str, index: usize) -> Option<Nu
     let rest_match = caps.name("rest")?;
     let number = num_match.as_str().parse::<usize>().ok()?;
     let rest = rest_match.as_str().to_string();
-    let whitespace = line[num_match.end() + 1..rest_match.start()].to_string();
+    let sep_start = num_match.end().saturating_add(1);
+    let rest_start = rest_match.start();
+    if sep_start > rest_start || sep_start > line.len() || rest_start > line.len() {
+        return None;
+    }
+    let whitespace = line[sep_start..rest_start].to_string();
     Some(NumericCandidate {
         index,
         number,
@@ -365,6 +372,12 @@ pub(super) fn reorder_definition_block(
 
     if reordered.len() == end - start {
         lines[start..end].clone_from_slice(&reordered);
+    } else {
+        warn!(
+            expected = end - start,
+            actual = reordered.len(),
+            "reorder_definition_block: segment count mismatch; skipping reorder",
+        );
     }
 }
 

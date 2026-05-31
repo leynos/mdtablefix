@@ -234,4 +234,35 @@ mod tests {
         assert_eq!(state.next_number(0), 3);
         assert!(!state.counters.contains_key(&4));
     }
+
+    mod proptest_tests {
+        use proptest::prelude::*;
+
+        use super::ListState;
+
+        proptest! {
+            #[test]
+            fn list_state_next_number_always_starts_at_1_for_new_indent(
+                indents in proptest::collection::vec(0usize..=8, 1..=20),
+            ) {
+                let mut state = ListState::default();
+                for &indent in &indents {
+                    // Capture absence before the call: `next_number` may
+                    // prune deeper counters, but the counter for `indent`
+                    // itself is only removed by an earlier shallower call.
+                    let was_absent = !state.counters.contains_key(&indent);
+                    let returned = state.next_number(indent);
+                    if was_absent {
+                        prop_assert_eq!(
+                            returned,
+                            1,
+                            "indent {} first appeared (or re-emerged after pruning) but returned {}",
+                            indent,
+                            returned,
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
