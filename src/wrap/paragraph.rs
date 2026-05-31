@@ -33,9 +33,12 @@ pub(super) struct PendingPrefix {
     pub(super) hard_break: bool,
     /// Fence length of the inline code span that is currently open, if any.
     pub(super) open_fence_len: Option<usize>,
+    /// Stores source lines that contributed to the pending buffer.
+    pub(super) original_lines: Vec<String>,
+    /// Marks whether every stored source line already satisfied the wrap width.
+    pub(super) input_all_valid: bool,
 }
 
-#[derive(Default)]
 /// Tracks buffered paragraph content and its shared indentation.
 pub(super) struct ParagraphState {
     /// Stores buffered paragraph segments and whether each ends with a hard break.
@@ -44,8 +47,23 @@ pub(super) struct ParagraphState {
     indent: String,
     /// Stores a prefixed line waiting for a cross-line code span to close.
     pub(super) pending_prefix: Option<PendingPrefix>,
+    /// Stores original source lines for the current paragraph buffer.
+    original_lines: Vec<String>,
+    /// Marks whether every buffered source line already satisfied the wrap width.
+    input_all_valid: bool,
 }
 
+impl Default for ParagraphState {
+    fn default() -> Self {
+        Self {
+            buf: Vec::new(),
+            indent: String::new(),
+            pending_prefix: None,
+            original_lines: Vec::new(),
+            input_all_valid: true,
+        }
+    }
+}
 impl ParagraphState {
     /// Clears the buffered paragraph state.
     ///
@@ -56,6 +74,8 @@ impl ParagraphState {
         self.buf.clear();
         self.indent.clear();
         self.pending_prefix = None;
+        self.original_lines.clear();
+        self.input_all_valid = true;
     }
 
     /// Records the paragraph indent from `line` when the buffer is still empty.
@@ -75,11 +95,25 @@ impl ParagraphState {
     /// `text` is stored verbatim and `hard_break` records whether the source
     /// line ended with Markdown hard-break spacing. This method returns no
     /// value and keeps buffered segments in input order without panicking.
-    pub(super) fn push(&mut self, text: String, hard_break: bool) {
+    pub(super) fn push(
+        &mut self,
+        text: String,
+        hard_break: bool,
+        original_line: &str,
+        width: usize,
+    ) {
+        if line_exceeds_width(original_line, width) {
+            self.input_all_valid = false;
+        }
+        self.original_lines.push(original_line.to_string());
         self.buf.push((text, hard_break));
     }
 }
 
+/// Reports whether `line` is wider than the configured display width.
+pub(super) fn line_exceeds_width(line: &str, width: usize) -> bool {
+    UnicodeWidthStr::width(line) > width
+}
 /// Emits wrapped paragraph lines into the caller-provided output buffer.
 pub(super) struct ParagraphWriter<'a> {
     /// Borrows the caller-owned output buffer that receives emitted lines.
@@ -95,6 +129,9 @@ impl<'a> ParagraphWriter<'a> {
     /// interpreted in Unicode display columns, and the constructor never
     /// panics.
     pub(super) fn new(out: &'a mut Vec<String>, width: usize) -> Self { Self { out, width } }
+
+    /// Returns the configured target wrap width.
+    pub(super) fn width(&self) -> usize { self.width }
 
     /// Wraps `text` with `prefix` on the first line and `continuation_prefix`
     /// on later lines.
@@ -131,13 +168,15 @@ impl<'a> ParagraphWriter<'a> {
         let prefix = line.prefix.as_ref();
         let prefix_width = UnicodeWidthStr::width(prefix);
         let available = self.width.saturating_sub(prefix_width).max(1);
-        self.append_wrapped_with_prefix_width(line, available);
+        self.append_wrapped_with_prefix_width(line, available, None, false);
     }
 
     pub(super) fn append_wrapped_with_prefix_width(
         &mut self,
         line: &PrefixLine<'_>,
         available: usize,
+        fallback_original_lines: Option<&[String]>,
+        fallback_input_all_valid: bool,
     ) {
         let prefix = line.prefix.as_ref();
         let prefix_width = UnicodeWidthStr::width(prefix);
@@ -155,6 +194,7 @@ impl<'a> ParagraphWriter<'a> {
             return;
         }
 
+        let start = self.out.len();
         for (index, wrapped_line) in lines.iter().enumerate() {
             if index == 0 {
                 self.out.push(format!("{prefix}{wrapped_line}"));
@@ -162,6 +202,18 @@ impl<'a> ParagraphWriter<'a> {
                 self.out
                     .push(format!("{continuation_prefix}{wrapped_line}"));
             }
+        }
+        if fallback_input_all_valid
+            && self.out[start..]
+                .iter()
+                .any(|line| line_exceeds_width(line, self.width))
+        {
+            self.out.truncate(start);
+            if let Some(original_lines) = fallback_original_lines {
+                self.out.extend(original_lines.iter().cloned());
+            }
+        } else {
+            self.exempt_unwrappable_inline_code(start);
         }
     }
 
@@ -188,7 +240,12 @@ impl<'a> ParagraphWriter<'a> {
                 rest: pending.rest.as_str(),
                 repeat_prefix: pending.repeat_prefix,
             };
-            self.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
+            self.append_wrapped_with_prefix_width(
+                &prefix_line,
+                pending.rest_width,
+                Some(&pending.original_lines),
+                pending.input_all_valid,
+            );
             if pending.hard_break
                 && let Some(last) = self.out.last_mut()
                 && !last.ends_with("  ")
@@ -208,13 +265,13 @@ impl<'a> ParagraphWriter<'a> {
             }
             segment.push_str(text);
             if *hard_break {
-                self.push_wrapped_segment(&state.indent, &segment);
+                self.push_wrapped_segment_with_fallback(&state.indent, &segment, state);
                 segment.clear();
             }
         }
 
         if !segment.is_empty() {
-            self.push_wrapped_segment(&state.indent, &segment);
+            self.push_wrapped_segment_with_fallback(&state.indent, &segment, state);
         }
 
         state.clear();
@@ -227,6 +284,50 @@ impl<'a> ParagraphWriter<'a> {
     /// visual indent and never panics.
     fn push_wrapped_segment(&mut self, indent: &str, segment: &str) {
         self.wrap_with_prefix(indent, indent, segment);
+    }
+
+    fn push_wrapped_segment_with_fallback(
+        &mut self,
+        indent: &str,
+        segment: &str,
+        state: &ParagraphState,
+    ) {
+        let start = self.out.len();
+        self.push_wrapped_segment(indent, segment);
+        if state.input_all_valid
+            && self.out[start..]
+                .iter()
+                .any(|line| line_exceeds_width(line, self.width))
+        {
+            self.out.truncate(start);
+            self.out.extend(state.original_lines.iter().cloned());
+        } else {
+            self.exempt_unwrappable_inline_code(start);
+        }
+    }
+
+    fn exempt_unwrappable_inline_code(&mut self, start: usize) {
+        let mut index = start;
+        while index < self.out.len() {
+            if line_exceeds_width(&self.out[index], self.width)
+                && self.out[index].trim_start().starts_with('`')
+            {
+                self.insert_markdownlint_exemption(index);
+                index += 1;
+            }
+            index += 1;
+        }
+    }
+
+    fn insert_markdownlint_exemption(&mut self, index: usize) {
+        let indent: String = self.out[index]
+            .chars()
+            .take_while(|ch| ch.is_whitespace())
+            .collect();
+        let directive = format!("{indent}<!-- markdownlint-disable-next-line MD013 -->");
+        if index == 0 || self.out[index - 1] != directive {
+            self.out.insert(index, directive);
+        }
     }
 
     /// Flushes any active paragraph and then emits `line` verbatim.
@@ -254,6 +355,8 @@ impl<'a> ParagraphWriter<'a> {
         if let Some((fence_len, _)) = parse_open_code_span(prefix_line.rest) {
             let prefix = prefix_line.prefix.as_ref().to_string();
             let prefix_width = UnicodeWidthStr::width(prefix.as_str());
+            let original_line = format!("{prefix}{}", prefix_line.rest);
+            let input_all_valid = !line_exceeds_width(&original_line, self.width);
             state.pending_prefix = Some(PendingPrefix {
                 prefix,
                 rest: prefix_line.rest.to_string(),
@@ -261,6 +364,8 @@ impl<'a> ParagraphWriter<'a> {
                 repeat_prefix: prefix_line.repeat_prefix,
                 hard_break: false,
                 open_fence_len: Some(fence_len),
+                original_lines: vec![original_line],
+                input_all_valid,
             });
             return;
         }

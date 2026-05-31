@@ -163,7 +163,7 @@ fn handle_pending_continuation(
         });
         if matches_pending {
             let (text, hard_break) = line_break_parts(prefix_line.rest);
-            apply_continuation_chunk(&text, hard_break, writer, state);
+            apply_continuation_chunk(line, &text, hard_break, writer, state);
             return;
         }
 
@@ -186,7 +186,7 @@ fn handle_pending_continuation(
     if state.pending_prefix.is_none() {
         return;
     }
-    apply_continuation_chunk(&text, hard_break, writer, state);
+    apply_continuation_chunk(line, &text, hard_break, writer, state);
 }
 
 /// Wrap text lines to the given width.
@@ -253,7 +253,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 
         state.note_indent(line);
         let (text, hard_break) = line_break_parts(line);
-        state.push(text, hard_break);
+        state.push(text, hard_break, line, width);
     }
 
     writer.flush_paragraph(&mut state);

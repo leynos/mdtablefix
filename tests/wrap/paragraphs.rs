@@ -18,6 +18,18 @@ fn test_wrap_paragraph() {
     assert!(output.iter().all(|l| l.len() <= 80));
 }
 
+#[test]
+fn test_wrap_plain_paragraph_does_not_fallback_when_output_fits() {
+    let input = lines_vec![
+        "This plain paragraph starts as one long source line without inline code spans and should \
+         wrap cleanly into shorter output lines that satisfy the configured width.",
+    ];
+    let output = process_stream(&input);
+    assert!(output.len() > 1);
+    assert!(output.iter().all(|line| line.len() <= 80));
+    assert_ne!(output, input);
+}
+
 #[rstest]
 #[case(100)]
 #[case(150)]

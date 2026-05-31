@@ -1,0 +1,2 @@
+- `Event = DocumentStart | HeaderEvent | ParagraphEvent | UtteranceEvent |
+  DivEvent | DocumentEnd`

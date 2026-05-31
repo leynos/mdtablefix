@@ -1,0 +1,7 @@
+---
+source: tests/wrap/lists.rs
+assertion_line: 109
+expression: "output.join(\"\\n\")"
+---
+- `Event = DocumentStart | HeaderEvent | ParagraphEvent | UtteranceEvent |
+  DivEvent | DocumentEnd`

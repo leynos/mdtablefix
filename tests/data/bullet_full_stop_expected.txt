@@ -3,5 +3,6 @@
   components.10 Entities spawned with such a component are automatically
   despawned when the application exits the specified state. This greatly
   simplifies cleanup logic in tests. For example:
+  <!-- markdownlint-disable-next-line MD013 -->
   `commands.spawn((Name::new("TestPlayer"), StateScoped(GameState::InGame), PlayerComponent));`.
 

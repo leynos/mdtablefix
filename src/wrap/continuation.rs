@@ -12,7 +12,7 @@
 use std::borrow::Cow;
 
 use super::{
-    paragraph::{ParagraphState, ParagraphWriter, PendingPrefix, PrefixLine},
+    paragraph::{ParagraphState, ParagraphWriter, PendingPrefix, PrefixLine, line_exceeds_width},
     tokenize,
     tokenize::{parse_open_code_span, position_after_close, scan_continuation_span_state},
 };
@@ -24,6 +24,7 @@ use super::{
 /// non-prefixed continuation branches in `handle_pending_continuation`.
 /// Returns silently when `state.pending_prefix` is `None`.
 pub(super) fn apply_continuation_chunk(
+    original_line: &str,
     text: &str,
     hard_break: bool,
     writer: &mut ParagraphWriter<'_>,
@@ -32,6 +33,10 @@ pub(super) fn apply_continuation_chunk(
     let Some(pending) = state.pending_prefix.as_mut() else {
         return;
     };
+    pending.original_lines.push(original_line.to_string());
+    if line_exceeds_width(original_line, writer.width()) {
+        pending.input_all_valid = false;
+    }
 
     let open_fence_len = pending.open_fence_len.unwrap_or(0);
     // Compute the leading backtick run once; both the offset calculation and
@@ -165,7 +170,12 @@ fn emit_pending_prefix_segment(
         rest: flushed,
         repeat_prefix: pending.repeat_prefix,
     };
-    writer.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
+    writer.append_wrapped_with_prefix_width(
+        &prefix_line,
+        pending.rest_width,
+        Some(&pending.original_lines),
+        pending.input_all_valid,
+    );
     if pending.hard_break {
         writer.ensure_trailing_hard_break_on_last_line();
     }

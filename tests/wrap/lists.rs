@@ -78,6 +78,55 @@ fn test_wrap_long_inline_code_item() {
 }
 
 #[test]
+fn test_wrap_preserves_valid_wrapped_union_type_code_span() {
+    let input = lines_vec![
+        "- `Event = DocumentStart | HeaderEvent | ParagraphEvent | UtteranceEvent |",
+        "  DivEvent | DocumentEnd`",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
+#[test]
+fn test_wrap_allows_preexisting_long_inline_code_span() {
+    let input = lines_vec![
+        "1. Add",
+        concat!(
+            "   `count_for_series(self, owner_series_profile_id: str, kind: ",
+            "ReferenceDocumentKind | None) -> int`"
+        ),
+        "   to `ReferenceDocumentRepository`.",
+    ];
+    let output = process_stream(&input);
+    assert_eq!(
+        output,
+        lines_vec![
+            "1. Add",
+            "   <!-- markdownlint-disable-next-line MD013 -->",
+            concat!(
+                "   `count_for_series(self, owner_series_profile_id: str, kind: ",
+                "ReferenceDocumentKind | None) -> int`"
+            ),
+            "   to `ReferenceDocumentRepository`.",
+        ]
+    );
+    let second_pass = process_stream(&output);
+    assert_eq!(second_pass, output);
+}
+
+#[test]
+fn test_wrap_preserves_union_type_fixture_snapshot() {
+    let input: Vec<String> = include_lines!("../data/issue_311_union_type_input.txt");
+    let output = process_stream(&input);
+    insta::with_settings!({
+        snapshot_path => "../snapshots",
+        prepend_module_to_snapshot => false,
+    }, {
+        insta::assert_snapshot!("issue_311_union_type_preserved", output.join("\n"));
+    });
+}
+
+#[test]
 fn test_wrap_opening_paren_before_inline_code() {
     let input = lines_vec![concat!(
         "- `src/cli/mod.rs` (240 lines): defines the `Cli` struct with ",
