@@ -2,10 +2,10 @@
 
 #[path = "support/cli_stdin.rs"]
 mod cli_stdin;
-use cli_stdin::run_cli_with_stdin;
+use cli_stdin::{CliResult, run_cli_with_stdin};
 
 #[test]
-fn test_cli_fences_preserves_nested_backtick_block() {
+fn test_cli_fences_preserves_nested_backtick_block() -> CliResult<()> {
     let input = concat!(
         "````markdown\n",
         "```rust\n",
@@ -14,13 +14,13 @@ fn test_cli_fences_preserves_nested_backtick_block() {
         "````\n",
     );
 
-    run_cli_with_stdin(&["--fences"], input)
-        .success()
-        .stdout(input);
+    let assertion = run_cli_with_stdin(&["--fences"], input)?;
+    assertion.success().stdout(input);
+    Ok(())
 }
 
 #[test]
-fn test_cli_fences_preserves_nested_backticks_inside_tilde_block() {
+fn test_cli_fences_preserves_nested_backticks_inside_tilde_block() -> CliResult<()> {
     let input = concat!(
         "~~~~markdown\n",
         "```rust\n",
@@ -29,13 +29,13 @@ fn test_cli_fences_preserves_nested_backticks_inside_tilde_block() {
         "~~~~\n",
     );
 
-    run_cli_with_stdin(&["--fences"], input)
-        .success()
-        .stdout(input);
+    let assertion = run_cli_with_stdin(&["--fences"], input)?;
+    assertion.success().stdout(input);
+    Ok(())
 }
 
 #[test]
-fn test_cli_fences_compresses_outer_backticks_while_preserving_inner_tildes() {
+fn test_cli_fences_compresses_outer_backticks_while_preserving_inner_tildes() -> CliResult<()> {
     let input = concat!(
         "````markdown\n",
         "~~~rust\n",
@@ -51,7 +51,7 @@ fn test_cli_fences_compresses_outer_backticks_while_preserving_inner_tildes() {
         "```\n",
     );
 
-    run_cli_with_stdin(&["--fences"], input)
-        .success()
-        .stdout(expected);
+    let assertion = run_cli_with_stdin(&["--fences"], input)?;
+    assertion.success().stdout(expected);
+    Ok(())
 }
