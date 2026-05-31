@@ -191,3 +191,47 @@ fn test_wrap_link_leading_and_trailing_punctuation(
         "stray quote was orphaned in {output:?}",
     );
 }
+
+#[test]
+fn test_wrap_empty_url_link_is_not_split() {
+    let input = lines_vec![concat!(
+        "Inspect the placeholder []() inside a long paragraph that easily ",
+        "exceeds the eighty character wrap threshold for prose reflow."
+    )];
+    let output = process_stream(&input);
+    assert!(
+        output.iter().any(|l| l.contains("[]()")),
+        "empty-URL link should remain intact in {output:?}",
+    );
+    assert!(
+        !output.iter().any(|l| l.trim_start().starts_with("()")),
+        "the URL parentheses must not lead a wrapped line in {output:?}",
+    );
+}
+
+#[test]
+fn test_wrap_link_with_unbalanced_parens_is_not_split() {
+    let input = lines_vec![concat!(
+        "See [example](https://example.com/path(fragment) for additional ",
+        "context that pushes this paragraph beyond the eighty character limit."
+    )];
+    let output = process_stream(&input);
+    assert!(
+        output
+            .iter()
+            .any(|l| l.contains("[example](https://example.com/path(fragment)")),
+        "unbalanced-paren link should stay intact in {output:?}",
+    );
+}
+
+#[test]
+fn test_wrap_link_at_exact_wrap_boundary_is_not_split() {
+    let prefix = "Word ".repeat(10);
+    let link = "[boundary](https://example.com/wrap-boundary-test)";
+    let input = lines_vec![format!("{prefix}{link} trailing text to force wrapping.")];
+    let output = process_stream(&input);
+    assert!(
+        output.iter().any(|l| l.contains(link)),
+        "link at the exact wrap boundary should remain intact in {output:?}",
+    );
+}
