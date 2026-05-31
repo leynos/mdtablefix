@@ -1,6 +1,6 @@
 //! Blockquote wrapping tests.
 
-use super::*;
+use super::{wrap_assertions::assert_wrapped_blockquote, *};
 
 #[test]
 fn test_wrap_blockquote() {

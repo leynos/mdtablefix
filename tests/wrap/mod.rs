@@ -8,7 +8,11 @@ use mdtablefix::process_stream;
 #[macro_use]
 #[path = "../common/mod.rs"]
 mod common;
-use common::{assert_wrapped_blockquote, assert_wrapped_list_item, run_cli_with_stdin};
+
+#[path = "../support/cli_stdin.rs"]
+mod cli_stdin;
+#[path = "../support/wrap_assertions.rs"]
+mod wrap_assertions;
 
 mod blockquotes;
 mod cli;

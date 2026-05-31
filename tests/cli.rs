@@ -18,7 +18,9 @@ use tempfile::tempdir;
 #[macro_use]
 #[path = "common/mod.rs"]
 mod common;
-use common::broken_table;
+#[path = "support/fixtures.rs"]
+mod fixtures;
+use fixtures::broken_table;
 
 /// Verifies that the CLI fails when the `--in-place` flag is used without specifying a file.
 ///

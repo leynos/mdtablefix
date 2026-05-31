@@ -22,6 +22,9 @@ use rstest::fixture;
 #[macro_use]
 #[path = "../common/mod.rs"]
 mod common;
+#[path = "../support/fixtures.rs"]
+mod fixtures;
+use fixtures::broken_table;
 
 #[fixture]
 fn malformed_table() -> Vec<String> {

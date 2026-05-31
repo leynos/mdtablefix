@@ -138,7 +138,7 @@ fn test_wrap_reopen_with_whitespace_tail_is_split_atomically() {
     );
     assert!(
         rendered.contains("` more`"),
-        "span B (whitespace-prefixed) must be synthesised closed: {rendered:?}"
+        "span B (whitespace-prefixed) must be synthesized closed: {rendered:?}"
     );
 }
 
@@ -156,7 +156,7 @@ fn test_wrap_reopen_with_close_paren_tail_is_split_atomically() {
     );
     assert!(
         rendered.contains("`)done`"),
-        "span B (')'-prefixed) must be synthesised closed: {rendered:?}"
+        "span B (')'-prefixed) must be synthesized closed: {rendered:?}"
     );
 }
 

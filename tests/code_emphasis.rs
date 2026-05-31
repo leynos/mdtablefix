@@ -6,9 +6,12 @@ use std::fs;
 
 use rstest::rstest;
 
-#[path = "common/mod.rs"]
-mod common;
-use common::{run_cli_with_args, run_cli_with_stdin};
+#[path = "support/cli_args.rs"]
+mod cli_args;
+#[path = "support/cli_stdin.rs"]
+mod cli_stdin;
+use cli_args::run_cli_with_args;
+use cli_stdin::run_cli_with_stdin;
 use tempfile::tempdir;
 
 #[test]
