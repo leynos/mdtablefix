@@ -406,7 +406,8 @@ fn compose_reordered_block(
 /// first definition) is preserved, and leading blank lines on the first
 /// reordered segment are migrated to the boundary between the first and
 /// second segments so block-level spacing is not lost. The slice is mutated
-/// in place; if reordering would change row count it is silently skipped.
+/// in place; if reordering would change row count, a warning is emitted and
+/// the reorder is skipped.
 pub(super) fn reorder_definition_block(
     lines: &mut [String],
     start: usize,
