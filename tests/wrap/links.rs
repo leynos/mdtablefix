@@ -233,11 +233,23 @@ fn test_wrap_link_at_exact_wrap_boundary_is_not_split() {
     let prefix = WORD.repeat(WRAP_WIDTH / WORD.len());
     assert_eq!(prefix.len() % WRAP_WIDTH, 0);
     let link = "[boundary](https://example.com/wrap-boundary-test)";
-    let input = lines_vec![format!("{prefix}{link} trailing text to force wrapping.")];
+    let punct = ".";
+    // Trailing text pushes total length well past WRAP_WIDTH so wrapping fires.
+    let input = lines_vec![format!(
+        "{prefix}{link}{punct} trailing text to force wrapping here."
+    )];
     let output = process_stream(&input);
+    // The link starts at the exact wrap boundary; it must land on its own line
+    // with its trailing punctuation attached — not as two separate tokens.
+    let link_with_punct = format!("{link}{punct}");
     assert!(
-        output.iter().any(|l| l.contains(link)),
-        "link at the exact wrap boundary should remain intact in {output:?}",
+        output.iter().any(|l| l == &link_with_punct),
+        "link with punctuation should appear as its own complete line at the wrap boundary; got \
+         {output:?}",
+    );
+    assert!(
+        !output.iter().any(|l| l.trim() == punct),
+        "trailing punctuation must not be orphaned onto its own line; got {output:?}",
     );
 }
 

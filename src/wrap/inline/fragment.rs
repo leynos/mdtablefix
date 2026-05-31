@@ -128,6 +128,25 @@ pub(super) fn has_inline_code_structure(text: &str) -> bool {
     matched_fence(text) || matched_fence(trimmed) || matched_fence(without_opening)
 }
 
+/// Returns whether `text` is a link plus optional trailing punctuation.
+fn contains_link_with_trailing_punctuation(text: &str) -> bool {
+    let mut candidate = text;
+
+    loop {
+        if fragment_is_link(candidate) {
+            return true;
+        }
+
+        let Some(ch) = candidate.chars().next_back() else {
+            return false;
+        };
+        if !is_trailing_punct(ch) {
+            return false;
+        }
+        candidate = &candidate[..candidate.len() - ch.len_utf8()];
+    }
+}
+
 /// Classifies rendered fragment `text` for later post-processing.
 ///
 /// `classify_fragment` checks both the original text and a copy trimmed of
@@ -141,7 +160,7 @@ fn classify_fragment(text: &str) -> FragmentKind {
     }
     let trimmed = text.trim_end_matches(is_trailing_punct);
     let without_opening = trimmed.trim_start_matches(is_opening_punct);
-    if fragment_is_link(text) {
+    if contains_link_with_trailing_punctuation(text) {
         FragmentKind::Link
     } else if is_inline_code_token(text)
         || is_inline_code_token(trimmed)
