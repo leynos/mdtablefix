@@ -504,6 +504,7 @@ dependencies = [
  "regex",
  "rstest",
  "tempfile",
+ "test-macros",
  "textwrap",
  "tracing",
  "tracing-test",
@@ -1098,6 +1099,15 @@ name = "termtree"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
+
+[[package]]
+name = "test-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "textwrap"
