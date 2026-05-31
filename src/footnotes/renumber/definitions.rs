@@ -58,7 +58,10 @@ pub(super) struct NumericCandidate {
 /// matched pair: `is_definition_line` is indexed by source row and
 /// `definitions` is keyed by `DefinitionLine::index`.
 pub(super) struct DefinitionUpdates {
-    /// Rewrite plans for every definition encountered, in scan order.
+    /// Rewrite plans for every definition encountered. Explicit `[^n]:`
+    /// definitions appear in scan order; promoted numeric candidates follow
+    /// in reverse scan order (bottom-up), as required by
+    /// `finalize_numeric_candidates`.
     pub(super) definitions: Vec<DefinitionLine>,
     /// `is_definition_line[i]` is `true` when row `i` of the source slice is
     /// the header of a footnote definition (existing or freshly promoted),

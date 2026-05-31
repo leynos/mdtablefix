@@ -4,6 +4,9 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use regex::{Captures, Match, Regex};
 
+/// Owns the footnote-definition parsing and reordering machinery, delegated
+/// from the parent module so each source file remains readable and within
+/// the repository size limit.
 mod definitions;
 /// Re-exports the [`DefinitionParts`](super::parsing::DefinitionParts) shape
 /// from the sibling `parsing` module so the [`definitions`] submodule can
