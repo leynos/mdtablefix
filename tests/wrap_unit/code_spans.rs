@@ -90,6 +90,7 @@ fn wrap_text_breaks_between_space_separated_code_spans() {
         "expected first line to break inside the code-span list, got: {:?}",
         wrapped[0]
     );
+    assert_eq!(wrapped.join(" "), input[0]);
 }
 
 #[test]

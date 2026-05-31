@@ -13,9 +13,9 @@ fn wrap_stream_couples_opening_paren_before_inline_code_in_list() {
         "a localized clap command and parses arguments."
     )];
     let output = process_stream(&input);
-    for window in output.windows(2) {
+    for line in &output {
         assert!(
-            !window[0].ends_with('('),
+            !line.ends_with('('),
             "opening parenthesis must not be stranded at line end: {output:?}"
         );
     }
