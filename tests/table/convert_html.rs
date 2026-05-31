@@ -115,3 +115,30 @@ fn preserves_trailing_spaces_in_cells() {
 fn converts_indented_html_table_cases(input: Vec<String>, expected: Vec<String>) {
     assert_eq!(convert_html_tables(&input), expected);
 }
+
+#[test]
+fn nested_html_table_does_not_trigger_premature_flush() {
+    let input = lines_vec![
+        "<table>",
+        "<tr><th>A</th><th>B</th></tr>",
+        "<tr><td>",
+        "<table>",
+        "<tr><th>Inner</th></tr>",
+        "<tr><td>x</td></tr>",
+        "</table>",
+        "</td><td>2</td></tr>",
+        "</table>",
+    ];
+    let output = convert_html_tables(&input);
+    assert!(
+        output
+            .iter()
+            .all(|line| !line.contains("<table>") && !line.contains("</table>")),
+        "nested structure must be buffered to the outermost </table> and converted as one block, \
+         leaving no raw <table>/</table> markers: {output:?}"
+    );
+    assert!(
+        output.iter().any(|line| line.starts_with('|')),
+        "expected at least one Markdown table row in {output:?}"
+    );
+}

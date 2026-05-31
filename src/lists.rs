@@ -205,4 +205,33 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(renumber_lists(&input), expected);
     }
+
+    #[test]
+    fn list_state_reset_clears_indent_stack_and_counters() {
+        let mut state = ListState::default();
+        let _ = state.next_number(0);
+        let _ = state.next_number(0);
+        let _ = state.next_number(4);
+        assert!(!state.indent_stack.is_empty());
+        assert!(!state.counters.is_empty());
+
+        state.reset();
+
+        assert!(state.indent_stack.is_empty());
+        assert!(state.counters.is_empty());
+    }
+
+    #[test]
+    fn list_state_next_number_increments_and_prunes_deeper_indents() {
+        let mut state = ListState::default();
+        assert_eq!(state.next_number(0), 1);
+        assert_eq!(state.next_number(0), 2);
+        // A deeper indent starts its own counter at 1.
+        assert_eq!(state.next_number(4), 1);
+        assert_eq!(state.next_number(4), 2);
+        // Returning to the original indent prunes the deeper one and continues
+        // counting from where the outer level left off.
+        assert_eq!(state.next_number(0), 3);
+        assert!(!state.counters.contains_key(&4));
+    }
 }
