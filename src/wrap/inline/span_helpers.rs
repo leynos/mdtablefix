@@ -9,6 +9,7 @@ use unicode_width::UnicodeWidthStr;
 use super::predicates::{
     is_inline_code_token,
     is_trailing_punct,
+    is_trailing_punctuation_token,
     looks_like_footnote_ref,
     looks_like_link,
 };
@@ -32,7 +33,7 @@ pub(in crate::wrap::inline) fn extend_punctuation(
     mut j: usize,
     width: &mut usize,
 ) -> usize {
-    while j < tokens.len() && tokens[j].chars().all(is_trailing_punct) {
+    while j < tokens.len() && is_trailing_punctuation_token(&tokens[j]) {
         *width += UnicodeWidthStr::width(tokens[j].as_str());
         j += 1;
     }
@@ -49,11 +50,11 @@ pub(in crate::wrap::inline) fn should_couple_whitespace(
         (SpanKind::Link, Some(next))
             if looks_like_link(next)
                 || is_inline_code_token(next)
-                || next.chars().all(is_trailing_punct) =>
+                || is_trailing_punctuation_token(next) =>
         {
             true
         }
-        (SpanKind::Code, Some(next)) if next.chars().all(is_trailing_punct) => true,
+        (SpanKind::Code, Some(next)) if is_trailing_punctuation_token(next) => true,
         _ => false,
     }
 }

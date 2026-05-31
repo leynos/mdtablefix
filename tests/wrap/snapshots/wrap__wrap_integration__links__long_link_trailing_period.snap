@@ -1,0 +1,6 @@
+---
+source: tests/wrap/links.rs
+description: "link punctuation wrapping: long_link_trailing_period"
+---
+See
+[HTML table support for more details](docs/architecture.md#html-table-support-in-mdtablefix).

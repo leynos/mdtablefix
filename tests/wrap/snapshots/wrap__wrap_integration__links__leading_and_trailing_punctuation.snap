@@ -1,0 +1,6 @@
+---
+source: tests/wrap/links.rs
+description: "link punctuation wrapping: leading_and_trailing_punctuation"
+---
+"[Link](foo.md)!" demonstrates punctuation around a link and includes plenty of
+extra words to exceed the wrapping limit.

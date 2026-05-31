@@ -16,6 +16,15 @@ pub(in crate::wrap::inline) fn is_trailing_punct(c: char) -> bool {
     ) || "…—–»›）］】》」』、。，：；！？”.’".contains(c)
 }
 
+/// Returns whether `token` is a non-empty run of trailing punctuation.
+///
+/// The wrapper uses this to keep trailing punctuation attached to the
+/// preceding link or code span during wrapping, rather than letting the
+/// punctuation break onto the next line.
+pub(in crate::wrap::inline) fn is_trailing_punctuation_token(token: &str) -> bool {
+    !token.is_empty() && token.chars().all(is_trailing_punct)
+}
+
 /// Returns whether `token` already looks like a complete Markdown link.
 pub(in crate::wrap::inline) fn looks_like_link(token: &str) -> bool {
     (token.starts_with('[') || token.starts_with("!["))
@@ -134,6 +143,7 @@ mod tests {
         is_inline_code_token,
         is_opening_punct,
         is_trailing_punct,
+        is_trailing_punctuation_token,
         is_whitespace_token,
         looks_like_footnote_ref,
     };
@@ -259,5 +269,19 @@ mod tests {
     #[case("2024-", false)]
     fn ends_with_hyphen_prefix_classifies_tokens(#[case] token: &str, #[case] expected: bool) {
         assert_eq!(ends_with_hyphen_prefix(token), expected);
+    }
+
+    #[rstest]
+    #[case(".", true)]
+    #[case("!?", true)]
+    #[case("...", true)]
+    #[case("", false)]
+    #[case("abc", false)]
+    #[case(".x", false)]
+    fn is_trailing_punctuation_token_classifies_tokens(
+        #[case] token: &str,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(is_trailing_punctuation_token(token), expected);
     }
 }

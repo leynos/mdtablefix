@@ -77,6 +77,11 @@ including Unicode alphabetic characters such as `` pré-`code` `` or
 broken. Trailing-hyphen compounds such as `` `code`-style `` continue to be
 absorbed by the tokenizer at the closing fence.
 
+When a Markdown link or inline code span is followed by trailing punctuation,
+such as a full stop or comma, `mdtablefix` keeps that punctuation attached to
+the same wrapped unit. It does not leave the punctuation orphaned on a line by
+itself after wrapping.
+
 Blockquote prefixes (`>`), task-list item markers (`- [ ]`, `- [x]`), and
 footnote definition labels (`[^n]:`) are detected automatically. The first
 wrapped line carries the original prefix; subsequent wrapped lines are indented

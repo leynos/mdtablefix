@@ -38,8 +38,8 @@
 - Preserve fenced and indented code blocks verbatim when `--wrap` is used, so
   commands inside code examples are not joined or re-wrapped. (
   [#261](https://github.com/leynos/mdtablefix/issues/261))
-- Keep trailing punctuation attached to inline code spans during wrapping to
-  maintain readability.
+- Keep trailing punctuation attached to Markdown links and inline code spans
+  during wrapping to maintain readability.
 - Allow wrapping between space-separated inline code spans instead of treating
   the full sequence as a single unbreakable unit. (
   [#252](https://github.com/leynos/mdtablefix/issues/252))

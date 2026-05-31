@@ -1,0 +1,6 @@
+---
+source: tests/wrap/links.rs
+description: "link punctuation wrapping: leading_quote_before_link"
+---
+"[Quoted link](quote.md)" is important for understanding the overall design
+because it provides context to the guidelines.
