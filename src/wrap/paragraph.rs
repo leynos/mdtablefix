@@ -47,6 +47,8 @@ pub(super) struct PendingPrefix {
     pub(super) open_fence_len: Option<usize>,
     /// Controls how continuation chunks are joined and flushed.
     pub(super) continuation_mode: ContinuationMode,
+    /// Marks whether the original prefix has already been emitted.
+    pub(super) used_prefix: bool,
 }
 
 /// Controls how a pending prefixed continuation should be joined or emitted.
@@ -59,6 +61,7 @@ pub(super) enum ContinuationMode {
     /// Emit the original source lines instead of rewrapping ambiguous input.
     VerbatimFlush,
 }
+
 /// Tracks buffered paragraph content and its shared indentation.
 #[derive(Default)]
 pub(super) struct ParagraphState {
@@ -101,6 +104,18 @@ impl ParagraphState {
     /// value and keeps buffered segments in input order without panicking.
     pub(super) fn push(&mut self, text: String, hard_break: bool) {
         self.buf.push((text, hard_break));
+    }
+
+    /// Takes the deferred prefixed segment and resets plain paragraph buffers.
+    ///
+    /// This keeps the pending-prefix state transition separate from output
+    /// emission. It returns the pending prefix when one exists, clears the
+    /// regular paragraph buffer and indent, and leaves `pending_prefix` empty.
+    pub(super) fn drain_pending_prefix(&mut self) -> Option<PendingPrefix> {
+        let pending = self.pending_prefix.take()?;
+        self.buf.clear();
+        self.indent.clear();
+        Some(pending)
     }
 }
 
@@ -164,14 +179,7 @@ impl<'a> ParagraphWriter<'a> {
         available: usize,
     ) {
         let prefix = line.prefix.as_ref();
-        let prefix_width = UnicodeWidthStr::width(prefix);
-        let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
-        let indent_width = UnicodeWidthStr::width(indent_str.as_str());
-        let continuation_prefix = if line.repeat_prefix {
-            prefix.to_string()
-        } else {
-            format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width))
-        };
+        let continuation_prefix = continuation_prefix_for(prefix, line.repeat_prefix);
 
         let lines = wrap_preserving_code(line.rest, available);
         if lines.is_empty() {
@@ -230,9 +238,8 @@ impl<'a> ParagraphWriter<'a> {
     /// method returns no value, clears the state when flushing completes, and
     /// preserves hard-break segments as distinct wrapped emissions.
     pub(super) fn flush_paragraph(&mut self, state: &mut ParagraphState) {
-        if let Some(pending) = state.pending_prefix.take() {
-            state.buf.clear();
-            state.indent.clear();
+        if let Some(pending) = state.drain_pending_prefix() {
+            let mut pending = pending;
 
             if pending.continuation_mode == ContinuationMode::VerbatimFlush {
                 self.out.extend(pending.original_lines);
@@ -240,17 +247,15 @@ impl<'a> ParagraphWriter<'a> {
             }
 
             let rest = trim_code_span_edge_spaces(&pending.rest, &pending.synthetic_join_spaces);
+            let prefix = pending_prefix_for_next_segment(&mut pending);
             let prefix_line = PrefixLine {
-                prefix: Cow::Owned(pending.prefix),
+                prefix: Cow::Owned(prefix),
                 rest: rest.as_ref(),
                 repeat_prefix: pending.repeat_prefix,
             };
             self.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
-            if pending.hard_break
-                && let Some(last) = self.out.last_mut()
-                && !last.ends_with("  ")
-            {
-                last.push_str("  ");
+            if pending.hard_break {
+                self.ensure_trailing_hard_break_on_last_line();
             }
         }
 
@@ -335,10 +340,35 @@ impl<'a> ParagraphWriter<'a> {
                 hard_break: false,
                 open_fence_len: Some(fence_len),
                 continuation_mode,
+                used_prefix: false,
             });
             return;
         }
 
         self.append_wrapped_with_prefix(prefix_line);
     }
+}
+
+/// Selects the prefix to emit for the next deferred prefixed segment.
+///
+/// The first segment receives the original prefix and marks it as used. Later
+/// segments receive the continuation-indent form unless the prefix must repeat.
+pub(super) fn pending_prefix_for_next_segment(pending: &mut PendingPrefix) -> String {
+    if pending.used_prefix {
+        continuation_prefix_for(pending.prefix.as_str(), pending.repeat_prefix)
+    } else {
+        pending.used_prefix = true;
+        pending.prefix.clone()
+    }
+}
+
+fn continuation_prefix_for(prefix: &str, repeat_prefix: bool) -> String {
+    if repeat_prefix {
+        return prefix.to_string();
+    }
+
+    let prefix_width = UnicodeWidthStr::width(prefix);
+    let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
+    let indent_width = UnicodeWidthStr::width(indent_str.as_str());
+    format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width))
 }

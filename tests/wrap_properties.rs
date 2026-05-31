@@ -49,6 +49,13 @@ fn footnote_label_strategy() -> impl Strategy<Value = String> {
     .prop_map(|chars| chars.into_iter().collect())
 }
 
+fn checklist_marker_count(lines: &[String]) -> usize {
+    lines
+        .iter()
+        .filter(|line| line.starts_with("- [ ] ") || line.starts_with("- [x] "))
+        .count()
+}
+
 proptest! {
     #[test]
     fn wrap_text_keeps_generated_footnote_references_atomic(
@@ -170,6 +177,29 @@ proptest! {
         }
         let rendered = output.join("\n");
         prop_assert!(rendered.contains(&fence), "fence lost; rendered:\n{rendered}");
+    }
+
+    #[test]
+    fn wrap_text_deferred_checklist_span_does_not_add_checklist_markers(
+        checked in any::<bool>(),
+        before in "[a-z][a-z ]{0,30}",
+        command in "[a-z][a-z0-9_ -]{1,30}",
+        suffix in "[a-z][a-z ]{0,30}",
+        width in 30usize..=100,
+    ) {
+        let marker = if checked { "- [x] " } else { "- [ ] " };
+        let input = vec![
+            format!("{marker}{before} `{command}"),
+            format!("  --flag` {suffix}"),
+        ];
+        let output = wrap_text(&input, width);
+
+        prop_assert_eq!(
+            checklist_marker_count(&output),
+            1,
+            "wrapped checklist item gained markers: {:?}",
+            output
+        );
     }
 
     #[test]

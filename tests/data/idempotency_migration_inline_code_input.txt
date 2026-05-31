@@ -1,0 +1,2 @@
+3. A `if __name__ == "__main__"` guard that calls `sys.exit(asyncio.run(
+   check_migrations_cli()))`.

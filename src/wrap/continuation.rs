@@ -15,7 +15,14 @@ use tracing::trace;
 use unicode_width::UnicodeWidthStr;
 
 use super::{
-    paragraph::{ContinuationMode, ParagraphState, ParagraphWriter, PendingPrefix, PrefixLine},
+    paragraph::{
+        ContinuationMode,
+        ParagraphState,
+        ParagraphWriter,
+        PendingPrefix,
+        PrefixLine,
+        pending_prefix_for_next_segment,
+    },
     tokenize,
     tokenize::{parse_open_code_span, position_after_close, scan_continuation_span_state},
 };
@@ -98,7 +105,7 @@ pub(super) fn apply_continuation_chunk(
                 ticks = "`".repeat(new_len),
                 tail = &pending.rest[split_at + new_len..],
             );
-            let opener_at_eol = pending_rest["`".repeat(new_len).len()..].trim().is_empty();
+            let opener_at_eol = pending_rest[new_len..].trim().is_empty();
             let pending_rest = if opener_at_eol {
                 "`".repeat(new_len)
             } else {
@@ -120,7 +127,9 @@ pub(super) fn apply_continuation_chunk(
                 ?continuation_mode,
                 opener_at_eol, new_len, "selected continuation mode after close/reopen split"
             );
-            pending.open_fence_len = Some(new_len);
+            pending.open_fence_len = scan_continuation_span_state(pending.rest.as_str(), 0)
+                .filter(|len| *len > 0)
+                .or_else(|| parse_open_code_span(pending.rest.as_str()).map(|(len, _)| len));
             pending.continuation_mode = continuation_mode;
             pending.hard_break = false;
         }
@@ -256,21 +265,22 @@ fn leading_run_needs_space(
 
 fn emit_pending_prefix_segment(
     writer: &mut ParagraphWriter<'_>,
-    pending: &PendingPrefix,
+    pending: &mut PendingPrefix,
     split_at: usize,
 ) {
     if split_at == 0 {
         return;
     }
 
-    let flushed = &pending.rest[..split_at];
+    let flushed = pending.rest[..split_at].to_string();
     if flushed.is_empty() {
         return;
     }
 
+    let prefix = pending_prefix_for_next_segment(pending);
     let prefix_line = PrefixLine {
-        prefix: Cow::Borrowed(pending.prefix.as_str()),
-        rest: flushed,
+        prefix: Cow::Owned(prefix),
+        rest: flushed.as_str(),
         repeat_prefix: pending.repeat_prefix,
     };
     writer.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
