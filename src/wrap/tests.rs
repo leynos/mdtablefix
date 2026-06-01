@@ -12,3 +12,8 @@ mod prefix;
 mod span_grouping_props;
 mod span_state;
 mod token_grouping;
+
+const TRAILING_PUNCTUATION_CHARS: &[char] = &[
+    '.', ',', ';', ':', '!', '?', ')', ']', '"', '\'', '…', '—', '–', '»', '›', '）', '］', '】',
+    '》', '」', '』', '、', '。', '，', '：', '；', '！', '？', '”', '’',
+];

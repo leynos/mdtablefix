@@ -35,6 +35,7 @@ pub(in crate::wrap::inline) use predicates::{
     is_inline_code_token,
     is_opening_punct,
     is_trailing_punct,
+    is_trailing_punctuation_token,
     is_whitespace_token,
     looks_like_footnote_ref,
 };
@@ -121,7 +122,7 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
             break;
         }
 
-        if token.chars().all(is_trailing_punct) {
+        if is_trailing_punctuation_token(token) {
             if matches!(
                 kind,
                 SpanKind::Code | SpanKind::Link | SpanKind::FootnoteRef
@@ -193,7 +194,7 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
     while i < tokens.len() {
         let (group_end, _) = determine_token_span(tokens, i);
         let span = i..group_end;
-        let text = if tokens[span.clone()]
+        let text = if tokens[i..group_end]
             .iter()
             .all(|token| is_whitespace_token(token))
         {
@@ -208,6 +209,47 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
     }
 
     fragments
+}
+
+/// Returns whether `line` contains one atomic fragment.
+fn is_single_atomic_line(line: &[InlineFragment]) -> bool { line.len() == 1 && line[0].is_atomic() }
+
+/// Returns the total display width of a fragment line.
+fn fragment_line_width(line: &[InlineFragment]) -> usize {
+    line.iter().map(|fragment| fragment.width).sum()
+}
+
+/// Splits an atomic first fragment from trailing prose after a boundary wrap.
+fn split_boundary_atomic_line(
+    previous_line: &[InlineFragment],
+    line: &[InlineFragment],
+    width: usize,
+) -> Option<(Vec<InlineFragment>, Vec<InlineFragment>)> {
+    let previous_width = fragment_line_width(previous_line);
+    if !(previous_width == width || previous_width + 1 == width)
+        || !line.first().is_some_and(InlineFragment::is_atomic)
+        || !line
+            .get(1)
+            .is_some_and(|fragment| fragment.is_whitespace() || fragment.is_plain())
+    {
+        return None;
+    }
+
+    Some((vec![line[0].clone()], line[1..].to_vec()))
+}
+
+/// Returns whether a boundary atomic fragment should be finalized now.
+fn should_flush_boundary_atomic(
+    lines: &[String],
+    buffer: &[InlineFragment],
+    next: &InlineFragment,
+    width: usize,
+) -> bool {
+    lines.last().is_some_and(|line| {
+        let rendered_width = UnicodeWidthStr::width(line.as_str());
+        rendered_width == width || rendered_width + 1 == width
+    }) && is_single_atomic_line(buffer)
+        && (next.is_whitespace() || next.is_plain())
 }
 
 /// Renders one wrapped fragment line back into Markdown text.
@@ -258,6 +300,14 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut buffer: Vec<InlineFragment> = Vec::new();
 
     for fragment in fragments {
+        if should_flush_boundary_atomic(&lines, &buffer, &fragment, width) {
+            lines.push(render_line(&buffer, false, !lines.is_empty()));
+            buffer.clear();
+            if fragment.is_whitespace() {
+                continue;
+            }
+        }
+
         buffer.push(fragment);
         let wrapped = wrap_first_fit(&buffer, &[width_as_f64(width)]);
         let raw_lines = wrapped.iter().map(|line| line.to_vec()).collect::<Vec<_>>();
@@ -265,6 +315,19 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         rebalance_atomic_tails(&mut grouped_lines, width);
 
         if grouped_lines.len() == 1 {
+            continue;
+        }
+
+        if let Some((atomic_line, remaining_line)) = grouped_lines
+            .get(grouped_lines.len() - 2)
+            .zip(grouped_lines.last())
+            .and_then(|(previous, line)| split_boundary_atomic_line(previous, line, width))
+        {
+            for line in &grouped_lines[..grouped_lines.len() - 1] {
+                lines.push(render_line(line, false, !lines.is_empty()));
+            }
+            lines.push(render_line(&atomic_line, false, !lines.is_empty()));
+            buffer = remaining_line;
             continue;
         }
 

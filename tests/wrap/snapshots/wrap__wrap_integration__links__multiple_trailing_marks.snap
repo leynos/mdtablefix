@@ -1,0 +1,6 @@
+---
+source: tests/wrap/links.rs
+description: "link punctuation wrapping: multiple_trailing_marks"
+---
+Check this [link](foo.md)!? Additional words are added so this line exceeds the
+eighty character limit for wrapping.

@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Column width used when wrapping text.
-pub(crate) const WRAP_COLS: usize = 80;
+pub const WRAP_COLS: usize = 80;
 
 /// Processing options controlling the behaviour of [`process_stream_inner`].
 ///

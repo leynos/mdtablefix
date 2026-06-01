@@ -1,0 +1,6 @@
+---
+source: tests/wrap/links.rs
+description: "link punctuation wrapping: colon_after_link"
+---
+Reference [doc](bar.md): an extended line that ensures the wrapping logic
+triggers because it exceeds eighty characters easily.

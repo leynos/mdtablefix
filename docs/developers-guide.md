@@ -254,6 +254,12 @@ passes. Inline code spans, Markdown links, and GFM footnote references use
 atomic fragment kinds, so the wrapper never inserts a break inside their
 Markdown syntax.
 
+The inline span builder uses the private `is_trailing_punctuation_token`
+helper, via `extend_punctuation`, to keep trailing punctuation attached to
+links and code spans while token groups are being formed. Markdown delimiters
+that open syntax are not treated as trailing punctuation, which avoids
+classifying arbitrary ASCII punctuation as link suffixes.
+
 The `postprocess` module exists because greedy line fitting alone does not
 reproduce the repository's historical whitespace semantics. The first pass
 merges whitespace-only wrap lines into adjacent content, and the second pass
@@ -334,6 +340,12 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   atomically once the span closes. No line break may be inserted inside the
   span, and the closing backtick must remain on the same line as the span
   content.
+- **`WRAP_COLS` public constant.** `mdtablefix::process::WRAP_COLS` is
+  exported as `pub` so that integration tests can reference the production
+  wrap width instead of hard-coding `80`. When writing tests that depend on
+  the column boundary (for example, wrap-boundary edge-case tests), import
+  and use `WRAP_COLS` as the single source of truth. Do not duplicate the
+  literal value `80` in test code.
 
 Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
 replacing `LineBuffer` with `textwrap`.
