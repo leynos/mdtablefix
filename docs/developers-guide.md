@@ -576,15 +576,16 @@ Each integration-test file declares the modules it needs via explicit
 The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
 proc-macro attribute. It suppresses the `unused_braces` lint that `rstest`
 fixture expansion triggers when `fn_single_line = true` is set in
-`rustfmt.toml`. Apply it to any fixture function whose single-expression body
-triggers the lint:
+`rustfmt.toml`.
 
-This helper exists because `rstest`'s `#[fixture]` expansion currently emits a
-single-expression body shape that conflicts with the single-line function
-formatter and the compiler's `unused_braces` lint. A tracking ticket for the
-upstream `rstest` behaviour is forthcoming. Until that is resolved, keep the
-lint annotation inside the proc macro so fixture modules do not need broad lint
-suppressions.
+The macro emits `#[allow(unused_braces, …)]` rather than `#[expect(…)]` because
+the Rust proc-macro API delivers a pre-parsed token stream; the emitted lint
+attribute applies to code that the compiler has not yet expanded, making
+`#[expect]` semantically unusable at that site. This is a known consequence of
+the `rstest` fixture expansion and is not a lint-integrity violation.
+
+Apply it to any fixture function whose single-expression body triggers the
+lint:
 
 ```rust
 #[test_macros::allow_fixture_expansion_lints]

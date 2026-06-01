@@ -186,7 +186,10 @@ mod prop_tests {
             match &output[fence_break_idx] {
                 Cow::Borrowed(value) => {
                     prop_assert_eq!(*value, break_line.as_str());
-                    prop_assert!(std::ptr::eq(*value, lines[fence_break_idx].as_str()));
+                    prop_assert!(
+                        std::ptr::eq(*value, lines[fence_break_idx].as_str()),
+                        "fenced break line must borrow from input, not from static"
+                    );
                 }
                 Cow::Owned(value) => {
                     prop_assert!(
