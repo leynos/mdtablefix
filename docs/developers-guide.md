@@ -579,6 +579,13 @@ fixture expansion triggers when `fn_single_line = true` is set in
 `rustfmt.toml`. Apply it to any fixture function whose single-expression body
 triggers the lint:
 
+This helper exists because `rstest`'s `#[fixture]` expansion currently emits a
+single-expression body shape that conflicts with the single-line function
+formatter and the compiler's `unused_braces` lint. A tracking ticket for the
+upstream `rstest` behaviour is forthcoming. Until that is resolved, keep the
+lint annotation inside the proc macro so fixture modules do not need broad lint
+suppressions.
+
 ```rust
 #[test_macros::allow_fixture_expansion_lints]
 #[rstest::fixture]
