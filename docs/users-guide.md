@@ -159,10 +159,13 @@ buffer.
 
 Callers that need owned `String` values must call `.into_owned()`:
 
-    use mdtablefix::format_breaks;
+<!-- markdownlint-disable-next-line MD046 -->
+```rust
+use mdtablefix::format_breaks;
 
-    let lines = vec!["some text".to_string(), "---".to_string()];
-    let owned: Vec<String> = format_breaks(&lines)
-        .into_iter()
-        .map(|c| c.into_owned())
-        .collect();
+let lines = vec!["some text".to_string(), "---".to_string()];
+let owned: Vec<String> = format_breaks(&lines)
+    .into_iter()
+    .map(|c| c.into_owned())
+    .collect();
+```

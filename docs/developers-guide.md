@@ -576,6 +576,8 @@ Each integration-test file declares the modules it needs via explicit
 `tests/common/mod.rs` exports two `#[macro_export]` macros available to all
 integration-test crates:
 
+Table: Macros for building `Vec<String>` from literals and file lines.
+
 | Macro | Purpose |
 | --- | --- |
 | `lines_vec![…]` | Builds a `Vec<String>` from string-like values. |
