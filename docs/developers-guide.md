@@ -561,6 +561,8 @@ and arguments before accepting the new output.
 
 Integration-test helpers are organized under `tests/support/`:
 
+Table: Integration-test support modules and their purposes.
+
 | Module | Purpose |
 | --- | --- |
 | `cli_args.rs` | `run_cli_with_args` — invokes the binary with argument-only tests |
