@@ -243,6 +243,23 @@ assert_eq!(out[2], "[^1]: First note");
 - `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on
   disk in-place.
 
+> **Breaking change:** `format_breaks` now returns
+> `Vec<Cow<'_, str>>` instead of `Vec<String>` so unchanged lines stay
+> borrowed from the input rather than forcing heap allocations.
+> Synthesized thematic-break lines borrow from a shared static. Callers
+> that need owned `String` values should map `.into_owned()` over the
+> returned `Cow`s:
+>
+> ```rust
+> use mdtablefix::format_breaks;
+>
+> let input = vec!["foo".to_string(), "---".to_string()];
+> let owned: Vec<String> = format_breaks(&input)
+>     .into_iter()
+>     .map(std::borrow::Cow::into_owned)
+>     .collect();
+> ```
+
 ## HTML table support
 
 `mdtablefix` recognizes basic HTML `<table>` elements embedded in Markdown.

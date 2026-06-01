@@ -9,13 +9,22 @@ use tempfile::tempdir;
 #[macro_use]
 #[path = "common/mod.rs"]
 mod common;
-use common::{broken_table, run_cli_with_args};
+
+#[path = "support/cli_args.rs"]
+mod cli_args;
+#[path = "support/fixtures.rs"]
+mod fixtures;
+use cli_args::run_cli_with_args;
+use fixtures::broken_table;
 
 #[rstest]
-fn test_cli_parallel_empty_file_list() { run_cli_with_args(&[]).success().stdout("\n"); }
+fn test_cli_parallel_empty_file_list() -> Result<(), Box<dyn std::error::Error>> {
+    run_cli_with_args(&[])?.success().stdout("\n");
+    Ok(())
+}
 
 #[rstest]
-fn test_cli_parallel_multiple_files() {
+fn test_cli_parallel_multiple_files() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir().expect("failed to create temporary directory");
     let mut files = Vec::new();
     let mut expected = String::new();
@@ -40,7 +49,8 @@ fn test_cli_parallel_multiple_files() {
         .iter()
         .map(|p| p.to_str().expect("path is not valid UTF-8"))
         .collect();
-    run_cli_with_args(&args).success().stdout(expected);
+    run_cli_with_args(&args)?.success().stdout(expected);
+    Ok(())
 }
 
 #[rstest]
@@ -71,7 +81,9 @@ fn test_cli_parallel_missing_file_error() {
 }
 
 #[rstest]
-fn test_cli_parallel_missing_file_in_place(broken_table: Vec<String>) {
+fn test_cli_parallel_missing_file_in_place(
+    broken_table: Vec<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir().expect("failed to create temporary directory");
     let good = dir.path().join("good.md");
     let mut f = File::create(&good).expect("failed to create file");
@@ -84,7 +96,8 @@ fn test_cli_parallel_missing_file_in_place(broken_table: Vec<String>) {
 
     let good_str = good.to_str().expect("path is not valid UTF-8");
     let missing_str = missing.to_str().expect("path is not valid UTF-8");
-    run_cli_with_args(&["--in-place", good_str, missing_str])
+    run_cli_with_args(&["--in-place", good_str, missing_str])?
         .failure()
         .stderr(predicates::str::contains("missing.md"));
+    Ok(())
 }

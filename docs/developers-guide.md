@@ -566,3 +566,75 @@ Review the generated `tests/snapshots/cli_matrix__*.snap` files before
 committing. Snapshot churn across many cases usually means the fixture is too
 broad or a shared transform changed behaviour; inspect the labelled case, mode,
 and arguments before accepting the new output.
+
+## Test infrastructure
+
+### `tests/support/` module
+
+Integration-test helpers are organized under `tests/support/`:
+
+Table: Integration-test support modules and their purposes.
+
+| Module | Purpose |
+| --- | --- |
+| `cli_args.rs` | `run_cli_with_args` — invokes the binary with argument-only tests |
+| `cli_stdin.rs` | `run_cli_with_stdin` — invokes the binary feeding stdin |
+| `fixtures.rs` | Shared rstest fixtures (e.g. `broken_table`) |
+| `wrap_assertions.rs` | Higher-level assertions for wrapping output |
+
+Each integration-test file declares the modules it needs via explicit
+`#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
+
+### Exported test macros (`tests/common/mod.rs`)
+
+`tests/common/mod.rs` exports two `#[macro_export]` macros available to all
+integration-test crates:
+
+Table: Macros for building `Vec<String>` from literals and file lines.
+
+| Macro | Purpose |
+| --- | --- |
+| `lines_vec![…]` | Builds a `Vec<String>` from string-like values. |
+| `include_lines!("path")` | Builds a `Vec<String>` from file lines. |
+
+`lines_vec![…]` reduces boilerplate when constructing fixture inputs.
+`include_lines!("path")` uses `include_str!` at compile time and returns one
+`String` per line of the referenced file.
+
+Both macros are exported rather than kept private because Rust's macro scoping
+rules require `#[macro_export]` for macros to be visible across integration-test
+binary crates. The `#[expect(unused_macros)]` suppressions that previously
+guarded them were replaced by the export attribute when it became clear that
+multiple test binaries depend on them.
+
+### `test-macros` crate
+
+The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
+proc-macro attribute. It suppresses the `unused_braces` lint that `rstest`
+fixture expansion triggers when `fn_single_line = true` is set in
+`rustfmt.toml`.
+
+The macro emits `#[allow(unused_braces, …)]` rather than `#[expect(…)]` because
+the Rust proc-macro API delivers a pre-parsed token stream; the emitted lint
+attribute applies to code that the compiler has not yet expanded, making
+`#[expect]` semantically unusable at that site. This is a known consequence of
+the `rstest` fixture expansion and is not a lint-integrity violation.
+
+Apply it to any fixture function whose single-expression body triggers the
+lint:
+
+```rust
+#[test_macros::allow_fixture_expansion_lints]
+#[rstest::fixture]
+pub fn broken_table() -> Vec<String> { … }
+```
+
+## Breaks module – Cow allocation strategy
+
+`format_breaks` in [src/breaks.rs](../src/breaks.rs) returns
+`Vec<Cow<'_, str>>` so unchanged lines can be forwarded without allocating.
+Lines that do not match a thematic break are emitted as `Cow::Borrowed` slices
+into the input `&[String]`. Synthesized thematic-break lines are also emitted
+as `Cow::Borrowed`, pointing to the shared `LazyLock<String>` static
+`THEMATIC_BREAK_LINE`. Callers that need owned `String` values must call
+`.into_owned()` on each item.

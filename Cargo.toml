@@ -35,12 +35,13 @@ unicode-width = "0.2"
 rstest = "0.26"
 assert_cmd = "2"
 insta = "1.47"
-proptest = "1.6"
+proptest = "1.11.0"
 tempfile = "3"
 libc = "0.2.174"
 predicates = "3"
 trybuild = "1"
 tracing-test = "0.2"
+test-macros = { path = "test-macros" }
 
 [lints.clippy]
 pedantic = "warn"

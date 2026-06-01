@@ -19,7 +19,7 @@ static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
 /// Normalize thematic breaks outside fenced code blocks.
 ///
 /// Consecutive hyphens, asterisks or underscores are replaced with a
-/// standardised line of underscores. Fenced code blocks are ignored so
+/// standardized line of underscores. Fenced code blocks are ignored so
 /// that breaks within them remain untouched.
 ///
 /// # Examples
@@ -31,11 +31,12 @@ static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
 ///
 /// let lines = vec!["foo".to_string(), "***".to_string(), "bar".to_string()];
 /// let out = format_breaks(&lines);
+/// let break_line = "_".repeat(THEMATIC_BREAK_LEN);
 /// assert_eq!(
 ///     out,
 ///     vec![
 ///         Cow::Borrowed("foo"),
-///         Cow::Owned("_".repeat(THEMATIC_BREAK_LEN)),
+///         Cow::Borrowed(break_line.as_str()),
 ///         Cow::Borrowed("bar"),
 ///     ]
 /// );
@@ -64,9 +65,22 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
+    use std::{
+        borrow::Cow,
+        sync::{Arc, Barrier},
+        thread,
+    };
 
     use super::*;
+
+    macro_rules! assert_borrowed_value {
+        ($line:expr, $expected:expr $(,)?) => {
+            match &$line {
+                Cow::Borrowed(value) => assert_eq!(*value, $expected),
+                Cow::Owned(value) => panic!("expected borrowed value, got owned {value:?}"),
+            }
+        };
+    }
 
     #[test]
     fn basic_formatting() {
@@ -74,12 +88,11 @@ mod tests {
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>();
-        let expected: Vec<Cow<str>> = vec![
-            input[0].as_str().into(),
-            Cow::Borrowed(THEMATIC_BREAK_LINE.as_str()),
-            input[2].as_str().into(),
-        ];
-        assert_eq!(format_breaks(&input), expected);
+        let output = format_breaks(&input);
+
+        assert_borrowed_value!(output[0], "foo");
+        assert_borrowed_value!(output[1], THEMATIC_BREAK_LINE.as_str());
+        assert_borrowed_value!(output[2], "bar");
     }
 
     #[test]
@@ -88,7 +101,169 @@ mod tests {
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>();
-        let expected: Vec<Cow<str>> = input.iter().map(|s| s.as_str().into()).collect();
-        assert_eq!(format_breaks(&input), expected);
+        let output = format_breaks(&input);
+
+        assert_borrowed_value!(output[0], "```");
+        assert_borrowed_value!(output[1], "---");
+        assert_borrowed_value!(output[2], "```");
+    }
+
+    #[test]
+    fn thematic_break_static_is_stable_across_threads() {
+        const THREADS: usize = 16;
+
+        let barrier = Arc::new(Barrier::new(THREADS));
+        let handles = (0..THREADS)
+            .map(|_| {
+                let barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    let input = vec!["---".to_string()];
+                    barrier.wait();
+
+                    let output = format_breaks(&input);
+                    match &output[0] {
+                        Cow::Borrowed(value) => {
+                            assert_eq!(*value, THEMATIC_BREAK_LINE.as_str());
+                            assert_eq!(value.len(), THEMATIC_BREAK_LEN);
+                            assert!(std::ptr::eq(*value, THEMATIC_BREAK_LINE.as_str()));
+                            value.as_ptr() as usize
+                        }
+                        Cow::Owned(value) => {
+                            panic!("expected borrowed break line, got owned {value:?}");
+                        }
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let pointers = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("thread must complete"))
+            .collect::<Vec<_>>();
+
+        assert!(
+            pointers
+                .iter()
+                .all(|pointer| *pointer == THEMATIC_BREAK_LINE.as_ptr() as usize)
+        );
+    }
+}
+
+#[cfg(test)]
+mod prop_tests {
+    //! Property-based tests for thematic break formatting and `Cow`
+    //! allocation semantics in [`format_breaks`].
+    //!
+    //! Uses the `non_thematic_line` and `thematic_break_line` strategies to
+    //! exercise the `Cow` allocation invariants: every output line preserves
+    //! input length, non-thematic lines stay borrowed from the input, and
+    //! thematic-break lines stay borrowed from the shared static.
+
+    use std::borrow::Cow;
+
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn output_length_matches_input_length(lines in prop::collection::vec(any::<String>(), 0..128)) {
+            let output = format_breaks(&lines);
+
+            prop_assert_eq!(output.len(), lines.len());
+        }
+
+        #[test]
+        fn non_thematic_lines_are_borrowed_from_input(
+            lines in prop::collection::vec(non_thematic_line(), 0..128),
+        ) {
+            let output = format_breaks(&lines);
+
+            for (input, output) in lines.iter().zip(output) {
+                match output {
+                    Cow::Borrowed(value) => {
+                        prop_assert_eq!(value, input.as_str());
+                        prop_assert!(std::ptr::eq(value, input.as_str()));
+                    }
+                    Cow::Owned(value) => {
+                        prop_assert!(false, "expected borrowed input line, got owned {value:?}");
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn thematic_break_lines_are_borrowed_from_static(line in thematic_break_line()) {
+            let input = vec![line];
+            let output = format_breaks(&input);
+
+            prop_assert_eq!(output.len(), 1);
+            match &output[0] {
+                Cow::Borrowed(value) => {
+                    prop_assert_eq!(*value, THEMATIC_BREAK_LINE.as_str());
+                    prop_assert_eq!(value.len(), THEMATIC_BREAK_LEN);
+                    prop_assert!(std::ptr::eq(*value, THEMATIC_BREAK_LINE.as_str()));
+                }
+                Cow::Owned(value) => {
+                    prop_assert!(false, "expected borrowed break line, got owned {value:?}");
+                }
+            }
+        }
+
+        #[test]
+        fn fenced_thematic_breaks_are_not_normalised(
+            fencer in prop_oneof![Just("```".to_string()), Just("~~~".to_string())],
+            break_line in thematic_break_line(),
+            prefix in prop::collection::vec(non_thematic_line(), 0..8),
+            suffix in prop::collection::vec(non_thematic_line(), 0..8),
+        ) {
+            let mut lines: Vec<String> = prefix.clone();
+            lines.push(fencer.clone());
+            lines.push(break_line.clone());
+            lines.push(fencer.clone());
+            lines.extend(suffix.clone());
+
+            let output = format_breaks(&lines);
+            prop_assert_eq!(output.len(), lines.len());
+
+            let fence_break_idx = prefix.len() + 1;
+            match &output[fence_break_idx] {
+                Cow::Borrowed(value) => {
+                    prop_assert_eq!(*value, break_line.as_str());
+                    prop_assert!(
+                        std::ptr::eq(*value, lines[fence_break_idx].as_str()),
+                        "fenced break line must borrow from input, not from static"
+                    );
+                }
+                Cow::Owned(value) => {
+                    prop_assert!(
+                        false,
+                        "expected borrowed input line inside fence, got owned {value:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    fn non_thematic_line() -> impl Strategy<Value = String> {
+        any::<String>().prop_filter("line must not match thematic break regex", |line| {
+            !THEMATIC_BREAK_RE.is_match(line.trim_end())
+        })
+    }
+
+    fn thematic_break_line() -> impl Strategy<Value = String> {
+        (
+            0usize..=3,
+            prop_oneof![Just('*'), Just('-'), Just('_')],
+            3usize..80,
+            prop::collection::vec(prop_oneof![Just(' '), Just('\t')], 0..8),
+        )
+            .prop_map(|(indent, marker, count, trailing)| {
+                let mut line = String::with_capacity(indent + count + trailing.len());
+                line.push_str(&" ".repeat(indent));
+                line.push_str(&marker.to_string().repeat(count));
+                line.extend(trailing);
+                line
+            })
     }
 }

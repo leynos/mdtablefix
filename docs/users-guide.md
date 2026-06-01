@@ -151,3 +151,26 @@ After running `mdtablefix --fences`:
     ```rust
     fn main() {}
     ```
+
+## Library API notes
+
+### `format_breaks` return type
+
+`format_breaks` returns `Vec<Cow<'_, str>>` rather than `Vec<String>`. Lines
+that are not thematic breaks are returned as `Cow::Borrowed` slices into the
+input, avoiding heap allocations for unchanged content. Synthesized
+thematic-break lines are also `Cow::Borrowed`, borrowing from a shared static
+buffer.
+
+Callers that need owned `String` values must call `.into_owned()`:
+
+<!-- markdownlint-disable-next-line MD046 -->
+```rust
+use mdtablefix::format_breaks;
+
+let lines = vec!["some text".to_string(), "---".to_string()];
+let owned: Vec<String> = format_breaks(&lines)
+    .into_iter()
+    .map(|c| c.into_owned())
+    .collect();
+```

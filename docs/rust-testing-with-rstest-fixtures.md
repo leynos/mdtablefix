@@ -1156,13 +1156,13 @@ for maintainability and scalability.
   `#[default]` / `#[with]` for configurable fixtures to enhance the clarity of
   both fixture definitions and their usage in tests.
 - **Utility Macros:** The integration tests define a `lines_vec!` macro for
-  quickly building `Vec<String>` from string slices. Use it in fixtures to
+  quickly building `Vec<String>` from string-like values. Use it in fixtures to
   avoid repetitive `.to_string()` calls.
 
 ```rust
 #[fixture]
 fn example_table() -> Vec<String> {
-    lines_vec!("a", "b", "c")
+    lines_vec!["a", "b", "c"]
 }
 ```
 

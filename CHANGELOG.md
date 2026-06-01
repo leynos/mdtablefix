@@ -7,6 +7,11 @@
 - `--code-emphasis` flag to fix emphasis markers that adjoin inline code.
   Runs before wrapping and footnote conversion.
 
+### Changed
+
+- `format_breaks` now returns `Vec<Cow<'_, str>>` rather than `Vec<String>`,
+  so unchanged lines stay borrowed instead of forcing heap allocations.
+
 ### Fixed
 
 - Keep hyphenated compounds containing an inline code span atomic during
