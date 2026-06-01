@@ -132,6 +132,9 @@ pub(super) fn apply_continuation_chunk(
                 .or_else(|| parse_open_code_span(pending.rest.as_str()).map(|(len, _)| len));
             pending.continuation_mode = continuation_mode;
             pending.hard_break = false;
+            if pending.open_fence_len.is_none() {
+                writer.flush_paragraph(state);
+            }
         }
         SpanStateUpdate::Flush => {
             writer.flush_paragraph(state);
