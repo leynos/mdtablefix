@@ -51,13 +51,17 @@ fn toggle_code_span(open: &mut Option<usize>, len: usize) {
     }
 }
 
-/// Assert that every line in a blockquote starts with the given prefix and is at most 80
-/// characters.
+/// Assert that a wrapped blockquote has the expected number of lines and prefix.
+///
+/// The `expected` parameter is the expected number of lines in the wrapped
+/// blockquote.
 ///
 /// # Panics
 ///
-/// Panics if the output slice is empty or the prefix is missing from any line.
+/// Panics if the output slice is empty, expected count is zero, or if the prefix
+/// is missing from any line.
 pub fn assert_wrapped_blockquote(output: &[String], prefix: &str, expected: usize) {
+    assert!(expected > 0, "expected line count must be positive");
     assert!(!output.is_empty(), "output slice is empty");
     assert_eq!(output.len(), expected);
     assert!(output.iter().all(|l| l.starts_with(prefix)));

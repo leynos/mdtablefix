@@ -19,7 +19,7 @@ static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
 /// Normalize thematic breaks outside fenced code blocks.
 ///
 /// Consecutive hyphens, asterisks or underscores are replaced with a
-/// standardised line of underscores. Fenced code blocks are ignored so
+/// standardized line of underscores. Fenced code blocks are ignored so
 /// that breaks within them remain untouched.
 ///
 /// # Examples

@@ -598,7 +598,7 @@ pub fn broken_table() -> Vec<String> { … }
 `format_breaks` in [src/breaks.rs](../src/breaks.rs) returns
 `Vec<Cow<'_, str>>` so unchanged lines can be forwarded without allocating.
 Lines that do not match a thematic break are emitted as `Cow::Borrowed` slices
-into the input `&[String]`. Synthesised thematic-break lines are also emitted
+into the input `&[String]`. Synthesized thematic-break lines are also emitted
 as `Cow::Borrowed`, pointing to the shared `LazyLock<String>` static
 `THEMATIC_BREAK_LINE`. Callers that need owned `String` values must call
 `.into_owned()` on each item.
