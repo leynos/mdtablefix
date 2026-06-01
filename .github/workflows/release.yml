@@ -83,7 +83,7 @@ jobs:
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@e202e43e85bdef0415ba0c44c6e70c87ba7db78a
       - name: Cache cross binary
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/cross
           key: cross-v0.2.5-${{ runner.os }}
@@ -92,7 +92,7 @@ jobs:
           RUSTFLAGS: ""
         run: cargo install cross --git https://github.com/cross-rs/cross --tag v0.2.5
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
