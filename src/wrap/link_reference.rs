@@ -11,8 +11,20 @@ use regex::Regex;
 /// link labels (for example, `[label [nested]]` or `[\[escaped\]]`). That
 /// limitation is acceptable for issue #292 and the current regression tests.
 pub(super) static LINK_REF_RE: std::sync::LazyLock<Regex> = lazy_regex!(
-    r#"^(\s*)(\[[^\]]+\]:\s*)(.+?)(?:\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\)))?\s*$"#,
+    r#"^(\s*)(\[[^\]]+\]:\s*)(\S.*?)(?:\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\)))?\s*$"#,
     "link reference definition regex should compile",
+);
+
+/// Matches a link reference label line whose destination continues on the next line.
+pub(super) static BARE_LABEL_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^(\s*)(\[[^\]]+\]:\s*)$",
+    "bare link reference label regex should compile",
+);
+
+/// Matches an indented non-blank destination continuation line.
+pub(super) static URL_CONTINUATION_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^\s+\S",
+    "link reference URL continuation regex should compile",
 );
 
 /// Matches a standalone link reference title continuation line.
@@ -25,11 +37,20 @@ pub(super) static LINK_TITLE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     "link reference standalone title regex should compile",
 );
 
-/// Injected regex pair for link reference definition queries.
+/// Matches an inline title suffix after a continued link reference destination.
+pub(super) static INLINE_TITLE_SUFFIX_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r#"\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\))\s*$"#,
+    "link reference inline title suffix regex should compile",
+);
+
+/// Injected regex set for link reference definition queries.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct LinkReferenceMatcher {
     link_ref: &'static Regex,
+    bare_label: &'static Regex,
+    url_continuation: &'static Regex,
     link_title: &'static Regex,
+    inline_title_suffix: &'static Regex,
 }
 
 impl LinkReferenceMatcher {
@@ -38,13 +59,20 @@ impl LinkReferenceMatcher {
     pub(crate) fn production() -> Self {
         Self {
             link_ref: &LINK_REF_RE,
+            bare_label: &BARE_LABEL_RE,
+            url_continuation: &URL_CONTINUATION_RE,
             link_title: &LINK_TITLE_RE,
+            inline_title_suffix: &INLINE_TITLE_SUFFIX_RE,
         }
     }
 
     /// Returns `true` when `line` matches a link reference definition.
     #[must_use]
     pub(super) fn is_definition(&self, line: &str) -> bool { self.link_ref.is_match(line) }
+
+    /// Returns `true` when `line` is only a link reference label and colon.
+    #[must_use]
+    pub(super) fn is_bare_label_only(&self, line: &str) -> bool { self.bare_label.is_match(line) }
 
     /// Returns whether a standalone title may follow on the next line.
     ///
@@ -62,6 +90,16 @@ impl LinkReferenceMatcher {
     pub(super) fn is_standalone_title_line(&self, line: &str) -> bool {
         self.link_title.is_match(line)
     }
+
+    /// Returns `true` when `line` is an indented URL continuation.
+    #[must_use]
+    pub(super) fn is_url_continuation_line(&self, line: &str) -> bool {
+        self.url_continuation.is_match(line)
+    }
+
+    fn url_continuation_has_inline_title(&self, line: &str) -> bool {
+        self.inline_title_suffix.is_match(line)
+    }
 }
 
 /// Outcome of observing one line while awaiting a standalone title.
@@ -73,7 +111,7 @@ pub(crate) enum LinkTitleWindowOutcome {
     Reprocess,
 }
 
-/// Tracks whether the line after a bare link reference may be a standalone title.
+/// Tracks whether a split link reference may have a destination or title continuation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum LinkTitleWindow {
     /// No standalone title continuation is expected.
@@ -81,6 +119,8 @@ pub(crate) enum LinkTitleWindow {
     Closed,
     /// The previous line was a bare link reference definition.
     AwaitingStandaloneTitle,
+    /// The previous line was a link reference label whose destination is next.
+    AwaitingUrlContinuation,
 }
 
 impl LinkTitleWindow {
@@ -89,6 +129,9 @@ impl LinkTitleWindow {
 
     /// Opens the window after emitting a bare link reference definition.
     pub(super) fn observe_bare_definition(&mut self) { *self = Self::AwaitingStandaloneTitle; }
+
+    /// Opens the window after emitting a label-only link reference definition.
+    pub(super) fn observe_bare_label(&mut self) { *self = Self::AwaitingUrlContinuation; }
 
     /// Inspects the next line when a standalone title may follow.
     ///
@@ -99,15 +142,31 @@ impl LinkTitleWindow {
         line: &str,
         matcher: LinkReferenceMatcher,
     ) -> Option<LinkTitleWindowOutcome> {
-        if *self != Self::AwaitingStandaloneTitle {
-            return None;
+        match *self {
+            Self::Closed => None,
+            Self::AwaitingStandaloneTitle => {
+                *self = Self::Closed;
+                if line.trim().is_empty() || matcher.is_standalone_title_line(line) {
+                    return Some(LinkTitleWindowOutcome::EmitVerbatim);
+                }
+                Some(LinkTitleWindowOutcome::Reprocess)
+            }
+            Self::AwaitingUrlContinuation => {
+                if matcher.is_url_continuation_line(line) {
+                    if matcher.url_continuation_has_inline_title(line) {
+                        *self = Self::Closed;
+                    } else {
+                        *self = Self::AwaitingStandaloneTitle;
+                    }
+                    return Some(LinkTitleWindowOutcome::EmitVerbatim);
+                }
+                *self = Self::Closed;
+                if line.trim().is_empty() {
+                    return Some(LinkTitleWindowOutcome::EmitVerbatim);
+                }
+                Some(LinkTitleWindowOutcome::Reprocess)
+            }
         }
-
-        *self = Self::Closed;
-        if line.trim().is_empty() || matcher.is_standalone_title_line(line) {
-            return Some(LinkTitleWindowOutcome::EmitVerbatim);
-        }
-        Some(LinkTitleWindowOutcome::Reprocess)
     }
 }
 

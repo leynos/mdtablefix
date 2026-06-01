@@ -24,6 +24,15 @@ fn assert_wrap_snapshot(name: &str, input: &str) {
     "[foo]: https://example.com \"My Title\""
 )]
 #[case("link_ref_next_line_title", "[foo]: https://example.com\n\"My Title\"")]
+#[case("collapsed_link_ref_indented_url", "[foo]:\n  https://example.com")]
+#[case(
+    "collapsed_link_ref_indented_url_next_line_title",
+    "[foo]:\n  https://example.com\n  \"My Title\""
+)]
+#[case(
+    "collapsed_link_ref_indented_url_inline_title",
+    "[foo]:\n  https://example.com \"My Title\""
+)]
 #[case(
     "multiple_link_refs",
     concat!(

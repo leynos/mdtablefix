@@ -200,6 +200,40 @@ proptest! {
         );
     }
 
+    /// Label-only reference lines match separately from complete definitions.
+    #[test]
+    fn bare_label_only_matches(label in arb_label(), trailing_spaces in 0usize..=4usize) {
+        let matcher = LinkReferenceMatcher::production();
+        let line = format!("[{label}]:{}", " ".repeat(trailing_spaces));
+        prop_assert!(matcher.is_bare_label_only(&line));
+        prop_assert!(!matcher.is_definition(&line));
+    }
+
+    /// Complete definitions are not label-only matches.
+    #[test]
+    fn complete_definition_is_not_bare_label(label in arb_label(), url in arb_bare_url()) {
+        let matcher = LinkReferenceMatcher::production();
+        let line = format!("[{label}]: {url}");
+        prop_assert!(!matcher.is_bare_label_only(&line));
+    }
+
+    /// Indented non-blank lines qualify as URL continuations.
+    #[test]
+    fn indented_url_continuation_matches(url in arb_bare_url(), indent in 1usize..=4usize) {
+        let matcher = LinkReferenceMatcher::production();
+        let line = format!("{:indent$}{url}", "", indent = indent);
+        prop_assert!(matcher.is_url_continuation_line(&line));
+    }
+
+    /// Non-indented text and blank lines are not URL continuations.
+    #[test]
+    fn invalid_url_continuations_do_not_match(text in "[A-Za-z][A-Za-z0-9 ]{1,60}") {
+        let matcher = LinkReferenceMatcher::production();
+        prop_assert!(!matcher.is_url_continuation_line(&text));
+        prop_assert!(!matcher.is_url_continuation_line(""));
+        prop_assert!(!matcher.is_url_continuation_line("   "));
+    }
+
     /// A closed window ignores subsequent lines until opened again.
     #[test]
     fn closed_window_is_inert(line in "\\PC*") {
@@ -215,6 +249,7 @@ proptest! {
         prior in prop_oneof![
             Just(LinkTitleWindow::Closed),
             Just(LinkTitleWindow::AwaitingStandaloneTitle),
+            Just(LinkTitleWindow::AwaitingUrlContinuation),
         ],
     ) {
         let mut window = prior;
@@ -265,6 +300,61 @@ proptest! {
         );
         prop_assert_eq!(window, LinkTitleWindow::Closed);
     }
+
+    /// URL continuations emit verbatim and then await an optional standalone title.
+    #[test]
+    fn awaiting_url_continuation_emits_verbatim(url in arb_bare_url(), indent in 1usize..=3usize) {
+        let matcher = LinkReferenceMatcher::production();
+        let line = format!("{:indent$}{url}", "", indent = indent);
+        let mut window = LinkTitleWindow::AwaitingUrlContinuation;
+        prop_assert_eq!(
+            window.observe_next_line(&line, matcher),
+            Some(LinkTitleWindowOutcome::EmitVerbatim)
+        );
+        prop_assert_eq!(window, LinkTitleWindow::AwaitingStandaloneTitle);
+    }
+
+    /// Inline titles on URL continuations emit verbatim and close the window.
+    #[test]
+    fn url_continuation_inline_title_closes_window(
+        url in arb_bare_url(),
+        title in arb_dq_title(),
+        indent in 1usize..=3usize,
+    ) {
+        let matcher = LinkReferenceMatcher::production();
+        let line = format!("{:indent$}{url} {title}", "", indent = indent);
+        let mut window = LinkTitleWindow::AwaitingUrlContinuation;
+        prop_assert_eq!(
+            window.observe_next_line(&line, matcher),
+            Some(LinkTitleWindowOutcome::EmitVerbatim)
+        );
+        prop_assert_eq!(window, LinkTitleWindow::Closed);
+    }
+
+    /// Blank lines after a label-only reference emit verbatim and close the window.
+    #[test]
+    fn awaiting_url_continuation_blank_line_emits_verbatim(pad in 0usize..=4usize) {
+        let matcher = LinkReferenceMatcher::production();
+        let line = " ".repeat(pad);
+        let mut window = LinkTitleWindow::AwaitingUrlContinuation;
+        prop_assert_eq!(
+            window.observe_next_line(&line, matcher),
+            Some(LinkTitleWindowOutcome::EmitVerbatim)
+        );
+        prop_assert_eq!(window, LinkTitleWindow::Closed);
+    }
+
+    /// Non-continuation prose after a label-only reference is reprocessed normally.
+    #[test]
+    fn awaiting_url_continuation_prose_reprocesses(text in "[A-Za-z][A-Za-z0-9 ]{1,60}") {
+        let matcher = LinkReferenceMatcher::production();
+        let mut window = LinkTitleWindow::AwaitingUrlContinuation;
+        prop_assert_eq!(
+            window.observe_next_line(&text, matcher),
+            Some(LinkTitleWindowOutcome::Reprocess)
+        );
+        prop_assert_eq!(window, LinkTitleWindow::Closed);
+    }
 }
 
 #[test]
@@ -272,4 +362,11 @@ fn bare_definition_opens_window() {
     let mut window = LinkTitleWindow::Closed;
     window.observe_bare_definition();
     assert_eq!(window, LinkTitleWindow::AwaitingStandaloneTitle);
+}
+
+#[test]
+fn bare_label_opens_url_continuation_window() {
+    let mut window = LinkTitleWindow::Closed;
+    window.observe_bare_label();
+    assert_eq!(window, LinkTitleWindow::AwaitingUrlContinuation);
 }

@@ -172,10 +172,12 @@ fn handle_pending_continuation(
     }
 
     if is_passthrough_block(block_kind, line) {
-        if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition))
-            && link_matcher.standalone_title_need(line) == Some(true)
-        {
-            link_title_window.observe_bare_definition();
+        if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
+            if link_matcher.is_bare_label_only(line) {
+                link_title_window.observe_bare_label();
+            } else if link_matcher.standalone_title_need(line) == Some(true) {
+                link_title_window.observe_bare_definition();
+            }
         }
         let emitted = normalized_passthrough_line(line);
         writer.push_verbatim(state, emitted);
@@ -234,10 +236,12 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
         }
 
         if is_passthrough_block(block_kind, line) {
-            if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition))
-                && link_matcher.standalone_title_need(line) == Some(true)
-            {
-                link_title_window.observe_bare_definition();
+            if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
+                if link_matcher.is_bare_label_only(line) {
+                    link_title_window.observe_bare_label();
+                } else if link_matcher.standalone_title_need(line) == Some(true) {
+                    link_title_window.observe_bare_definition();
+                }
             }
             // Whitespace-only lines act as paragraph breaks; emit them as empty
             // strings so downstream consumers see a uniform separator.
