@@ -289,9 +289,9 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 /// Converts HTML tables embedded in Markdown lines to Markdown table syntax.
 ///
 /// Scans the input lines, detects HTML table blocks outside of fenced code blocks, and replaces
-/// them with equivalent Markdown tables. Fenced code blocks are left unmodified. Handles nested
-/// tables and preserves original line formatting outside of tables. Fenced code blocks are left
-/// untouched, allowing raw HTML examples to be documented without modification.
+/// them with equivalent Markdown tables. Fenced code blocks are left untouched, allowing raw HTML
+/// examples to be documented without modification. Handles nested tables and preserves original
+/// line formatting outside of tables.
 ///
 /// # Examples
 ///
