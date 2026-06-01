@@ -10,6 +10,8 @@
 
 use std::borrow::Cow;
 
+use tracing::trace;
+
 mod block;
 mod continuation;
 mod fence;
@@ -80,8 +82,8 @@ fn is_passthrough_block(block_kind: Option<BlockKind>, line: &str) -> bool {
 
 fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
     if let Some(cap) = BULLET_RE.captures(line) {
-        let prefix = cap.get(1).expect("bullet regex capture").as_str();
-        let rest = cap.get(2).expect("bullet regex remainder capture").as_str();
+        let prefix = cap.get(1).map(|m| m.as_str())?;
+        let rest = cap.get(2).map(|m| m.as_str())?;
         return Some(PrefixLine {
             prefix: Cow::Borrowed(prefix),
             rest,
@@ -90,12 +92,9 @@ fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
     }
 
     if let Some(cap) = FOOTNOTE_RE.captures(line) {
-        let prefix = cap.get(1).expect("footnote prefix capture").as_str();
-        let marker = cap.get(2).expect("footnote marker capture").as_str();
-        let rest = cap
-            .get(3)
-            .expect("footnote regex remainder capture")
-            .as_str();
+        let prefix = cap.get(1).map(|m| m.as_str())?;
+        let marker = cap.get(2).map(|m| m.as_str())?;
+        let rest = cap.get(3).map(|m| m.as_str())?;
         return Some(PrefixLine {
             prefix: Cow::Owned(format!("{prefix}{marker}")),
             rest,
@@ -103,12 +102,18 @@ fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
         });
     }
 
-    BLOCKQUOTE_RE.captures(line).map(|cap| PrefixLine {
-        prefix: Cow::Borrowed(cap.get(1).expect("blockquote prefix capture").as_str()),
-        rest: cap
-            .get(2)
-            .expect("blockquote regex remainder capture")
-            .as_str(),
+    let Some(cap) = BLOCKQUOTE_RE.captures(line) else {
+        trace!(
+            line_len = line.len(),
+            "prefix_line found no supported prefix"
+        );
+        return None;
+    };
+    let prefix = cap.get(1).map(|m| m.as_str())?;
+    let rest = cap.get(2).map(|m| m.as_str())?;
+    Some(PrefixLine {
+        prefix: Cow::Borrowed(prefix),
+        rest,
         repeat_prefix: true,
     })
 }
@@ -130,6 +135,18 @@ fn line_break_parts(line: &str) -> (String, bool) {
         .trim_end_matches(' ')
         .to_string();
     (text, hard_break)
+}
+
+fn normalized_passthrough_line(line: &str) -> &str {
+    if !line.is_empty() && line.trim().is_empty() {
+        trace!(
+            line_len = line.len(),
+            "normalising whitespace-only passthrough line"
+        );
+        ""
+    } else {
+        line
+    }
 }
 
 fn handle_pending_continuation(
@@ -160,7 +177,8 @@ fn handle_pending_continuation(
         {
             link_title_window.observe_bare_definition();
         }
-        writer.push_verbatim(state, line);
+        let emitted = normalized_passthrough_line(line);
+        writer.push_verbatim(state, emitted);
         return;
     }
 
@@ -172,9 +190,6 @@ fn handle_pending_continuation(
 }
 
 /// Wrap text lines to the given width.
-///
-/// # Panics
-/// Panics if regex captures fail unexpectedly.
 #[must_use]
 pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
@@ -224,7 +239,10 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             {
                 link_title_window.observe_bare_definition();
             }
-            writer.push_verbatim(&mut state, line);
+            // Whitespace-only lines act as paragraph breaks; emit them as empty
+            // strings so downstream consumers see a uniform separator.
+            let emitted = normalized_passthrough_line(line);
+            writer.push_verbatim(&mut state, emitted);
             continue;
         }
 

@@ -11,13 +11,19 @@ use std::sync::LazyLock;
 use html5ever::{driver::ParseOpts, parse_document, tendril::TendrilSink};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use regex::Regex;
+use tracing::debug;
 
 use crate::wrap::is_fence;
 
-/// Matches the start of an HTML `<table>` tag, ignoring case.
+/// Matches an HTML `<table>` tag at the start of a Markdown block, ignoring case.
 static TABLE_START_RE: LazyLock<Regex> = lazy_regex!(
-    r"(?i)^<table(?:\s|>|$)",
+    r"(?i)^(?:<table(?:\s|>|$))",
     "HTML table start pattern should compile"
+);
+/// Matches every HTML `<table>` tag while inside an HTML table block.
+static TABLE_TAG_RE: LazyLock<Regex> = lazy_regex!(
+    r"(?i)<table(?:\s|>|$)",
+    "HTML table tag pattern should compile"
 );
 /// Matches the end of an HTML `</table>` tag, ignoring case.
 static TABLE_END_RE: LazyLock<Regex> =
@@ -208,43 +214,52 @@ fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
     out
 }
 
-fn append_html_table_line(line: &str, buf: &mut Vec<String>, depth: &mut usize) {
-    buf.push(line.to_string());
-    *depth += TABLE_START_RE.find_iter(line).count();
-    if TABLE_END_RE.is_match(line) {
-        *depth = depth.saturating_sub(TABLE_END_RE.find_iter(line).count());
-    }
-}
-
-fn flush_completed_html_table(buf: &mut Vec<String>, depth: usize, out: &mut Vec<String>) -> bool {
-    if depth != 0 {
-        return false;
-    }
-    out.extend(table_lines_to_markdown(buf));
-    buf.clear();
-    true
-}
-
 #[derive(Default)]
 struct HtmlTableState {
     buf: Vec<String>,
     depth: usize,
-    in_html: bool,
 }
 
 impl HtmlTableState {
+    fn in_html(&self) -> bool { !self.buf.is_empty() }
+
     fn flush_raw(&mut self, out: &mut Vec<String>) {
         if !self.buf.is_empty() {
+            debug!(
+                line_count = self.buf.len(),
+                depth = self.depth,
+                "flushing buffered HTML table block without conversion"
+            );
             out.append(&mut self.buf);
         }
         self.depth = 0;
-        self.in_html = false;
     }
 
     fn push_html_line(&mut self, line: &str, out: &mut Vec<String>) {
-        append_html_table_line(line, &mut self.buf, &mut self.depth);
-        if flush_completed_html_table(&mut self.buf, self.depth, out) {
-            self.in_html = false;
+        let trimmed = line.trim_start();
+        let previous_depth = self.depth;
+        let start_count = TABLE_TAG_RE.find_iter(trimmed).count();
+        let end_count = TABLE_END_RE.find_iter(trimmed).count();
+        self.buf.push(line.to_string());
+        self.depth += start_count;
+        if end_count > 0 {
+            self.depth = self.depth.saturating_sub(end_count);
+        }
+        debug!(
+            previous_depth,
+            start_count,
+            end_count,
+            depth = self.depth,
+            buffered_lines = self.buf.len(),
+            "updated HTML table buffer depth"
+        );
+        if self.depth == 0 {
+            debug!(
+                line_count = self.buf.len(),
+                "converting HTML table block to Markdown"
+            );
+            out.extend(table_lines_to_markdown(&self.buf));
+            self.buf.clear();
         }
     }
 }
@@ -274,36 +289,28 @@ impl HtmlTableState {
 /// ```
 pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
-    let mut buf = Vec::new();
-    let mut depth = 0usize;
+    let mut html_state = HtmlTableState::default();
 
     for line in lines {
-        if depth > 0 || TABLE_START_RE.is_match(line.trim_start()) {
-            append_html_table_line(line, &mut buf, &mut depth);
-            let _ = flush_completed_html_table(&mut buf, depth, &mut out);
+        if html_state.in_html() || TABLE_START_RE.is_match(line.trim_start()) {
+            html_state.push_html_line(line, &mut out);
             continue;
         }
 
         out.push(line.clone());
     }
 
-    if !buf.is_empty() {
-        out.extend(buf);
-    }
+    html_state.flush_raw(&mut out);
 
     out
 }
 
-/// Processes Markdown lines and converts embedded HTML tables to Markdown.
-///
-/// Fenced code blocks are left untouched, allowing raw HTML examples to be
-/// documented without modification.
-#[must_use]
 /// Converts HTML tables embedded in Markdown lines to Markdown table syntax.
 ///
 /// Scans the input lines, detects HTML table blocks outside of fenced code blocks, and replaces
-/// them with equivalent Markdown tables. Fenced code blocks are left unmodified. Handles nested
-/// tables and preserves original line formatting outside of tables.
+/// them with equivalent Markdown tables. Fenced code blocks are left untouched, allowing raw HTML
+/// examples to be documented without modification. Handles nested tables and preserves original
+/// line formatting outside of tables.
 ///
 /// # Examples
 ///
@@ -318,6 +325,7 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 /// let result = convert_html_tables(&lines);
 /// assert!(result[0].starts_with("| Header |"));
 /// ```
+#[must_use]
 pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut html_state = HtmlTableState::default();
@@ -325,7 +333,7 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
 
     for line in lines {
         if is_fence(line).is_some() {
-            if html_state.in_html {
+            if html_state.in_html() {
                 html_state.flush_raw(&mut out);
             }
             in_code = !in_code;
@@ -338,13 +346,12 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        if html_state.in_html {
+        if html_state.in_html() {
             html_state.push_html_line(line, &mut out);
             continue;
         }
 
         if TABLE_START_RE.is_match(line.trim_start()) {
-            html_state.in_html = true;
             html_state.push_html_line(line, &mut out);
             continue;
         }
@@ -352,44 +359,11 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
         out.push(line.clone());
     }
 
-    if !html_state.buf.is_empty() {
-        out.extend(html_state.buf);
-    }
+    html_state.flush_raw(&mut out);
 
     out
 }
 
 #[cfg(test)]
-mod tests {
-    use html5ever::{driver::ParseOpts, parse_document, tendril::TendrilSink};
-    use markup5ever_rcdom::RcDom;
-
-    use super::*;
-
-    #[test]
-    fn element_detection() {
-        let dom: RcDom = parse_document(RcDom::default(), ParseOpts::default())
-            .one("<table></table>".to_string());
-        let html = dom.document.children.borrow()[0].clone();
-        let body = html.children.borrow()[1].clone();
-        let table = body.children.borrow()[0].clone();
-        assert!(is_element(&table, "table"));
-        assert!(is_element(&table, "TABLE"));
-        assert!(!is_element(&table, "tr"));
-    }
-
-    #[test]
-    fn table_cell_detection() {
-        let dom: RcDom = parse_document(RcDom::default(), ParseOpts::default())
-            .one("<table><tr><th>a</th><td>b</td></tr></table>".to_string());
-        let html = dom.document.children.borrow()[0].clone();
-        let body = html.children.borrow()[1].clone();
-        let table = body.children.borrow()[0].clone();
-        let tbody = table.children.borrow()[0].clone();
-        let tr = tbody.children.borrow()[0].clone();
-        let th = tr.children.borrow()[0].clone();
-        let td = tr.children.borrow()[1].clone();
-        assert!(is_table_cell(&th));
-        assert!(is_table_cell(&td));
-    }
-}
+#[path = "html_tests.rs"]
+mod tests;

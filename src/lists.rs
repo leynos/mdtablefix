@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use regex::Regex;
+use tracing::debug;
 
 use crate::{breaks::THEMATIC_BREAK_RE, wrap::FenceTracker};
 
@@ -61,12 +62,23 @@ fn is_plain_paragraph_line(line: &str) -> bool {
     )
 }
 
+#[derive(Default)]
 struct ListState {
     indent_stack: Vec<usize>,
     counters: HashMap<usize, usize>,
 }
 
 impl ListState {
+    fn reset(&mut self) {
+        debug!(
+            indent_depths = self.indent_stack.len(),
+            counters = self.counters.len(),
+            "resetting ordered list renumbering state"
+        );
+        self.indent_stack.clear();
+        self.counters.clear();
+    }
+
     fn prune_deeper(&mut self, indent: usize, inclusive: bool) {
         prune_deeper(
             indent,
@@ -74,6 +86,17 @@ impl ListState {
             &mut self.indent_stack,
             &mut self.counters,
         );
+    }
+
+    fn next_number(&mut self, indent: usize) -> usize {
+        self.prune_deeper(indent, false);
+        if self.indent_stack.last().is_none_or(|&d| d < indent) {
+            self.indent_stack.push(indent);
+        }
+        let num = self.counters.entry(indent).or_insert(1);
+        let current = *num;
+        *num += 1;
+        current
     }
 
     fn handle_paragraph_restart(&mut self, indent: usize, line: &str, prev_blank: bool) -> bool {
@@ -97,10 +120,7 @@ impl ListState {
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
-    let mut state = ListState {
-        indent_stack: Vec::new(),
-        counters: HashMap::new(),
-    };
+    let mut state = ListState::default();
     // Track fenced code blocks consistently across list processing.
     let mut fences = FenceTracker::default();
     #[allow(clippy::unnecessary_map_or)]
@@ -123,13 +143,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             continue;
         }
         if let Some((indent, indent_str, sep, rest)) = parse_numbered(line) {
-            state.prune_deeper(indent, false);
-            if state.indent_stack.last().is_none_or(|&d| d < indent) {
-                state.indent_stack.push(indent);
-            }
-            let num = state.counters.entry(indent).or_insert(1);
-            let current = *num;
-            *num += 1;
+            let current = state.next_number(indent);
             out.push(format!("{indent_str}{current}.{sep}{rest}"));
             prev_blank = false;
             continue;
@@ -141,8 +155,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
         if HEADING_RE.is_match(line) || THEMATIC_BREAK_RE.is_match(line.trim_end()) {
-            state.indent_stack.clear();
-            state.counters.clear();
+            state.reset();
             out.push(line.clone());
             prev_blank = false;
             continue;
@@ -159,6 +172,11 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for ordered list renumbering.
+    //!
+    //! These tests cover the parent module's parsing helpers, state
+    //! transitions, and public renumbering behaviour.
+
     use super::*;
 
     #[test]
@@ -197,5 +215,88 @@ mod tests {
             .map(str::to_string)
             .collect::<Vec<_>>();
         assert_eq!(renumber_lists(&input), expected);
+    }
+
+    #[test]
+    fn list_state_reset_clears_indent_stack_and_counters() {
+        let mut state = ListState::default();
+        let _ = state.next_number(0);
+        let _ = state.next_number(0);
+        let _ = state.next_number(4);
+        assert!(!state.indent_stack.is_empty());
+        assert!(!state.counters.is_empty());
+
+        state.reset();
+
+        assert!(state.indent_stack.is_empty());
+        assert!(state.counters.is_empty());
+    }
+
+    #[test]
+    fn list_state_next_number_increments_and_prunes_deeper_indents() {
+        let mut state = ListState::default();
+        assert_eq!(state.next_number(0), 1);
+        assert_eq!(state.next_number(0), 2);
+        // A deeper indent starts its own counter at 1.
+        assert_eq!(state.next_number(4), 1);
+        assert_eq!(state.next_number(4), 2);
+        // Returning to the original indent prunes the deeper one and continues
+        // counting from where the outer level left off.
+        assert_eq!(state.next_number(0), 3);
+        assert!(!state.counters.contains_key(&4));
+    }
+
+    mod proptest_tests {
+        //! Property tests for ordered list state invariants.
+        //!
+        //! These generated cases exercise the same `ListState` state machine
+        //! used by `renumber_lists` across varied indent sequences.
+
+        use proptest::prelude::*;
+
+        use super::ListState;
+
+        proptest! {
+            #[test]
+            fn list_state_next_number_always_starts_at_1_for_new_indent(
+                indents in proptest::collection::vec(0usize..=8, 1..=20),
+            ) {
+                let mut state = ListState::default();
+                for &indent in &indents {
+                    // Capture absence before the call: `next_number` may
+                    // prune deeper counters, but the counter for `indent`
+                    // itself is only removed by an earlier shallower call.
+                    let was_absent = !state.counters.contains_key(&indent);
+                    let returned = state.next_number(indent);
+                    if was_absent {
+                        prop_assert_eq!(
+                            returned,
+                            1,
+                            "indent {} first appeared (or re-emerged after pruning) but returned {}",
+                            indent,
+                            returned,
+                        );
+                    }
+                }
+            }
+
+            #[test]
+            fn list_state_prunes_deeper_counters_when_returning_to_outer_indent(
+                outer_count in 1usize..=6,
+                deeper_count in 1usize..=6,
+            ) {
+                let mut state = ListState::default();
+                for expected in 1..=outer_count {
+                    prop_assert_eq!(state.next_number(0), expected);
+                }
+                for expected in 1..=deeper_count {
+                    prop_assert_eq!(state.next_number(4), expected);
+                }
+
+                prop_assert_eq!(state.next_number(0), outer_count + 1);
+                prop_assert!(!state.counters.contains_key(&4));
+                prop_assert_eq!(state.counters.get(&0), Some(&(outer_count + 2)));
+            }
+        }
     }
 }

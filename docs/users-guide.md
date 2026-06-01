@@ -101,6 +101,30 @@ Two trailing spaces at the end of a line produce a hard line break in rendered
 Markdown. `mdtablefix --wrap` preserves those trailing spaces on the final
 wrapped line, so hard-break semantics are not lost after reformatting.
 
+Lines that consist entirely of whitespace — spaces, tabs, or any mixture — are
+normalized to empty strings during wrapping. Such lines act as paragraph
+boundaries and are never passed through with their original whitespace
+content, so the output uses a single uniform separator between paragraphs
+regardless of the input's incidental indentation.
+
+When computing the indentation width for continuation lines in prefixed
+contexts (blockquotes, lists, and footnote definitions), `mdtablefix` measures
+the prefix using Unicode display width (`UnicodeWidthStr::width`) rather than
+byte or character count. Continuation lines therefore stay correctly aligned
+when the prefix contains full-width characters such as ideographic spaces or
+CJK punctuation.
+
+## HTML table conversion
+
+`mdtablefix` converts `<table>…</table>` blocks that span multiple lines and
+carry leading indentation into Markdown pipe tables. The leading indentation
+is preserved on every emitted row, so the converted table sits at the same
+indentation level as the original HTML. Surrounding non-table lines at that
+same indentation level are passed through unchanged. Nested `<table>` tags
+are tracked by depth, so the buffered structure is converted only once the
+outermost `</table>` is reached and never split into two separate
+conversions.
+
 ## Fence normalization
 
 Pass `--fences` to normalize fenced code blocks before later processing. Safe
