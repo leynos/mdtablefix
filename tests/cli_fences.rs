@@ -2,10 +2,10 @@
 
 #[path = "support/cli_stdin.rs"]
 mod cli_stdin;
-use cli_stdin::{CliResult, run_cli_with_stdin};
+use cli_stdin::run_cli_with_stdin;
 
 #[test]
-fn test_cli_fences_preserves_nested_backtick_block() -> CliResult<()> {
+fn test_cli_fences_preserves_nested_backtick_block() -> Result<(), Box<dyn std::error::Error>> {
     let input = concat!(
         "````markdown\n",
         "```rust\n",
@@ -20,7 +20,8 @@ fn test_cli_fences_preserves_nested_backtick_block() -> CliResult<()> {
 }
 
 #[test]
-fn test_cli_fences_preserves_nested_backticks_inside_tilde_block() -> CliResult<()> {
+fn test_cli_fences_preserves_nested_backticks_inside_tilde_block()
+-> Result<(), Box<dyn std::error::Error>> {
     let input = concat!(
         "~~~~markdown\n",
         "```rust\n",
@@ -35,7 +36,8 @@ fn test_cli_fences_preserves_nested_backticks_inside_tilde_block() -> CliResult<
 }
 
 #[test]
-fn test_cli_fences_compresses_outer_backticks_while_preserving_inner_tildes() -> CliResult<()> {
+fn test_cli_fences_compresses_outer_backticks_while_preserving_inner_tildes()
+-> Result<(), Box<dyn std::error::Error>> {
     let input = concat!(
         "````markdown\n",
         "~~~rust\n",

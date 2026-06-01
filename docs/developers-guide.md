@@ -555,12 +555,42 @@ committing. Snapshot churn across many cases usually means the fixture is too
 broad or a shared transform changed behaviour; inspect the labelled case, mode,
 and arguments before accepting the new output.
 
+## Test infrastructure
+
+### `tests/support/` module
+
+Integration-test helpers are organized under `tests/support/`:
+
+| Module | Purpose |
+| --- | --- |
+| `cli_args.rs` | `run_cli_with_args` — invokes the binary with argument-only tests |
+| `cli_stdin.rs` | `run_cli_with_stdin` — invokes the binary feeding stdin |
+| `fixtures.rs` | Shared rstest fixtures (e.g. `broken_table`) |
+| `wrap_assertions.rs` | Higher-level assertions for wrapping output |
+
+Each integration-test file declares the modules it needs via explicit
+`#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
+
+### `test-macros` crate
+
+The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
+proc-macro attribute. It suppresses the `unused_braces` lint that the `rstest`
+fixture expansion triggers when `fn_single_line = true` is active in
+`rustfmt.toml`. Apply it to any fixture function whose single-expression body
+causes the lint:
+
+```rust
+#[test_macros::allow_fixture_expansion_lints]
+#[rstest::fixture]
+pub fn broken_table() -> Vec<String> { … }
+```
+
 ## Breaks module – Cow allocation strategy
 
 `format_breaks` in [src/breaks.rs](../src/breaks.rs) returns
 `Vec<Cow<'_, str>>` so unchanged lines can be forwarded without allocating.
 Lines that do not match a thematic break are emitted as `Cow::Borrowed` slices
-into the input `&[String]`. Synthesized thematic-break lines are also emitted
+into the input `&[String]`. Synthesised thematic-break lines are also emitted
 as `Cow::Borrowed`, pointing to the shared `LazyLock<String>` static
 `THEMATIC_BREAK_LINE`. Callers that need owned `String` values must call
 `.into_owned()` on each item.

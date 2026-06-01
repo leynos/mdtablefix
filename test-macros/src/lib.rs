@@ -15,16 +15,9 @@ pub fn allow_fixture_expansion_lints(_attr: TokenStream, item: TokenStream) -> T
     let parsed_item = parse_macro_input!(item as Item);
 
     quote! {
-        #[allow(
+        #[expect(
             unused_braces,
             reason = "fixture macro expansion triggers unused-braces on expression bodies"
-        )]
-        #[cfg_attr(
-            clippy,
-            expect(
-                clippy::allow_attributes,
-                reason = "needed to allow unused_braces for fixture macro expansion"
-            )
         )]
         #parsed_item
     }

@@ -6,10 +6,10 @@
 
 use rstest::rstest;
 
-use super::cli_stdin::{CliResult, run_cli_with_stdin};
+use super::cli_stdin::run_cli_with_stdin;
 
 #[test]
-fn test_cli_wrap_option() -> CliResult<()> {
+fn test_cli_wrap_option() -> Result<(), Box<dyn std::error::Error>> {
     let input = "This line is deliberately made much longer than eighty columns so that the \
                  wrapping algorithm is forced to insert a soft line-break somewhere in the middle \
                  of the paragraph when the --wrap flag is supplied.";
@@ -65,7 +65,10 @@ fn test_cli_wrap_option() -> CliResult<()> {
         ],
     ),
 )]
-fn test_cli_wrap_reflows_markdown(paragraph: &str, expected_lines: &[&str]) -> CliResult<()> {
+fn test_cli_wrap_reflows_markdown(
+    paragraph: &str,
+    expected_lines: &[&str],
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut input = paragraph.to_owned();
     input.push('\n');
     let assertion = run_cli_with_stdin(&["--wrap"], &input)?;
@@ -81,7 +84,7 @@ fn test_cli_wrap_reflows_markdown(paragraph: &str, expected_lines: &[&str]) -> C
 
 /// Ensures `--wrap` preserves an explicit language specifier on fences.
 #[test]
-fn test_cli_wrap_preserves_language() -> CliResult<()> {
+fn test_cli_wrap_preserves_language() -> Result<(), Box<dyn std::error::Error>> {
     let input = "```rust\nfn main() {}\n```\n";
     let assertion = run_cli_with_stdin(&["--wrap"], input)?;
     assertion.success().stdout(input);
@@ -90,7 +93,7 @@ fn test_cli_wrap_preserves_language() -> CliResult<()> {
 
 /// Accepts an optional space between the fence marker and language.
 #[test]
-fn test_cli_wrap_preserves_language_with_space() -> CliResult<()> {
+fn test_cli_wrap_preserves_language_with_space() -> Result<(), Box<dyn std::error::Error>> {
     let input = "``` rust\nfn main() {}\n```\n";
     let assertion = run_cli_with_stdin(&["--wrap"], input)?;
     assertion.success().stdout(input);
@@ -99,7 +102,7 @@ fn test_cli_wrap_preserves_language_with_space() -> CliResult<()> {
 
 /// Validates handling of opening fences without language specifiers.
 #[test]
-fn test_cli_wrap_preserves_plain_fence() -> CliResult<()> {
+fn test_cli_wrap_preserves_plain_fence() -> Result<(), Box<dyn std::error::Error>> {
     let input = "```\ncode\n```\n";
     let assertion = run_cli_with_stdin(&["--wrap"], input)?;
     assertion.success().stdout(input);
@@ -108,7 +111,7 @@ fn test_cli_wrap_preserves_plain_fence() -> CliResult<()> {
 
 /// Ensures `--wrap` preserves indented fenced code blocks.
 #[test]
-fn test_cli_wrap_preserves_indented_fence() -> CliResult<()> {
+fn test_cli_wrap_preserves_indented_fence() -> Result<(), Box<dyn std::error::Error>> {
     let input = "    ```rust\n    fn main() {}\n    ```\n";
     let assertion = run_cli_with_stdin(&["--wrap"], input)?;
     assertion.success().stdout(input);
@@ -117,7 +120,7 @@ fn test_cli_wrap_preserves_indented_fence() -> CliResult<()> {
 
 /// Ensures `--wrap` preserves tildes as fence markers with language.
 #[test]
-fn test_cli_wrap_preserves_tilde_fence_with_language() -> CliResult<()> {
+fn test_cli_wrap_preserves_tilde_fence_with_language() -> Result<(), Box<dyn std::error::Error>> {
     let input = "~~~python\nprint('Hello, world!')\n~~~\n";
     let assertion = run_cli_with_stdin(&["--wrap"], input)?;
     assertion.success().stdout(input);
@@ -126,7 +129,8 @@ fn test_cli_wrap_preserves_tilde_fence_with_language() -> CliResult<()> {
 
 /// Ensures `--wrap` preserves tildes as fence markers without language.
 #[test]
-fn test_cli_wrap_preserves_tilde_fence_without_language() -> CliResult<()> {
+fn test_cli_wrap_preserves_tilde_fence_without_language() -> Result<(), Box<dyn std::error::Error>>
+{
     let input = "~~~\nno language here\n~~~\n";
     let assertion = run_cli_with_stdin(&["--wrap"], input)?;
     assertion.success().stdout(input);
@@ -135,7 +139,8 @@ fn test_cli_wrap_preserves_tilde_fence_without_language() -> CliResult<()> {
 
 /// Opening with four backticks should ignore inner triple backticks.
 #[test]
-fn test_cli_wrap_preserves_four_backticks_and_ignores_inner_triple() -> CliResult<()> {
+fn test_cli_wrap_preserves_four_backticks_and_ignores_inner_triple()
+-> Result<(), Box<dyn std::error::Error>> {
     let input = "````rust\n```\nfn main() {}\n````\n";
     let assertion = run_cli_with_stdin(&["--wrap"], input)?;
     assertion.success().stdout(input);
@@ -144,7 +149,7 @@ fn test_cli_wrap_preserves_four_backticks_and_ignores_inner_triple() -> CliResul
 
 /// Retains extended info strings including attributes and options.
 #[test]
-fn test_cli_wrap_preserves_extended_info_string() -> CliResult<()> {
+fn test_cli_wrap_preserves_extended_info_string() -> Result<(), Box<dyn std::error::Error>> {
     let input = "``` rust linenums {style=monokai}\ncode\n```\n";
     let assertion = run_cli_with_stdin(&["--wrap"], input)?;
     assertion.success().stdout(input);
@@ -153,7 +158,7 @@ fn test_cli_wrap_preserves_extended_info_string() -> CliResult<()> {
 
 /// Accepts four or more tildes as fence markers.
 #[test]
-fn test_cli_wrap_preserves_tilde_with_four_markers() -> CliResult<()> {
+fn test_cli_wrap_preserves_tilde_with_four_markers() -> Result<(), Box<dyn std::error::Error>> {
     let input = "~~~~python\nprint('hi')\n~~~~\n";
     let assertion = run_cli_with_stdin(&["--wrap"], input)?;
     assertion.success().stdout(input);
@@ -162,7 +167,8 @@ fn test_cli_wrap_preserves_tilde_with_four_markers() -> CliResult<()> {
 
 /// Ensures `--wrap` preserves inline code spans with embedded quotes.
 #[test]
-fn test_cli_wrap_preserves_inline_code_span_with_quotes() -> CliResult<()> {
+fn test_cli_wrap_preserves_inline_code_span_with_quotes() -> Result<(), Box<dyn std::error::Error>>
+{
     let input = concat!(
         r#"- **Imperative (Avoid):** `When I type "user@example.com" into the "email"
   field and click the "submit" button` A declarative style describes the user's
@@ -192,7 +198,7 @@ fn test_cli_wrap_preserves_inline_code_span_with_quotes() -> CliResult<()> {
 
 /// Ensures `--wrap` preserves emphasised step definition guidance with inline code spans.
 #[test]
-fn test_cli_wrap_preserves_step_definitions_guidance() -> CliResult<()> {
+fn test_cli_wrap_preserves_step_definitions_guidance() -> Result<(), Box<dyn std::error::Error>> {
     let input = "- **Step Definitions:** Mirror the feature file structure in your `tests/steps/` \
                  directory.\n  Create a Rust module for each feature area (e.g., \
                  `tests/steps/authentication_steps.rs`,\n  `tests/steps/catalog_steps.rs`). This \

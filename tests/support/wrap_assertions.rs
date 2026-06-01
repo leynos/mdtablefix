@@ -29,26 +29,18 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
 }
 
 fn scan_code_spans(line: &str, open: &mut Option<usize>) {
-    let chars: Vec<char> = line.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        if chars[i] != '`' {
-            i += 1;
+    let mut chars = line.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch != '`' {
             continue;
         }
 
-        let len = count_backticks(&chars, &mut i);
+        let mut len = 1;
+        while chars.next_if_eq(&'`').is_some() {
+            len += 1;
+        }
         toggle_code_span(open, len);
     }
-}
-
-fn count_backticks(chars: &[char], index: &mut usize) -> usize {
-    let mut len = 0;
-    while *index < chars.len() && chars[*index] == '`' {
-        len += 1;
-        *index += 1;
-    }
-    len
 }
 
 fn toggle_code_span(open: &mut Option<usize>, len: usize) {

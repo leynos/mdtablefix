@@ -165,6 +165,36 @@ mod prop_tests {
                 }
             }
         }
+
+        #[test]
+        fn fenced_thematic_breaks_are_not_normalised(
+            fencer in prop_oneof![Just("```".to_string()), Just("~~~".to_string())],
+            break_line in thematic_break_line(),
+            prefix in prop::collection::vec(non_thematic_line(), 0..8),
+            suffix in prop::collection::vec(non_thematic_line(), 0..8),
+        ) {
+            let mut lines: Vec<String> = prefix.clone();
+            lines.push(fencer.clone());
+            lines.push(break_line.clone());
+            lines.push(fencer.clone());
+            lines.extend(suffix.clone());
+
+            let output = format_breaks(&lines);
+            prop_assert_eq!(output.len(), lines.len());
+
+            // The break line inside the fence must be returned verbatim (borrowed
+            // from the input), not replaced with THEMATIC_BREAK_LINE.
+            let fence_break_idx = prefix.len() + 1;
+            match &output[fence_break_idx] {
+                Cow::Borrowed(value) => {
+                    prop_assert_eq!(*value, break_line.as_str());
+                    prop_assert!(std::ptr::eq(*value, lines[fence_break_idx].as_str()));
+                }
+                Cow::Owned(value) => {
+                    prop_assert!(false, "expected borrowed input line inside fence, got owned {value:?}");
+                }
+            }
+        }
     }
 
     fn non_thematic_line() -> impl Strategy<Value = String> {
