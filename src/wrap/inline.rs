@@ -238,7 +238,7 @@ fn split_boundary_atomic_line(
     Some((vec![line[0].clone()], line[1..].to_vec()))
 }
 
-/// Returns whether a boundary atomic fragment should be finalised now.
+/// Returns whether a boundary atomic fragment should be finalized now.
 fn should_flush_boundary_atomic(
     lines: &[String],
     buffer: &[InlineFragment],

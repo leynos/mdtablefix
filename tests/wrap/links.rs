@@ -6,6 +6,7 @@
 //! links instead of being orphaned during wrapping.
 
 use insta::assert_snapshot;
+use mdtablefix::process::WRAP_COLS;
 use rstest::rstest;
 
 use super::*;
@@ -227,14 +228,12 @@ fn test_wrap_link_with_unbalanced_parens_is_not_split() {
 
 #[test]
 fn test_wrap_link_at_exact_wrap_boundary_is_not_split() {
-    // Mirrors `process::WRAP_COLS`, which is `pub(crate)`.
-    const WRAP_WIDTH: usize = 80;
     const WORD: &str = "Word ";
-    let prefix = WORD.repeat(WRAP_WIDTH / WORD.len());
-    assert_eq!(prefix.len() % WRAP_WIDTH, 0);
+    let prefix = WORD.repeat(WRAP_COLS / WORD.len());
+    assert_eq!(prefix.len() % WRAP_COLS, 0);
     let link = "[boundary](https://example.com/wrap-boundary-test)";
     let punct = ".";
-    // Trailing text pushes total length well past WRAP_WIDTH so wrapping fires.
+    // Trailing text pushes total length well past WRAP_COLS so wrapping fires.
     let input = lines_vec![format!(
         "{prefix}{link}{punct} trailing text to force wrapping here."
     )];
