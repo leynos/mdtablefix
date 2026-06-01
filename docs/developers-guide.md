@@ -570,7 +570,7 @@ and arguments before accepting the new output.
 ## Stateful pipeline helpers
 
 Three internal types centralize the buffered state used by the conversion
-pipeline. Each owns one slice of pipeline behaviour so the surrounding
+pipeline. Each owns one slice of pipeline behaviour, so the surrounding
 functions remain focused on traversal.
 
 ### `HtmlTableState` (`src/html.rs`)
@@ -595,8 +595,8 @@ consistent with explicit reference rewrites. Explicit `[^n]:` headers are
 appended to `definitions` as soon as they are encountered, producing a
 `DefinitionLine` per header in scan order. Ordered-list items that look like
 candidate footnote definitions are buffered as `NumericCandidate` entries
-during the scan and finalised at the end via `finalize_numeric_candidates`,
-which drains the buffer in reverse so the assigned numbers reflect
+during the scan and finalized at the end via `finalize_numeric_candidates`,
+which drains the buffer in reverse, so the assigned numbers reflect
 bottom-up ordering rather than the order in which the candidates were
 discovered.
 
@@ -606,7 +606,7 @@ discovered.
 ordered-list renumbering. `next_number(indent)` first prunes indent levels
 deeper than `indent` (their counters disappear so a future deeper level
 restarts at 1), pushes `indent` onto the stack if it is new, and returns the
-next sequential number for that level — incrementing the counter so the next
+next sequential number for that level — incrementing the counter, so the next
 call at the same indent receives the following integer. `reset()` clears
 both the stack and the counter map; the renumbering pass invokes it when a
 heading or thematic break is encountered, so the next list starts numbering

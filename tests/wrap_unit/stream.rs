@@ -39,12 +39,10 @@ fn wrap_stream_keeps_opening_bracket_with_inline_code_in_list(
     )];
     let output = process_stream(&input);
     for line in &output {
-        if line.contains('`') {
-            assert!(
-                !line.ends_with(opener),
-                "opening bracket must stay with inline code on line: {line:?}"
-            );
-        }
+        assert!(
+            !line.ends_with(opener),
+            "opening bracket must stay with inline code on line: {line:?}"
+        );
     }
 }
 

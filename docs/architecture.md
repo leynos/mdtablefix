@@ -387,7 +387,7 @@ It keeps the current indent, emits wrapped or verbatim lines into the caller's
 output buffer, and leaves inline fitting to the wrapping helpers.
 
 `HtmlTableState` buffers candidate HTML table lines until the surrounding
-table closes. Its depth counter tracks nested `<table>` blocks so only the
+table closes. Its depth counter tracks nested `<table>` blocks, so only the
 outermost table is converted at once, while incomplete input can still be
 flushed back verbatim.
 

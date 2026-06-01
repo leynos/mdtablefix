@@ -14,7 +14,10 @@ fn strings(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_s
 #[case("7.")]
 #[case("7:")]
 fn malformed_numeric_candidate_line_is_ignored(#[case] line: &str) {
-    assert!(numeric_candidate_from_line(line, 0).is_none());
+    assert!(
+        numeric_candidate_from_line(line, 0).is_none(),
+        "offending line: {line:?}"
+    );
 }
 
 #[rstest]
@@ -35,6 +38,12 @@ fn renumber_footnotes_rewrites_definitions(
 }
 
 mod proptest_tests {
+    //! Property tests for footnote renumbering.
+    //!
+    //! These cases use `proptest` and `Regex` to generate reference and
+    //! definition sets, then verify that renumbering preserves fenced content
+    //! while assigning sequential footnote numbers.
+
     use proptest::prelude::*;
     use regex::Regex;
 
