@@ -18,6 +18,7 @@
 
 use mdtablefix::wrap::wrap_text;
 use rstest::rstest;
+use unicode_width::UnicodeWidthStr;
 
 use super::*;
 
@@ -202,6 +203,49 @@ fn test_wrap_issue_md038_regression_fixture() {
     assert_no_md038_code_span(&output.join("\n"));
 }
 
+#[test]
+fn test_wrap_does_not_join_overlong_signature() {
+    let input = lines_vec![
+        "- `EngineConnector::connect(socket: impl AsRef<str>)",
+        "  -> Result<Docker, PodbotError>`",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(output, input);
+    assert_no_line_exceeds_width(&output, 80);
+}
+
+#[test]
+fn test_wrap_does_not_join_overlong_import_list() {
+    let input = lines_vec![
+        "- `podbot::engine::{ContainerSecurityOptions, CreateContainerRequest,",
+        "  EngineConnector, SelinuxLabelMode}`",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(output, input);
+    assert_no_line_exceeds_width(&output, 80);
+}
+
+#[test]
+fn test_wrap_partial_join_then_verbatim() {
+    let input = lines_vec![
+        "- `Api::call(",
+        "  first: FirstType, second: SecondType,",
+        "  third: ThirdType, fourth: FourthType)`",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(
+        output,
+        vec![
+            "- `Api::call( first: FirstType, second: SecondType,".to_string(),
+            "  third: ThirdType, fourth: FourthType)`".to_string(),
+        ]
+    );
+    assert_no_line_exceeds_width(&output, 80);
+}
+
 fn assert_no_md038_code_span(rendered: &str) {
     let mut remaining = rendered;
     while let Some(open_index) = remaining.find('`') {
@@ -215,5 +259,15 @@ fn assert_no_md038_code_span(rendered: &str) {
             "code span has leading or trailing space: {code:?} in {rendered:?}"
         );
         remaining = &after_open[close_index + 1..];
+    }
+}
+
+fn assert_no_line_exceeds_width(output: &[String], width: usize) {
+    for line in output {
+        let line_width = UnicodeWidthStr::width(line.as_str());
+        assert!(
+            line_width <= width,
+            "line exceeds {width} columns with width {line_width}: {line:?}"
+        );
     }
 }

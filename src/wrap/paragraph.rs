@@ -184,6 +184,29 @@ impl<'a> ParagraphWriter<'a> {
         }
     }
 
+    pub(super) fn emit_pending_with_verbatim_continuation(
+        &mut self,
+        pending: PendingPrefix,
+        continuation: &str,
+        hard_break: bool,
+    ) {
+        let prefix = pending.prefix;
+        let mut first_line = format!("{prefix}{rest}", rest = pending.rest);
+        if (pending.hard_break || hard_break) && !first_line.ends_with("  ") {
+            first_line.push_str("  ");
+        }
+        self.out.push(first_line);
+
+        let prefix_width = UnicodeWidthStr::width(prefix.as_str());
+        let continuation_prefix = if pending.repeat_prefix {
+            prefix
+        } else {
+            " ".repeat(prefix_width)
+        };
+        self.out
+            .push(format!("{continuation_prefix}{continuation}"));
+    }
+
     /// Flushes the buffered paragraph into wrapped output lines.
     ///
     /// `state` supplies the buffered segments and remembered indent. This

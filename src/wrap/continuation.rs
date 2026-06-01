@@ -11,6 +11,8 @@
 
 use std::borrow::Cow;
 
+use unicode_width::UnicodeWidthStr;
+
 use super::{
     paragraph::{ContinuationMode, ParagraphState, ParagraphWriter, PendingPrefix, PrefixLine},
     tokenize,
@@ -30,6 +32,13 @@ pub(super) fn apply_continuation_chunk(
     writer: &mut ParagraphWriter<'_>,
     state: &mut ParagraphState,
 ) {
+    if should_emit_verbatim_for_width(text, state)
+        && let Some(pending) = state.pending_prefix.take()
+    {
+        writer.emit_pending_with_verbatim_continuation(pending, text, hard_break);
+        return;
+    }
+
     let Some(pending) = state.pending_prefix.as_mut() else {
         return;
     };
@@ -93,6 +102,34 @@ pub(super) fn apply_continuation_chunk(
             writer.flush_paragraph(state);
         }
     }
+}
+
+fn should_emit_verbatim_for_width(text: &str, state: &ParagraphState) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+
+    let Some(pending) = state.pending_prefix.as_ref() else {
+        return false;
+    };
+
+    let open_fence_len = pending.open_fence_len.unwrap_or(0);
+    let is_tight_code_span = pending.continuation_mode == ContinuationMode::TightCodeSpan;
+    let leading_run_len = tokenize::opening_fence_run_len(text.as_bytes(), text);
+    let needs_space =
+        !is_tight_code_span && leading_run_needs_space(leading_run_len, open_fence_len, false);
+    let projected_width = UnicodeWidthStr::width(pending.rest.as_str())
+        + usize::from(!pending.rest.is_empty() && needs_space)
+        + UnicodeWidthStr::width(text);
+
+    let closes_pending_span_at_end = position_after_close(text, open_fence_len)
+        .is_some_and(|close_end| text[close_end..].trim().is_empty())
+        && matches!(
+            scan_continuation_span_state(text, open_fence_len),
+            None | Some(0)
+        );
+
+    closes_pending_span_at_end && projected_width > pending.rest_width
 }
 
 /// Join a soft-wrapped continuation onto pending prefixed text.

@@ -181,11 +181,13 @@ The wrapping pipeline for `--wrap` is:
    inventing a closing fence. If the opener is at or near the end of its source
    line, `PendingPrefix` marks subsequent continuations as verbatim so joining
    does not create leading or trailing spaces inside the code span. When the
-   scanner reports no open span and no close/reopen boundary exists,
-   `flush_paragraph` emits the buffered segment atomically using
-   `append_wrapped_with_prefix_width`. When `hard_break` is set, two trailing
-   spaces are appended to the last emitted line. `clear()` on `ParagraphState`
-   also resets `pending_prefix` to `None`.
+   projected join would exceed the available content width, the pending line
+   and continuation are emitted verbatim rather than joined into a
+   Markdownlint-invalid overlong line. When the scanner reports no open span
+   and no close/reopen boundary exists, `flush_paragraph` emits the buffered
+   segment atomically using `append_wrapped_with_prefix_width`. When
+   `hard_break` is set, two trailing spaces are appended to the last emitted
+   line. `clear()` on `ParagraphState` also resets `pending_prefix` to `None`.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
