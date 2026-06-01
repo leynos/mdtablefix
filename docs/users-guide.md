@@ -114,7 +114,6 @@ byte or character count. Continuation lines therefore stay correctly aligned
 when the prefix contains full-width characters such as ideographic spaces or
 CJK punctuation.
 
-
 ## HTML table conversion
 
 `mdtablefix` converts `<table>…</table>` blocks that span multiple lines and

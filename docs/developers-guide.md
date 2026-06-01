@@ -567,13 +567,11 @@ committing. Snapshot churn across many cases usually means the fixture is too
 broad or a shared transform changed behaviour; inspect the labelled case, mode,
 and arguments before accepting the new output.
 
-
 ## Stateful pipeline helpers
 
 Three internal types centralize the buffered state used by the conversion
 pipeline. Each owns one slice of pipeline behaviour so the surrounding
 functions remain focused on traversal.
-
 
 ### `HtmlTableState` (`src/html.rs`)
 
@@ -587,7 +585,6 @@ returns to zero, the buffered lines are converted by `table_lines_to_markdown`
 and the buffer is cleared. `flush_raw` exists for the fenced-block escape
 path: it emits the buffered lines verbatim without conversion, so raw HTML
 inside a fenced code block is preserved unchanged.
-
 
 ### `DefinitionScanState` (`src/footnotes/renumber/definitions.rs`)
 
@@ -603,7 +600,6 @@ which drains the buffer in reverse so the assigned numbers reflect
 bottom-up ordering rather than the order in which the candidates were
 discovered.
 
-
 ### `ListState` (`src/lists.rs`)
 
 `ListState` maintains an indent stack and a per-indent counter map for
@@ -615,6 +611,7 @@ call at the same indent receives the following integer. `reset()` clears
 both the stack and the counter map; the renumbering pass invokes it when a
 heading or thematic break is encountered, so the next list starts numbering
 from 1 again.
+
 ## Test infrastructure
 
 ### `tests/support/` module
