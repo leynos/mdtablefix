@@ -65,7 +65,11 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
+    use std::{
+        borrow::Cow,
+        sync::{Arc, Barrier},
+        thread,
+    };
 
     use super::*;
 
@@ -102,6 +106,46 @@ mod tests {
         assert_borrowed_value!(output[0], "```");
         assert_borrowed_value!(output[1], "---");
         assert_borrowed_value!(output[2], "```");
+    }
+
+    #[test]
+    fn thematic_break_static_is_stable_across_threads() {
+        const THREADS: usize = 16;
+
+        let barrier = Arc::new(Barrier::new(THREADS));
+        let handles = (0..THREADS)
+            .map(|_| {
+                let barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    let input = vec!["---".to_string()];
+                    barrier.wait();
+
+                    let output = format_breaks(&input);
+                    match &output[0] {
+                        Cow::Borrowed(value) => {
+                            assert_eq!(*value, THEMATIC_BREAK_LINE.as_str());
+                            assert_eq!(value.len(), THEMATIC_BREAK_LEN);
+                            assert!(std::ptr::eq(*value, THEMATIC_BREAK_LINE.as_str()));
+                            value.as_ptr() as usize
+                        }
+                        Cow::Owned(value) => {
+                            panic!("expected borrowed break line, got owned {value:?}");
+                        }
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let pointers = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("thread must complete"))
+            .collect::<Vec<_>>();
+
+        assert!(
+            pointers
+                .iter()
+                .all(|pointer| *pointer == THEMATIC_BREAK_LINE.as_ptr() as usize)
+        );
     }
 }
 
