@@ -574,10 +574,10 @@ Each integration-test file declares the modules it needs via explicit
 ### `test-macros` crate
 
 The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
-proc-macro attribute. It suppresses the `unused_braces` lint that the `rstest`
-fixture expansion triggers when `fn_single_line = true` is active in
+proc-macro attribute. It suppresses the `unused_braces` lint that `rstest`
+fixture expansion triggers when `fn_single_line = true` is set in
 `rustfmt.toml`. Apply it to any fixture function whose single-expression body
-causes the lint:
+triggers the lint:
 
 ```rust
 #[test_macros::allow_fixture_expansion_lints]

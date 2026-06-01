@@ -182,8 +182,6 @@ mod prop_tests {
             let output = format_breaks(&lines);
             prop_assert_eq!(output.len(), lines.len());
 
-            // The break line inside the fence must be returned verbatim (borrowed
-            // from the input), not replaced with THEMATIC_BREAK_LINE.
             let fence_break_idx = prefix.len() + 1;
             match &output[fence_break_idx] {
                 Cow::Borrowed(value) => {
@@ -191,7 +189,10 @@ mod prop_tests {
                     prop_assert!(std::ptr::eq(*value, lines[fence_break_idx].as_str()));
                 }
                 Cow::Owned(value) => {
-                    prop_assert!(false, "expected borrowed input line inside fence, got owned {value:?}");
+                    prop_assert!(
+                        false,
+                        "expected borrowed input line inside fence, got owned {value:?}"
+                    );
                 }
             }
         }
