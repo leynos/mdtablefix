@@ -36,6 +36,13 @@ fn table_cell_detection() {
     assert!(is_table_cell(&td));
 }
 
+#[test]
+fn convert_html_tables_ignores_mid_line_table_tags() {
+    let input = vec!["prefix <table><tr><td>Cell</td></tr></table>".to_string()];
+
+    assert_eq!(convert_html_tables(&input), input);
+}
+
 mod proptest_tests {
     //! Property tests for HTML table conversion invariants.
     //!

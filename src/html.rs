@@ -15,10 +15,15 @@ use tracing::debug;
 
 use crate::wrap::is_fence;
 
-/// Matches the start of an HTML `<table>` tag, ignoring case.
+/// Matches an HTML `<table>` tag at the start of a Markdown block, ignoring case.
 static TABLE_START_RE: LazyLock<Regex> = lazy_regex!(
-    r"(?i)<table(?:\s|>|$)",
+    r"(?i)^(?:<table(?:\s|>|$))",
     "HTML table start pattern should compile"
+);
+/// Matches every HTML `<table>` tag while inside an HTML table block.
+static TABLE_TAG_RE: LazyLock<Regex> = lazy_regex!(
+    r"(?i)<table(?:\s|>|$)",
+    "HTML table tag pattern should compile"
 );
 /// Matches the end of an HTML `</table>` tag, ignoring case.
 static TABLE_END_RE: LazyLock<Regex> =
@@ -228,7 +233,7 @@ impl HtmlTableState {
     fn push_html_line(&mut self, line: &str, out: &mut Vec<String>) {
         let trimmed = line.trim_start();
         self.buf.push(line.to_string());
-        self.depth += TABLE_START_RE.find_iter(trimmed).count();
+        self.depth += TABLE_TAG_RE.find_iter(trimmed).count();
         if TABLE_END_RE.is_match(trimmed) {
             self.depth = self
                 .depth
