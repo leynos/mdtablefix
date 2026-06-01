@@ -571,6 +571,26 @@ Integration-test helpers are organized under `tests/support/`:
 Each integration-test file declares the modules it needs via explicit
 `#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
 
+### Exported test macros (`tests/common/mod.rs`)
+
+`tests/common/mod.rs` exports two `#[macro_export]` macros available to all
+integration-test crates:
+
+| Macro | Purpose |
+| --- | --- |
+| `lines_vec![…]` | Builds a `Vec<String>` from string-like values. |
+| `include_lines!("path")` | Builds a `Vec<String>` from file lines. |
+
+`lines_vec![…]` reduces boilerplate when constructing fixture inputs.
+`include_lines!("path")` uses `include_str!` at compile time and returns one
+`String` per line of the referenced file.
+
+Both macros are exported rather than kept private because Rust's macro scoping
+rules require `#[macro_export]` for macros to be visible across integration-test
+binary crates. The `#[expect(unused_macros)]` suppressions that previously
+guarded them were replaced by the export attribute when it became clear that
+multiple test binaries depend on them.
+
 ### `test-macros` crate
 
 The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
