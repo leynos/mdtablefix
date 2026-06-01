@@ -3,6 +3,8 @@
 //! These tests compile as a child module of `postprocess`, so they can cover
 //! private helpers while keeping test-only cases out of the production module.
 
+use rstest::rstest;
+
 use super::{
     super::fragment::{FragmentKind, InlineFragment},
     *,
@@ -148,26 +150,43 @@ fn rebalance_moves_atomic_tail_when_fits() {
     );
 }
 
-#[test]
-fn rebalance_does_not_move_when_overflow() {
-    let mut lines = vec![
+#[rstest]
+#[case::overflow_plain(
+    vec![
         vec![fragment("alpha"), fragment("`code`")],
         vec![fragment(" "), fragment("plain")],
-    ];
-    let original = lines.clone();
-    let width = line_width(&lines[1]) + lines[0].last().expect("tail exists").width - 1;
-    rebalance_atomic_tails(&mut lines, width);
-    assert_eq!(lines, original);
-}
-
-#[test]
-fn rebalance_skips_when_next_does_not_start_with_space_then_plain() {
-    let mut lines = vec![
+    ],
+    11,
+)]
+#[case::next_starts_plain_only(
+    vec![
         vec![fragment("alpha"), fragment("`code`")],
         vec![fragment("plain")],
-    ];
+    ],
+    80,
+)]
+#[case::single_plain_fragment_line(
+    vec![
+        vec![fragment("tail")],
+        vec![fragment(" "), fragment("beta")],
+    ],
+    20,
+)]
+#[case::empty(Vec::new(), 10)]
+#[case::single_line(vec![vec![fragment("alpha"), fragment("tail")]], 10)]
+#[case::next_starts_space_then_atomic(
+    vec![
+        vec![fragment("alpha"), fragment("tail")],
+        vec![fragment(" "), fragment("`code`")],
+    ],
+    20,
+)]
+fn rebalance_leaves_input_unchanged(
+    #[case] mut lines: Vec<Vec<InlineFragment>>,
+    #[case] width: usize,
+) {
     let original = lines.clone();
-    rebalance_atomic_tails(&mut lines, 80);
+    rebalance_atomic_tails(&mut lines, width);
     assert_eq!(lines, original);
 }
 
@@ -198,41 +217,4 @@ fn rebalance_moves_plain_tail_when_fits() {
         lines[1],
         vec![fragment("tail"), fragment(" "), fragment("beta")]
     );
-}
-
-#[test]
-fn rebalance_leaves_single_plain_fragment_line_unchanged() {
-    let mut lines = vec![
-        vec![fragment("tail")],
-        vec![fragment(" "), fragment("beta")],
-    ];
-    let original = lines.clone();
-    rebalance_atomic_tails(&mut lines, 20);
-    assert_eq!(lines, original);
-}
-
-#[test]
-fn rebalance_ignores_empty_input() {
-    let mut lines: Vec<Vec<InlineFragment>> = Vec::new();
-    rebalance_atomic_tails(&mut lines, 10);
-    assert!(lines.is_empty());
-}
-
-#[test]
-fn rebalance_leaves_single_line_input_unchanged() {
-    let mut lines = vec![vec![fragment("alpha"), fragment("tail")]];
-    let original = lines.clone();
-    rebalance_atomic_tails(&mut lines, 10);
-    assert_eq!(lines, original);
-}
-
-#[test]
-fn rebalance_skips_when_next_line_starts_with_space_then_atomic() {
-    let mut lines = vec![
-        vec![fragment("alpha"), fragment("tail")],
-        vec![fragment(" "), fragment("`code`")],
-    ];
-    let original = lines.clone();
-    rebalance_atomic_tails(&mut lines, 20);
-    assert_eq!(lines, original);
 }

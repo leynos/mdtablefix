@@ -17,7 +17,7 @@ use crate::wrap::is_fence;
 
 /// Matches the start of an HTML `<table>` tag, ignoring case.
 static TABLE_START_RE: LazyLock<Regex> = lazy_regex!(
-    r"(?i)^<table(?:\s|>|$)",
+    r"(?i)<table(?:\s|>|$)",
     "HTML table start pattern should compile"
 );
 /// Matches the end of an HTML `</table>` tag, ignoring case.
@@ -286,16 +286,12 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
     out
 }
 
-/// Processes Markdown lines and converts embedded HTML tables to Markdown.
-///
-/// Fenced code blocks are left untouched, allowing raw HTML examples to be
-/// documented without modification.
-#[must_use]
 /// Converts HTML tables embedded in Markdown lines to Markdown table syntax.
 ///
 /// Scans the input lines, detects HTML table blocks outside of fenced code blocks, and replaces
 /// them with equivalent Markdown tables. Fenced code blocks are left unmodified. Handles nested
-/// tables and preserves original line formatting outside of tables.
+/// tables and preserves original line formatting outside of tables. Fenced code blocks are left
+/// untouched, allowing raw HTML examples to be documented without modification.
 ///
 /// # Examples
 ///
@@ -310,6 +306,7 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 /// let result = convert_html_tables(&lines);
 /// assert!(result[0].starts_with("| Header |"));
 /// ```
+#[must_use]
 pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut html_state = HtmlTableState::default();
