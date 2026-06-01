@@ -70,5 +70,27 @@ mod proptest_tests {
                 prop_assert_eq!(state.in_html(), state.depth > 0);
             }
         }
+
+        #[test]
+        fn html_table_state_buffers_until_all_nested_tables_close(
+            nested_count in 0usize..=4,
+        ) {
+            let mut state = HtmlTableState::default();
+            let mut out = Vec::new();
+            let opens = "<table>".repeat(nested_count + 1);
+            let closes = "</table>".repeat(nested_count);
+
+            state.push_html_line(&opens, &mut out);
+            prop_assert!(state.in_html());
+            prop_assert!(out.is_empty());
+
+            state.push_html_line(&closes, &mut out);
+            prop_assert!(state.in_html());
+            prop_assert!(out.is_empty());
+
+            state.push_html_line("</table>", &mut out);
+            prop_assert!(!state.in_html());
+            prop_assert_eq!(state.depth, 0);
+        }
     }
 }

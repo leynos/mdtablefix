@@ -279,6 +279,24 @@ mod tests {
                     }
                 }
             }
+
+            #[test]
+            fn list_state_prunes_deeper_counters_when_returning_to_outer_indent(
+                outer_count in 1usize..=6,
+                deeper_count in 1usize..=6,
+            ) {
+                let mut state = ListState::default();
+                for expected in 1..=outer_count {
+                    prop_assert_eq!(state.next_number(0), expected);
+                }
+                for expected in 1..=deeper_count {
+                    prop_assert_eq!(state.next_number(4), expected);
+                }
+
+                prop_assert_eq!(state.next_number(0), outer_count + 1);
+                prop_assert!(!state.counters.contains_key(&4));
+                prop_assert_eq!(state.counters.get(&0), Some(&(outer_count + 2)));
+            }
         }
     }
 }

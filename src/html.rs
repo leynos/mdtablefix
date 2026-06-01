@@ -225,6 +225,11 @@ impl HtmlTableState {
 
     fn flush_raw(&mut self, out: &mut Vec<String>) {
         if !self.buf.is_empty() {
+            debug!(
+                line_count = self.buf.len(),
+                depth = self.depth,
+                "flushing buffered HTML table block without conversion"
+            );
             out.append(&mut self.buf);
         }
         self.depth = 0;
@@ -232,13 +237,22 @@ impl HtmlTableState {
 
     fn push_html_line(&mut self, line: &str, out: &mut Vec<String>) {
         let trimmed = line.trim_start();
+        let previous_depth = self.depth;
+        let start_count = TABLE_TAG_RE.find_iter(trimmed).count();
+        let end_count = TABLE_END_RE.find_iter(trimmed).count();
         self.buf.push(line.to_string());
-        self.depth += TABLE_TAG_RE.find_iter(trimmed).count();
-        if TABLE_END_RE.is_match(trimmed) {
-            self.depth = self
-                .depth
-                .saturating_sub(TABLE_END_RE.find_iter(trimmed).count());
+        self.depth += start_count;
+        if end_count > 0 {
+            self.depth = self.depth.saturating_sub(end_count);
         }
+        debug!(
+            previous_depth,
+            start_count,
+            end_count,
+            depth = self.depth,
+            buffered_lines = self.buf.len(),
+            "updated HTML table buffer depth"
+        );
         if self.depth == 0 {
             debug!(
                 line_count = self.buf.len(),

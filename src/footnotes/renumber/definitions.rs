@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use tracing::warn;
+use tracing::{debug, trace, warn};
 
 use super::{
     FOOTNOTE_LINE_RE,
@@ -203,9 +203,19 @@ fn collect_scan_updates(lines: &[String], state: &mut DefinitionScanState<'_>) {
             state.numeric_list_range,
             state.skip_numeric_conversion,
         ) {
+            trace!(
+                index,
+                numeric_list_range = ?state.numeric_list_range,
+                skip_numeric_conversion = state.skip_numeric_conversion,
+                "skipping numeric footnote candidate conversion"
+            );
             continue;
         }
         if state.mapping.is_empty() && state.definitions.is_empty() {
+            trace!(
+                index,
+                "skipping numeric footnote candidate before any reference mapping exists"
+            );
             continue;
         }
         if let Some(candidate) = numeric_candidate_from_line(line, index) {
@@ -416,17 +426,35 @@ pub(super) fn reorder_definition_block(
 ) {
     let header_positions = collect_header_positions(lines, start, end);
     if header_positions.len() <= 1 {
+        debug!(
+            start,
+            end,
+            header_count = header_positions.len(),
+            "reorder_definition_block: skipping reorder without multiple headers"
+        );
         return;
     }
 
     let def_lookup = build_def_lookup(definitions, start, end);
     if def_lookup.len() <= 1 {
+        debug!(
+            start,
+            end,
+            definition_count = def_lookup.len(),
+            "reorder_definition_block: skipping reorder without multiple definition mappings"
+        );
         return;
     }
 
     let prefix_len = header_positions.first().map_or(0, |first| first - start);
     let mut segments = build_segments(lines, &header_positions, &def_lookup, start, end);
     if segments.len() <= 1 {
+        debug!(
+            start,
+            end,
+            segment_count = segments.len(),
+            "reorder_definition_block: skipping reorder without multiple segments"
+        );
         return;
     }
 

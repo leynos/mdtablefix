@@ -273,6 +273,9 @@ impl<'a> ParagraphWriter<'a> {
 mod tests {
     use std::borrow::Cow;
 
+    use proptest::prelude::*;
+    use unicode_width::UnicodeWidthStr;
+
     use super::{ParagraphState, ParagraphWriter, PrefixLine};
 
     #[test]
@@ -336,5 +339,34 @@ mod tests {
         let mut writer = ParagraphWriter::new(&mut out, 7);
         writer.wrap_with_prefix("「 ", "  ", "ab cd");
         assert_eq!(out, vec!["「 ab".to_string(), "  cd".to_string()]);
+    }
+
+    proptest! {
+        #[test]
+        fn paragraph_writer_preserves_prefixes_and_width(
+            words in proptest::collection::vec("[a-z]{1,6}", 1..=8),
+            width in 20usize..=60,
+            indent in 0usize..=4,
+        ) {
+            let prefix = format!("{}- ", " ".repeat(indent));
+            let continuation = " ".repeat(UnicodeWidthStr::width(prefix.as_str()));
+            let text = words.join(" ");
+            let mut out = Vec::new();
+            let mut writer = ParagraphWriter::new(&mut out, width);
+
+            writer.wrap_with_prefix(&prefix, &continuation, &text);
+
+            prop_assert!(!out.is_empty());
+            prop_assert!(out[0].starts_with(&prefix));
+            for line in out.iter().skip(1) {
+                prop_assert!(line.starts_with(&continuation));
+            }
+            for line in &out {
+                prop_assert!(
+                    UnicodeWidthStr::width(line.as_str()) <= width,
+                    "wrapped line exceeded width {width}: {line:?}",
+                );
+            }
+        }
     }
 }

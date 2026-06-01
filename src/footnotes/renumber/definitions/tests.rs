@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 
+use proptest::prelude::*;
 use rstest::rstest;
 
 use super::{
@@ -141,4 +142,35 @@ fn reorder_definition_block_sorts_segments_by_new_number() {
             "    continuation",
         ])
     );
+}
+
+proptest! {
+    #[test]
+    fn reorder_definition_block_orders_generated_definition_mappings(
+        numbers in proptest::collection::vec(1usize..=20, 2..=8),
+    ) {
+        let mut lines = vec!["## Footnotes".to_string(), String::new()];
+        let mut definitions = Vec::new();
+        for (offset, number) in numbers.iter().enumerate() {
+            let index = lines.len();
+            lines.push(format!("[^{number}]: Body {offset}"));
+            definitions.push(DefinitionLine {
+                index,
+                new_number: *number,
+                line: format!("[^{number}]: Body {offset}"),
+            });
+        }
+
+        reorder_definition_block(&mut lines, 0, definitions.len() + 2, &definitions);
+
+        let emitted_numbers = lines
+            .iter()
+            .filter_map(|line| line.strip_prefix("[^"))
+            .filter_map(|rest| rest.split("]:").next())
+            .filter_map(|number| number.parse::<usize>().ok())
+            .collect::<Vec<_>>();
+        let mut sorted = emitted_numbers.clone();
+        sorted.sort_unstable();
+        prop_assert_eq!(emitted_numbers, sorted);
+    }
 }
