@@ -10,6 +10,8 @@
 
 use std::borrow::Cow;
 
+use tracing::trace;
+
 mod block;
 mod continuation;
 mod fence;
@@ -100,7 +102,13 @@ fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
         });
     }
 
-    let cap = BLOCKQUOTE_RE.captures(line)?;
+    let Some(cap) = BLOCKQUOTE_RE.captures(line) else {
+        trace!(
+            line_len = line.len(),
+            "prefix_line found no supported prefix"
+        );
+        return None;
+    };
     let prefix = cap.get(1).map(|m| m.as_str())?;
     let rest = cap.get(2).map(|m| m.as_str())?;
     Some(PrefixLine {
@@ -127,6 +135,18 @@ fn line_break_parts(line: &str) -> (String, bool) {
         .trim_end_matches(' ')
         .to_string();
     (text, hard_break)
+}
+
+fn normalized_passthrough_line(line: &str) -> &str {
+    if !line.is_empty() && line.trim().is_empty() {
+        trace!(
+            line_len = line.len(),
+            "normalising whitespace-only passthrough line"
+        );
+        ""
+    } else {
+        line
+    }
 }
 
 fn handle_pending_continuation(
@@ -157,11 +177,7 @@ fn handle_pending_continuation(
         {
             link_title_window.observe_bare_definition();
         }
-        let emitted = if !line.is_empty() && line.trim().is_empty() {
-            ""
-        } else {
-            line
-        };
+        let emitted = normalized_passthrough_line(line);
         writer.push_verbatim(state, emitted);
         return;
     }
@@ -225,11 +241,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             }
             // Whitespace-only lines act as paragraph breaks; emit them as empty
             // strings so downstream consumers see a uniform separator.
-            let emitted = if !line.is_empty() && line.trim().is_empty() {
-                ""
-            } else {
-                line.as_str()
-            };
+            let emitted = normalized_passthrough_line(line);
             writer.push_verbatim(&mut state, emitted);
             continue;
         }

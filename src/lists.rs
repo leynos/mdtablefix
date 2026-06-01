@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use regex::Regex;
+use tracing::debug;
 
 use crate::{breaks::THEMATIC_BREAK_RE, wrap::FenceTracker};
 
@@ -69,6 +70,11 @@ struct ListState {
 
 impl ListState {
     fn reset(&mut self) {
+        debug!(
+            indent_depths = self.indent_stack.len(),
+            counters = self.counters.len(),
+            "resetting ordered list renumbering state"
+        );
         self.indent_stack.clear();
         self.counters.clear();
     }
@@ -166,6 +172,11 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for ordered list renumbering.
+    //!
+    //! These tests cover the parent module's parsing helpers, state
+    //! transitions, and public renumbering behaviour.
+
     use super::*;
 
     #[test]
@@ -236,6 +247,11 @@ mod tests {
     }
 
     mod proptest_tests {
+        //! Property tests for ordered list state invariants.
+        //!
+        //! These generated cases exercise the same `ListState` state machine
+        //! used by `renumber_lists` across varied indent sequences.
+
         use proptest::prelude::*;
 
         use super::ListState;

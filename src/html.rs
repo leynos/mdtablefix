@@ -11,6 +11,7 @@ use std::sync::LazyLock;
 use html5ever::{driver::ParseOpts, parse_document, tendril::TendrilSink};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use regex::Regex;
+use tracing::warn;
 
 use crate::wrap::is_fence;
 
@@ -234,6 +235,10 @@ impl HtmlTableState {
                 .saturating_sub(TABLE_END_RE.find_iter(trimmed).count());
         }
         if self.depth == 0 {
+            warn!(
+                line_count = self.buf.len(),
+                "converting HTML table block to Markdown"
+            );
             out.extend(table_lines_to_markdown(&self.buf));
             self.buf.clear();
         }
@@ -345,6 +350,11 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for HTML table conversion helpers.
+    //!
+    //! These tests exercise the parent module's private parsing state and
+    //! public conversion path for Markdown documents containing HTML tables.
+
     use html5ever::{driver::ParseOpts, parse_document, tendril::TendrilSink};
     use markup5ever_rcdom::RcDom;
 
@@ -378,6 +388,11 @@ mod tests {
     }
 
     mod proptest_tests {
+        //! Property tests for HTML table conversion invariants.
+        //!
+        //! These generated cases complement the parent test module by checking
+        //! `HtmlTableState` behaviour across varied open and close sequences.
+
         use proptest::prelude::*;
 
         use super::HtmlTableState;

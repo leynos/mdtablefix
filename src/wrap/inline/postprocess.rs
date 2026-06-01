@@ -11,6 +11,8 @@
 //! historical whitespace behaviour and keep eligible atomic fragments attached
 //! to the line where they fit.
 
+use tracing::trace;
+
 use super::fragment::{FragmentKind, InlineFragment};
 
 /// Returns whether every fragment on the line is whitespace-only.
@@ -85,6 +87,11 @@ pub(super) fn merge_whitespace_only_lines(
 
     for (index, mut line) in lines.iter().cloned().enumerate() {
         if is_whitespace_only_line(&line) {
+            trace!(
+                index,
+                fragment_count = line.len(),
+                "normalising whitespace-only wrapped line"
+            );
             let next_starts_atomic = lines
                 .get(index + 1)
                 .is_some_and(|next_line| line_starts_with_atomic(next_line));
