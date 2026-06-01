@@ -194,7 +194,7 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
     while i < tokens.len() {
         let (group_end, _) = determine_token_span(tokens, i);
         let span = i..group_end;
-        let text = if tokens[span.clone()]
+        let text = if tokens[i..group_end]
             .iter()
             .all(|token| is_whitespace_token(token))
         {

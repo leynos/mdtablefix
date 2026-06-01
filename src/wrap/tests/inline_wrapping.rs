@@ -12,12 +12,14 @@ proptest::proptest! {
     fn wrap_preserving_code_keeps_supported_punctuation_with_links(
         punctuation_index in 0..TRAILING_PUNCTUATION_CHARS.len(),
         pad_len in 0usize..24,
+        wrap_width in 24usize..96,
+        url_slug in "[a-z]{3,12}",
     ) {
         let punctuation = TRAILING_PUNCTUATION_CHARS[punctuation_index];
         let prefix = "lead ".repeat(pad_len);
-        let link = format!("[link](docs/{pad_len}.md){punctuation}");
+        let link = format!("[link](docs/{url_slug}.md){punctuation}");
         let input = format!("{prefix}{link} trailing words force wrapping");
-        let lines = wrap_preserving_code(&input, 24);
+        let lines = wrap_preserving_code(&input, wrap_width);
 
         assert!(
             lines.iter().any(|line| line.contains(&link)),
@@ -33,12 +35,13 @@ proptest::proptest! {
     fn wrap_preserving_code_keeps_supported_punctuation_with_code_spans(
         punctuation_index in 0..TRAILING_PUNCTUATION_CHARS.len(),
         pad_len in 0usize..24,
+        wrap_width in 24usize..96,
     ) {
         let punctuation = TRAILING_PUNCTUATION_CHARS[punctuation_index];
         let prefix = "lead ".repeat(pad_len);
         let code_span = format!("`code-{pad_len}`{punctuation}");
         let input = format!("{prefix}{code_span} trailing words force wrapping");
-        let lines = wrap_preserving_code(&input, 24);
+        let lines = wrap_preserving_code(&input, wrap_width);
 
         assert!(
             lines.iter().any(|line| line.contains(&code_span)),

@@ -340,6 +340,12 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   atomically once the span closes. No line break may be inserted inside the
   span, and the closing backtick must remain on the same line as the span
   content.
+- **`WRAP_COLS` public constant.** `mdtablefix::process::WRAP_COLS` is
+  exported as `pub` so that integration tests can reference the production
+  wrap width instead of hard-coding `80`. When writing tests that depend on
+  the column boundary (for example, wrap-boundary edge-case tests), import
+  and use `WRAP_COLS` as the single source of truth. Do not duplicate the
+  literal value `80` in test code.
 
 Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
 replacing `LineBuffer` with `textwrap`.
