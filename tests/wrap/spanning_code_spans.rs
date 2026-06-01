@@ -113,51 +113,34 @@ fn test_wrap_defers_while_any_span_stays_open() {
 #[test]
 fn test_wrap_pending_cleared_after_span_closes_on_continuation() {
     // Span closes on the continuation line; the pending buffer stays alive
-    // (had_open guard) but must not leak a stale open_fence_len into the
-    // plain line that follows — "baz" joins as plain prose, not as span
-    // content.
+    // only until the scanner confirms no span remains open. The following
+    // plain line starts a new paragraph instead of extending the pending
+    // prefix buffer.
     let input = lines_vec!["- `foo", "  bar`", "baz"];
     let output = wrap_text(&input, 80);
-    assert_eq!(output, vec!["- `foo bar` baz".to_string()],);
+    assert_eq!(output, vec!["- `foo bar`".to_string(), "baz".to_string()],);
 }
 
 #[test]
 fn test_wrap_reopen_with_whitespace_tail_is_split_atomically() {
-    // The reopen detector must accept new openers whose first content
-    // character is whitespace; CommonMark allows leading whitespace inside
-    // a code span (it is stripped during rendering). Regression test:
-    // `split_reopen_span` previously rejected these reopens via an
-    // unjustified `is_whitespace()` early return, leaving span B unsplit
-    // and growing the pending buffer across both spans.
+    // Without a real closing fence for span B, preserving the source is safer
+    // than inventing Markdown that changes the prose.
     let input = lines_vec!["- foo `open", "  closed` and ` more"];
     let output = wrap_text(&input, 80);
     let rendered = output.join("\n");
-    assert!(
-        rendered.contains("`open closed`"),
-        "span A must close atomically: {rendered:?}"
-    );
-    assert!(
-        rendered.contains("` more`"),
-        "span B (whitespace-prefixed) must be synthesized closed: {rendered:?}"
-    );
+    assert_eq!(output, input);
+    assert!(!rendered.contains("` more`"));
 }
 
 #[test]
 fn test_wrap_reopen_with_close_paren_tail_is_split_atomically() {
     // Same as the whitespace case, but the new opener is immediately
-    // followed by ')'. Regression test for the symmetric heuristic that
-    // also rejected ')' as a leading character.
+    // followed by ')'.
     let input = lines_vec!["- foo `open", "  closed` and `)done"];
     let output = wrap_text(&input, 80);
     let rendered = output.join("\n");
-    assert!(
-        rendered.contains("`open closed`"),
-        "span A must close atomically: {rendered:?}"
-    );
-    assert!(
-        rendered.contains("`)done`"),
-        "span B (')'-prefixed) must be synthesized closed: {rendered:?}"
-    );
+    assert_eq!(output, input);
+    assert!(!rendered.contains("`)done`"));
 }
 
 #[test]
@@ -171,4 +154,66 @@ fn test_wrap_prefixed_open_span_leaves_indented_code_verbatim() {
         !rendered.contains("`open --version"),
         "indented line was merged into span text: {rendered:?}"
     );
+}
+
+#[test]
+fn test_wrap_three_line_close_a_open_b_close_b() {
+    let input = lines_vec![
+        "4. `parse_rsa_pem(pem_contents, display_path) ->",
+        "   Result<EncodingKey, GitHubError>` calls `validate_rsa_pem",
+        "   first`, then maps the error.",
+    ];
+    let output = wrap_text(&input, 80);
+    let rendered = output.join("\n");
+
+    assert!(
+        rendered.contains(
+            "`parse_rsa_pem(pem_contents, display_path) -> Result<EncodingKey, GitHubError>`"
+        ),
+        "span A must remain intact: {rendered:?}"
+    );
+    assert!(
+        rendered.contains("`validate_rsa_pem first`"),
+        "span B must remain intact: {rendered:?}"
+    );
+    assert_no_md038_code_span(&rendered);
+}
+
+#[test]
+fn test_wrap_opener_at_eol_emits_verbatim() {
+    let input = lines_vec![
+        "4. Calls the configured loader `",
+        "   EncodingKey::from_rsa_pem(pem_contents.as_bytes())`, mapping errors.",
+    ];
+    let output = wrap_text(&input, 80);
+    let rendered = output.join("\n");
+
+    assert!(rendered.contains("`EncodingKey::from_rsa_pem(pem_contents.as_bytes())`"));
+    assert_no_md038_code_span(&rendered);
+}
+
+#[test]
+fn test_wrap_issue_md038_regression_fixture() {
+    let input: Vec<String> = include_lines!("../data/issue_md038_input.txt");
+    let expected: Vec<String> = include_lines!("../data/issue_md038_expected.txt");
+    let output = process_stream(&input);
+
+    assert_eq!(output, expected);
+    assert_no_md038_code_span(&output.join("\n"));
+}
+
+fn assert_no_md038_code_span(rendered: &str) {
+    let mut remaining = rendered;
+    while let Some(open_index) = remaining.find('`') {
+        let after_open = &remaining[open_index + 1..];
+        let Some(close_index) = after_open.find('`') else {
+            break;
+        };
+        let code = &after_open[..close_index];
+        assert!(
+            code.is_empty() || (!code.starts_with(' ') && !code.ends_with(' ')),
+            "code span has leading or trailing space: {code:?} in {rendered:?}"
+        );
+        remaining = &after_open[close_index + 1..];
+    }
 }

@@ -19,6 +19,22 @@ use mdtablefix::wrap::wrap_text;
 use proptest::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
+fn has_md038_code_span(rendered: &str) -> bool {
+    let mut remaining = rendered;
+    while let Some(open_index) = remaining.find('`') {
+        let after_open = &remaining[open_index + 1..];
+        let Some(close_index) = after_open.find('`') else {
+            break;
+        };
+        let code = &after_open[..close_index];
+        if !code.is_empty() && (code.starts_with(' ') || code.ends_with(' ')) {
+            return true;
+        }
+        remaining = &after_open[close_index + 1..];
+    }
+    false
+}
+
 fn footnote_label_strategy() -> impl Strategy<Value = String> {
     prop::collection::vec(
         prop_oneof![
@@ -184,5 +200,24 @@ proptest! {
         } else {
             prop_assert!(!output.is_empty(), "wrap_text must not panic or return empty output");
         }
+    }
+
+    #[test]
+    fn wrap_text_opener_at_eol_does_not_create_md038_span(
+        body in "[A-Za-z_][A-Za-z0-9_:() .]{1,60}",
+        suffix in "[a-z ]{1,40}",
+        width in 40usize..=120,
+    ) {
+        let input = vec![
+            "4. Opens a code span at line end `".to_string(),
+            format!("   {body}`, {suffix}."),
+        ];
+        let output = wrap_text(&input, width);
+        let rendered = output.join("\n");
+
+        prop_assert!(
+            !has_md038_code_span(&rendered),
+            "output must not contain MD038 code spans:\n{rendered}"
+        );
     }
 }

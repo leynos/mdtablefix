@@ -1,0 +1,5 @@
+4. `parse_rsa_pem(pem_contents, display_path) ->
+   Result<EncodingKey,
+   GitHubError>`: calls `validate_rsa_pem` first, then `EncodingKey::from_rsa_pem(pem_contents.as_bytes())
+   `, mapping `jsonwebtoken::errors::Error` to `
+   GitHubError::PrivateKeyLoadFailed`.

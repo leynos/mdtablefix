@@ -5,14 +5,14 @@
 //! subsequent lines, [`super::wrap_text`] defers emission into a
 //! [`PendingPrefix`] buffer. This module owns the join/update/dispatch
 //! state machine that reconciles each continuation chunk with the buffer:
-//! it joins the chunks, tracks open-fence state across them, synthesizes
-//! closers for spans that close-then-reopen within one chunk, and flushes
-//! the buffered paragraph atomically once the span is fully resolved.
+//! it joins the chunks, tracks open-fence state across them, splits spans
+//! that close-then-reopen within one chunk, and flushes the buffered
+//! paragraph atomically once the span is fully resolved.
 
 use std::borrow::Cow;
 
 use super::{
-    paragraph::{ParagraphState, ParagraphWriter, PendingPrefix, PrefixLine},
+    paragraph::{ContinuationMode, ParagraphState, ParagraphWriter, PendingPrefix, PrefixLine},
     tokenize,
     tokenize::{parse_open_code_span, position_after_close, scan_continuation_span_state},
 };
@@ -25,6 +25,7 @@ use super::{
 /// Returns silently when `state.pending_prefix` is `None`.
 pub(super) fn apply_continuation_chunk(
     text: &str,
+    source_line: &str,
     hard_break: bool,
     writer: &mut ParagraphWriter<'_>,
     state: &mut ParagraphState,
@@ -32,19 +33,32 @@ pub(super) fn apply_continuation_chunk(
     let Some(pending) = state.pending_prefix.as_mut() else {
         return;
     };
+    pending.original_lines.push(source_line.to_string());
 
     let open_fence_len = pending.open_fence_len.unwrap_or(0);
+    let should_join_verbatim = pending.continuation_mode == ContinuationMode::TightCodeSpan;
     // Compute the leading backtick run once; both the offset calculation and
     // `join_pending_continuation` need it, and a fresh scan from each would
     // double-walk `text`.
     let leading_run_len = tokenize::opening_fence_run_len(text.as_bytes(), text);
-    let needs_space = leading_run_needs_space(leading_run_len, open_fence_len);
+    let needs_space = !should_join_verbatim
+        && leading_run_needs_space(
+            leading_run_len,
+            open_fence_len,
+            pending.continuation_mode == ContinuationMode::TightCodeSpan,
+        );
     let continuation_offset = {
         let pending_len = pending.rest.len();
         pending_len + usize::from(pending_len > 0 && needs_space)
     };
-    let joined =
-        join_pending_continuation(&mut pending.rest, text, open_fence_len, leading_run_len);
+    let joined = join_pending_continuation(
+        &mut pending.rest,
+        text,
+        open_fence_len,
+        leading_run_len,
+        should_join_verbatim,
+        pending.continuation_mode == ContinuationMode::TightCodeSpan,
+    );
     if hard_break {
         pending.hard_break = true;
     }
@@ -60,8 +74,19 @@ pub(super) fn apply_continuation_chunk(
                 ticks = "`".repeat(new_len),
                 tail = &pending.rest[split_at + new_len..],
             );
+            let opener_at_eol = pending_rest["`".repeat(new_len).len()..].trim().is_empty();
+            let pending_rest = if opener_at_eol {
+                "`".repeat(new_len)
+            } else {
+                pending_rest
+            };
             pending.rest = pending_rest;
             pending.open_fence_len = Some(new_len);
+            pending.continuation_mode = if opener_at_eol {
+                ContinuationMode::TightCodeSpan
+            } else {
+                ContinuationMode::Normalize
+            };
             pending.hard_break = false;
         }
         SpanStateUpdate::Flush => {
@@ -83,12 +108,15 @@ fn join_pending_continuation(
     continuation: &str,
     fence_len: usize,
     leading_run_len: Option<usize>,
+    verbatim_continuations: bool,
+    opener_at_eol: bool,
 ) -> bool {
     if continuation.is_empty() {
         return false;
     }
 
-    let needs_space = leading_run_needs_space(leading_run_len, fence_len);
+    let needs_space = !verbatim_continuations
+        && leading_run_needs_space(leading_run_len, fence_len, opener_at_eol);
     if !existing.is_empty() && needs_space {
         existing.push(' ');
     }
@@ -139,9 +167,17 @@ fn split_reopen_span(
 /// length matches the currently open fence (i.e. the chunk begins with the
 /// span's closing fence). `leading_run_len` is the precomputed length of any
 /// such opening backtick run, as returned by `opening_fence_run_len`.
-fn leading_run_needs_space(leading_run_len: Option<usize>, open_fence_len: usize) -> bool {
+fn leading_run_needs_space(
+    leading_run_len: Option<usize>,
+    open_fence_len: usize,
+    opener_at_eol: bool,
+) -> bool {
     match leading_run_len {
         Some(run_len) => run_len != open_fence_len,
+        // CommonMark turns a source line ending into a space inside code
+        // spans. For an opener at EOL, preserving that space creates MD038
+        // failures, so keep the continuation tight instead.
+        None if open_fence_len > 0 && opener_at_eol => false,
         None => true,
     }
 }
@@ -193,20 +229,8 @@ fn update_span_state(
     let raw_fence = pending.open_fence_len.unwrap_or(0);
     match scan_continuation_span_state(continuation, raw_fence) {
         Some(n) if n > 0 => {
-            // A span is still open at the end of the chunk, but it may be
-            // a *different* span: the pre-existing span A closed and a new
-            // span B opened within this same continuation. Detect that
-            // boundary so the trailing opener does not silently grow the
-            // pending buffer across both spans. The closer for span B is
-            // not in the source, so synthesize one at the end of the
-            // buffer; this keeps span B atomic ("`4.1.1`") and lets
-            // subsequent continuations be appended as plain text.
-            if let Some((_, new_len)) =
-                split_reopen_span(continuation, continuation_offset, raw_fence)
-            {
-                pending.rest.push_str(&"`".repeat(new_len));
-                pending.open_fence_len = None;
-                return SpanStateUpdate::StillOpen;
+            if split_reopen_span(continuation, continuation_offset, raw_fence).is_some() {
+                pending.continuation_mode = ContinuationMode::VerbatimFlush;
             }
             pending.open_fence_len = Some(n);
             SpanStateUpdate::StillOpen
@@ -218,12 +242,23 @@ fn update_span_state(
             {
                 return SpanStateUpdate::ClosedAndReopened { split_at, new_len };
             }
-            let had_open = raw_fence != 0;
-            if !had_open || pending.hard_break {
-                SpanStateUpdate::Flush
-            } else {
-                SpanStateUpdate::StillOpen
-            }
+            pending.continuation_mode =
+                if raw_fence > 0 && closing_fence_tail_starts_word(continuation, raw_fence) {
+                    ContinuationMode::VerbatimFlush
+                } else {
+                    ContinuationMode::Normalize
+                };
+            SpanStateUpdate::Flush
         }
     }
+}
+
+fn closing_fence_tail_starts_word(continuation: &str, raw_fence: usize) -> bool {
+    let Some(close_end) = position_after_close(continuation, raw_fence) else {
+        return false;
+    };
+    continuation[close_end..]
+        .chars()
+        .next()
+        .is_some_and(|ch| ch.is_alphanumeric() || ch == '_')
 }

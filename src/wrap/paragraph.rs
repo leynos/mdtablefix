@@ -25,6 +25,8 @@ pub(super) struct PendingPrefix {
     pub(super) prefix: String,
     /// Stores the line content after the prefix, including any open code span.
     pub(super) rest: String,
+    /// Stores the original source lines when unsafe continuations need passthrough.
+    pub(super) original_lines: Vec<String>,
     /// Stores the precomputed content width available on the first line.
     pub(super) rest_width: usize,
     /// Marks whether continuation lines should repeat the full prefix.
@@ -33,9 +35,18 @@ pub(super) struct PendingPrefix {
     pub(super) hard_break: bool,
     /// Fence length of the inline code span that is currently open, if any.
     pub(super) open_fence_len: Option<usize>,
+    /// Controls how continuation chunks are joined and flushed.
+    pub(super) continuation_mode: ContinuationMode,
 }
 
-#[derive(Default)]
+pub(super) enum ContinuationMode {
+    /// Join continuations using normal Markdown soft-break spacing.
+    Normalize,
+    /// Join without adding a synthetic space after an opener at EOL.
+    TightCodeSpan,
+    /// Emit the original source lines instead of rewrapping ambiguous input.
+    VerbatimFlush,
+}
 /// Tracks buffered paragraph content and its shared indentation.
 pub(super) struct ParagraphState {
     /// Stores buffered paragraph segments and whether each ends with a hard break.
@@ -183,9 +194,15 @@ impl<'a> ParagraphWriter<'a> {
             state.buf.clear();
             state.indent.clear();
 
+            if pending.continuation_mode == ContinuationMode::VerbatimFlush {
+                self.out.extend(pending.original_lines);
+                return;
+            }
+
+            let rest = trim_code_span_edge_spaces(&pending.rest);
             let prefix_line = PrefixLine {
                 prefix: Cow::Owned(pending.prefix),
-                rest: pending.rest.as_str(),
+                rest: rest.as_ref(),
                 repeat_prefix: pending.repeat_prefix,
             };
             self.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
@@ -251,16 +268,27 @@ impl<'a> ParagraphWriter<'a> {
     ) {
         self.flush_paragraph(state);
 
-        if let Some((fence_len, _)) = parse_open_code_span(prefix_line.rest) {
+        if let Some((fence_len, open_tail)) = parse_open_code_span(prefix_line.rest) {
             let prefix = prefix_line.prefix.as_ref().to_string();
             let prefix_width = UnicodeWidthStr::width(prefix.as_str());
+            let opener_at_eol = open_tail.trim().is_empty();
             state.pending_prefix = Some(PendingPrefix {
                 prefix,
                 rest: prefix_line.rest.to_string(),
+                original_lines: vec![format!(
+                    "{prefix}{rest}",
+                    prefix = prefix_line.prefix.as_ref(),
+                    rest = prefix_line.rest,
+                )],
                 rest_width: self.width.saturating_sub(prefix_width).max(1),
                 repeat_prefix: prefix_line.repeat_prefix,
                 hard_break: false,
                 open_fence_len: Some(fence_len),
+                continuation_mode: if opener_at_eol {
+                    ContinuationMode::TightCodeSpan
+                } else {
+                    ContinuationMode::Normalize
+                },
             });
             return;
         }
@@ -269,7 +297,29 @@ impl<'a> ParagraphWriter<'a> {
     }
 }
 
-#[cfg(test)]
+fn trim_code_span_edge_spaces(text: &str) -> Cow<'_, str> {
+    if !text.contains("` ") && !text.contains(" `") {
+        return Cow::Borrowed(text);
+    }
+
+    let mut output = String::with_capacity(text.len());
+    let mut remaining = text;
+    while let Some(open_index) = remaining.find('`') {
+        let before = &remaining[..=open_index];
+        let after_open = &remaining[open_index + 1..];
+        let Some(close_index) = after_open.find('`') else {
+            output.push_str(remaining);
+            return Cow::Owned(output);
+        };
+        let code = &after_open[..close_index];
+        output.push_str(before);
+        output.push_str(code.trim_matches(' '));
+        output.push('`');
+        remaining = &after_open[close_index + 1..];
+    }
+    output.push_str(remaining);
+    Cow::Owned(output)
+}
 mod tests {
     use std::borrow::Cow;
 

@@ -163,7 +163,7 @@ fn handle_pending_continuation(
         });
         if matches_pending {
             let (text, hard_break) = line_break_parts(prefix_line.rest);
-            apply_continuation_chunk(&text, hard_break, writer, state);
+            apply_continuation_chunk(&text, line, hard_break, writer, state);
             return;
         }
 
@@ -186,7 +186,7 @@ fn handle_pending_continuation(
     if state.pending_prefix.is_none() {
         return;
     }
-    apply_continuation_chunk(&text, hard_break, writer, state);
+    apply_continuation_chunk(&text, line, hard_break, writer, state);
 }
 
 /// Wrap text lines to the given width.

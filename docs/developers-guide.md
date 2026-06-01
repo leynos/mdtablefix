@@ -177,13 +177,13 @@ The wrapping pipeline for `--wrap` is:
    `apply_continuation_chunk` consults `update_span_state` to drive a
    `SpanStateUpdate` (`StillOpen`, `ClosedAndReopened`, or `Flush`); when the
    same chunk both closes the pre-existing span and opens a new one, the helper
-   synthesizes a closer for the new span so it stays atomic in the buffer, and
-   subsequent lines append as plain prose. Once `has_unclosed_code_span` returns
-   `false` for the accumulated rest, closure is confirmed and
-   `flush_paragraph` emits the entire buffered segment atomically using
-   `append_wrapped_with_prefix_width`; a deferred open span (detected by
-   `parse_open_code_span` before the join) suppresses emission unless a pending
-   Markdown hard break forces it.  When `hard_break` is set, two trailing
+   emits the closed prefix segment and keeps the new span pending rather than
+   inventing a closing fence. If the opener is at or near the end of its source
+   line, `PendingPrefix` marks subsequent continuations as verbatim so joining
+   does not create leading or trailing spaces inside the code span. When the
+   scanner reports no open span and no close/reopen boundary exists,
+   `flush_paragraph` emits the buffered segment atomically using
+   `append_wrapped_with_prefix_width`. When `hard_break` is set, two trailing
    spaces are appended to the last emitted line. `clear()` on `ParagraphState`
    also resets `pending_prefix` to `None`.
 
