@@ -321,20 +321,19 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     let mut tokens = Vec::new();
     let had_trailing_newline = source.ends_with('\n');
     let mut lines = source.lines().peekable();
-    let mut in_fence = false;
+    let mut fence_tracker = super::FenceTracker::default();
 
     // Iterate lazily so we can safely use `peek()` to decide on trailing
     // newline emission without borrowing issues from a `for` loop over
     // `&str` references.
     while let Some(line) = lines.next() {
-        if super::is_fence(line).is_some() {
+        if fence_tracker.observe(line) {
             tokens.push(Token::Fence(line));
             push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
-            in_fence = !in_fence;
             continue;
         }
 
-        if in_fence {
+        if fence_tracker.in_fence() {
             tokens.push(Token::Fence(line));
             push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
             continue;
