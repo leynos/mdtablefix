@@ -232,7 +232,34 @@ fn test_cli_wrap_fences_ellipsis_preserve_fenced_content() -> Result<(), Box<dyn
         &["--wrap", "--renumber", "--breaks", "--ellipsis", "--fences"],
         input,
     )?;
-    assertion.success().stdout(input);
+    let success = assertion.success();
+    let output = String::from_utf8_lossy(&success.get_output().stdout);
+    assert!(
+        output.contains(concat!(
+            "-- Tenant root table\n",
+            "CREATE TABLE tenants (\n",
+            "    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n",
+            "    slug VARCHAR(64) NOT NULL UNIQUE,\n",
+            "    name VARCHAR(255) NOT NULL,\n",
+            "    status VARCHAR(32) NOT NULL DEFAULT 'active'\n",
+            ");\n",
+            "\n",
+            "-- Deterministic default tenant for migration safety and single-tenant dev mode.\n",
+            "INSERT INTO tenants (id, slug, name, status)\n",
+            "VALUES ('00000000-0000-0000-0000-000000000001', 'default', 'Default Tenant', \
+             'active')\n",
+            "ON CONFLICT (id) DO NOTHING;"
+        )),
+        "SQL fenced body must remain unchanged"
+    );
+    assert!(
+        output.contains("// Payload example...\n{...}"),
+        "JSON-like fenced body must remain unchanged"
+    );
+    assert!(
+        output.contains("```json\n{...}\n```"),
+        "inner JSON fence must remain literal"
+    );
     Ok(())
 }
 
