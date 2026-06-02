@@ -117,40 +117,7 @@ pub(super) fn apply_continuation_chunk(
     match update_span_state(text, continuation_offset, pending) {
         SpanStateUpdate::StillOpen => {}
         SpanStateUpdate::ClosedAndReopened { split_at, new_len } => {
-            emit_pending_prefix_segment(writer, pending, split_at);
-            let pending_rest = format!(
-                "{ticks}{tail}",
-                ticks = "`".repeat(new_len),
-                tail = &pending.rest[split_at + new_len..],
-            );
-            let opener_at_eol = pending_rest[new_len..].trim().is_empty();
-            let pending_rest = if opener_at_eol {
-                "`".repeat(new_len)
-            } else {
-                pending_rest
-            };
-            pending.rest = pending_rest;
-            pending.synthetic_join_spaces = pending
-                .synthetic_join_spaces
-                .iter()
-                .filter_map(|offset| offset.checked_sub(split_at))
-                .filter(|offset| *offset < pending.rest.len())
-                .collect();
-            let continuation_mode = if opener_at_eol {
-                ContinuationMode::TightCodeSpan
-            } else {
-                ContinuationMode::Normalize
-            };
-            trace!(
-                ?continuation_mode,
-                opener_at_eol, new_len, "selected continuation mode after close/reopen split"
-            );
-            pending.open_fence_len = scan_continuation_span_state(pending.rest.as_str(), 0)
-                .filter(|len| *len > 0)
-                .or_else(|| parse_open_code_span(pending.rest.as_str()).map(|(len, _)| len));
-            pending.continuation_mode = continuation_mode;
-            pending.hard_break = false;
-            if pending.open_fence_len.is_none() {
+            if reopen_pending_span(writer, pending, split_at, new_len) {
                 writer.flush_paragraph(state);
             }
         }
@@ -158,6 +125,48 @@ pub(super) fn apply_continuation_chunk(
             writer.flush_paragraph(state);
         }
     }
+}
+
+fn reopen_pending_span(
+    writer: &mut ParagraphWriter<'_>,
+    pending: &mut PendingPrefix,
+    split_at: usize,
+    new_len: usize,
+) -> bool {
+    emit_pending_prefix_segment(writer, pending, split_at);
+    let pending_rest = format!(
+        "{ticks}{tail}",
+        ticks = "`".repeat(new_len),
+        tail = &pending.rest[split_at + new_len..],
+    );
+    let opener_at_eol = pending_rest[new_len..].trim().is_empty();
+    let pending_rest = if opener_at_eol {
+        "`".repeat(new_len)
+    } else {
+        pending_rest
+    };
+    pending.rest = pending_rest;
+    pending.synthetic_join_spaces = pending
+        .synthetic_join_spaces
+        .iter()
+        .filter_map(|offset| offset.checked_sub(split_at))
+        .filter(|offset| *offset < pending.rest.len())
+        .collect();
+    pending.open_fence_len = scan_continuation_span_state(pending.rest.as_str(), 0)
+        .filter(|len| *len > 0)
+        .or_else(|| parse_open_code_span(pending.rest.as_str()).map(|(len, _)| len));
+    let continuation_mode = if opener_at_eol {
+        ContinuationMode::TightCodeSpan
+    } else {
+        ContinuationMode::Normalize
+    };
+    trace!(
+        ?continuation_mode,
+        opener_at_eol, new_len, "selected continuation mode after close/reopen split"
+    );
+    pending.continuation_mode = continuation_mode;
+    pending.hard_break = false;
+    pending.open_fence_len.is_none()
 }
 
 fn should_emit_verbatim_for_width(text: &str, state: &ParagraphState) -> bool {
