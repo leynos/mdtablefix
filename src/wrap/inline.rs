@@ -211,23 +211,27 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
     fragments
 }
 
-/// Returns whether `line` contains one atomic fragment.
-fn is_single_atomic_line(line: &[InlineFragment]) -> bool { line.len() == 1 && line[0].is_atomic() }
+/// Returns whether `line` contains one link fragment.
+fn is_single_link_line(line: &[InlineFragment]) -> bool {
+    line.len() == 1 && line[0].kind == fragment::FragmentKind::Link
+}
 
 /// Returns the total display width of a fragment line.
 fn fragment_line_width(line: &[InlineFragment]) -> usize {
     line.iter().map(|fragment| fragment.width).sum()
 }
 
-/// Splits an atomic first fragment from trailing prose after a boundary wrap.
-fn split_boundary_atomic_line(
+/// Splits a link first fragment from trailing prose after a boundary wrap.
+fn split_boundary_link_line(
     previous_line: &[InlineFragment],
     line: &[InlineFragment],
     width: usize,
 ) -> Option<(Vec<InlineFragment>, Vec<InlineFragment>)> {
     let previous_width = fragment_line_width(previous_line);
     if !(previous_width == width || previous_width + 1 == width)
-        || !line.first().is_some_and(InlineFragment::is_atomic)
+        || !line
+            .first()
+            .is_some_and(|fragment| fragment.kind == fragment::FragmentKind::Link)
         || !line
             .get(1)
             .is_some_and(|fragment| fragment.is_whitespace() || fragment.is_plain())
@@ -238,8 +242,8 @@ fn split_boundary_atomic_line(
     Some((vec![line[0].clone()], line[1..].to_vec()))
 }
 
-/// Returns whether a boundary atomic fragment should be finalized now.
-fn should_flush_boundary_atomic(
+/// Returns whether a boundary link fragment should be finalized now.
+fn should_flush_boundary_link(
     lines: &[String],
     buffer: &[InlineFragment],
     next: &InlineFragment,
@@ -248,7 +252,7 @@ fn should_flush_boundary_atomic(
     lines.last().is_some_and(|line| {
         let rendered_width = UnicodeWidthStr::width(line.as_str());
         rendered_width == width || rendered_width + 1 == width
-    }) && is_single_atomic_line(buffer)
+    }) && is_single_link_line(buffer)
         && (next.is_whitespace() || next.is_plain())
 }
 
@@ -300,7 +304,7 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     let mut buffer: Vec<InlineFragment> = Vec::new();
 
     for fragment in fragments {
-        if should_flush_boundary_atomic(&lines, &buffer, &fragment, width) {
+        if should_flush_boundary_link(&lines, &buffer, &fragment, width) {
             lines.push(render_line(&buffer, false, !lines.is_empty()));
             buffer.clear();
             if fragment.is_whitespace() {
@@ -318,15 +322,15 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
             continue;
         }
 
-        if let Some((atomic_line, remaining_line)) = grouped_lines
+        if let Some((link_line, remaining_line)) = grouped_lines
             .get(grouped_lines.len() - 2)
             .zip(grouped_lines.last())
-            .and_then(|(previous, line)| split_boundary_atomic_line(previous, line, width))
+            .and_then(|(previous, line)| split_boundary_link_line(previous, line, width))
         {
             for line in &grouped_lines[..grouped_lines.len() - 1] {
                 lines.push(render_line(line, false, !lines.is_empty()));
             }
-            lines.push(render_line(&atomic_line, false, !lines.is_empty()));
+            lines.push(render_line(&link_line, false, !lines.is_empty()));
             buffer = remaining_line;
             continue;
         }

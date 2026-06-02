@@ -11,6 +11,10 @@ pub(super) static FENCE_RE: std::sync::LazyLock<Regex> =
         Regex::new(r"^(\s*)(`{3,}|~{3,})([^\r\n]*)$").expect("valid fence regex")
     });
 
+static BLOCKQUOTE_FENCE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"^(\s*(?:>\s*)+)(`{3,}|~{3,})([^\r\n]*)$").expect("valid blockquote fence regex")
+});
+
 /// Return fence components if the line starts a fenced code block.
 ///
 /// The function captures:
@@ -31,7 +35,7 @@ pub(super) static FENCE_RE: std::sync::LazyLock<Regex> =
 #[must_use]
 #[rustfmt::skip]
 pub fn is_fence(line: &str) -> Option<(&str, &str, &str)> {
-    FENCE_RE.captures(line).map(|cap| {
+    FENCE_RE.captures(line).or_else(|| BLOCKQUOTE_FENCE_RE.captures(line)).map(|cap| {
         let indent = cap.get(1).map_or("", |m| m.as_str());
         let fence  = cap.get(2).map_or("", |m| m.as_str());
         let info   = cap.get(3).map_or("", |m| m.as_str());
