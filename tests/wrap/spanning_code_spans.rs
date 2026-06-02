@@ -283,6 +283,12 @@ fn test_assert_no_md038_code_span_allows_backtick_disambiguation_spaces() {
 }
 
 #[test]
+#[should_panic(expected = "code span has leading or trailing space")]
+fn test_assert_no_md038_code_span_rejects_one_sided_backtick_edge() {
+    assert_no_md038_code_span("`` `foo  ``");
+}
+
+#[test]
 fn test_wrap_does_not_join_overlong_import_list() {
     let input = lines_vec![
         "- `podbot::engine::{ContainerSecurityOptions, CreateContainerRequest,",
@@ -323,7 +329,7 @@ fn assert_no_md038_code_span(rendered: &str) {
         };
         let code = &after_open[..close_index];
         let trimmed_code = code.trim_matches(' ');
-        let allows_edge_spaces = trimmed_code.starts_with('`') || trimmed_code.ends_with('`');
+        let allows_edge_spaces = trimmed_code.starts_with('`') && trimmed_code.ends_with('`');
         assert!(
             code.is_empty()
                 || allows_edge_spaces
