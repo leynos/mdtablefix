@@ -47,6 +47,18 @@ the same line as the span content. This behaviour applies in all prefixed
 contexts — bulleted lists, ordered lists, blockquotes, and footnote definitions
 — as well as in plain paragraphs.
 
+If joining a split inline code span would exceed the configured wrap width,
+`mdtablefix` preserves the existing multi-line shape instead of emitting an
+overlong line. Ambiguous close-and-reopen patterns are also preserved
+verbatim, so the formatter does not introduce Markdownlint MD038 spacing
+violations or change the intended code-span boundaries.
+
+When `--wrap` is combined with `--renumber`, ordered list item boundaries are
+preserved even when a list item contains a long inline code span. The wrapper
+may leave the span on its existing continuation line, but it does not split a
+single list item into new numbered steps or strand code-span fragments as
+separate list items.
+
 When a footnote reference immediately follows an inline code span or Markdown
 link without intervening whitespace—for example `` `code`.[^ref] `` or
 `[text](url).[^ref]`—the reference stays on the same line as the preceding
