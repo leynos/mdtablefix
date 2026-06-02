@@ -278,6 +278,11 @@ fn test_assert_no_md038_code_span_handles_multi_backtick_content() {
 }
 
 #[test]
+fn test_assert_no_md038_code_span_allows_backtick_disambiguation_spaces() {
+    assert_no_md038_code_span("`` `foo` ``");
+}
+
+#[test]
 fn test_wrap_does_not_join_overlong_import_list() {
     let input = lines_vec![
         "- `podbot::engine::{ContainerSecurityOptions, CreateContainerRequest,",
@@ -317,8 +322,12 @@ fn assert_no_md038_code_span(rendered: &str) {
             break;
         };
         let code = &after_open[..close_index];
+        let trimmed_code = code.trim_matches(' ');
+        let allows_edge_spaces = trimmed_code.starts_with('`') || trimmed_code.ends_with('`');
         assert!(
-            code.is_empty() || (!code.starts_with(' ') && !code.ends_with(' ')),
+            code.is_empty()
+                || allows_edge_spaces
+                || (!code.starts_with(' ') && !code.ends_with(' ')),
             "code span has leading or trailing space: {code:?} in {rendered:?}"
         );
         remaining = &after_open[close_index + fence_len..];
