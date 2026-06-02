@@ -190,7 +190,7 @@ impl<'a> ParagraphWriter<'a> {
     ) {
         let prefix = pending.prefix;
         let mut first_line = format!("{prefix}{rest}", rest = pending.rest);
-        if (pending.hard_break || hard_break) && !first_line.ends_with("  ") {
+        if pending.hard_break && !first_line.ends_with("  ") {
             first_line.push_str("  ");
         }
         self.out.push(first_line);
@@ -201,8 +201,11 @@ impl<'a> ParagraphWriter<'a> {
         } else {
             " ".repeat(prefix_width)
         };
-        self.out
-            .push(format!("{continuation_prefix}{continuation}"));
+        let mut continuation_line = format!("{continuation_prefix}{continuation}");
+        if hard_break && !continuation_line.ends_with("  ") {
+            continuation_line.push_str("  ");
+        }
+        self.out.push(continuation_line);
     }
 
     /// Flushes the buffered paragraph into wrapped output lines.

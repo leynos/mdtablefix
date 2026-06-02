@@ -232,6 +232,21 @@ fn test_wrap_does_not_join_overlong_signature() {
 }
 
 #[test]
+fn test_wrap_verbatim_width_guard_keeps_hard_break_on_continuation() {
+    let input = lines_vec![
+        "- `EngineConnector::connect(socket: impl AsRef<str>)",
+        "  -> Result<Docker, PodbotError>`  ",
+        "next",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(output, input);
+    assert!(!output[0].ends_with("  "));
+    assert!(output[1].ends_with("  "));
+    assert_no_line_exceeds_width(&output, 80);
+}
+
+#[test]
 fn test_wrap_does_not_join_overlong_import_list() {
     let input = lines_vec![
         "- `podbot::engine::{ContainerSecurityOptions, CreateContainerRequest,",
