@@ -104,7 +104,7 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
             let (tok, mut new_i) = parse_link_or_image(text, i);
             tokens.push(tok);
             let punct_start = new_i;
-            new_i = scan_while(text, new_i, is_trailing_punctuation);
+            new_i = scan_trailing_punctuation_end(text, new_i);
             if new_i > punct_start {
                 tokens.push(collect_range(text, punct_start, new_i));
             }
@@ -119,6 +119,26 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
     tokens
 }
 
+fn scan_trailing_punctuation_end(text: &str, mut index: usize) -> usize {
+    while index < text.len() {
+        let Some(current) = text[index..].chars().next() else {
+            break;
+        };
+        if current == '('
+            && text
+                .get(index + 1..)
+                .is_some_and(|tail| tail.starts_with('['))
+        {
+            break;
+        }
+        if !is_trailing_punctuation(current) {
+            break;
+        }
+        index += current.len_utf8();
+    }
+    index
+}
+
 fn append_escaped_backtick(tokens: &mut Vec<String>) {
     if let Some(last) = tokens.last_mut() {
         last.push('`');
@@ -128,6 +148,10 @@ fn append_escaped_backtick(tokens: &mut Vec<String>) {
 }
 
 fn scan_plain_text_end(text: &str, bytes: &[u8], mut index: usize) -> usize {
+    if text[index..].starts_with("([") {
+        return index + 1;
+    }
+
     while index < text.len() {
         let Some(current) = text[index..].chars().next() else {
             break;
@@ -150,6 +174,12 @@ fn should_stop_plain_text(text: &str, bytes: &[u8], index: usize, current: (char
     let (ch, is_escaped) = current;
     if ch == '[' {
         return !is_escaped && !bracket_follows_escaped_bang(bytes, index);
+    }
+    if ch == '(' {
+        return !is_escaped
+            && text
+                .get(index + 1..)
+                .is_some_and(|tail| tail.starts_with('['));
     }
     looks_like_image_start(text, index, ch) && !is_escaped
 }

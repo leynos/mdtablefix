@@ -146,6 +146,48 @@ fn wrap_preserving_code_keeps_opening_bracket_with_inline_code(
     }
 }
 
+#[rstest]
+#[case(
+    "The formatter keeps pattern([1](https://example.com/ref)) attached while wrapping.",
+    32,
+    "pattern([1](https://example.com/ref))"
+)]
+#[case(
+    concat!(
+        "The formatter keeps runtime([6](https://example.com/command))",
+        "([7](https://example.com/event)) attached while wrapping."
+    ),
+    34,
+    "runtime([6](https://example.com/command))([7](https://example.com/event))",
+)]
+fn wrap_preserving_code_keeps_inline_citation_links_attached(
+    #[case] input: &str,
+    #[case] width: usize,
+    #[case] expected_citation: &str,
+) {
+    let lines = wrap_preserving_code(input, width);
+    assert!(
+        lines.iter().any(|line| line.contains(expected_citation)),
+        "expected citation to stay attached in {lines:?}",
+    );
+    assert!(
+        lines.iter().all(|line| !line.ends_with('(')),
+        "opening parenthesis must not be stranded at line end: {lines:?}",
+    );
+    assert!(
+        lines
+            .iter()
+            .all(|line| !line.trim_start().starts_with("[1](")
+                && !line.trim_start().starts_with("[6](")
+                && !line.trim_start().starts_with("[7](")),
+        "citation link must not start a continuation line: {lines:?}",
+    );
+    assert!(
+        lines.iter().all(|line| line.trim() != ")("),
+        "adjacent citation punctuation must not be orphaned: {lines:?}",
+    );
+}
+
 #[test]
 fn wrap_preserving_code_glues_punctuation_after_code() {
     let lines = wrap_preserving_code("line with `code` !", 80);

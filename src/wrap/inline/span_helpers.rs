@@ -8,6 +8,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::predicates::{
     is_inline_code_token,
+    is_opening_punct,
     is_trailing_punct,
     is_trailing_punctuation_token,
     looks_like_footnote_ref,
@@ -92,6 +93,24 @@ pub(in crate::wrap::inline) fn absorb_token_and_trailing_punctuation(
 ) -> usize {
     *width += UnicodeWidthStr::width(tokens[end].as_str());
     extend_punctuation(tokens, end + 1, width)
+}
+
+/// Couples an opener-followed inline link, such as `([1](url))`, into the
+/// current span.
+pub(in crate::wrap::inline) fn try_couple_inline_link_after_opener(
+    tokens: &[String],
+    end: usize,
+    width: &mut usize,
+) -> Option<(SpanKind, usize)> {
+    let opener = tokens.get(end)?;
+    let link = tokens.get(end + 1)?;
+    if !opener.chars().all(is_opening_punct) || !looks_like_link(link) {
+        return None;
+    }
+
+    *width += UnicodeWidthStr::width(opener.as_str());
+    *width += UnicodeWidthStr::width(link.as_str());
+    Some((SpanKind::Link, extend_punctuation(tokens, end + 2, width)))
 }
 
 /// Couples an adjacent footnote reference into the current span when appropriate.
