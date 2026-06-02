@@ -120,16 +120,23 @@ fn is_bullet_marker(trimmed: &str) -> bool {
 }
 
 fn is_ordered_list_marker(trimmed: &str) -> bool {
-    let marker = trimmed
-        .chars()
-        .take_while(|ch| ch.is_ascii_digit() || matches!(ch, '.' | ')'))
-        .collect::<String>();
-    let Some(number) = marker.strip_suffix(['.', ')']) else {
+    let mut end_idx = 0;
+    for (idx, ch) in trimmed.char_indices() {
+        if ch.is_ascii_digit() || matches!(ch, '.' | ')') {
+            end_idx = idx + ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    if end_idx == 0 || !matches!(trimmed.as_bytes()[end_idx - 1], b'.' | b')') {
         return false;
-    };
+    }
+
+    let number = &trimmed[..end_idx - 1];
     !number.is_empty()
-        && number.chars().all(|ch| ch.is_ascii_digit())
-        && trimmed[marker.len()..]
+        && number.bytes().all(|byte| byte.is_ascii_digit())
+        && trimmed[end_idx..]
             .chars()
             .next()
             .is_some_and(char::is_whitespace)
