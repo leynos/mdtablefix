@@ -9,19 +9,6 @@
 #[path = "common/mod.rs"]
 mod common;
 
-fn wrap_text_oversized_code_span_stays_intact() {
-    let code_span = concat!(
-        "`fn find_interrupted_session(base_dir: &Utf8Path, owner: &str, ",
-        "repository: &str, pr_number: u64) -> Result<Option<SessionState>, IntakeError>`",
-    );
-    let input = lines_vec![format!("1. Implement {code_span} now.")];
-    let wrapped = wrap_text(&input, 80);
-
-    assert!(wrapped.join("\n").contains(code_span));
-    assert!(wrapped.iter().all(|line| !line.trim().is_empty()));
-    assert!(wrapped.iter().skip(1).all(|line| line.starts_with("   ")));
-}
-
 #[path = "wrap_unit/code_spans.rs"]
 mod code_spans;
 #[path = "wrap_unit/footnotes.rs"]
