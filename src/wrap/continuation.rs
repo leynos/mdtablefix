@@ -51,11 +51,7 @@ pub(super) fn apply_continuation_chunk(
     // double-walk `text`.
     let leading_run_len = tokenize::opening_fence_run_len(text.as_bytes(), text);
     let needs_space = !should_join_verbatim
-        && leading_run_needs_space(
-            leading_run_len,
-            open_fence_len,
-            pending.continuation_mode == ContinuationMode::TightCodeSpan,
-        );
+        && leading_run_needs_space(leading_run_len, open_fence_len, should_join_verbatim);
     let continuation_offset = {
         let pending_len = pending.rest.len();
         pending_len + usize::from(pending_len > 0 && needs_space)

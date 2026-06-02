@@ -247,6 +247,11 @@ fn test_wrap_verbatim_width_guard_keeps_hard_break_on_continuation() {
 }
 
 #[test]
+fn test_assert_no_md038_code_span_handles_multi_backtick_content() {
+    assert_no_md038_code_span("``foo ` bar ` baz``");
+}
+
+#[test]
 fn test_wrap_does_not_join_overlong_import_list() {
     let input = lines_vec![
         "- `podbot::engine::{ContainerSecurityOptions, CreateContainerRequest,",
@@ -280,8 +285,9 @@ fn test_wrap_partial_join_then_verbatim() {
 fn assert_no_md038_code_span(rendered: &str) {
     let mut remaining = rendered;
     while let Some(open_index) = remaining.find('`') {
-        let after_open = &remaining[open_index + 1..];
-        let Some(close_index) = after_open.find('`') else {
+        let fence_len = backtick_run_len(&remaining[open_index..]);
+        let after_open = &remaining[open_index + fence_len..];
+        let Some(close_index) = matching_backtick_run_index(after_open, fence_len) else {
             break;
         };
         let code = &after_open[..close_index];
@@ -289,8 +295,28 @@ fn assert_no_md038_code_span(rendered: &str) {
             code.is_empty() || (!code.starts_with(' ') && !code.ends_with(' ')),
             "code span has leading or trailing space: {code:?} in {rendered:?}"
         );
-        remaining = &after_open[close_index + 1..];
+        remaining = &after_open[close_index + fence_len..];
     }
+}
+
+fn matching_backtick_run_index(text: &str, fence_len: usize) -> Option<usize> {
+    let mut search = 0;
+    while let Some(relative_index) = text[search..].find('`') {
+        let run_start = search + relative_index;
+        let run_len = backtick_run_len(&text[run_start..]);
+        if run_len == fence_len {
+            return Some(run_start);
+        }
+        search = run_start + run_len;
+    }
+    None
+}
+
+fn backtick_run_len(text: &str) -> usize {
+    text.as_bytes()
+        .iter()
+        .take_while(|byte| **byte == b'`')
+        .count()
 }
 
 fn assert_no_line_exceeds_width(output: &[String], width: usize) {

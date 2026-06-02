@@ -17,7 +17,11 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
     assert!(output.iter().all(|l| l.len() <= 80));
     // Guards against `rebalance_atomic_tails` emptying a list-item line and
     // creating a paragraph break that later changes ordered-list semantics.
-    assert!(output.iter().all(|line| !line.is_empty()));
+    assert!(
+        output
+            .iter()
+            .all(|line| line.chars().any(|ch| !ch.is_whitespace()))
+    );
     let indent = " ".repeat(prefix.len());
     for line in output.iter().skip(1) {
         assert!(line.starts_with(&indent));
