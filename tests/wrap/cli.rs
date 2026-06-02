@@ -196,38 +196,11 @@ fn test_cli_wrap_preserves_inline_code_span_with_quotes() -> Result<(), Box<dyn 
     Ok(())
 }
 
-/// Protects issue #329: combined format flags must not rewrite fenced content.
+/// Protects issue `#329`: combined format flags must not rewrite fenced content.
 #[test]
 fn test_cli_wrap_fences_ellipsis_preserve_fenced_content() -> Result<(), Box<dyn std::error::Error>>
 {
-    let input = concat!(
-        "```sql\n",
-        "-- Tenant root table\n",
-        "CREATE TABLE tenants (\n",
-        "    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n",
-        "    slug VARCHAR(64) NOT NULL UNIQUE,\n",
-        "    name VARCHAR(255) NOT NULL,\n",
-        "    status VARCHAR(32) NOT NULL DEFAULT 'active'\n",
-        ");\n",
-        "\n",
-        "-- Deterministic default tenant for migration safety and single-tenant dev mode.\n",
-        "INSERT INTO tenants (id, slug, name, status)\n",
-        "VALUES ('00000000-0000-0000-0000-000000000001', 'default', 'Default Tenant', 'active')\n",
-        "ON CONFLICT (id) DO NOTHING;\n",
-        "```\n",
-        "\n",
-        "```json\n",
-        "// Payload example...\n",
-        "{...}\n",
-        "```\n",
-        "\n",
-        "````markdown\n",
-        "```json\n",
-        "{...}\n",
-        "```\n",
-        "````\n",
-    );
-
+    let input = include_str!("../data/issue_329_wrap_fences_ellipsis_input.txt");
     let assertion = run_cli_with_stdin(
         &["--wrap", "--renumber", "--breaks", "--ellipsis", "--fences"],
         input,
@@ -235,29 +208,21 @@ fn test_cli_wrap_fences_ellipsis_preserve_fenced_content() -> Result<(), Box<dyn
     let success = assertion.success();
     let output = String::from_utf8_lossy(&success.get_output().stdout);
     assert!(
-        output.contains(concat!(
-            "-- Tenant root table\n",
-            "CREATE TABLE tenants (\n",
-            "    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n",
-            "    slug VARCHAR(64) NOT NULL UNIQUE,\n",
-            "    name VARCHAR(255) NOT NULL,\n",
-            "    status VARCHAR(32) NOT NULL DEFAULT 'active'\n",
-            ");\n",
-            "\n",
-            "-- Deterministic default tenant for migration safety and single-tenant dev mode.\n",
-            "INSERT INTO tenants (id, slug, name, status)\n",
-            "VALUES ('00000000-0000-0000-0000-000000000001', 'default', 'Default Tenant', \
-             'active')\n",
-            "ON CONFLICT (id) DO NOTHING;"
+        output.contains(include_str!(
+            "../data/issue_329_wrap_fences_ellipsis_sql_body.txt"
         )),
         "SQL fenced body must remain unchanged"
     );
     assert!(
-        output.contains("// Payload example...\n{...}"),
+        output.contains(include_str!(
+            "../data/issue_329_wrap_fences_ellipsis_json_body.txt"
+        )),
         "JSON-like fenced body must remain unchanged"
     );
     assert!(
-        output.contains("```json\n{...}\n```"),
+        output.contains(include_str!(
+            "../data/issue_329_wrap_fences_ellipsis_inner_fence.txt"
+        )),
         "inner JSON fence must remain literal"
     );
     Ok(())
