@@ -32,12 +32,24 @@ pub(super) fn apply_continuation_chunk(
     writer: &mut ParagraphWriter<'_>,
     state: &mut ParagraphState,
 ) {
-    if should_emit_verbatim_for_width(text, state)
-        && let Some(mut pending) = state.pending_prefix.take()
-    {
-        pending.original_lines.push(source_line.to_string());
-        writer.emit_pending_with_verbatim_continuation(pending, source_line, hard_break);
-        return;
+    if should_emit_verbatim_for_width(text, state) {
+        if state
+            .pending_prefix
+            .as_ref()
+            .is_some_and(|pending| pending.continuation_mode == ContinuationMode::VerbatimFlush)
+        {
+            if let Some(pending) = state.pending_prefix.as_mut() {
+                pending.original_lines.push(source_line.to_string());
+            }
+            writer.flush_paragraph(state);
+            return;
+        }
+
+        if let Some(mut pending) = state.pending_prefix.take() {
+            pending.original_lines.push(source_line.to_string());
+            writer.emit_pending_with_verbatim_continuation(pending, source_line, hard_break);
+            return;
+        }
     }
 
     let Some(pending) = state.pending_prefix.as_mut() else {

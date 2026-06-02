@@ -258,6 +258,21 @@ fn test_wrap_verbatim_width_guard_preserves_raw_continuation_line() {
 }
 
 #[test]
+fn test_wrap_verbatim_flush_width_guard_preserves_original_lines() {
+    let input = lines_vec![
+        "- `first span starts here",
+        concat!(
+            "  and closes here` then opens ",
+            "`SecondSpan::with_a_long_signature(first: FirstType, second: SecondType,"
+        ),
+        "  third: ThirdType, fourth: FourthType)`",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(output, input);
+}
+
+#[test]
 fn test_assert_no_md038_code_span_handles_multi_backtick_content() {
     assert_no_md038_code_span("``foo ` bar ` baz``");
 }
