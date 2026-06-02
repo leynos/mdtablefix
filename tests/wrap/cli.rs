@@ -4,9 +4,16 @@
 //! wrapping behaviour when processing Markdown content through the `mdtablefix`
 //! binary.
 
+use proptest::{
+    prelude::*,
+    test_runner::{Config, TestRunner},
+};
 use rstest::rstest;
 
 use super::cli_stdin::run_cli_with_stdin;
+
+const ISSUE_329_COMBINED_FLAGS: &[&str] =
+    &["--wrap", "--renumber", "--breaks", "--ellipsis", "--fences"];
 
 #[test]
 fn test_cli_wrap_option() -> Result<(), Box<dyn std::error::Error>> {
@@ -201,31 +208,77 @@ fn test_cli_wrap_preserves_inline_code_span_with_quotes() -> Result<(), Box<dyn 
 fn test_cli_wrap_fences_ellipsis_preserve_fenced_content() -> Result<(), Box<dyn std::error::Error>>
 {
     let input = include_str!("../data/issue_329_wrap_fences_ellipsis_input.txt");
-    let assertion = run_cli_with_stdin(
-        &["--wrap", "--renumber", "--breaks", "--ellipsis", "--fences"],
-        input,
-    )?;
+    let assertion = run_cli_with_stdin(ISSUE_329_COMBINED_FLAGS, input)?;
     let success = assertion.success();
     let output = String::from_utf8_lossy(&success.get_output().stdout);
-    assert!(
-        output.contains(include_str!(
-            "../data/issue_329_wrap_fences_ellipsis_sql_body.txt"
-        )),
-        "SQL fenced body must remain unchanged"
-    );
-    assert!(
-        output.contains(include_str!(
-            "../data/issue_329_wrap_fences_ellipsis_json_body.txt"
-        )),
-        "JSON-like fenced body must remain unchanged"
-    );
-    assert!(
-        output.contains(include_str!(
-            "../data/issue_329_wrap_fences_ellipsis_inner_fence.txt"
-        )),
-        "inner JSON fence must remain literal"
+    insta::assert_snapshot!(
+        "issue_329_wrap_fences_ellipsis_preserve_fenced_content",
+        output
     );
     Ok(())
+}
+
+fn fence_marker_strategy() -> impl Strategy<Value = String> {
+    (prop_oneof![Just('`'), Just('~')], 3usize..=6)
+        .prop_map(|(marker, len)| std::iter::repeat_n(marker, len).collect())
+}
+
+fn fence_info_strategy() -> impl Strategy<Value = String> {
+    prop_oneof![
+        Just(String::new()),
+        Just("sql".to_owned()),
+        Just("json payload".to_owned()),
+        Just("{#example .sample}".to_owned()),
+    ]
+}
+
+fn fenced_body_strategy() -> impl Strategy<Value = Vec<String>> {
+    prop::collection::vec(
+        prop_oneof![
+            Just("-- Payload example...".to_owned()),
+            Just("{...}".to_owned()),
+            Just("VALUES ('00000000-0000-0000-0000-000000000001', 'default');".to_owned()),
+            "[a-z][a-z ]{0,48}\\.\\.\\.".prop_map(|line| line),
+        ],
+        1..=5,
+    )
+}
+
+#[test]
+fn combined_flags_preserve_generated_fenced_bodies() {
+    let strategy = (
+        0usize..=3,
+        fence_marker_strategy(),
+        fence_info_strategy(),
+        fenced_body_strategy(),
+    );
+    let mut runner = TestRunner::new(Config {
+        cases: 32,
+        ..Config::default()
+    });
+
+    runner
+        .run(&strategy, |(indent, marker, info, body_lines)| {
+            let indent = " ".repeat(indent);
+            let info_suffix = if info.is_empty() {
+                String::new()
+            } else {
+                format!(" {info}")
+            };
+            let body = body_lines.join("\n");
+            let input = format!("{indent}{marker}{info_suffix}\n{body}\n{indent}{marker}\n");
+            let assertion = run_cli_with_stdin(ISSUE_329_COMBINED_FLAGS, &input)
+                .map_err(|err| TestCaseError::fail(err.to_string()))?;
+            let success = assertion.success();
+            let output = String::from_utf8_lossy(&success.get_output().stdout);
+
+            prop_assert!(
+                output.contains(&body),
+                "missing unchanged fenced body {body:?} in output:\n{output}"
+            );
+            Ok(())
+        })
+        .expect("generated fenced bodies are preserved by combined flags");
 }
 
 /// Ensures `--wrap` preserves emphasised step definition guidance with inline code spans.
