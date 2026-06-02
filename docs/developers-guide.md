@@ -164,7 +164,11 @@ The wrapping pipeline for `--wrap` is:
    `has_unclosed_code_span`), it clears the current paragraph buffer and saves
    the prefix, rest text, available width, `repeat_prefix`, and `hard_break`
    flag into `ParagraphState::pending_prefix` as a `PendingPrefix` value rather
-   than wrapping immediately.  Subsequent source lines are routed through
+   than wrapping immediately. `PendingPrefix` also records original source
+   lines for ambiguity-preserving passthrough, and `synthetic_join_spaces`
+   stores byte offsets for spaces inserted by continuation joining so only
+   formatter-created code-span edge spaces are trimmed later. Subsequent source
+   lines are routed through
    `handle_pending_continuation` (in `src/wrap.rs`) instead of the normal
    wrapping path. `handle_pending_continuation` classifies the line and
    delegates each soft-wrapped continuation chunk to `apply_continuation_chunk`
@@ -177,15 +181,35 @@ The wrapping pipeline for `--wrap` is:
    `apply_continuation_chunk` consults `update_span_state` to drive a
    `SpanStateUpdate` (`StillOpen`, `ClosedAndReopened`, or `Flush`); when the
    same chunk both closes the pre-existing span and opens a new one, the helper
-   synthesizes a closer for the new span so it stays atomic in the buffer, and
-   subsequent lines append as plain prose. Once `has_unclosed_code_span` returns
-   `false` for the accumulated rest, closure is confirmed and
-   `flush_paragraph` emits the entire buffered segment atomically using
-   `append_wrapped_with_prefix_width`; a deferred open span (detected by
-   `parse_open_code_span` before the join) suppresses emission unless a pending
-   Markdown hard break forces it.  When `hard_break` is set, two trailing
-   spaces are appended to the last emitted line. `clear()` on `ParagraphState`
-   also resets `pending_prefix` to `None`.
+   emits the closed prefix segment and keeps the new span pending rather than
+   inventing a closing fence. `ParagraphState::drain_pending_prefix` takes that
+   pending segment and clears the regular paragraph buffers before final
+   emission. `PendingPrefix::used_prefix` tracks whether the original prefix has
+   already been emitted, and
+   `pending_prefix_for_next_segment` uses it to give the first split segment the
+   original prefix and later split segments the continuation indent. If the
+   opener is at or near the end of its source line, `PendingPrefix` marks
+   subsequent continuations as verbatim, so joining does not create leading or
+   trailing spaces inside the code span. When the projected join would exceed
+   the available content width, the pending line and continuation are emitted
+   verbatim rather than joined into a Markdownlint-invalid overlong line. When
+   the scanner reports no open span and no close/reopen boundary exists,
+   `flush_paragraph` emits the buffered segment atomically using
+   `append_wrapped_with_prefix_width`. The exception is
+   `ContinuationMode::VerbatimFlush`: when the scanner sees a closing fence
+   immediately followed by a word character, `flush_paragraph` emits
+   `pending.original_lines` verbatim instead of rewrapping the buffer. When
+   `hard_break` is set, two trailing spaces are appended to the last emitted
+   line. `clear()` on `ParagraphState` also resets `pending_prefix` to `None`.
+
+   `ContinuationMode` records how pending continuations are handled:
+   `Normalize` uses ordinary Markdown soft-break spacing, `TightCodeSpan`
+   suppresses synthetic spaces after an opener at end-of-line, and
+   `VerbatimFlush` preserves `pending.original_lines` for ambiguous close and
+   reopen sequences. The `code_span_trim` module contains
+   `trim_code_span_edge_spaces`, which matches code spans by exact fence length
+   and removes only spaces whose byte offsets appear in
+   `synthetic_join_spaces`.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
@@ -286,6 +310,9 @@ Table: Key types and functions.
 | `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                        | `src/wrap/paragraph.rs`           |
 | `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                               | `src/wrap/paragraph.rs`           |
 | `PendingPrefix`                                                                                                                                                                                                                                              | `src/wrap/paragraph.rs`           |
+| `emit_pending_with_verbatim_continuation` - Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                   | `src/wrap/paragraph.rs`           |
+| `drain_pending_prefix` — Takes the deferred prefixed segment and clears plain paragraph buffers before final emission.                                                                                                                                       | `src/wrap/paragraph.rs`           |
+| `pending_prefix_for_next_segment` — Selects the original pending prefix for the first deferred segment, then the continuation indent for later segments.                                                                                                     | `src/wrap/paragraph.rs`           |
 | `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                | `src/wrap/continuation.rs`        |
 | `join_pending_continuation`                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`        |
 | `opening_fence_run_len` — Measures the length of an unescaped backtick run at the start of a byte slice; used to identify opening code-span fences.                                                                                                          | `src/wrap/tokenize/scanning.rs`   |
@@ -293,6 +320,12 @@ Table: Key types and functions.
 | `handle_pending_continuation`                                                                                                                                                                                                                                | `src/wrap.rs`                     |
 | `scan_code_suffix_end`                                                                                                                                                                                                                                       | `src/wrap/tokenize/scanning.rs`   |
 | `has_inline_code_structure`                                                                                                                                                                                                                                  | `src/wrap/inline/fragment.rs`     |
+
+`ContinuationMode` in `src/wrap/paragraph.rs` selects normal joining,
+opener-at-EOL tight joining, or original-line verbatim flushing for
+`PendingPrefix`. The private `code_span_trim` module provides
+`trim_code_span_edge_spaces` for metadata-guided trimming of synthetic
+code-span boundary spaces.
 
 `SpanKind` in `src/wrap/inline/span_helpers.rs` records how a grouped token
 span behaves while `determine_token_span` walks the stream: `General` for

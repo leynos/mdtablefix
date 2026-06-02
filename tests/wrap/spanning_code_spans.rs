@@ -18,6 +18,7 @@
 
 use mdtablefix::wrap::wrap_text;
 use rstest::rstest;
+use unicode_width::UnicodeWidthStr;
 
 use super::*;
 
@@ -113,51 +114,34 @@ fn test_wrap_defers_while_any_span_stays_open() {
 #[test]
 fn test_wrap_pending_cleared_after_span_closes_on_continuation() {
     // Span closes on the continuation line; the pending buffer stays alive
-    // (had_open guard) but must not leak a stale open_fence_len into the
-    // plain line that follows — "baz" joins as plain prose, not as span
-    // content.
+    // only until the scanner confirms no span remains open. The following
+    // plain line starts a new paragraph instead of extending the pending
+    // prefix buffer.
     let input = lines_vec!["- `foo", "  bar`", "baz"];
     let output = wrap_text(&input, 80);
-    assert_eq!(output, vec!["- `foo bar` baz".to_string()],);
+    assert_eq!(output, vec!["- `foo bar`".to_string(), "baz".to_string()],);
 }
 
 #[test]
 fn test_wrap_reopen_with_whitespace_tail_is_split_atomically() {
-    // The reopen detector must accept new openers whose first content
-    // character is whitespace; CommonMark allows leading whitespace inside
-    // a code span (it is stripped during rendering). Regression test:
-    // `split_reopen_span` previously rejected these reopens via an
-    // unjustified `is_whitespace()` early return, leaving span B unsplit
-    // and growing the pending buffer across both spans.
+    // Without a real closing fence for span B, preserving the source is safer
+    // than inventing Markdown that changes the prose.
     let input = lines_vec!["- foo `open", "  closed` and ` more"];
     let output = wrap_text(&input, 80);
     let rendered = output.join("\n");
-    assert!(
-        rendered.contains("`open closed`"),
-        "span A must close atomically: {rendered:?}"
-    );
-    assert!(
-        rendered.contains("` more`"),
-        "span B (whitespace-prefixed) must be synthesized closed: {rendered:?}"
-    );
+    assert_eq!(output, input);
+    assert!(!rendered.contains("` more`"));
 }
 
 #[test]
 fn test_wrap_reopen_with_close_paren_tail_is_split_atomically() {
     // Same as the whitespace case, but the new opener is immediately
-    // followed by ')'. Regression test for the symmetric heuristic that
-    // also rejected ')' as a leading character.
+    // followed by ')'.
     let input = lines_vec!["- foo `open", "  closed` and `)done"];
     let output = wrap_text(&input, 80);
     let rendered = output.join("\n");
-    assert!(
-        rendered.contains("`open closed`"),
-        "span A must close atomically: {rendered:?}"
-    );
-    assert!(
-        rendered.contains("`)done`"),
-        "span B (')'-prefixed) must be synthesized closed: {rendered:?}"
-    );
+    assert_eq!(output, input);
+    assert!(!rendered.contains("`)done`"));
 }
 
 #[test]
@@ -171,4 +155,222 @@ fn test_wrap_prefixed_open_span_leaves_indented_code_verbatim() {
         !rendered.contains("`open --version"),
         "indented line was merged into span text: {rendered:?}"
     );
+}
+
+#[test]
+fn test_wrap_three_line_close_a_open_b_close_b() {
+    let input = lines_vec![
+        "4. `parse_rsa_pem(pem_contents, display_path) ->",
+        "   Result<EncodingKey, GitHubError>` calls `validate_rsa_pem",
+        "   first`, then maps the error.",
+    ];
+    let output = wrap_text(&input, 80);
+    let rendered = output.join("\n");
+
+    assert!(
+        rendered.contains(
+            "`parse_rsa_pem(pem_contents, display_path) -> Result<EncodingKey, GitHubError>`"
+        ),
+        "span A must remain intact: {rendered:?}"
+    );
+    assert!(
+        rendered.contains("`validate_rsa_pem first`"),
+        "span B must remain intact: {rendered:?}"
+    );
+    assert_no_md038_code_span(&rendered);
+}
+
+#[test]
+fn test_wrap_opener_at_eol_emits_verbatim() {
+    let input = lines_vec![
+        "4. Calls the configured loader `",
+        "   EncodingKey::from_rsa_pem(pem_contents.as_bytes())`, mapping errors.",
+    ];
+    let output = wrap_text(&input, 80);
+    let rendered = output.join("\n");
+
+    assert!(rendered.contains("`EncodingKey::from_rsa_pem(pem_contents.as_bytes())`"));
+    assert_no_md038_code_span(&rendered);
+}
+
+#[test]
+fn test_wrap_preserves_authored_edges_of_multi_backtick_code_span() {
+    let input = lines_vec!["- `` foo `", "  bar ` baz ``"];
+    let output = wrap_text(&input, 80);
+    let rendered = output.join("\n");
+
+    assert!(
+        rendered.contains("`` foo ` bar ` baz ``"),
+        "authored multi-backtick content must be preserved: {rendered:?}"
+    );
+    assert!(
+        !rendered.contains("`bar`"),
+        "single-backtick runs inside a two-backtick span are content: {rendered:?}"
+    );
+}
+
+#[test]
+fn test_wrap_issue_md038_regression_fixture() {
+    let input: Vec<String> = include_lines!("../data/issue_md038_input.txt");
+    let expected: Vec<String> = include_lines!("../data/issue_md038_expected.txt");
+    let output = process_stream(&input);
+
+    assert_eq!(output, expected);
+    assert_no_md038_code_span(&output.join("\n"));
+}
+
+#[test]
+fn test_wrap_does_not_join_overlong_signature() {
+    let input = lines_vec![
+        "- `EngineConnector::connect(socket: impl AsRef<str>)",
+        "  -> Result<Docker, PodbotError>`",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(output, input);
+    assert_no_line_exceeds_width(&output, 80);
+}
+
+#[test]
+fn test_wrap_verbatim_width_guard_keeps_hard_break_on_continuation() {
+    let input = lines_vec![
+        "- `EngineConnector::connect(socket: impl AsRef<str>)",
+        "  -> Result<Docker, PodbotError>`  ",
+        "next",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(output, input);
+    assert!(!output[0].ends_with("  "));
+    assert!(output[1].ends_with("  "));
+    assert_no_line_exceeds_width(&output, 80);
+}
+
+#[test]
+fn test_wrap_verbatim_width_guard_preserves_raw_continuation_line() {
+    let input = lines_vec![
+        "- `EngineConnector::connect(socket: impl AsRef<str>)",
+        "      -> Result<Docker, PodbotError>`",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(output, input);
+}
+
+#[test]
+fn test_wrap_verbatim_flush_width_guard_preserves_original_lines() {
+    let input = lines_vec![
+        "- `first span starts here",
+        concat!(
+            "  and closes here` then opens ",
+            "`SecondSpan::with_a_long_signature(first: FirstType, second: SecondType,"
+        ),
+        "  third: ThirdType, fourth: FourthType)`",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(output, input);
+}
+
+#[test]
+fn test_assert_no_md038_code_span_handles_multi_backtick_content() {
+    assert_no_md038_code_span("``foo ` bar ` baz``");
+}
+
+#[test]
+fn test_assert_no_md038_code_span_allows_backtick_disambiguation_spaces() {
+    assert_no_md038_code_span("`` `foo` ``");
+}
+
+#[test]
+fn test_assert_no_md038_code_span_rejects_invalid_backtick_disambiguation() {
+    assert!(std::panic::catch_unwind(|| assert_no_md038_code_span("`` `foo  ``")).is_err());
+    assert!(std::panic::catch_unwind(|| assert_no_md038_code_span("``  `foo`  ``")).is_err());
+}
+
+#[test]
+fn test_wrap_does_not_join_overlong_import_list() {
+    let input = lines_vec![
+        "- `podbot::engine::{ContainerSecurityOptions, CreateContainerRequest,",
+        "  EngineConnector, SelinuxLabelMode}`",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(output, input);
+    assert_no_line_exceeds_width(&output, 80);
+}
+
+#[test]
+fn test_wrap_partial_join_then_verbatim() {
+    let input = lines_vec![
+        "- `Api::call(",
+        "  first: FirstType, second: SecondType,",
+        "  third: ThirdType, fourth: FourthType)`",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(
+        output,
+        vec![
+            "- `Api::call( first: FirstType, second: SecondType,".to_string(),
+            "  third: ThirdType, fourth: FourthType)`".to_string(),
+        ]
+    );
+    assert_no_line_exceeds_width(&output, 80);
+}
+
+fn assert_no_md038_code_span(rendered: &str) {
+    let mut remaining = rendered;
+    while let Some(open_index) = remaining.find('`') {
+        let fence_len = backtick_run_len(&remaining[open_index..]);
+        let after_open = &remaining[open_index + fence_len..];
+        let Some(close_index) = matching_backtick_run_index(after_open, fence_len) else {
+            break;
+        };
+        let code = &after_open[..close_index];
+        let trimmed_code = code.trim_matches(' ');
+        let leading_spaces = code.len() - code.trim_start_matches(' ').len();
+        let trailing_spaces = code.len() - code.trim_end_matches(' ').len();
+        let allows_edge_spaces = leading_spaces == 1
+            && trailing_spaces == 1
+            && trimmed_code.starts_with('`')
+            && trimmed_code.ends_with('`');
+        assert!(
+            code.is_empty()
+                || allows_edge_spaces
+                || (!code.starts_with(' ') && !code.ends_with(' ')),
+            "code span has leading or trailing space: {code:?} in {rendered:?}"
+        );
+        remaining = &after_open[close_index + fence_len..];
+    }
+}
+
+fn matching_backtick_run_index(text: &str, fence_len: usize) -> Option<usize> {
+    let mut search = 0;
+    while let Some(relative_index) = text[search..].find('`') {
+        let run_start = search + relative_index;
+        let run_len = backtick_run_len(&text[run_start..]);
+        if run_len == fence_len {
+            return Some(run_start);
+        }
+        search = run_start + run_len;
+    }
+    None
+}
+
+fn backtick_run_len(text: &str) -> usize {
+    text.as_bytes()
+        .iter()
+        .take_while(|byte| **byte == b'`')
+        .count()
+}
+
+fn assert_no_line_exceeds_width(output: &[String], width: usize) {
+    for line in output {
+        let line_width = UnicodeWidthStr::width(line.as_str());
+        assert!(
+            line_width <= width,
+            "line exceeds {width} columns with width {line_width}: {line:?}"
+        );
+    }
 }

@@ -15,9 +15,22 @@ pub fn assert_wrapped_list_item(output: &[String], prefix: &str, expected: usize
     assert_eq!(output.len(), expected);
     assert!(output.first().is_some_and(|line| line.starts_with(prefix)));
     assert!(output.iter().all(|l| l.len() <= 80));
+    // Guards against `rebalance_atomic_tails` emptying a list-item line and
+    // creating a paragraph break that later changes ordered-list semantics.
+    assert!(
+        output
+            .iter()
+            .all(|line| line.chars().any(|ch| !ch.is_whitespace()))
+    );
     let indent = " ".repeat(prefix.len());
     for line in output.iter().skip(1) {
         assert!(line.starts_with(&indent));
+        // Continuation indentation must match the marker width exactly, not
+        // merely begin with enough spaces.
+        assert_eq!(
+            line.chars().take_while(|ch| *ch == ' ').count(),
+            prefix.len()
+        );
     }
 
     let mut open: Option<usize> = None;

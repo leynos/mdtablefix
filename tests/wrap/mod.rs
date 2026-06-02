@@ -15,6 +15,7 @@ mod cli_stdin;
 mod wrap_assertions;
 
 mod blockquotes;
+mod checklist_code_spans;
 mod cli;
 mod fence_behaviour;
 mod footnotes;

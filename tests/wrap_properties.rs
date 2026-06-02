@@ -19,6 +19,22 @@ use mdtablefix::wrap::wrap_text;
 use proptest::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
+fn has_md038_code_span(rendered: &str) -> bool {
+    let mut remaining = rendered;
+    while let Some(open_index) = remaining.find('`') {
+        let after_open = &remaining[open_index + 1..];
+        let Some(close_index) = after_open.find('`') else {
+            break;
+        };
+        let code = &after_open[..close_index];
+        if !code.is_empty() && (code.starts_with(' ') || code.ends_with(' ')) {
+            return true;
+        }
+        remaining = &after_open[close_index + 1..];
+    }
+    false
+}
+
 fn footnote_label_strategy() -> impl Strategy<Value = String> {
     prop::collection::vec(
         prop_oneof![
@@ -31,6 +47,13 @@ fn footnote_label_strategy() -> impl Strategy<Value = String> {
         1..16,
     )
     .prop_map(|chars| chars.into_iter().collect())
+}
+
+fn checklist_marker_count(lines: &[String]) -> usize {
+    lines
+        .iter()
+        .filter(|line| line.starts_with("- [ ] ") || line.starts_with("- [x] "))
+        .count()
 }
 
 proptest! {
@@ -157,6 +180,93 @@ proptest! {
     }
 
     #[test]
+    fn wrap_text_deferred_checklist_span_does_not_add_checklist_markers(
+        checked in any::<bool>(),
+        before in "[a-z][a-z ]{0,30}",
+        command in "[a-z][a-z0-9_-]{1,30}",
+        suffix in "[a-z][a-z ]{0,30}",
+        width in 30usize..=100,
+    ) {
+        let marker = if checked { "- [x] " } else { "- [ ] " };
+        let input = vec![
+            format!("{marker}{before} `{command}"),
+            format!("  --flag` {suffix}"),
+        ];
+        let output = wrap_text(&input, width);
+
+        prop_assert_eq!(
+            checklist_marker_count(&output),
+            1,
+            "wrapped checklist item gained markers: {:?}",
+            output
+        );
+        let rendered = output.join("\n");
+        prop_assert!(
+            !rendered.contains(format!("` {command}").as_str()),
+            "wrapped checklist item inserted a space after the opening fence: {:?}",
+            output
+        );
+        prop_assert!(
+            !rendered.contains(format!("{command} `").as_str()),
+            "wrapped checklist item inserted a space before the closing fence: {:?}",
+            output
+        );
+        prop_assert!(
+            rendered.contains(format!("`{command} --flag`").as_str()),
+            "wrapped checklist item did not preserve the command span: {:?}",
+            output
+        );
+    }
+
+    #[test]
+    fn wrap_text_deferred_span_close_reopen_different_fence_lengths_correct(
+        n1 in 1usize..=3,
+        n2 in 1usize..=3,
+        before in "[a-z]{1,15}",
+        mid in "[a-z]{1,10}",
+        after in "[a-z]{1,15}",
+        width in 40usize..=120,
+    ) {
+        prop_assume!(n1 != n2);
+        let fence1 = "`".repeat(n1);
+        let fence2 = "`".repeat(n2);
+        let input = vec![
+            format!("- [ ] {before} {fence1}{mid}"),
+            format!("      {mid}{fence1} {fence2}{after}{fence2}"),
+        ];
+        let output = wrap_text(&input, width);
+
+        prop_assert_eq!(
+            checklist_marker_count(&output),
+            1,
+            "wrapped checklist item gained markers: {:?}",
+            output
+        );
+        for line in &output {
+            let trimmed = line.trim_start();
+            prop_assert!(
+                !trimmed.chars().all(|ch| ch == '`'),
+                "orphaned fence on line: {line:?}"
+            );
+            prop_assert!(
+                !trimmed.starts_with('`'),
+                "bare backtick run starts a continuation line: {line:?}"
+            );
+        }
+        let rendered = output.join("\n");
+        prop_assert!(
+            !rendered.contains(format!("{fence1} {mid}").as_str()),
+            "wrapped span inserted a space after the first opening fence: {:?}",
+            output
+        );
+        prop_assert!(
+            !rendered.contains(format!("{fence2} {after}").as_str()),
+            "wrapped span inserted a space after the second opening fence: {:?}",
+            output
+        );
+    }
+
+    #[test]
     fn wrap_keeps_leading_hyphen_compound_atomic(
         prefix in "\\p{L}{1,12}",
         inner in "\\p{L}{1,12}",
@@ -183,6 +293,56 @@ proptest! {
             );
         } else {
             prop_assert!(!output.is_empty(), "wrap_text must not panic or return empty output");
+        }
+    }
+
+    #[test]
+    fn wrap_text_opener_at_eol_does_not_create_md038_span(
+        body in "[A-Za-z_][A-Za-z0-9_:() .]{1,60}",
+        suffix in "[a-z ]{1,40}",
+        width in 40usize..=120,
+    ) {
+        prop_assume!(!body.ends_with(' '));
+        let input = vec![
+            "4. Opens a code span at line end `".to_string(),
+            format!("   {body}`, {suffix}."),
+        ];
+        let output = wrap_text(&input, width);
+        let rendered = output.join("\n");
+
+        prop_assert!(
+            !has_md038_code_span(&rendered),
+            "output must not contain MD038 code spans:\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn wrap_text_spanning_code_continuations_respect_width_when_source_lines_fit(
+        prefix_kind in 0usize..3,
+        before in "[a-z]{1,16}",
+        part1 in "[a-z]{1,24}",
+        part2 in "[a-z]{1,24}",
+    ) {
+        let (line1_prefix, cont_prefix) = match prefix_kind {
+            0 => ("- ".to_owned(), "  ".to_owned()),
+            1 => ("1. ".to_owned(), "   ".to_owned()),
+            _ => ("> ".to_owned(), "> ".to_owned()),
+        };
+        let line1 = format!("{line1_prefix}{before} `{part1}");
+        let line2 = format!("{cont_prefix}{part2}`");
+        let joined = format!("{line1_prefix}{before} `{part1} {part2}`");
+        let width = UnicodeWidthStr::width(line1.as_str())
+            .max(UnicodeWidthStr::width(line2.as_str()));
+
+        prop_assert!(UnicodeWidthStr::width(joined.as_str()) > width);
+
+        let output = wrap_text(&[line1, line2], width);
+
+        for line in &output {
+            prop_assert!(
+                UnicodeWidthStr::width(line.as_str()) <= width,
+                "line exceeds width {width}: {line:?}; output: {output:?}"
+            );
         }
     }
 }

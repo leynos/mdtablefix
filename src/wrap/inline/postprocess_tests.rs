@@ -172,6 +172,13 @@ fn rebalance_moves_atomic_tail_when_fits() {
     ],
     20,
 )]
+#[case::single_atomic_fragment_line(
+    vec![
+        vec![fragment("`SessionState::write_sidecar(&self)`")],
+        vec![fragment(" "), fragment("writes")],
+    ],
+    80,
+)]
 #[case::empty(Vec::new(), 10)]
 #[case::single_line(vec![vec![fragment("alpha"), fragment("tail")]], 10)]
 #[case::next_starts_space_then_atomic(

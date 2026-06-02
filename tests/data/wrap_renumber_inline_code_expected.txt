@@ -1,0 +1,11 @@
+1. Prepare the state directory.
+2. Define the session identifier.
+3. Add the sidecar schema.
+4. Wire the intake path.
+5. Implement `SessionState::write_sidecar(&self) -> Result<(), IntakeError>` —
+   writes the JSON sidecar file using `cap_std` filesystem primitives.
+6. Implement
+   `SessionState::read_sidecar(path: &Utf8Path) -> Result<Self, IntakeError>` —
+   reads and deserializes a sidecar file.
+7. Add `serde` and `serde_json` to the import list (both are already in
+   `Cargo.toml`).

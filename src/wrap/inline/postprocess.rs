@@ -40,7 +40,7 @@ fn line_starts_with_single_space_then_plain(line: &[InlineFragment]) -> bool {
 
 /// Returns whether the line ends with a fragment worth rebalancing.
 fn line_has_rebalanceable_tail(line: &[InlineFragment]) -> bool {
-    line.last().is_some_and(InlineFragment::is_atomic)
+    (line.len() > 1 && line.last().is_some_and(InlineFragment::is_atomic))
         || (line.len() > 1 && line.last().is_some_and(InlineFragment::is_plain))
 }
 

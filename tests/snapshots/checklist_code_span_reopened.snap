@@ -1,0 +1,6 @@
+---
+source: tests/wrap/checklist_code_spans.rs
+assertion_line: 39
+expression: "output.join(\"\\n\")"
+---
+- [x] Ran `set -o pipefail`, then `make lint`

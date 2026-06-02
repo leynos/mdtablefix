@@ -109,6 +109,31 @@ fn test_wrap_no_leading_spaces_on_continuation_lines() {
 }
 
 #[rstest]
+#[case::line_buffer_adr(lines_vec![
+    "The previous wrapping engine in `src/wrap/line_buffer.rs` implemented a bespoke",
+    "`LineBuffer` struct that accumulated tokens, tracked a split-point cursor, and",
+    "flushed completed lines one at a time. This approach had three compounding",
+    "problems:",
+])]
+#[case::escaped_pipe_sentence(lines_vec![
+    "Continuation-row protection has one extra constraint: once the protected row is",
+    "rebuilt, literal pipe characters inside the non-leading cells are re-escaped as",
+    "`\\|`. Without that step, a second parse would treat the restored pipe as a new",
+    "column delimiter and split the row incorrectly.",
+])]
+#[case::extension_code_spans(lines_vec![
+    "This grouping is deliberately narrow. Whitespace between separate inline code",
+    "spans remains a valid break opportunity, so sequences such as `.toml`, `.json`,",
+    "`.json5`, `.yaml`, and `.yml` can wrap between spans when required. The",
+    "coupling rule only keeps immediately trailing punctuation with the preceding",
+    "code span.",
+])]
+fn test_wrap_keeps_documentation_paragraphs_idempotent(#[case] input: Vec<String>) {
+    let output = process_stream(&input);
+    assert_eq!(output, input);
+}
+
+#[rstest]
 #[case("`Constraints`, `Tolerances`, and `Risks`.")]
 #[case("See `alpha` and `beta` for details.")]
 #[case("(`code`) with opening parenthesis.")]
