@@ -1,0 +1,1 @@
+- [x] Run `cargo test --workspace` after changing the wrapper.

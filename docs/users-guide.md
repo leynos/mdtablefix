@@ -47,6 +47,10 @@ the same line as the span content. This behaviour applies in all prefixed
 contexts — bulleted lists, ordered lists, blockquotes, and footnote definitions
 — as well as in plain paragraphs.
 
+For list items, deferred inline code continuations use continuation indentation
+rather than repeating the original list marker. This prevents a wrapped
+checklist item from being reformatted as several independent checklist entries.
+
 If joining a split inline code span would exceed the configured wrap width,
 `mdtablefix` preserves the existing multi-line shape instead of emitting an
 overlong line. Ambiguous close-and-reopen patterns are also preserved

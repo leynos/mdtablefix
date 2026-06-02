@@ -49,6 +49,13 @@ fn footnote_label_strategy() -> impl Strategy<Value = String> {
     .prop_map(|chars| chars.into_iter().collect())
 }
 
+fn checklist_marker_count(lines: &[String]) -> usize {
+    lines
+        .iter()
+        .filter(|line| line.starts_with("- [ ] ") || line.starts_with("- [x] "))
+        .count()
+}
+
 proptest! {
     #[test]
     fn wrap_text_keeps_generated_footnote_references_atomic(
@@ -173,6 +180,93 @@ proptest! {
     }
 
     #[test]
+    fn wrap_text_deferred_checklist_span_does_not_add_checklist_markers(
+        checked in any::<bool>(),
+        before in "[a-z][a-z ]{0,30}",
+        command in "[a-z][a-z0-9_-]{1,30}",
+        suffix in "[a-z][a-z ]{0,30}",
+        width in 30usize..=100,
+    ) {
+        let marker = if checked { "- [x] " } else { "- [ ] " };
+        let input = vec![
+            format!("{marker}{before} `{command}"),
+            format!("  --flag` {suffix}"),
+        ];
+        let output = wrap_text(&input, width);
+
+        prop_assert_eq!(
+            checklist_marker_count(&output),
+            1,
+            "wrapped checklist item gained markers: {:?}",
+            output
+        );
+        let rendered = output.join("\n");
+        prop_assert!(
+            !rendered.contains(format!("` {command}").as_str()),
+            "wrapped checklist item inserted a space after the opening fence: {:?}",
+            output
+        );
+        prop_assert!(
+            !rendered.contains(format!("{command} `").as_str()),
+            "wrapped checklist item inserted a space before the closing fence: {:?}",
+            output
+        );
+        prop_assert!(
+            rendered.contains(format!("`{command} --flag`").as_str()),
+            "wrapped checklist item did not preserve the command span: {:?}",
+            output
+        );
+    }
+
+    #[test]
+    fn wrap_text_deferred_span_close_reopen_different_fence_lengths_correct(
+        n1 in 1usize..=3,
+        n2 in 1usize..=3,
+        before in "[a-z]{1,15}",
+        mid in "[a-z]{1,10}",
+        after in "[a-z]{1,15}",
+        width in 40usize..=120,
+    ) {
+        prop_assume!(n1 != n2);
+        let fence1 = "`".repeat(n1);
+        let fence2 = "`".repeat(n2);
+        let input = vec![
+            format!("- [ ] {before} {fence1}{mid}"),
+            format!("      {mid}{fence1} {fence2}{after}{fence2}"),
+        ];
+        let output = wrap_text(&input, width);
+
+        prop_assert_eq!(
+            checklist_marker_count(&output),
+            1,
+            "wrapped checklist item gained markers: {:?}",
+            output
+        );
+        for line in &output {
+            let trimmed = line.trim_start();
+            prop_assert!(
+                !trimmed.chars().all(|ch| ch == '`'),
+                "orphaned fence on line: {line:?}"
+            );
+            prop_assert!(
+                !trimmed.starts_with('`'),
+                "bare backtick run starts a continuation line: {line:?}"
+            );
+        }
+        let rendered = output.join("\n");
+        prop_assert!(
+            !rendered.contains(format!("{fence1} {mid}").as_str()),
+            "wrapped span inserted a space after the first opening fence: {:?}",
+            output
+        );
+        prop_assert!(
+            !rendered.contains(format!("{fence2} {after}").as_str()),
+            "wrapped span inserted a space after the second opening fence: {:?}",
+            output
+        );
+    }
+
+    #[test]
     fn wrap_keeps_leading_hyphen_compound_atomic(
         prefix in "\\p{L}{1,12}",
         inner in "\\p{L}{1,12}",
@@ -228,7 +322,6 @@ proptest! {
         before in "[a-z]{1,16}",
         part1 in "[a-z]{1,24}",
         part2 in "[a-z]{1,24}",
-        width in 24usize..=80,
     ) {
         let (line1_prefix, cont_prefix) = match prefix_kind {
             0 => ("- ".to_owned(), "  ".to_owned()),
@@ -238,10 +331,10 @@ proptest! {
         let line1 = format!("{line1_prefix}{before} `{part1}");
         let line2 = format!("{cont_prefix}{part2}`");
         let joined = format!("{line1_prefix}{before} `{part1} {part2}`");
+        let width = UnicodeWidthStr::width(line1.as_str())
+            .max(UnicodeWidthStr::width(line2.as_str()));
 
-        prop_assume!(UnicodeWidthStr::width(line1.as_str()) <= width);
-        prop_assume!(UnicodeWidthStr::width(line2.as_str()) <= width);
-        prop_assume!(UnicodeWidthStr::width(joined.as_str()) > width);
+        prop_assert!(UnicodeWidthStr::width(joined.as_str()) > width);
 
         let output = wrap_text(&[line1, line2], width);
 

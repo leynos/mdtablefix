@@ -9,7 +9,14 @@ use std::borrow::Cow;
 use proptest::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
-use super::{ParagraphState, ParagraphWriter, PrefixLine};
+use super::{
+    ContinuationMode,
+    ParagraphState,
+    ParagraphWriter,
+    PendingPrefix,
+    PrefixLine,
+    pending_prefix_for_next_segment,
+};
 
 #[test]
 fn wrap_with_prefix_emits_single_line_when_text_fits() {
@@ -74,6 +81,39 @@ fn wrap_with_prefix_accounts_for_unicode_wide_prefixes() {
     assert_eq!(out, vec!["「 ab".to_string(), "  cd".to_string()]);
 }
 
+#[test]
+fn pending_prefix_first_call_returns_original_prefix_and_marks_used() {
+    let mut pending = pending_prefix("- [ ] ", false);
+
+    let prefix = pending_prefix_for_next_segment(&mut pending);
+
+    assert_eq!(prefix, "- [ ] ");
+    assert!(pending.used_prefix);
+}
+
+#[test]
+fn pending_prefix_subsequent_call_returns_continuation_indent() {
+    let mut pending = pending_prefix("- [ ] ", false);
+
+    let _ = pending_prefix_for_next_segment(&mut pending);
+    let prefix = pending_prefix_for_next_segment(&mut pending);
+
+    assert_eq!(prefix, "      ");
+    assert!(pending.used_prefix);
+}
+
+#[test]
+fn pending_prefix_repeat_prefix_returns_original_prefix_every_time() {
+    let mut pending = pending_prefix("> ", true);
+
+    let first = pending_prefix_for_next_segment(&mut pending);
+    let second = pending_prefix_for_next_segment(&mut pending);
+
+    assert_eq!(first, "> ");
+    assert_eq!(second, "> ");
+    assert!(pending.used_prefix);
+}
+
 proptest! {
     #[test]
     fn paragraph_writer_preserves_prefixes_and_width(
@@ -100,5 +140,20 @@ proptest! {
                 "wrapped line exceeded width {width}: {line:?}",
             );
         }
+    }
+}
+
+fn pending_prefix(prefix: &str, repeat_prefix: bool) -> PendingPrefix {
+    PendingPrefix {
+        prefix: prefix.to_string(),
+        rest: "text".to_string(),
+        original_lines: vec![format!("{prefix}text")],
+        synthetic_join_spaces: Vec::new(),
+        rest_width: 74,
+        repeat_prefix,
+        hard_break: false,
+        open_fence_len: Some(1),
+        continuation_mode: ContinuationMode::Normalize,
+        used_prefix: false,
     }
 }

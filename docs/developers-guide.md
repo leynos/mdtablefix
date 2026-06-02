@@ -182,14 +182,20 @@ The wrapping pipeline for `--wrap` is:
    `SpanStateUpdate` (`StillOpen`, `ClosedAndReopened`, or `Flush`); when the
    same chunk both closes the pre-existing span and opens a new one, the helper
    emits the closed prefix segment and keeps the new span pending rather than
-   inventing a closing fence. If the opener is at or near the end of its source
-   line, `PendingPrefix` marks subsequent continuations as verbatim so joining
-   does not create leading or trailing spaces inside the code span. When the
-   projected join would exceed the available content width, the pending line
-   and continuation are emitted verbatim rather than joined into a
-   Markdownlint-invalid overlong line. When the scanner reports no open span
-   and no close/reopen boundary exists, `flush_paragraph` emits the buffered
-   segment atomically using `append_wrapped_with_prefix_width`. The exception is
+   inventing a closing fence. `ParagraphState::drain_pending_prefix` takes that
+   pending segment and clears the regular paragraph buffers before final
+   emission. `PendingPrefix::used_prefix` tracks whether the original prefix has
+   already been emitted, and
+   `pending_prefix_for_next_segment` uses it to give the first split segment the
+   original prefix and later split segments the continuation indent. If the
+   opener is at or near the end of its source line, `PendingPrefix` marks
+   subsequent continuations as verbatim, so joining does not create leading or
+   trailing spaces inside the code span. When the projected join would exceed
+   the available content width, the pending line and continuation are emitted
+   verbatim rather than joined into a Markdownlint-invalid overlong line. When
+   the scanner reports no open span and no close/reopen boundary exists,
+   `flush_paragraph` emits the buffered segment atomically using
+   `append_wrapped_with_prefix_width`. The exception is
    `ContinuationMode::VerbatimFlush`: when the scanner sees a closing fence
    immediately followed by a word character, `flush_paragraph` emits
    `pending.original_lines` verbatim instead of rewrapping the buffer. When
@@ -305,6 +311,8 @@ Table: Key types and functions.
 | `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                               | `src/wrap/paragraph.rs`           |
 | `PendingPrefix`                                                                                                                                                                                                                                              | `src/wrap/paragraph.rs`           |
 | `emit_pending_with_verbatim_continuation` - Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                   | `src/wrap/paragraph.rs`           |
+| `drain_pending_prefix` — Takes the deferred prefixed segment and clears plain paragraph buffers before final emission.                                                                                                                                       | `src/wrap/paragraph.rs`           |
+| `pending_prefix_for_next_segment` — Selects the original pending prefix for the first deferred segment, then the continuation indent for later segments.                                                                                                     | `src/wrap/paragraph.rs`           |
 | `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                | `src/wrap/continuation.rs`        |
 | `join_pending_continuation`                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`        |
 | `opening_fence_run_len` — Measures the length of an unescaped backtick run at the start of a byte slice; used to identify opening code-span fences.                                                                                                          | `src/wrap/tokenize/scanning.rs`   |

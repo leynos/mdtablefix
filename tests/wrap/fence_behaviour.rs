@@ -123,6 +123,20 @@ fn wrap_respects_fences_with_info_strings_and_whitespace() {
 }
 
 #[test]
+fn wrap_preserves_blockquote_fenced_code_attributes() {
+    let input = lines_vec![
+        "> ```rust",
+        "> use mdtablefix::format_breaks;",
+        ">",
+        "> let input = vec![\"foo\".to_string(), \"---\".to_string()];",
+        "> ```",
+    ];
+    let output = process_stream(&input);
+
+    assert_eq!(output, input);
+}
+
+#[test]
 fn wrap_does_not_close_on_shorter_closing_marker() {
     let intro = concat!(
         "This paragraph intentionally spans more than eighty characters so that wrapping occurs ",

@@ -19,6 +19,7 @@ fn pending_prefix(
         hard_break: false,
         open_fence_len: Some(1),
         continuation_mode,
+        used_prefix: false,
     }
 }
 
@@ -131,4 +132,19 @@ fn update_span_state_selects_verbatim_flush_for_word_tail_after_close() {
         pending.continuation_mode,
         ContinuationMode::VerbatimFlush
     ));
+}
+
+#[test]
+fn scan_continuation_filter_distinguishes_closed_and_open_spans() {
+    let closed = scan_continuation_span_state("no backticks here", 0);
+    assert_eq!(closed, Some(0));
+    assert_eq!(closed.filter(|len| *len > 0), None);
+
+    let still_open = scan_continuation_span_state("text `more", 0);
+    assert_eq!(still_open, Some(0));
+    assert_eq!(still_open.filter(|len| *len > 0), None);
+    assert_eq!(
+        parse_open_code_span("text `more").map(|(len, _)| len),
+        Some(1)
+    );
 }

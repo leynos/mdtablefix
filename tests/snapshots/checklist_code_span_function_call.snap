@@ -1,0 +1,6 @@
+---
+source: tests/wrap/checklist_code_spans.rs
+assertion_line: 39
+expression: "output.join(\"\\n\")"
+---
+- [x] Add `sys.exit(asyncio.run(main()))` to the migration command.
