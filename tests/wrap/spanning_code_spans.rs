@@ -194,6 +194,22 @@ fn test_wrap_opener_at_eol_emits_verbatim() {
 }
 
 #[test]
+fn test_wrap_trims_only_edges_of_multi_backtick_code_span() {
+    let input = lines_vec!["- `` foo `", "  bar ` baz ``"];
+    let output = wrap_text(&input, 80);
+    let rendered = output.join("\n");
+
+    assert!(
+        rendered.contains("``foo ` bar ` baz``"),
+        "literal single-backtick content must be preserved: {rendered:?}"
+    );
+    assert!(
+        !rendered.contains("`bar`"),
+        "single-backtick runs inside a two-backtick span are content: {rendered:?}"
+    );
+}
+
+#[test]
 fn test_wrap_issue_md038_regression_fixture() {
     let input: Vec<String> = include_lines!("../data/issue_md038_input.txt");
     let expected: Vec<String> = include_lines!("../data/issue_md038_expected.txt");

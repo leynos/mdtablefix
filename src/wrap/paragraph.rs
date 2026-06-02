@@ -7,8 +7,6 @@ use std::borrow::Cow;
 
 use unicode_width::UnicodeWidthStr;
 
-use super::{inline::wrap_preserving_code, tokenize::parse_open_code_span};
-
 /// Carries the parsed prefix metadata for a line that should be wrapped.
 pub(super) struct PrefixLine<'a> {
     /// Stores the literal prefix emitted on the first wrapped line.
@@ -319,30 +317,6 @@ impl<'a> ParagraphWriter<'a> {
         self.append_wrapped_with_prefix(prefix_line);
     }
 }
-
-fn trim_code_span_edge_spaces(text: &str) -> Cow<'_, str> {
-    if !text.contains("` ") && !text.contains(" `") {
-        return Cow::Borrowed(text);
-    }
-
-    let mut output = String::with_capacity(text.len());
-    let mut remaining = text;
-    while let Some(open_index) = remaining.find('`') {
-        let before = &remaining[..=open_index];
-        let after_open = &remaining[open_index + 1..];
-        let Some(close_index) = after_open.find('`') else {
-            output.push_str(remaining);
-            return Cow::Owned(output);
-        };
-        let code = &after_open[..close_index];
-        output.push_str(before);
-        output.push_str(code.trim_matches(' '));
-        output.push('`');
-        remaining = &after_open[close_index + 1..];
-    }
-    output.push_str(remaining);
-    Cow::Owned(output)
-}
 mod tests {
     use std::borrow::Cow;
 
@@ -443,3 +417,5 @@ mod tests {
         }
     }
 }
+
+mod code_span_trim;
