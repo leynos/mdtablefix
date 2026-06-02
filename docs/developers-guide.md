@@ -164,7 +164,11 @@ The wrapping pipeline for `--wrap` is:
    `has_unclosed_code_span`), it clears the current paragraph buffer and saves
    the prefix, rest text, available width, `repeat_prefix`, and `hard_break`
    flag into `ParagraphState::pending_prefix` as a `PendingPrefix` value rather
-   than wrapping immediately.  Subsequent source lines are routed through
+   than wrapping immediately. `PendingPrefix` also records original source
+   lines for ambiguity-preserving passthrough, and `synthetic_join_spaces`
+   stores byte offsets for spaces inserted by continuation joining so only
+   formatter-created code-span edge spaces are trimmed later. Subsequent source
+   lines are routed through
    `handle_pending_continuation` (in `src/wrap.rs`) instead of the normal
    wrapping path. `handle_pending_continuation` classifies the line and
    delegates each soft-wrapped continuation chunk to `apply_continuation_chunk`
@@ -191,6 +195,15 @@ The wrapping pipeline for `--wrap` is:
    `pending.original_lines` verbatim instead of rewrapping the buffer. When
    `hard_break` is set, two trailing spaces are appended to the last emitted
    line. `clear()` on `ParagraphState` also resets `pending_prefix` to `None`.
+
+   `ContinuationMode` records how pending continuations are handled:
+   `Normalize` uses ordinary Markdown soft-break spacing, `TightCodeSpan`
+   suppresses synthetic spaces after an opener at end-of-line, and
+   `VerbatimFlush` preserves `pending.original_lines` for ambiguous close and
+   reopen sequences. The `code_span_trim` module contains
+   `trim_code_span_edge_spaces`, which matches code spans by exact fence length
+   and removes only spaces whose byte offsets appear in
+   `synthetic_join_spaces`.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
@@ -298,6 +311,12 @@ Table: Key types and functions.
 | `handle_pending_continuation`                                                                                                                                                                                                                                | `src/wrap.rs`                     |
 | `scan_code_suffix_end`                                                                                                                                                                                                                                       | `src/wrap/tokenize/scanning.rs`   |
 | `has_inline_code_structure`                                                                                                                                                                                                                                  | `src/wrap/inline/fragment.rs`     |
+
+`ContinuationMode` in `src/wrap/paragraph.rs` selects normal joining,
+opener-at-EOL tight joining, or original-line verbatim flushing for
+`PendingPrefix`. The private `code_span_trim` module provides
+`trim_code_span_edge_spaces` for metadata-guided trimming of synthetic
+code-span boundary spaces.
 
 `SpanKind` in `src/wrap/inline/span_helpers.rs` records how a grouped token
 span behaves while `determine_token_span` walks the stream: `General` for

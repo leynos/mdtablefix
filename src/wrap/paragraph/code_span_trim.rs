@@ -4,7 +4,7 @@
 //! spans, preserving the exact fence length so literal shorter backtick runs
 //! remain untouched as span content.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashSet};
 
 pub(super) fn trim_code_span_edge_spaces<'a>(
     text: &'a str,
@@ -17,6 +17,7 @@ pub(super) fn trim_code_span_edge_spaces<'a>(
     let mut output = String::with_capacity(text.len());
     let mut remaining = text;
     let mut consumed = 0;
+    let synthetic_space_offsets: HashSet<usize> = synthetic_spaces.iter().copied().collect();
     while let Some((open_start, open_end)) = next_backtick_run(remaining, 0) {
         let fence_len = open_end - open_start;
         let Some(close_start) = matching_backtick_run_start(remaining, open_end, fence_len) else {
@@ -26,9 +27,10 @@ pub(super) fn trim_code_span_edge_spaces<'a>(
         let close_end = close_start + fence_len;
         let code_start = consumed + open_end;
         let code_end = consumed + close_start;
-        let trim_start = usize::from(synthetic_spaces.contains(&code_start));
+        let trim_start = usize::from(synthetic_space_offsets.contains(&code_start));
         let trim_end = usize::from(
-            code_end > code_start && synthetic_spaces.contains(&(code_end.saturating_sub(1))),
+            code_end > code_start
+                && synthetic_space_offsets.contains(&(code_end.saturating_sub(1))),
         );
         output.push_str(&remaining[..open_end]);
         output.push_str(&remaining[open_end + trim_start..close_start - trim_end]);
