@@ -29,24 +29,7 @@ use super::{
 
 #[cfg(test)]
 #[path = "continuation_tests.rs"]
-mod tests {
-    use super::{parse_open_code_span, scan_continuation_span_state};
-
-    #[test]
-    fn scan_continuation_filter_distinguishes_closed_and_open_spans() {
-        let closed = scan_continuation_span_state("no backticks here", 0);
-        assert_eq!(closed, Some(0));
-        assert_eq!(closed.filter(|len| *len > 0), None);
-
-        let still_open = scan_continuation_span_state("text `more", 0);
-        assert_eq!(still_open, Some(0));
-        assert_eq!(still_open.filter(|len| *len > 0), None);
-        assert_eq!(
-            parse_open_code_span("text `more").map(|(len, _)| len),
-            Some(1)
-        );
-    }
-}
+mod tests;
 
 /// Joins `text` onto the active pending-prefix buffer and reacts to the
 /// resulting span-state update.
@@ -396,24 +379,6 @@ fn update_span_state(
             pending.continuation_mode = continuation_mode;
             SpanStateUpdate::Flush
         }
-    }
-}
-mod tests {
-    use super::{parse_open_code_span, scan_continuation_span_state};
-
-    #[test]
-    fn scan_continuation_filter_distinguishes_closed_and_open_spans() {
-        let closed = scan_continuation_span_state("no backticks here", 0);
-        assert_eq!(closed, Some(0));
-        assert_eq!(closed.filter(|len| *len > 0), None);
-
-        let still_open = scan_continuation_span_state("text `more", 0);
-        assert_eq!(still_open, Some(0));
-        assert_eq!(still_open.filter(|len| *len > 0), None);
-        assert_eq!(
-            parse_open_code_span("text `more").map(|(len, _)| len),
-            Some(1)
-        );
     }
 }
 fn closing_fence_tail_starts_word(continuation: &str, raw_fence: usize) -> bool {

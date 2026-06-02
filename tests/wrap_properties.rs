@@ -322,7 +322,6 @@ proptest! {
         before in "[a-z]{1,16}",
         part1 in "[a-z]{1,24}",
         part2 in "[a-z]{1,24}",
-        width in 24usize..=80,
     ) {
         let (line1_prefix, cont_prefix) = match prefix_kind {
             0 => ("- ".to_owned(), "  ".to_owned()),
@@ -332,10 +331,10 @@ proptest! {
         let line1 = format!("{line1_prefix}{before} `{part1}");
         let line2 = format!("{cont_prefix}{part2}`");
         let joined = format!("{line1_prefix}{before} `{part1} {part2}`");
+        let width = UnicodeWidthStr::width(line1.as_str())
+            .max(UnicodeWidthStr::width(line2.as_str()));
 
-        prop_assume!(UnicodeWidthStr::width(line1.as_str()) <= width);
-        prop_assume!(UnicodeWidthStr::width(line2.as_str()) <= width);
-        prop_assume!(UnicodeWidthStr::width(joined.as_str()) > width);
+        prop_assert!(UnicodeWidthStr::width(joined.as_str()) > width);
 
         let output = wrap_text(&[line1, line2], width);
 
