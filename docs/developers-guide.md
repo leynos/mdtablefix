@@ -180,13 +180,16 @@ The wrapping pipeline for `--wrap` is:
    joined when their prefix exactly matches the pending prefix. After joining,
    `apply_continuation_chunk` consults `update_span_state` to drive a
    `SpanStateUpdate` (`StillOpen`, `ClosedAndReopened`, or `Flush`); when the
+   same chunk both closes the pre-existing span and opens a new one, the helper
    emits the closed prefix segment and keeps the new span pending rather than
-   inventing a closing fence. `PendingPrefix::used_prefix` tracks whether the
-   original prefix has already been emitted, and
+   inventing a closing fence. `ParagraphState::drain_pending_prefix` takes that
+   pending segment and clears the regular paragraph buffers before final
+   emission. `PendingPrefix::used_prefix` tracks whether the original prefix has
+   already been emitted, and
    `pending_prefix_for_next_segment` uses it to give the first split segment the
    original prefix and later split segments the continuation indent. If the
    opener is at or near the end of its source line, `PendingPrefix` marks
-   subsequent continuations as verbatim so joining does not create leading or
+   subsequent continuations as verbatim, so joining does not create leading or
    trailing spaces inside the code span. When the projected join would exceed
    the available content width, the pending line and continuation are emitted
    verbatim rather than joined into a Markdownlint-invalid overlong line. When
@@ -308,6 +311,7 @@ Table: Key types and functions.
 | `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                               | `src/wrap/paragraph.rs`           |
 | `PendingPrefix`                                                                                                                                                                                                                                              | `src/wrap/paragraph.rs`           |
 | `emit_pending_with_verbatim_continuation` - Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                   | `src/wrap/paragraph.rs`           |
+| `drain_pending_prefix` — Takes the deferred prefixed segment and clears plain paragraph buffers before final emission.                                                                                                                                       | `src/wrap/paragraph.rs`           |
 | `pending_prefix_for_next_segment` — Selects the original pending prefix for the first deferred segment, then the continuation indent for later segments.                                                                                                     | `src/wrap/paragraph.rs`           |
 | `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                | `src/wrap/continuation.rs`        |
 | `join_pending_continuation`                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`        |

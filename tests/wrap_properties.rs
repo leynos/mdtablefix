@@ -212,8 +212,7 @@ proptest! {
             output
         );
         prop_assert!(
-            rendered.contains(format!("`{command} --flag`").as_str())
-                || rendered.contains(format!("`{command}--flag`").as_str()),
+            rendered.contains(format!("`{command} --flag`").as_str()),
             "wrapped checklist item did not preserve the command span: {:?}",
             output
         );

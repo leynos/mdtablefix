@@ -318,6 +318,7 @@ fn emit_pending_prefix_segment(
         return;
     }
 
+    // Advances `used_prefix` so later split segments use continuation indent.
     let prefix = pending_prefix_for_next_segment(pending);
     let prefix_line = PrefixLine {
         prefix: Cow::Owned(prefix),

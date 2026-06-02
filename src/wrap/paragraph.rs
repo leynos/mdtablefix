@@ -246,6 +246,7 @@ impl<'a> ParagraphWriter<'a> {
                 return;
             }
 
+            // Advances `used_prefix` so a final flush never repeats list markers.
             let prefix = pending_prefix_for_next_segment(&mut pending);
             let rest = trim_code_span_edge_spaces(&pending.rest, &pending.synthetic_join_spaces);
             let prefix_line = PrefixLine {
@@ -353,6 +354,8 @@ impl<'a> ParagraphWriter<'a> {
 ///
 /// The first segment receives the original prefix and marks it as used. Later
 /// segments receive the continuation-indent form unless the prefix must repeat.
+/// This is a state transition: callers should treat `pending.used_prefix` as
+/// consumed after the first call.
 pub(super) fn pending_prefix_for_next_segment(pending: &mut PendingPrefix) -> String {
     if pending.used_prefix {
         continuation_prefix_for(pending.prefix.as_str(), pending.repeat_prefix)
