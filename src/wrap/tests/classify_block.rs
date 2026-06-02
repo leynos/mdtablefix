@@ -17,6 +17,9 @@ use crate::wrap::{BlockKind, LinkReferenceMatcher, classify_block};
     "[ansible]: <https://docs.ansible.com/>",
     Some(BlockKind::LinkReferenceDefinition)
 )]
+#[case("[foo]:", Some(BlockKind::LinkReferenceDefinition))]
+#[case("  [foo]:", Some(BlockKind::LinkReferenceDefinition))]
+#[case("    [foo]:", None)]
 #[case(
     "<!-- markdownlint-disable -->",
     Some(BlockKind::MarkdownlintDirective)

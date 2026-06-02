@@ -252,13 +252,18 @@ Classified when indentation is fewer than four columns and
 Centralizes link reference regex access. `production()` returns the workspace
 matcher; callers inject `&LinkReferenceMatcher` (or a copy) into query methods
 rather than reading global statics directly. `is_definition(line)` classifies
-link reference definitions. `standalone_title_need(line)` returns `None` when
-the line is not a definition, `Some(true)` when no inline title is present, and
-`Some(false)` when a title is already on the same line.
-`is_standalone_title_line(line)` matches title continuation lines per
-`CommonMark` spec §4.7 (at most three leading spaces, title in `"…"`, `'…'`, or
-`(…)`). Known limitation: nested or escaped brackets inside link labels are not
-supported (for example, `[label [nested]]` or `[\[escaped\]]`).
+complete link reference definitions. `is_bare_label_only(line)` classifies
+split definitions whose destination may follow on the next line.
+`is_url_continuation_line(line)` accepts indented destination continuation
+lines with an optional inline title, but rejects indented Markdown-prefixed
+blocks so lists and blockquotes still use normal block handling.
+`standalone_title_need(line)` returns `None` when the line is not a definition,
+`Some(true)` when no inline title is present, and `Some(false)` when a title is
+already on the same line. `is_standalone_title_line(line)` matches title
+continuation lines per `CommonMark` spec §4.7 (at most three leading spaces,
+title in `"…"`, `'…'`, or `(…)`). Known limitation: nested or escaped brackets
+inside link labels are not supported (for example, `[label [nested]]` or
+`[\[escaped\]]`).
 
 **`LinkTitleWindow`**
 
@@ -267,8 +272,16 @@ Explicit state for standalone title continuation in `wrap_text`. Starts
 opens `AwaitingStandaloneTitle`. While open, `observe_next_line(line, matcher)`
 returns `Some(EmitVerbatim)` for blank or title lines (and closes the window),
 or `Some(Reprocess)` when the line is ordinary prose (closing the window, so
-the caller reflows it). Fence entry calls `observe_fence_context()` to reset
-the window.
+the caller reflows it).
+
+After a label-only reference definition, `observe_bare_label()` opens
+`AwaitingUrlContinuation`. A valid indented destination emits verbatim; if the
+destination does not include an inline title, the window advances to
+`AwaitingStandaloneTitle` so the following line may still be a standalone
+title. Blank lines and inline-title destinations close the window. Markdown
+prefixed blocks return `Reprocess`, close the window, and allow normal block
+classification to handle the line. Fence entry calls `observe_fence_context()`
+to reset the window.
 
 `InlineFragment` carries the rendered fragment text, its precomputed display
 width, and a `FragmentKind` tag. That construction-time classification lets the
