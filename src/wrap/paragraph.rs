@@ -69,6 +69,8 @@ pub(super) struct ParagraphState {
     buf: Vec<(String, bool)>,
     /// Stores the leading indentation reused for wrapped continuation lines.
     indent: String,
+    /// Stores the list continuation indent after a deferred prefix flush.
+    continuation_indent: Option<String>,
     /// Stores a prefixed line waiting for a cross-line code span to close.
     pub(super) pending_prefix: Option<PendingPrefix>,
 }
@@ -82,6 +84,7 @@ impl ParagraphState {
     pub(super) fn clear(&mut self) {
         self.buf.clear();
         self.indent.clear();
+        self.continuation_indent = None;
         self.pending_prefix = None;
     }
 
@@ -93,8 +96,19 @@ impl ParagraphState {
     /// panics.
     pub(super) fn note_indent(&mut self, line: &str) {
         if self.buf.is_empty() {
-            self.indent = line.chars().take_while(|c| c.is_whitespace()).collect();
+            let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+            if indent.is_empty() {
+                self.continuation_indent = None;
+                self.indent.clear();
+            } else {
+                self.indent = self.continuation_indent.take().unwrap_or(indent);
+            }
         }
+    }
+
+    /// Records the continuation indent for the next indented paragraph.
+    pub(super) fn remember_continuation_indent(&mut self, indent: String) {
+        self.continuation_indent = Some(indent);
     }
 
     /// Appends one paragraph segment and its hard-break marker.
@@ -242,6 +256,12 @@ impl<'a> ParagraphWriter<'a> {
             let mut pending = pending;
 
             if pending.continuation_mode == ContinuationMode::VerbatimFlush {
+                if !pending.repeat_prefix {
+                    state.remember_continuation_indent(continuation_prefix_for(
+                        pending.prefix.as_str(),
+                        pending.repeat_prefix,
+                    ));
+                }
                 self.out.extend(pending.original_lines);
                 return;
             }
@@ -257,6 +277,12 @@ impl<'a> ParagraphWriter<'a> {
             self.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
             if pending.hard_break {
                 self.ensure_trailing_hard_break_on_last_line();
+            }
+            if !pending.repeat_prefix {
+                state.remember_continuation_indent(continuation_prefix_for(
+                    pending.prefix.as_str(),
+                    pending.repeat_prefix,
+                ));
             }
         }
 
@@ -299,6 +325,7 @@ impl<'a> ParagraphWriter<'a> {
     /// break paragraph accumulation boundaries.
     pub(super) fn push_verbatim(&mut self, state: &mut ParagraphState, line: &str) {
         self.flush_paragraph(state);
+        state.continuation_indent = None;
         self.out.push(line.to_string());
     }
 
@@ -313,6 +340,7 @@ impl<'a> ParagraphWriter<'a> {
         prefix_line: &PrefixLine<'_>,
     ) {
         self.flush_paragraph(state);
+        state.continuation_indent = None;
 
         if let Some((fence_len, open_tail)) = parse_open_code_span(prefix_line.rest) {
             let prefix = prefix_line.prefix.as_ref().to_string();
