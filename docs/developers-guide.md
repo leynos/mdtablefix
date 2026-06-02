@@ -185,7 +185,10 @@ The wrapping pipeline for `--wrap` is:
    and continuation are emitted verbatim rather than joined into a
    Markdownlint-invalid overlong line. When the scanner reports no open span
    and no close/reopen boundary exists, `flush_paragraph` emits the buffered
-   segment atomically using `append_wrapped_with_prefix_width`. When
+   segment atomically using `append_wrapped_with_prefix_width`. The exception is
+   `ContinuationMode::VerbatimFlush`: when the scanner sees a closing fence
+   immediately followed by a word character, `flush_paragraph` emits
+   `pending.original_lines` verbatim instead of rewrapping the buffer. When
    `hard_break` is set, two trailing spaces are appended to the last emitted
    line. `clear()` on `ParagraphState` also resets `pending_prefix` to `None`.
 

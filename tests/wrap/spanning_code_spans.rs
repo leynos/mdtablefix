@@ -194,14 +194,14 @@ fn test_wrap_opener_at_eol_emits_verbatim() {
 }
 
 #[test]
-fn test_wrap_trims_only_edges_of_multi_backtick_code_span() {
+fn test_wrap_preserves_authored_edges_of_multi_backtick_code_span() {
     let input = lines_vec!["- `` foo `", "  bar ` baz ``"];
     let output = wrap_text(&input, 80);
     let rendered = output.join("\n");
 
     assert!(
-        rendered.contains("``foo ` bar ` baz``"),
-        "literal single-backtick content must be preserved: {rendered:?}"
+        rendered.contains("`` foo ` bar ` baz ``"),
+        "authored multi-backtick content must be preserved: {rendered:?}"
     );
     assert!(
         !rendered.contains("`bar`"),
@@ -244,6 +244,17 @@ fn test_wrap_verbatim_width_guard_keeps_hard_break_on_continuation() {
     assert!(!output[0].ends_with("  "));
     assert!(output[1].ends_with("  "));
     assert_no_line_exceeds_width(&output, 80);
+}
+
+#[test]
+fn test_wrap_verbatim_width_guard_preserves_raw_continuation_line() {
+    let input = lines_vec![
+        "- `EngineConnector::connect(socket: impl AsRef<str>)",
+        "      -> Result<Docker, PodbotError>`",
+    ];
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(output, input);
 }
 
 #[test]

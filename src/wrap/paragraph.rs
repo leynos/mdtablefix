@@ -34,6 +34,8 @@ pub(super) struct PendingPrefix {
     pub(super) rest: String,
     /// Stores the original source lines when unsafe continuations need passthrough.
     pub(super) original_lines: Vec<String>,
+    /// Byte offsets of spaces inserted while joining continuation lines.
+    pub(super) synthetic_join_spaces: Vec<usize>,
     /// Stores the precomputed content width available on the first line.
     pub(super) rest_width: usize,
     /// Marks whether continuation lines should repeat the full prefix.
@@ -198,10 +200,9 @@ impl<'a> ParagraphWriter<'a> {
     ///
     /// `pending` provides the stored prefix, the original first-line text,
     /// and whether the prefix must repeat on continuations. `continuation`
-    /// is appended as-is to the second line, and `hard_break` applies trailing
-    /// Markdown hard-break spacing when needed. This method writes two lines
-    /// to `out`, preserves the recorded prefix width, and leaves the buffered
-    /// state untouched.
+    /// is the original source continuation line, and `hard_break` applies
+    /// trailing Markdown hard-break spacing when needed. This method writes
+    /// two lines to `out` and leaves the buffered state untouched.
     pub(super) fn emit_pending_with_verbatim_continuation(
         &mut self,
         pending: PendingPrefix,
@@ -215,13 +216,7 @@ impl<'a> ParagraphWriter<'a> {
         }
         self.out.push(first_line);
 
-        let prefix_width = UnicodeWidthStr::width(prefix.as_str());
-        let continuation_prefix = if pending.repeat_prefix {
-            prefix
-        } else {
-            " ".repeat(prefix_width)
-        };
-        let mut continuation_line = format!("{continuation_prefix}{continuation}");
+        let mut continuation_line = continuation.to_string();
         if hard_break && !continuation_line.ends_with("  ") {
             continuation_line.push_str("  ");
         }
@@ -243,7 +238,7 @@ impl<'a> ParagraphWriter<'a> {
                 return;
             }
 
-            let rest = trim_code_span_edge_spaces(&pending.rest);
+            let rest = trim_code_span_edge_spaces(&pending.rest, &pending.synthetic_join_spaces);
             let prefix_line = PrefixLine {
                 prefix: Cow::Owned(pending.prefix),
                 rest: rest.as_ref(),
@@ -324,6 +319,7 @@ impl<'a> ParagraphWriter<'a> {
                     prefix = prefix_line.prefix.as_ref(),
                     rest = prefix_line.rest,
                 )],
+                synthetic_join_spaces: Vec::new(),
                 rest_width: self.width.saturating_sub(prefix_width).max(1),
                 repeat_prefix: prefix_line.repeat_prefix,
                 hard_break: false,

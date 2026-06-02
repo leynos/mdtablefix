@@ -208,6 +208,7 @@ proptest! {
         suffix in "[a-z ]{1,40}",
         width in 40usize..=120,
     ) {
+        prop_assume!(!body.ends_with(' '));
         let input = vec![
             "4. Opens a code span at line end `".to_string(),
             format!("   {body}`, {suffix}."),

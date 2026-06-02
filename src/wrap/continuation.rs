@@ -33,9 +33,10 @@ pub(super) fn apply_continuation_chunk(
     state: &mut ParagraphState,
 ) {
     if should_emit_verbatim_for_width(text, state)
-        && let Some(pending) = state.pending_prefix.take()
+        && let Some(mut pending) = state.pending_prefix.take()
     {
-        writer.emit_pending_with_verbatim_continuation(pending, text, hard_break);
+        pending.original_lines.push(source_line.to_string());
+        writer.emit_pending_with_verbatim_continuation(pending, source_line, hard_break);
         return;
     }
 
@@ -52,18 +53,19 @@ pub(super) fn apply_continuation_chunk(
     let leading_run_len = tokenize::opening_fence_run_len(text.as_bytes(), text);
     let needs_space = !should_join_verbatim
         && leading_run_needs_space(leading_run_len, open_fence_len, should_join_verbatim);
+    let inserted_space_offset = if pending.rest.is_empty() || !needs_space {
+        None
+    } else {
+        Some(pending.rest.len())
+    };
     let continuation_offset = {
         let pending_len = pending.rest.len();
         pending_len + usize::from(pending_len > 0 && needs_space)
     };
-    let joined = join_pending_continuation(
-        &mut pending.rest,
-        text,
-        open_fence_len,
-        leading_run_len,
-        should_join_verbatim,
-        pending.continuation_mode == ContinuationMode::TightCodeSpan,
-    );
+    let joined = join_pending_continuation(&mut pending.rest, text, needs_space);
+    if joined && let Some(offset) = inserted_space_offset {
+        pending.synthetic_join_spaces.push(offset);
+    }
     if hard_break {
         pending.hard_break = true;
     }
@@ -86,6 +88,12 @@ pub(super) fn apply_continuation_chunk(
                 pending_rest
             };
             pending.rest = pending_rest;
+            pending.synthetic_join_spaces = pending
+                .synthetic_join_spaces
+                .iter()
+                .filter_map(|offset| offset.checked_sub(split_at))
+                .filter(|offset| *offset < pending.rest.len())
+                .collect();
             pending.open_fence_len = Some(new_len);
             pending.continuation_mode = if opener_at_eol {
                 ContinuationMode::TightCodeSpan
@@ -132,24 +140,13 @@ fn should_emit_verbatim_for_width(text: &str, state: &ParagraphState) -> bool {
 ///
 /// Never synthesizes closing fences. Only backticks present in the source may
 /// close an open span; when the continuation does not begin with the matching
-/// closing fence run, a single space is inserted before appending. The caller
-/// is responsible for measuring the leading backtick run with
-/// `tokenize::opening_fence_run_len` and threading it in via
-/// `leading_run_len` so we avoid double-walking `continuation`.
-fn join_pending_continuation(
-    existing: &mut String,
-    continuation: &str,
-    fence_len: usize,
-    leading_run_len: Option<usize>,
-    verbatim_continuations: bool,
-    opener_at_eol: bool,
-) -> bool {
+/// closing fence run, the caller passes `needs_space` so a single space is
+/// inserted before appending.
+fn join_pending_continuation(existing: &mut String, continuation: &str, needs_space: bool) -> bool {
     if continuation.is_empty() {
         return false;
     }
 
-    let needs_space = !verbatim_continuations
-        && leading_run_needs_space(leading_run_len, fence_len, opener_at_eol);
     if !existing.is_empty() && needs_space {
         existing.push(' ');
     }

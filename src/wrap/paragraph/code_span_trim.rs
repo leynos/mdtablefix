@@ -6,13 +6,17 @@
 
 use std::borrow::Cow;
 
-pub(super) fn trim_code_span_edge_spaces(text: &str) -> Cow<'_, str> {
-    if !text.contains("` ") && !text.contains(" `") {
+pub(super) fn trim_code_span_edge_spaces<'a>(
+    text: &'a str,
+    synthetic_spaces: &[usize],
+) -> Cow<'a, str> {
+    if synthetic_spaces.is_empty() || (!text.contains("` ") && !text.contains(" `")) {
         return Cow::Borrowed(text);
     }
 
     let mut output = String::with_capacity(text.len());
     let mut remaining = text;
+    let mut consumed = 0;
     while let Some((open_start, open_end)) = next_backtick_run(remaining, 0) {
         let fence_len = open_end - open_start;
         let Some(close_start) = matching_backtick_run_start(remaining, open_end, fence_len) else {
@@ -20,11 +24,17 @@ pub(super) fn trim_code_span_edge_spaces(text: &str) -> Cow<'_, str> {
             return Cow::Owned(output);
         };
         let close_end = close_start + fence_len;
-        let code = &remaining[open_end..close_start];
+        let code_start = consumed + open_end;
+        let code_end = consumed + close_start;
+        let trim_start = usize::from(synthetic_spaces.contains(&code_start));
+        let trim_end = usize::from(
+            code_end > code_start && synthetic_spaces.contains(&(code_end.saturating_sub(1))),
+        );
         output.push_str(&remaining[..open_end]);
-        output.push_str(code.trim_matches(' '));
+        output.push_str(&remaining[open_end + trim_start..close_start - trim_end]);
         output.push_str(&remaining[close_start..close_end]);
         remaining = &remaining[close_end..];
+        consumed += close_end;
     }
     output.push_str(remaining);
     Cow::Owned(output)
@@ -91,25 +101,25 @@ mod tests {
     use super::trim_code_span_edge_spaces;
 
     #[test]
-    fn trims_single_backtick_span_edge_spaces() {
+    fn trims_synthetic_single_backtick_span_edge_spaces() {
         assert_eq!(
-            trim_code_span_edge_spaces("` foo `"),
+            trim_code_span_edge_spaces("` foo `", &[1, 5]),
             Cow::Borrowed("`foo`"),
         );
     }
 
     #[test]
-    fn trims_span_after_leading_prose() {
+    fn preserves_authored_edge_spaces_without_synthetic_metadata() {
         assert_eq!(
-            trim_code_span_edge_spaces("calls ` foo ` now"),
-            Cow::Borrowed("calls `foo` now"),
+            trim_code_span_edge_spaces("calls ` foo ` now", &[]),
+            Cow::Borrowed("calls ` foo ` now"),
         );
     }
 
     #[test]
     fn respects_multi_backtick_fences() {
         assert_eq!(
-            trim_code_span_edge_spaces("`` foo ` bar ` baz ``"),
+            trim_code_span_edge_spaces("`` foo ` bar ` baz ``", &[2, 18]),
             Cow::Borrowed("``foo ` bar ` baz``"),
         );
     }
