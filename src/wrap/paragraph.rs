@@ -6,6 +6,7 @@
 use std::borrow::Cow;
 
 use code_span_trim::trim_code_span_edge_spaces;
+use tracing::trace;
 use unicode_width::UnicodeWidthStr;
 
 use super::{inline::wrap_preserving_code, tokenize::parse_open_code_span};
@@ -49,7 +50,7 @@ pub(super) struct PendingPrefix {
 }
 
 /// Controls how a pending prefixed continuation should be joined or emitted.
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(super) enum ContinuationMode {
     /// Join continuations using normal Markdown soft-break spacing.
     Normalize,
@@ -311,6 +312,15 @@ impl<'a> ParagraphWriter<'a> {
             let prefix = prefix_line.prefix.as_ref().to_string();
             let prefix_width = UnicodeWidthStr::width(prefix.as_str());
             let opener_at_eol = open_tail.trim().is_empty();
+            let continuation_mode = if opener_at_eol {
+                ContinuationMode::TightCodeSpan
+            } else {
+                ContinuationMode::Normalize
+            };
+            trace!(
+                ?continuation_mode,
+                opener_at_eol, fence_len, "selected pending-prefix continuation mode"
+            );
             state.pending_prefix = Some(PendingPrefix {
                 prefix,
                 rest: prefix_line.rest.to_string(),
@@ -324,11 +334,7 @@ impl<'a> ParagraphWriter<'a> {
                 repeat_prefix: prefix_line.repeat_prefix,
                 hard_break: false,
                 open_fence_len: Some(fence_len),
-                continuation_mode: if opener_at_eol {
-                    ContinuationMode::TightCodeSpan
-                } else {
-                    ContinuationMode::Normalize
-                },
+                continuation_mode,
             });
             return;
         }

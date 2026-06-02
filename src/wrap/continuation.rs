@@ -11,6 +11,7 @@
 
 use std::borrow::Cow;
 
+use tracing::trace;
 use unicode_width::UnicodeWidthStr;
 
 use super::{
@@ -18,6 +19,10 @@ use super::{
     tokenize,
     tokenize::{parse_open_code_span, position_after_close, scan_continuation_span_state},
 };
+
+#[cfg(test)]
+#[path = "continuation_tests.rs"]
+mod tests;
 
 /// Joins `text` onto the active pending-prefix buffer and reacts to the
 /// resulting span-state update.
@@ -36,6 +41,10 @@ pub(super) fn apply_continuation_chunk(
         if let Some(pending) = state.pending_prefix.as_mut()
             && pending.continuation_mode == ContinuationMode::VerbatimFlush
         {
+            trace!(
+                ?pending.continuation_mode,
+                "flushing original lines for width-triggered verbatim continuation"
+            );
             pending.original_lines.push(source_line.to_string());
             writer.flush_paragraph(state);
             return;
@@ -102,12 +111,17 @@ pub(super) fn apply_continuation_chunk(
                 .filter_map(|offset| offset.checked_sub(split_at))
                 .filter(|offset| *offset < pending.rest.len())
                 .collect();
-            pending.open_fence_len = Some(new_len);
-            pending.continuation_mode = if opener_at_eol {
+            let continuation_mode = if opener_at_eol {
                 ContinuationMode::TightCodeSpan
             } else {
                 ContinuationMode::Normalize
             };
+            trace!(
+                ?continuation_mode,
+                opener_at_eol, new_len, "selected continuation mode after close/reopen split"
+            );
+            pending.open_fence_len = Some(new_len);
+            pending.continuation_mode = continuation_mode;
             pending.hard_break = false;
         }
         SpanStateUpdate::Flush => {
@@ -118,10 +132,20 @@ pub(super) fn apply_continuation_chunk(
 
 fn should_emit_verbatim_for_width(text: &str, state: &ParagraphState) -> bool {
     if text.is_empty() {
+        trace!(
+            emit = false,
+            reason = "empty_text",
+            "checked width-triggered verbatim continuation"
+        );
         return false;
     }
 
     let Some(pending) = state.pending_prefix.as_ref() else {
+        trace!(
+            emit = false,
+            reason = "no_pending_prefix",
+            "checked width-triggered verbatim continuation"
+        );
         return false;
     };
 
@@ -141,7 +165,17 @@ fn should_emit_verbatim_for_width(text: &str, state: &ParagraphState) -> bool {
             None | Some(0)
         );
 
-    closes_pending_span_at_end && projected_width > pending.rest_width
+    let emit = closes_pending_span_at_end && projected_width > pending.rest_width;
+    trace!(
+        emit,
+        ?pending.continuation_mode,
+        projected_width,
+        rest_width = pending.rest_width,
+        closes_pending_span_at_end,
+        open_fence_len,
+        "checked width-triggered verbatim continuation"
+    );
+    emit
 }
 
 /// Join a soft-wrapped continuation onto pending prefixed text.
@@ -267,7 +301,15 @@ fn update_span_state(
     let raw_fence = pending.open_fence_len.unwrap_or(0);
     match scan_continuation_span_state(continuation, raw_fence) {
         Some(n) if n > 0 => {
-            if split_reopen_span(continuation, continuation_offset, raw_fence).is_some() {
+            let has_split_reopen =
+                split_reopen_span(continuation, continuation_offset, raw_fence).is_some();
+            if has_split_reopen {
+                trace!(
+                    continuation_mode = ?ContinuationMode::VerbatimFlush,
+                    raw_fence,
+                    new_fence_len = n,
+                    "selected verbatim continuation mode for split reopen"
+                );
                 pending.continuation_mode = ContinuationMode::VerbatimFlush;
             }
             pending.open_fence_len = Some(n);
@@ -280,12 +322,17 @@ fn update_span_state(
             {
                 return SpanStateUpdate::ClosedAndReopened { split_at, new_len };
             }
-            pending.continuation_mode =
+            let continuation_mode =
                 if raw_fence > 0 && closing_fence_tail_starts_word(continuation, raw_fence) {
                     ContinuationMode::VerbatimFlush
                 } else {
                     ContinuationMode::Normalize
                 };
+            trace!(
+                ?continuation_mode,
+                raw_fence, "selected continuation mode before flushing pending prefix"
+            );
+            pending.continuation_mode = continuation_mode;
             SpanStateUpdate::Flush
         }
     }

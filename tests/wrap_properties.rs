@@ -221,4 +221,35 @@ proptest! {
             "output must not contain MD038 code spans:\n{rendered}"
         );
     }
+
+    #[test]
+    fn wrap_text_spanning_code_continuations_respect_width_when_source_lines_fit(
+        prefix_kind in 0usize..3,
+        before in "[a-z]{1,16}",
+        part1 in "[a-z]{1,24}",
+        part2 in "[a-z]{1,24}",
+        width in 24usize..=80,
+    ) {
+        let (line1_prefix, cont_prefix) = match prefix_kind {
+            0 => ("- ".to_owned(), "  ".to_owned()),
+            1 => ("1. ".to_owned(), "   ".to_owned()),
+            _ => ("> ".to_owned(), "> ".to_owned()),
+        };
+        let line1 = format!("{line1_prefix}{before} `{part1}");
+        let line2 = format!("{cont_prefix}{part2}`");
+        let joined = format!("{line1_prefix}{before} `{part1} {part2}`");
+
+        prop_assume!(UnicodeWidthStr::width(line1.as_str()) <= width);
+        prop_assume!(UnicodeWidthStr::width(line2.as_str()) <= width);
+        prop_assume!(UnicodeWidthStr::width(joined.as_str()) > width);
+
+        let output = wrap_text(&[line1, line2], width);
+
+        for line in &output {
+            prop_assert!(
+                UnicodeWidthStr::width(line.as_str()) <= width,
+                "line exceeds width {width}: {line:?}; output: {output:?}"
+            );
+        }
+    }
 }

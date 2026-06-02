@@ -6,6 +6,8 @@
 
 use std::{borrow::Cow, collections::HashSet};
 
+use tracing::trace;
+
 pub(super) fn trim_code_span_edge_spaces<'a>(
     text: &'a str,
     synthetic_spaces: &[usize],
@@ -32,6 +34,16 @@ pub(super) fn trim_code_span_edge_spaces<'a>(
             code_end > code_start
                 && synthetic_space_offsets.contains(&(code_end.saturating_sub(1))),
         );
+        if trim_start > 0 || trim_end > 0 {
+            trace!(
+                fence_len,
+                code_start,
+                code_end,
+                trim_start,
+                trim_end,
+                "trimmed synthetic code-span edge spaces"
+            );
+        }
         output.push_str(&remaining[..open_end]);
         output.push_str(&remaining[open_end + trim_start..close_start - trim_end]);
         output.push_str(&remaining[close_start..close_end]);
