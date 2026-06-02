@@ -27,3 +27,4 @@ mod links;
 mod lists;
 mod paragraphs;
 mod spanning_code_spans;
+mod tokenize_markdown;

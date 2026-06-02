@@ -2,6 +2,12 @@
 //!
 //! This module contains utilities for breaking lines into tokens so that
 //! inline code spans and Markdown links are preserved during wrapping.
+//! Full-line fenced code blocks are tracked with the shared [`FenceTracker`]
+//! from `src/wrap/fence.rs`, so tokenization uses the same opening, closing,
+//! marker-length, and nested-literal semantics as paragraph wrapping and fence
+//! normalization. While that tracker is inside a fenced block, every line is
+//! emitted as [`Token::Fence`] and no inline transform can rewrite code-block
+//! content.
 
 mod parsing;
 mod scanning;

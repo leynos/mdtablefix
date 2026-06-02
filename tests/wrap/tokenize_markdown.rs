@@ -1,11 +1,11 @@
-//! Tests for the tokenize_markdown helper.
+//! Tests for the `tokenize_markdown` helper.
 
 use mdtablefix::wrap::{self, Token};
 use rstest::rstest;
 
 #[test]
 fn unclosed_fence_yields_fence_tokens() {
-    let lines = vec!["```rust", "let x = 42;", "fn foo() {}"];
+    let lines = ["```rust", "let x = 42;", "fn foo() {}"];
     let joined = lines.join("\n");
     let tokens = wrap::tokenize_markdown(&joined);
     assert_eq!(
@@ -21,33 +21,66 @@ fn unclosed_fence_yields_fence_tokens() {
 }
 
 #[test]
+fn closed_fence_yields_fence_tokens_until_closer() {
+    let source = "```sql\nSELECT ...;\n{...}\n```\nafter `code`";
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(
+        tokens,
+        vec![
+            Token::Fence("```sql"),
+            Token::Newline,
+            Token::Fence("SELECT ...;"),
+            Token::Newline,
+            Token::Fence("{...}"),
+            Token::Newline,
+            Token::Fence("```"),
+            Token::Newline,
+            Token::Text("after "),
+            Token::Code {
+                raw: "`code`",
+                fence: "`",
+                code: "code",
+            },
+        ]
+    );
+}
+
+#[test]
+fn nested_shorter_fence_remains_literal_until_outer_closer() {
+    let source = "````markdown\n```json\n{...}\n```\n````\nafter";
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(
+        tokens,
+        vec![
+            Token::Fence("````markdown"),
+            Token::Newline,
+            Token::Fence("```json"),
+            Token::Newline,
+            Token::Fence("{...}"),
+            Token::Newline,
+            Token::Fence("```"),
+            Token::Newline,
+            Token::Fence("````"),
+            Token::Newline,
+            Token::Text("after"),
+        ]
+    );
+}
+
+#[test]
 fn malformed_fence_is_text() {
     let source = "``~~\ncode\n``~~";
     let tokens = wrap::tokenize_markdown(source);
     assert_eq!(
         tokens,
         vec![
-            Token::Text("``~~"),
+            Token::Text("``"),
+            Token::Text("~~"),
             Token::Newline,
             Token::Text("code"),
             Token::Newline,
-            Token::Text("``~~"),
-        ]
-    );
-}
-
-#[test]
-fn incorrect_fence_length_is_text() {
-    let source = "````\ncode\n````";
-    let tokens = wrap::tokenize_markdown(source);
-    assert_eq!(
-        tokens,
-        vec![
-            Token::Text("````"),
-            Token::Newline,
-            Token::Text("code"),
-            Token::Newline,
-            Token::Text("````"),
+            Token::Text("``"),
+            Token::Text("~~"),
         ]
     );
 }
@@ -69,13 +102,7 @@ fn unmatched_inline_code_is_text() {
 fn multiple_unmatched_backticks_are_text() {
     let source = "``bad code";
     let tokens = wrap::tokenize_markdown(source);
-    assert_eq!(
-        tokens,
-        vec![
-            Token::Text("``"),
-            Token::Text("bad code"),
-        ]
-    );
+    assert_eq!(tokens, vec![Token::Text("``"), Token::Text("bad code"),]);
 }
 
 #[test]
