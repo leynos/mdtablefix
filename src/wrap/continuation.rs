@@ -29,7 +29,24 @@ use super::{
 
 #[cfg(test)]
 #[path = "continuation_tests.rs"]
-mod tests;
+mod tests {
+    use super::{parse_open_code_span, scan_continuation_span_state};
+
+    #[test]
+    fn scan_continuation_filter_distinguishes_closed_and_open_spans() {
+        let closed = scan_continuation_span_state("no backticks here", 0);
+        assert_eq!(closed, Some(0));
+        assert_eq!(closed.filter(|len| *len > 0), None);
+
+        let still_open = scan_continuation_span_state("text `more", 0);
+        assert_eq!(still_open, Some(0));
+        assert_eq!(still_open.filter(|len| *len > 0), None);
+        assert_eq!(
+            parse_open_code_span("text `more").map(|(len, _)| len),
+            Some(1)
+        );
+    }
+}
 
 /// Joins `text` onto the active pending-prefix buffer and reacts to the
 /// resulting span-state update.
@@ -76,7 +93,8 @@ pub(super) fn apply_continuation_chunk(
     // double-walk `text`.
     let leading_run_len = tokenize::opening_fence_run_len(text.as_bytes(), text);
     let needs_space = !should_join_verbatim
-        && leading_run_needs_space(leading_run_len, open_fence_len, should_join_verbatim);
+        && leading_run_needs_space(leading_run_len, open_fence_len, should_join_verbatim)
+        && !suppresses_join_space_after_nested_open_paren(&pending.rest, open_fence_len);
     let inserted_space_offset = if pending.rest.is_empty() || !needs_space {
         None
     } else {
@@ -164,8 +182,9 @@ fn should_emit_verbatim_for_width(text: &str, state: &ParagraphState) -> bool {
     let open_fence_len = pending.open_fence_len.unwrap_or(0);
     let is_tight_code_span = pending.continuation_mode == ContinuationMode::TightCodeSpan;
     let leading_run_len = tokenize::opening_fence_run_len(text.as_bytes(), text);
-    let needs_space =
-        !is_tight_code_span && leading_run_needs_space(leading_run_len, open_fence_len, false);
+    let needs_space = !is_tight_code_span
+        && leading_run_needs_space(leading_run_len, open_fence_len, false)
+        && !suppresses_join_space_after_nested_open_paren(&pending.rest, open_fence_len);
     let projected_width = UnicodeWidthStr::width(pending.rest.as_str())
         + usize::from(!pending.rest.is_empty() && needs_space)
         + UnicodeWidthStr::width(text);
@@ -266,6 +285,25 @@ fn leading_run_needs_space(
     }
 }
 
+fn suppresses_join_space_after_nested_open_paren(existing: &str, open_fence_len: usize) -> bool {
+    if open_fence_len == 0 || !existing.ends_with('(') {
+        return false;
+    }
+
+    let Some((_, code_tail)) = parse_open_code_span(existing) else {
+        return false;
+    };
+
+    unclosed_parenthesis_depth(code_tail) > 1
+}
+
+fn unclosed_parenthesis_depth(text: &str) -> usize {
+    text.chars().fold(0usize, |depth, ch| match ch {
+        '(' => depth.saturating_add(1),
+        ')' => depth.saturating_sub(1),
+        _ => depth,
+    })
+}
 fn emit_pending_prefix_segment(
     writer: &mut ParagraphWriter<'_>,
     pending: &mut PendingPrefix,
@@ -350,7 +388,6 @@ fn update_span_state(
         }
     }
 }
-
 mod tests {
     use super::{parse_open_code_span, scan_continuation_span_state};
 

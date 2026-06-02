@@ -246,8 +246,8 @@ impl<'a> ParagraphWriter<'a> {
                 return;
             }
 
-            let rest = trim_code_span_edge_spaces(&pending.rest, &pending.synthetic_join_spaces);
             let prefix = pending_prefix_for_next_segment(&mut pending);
+            let rest = trim_code_span_edge_spaces(&pending.rest, &pending.synthetic_join_spaces);
             let prefix_line = PrefixLine {
                 prefix: Cow::Owned(prefix),
                 rest: rest.as_ref(),
