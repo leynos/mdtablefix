@@ -283,9 +283,9 @@ fn test_assert_no_md038_code_span_allows_backtick_disambiguation_spaces() {
 }
 
 #[test]
-#[should_panic(expected = "code span has leading or trailing space")]
-fn test_assert_no_md038_code_span_rejects_one_sided_backtick_edge() {
-    assert_no_md038_code_span("`` `foo  ``");
+fn test_assert_no_md038_code_span_rejects_invalid_backtick_disambiguation() {
+    assert!(std::panic::catch_unwind(|| assert_no_md038_code_span("`` `foo  ``")).is_err());
+    assert!(std::panic::catch_unwind(|| assert_no_md038_code_span("``  `foo`  ``")).is_err());
 }
 
 #[test]
@@ -329,7 +329,12 @@ fn assert_no_md038_code_span(rendered: &str) {
         };
         let code = &after_open[..close_index];
         let trimmed_code = code.trim_matches(' ');
-        let allows_edge_spaces = trimmed_code.starts_with('`') && trimmed_code.ends_with('`');
+        let leading_spaces = code.len() - code.trim_start_matches(' ').len();
+        let trailing_spaces = code.len() - code.trim_end_matches(' ').len();
+        let allows_edge_spaces = leading_spaces == 1
+            && trailing_spaces == 1
+            && trimmed_code.starts_with('`')
+            && trimmed_code.ends_with('`');
         assert!(
             code.is_empty()
                 || allows_edge_spaces
