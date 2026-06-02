@@ -86,6 +86,22 @@ fn wrap_text_reflows_prose_after_bare_link_reference_definition() {
 }
 
 #[test]
+fn wrap_text_reflows_indented_list_after_label_only_reference() {
+    let item = concat!(
+        " - a very long list item follows a label-only reference and ",
+        "must still be handled by the list wrapping path."
+    );
+    let input = vec!["[foo]:".to_string(), item.to_string()];
+    let wrapped = wrap_text(&input, 36);
+
+    assert_eq!(wrapped[0], input[0]);
+    assert!(wrapped.len() > 2);
+    for line in wrapped.iter().skip(1) {
+        assert!(line.len() <= 36);
+    }
+}
+
+#[test]
 fn wrap_text_does_not_apply_awaiting_link_title_inside_fence() {
     let input = vec![
         "```".to_string(),

@@ -23,7 +23,11 @@ pub(super) static BARE_LABEL_RE: std::sync::LazyLock<Regex> = lazy_regex!(
 
 /// Matches an indented non-blank destination continuation line.
 pub(super) static URL_CONTINUATION_RE: std::sync::LazyLock<Regex> = lazy_regex!(
-    r"^\s+\S",
+    concat!(
+        r#"^\s+(?:<[^>\s]+>|\S+)(?:\s+("#,
+        r#""(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\)"#,
+        r#"))?\s*$"#,
+    ),
     "link reference URL continuation regex should compile",
 );
 
@@ -94,12 +98,41 @@ impl LinkReferenceMatcher {
     /// Returns `true` when `line` is an indented URL continuation.
     #[must_use]
     pub(super) fn is_url_continuation_line(&self, line: &str) -> bool {
-        self.url_continuation.is_match(line)
+        self.url_continuation.is_match(line) && !is_markdown_prefixed_continuation(line)
     }
 
     fn url_continuation_has_inline_title(&self, line: &str) -> bool {
         self.inline_title_suffix.is_match(line)
     }
+}
+
+fn is_markdown_prefixed_continuation(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    is_bullet_marker(trimmed)
+        || is_ordered_list_marker(trimmed)
+        || trimmed.starts_with('>')
+        || trimmed.starts_with('#')
+}
+
+fn is_bullet_marker(trimmed: &str) -> bool {
+    let mut chars = trimmed.chars();
+    matches!(chars.next(), Some('-' | '*' | '+')) && chars.next().is_some_and(char::is_whitespace)
+}
+
+fn is_ordered_list_marker(trimmed: &str) -> bool {
+    let marker = trimmed
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit() || matches!(ch, '.' | ')'))
+        .collect::<String>();
+    let Some(number) = marker.strip_suffix(['.', ')']) else {
+        return false;
+    };
+    !number.is_empty()
+        && number.chars().all(|ch| ch.is_ascii_digit())
+        && trimmed[marker.len()..]
+            .chars()
+            .next()
+            .is_some_and(char::is_whitespace)
 }
 
 /// Outcome of observing one line while awaiting a standalone title.
