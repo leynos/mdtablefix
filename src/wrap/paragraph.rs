@@ -194,6 +194,14 @@ impl<'a> ParagraphWriter<'a> {
         }
     }
 
+    /// Emits a buffered prefix line and its verbatim continuation.
+    ///
+    /// `pending` provides the stored prefix, the original first-line text,
+    /// and whether the prefix must repeat on continuations. `continuation`
+    /// is appended as-is to the second line, and `hard_break` applies trailing
+    /// Markdown hard-break spacing when needed. This method writes two lines
+    /// to `out`, preserves the recorded prefix width, and leaves the buffered
+    /// state untouched.
     pub(super) fn emit_pending_with_verbatim_continuation(
         &mut self,
         pending: PendingPrefix,
