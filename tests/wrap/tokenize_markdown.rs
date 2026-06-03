@@ -46,6 +46,28 @@ fn closed_fence_yields_fence_tokens_until_closer() {
 }
 
 #[test]
+fn closed_fenced_block_emits_fence_tokens_for_all_inner_lines() {
+    let source = "```\nplain text\nSELECT ...;\n{\"status\":\"active\"}\n```\nafter fence";
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(
+        tokens,
+        vec![
+            Token::Fence("```"),
+            Token::Newline,
+            Token::Fence("plain text"),
+            Token::Newline,
+            Token::Fence("SELECT ...;"),
+            Token::Newline,
+            Token::Fence("{\"status\":\"active\"}"),
+            Token::Newline,
+            Token::Fence("```"),
+            Token::Newline,
+            Token::Text("after fence"),
+        ]
+    );
+}
+
+#[test]
 fn nested_shorter_fence_remains_literal_until_outer_closer() {
     let source = "````markdown\n```json\n{...}\n```\n````\nafter";
     let tokens = wrap::tokenize_markdown(source);
@@ -63,6 +85,46 @@ fn nested_shorter_fence_remains_literal_until_outer_closer() {
             Token::Fence("````"),
             Token::Newline,
             Token::Text("after"),
+        ]
+    );
+}
+
+#[test]
+fn nested_literal_fence_remains_inside_outer_fence() {
+    let source = "````markdown\n```json\n{\"ok\":true}\n```\n````";
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(
+        tokens,
+        vec![
+            Token::Fence("````markdown"),
+            Token::Newline,
+            Token::Fence("```json"),
+            Token::Newline,
+            Token::Fence("{\"ok\":true}"),
+            Token::Newline,
+            Token::Fence("```"),
+            Token::Newline,
+            Token::Fence("````"),
+        ]
+    );
+}
+
+#[test]
+fn post_fence_text_is_tokenised_normally() {
+    let source = "```sql\nSELECT ...;\n```\nplain prose follows\nsecond prose line";
+    let tokens = wrap::tokenize_markdown(source);
+    assert_eq!(
+        tokens,
+        vec![
+            Token::Fence("```sql"),
+            Token::Newline,
+            Token::Fence("SELECT ...;"),
+            Token::Newline,
+            Token::Fence("```"),
+            Token::Newline,
+            Token::Text("plain prose follows"),
+            Token::Newline,
+            Token::Text("second prose line"),
         ]
     );
 }
