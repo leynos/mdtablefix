@@ -234,13 +234,23 @@ fn fence_info_strategy() -> impl Strategy<Value = String> {
         Just("json".to_owned()),
         Just("json payload".to_owned()),
         Just("{#example .sample}".to_owned()),
-        printable_ascii_line_strategy(0..24),
+        printable_ascii_info_strategy(0..24),
     ]
 }
 
 fn printable_ascii_line_strategy(len: std::ops::Range<usize>) -> impl Strategy<Value = String> {
     prop::collection::vec(0x20u8..=0x7e, len)
         .prop_map(|bytes| bytes.into_iter().map(char::from).collect())
+}
+
+fn printable_ascii_info_strategy(len: std::ops::Range<usize>) -> impl Strategy<Value = String> {
+    prop::collection::vec(0x20u8..=0x7e, len).prop_map(|bytes| {
+        bytes
+            .into_iter()
+            .filter(|byte| !matches!(*byte, b'`' | b'~'))
+            .map(char::from)
+            .collect()
+    })
 }
 
 fn fence_like_line_strategy(marker: char, marker_len: usize) -> BoxedStrategy<String> {
@@ -261,7 +271,11 @@ fn fence_like_line_strategy(marker: char, marker_len: usize) -> BoxedStrategy<St
 fn closes_active_fence(line: &str, marker: char, marker_len: usize) -> bool {
     let trimmed = line.trim_start();
     let run_len = trimmed.chars().take_while(|ch| *ch == marker).count();
-    run_len >= marker_len && trimmed.chars().nth(run_len).is_none_or(|ch| ch != marker)
+    run_len >= marker_len
+        && trimmed
+            .chars()
+            .nth(run_len)
+            .is_none_or(|ch| ch.is_ascii_whitespace())
 }
 
 fn fenced_body_strategy(marker: char, marker_len: usize) -> impl Strategy<Value = Vec<String>> {
