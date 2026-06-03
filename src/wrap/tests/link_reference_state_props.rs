@@ -43,6 +43,28 @@ fn observe_line_for(action: Action) -> Option<&'static str> {
     }
 }
 
+fn terminal_line_after_bare_label_strategy()
+-> impl Strategy<Value = (&'static str, LinkTitleWindowOutcome)> {
+    prop::sample::select(vec![
+        ("", LinkTitleWindowOutcome::EmitVerbatim),
+        (
+            "  https://example.com \"Title\"",
+            LinkTitleWindowOutcome::EmitVerbatim,
+        ),
+        ("plain prose", LinkTitleWindowOutcome::Reprocess),
+        (" - list item", LinkTitleWindowOutcome::Reprocess),
+    ])
+}
+
+fn title_window_line_strategy() -> impl Strategy<Value = (&'static str, LinkTitleWindowOutcome)> {
+    prop::sample::select(vec![
+        ("", LinkTitleWindowOutcome::EmitVerbatim),
+        ("  \"Title\"", LinkTitleWindowOutcome::EmitVerbatim),
+        ("plain prose", LinkTitleWindowOutcome::Reprocess),
+        (" - list item", LinkTitleWindowOutcome::Reprocess),
+    ])
+}
+
 proptest! {
     #[test]
     fn link_title_window_sequences_preserve_terminal_states(
@@ -82,5 +104,38 @@ proptest! {
                 }
             }
         }
+    }
+
+    #[test]
+    fn bare_label_terminal_continuations_close_window(
+        (line, expected) in terminal_line_after_bare_label_strategy(),
+    ) {
+        let matcher = LinkReferenceMatcher::production();
+        let mut window = LinkTitleWindow::Closed;
+
+        window.observe_bare_label();
+        prop_assert_eq!(window.observe_next_line(line, matcher), Some(expected));
+        prop_assert_eq!(window, LinkTitleWindow::Closed);
+    }
+
+    #[test]
+    fn bare_label_url_then_title_window_closes_on_second_line(
+        (second_line, expected) in title_window_line_strategy(),
+    ) {
+        let matcher = LinkReferenceMatcher::production();
+        let mut window = LinkTitleWindow::Closed;
+
+        window.observe_bare_label();
+        prop_assert_eq!(
+            window.observe_next_line("  https://example.com", matcher),
+            Some(LinkTitleWindowOutcome::EmitVerbatim)
+        );
+        prop_assert_eq!(window, LinkTitleWindow::AwaitingStandaloneTitle);
+
+        prop_assert_eq!(
+            window.observe_next_line(second_line, matcher),
+            Some(expected)
+        );
+        prop_assert_eq!(window, LinkTitleWindow::Closed);
     }
 }
