@@ -4,10 +4,7 @@
 //! wrapping behaviour when processing Markdown content through the `mdtablefix`
 //! binary.
 
-use proptest::{
-    prelude::*,
-    test_runner::{Config, TestRunner},
-};
+use proptest::prelude::*;
 use rstest::rstest;
 
 use super::cli_stdin::run_cli_with_stdin;
@@ -222,131 +219,65 @@ fn test_cli_wrap_fences_ellipsis_preserve_fenced_content() -> Result<(), Box<dyn
     Ok(())
 }
 
-fn fence_marker_strategy() -> impl Strategy<Value = String> {
-    (prop_oneof![Just('`'), Just('~')], 3usize..=6)
-        .prop_map(|(marker, len)| std::iter::repeat_n(marker, len).collect())
-}
-
-fn fence_info_strategy() -> impl Strategy<Value = String> {
-    prop_oneof![
-        Just(String::new()),
-        Just("sql".to_owned()),
-        Just("json".to_owned()),
-        Just("json payload".to_owned()),
-        Just("{#example .sample}".to_owned()),
-        printable_ascii_info_strategy(0..24),
-    ]
-}
-
-fn printable_ascii_line_strategy(len: std::ops::Range<usize>) -> impl Strategy<Value = String> {
-    prop::collection::vec(0x20u8..=0x7e, len)
-        .prop_map(|bytes| bytes.into_iter().map(char::from).collect())
-}
-
-fn printable_ascii_info_strategy(len: std::ops::Range<usize>) -> impl Strategy<Value = String> {
-    prop::collection::vec(0x20u8..=0x7e, len).prop_map(|bytes| {
-        bytes
-            .into_iter()
-            .filter(|byte| !matches!(*byte, b'`' | b'~'))
-            .map(char::from)
-            .collect()
-    })
-}
-
-fn fence_like_line_strategy(marker: char, marker_len: usize) -> BoxedStrategy<String> {
-    let opposite_marker = if marker == '`' { '~' } else { '`' };
-    let opposite = (3usize..=8)
-        .prop_map(move |len| std::iter::repeat_n(opposite_marker, len).collect::<String>());
-    let shorter_same = if marker_len > 3 {
-        (3usize..marker_len)
-            .prop_map(move |len| std::iter::repeat_n(marker, len).collect::<String>())
-            .boxed()
-    } else {
-        Just(format!("{marker}{marker}")).boxed()
-    };
-
-    prop_oneof![opposite, shorter_same].boxed()
-}
-
-fn closes_active_fence(line: &str, marker: char, marker_len: usize) -> bool {
-    let trimmed = line.trim_start();
-    let run_len = trimmed.chars().take_while(|ch| *ch == marker).count();
-    run_len >= marker_len
-        && trimmed
-            .chars()
-            .nth(run_len)
-            .is_none_or(|ch| ch.is_ascii_whitespace())
-}
-
-fn fenced_body_strategy(marker: char, marker_len: usize) -> impl Strategy<Value = Vec<String>> {
-    let arbitrary_line = printable_ascii_line_strategy(0..80)
-        .prop_filter("body line must not close active fence", move |line| {
-            !closes_active_fence(line, marker, marker_len)
-        });
-    prop::collection::vec(
-        prop_oneof![
-            Just("-- Payload example...".to_owned()),
-            Just("{...}".to_owned()),
-            Just("VALUES ('00000000-0000-0000-0000-000000000001', 'default');".to_owned()),
-            fence_like_line_strategy(marker, marker_len),
-            arbitrary_line.boxed(),
-        ],
-        1..=8,
-    )
-}
-
 #[test]
 fn combined_flags_preserve_generated_fenced_bodies() {
-    let strategy = (0usize..=3, fence_marker_strategy(), fence_info_strategy()).prop_flat_map(
-        |(indent, marker, info)| {
-            let marker_char = marker
-                .chars()
-                .next()
-                .expect("fence marker strategy emits a non-empty marker");
-            let marker_len = marker.len();
-            (
-                Just(indent),
-                Just(marker),
-                Just(info),
-                fenced_body_strategy(marker_char, marker_len),
-            )
-        },
-    );
-    let mut runner = TestRunner::new(Config {
-        cases: 96,
-        ..Config::default()
-    });
+    let strategy = super::cli_issue_329_property::fenced_block_strategy();
+    let mut runner = super::cli_issue_329_property::fenced_block_runner();
 
     runner
-        .run(&strategy, |(indent, marker, info, body_lines)| {
-            let indent = " ".repeat(indent);
-            let info_suffix = if info.is_empty() {
-                String::new()
-            } else {
-                format!(" {info}")
-            };
-            let body = body_lines.join("\n");
-            let input = format!("{indent}{marker}{info_suffix}\n{body}\n{indent}{marker}\n");
-            let assertion = run_cli_with_stdin(ISSUE_329_COMBINED_FLAGS, &input)
+        .run(&strategy, |block| {
+            let assertion = run_cli_with_stdin(ISSUE_329_COMBINED_FLAGS, &block.input)
                 .map_err(|err| TestCaseError::fail(err.to_string()))?;
             let success = assertion.success();
             let output = String::from_utf8_lossy(&success.get_output().stdout);
             let output_lines = output.lines().collect::<Vec<_>>();
-            let output_body = output_lines
-                .get(1..output_lines.len().saturating_sub(1))
-                .ok_or_else(|| TestCaseError::fail(format!("missing fence body:\n{output}")))?
-                .join("\n");
+
+            let located = super::cli_issue_329_property::locate_fenced_block(&output_lines, &block)
+                .map_err(TestCaseError::fail)?;
+            let opening_without_indent = located
+                .opening_line
+                .strip_prefix(&block.indent)
+                .ok_or_else(|| TestCaseError::fail("opening fence indentation changed"))?;
+            prop_assert!(
+                opening_without_indent.ends_with(&block.info_suffix),
+                "opening fence info string changed after combined flags:\ninput:\n{}\noutput:\n{}",
+                block.input,
+                output
+            );
+            let marker_len = opening_without_indent.len() - block.info_suffix.len();
+            let output_marker = &opening_without_indent[..marker_len];
+            let marker_char = output_marker
+                .chars()
+                .next()
+                .ok_or_else(|| TestCaseError::fail("opening fence marker missing"))?;
+            prop_assert!(
+                matches!(marker_char, '`' | '~')
+                    && marker_len >= 3
+                    && output_marker.chars().all(|ch| ch == marker_char),
+                "opening fence marker changed to an invalid delimiter:\ninput:\n{}\noutput:\n{}",
+                block.input,
+                output
+            );
+            let expected_closing = format!("{}{}", block.indent, output_marker);
+            prop_assert!(
+                located.closing_line == expected_closing,
+                "closing fence line does not match output opening marker:\ninput:\n{}\noutput:\n{}",
+                block.input,
+                output
+            );
+
+            let output_body = located.body_lines.join("\n");
 
             prop_assert_eq!(
                 output_body,
-                body,
+                block.body,
                 "fenced body changed after combined flags:\ninput:\n{}\noutput:\n{}",
-                input,
+                block.input,
                 output
             );
             Ok(())
         })
-        .expect("generated fenced bodies are preserved by combined flags");
+        .expect("generated fenced blocks are preserved by combined flags");
 }
 
 /// Ensures `--wrap` preserves emphasised step definition guidance with inline code spans.

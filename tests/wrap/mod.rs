@@ -17,6 +17,7 @@ mod wrap_assertions;
 mod blockquotes;
 mod checklist_code_spans;
 mod cli;
+mod cli_issue_329_property;
 mod fence_behaviour;
 mod footnotes;
 mod hard_line_breaks;
