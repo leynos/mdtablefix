@@ -211,10 +211,14 @@ fn test_cli_wrap_fences_ellipsis_preserve_fenced_content() -> Result<(), Box<dyn
     let assertion = run_cli_with_stdin(ISSUE_329_COMBINED_FLAGS, input)?;
     let success = assertion.success();
     let output = String::from_utf8_lossy(&success.get_output().stdout);
-    insta::assert_snapshot!(
-        "issue_329_wrap_fences_ellipsis_preserve_fenced_content",
-        output
-    );
+    insta::with_settings!({
+        snapshot_path => "../snapshots",
+    }, {
+        insta::assert_snapshot!(
+            "issue_329_wrap_fences_ellipsis_preserve_fenced_content",
+            output
+        );
+    });
     Ok(())
 }
 
