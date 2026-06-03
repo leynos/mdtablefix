@@ -227,33 +227,75 @@ fn fence_info_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
         Just(String::new()),
         Just("sql".to_owned()),
+        Just("json".to_owned()),
         Just("json payload".to_owned()),
         Just("{#example .sample}".to_owned()),
+        printable_ascii_line_strategy(0..24),
     ]
 }
 
-fn fenced_body_strategy() -> impl Strategy<Value = Vec<String>> {
+fn printable_ascii_line_strategy(len: std::ops::Range<usize>) -> impl Strategy<Value = String> {
+    prop::collection::vec(0x20u8..=0x7e, len)
+        .prop_map(|bytes| bytes.into_iter().map(char::from).collect())
+}
+
+fn fence_like_line_strategy(marker: char, marker_len: usize) -> BoxedStrategy<String> {
+    let opposite_marker = if marker == '`' { '~' } else { '`' };
+    let opposite = (3usize..=8)
+        .prop_map(move |len| std::iter::repeat_n(opposite_marker, len).collect::<String>());
+    let shorter_same = if marker_len > 3 {
+        (3usize..marker_len)
+            .prop_map(move |len| std::iter::repeat_n(marker, len).collect::<String>())
+            .boxed()
+    } else {
+        Just(format!("{marker}{marker}")).boxed()
+    };
+
+    prop_oneof![opposite, shorter_same].boxed()
+}
+
+fn closes_active_fence(line: &str, marker: char, marker_len: usize) -> bool {
+    let trimmed = line.trim_start();
+    let run_len = trimmed.chars().take_while(|ch| *ch == marker).count();
+    run_len >= marker_len && trimmed.chars().nth(run_len).is_none_or(|ch| ch != marker)
+}
+
+fn fenced_body_strategy(marker: char, marker_len: usize) -> impl Strategy<Value = Vec<String>> {
+    let arbitrary_line = printable_ascii_line_strategy(0..80)
+        .prop_filter("body line must not close active fence", move |line| {
+            !closes_active_fence(line, marker, marker_len)
+        });
     prop::collection::vec(
         prop_oneof![
             Just("-- Payload example...".to_owned()),
             Just("{...}".to_owned()),
             Just("VALUES ('00000000-0000-0000-0000-000000000001', 'default');".to_owned()),
-            "[a-z][a-z ]{0,48}\\.\\.\\.".prop_map(|line| line),
+            fence_like_line_strategy(marker, marker_len),
+            arbitrary_line.boxed(),
         ],
-        1..=5,
+        1..=8,
     )
 }
 
 #[test]
 fn combined_flags_preserve_generated_fenced_bodies() {
-    let strategy = (
-        0usize..=3,
-        fence_marker_strategy(),
-        fence_info_strategy(),
-        fenced_body_strategy(),
+    let strategy = (0usize..=3, fence_marker_strategy(), fence_info_strategy()).prop_flat_map(
+        |(indent, marker, info)| {
+            let marker_char = marker
+                .chars()
+                .next()
+                .expect("fence marker strategy emits a non-empty marker");
+            let marker_len = marker.len();
+            (
+                Just(indent),
+                Just(marker),
+                Just(info),
+                fenced_body_strategy(marker_char, marker_len),
+            )
+        },
     );
     let mut runner = TestRunner::new(Config {
-        cases: 32,
+        cases: 96,
         ..Config::default()
     });
 
@@ -271,10 +313,18 @@ fn combined_flags_preserve_generated_fenced_bodies() {
                 .map_err(|err| TestCaseError::fail(err.to_string()))?;
             let success = assertion.success();
             let output = String::from_utf8_lossy(&success.get_output().stdout);
+            let output_lines = output.lines().collect::<Vec<_>>();
+            let output_body = output_lines
+                .get(1..output_lines.len().saturating_sub(1))
+                .ok_or_else(|| TestCaseError::fail(format!("missing fence body:\n{output}")))?
+                .join("\n");
 
-            prop_assert!(
-                output.contains(&body),
-                "missing unchanged fenced body {body:?} in output:\n{output}"
+            prop_assert_eq!(
+                output_body,
+                body,
+                "fenced body changed after combined flags:\ninput:\n{}\noutput:\n{}",
+                input,
+                output
             );
             Ok(())
         })
