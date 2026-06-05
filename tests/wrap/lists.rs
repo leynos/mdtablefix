@@ -1,5 +1,6 @@
 //! List item wrapping tests.
 
+use mdtablefix::wrap_text;
 use rstest::rstest;
 
 use super::{wrap_assertions::assert_wrapped_list_item, *};
@@ -150,6 +151,18 @@ fn test_wrap_list_item_period_after_code() {
     let expected: Vec<String> = include_lines!("../data/bullet_full_stop_expected.txt");
     let output = process_stream(&input);
     assert_eq!(output, expected);
+}
+
+#[test]
+fn test_wrap_bullet_backslash_terminated_code_span_idempotent() {
+    let input: Vec<String> = include_lines!("../data/bullet_backslash_code_span_input.txt");
+    let expected: Vec<String> = include_lines!("../data/bullet_backslash_code_span_expected.txt");
+
+    let output = wrap_text(&input, 80);
+
+    assert_eq!(output, expected);
+    assert_eq!(wrap_text(&output, 80), output);
+    assert_wrapped_list_item(&output[2..4], "- ", 2);
 }
 
 #[test]

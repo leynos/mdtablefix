@@ -315,7 +315,7 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         buffer.push(fragment);
         let wrapped = wrap_first_fit(&buffer, &[width_as_f64(width)]);
         let raw_lines = wrapped.iter().map(|line| line.to_vec()).collect::<Vec<_>>();
-        let mut grouped_lines = merge_whitespace_only_lines(&raw_lines);
+        let mut grouped_lines = merge_whitespace_only_lines(&raw_lines, width);
         rebalance_atomic_tails(&mut grouped_lines, width);
 
         if grouped_lines.len() == 1 {

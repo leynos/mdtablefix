@@ -91,7 +91,7 @@ fn closing_fence_end(bytes: &[u8], text: &str, search: usize, fence_len: usize) 
     }
 
     let ch = text[search..].chars().next()?;
-    if ch != '`' || has_odd_backslash_escape_bytes(bytes, search) {
+    if ch != '`' {
         return None;
     }
 
@@ -260,7 +260,6 @@ pub(crate) fn position_after_close(continuation: &str, fence_len: usize) -> Opti
     while index < continuation.len() {
         let ch = continuation[index..].chars().next()?;
         if ch == '`'
-            && !has_odd_backslash_escape_bytes(bytes, index)
             && let Some(end) = closing_fence_end(bytes, continuation, index, fence_len)
         {
             return Some(end);
@@ -280,7 +279,7 @@ pub(crate) fn scan_continuation_span_state(continuation: &str, fence_len: usize)
             break;
         };
 
-        if ch == '`' && !has_odd_backslash_escape_bytes(bytes, index) {
+        if ch == '`' {
             if let Some(open_len) = current_fence {
                 if let Some(end) = closing_fence_end(bytes, continuation, index, open_len) {
                     current_fence = None;

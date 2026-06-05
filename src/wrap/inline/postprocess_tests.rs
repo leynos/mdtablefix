@@ -54,7 +54,7 @@ fn inline_fragment_plain() {
 #[test]
 fn merge_keeps_content_lines_unchanged() {
     let lines = vec![vec![fragment("hello")], vec![fragment("world")]];
-    assert_eq!(merge_whitespace_only_lines(&lines), lines);
+    assert_eq!(merge_whitespace_only_lines(&lines, 80), lines);
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn merge_carries_whitespace_forward() {
         vec![fragment("world")],
     ];
     assert_eq!(
-        merge_whitespace_only_lines(&lines),
+        merge_whitespace_only_lines(&lines, 80),
         vec![
             vec![fragment("hello")],
             vec![fragment(" "), fragment("world")],
@@ -80,7 +80,7 @@ fn merge_moves_inline_code_tail_before_single_space() {
         vec![fragment(" ")],
         vec![fragment("tail")],
     ];
-    let merged = merge_whitespace_only_lines(&lines);
+    let merged = merge_whitespace_only_lines(&lines, 80);
 
     assert_eq!(merged[0], vec![fragment("plain")]);
     assert_eq!(
@@ -90,10 +90,26 @@ fn merge_moves_inline_code_tail_before_single_space() {
 }
 
 #[test]
+fn merge_leaves_inline_code_tail_when_carry_would_exceed_width() {
+    let lines = vec![
+        vec![fragment("plain"), fragment("`long-code-tail`")],
+        vec![fragment(" ")],
+        vec![fragment("wide continuation")],
+    ];
+    let merged = merge_whitespace_only_lines(&lines, 20);
+
+    assert_eq!(
+        merged[0],
+        vec![fragment("plain"), fragment("`long-code-tail`")]
+    );
+    assert_eq!(merged[1], vec![fragment("wide continuation")]);
+}
+
+#[test]
 fn merge_trailing_whitespace_appended_to_last_line() {
     let lines = vec![vec![fragment("hello")], vec![fragment(" ")]];
     assert_eq!(
-        merge_whitespace_only_lines(&lines),
+        merge_whitespace_only_lines(&lines, 80),
         vec![vec![fragment("hello"), fragment(" ")]]
     );
 }
@@ -107,7 +123,7 @@ fn merge_carries_multiple_consecutive_whitespace_lines_forward() {
         vec![fragment("world")],
     ];
     assert_eq!(
-        merge_whitespace_only_lines(&lines),
+        merge_whitespace_only_lines(&lines, 80),
         vec![
             vec![fragment("hello")],
             vec![fragment(" "), fragment("\t"), fragment("world")]
@@ -123,7 +139,7 @@ fn merge_drops_single_space_before_atomic_starting_line() {
         vec![fragment("`code`")],
     ];
     assert_eq!(
-        merge_whitespace_only_lines(&lines),
+        merge_whitespace_only_lines(&lines, 80),
         vec![
             vec![fragment("alpha"), fragment("beta")],
             vec![fragment("`code`")]
@@ -133,7 +149,7 @@ fn merge_drops_single_space_before_atomic_starting_line() {
 
 #[test]
 fn merge_empty_input_returns_empty_output() {
-    assert!(merge_whitespace_only_lines(&[]).is_empty());
+    assert!(merge_whitespace_only_lines(&[], 80).is_empty());
 }
 
 #[test]

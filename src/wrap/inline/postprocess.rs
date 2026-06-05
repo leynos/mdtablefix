@@ -73,6 +73,34 @@ fn carry_previous_inline_code_tail(
     true
 }
 
+/// Returns the next line containing rendered content after `index`.
+fn next_content_line(lines: &[Vec<InlineFragment>], index: usize) -> Option<&[InlineFragment]> {
+    lines
+        .iter()
+        .skip(index + 1)
+        .find(|line| !is_whitespace_only_line(line))
+        .map(Vec::as_slice)
+}
+
+/// Returns whether carrying the previous inline-code tail can fit on target.
+fn inline_code_tail_carry_fits(
+    merged: &[Vec<InlineFragment>],
+    next_content_line: Option<&[InlineFragment]>,
+    width: usize,
+) -> bool {
+    let Some(next_content_line) = next_content_line else {
+        return true;
+    };
+    let Some(previous_line) = merged.last() else {
+        return true;
+    };
+    let Some(previous_tail) = previous_line.last() else {
+        return true;
+    };
+
+    previous_tail.width + 1 + line_width(next_content_line) <= width
+}
+
 /// Merges whitespace-only wrap artefacts into neighbouring content lines.
 ///
 /// `lines` is the provisional fragment layout from `wrap_first_fit`, and the
@@ -81,6 +109,7 @@ fn carry_previous_inline_code_tail(
 /// fragment instead of being merged backward. This helper never panics.
 pub(super) fn merge_whitespace_only_lines(
     lines: &[Vec<InlineFragment>],
+    width: usize,
 ) -> Vec<Vec<InlineFragment>> {
     let mut merged: Vec<Vec<InlineFragment>> = Vec::with_capacity(lines.len());
     let mut pending_whitespace: Vec<InlineFragment> = Vec::new();
@@ -103,6 +132,7 @@ pub(super) fn merge_whitespace_only_lines(
 
             if line_is_single_space
                 && !next_starts_atomic
+                && inline_code_tail_carry_fits(&merged, next_content_line(lines, index), width)
                 && carry_previous_inline_code_tail(&mut merged, &mut pending_whitespace)
             {
                 should_carry_whitespace = true;

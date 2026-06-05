@@ -91,7 +91,7 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
                 continue;
             }
 
-            let (token, new_i) = handle_backtick_fence(text, bytes, i);
+            let (token, new_i) = handle_backtick_fence(text, i);
             let (token, new_i) = extend_closed_code_token(text, i, token, new_i);
             tokens.push(token);
             i = new_i;
@@ -216,22 +216,18 @@ fn next_token(line: &str, offset: usize) -> Option<(Token<'_>, usize)> {
     // character count from `take_while` equals the byte length of the
     // fence delimiter. Slicing by `delim_len` is a valid UTF-8 boundary.
     let fence = &rest[..delim_len];
-    let mut search_start = delim_len;
-    while let Some(pos) = rest[search_start..].find(fence) {
-        let candidate = search_start + pos;
-        if !has_odd_backslash_escape_bytes(bytes, offset + candidate) {
-            let raw_end = candidate + delim_len;
-            let token = &rest[..raw_end];
-            let suffix_end = if is_closed_inline_code_span(token) {
-                scan_code_suffix_end(rest, raw_end)
-            } else {
-                raw_end
-            };
-            let code = &rest[delim_len..candidate];
-            let raw = &rest[..suffix_end];
-            return Some((Token::Code { raw, fence, code }, suffix_end));
-        }
-        search_start = candidate + 1;
+    if let Some(pos) = rest[delim_len..].find(fence) {
+        let candidate = delim_len + pos;
+        let raw_end = candidate + delim_len;
+        let token = &rest[..raw_end];
+        let suffix_end = if is_closed_inline_code_span(token) {
+            scan_code_suffix_end(rest, raw_end)
+        } else {
+            raw_end
+        };
+        let code = &rest[delim_len..candidate];
+        let raw = &rest[..suffix_end];
+        return Some((Token::Code { raw, fence, code }, suffix_end));
     }
 
     Some((Token::Text(fence), delim_len))

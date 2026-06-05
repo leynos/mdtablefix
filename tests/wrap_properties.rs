@@ -56,6 +56,10 @@ fn checklist_marker_count(lines: &[String]) -> usize {
         .count()
 }
 
+fn path_segment_strategy() -> impl Strategy<Value = String> {
+    "[A-Za-z][A-Za-z0-9]{1,10}".prop_map(String::from)
+}
+
 proptest! {
     #[test]
     fn wrap_text_keeps_generated_footnote_references_atomic(
@@ -96,6 +100,30 @@ proptest! {
                     "orphaned closing backtick fragment on line: {line:?}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn wrap_text_backslash_terminated_code_spans_stay_within_width(
+        vendor in path_segment_strategy(),
+        product in path_segment_strategy(),
+        scope in prop_oneof![Just("machine"), Just("user"), Just("system")],
+    ) {
+        let input = vec![
+            format!(
+                "- Install the executable to `C:\\Program Files\\{vendor}\\{product}\\bin\\` and"
+            ),
+            format!("  add that folder to PATH ({scope} scope)."),
+        ];
+
+        let output = wrap_text(&input, 80);
+        prop_assert_eq!(wrap_text(&output, 80), output.clone());
+        for line in &output {
+            prop_assert!(
+                UnicodeWidthStr::width(line.as_str()) <= 80,
+                "line too wide ({} cols): {line:?}",
+                UnicodeWidthStr::width(line.as_str())
+            );
         }
     }
 

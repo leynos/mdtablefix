@@ -6,7 +6,7 @@
 
 use tracing::{debug, trace};
 
-use super::scanning::{collect_range, has_odd_backslash_escape_bytes, scan_while};
+use super::scanning::{collect_range, scan_while};
 
 /// Parse a Markdown link or image starting at `i`.
 ///
@@ -196,7 +196,7 @@ pub(super) fn is_trailing_punctuation(c: char) -> bool {
     )
 }
 
-pub(super) fn handle_backtick_fence(text: &str, bytes: &[u8], start_idx: usize) -> (String, usize) {
+pub(super) fn handle_backtick_fence(text: &str, start_idx: usize) -> (String, usize) {
     let start = start_idx;
     let fence_end = scan_while(text, start_idx, |ch| ch == '`');
     let fence_len = fence_end - start;
@@ -204,7 +204,7 @@ pub(super) fn handle_backtick_fence(text: &str, bytes: &[u8], start_idx: usize) 
 
     while end < text.len() {
         let candidate_end = scan_while(text, end, |ch| ch == '`');
-        if candidate_end - end == fence_len && !has_odd_backslash_escape_bytes(bytes, end) {
+        if candidate_end - end == fence_len {
             return (collect_range(text, start, candidate_end), candidate_end);
         }
 
