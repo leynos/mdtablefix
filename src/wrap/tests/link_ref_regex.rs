@@ -357,43 +357,41 @@ proptest! {
     }
 }
 
-#[test]
-fn non_destination_lines_are_not_url_continuations() {
-    let matcher = LinkReferenceMatcher::production();
-    for line in [
-        " - item",
-        "  * item",
-        "  1. item",
-        " > quote",
-        " # heading",
-        " plain prose",
-        " https://example.com My Title",
-    ] {
-        assert!(!matcher.is_url_continuation_line(line));
+proptest! {
+    #[test]
+    fn some_outcome_always_closes_terminal_window(
+        prior in prop_oneof![
+            Just(LinkTitleWindow::AwaitingUrlContinuation),
+            Just(LinkTitleWindow::AwaitingStandaloneTitle),
+        ],
+        line in "[ -~]{1,80}",
+    ) {
+        let matcher = LinkReferenceMatcher::production();
+        let mut window = prior;
+        let outcome = window.observe_next_line(&line, matcher);
+        prop_assume!(outcome.is_some());
+        prop_assume!(window != LinkTitleWindow::AwaitingStandaloneTitle);
+        prop_assert_eq!(window, LinkTitleWindow::Closed);
     }
-}
 
-#[test]
-fn markdown_prefixed_lines_after_bare_label_are_reprocessed() {
-    let matcher = LinkReferenceMatcher::production();
-    let mut window = LinkTitleWindow::AwaitingUrlContinuation;
-    assert_eq!(
-        window.observe_next_line(" - item", matcher),
-        Some(LinkTitleWindowOutcome::Reprocess)
-    );
-    assert_eq!(window, LinkTitleWindow::Closed);
-}
+    #[test]
+    fn url_continuation_then_title_or_prose_closes_window(
+        url in arb_bare_url(),
+        second_line in prop_oneof![arb_title_form(), Just(String::new()), "[ -~]{1,80}".prop_map(|s| s)],
+    ) {
+        let matcher = LinkReferenceMatcher::production();
+        let mut window = LinkTitleWindow::Closed;
+        let first_line = format!("  {url}");
 
-#[test]
-fn bare_definition_opens_window() {
-    let mut window = LinkTitleWindow::Closed;
-    window.observe_bare_definition();
-    assert_eq!(window, LinkTitleWindow::AwaitingStandaloneTitle);
-}
+        prop_assume!(matcher.is_url_continuation_line(&first_line));
+        window.observe_bare_label();
+        prop_assert_eq!(
+            window.observe_next_line(&first_line, matcher),
+            Some(LinkTitleWindowOutcome::EmitVerbatim)
+        );
+        prop_assert_eq!(window, LinkTitleWindow::AwaitingStandaloneTitle);
 
-#[test]
-fn bare_label_opens_url_continuation_window() {
-    let mut window = LinkTitleWindow::Closed;
-    window.observe_bare_label();
-    assert_eq!(window, LinkTitleWindow::AwaitingUrlContinuation);
+        prop_assert!(window.observe_next_line(&second_line, matcher).is_some());
+        prop_assert_eq!(window, LinkTitleWindow::Closed);
+    }
 }
