@@ -216,9 +216,9 @@ fn next_token(line: &str, offset: usize) -> Option<(Token<'_>, usize)> {
     // character count from `take_while` equals the byte length of the
     // fence delimiter. Slicing by `delim_len` is a valid UTF-8 boundary.
     let fence = &rest[..delim_len];
-    if let Some(pos) = rest[delim_len..].find(fence) {
-        let candidate = delim_len + pos;
-        let raw_end = candidate + delim_len;
+    if let Some(relative_end) = position_after_close(&rest[delim_len..], delim_len) {
+        let raw_end = delim_len + relative_end;
+        let candidate = raw_end - delim_len;
         let token = &rest[..raw_end];
         let suffix_end = if is_closed_inline_code_span(token) {
             scan_code_suffix_end(rest, raw_end)

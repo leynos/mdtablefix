@@ -15,7 +15,7 @@
 //! - `src/wrap/tests/span_state.rs` — unit-level proptest coverage for `has_unclosed_code_span` and
 //!   `continuation_begins_with_closing_fence`
 
-use mdtablefix::wrap::wrap_text;
+use mdtablefix::{process::WRAP_COLS, wrap::wrap_text};
 use proptest::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
@@ -116,11 +116,11 @@ proptest! {
             format!("  add that folder to PATH ({scope} scope)."),
         ];
 
-        let output = wrap_text(&input, 80);
-        prop_assert_eq!(wrap_text(&output, 80), output.clone());
+        let output = wrap_text(&input, WRAP_COLS);
+        prop_assert_eq!(wrap_text(&output, WRAP_COLS), output.clone());
         for line in &output {
             prop_assert!(
-                UnicodeWidthStr::width(line.as_str()) <= 80,
+                UnicodeWidthStr::width(line.as_str()) <= WRAP_COLS,
                 "line too wide ({} cols): {line:?}",
                 UnicodeWidthStr::width(line.as_str())
             );
