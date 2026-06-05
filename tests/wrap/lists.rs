@@ -161,6 +161,15 @@ fn test_wrap_bullet_backslash_terminated_code_span_idempotent() {
     let output = wrap_text(&input, WRAP_COLS);
 
     assert_eq!(output, expected);
+    insta::with_settings!({
+        snapshot_path => "../snapshots",
+        prepend_module_to_snapshot => false,
+    }, {
+        insta::assert_snapshot!(
+            "bullet_backslash_terminated_code_span",
+            output.join("\n")
+        );
+    });
     assert_eq!(wrap_text(&output, WRAP_COLS), output);
     assert_wrapped_list_item(&output[2..4], "- ", 2);
 }

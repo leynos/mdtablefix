@@ -89,16 +89,45 @@ fn inline_code_tail_carry_fits(
     width: usize,
 ) -> bool {
     let Some(next_content_line) = next_content_line else {
+        trace!(
+            fits = true,
+            reason = "no following content line",
+            target_width = width,
+            "checked inline-code tail carry width"
+        );
         return true;
     };
     let Some(previous_line) = merged.last() else {
+        trace!(
+            fits = true,
+            reason = "no previous merged line",
+            target_width = width,
+            "checked inline-code tail carry width"
+        );
         return true;
     };
     let Some(previous_tail) = previous_line.last() else {
+        trace!(
+            fits = true,
+            reason = "previous merged line is empty",
+            target_width = width,
+            "checked inline-code tail carry width"
+        );
         return true;
     };
 
-    previous_tail.width + 1 + line_width(next_content_line) <= width
+    let next_line_width = line_width(next_content_line);
+    let projected_width = previous_tail.width + 1 + next_line_width;
+    let fits = projected_width <= width;
+    trace!(
+        fits,
+        projected_width,
+        target_width = width,
+        previous_tail_width = previous_tail.width,
+        next_line_width,
+        "checked inline-code tail carry width"
+    );
+    fits
 }
 
 /// Merges whitespace-only wrap artefacts into neighbouring content lines.
