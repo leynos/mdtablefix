@@ -38,6 +38,25 @@ fn inline_code_fences() {
 }
 
 #[test]
+fn segment_inline_handles_backslash_terminated_code_span() {
+    let tokens = segment_inline(r"Install to `C:\path\bin\` and add");
+    assert_eq!(
+        tokens,
+        vec![
+            "Install",
+            " ",
+            "to",
+            " ",
+            r"`C:\path\bin\`",
+            " ",
+            "and",
+            " ",
+            "add"
+        ]
+    );
+}
+
+#[test]
 fn unmatched_backticks() {
     let tokens = segment_inline("bad `code span");
     assert_eq!(tokens, vec!["bad", " ", "`", "code", " ", "span"]);

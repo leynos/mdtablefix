@@ -2,6 +2,7 @@
 
 use mdtablefix::{process::WRAP_COLS, wrap_text};
 use rstest::rstest;
+use unicode_width::UnicodeWidthStr;
 
 use super::{wrap_assertions::assert_wrapped_list_item, *};
 
@@ -172,6 +173,14 @@ fn test_wrap_bullet_backslash_terminated_code_span_idempotent() {
     });
     assert_eq!(wrap_text(&output, WRAP_COLS), output);
     assert_wrapped_list_item(&output[2..4], "- ", 2);
+    assert!(
+        output
+            .iter()
+            .all(|line| UnicodeWidthStr::width(line.as_str()) <= WRAP_COLS)
+    );
+    let rendered = output.join("\n");
+    assert!(rendered.contains(r"`C:\Program Files\<Vendor>\<Product>\bin\`"));
+    assert_eq!(rendered.chars().filter(|&ch| ch == '`').count(), 2);
 }
 
 #[test]

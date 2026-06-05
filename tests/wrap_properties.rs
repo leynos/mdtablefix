@@ -109,16 +109,27 @@ proptest! {
         product in path_segment_strategy(),
         scope in prop_oneof![Just("machine"), Just("user"), Just("system")],
     ) {
+        let code_span = format!("`C:\\Program Files\\{vendor}\\{product}\\bin\\`");
         let input = vec![
-            format!(
-                "- Install the executable to `C:\\Program Files\\{vendor}\\{product}\\bin\\` and"
-            ),
+            format!("- Install the executable to {code_span} and"),
             format!("  add that folder to PATH ({scope} scope)."),
         ];
 
         let output = wrap_text(&input, WRAP_COLS);
         prop_assert_eq!(wrap_text(&output, WRAP_COLS), output.clone());
+        let rendered = output.join("\n");
+        prop_assert!(
+            rendered.contains(&code_span),
+            "wrapped text no longer contains the expected inline code span {code_span:?}: {rendered:?}"
+        );
         for line in &output {
+            let backtick_count = line.chars().filter(|&ch| ch == '`').count();
+            prop_assert_eq!(
+                backtick_count % 2,
+                0,
+                "line has an unclosed code span after wrapping: {:?}",
+                line
+            );
             prop_assert!(
                 UnicodeWidthStr::width(line.as_str()) <= WRAP_COLS,
                 "line too wide ({} cols): {line:?}",

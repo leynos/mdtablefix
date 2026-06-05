@@ -106,6 +106,23 @@ fn merge_leaves_inline_code_tail_when_carry_would_exceed_width() {
 }
 
 #[test]
+fn merge_moves_inline_code_tail_at_exact_width_boundary() {
+    let lines = vec![
+        vec![fragment("plain"), fragment("`code`")],
+        vec![fragment(" ")],
+        vec![fragment("tail")],
+    ];
+    let width = fragment("`code`").width + 1 + fragment("tail").width;
+    let merged = merge_whitespace_only_lines(&lines, width);
+
+    assert_eq!(merged[0], vec![fragment("plain")]);
+    assert_eq!(
+        merged[1],
+        vec![fragment("`code`"), fragment(" "), fragment("tail")]
+    );
+}
+
+#[test]
 fn merge_trailing_whitespace_appended_to_last_line() {
     let lines = vec![vec![fragment("hello")], vec![fragment(" ")]];
     assert_eq!(
