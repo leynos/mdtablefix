@@ -1,0 +1,8 @@
+---
+source: tests/wrap/lists.rs
+expression: "output.join(\"\\n\")"
+---
+## Section
+
+- Install the executable to `C:\Program Files\<Vendor>\<Product>\bin\` and
+  add that folder to PATH (machine scope).

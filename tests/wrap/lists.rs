@@ -1,6 +1,8 @@
 //! List item wrapping tests.
 
+use mdtablefix::{process::WRAP_COLS, wrap_text};
 use rstest::rstest;
+use unicode_width::UnicodeWidthStr;
 
 use super::{wrap_assertions::assert_wrapped_list_item, *};
 
@@ -150,6 +152,35 @@ fn test_wrap_list_item_period_after_code() {
     let expected: Vec<String> = include_lines!("../data/bullet_full_stop_expected.txt");
     let output = process_stream(&input);
     assert_eq!(output, expected);
+}
+
+#[test]
+fn test_wrap_bullet_backslash_terminated_code_span_idempotent() {
+    let input: Vec<String> = include_lines!("../data/bullet_backslash_code_span_input.txt");
+    let expected: Vec<String> = include_lines!("../data/bullet_backslash_code_span_expected.txt");
+
+    let output = wrap_text(&input, WRAP_COLS);
+
+    assert_eq!(output, expected);
+    insta::with_settings!({
+        snapshot_path => "../snapshots",
+        prepend_module_to_snapshot => false,
+    }, {
+        insta::assert_snapshot!(
+            "bullet_backslash_terminated_code_span",
+            output.join("\n")
+        );
+    });
+    assert_eq!(wrap_text(&output, WRAP_COLS), output);
+    assert_wrapped_list_item(&output[2..4], "- ", 2);
+    assert!(
+        output
+            .iter()
+            .all(|line| UnicodeWidthStr::width(line.as_str()) <= WRAP_COLS)
+    );
+    let rendered = output.join("\n");
+    assert!(rendered.contains(r"`C:\Program Files\<Vendor>\<Product>\bin\`"));
+    assert_eq!(rendered.chars().filter(|&ch| ch == '`').count(), 2);
 }
 
 #[test]

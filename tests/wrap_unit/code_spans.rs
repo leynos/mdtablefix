@@ -1,7 +1,7 @@
 //! `wrap_text` regression tests covering code spans, link preservation,
 //! whitespace normalisation, and basic overflow guards.
 
-use mdtablefix::wrap::wrap_text;
+use mdtablefix::wrap::{Token, tokenize_markdown, wrap_text};
 use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
 
@@ -68,6 +68,24 @@ fn wrap_text_oversized_code_span_stays_intact() {
     assert!(wrapped.join("\n").contains(code_span));
     assert!(wrapped.iter().all(|line| !line.trim().is_empty()));
     assert!(wrapped.iter().skip(1).all(|line| line.starts_with("   ")));
+}
+
+#[test]
+fn test_tokenize_backslash_terminated_code_span() {
+    let tokens = tokenize_markdown(r"Install to `C:\path\bin\` and add");
+    let code_tokens = tokens
+        .iter()
+        .filter(|token| matches!(token, Token::Code { .. }))
+        .collect::<Vec<_>>();
+
+    assert_eq!(code_tokens.len(), 1);
+    assert!(matches!(
+        code_tokens[0],
+        Token::Code {
+            raw: r"`C:\path\bin\`",
+            ..
+        }
+    ));
 }
 
 #[test]

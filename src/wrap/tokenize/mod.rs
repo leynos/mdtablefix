@@ -100,7 +100,7 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
                 continue;
             }
 
-            let (token, new_i) = handle_backtick_fence(text, bytes, i);
+            let (token, new_i) = handle_backtick_fence(text, i);
             let (token, new_i) = extend_closed_code_token(text, i, token, new_i);
             tokens.push(token);
             i = new_i;
@@ -225,22 +225,18 @@ fn next_token(line: &str, offset: usize) -> Option<(Token<'_>, usize)> {
     // character count from `take_while` equals the byte length of the
     // fence delimiter. Slicing by `delim_len` is a valid UTF-8 boundary.
     let fence = &rest[..delim_len];
-    let mut search_start = delim_len;
-    while let Some(pos) = rest[search_start..].find(fence) {
-        let candidate = search_start + pos;
-        if !has_odd_backslash_escape_bytes(bytes, offset + candidate) {
-            let raw_end = candidate + delim_len;
-            let token = &rest[..raw_end];
-            let suffix_end = if is_closed_inline_code_span(token) {
-                scan_code_suffix_end(rest, raw_end)
-            } else {
-                raw_end
-            };
-            let code = &rest[delim_len..candidate];
-            let raw = &rest[..suffix_end];
-            return Some((Token::Code { raw, fence, code }, suffix_end));
-        }
-        search_start = candidate + 1;
+    if let Some(relative_end) = position_after_close(&rest[delim_len..], delim_len) {
+        let raw_end = delim_len + relative_end;
+        let candidate = raw_end - delim_len;
+        let token = &rest[..raw_end];
+        let suffix_end = if is_closed_inline_code_span(token) {
+            scan_code_suffix_end(rest, raw_end)
+        } else {
+            raw_end
+        };
+        let code = &rest[delim_len..candidate];
+        let raw = &rest[..suffix_end];
+        return Some((Token::Code { raw, fence, code }, suffix_end));
     }
 
     Some((Token::Text(fence), delim_len))
@@ -356,93 +352,5 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn segment_inline_handles_multibyte_tokens() {
-        let tokens = segment_inline("ßß `λ` фин");
-        assert_eq!(
-            tokens,
-            vec![
-                String::from("ßß"),
-                String::from(" "),
-                String::from("`λ`"),
-                String::from(" "),
-                String::from("фин"),
-            ]
-        );
-    }
-
-    #[test]
-    fn link_with_trailing_punctuation() {
-        let tokens = segment_inline("see [link](url).");
-        assert_eq!(tokens, vec!["see", " ", "[link](url)", "."]);
-    }
-
-    #[test]
-    fn image_with_nested_parentheses() {
-        let tokens = segment_inline("![alt](path(a(b)c))");
-        assert_eq!(tokens, vec!["![alt](path(a(b)c))"]);
-    }
-
-    #[test]
-    fn inline_code_fences() {
-        let tokens = segment_inline("use ``cmd`` now");
-        assert_eq!(tokens, vec!["use", " ", "``cmd``", " ", "now"]);
-    }
-
-    #[test]
-    fn unmatched_backticks() {
-        let tokens = segment_inline("bad `code span");
-        assert_eq!(tokens, vec!["bad", " ", "`", "code", " ", "span"]);
-    }
-
-    #[test]
-    fn tokenize_marks_trailing_newline() {
-        let tokens = tokenize_markdown("foo\n");
-        assert_eq!(tokens, vec![Token::Text("foo"), Token::Newline]);
-    }
-
-    #[test]
-    fn tokenize_handles_crlf() {
-        let tokens = tokenize_markdown("foo\r\nbar");
-        assert_eq!(
-            tokens,
-            vec![Token::Text("foo"), Token::Newline, Token::Text("bar")]
-        );
-    }
-
-    #[test]
-    fn escaped_triple_backticks_are_text() {
-        let tokens = segment_inline(r"\`\`\`ignore");
-        assert_eq!(tokens, vec![r"\`", r"\`", r"\`", "ignore"]);
-
-        let tokens = tokenize_markdown(r"\`\`\`ignore");
-        assert_eq!(tokens, vec![Token::Text(r"\`\`\`ignore")]);
-    }
-
-    #[test]
-    fn escaped_inline_backtick_is_text() {
-        let tokens = segment_inline(r"foo\`bar");
-        assert_eq!(tokens, vec![r"foo\`", "bar"]);
-
-        let tokens = tokenize_markdown(r"foo\`bar");
-        assert_eq!(tokens, vec![Token::Text(r"foo\`bar")]);
-    }
-
-    #[test]
-    fn escaped_backtick_adjacent_to_multibyte_characters_is_text() {
-        let tokens = segment_inline(r"ß\`å");
-        assert_eq!(tokens, vec![r"ß\`", "å"]);
-
-        let tokens = tokenize_markdown(r"ß\`å");
-        assert_eq!(tokens, vec![Token::Text(r"ß\`å")]);
-
-        let tokens = segment_inline(r"前\`后");
-        assert_eq!(tokens, vec![r"前\`", "后"]);
-
-        let tokens = tokenize_markdown(r"前\`后");
-        assert_eq!(tokens, vec![Token::Text(r"前\`后")]);
-    }
-}
+#[path = "mod_tests.rs"]
+mod tests;

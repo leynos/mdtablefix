@@ -231,7 +231,10 @@ The wrapping pipeline for `--wrap` is:
 4. **Post-processing and rendering.** The `postprocess` module applies
    `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
    whitespace-only wrap artefacts and isolated tails are normalized before the
-   fragments are rendered back into output lines. `render_line` in
+   fragments are rendered back into output lines. `wrap_preserving_code` passes
+   its configured wrap width into `merge_whitespace_only_lines`; that pass must
+   compare any projected inline-code tail carry against the same width before
+   moving an atomic code span onto a following content line. `render_line` in
    `src/wrap/inline.rs` converts each finished fragment line into Markdown
    text. Its `strip_leading_carry_whitespace` flag removes carry whitespace
    that the fitter attaches to the start of wrapped continuation lines; it is
@@ -329,7 +332,9 @@ Table: Key types and functions.
 | `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                | `src/wrap/continuation.rs`        |
 | `join_pending_continuation`                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`        |
 | `opening_fence_run_len` — Measures the length of an unescaped backtick run at the start of a byte slice; used to identify opening code-span fences.                                                                                                          | `src/wrap/tokenize/scanning.rs`   |
+| `position_after_close` — Finds a closing backtick fence with the exact opener length, rejects closers embedded in longer backtick runs, and treats backslashes inside code-span content as literal bytes.                                                    | `src/wrap/tokenize/scanning.rs`   |
 | `scan_continuation_span_state` — Incrementally scans a continuation string given a known open fence length, returning the remaining open fence length or `None` when all spans are balanced; used to avoid O(N²) rescanning of the accumulated pending text. | `src/wrap/tokenize/scanning.rs`   |
+| `handle_backtick_fence` — Tokenizes an inline code span from the opening fence byte offset and delegates closing-fence detection to `position_after_close`.                                                                                                  | `src/wrap/tokenize/parsing.rs`    |
 | `handle_pending_continuation`                                                                                                                                                                                                                                | `src/wrap.rs`                     |
 | `scan_code_suffix_end`                                                                                                                                                                                                                                       | `src/wrap/tokenize/scanning.rs`   |
 | `has_inline_code_structure`                                                                                                                                                                                                                                  | `src/wrap/inline/fragment.rs`     |
@@ -398,6 +403,17 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   atomically once the span closes. No line break may be inserted inside the
   span, and the closing backtick must remain on the same line as the span
   content.
+- **Closing fence detection.** Backslash escape checks apply only while
+  detecting opening backtick fences in ordinary Markdown text. Once a code span
+  is open, backslashes in the span content are literal bytes and must not make a
+  matching closing fence invisible. All tokenizer entry points that close code
+  spans use `position_after_close` so they also reject candidate closers
+  embedded in a longer backtick run.
+- **Width-aware inline-code carries.** `merge_whitespace_only_lines` receives
+  the active wrap width from `wrap_preserving_code`. Before carrying a previous
+  inline-code tail across a single-space wrap artefact, it must compute the
+  projected destination line width and skip the carry when that projection would
+  exceed the configured width.
 - **`WRAP_COLS` public constant.** `mdtablefix::process::WRAP_COLS` is
   exported as `pub` so that integration tests can reference the production
   wrap width instead of hard-coding `80`. When writing tests that depend on

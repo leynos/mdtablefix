@@ -15,7 +15,7 @@
 //! - `src/wrap/tests/span_state.rs` — unit-level proptest coverage for `has_unclosed_code_span` and
 //!   `continuation_begins_with_closing_fence`
 
-use mdtablefix::wrap::wrap_text;
+use mdtablefix::{process::WRAP_COLS, wrap::wrap_text};
 use proptest::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
@@ -54,6 +54,10 @@ fn checklist_marker_count(lines: &[String]) -> usize {
         .iter()
         .filter(|line| line.starts_with("- [ ] ") || line.starts_with("- [x] "))
         .count()
+}
+
+fn path_segment_strategy() -> impl Strategy<Value = String> {
+    "[A-Za-z][A-Za-z0-9]{1,10}".prop_map(String::from)
 }
 
 proptest! {
@@ -96,6 +100,41 @@ proptest! {
                     "orphaned closing backtick fragment on line: {line:?}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn wrap_text_backslash_terminated_code_spans_stay_within_width(
+        vendor in path_segment_strategy(),
+        product in path_segment_strategy(),
+        scope in prop_oneof![Just("machine"), Just("user"), Just("system")],
+    ) {
+        let code_span = format!("`C:\\Program Files\\{vendor}\\{product}\\bin\\`");
+        let input = vec![
+            format!("- Install the executable to {code_span} and"),
+            format!("  add that folder to PATH ({scope} scope)."),
+        ];
+
+        let output = wrap_text(&input, WRAP_COLS);
+        prop_assert_eq!(wrap_text(&output, WRAP_COLS), output.clone());
+        let rendered = output.join("\n");
+        prop_assert!(
+            rendered.contains(&code_span),
+            "wrapped text no longer contains the expected inline code span {code_span:?}: {rendered:?}"
+        );
+        for line in &output {
+            let backtick_count = line.chars().filter(|&ch| ch == '`').count();
+            prop_assert_eq!(
+                backtick_count % 2,
+                0,
+                "line has an unclosed code span after wrapping: {:?}",
+                line
+            );
+            prop_assert!(
+                UnicodeWidthStr::width(line.as_str()) <= WRAP_COLS,
+                "line too wide ({} cols): {line:?}",
+                UnicodeWidthStr::width(line.as_str())
+            );
         }
     }
 

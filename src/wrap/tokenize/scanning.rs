@@ -91,7 +91,7 @@ fn closing_fence_end(bytes: &[u8], text: &str, search: usize, fence_len: usize) 
     }
 
     let ch = text[search..].chars().next()?;
-    if ch != '`' || has_odd_backslash_escape_bytes(bytes, search) {
+    if ch != '`' {
         return None;
     }
 
@@ -260,7 +260,6 @@ pub(crate) fn position_after_close(continuation: &str, fence_len: usize) -> Opti
     while index < continuation.len() {
         let ch = continuation[index..].chars().next()?;
         if ch == '`'
-            && !has_odd_backslash_escape_bytes(bytes, index)
             && let Some(end) = closing_fence_end(bytes, continuation, index, fence_len)
         {
             return Some(end);
@@ -280,7 +279,7 @@ pub(crate) fn scan_continuation_span_state(continuation: &str, fence_len: usize)
             break;
         };
 
-        if ch == '`' && !has_odd_backslash_escape_bytes(bytes, index) {
+        if ch == '`' {
             if let Some(open_len) = current_fence {
                 if let Some(end) = closing_fence_end(bytes, continuation, index, open_len) {
                     current_fence = None;
@@ -320,89 +319,5 @@ pub(crate) fn continuation_begins_with_closing_fence(existing: &str, continuatio
     open_fence_len == run_len
 }
 #[cfg(test)]
-mod tests {
-    use rstest::rstest;
-
-    use super::*;
-
-    struct ScanCollectCase {
-        text: &'static str,
-        start: usize,
-        predicate: Option<fn(char) -> bool>,
-        end: Option<usize>,
-        expected_idx: Option<usize>,
-        expected_str: Option<&'static str>,
-    }
-
-    #[rstest]
-    #[case::alpha_prefix(ScanCollectCase { text: "abc123", start: 0, predicate: Some(char::is_alphabetic as fn(char) -> bool), end: None, expected_idx: Some(3), expected_str: None })]
-    #[case::numeric_suffix(ScanCollectCase { text: "abc123", start: 3, predicate: Some(char::is_numeric as fn(char) -> bool), end: None, expected_idx: Some("abc123".len()), expected_str: None })]
-    #[case::multibyte_scan(ScanCollectCase { text: "åßç123", start: 0, predicate: Some(char::is_alphabetic as fn(char) -> bool), end: None, expected_idx: Some("åßç123".find('1').unwrap_or("åßç123".len())), expected_str: Some("åßç") })]
-    #[case::collect_first_two(ScanCollectCase { text: "αβγδε", start: 0, predicate: None, end: Some("αβ".len()), expected_idx: None, expected_str: Some("αβ") })]
-    #[case::collect_middle(ScanCollectCase { text: "αβγδε", start: "αβ".len(), predicate: None, end: Some("αβ".len() + "γδ".len()), expected_idx: None, expected_str: Some("γδ") })]
-    fn scan_and_collect_cases(#[case] case: ScanCollectCase) {
-        if let Some(pred) = case.predicate {
-            let idx = scan_while(case.text, case.start, pred);
-            if let Some(expected) = case.expected_idx {
-                assert_eq!(idx, expected);
-            }
-            if let Some(expected_slice) = case.expected_str {
-                assert_eq!(&case.text[..idx], expected_slice);
-            }
-        } else if let Some(end_idx) = case.end {
-            let collected = collect_range(case.text, case.start, end_idx);
-            if let Some(expected_slice) = case.expected_str {
-                assert_eq!(collected, expected_slice);
-            }
-        } else {
-            panic!("Invalid test case configuration");
-        }
-    }
-
-    #[rstest]
-    #[case("`VarGuard`s alive", "`VarGuard`".len(), "`VarGuard`s".len())]
-    #[case("`class`'s field", "`class`".len(), "`class`'s".len())]
-    #[case("`code`-style name", "`code`".len(), "`code`-style".len())]
-    #[case("`code`-2 next", "`code`".len(), "`code`".len())]
-    #[case("`code`.", "`code`".len(), "`code`".len())]
-    #[case("`code`**", "`code`".len(), "`code`".len())]
-    #[case("`code`'2 next", "`code`".len(), "`code`".len())]
-    fn scan_code_suffix_end_cases(
-        #[case] text: &str,
-        #[case] start: usize,
-        #[case] expected: usize,
-    ) {
-        assert_eq!(scan_code_suffix_end(text, start), expected);
-    }
-
-    #[test]
-    fn parse_open_code_span_returns_active_fence() {
-        assert_eq!(parse_open_code_span("`foo"), Some((1, "foo")));
-        assert_eq!(parse_open_code_span("text `4.1.1"), Some((1, "4.1.1")));
-        assert_eq!(parse_open_code_span("`done` `open"), Some((1, "open")));
-        assert_eq!(parse_open_code_span("`done`"), None);
-    }
-
-    #[rstest]
-    #[case("Version `1.2", "beta` works.", false)]
-    #[case("Release `4.1.1", "rc1` candidate.", false)]
-    #[case("text `open", "`close rest", true)]
-    fn continuation_begins_with_closing_fence_matches_literal_closers_only(
-        #[case] existing: &str,
-        #[case] continuation: &str,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(
-            continuation_begins_with_closing_fence(existing, continuation),
-            expected
-        );
-    }
-
-    #[rstest]
-    #[case("`a``b`", false)]
-    #[case("``ab``", false)]
-    #[case("``a`b`", true)]
-    fn has_unclosed_code_span_rejects_mid_run_closers(#[case] text: &str, #[case] expected: bool) {
-        assert_eq!(has_unclosed_code_span(text), expected);
-    }
-}
+#[path = "scanning_tests.rs"]
+mod tests;
