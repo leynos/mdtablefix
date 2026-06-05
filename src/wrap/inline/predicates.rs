@@ -25,6 +25,65 @@ pub(in crate::wrap::inline) fn is_trailing_punctuation_token(token: &str) -> boo
     !token.is_empty() && token.chars().all(is_trailing_punct)
 }
 
+/// Returns whether `token` is a full or abbreviated English month name.
+pub(in crate::wrap::inline) fn is_month_name(token: &str) -> bool {
+    [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
+    .iter()
+    .any(|month| token.eq_ignore_ascii_case(month))
+}
+
+/// Returns whether `token` is an ordinal day number from 1st through 31st.
+pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
+    ["st", "nd", "rd", "th"]
+        .iter()
+        .find_map(|suffix| token.strip_suffix(suffix))
+        .is_some_and(is_day_number)
+}
+
+/// Returns whether `token` is a numeric day number from 1 through 31.
+pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
+    token
+        .strip_suffix(',')
+        .unwrap_or(token)
+        .parse::<u8>()
+        .is_ok_and(is_day)
+}
+
+/// Returns whether `token` is a four-digit year in the range 1000 through 2999.
+pub(in crate::wrap::inline) fn is_year(token: &str) -> bool {
+    token
+        .parse::<u16>()
+        .is_ok_and(|year| (1000..=2999).contains(&year))
+}
+
+fn is_day_number(token: &str) -> bool { token.parse::<u8>().is_ok_and(is_day) }
+
+fn is_day(day: u8) -> bool { (1..=31).contains(&day) }
+
 /// Returns whether `token` already looks like a complete Markdown link.
 pub(in crate::wrap::inline) fn looks_like_link(token: &str) -> bool {
     (token.starts_with('[') || token.starts_with("!["))

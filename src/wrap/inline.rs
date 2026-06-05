@@ -47,6 +47,7 @@ use span_helpers::{
     should_couple_whitespace,
     try_couple_footnote_reference,
     try_couple_inline_link_after_opener,
+    try_match_date_sequence,
 };
 use textwrap::wrap_algorithms::wrap_first_fit;
 use unicode_width::UnicodeWidthStr;
@@ -65,6 +66,14 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());
     let mut kind = SpanKind::General;
+
+    if let Some(date_end) = try_match_date_sequence(tokens, start) {
+        let date_width = tokens[start..date_end]
+            .iter()
+            .map(|token| UnicodeWidthStr::width(token.as_str()))
+            .sum();
+        return (date_end, date_width);
+    }
 
     // Forward-couple opening punctuation to the next atomic span so wrapping
     // never leaves a lone `(` at the end of a line before inline code or a link.

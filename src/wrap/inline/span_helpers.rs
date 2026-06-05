@@ -13,6 +13,11 @@ use super::predicates::{
     is_trailing_punctuation_token,
     looks_like_footnote_ref,
     looks_like_link,
+    is_ordinal_day,
+    is_month_name,
+    is_year,
+    is_numeric_day,
+    is_whitespace_token,
 };
 
 /// Marks how a grouped token span should behave during wrapping.
@@ -41,6 +46,62 @@ pub(in crate::wrap::inline) fn extend_punctuation(
     j
 }
 
+/// Returns the exclusive end of a date-like token run beginning at `start`.
+pub(in crate::wrap::inline) fn try_match_date_sequence(
+    tokens: &[String],
+    start: usize,
+) -> Option<usize> {
+    match_component_whitespace_component_whitespace_component(
+        tokens,
+        start,
+        is_ordinal_day,
+        is_month_name,
+        is_year,
+    )
+    .or_else(|| {
+        match_component_whitespace_component_whitespace_component(
+            tokens,
+            start,
+            is_numeric_day,
+            is_month_name,
+            is_year,
+        )
+    })
+    .or_else(|| {
+        match_component_whitespace_component_whitespace_component(
+            tokens,
+            start,
+            is_month_name,
+            is_numeric_day,
+            is_year,
+        )
+    })
+}
+
+fn match_component_whitespace_component_whitespace_component(
+    tokens: &[String],
+    start: usize,
+    first_matches: fn(&str) -> bool,
+    second_matches: fn(&str) -> bool,
+    third_matches: fn(&str) -> bool,
+) -> Option<usize> {
+    let first = tokens.get(start)?;
+    let first_space = tokens.get(start + 1)?;
+    let second = tokens.get(start + 2)?;
+    let second_space = tokens.get(start + 3)?;
+    let third = tokens.get(start + 4)?;
+
+    if first_matches(first)
+        && is_whitespace_token(first_space)
+        && second_matches(second)
+        && is_whitespace_token(second_space)
+        && third_matches(third)
+    {
+        Some(start + 5)
+    } else {
+        None
+    }
+}
 /// Decide whether whitespace between grouped tokens should stay attached to the
 /// current span.
 pub(in crate::wrap::inline) fn should_couple_whitespace(
