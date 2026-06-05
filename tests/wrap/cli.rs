@@ -4,9 +4,13 @@
 //! wrapping behaviour when processing Markdown content through the `mdtablefix`
 //! binary.
 
+use proptest::prelude::*;
 use rstest::rstest;
 
 use super::cli_stdin::run_cli_with_stdin;
+
+const ISSUE_329_COMBINED_FLAGS: &[&str] =
+    &["--wrap", "--renumber", "--breaks", "--ellipsis", "--fences"];
 
 #[test]
 fn test_cli_wrap_option() -> Result<(), Box<dyn std::error::Error>> {
@@ -194,6 +198,86 @@ fn test_cli_wrap_preserves_inline_code_span_with_quotes() -> Result<(), Box<dyn 
         "second inline code span must remain intact"
     );
     Ok(())
+}
+
+/// Protects issue `#329`: combined format flags must not rewrite fenced content.
+#[test]
+fn test_cli_wrap_fences_ellipsis_preserve_fenced_content() -> Result<(), Box<dyn std::error::Error>>
+{
+    let input = include_str!("../data/issue_329_wrap_fences_ellipsis_input.txt");
+    let assertion = run_cli_with_stdin(ISSUE_329_COMBINED_FLAGS, input)?;
+    let success = assertion.success();
+    let output = String::from_utf8_lossy(&success.get_output().stdout);
+    insta::with_settings!({
+        snapshot_path => "../snapshots",
+    }, {
+        insta::assert_snapshot!(
+            "issue_329_wrap_fences_ellipsis_preserve_fenced_content",
+            output
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn combined_flags_preserve_generated_fenced_bodies() {
+    let strategy = super::cli_issue_329_property::fenced_block_strategy();
+    let mut runner = super::cli_issue_329_property::fenced_block_runner();
+
+    runner
+        .run(&strategy, |block| {
+            let assertion = run_cli_with_stdin(ISSUE_329_COMBINED_FLAGS, &block.input)
+                .map_err(|err| TestCaseError::fail(err.to_string()))?;
+            let success = assertion.success();
+            let output = String::from_utf8_lossy(&success.get_output().stdout);
+            let output_lines = output.lines().collect::<Vec<_>>();
+
+            let located = super::cli_issue_329_property::locate_fenced_block(&output_lines, &block)
+                .map_err(TestCaseError::fail)?;
+            let opening_without_indent = located
+                .opening_line
+                .strip_prefix(&block.indent)
+                .ok_or_else(|| TestCaseError::fail("opening fence indentation changed"))?;
+            prop_assert!(
+                opening_without_indent.ends_with(&block.info_suffix),
+                "opening fence info string changed after combined flags:\ninput:\n{}\noutput:\n{}",
+                block.input,
+                output
+            );
+            let marker_len = opening_without_indent.len() - block.info_suffix.len();
+            let output_marker = &opening_without_indent[..marker_len];
+            let marker_char = output_marker
+                .chars()
+                .next()
+                .ok_or_else(|| TestCaseError::fail("opening fence marker missing"))?;
+            prop_assert!(
+                matches!(marker_char, '`' | '~')
+                    && marker_len >= 3
+                    && output_marker.chars().all(|ch| ch == marker_char),
+                "opening fence marker changed to an invalid delimiter:\ninput:\n{}\noutput:\n{}",
+                block.input,
+                output
+            );
+            let expected_closing = format!("{}{}", block.indent, output_marker);
+            prop_assert!(
+                located.closing_line == expected_closing,
+                "closing fence line does not match output opening marker:\ninput:\n{}\noutput:\n{}",
+                block.input,
+                output
+            );
+
+            let output_body = located.body_lines.join("\n");
+
+            prop_assert_eq!(
+                output_body,
+                block.body,
+                "fenced body changed after combined flags:\ninput:\n{}\noutput:\n{}",
+                block.input,
+                output
+            );
+            Ok(())
+        })
+        .expect("generated fenced blocks are preserved by combined flags");
 }
 
 /// Ensures `--wrap` preserves emphasised step definition guidance with inline code spans.

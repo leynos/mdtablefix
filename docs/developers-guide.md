@@ -336,6 +336,18 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
 
 - **Public API stability.** `mdtablefix::wrap::wrap_text`, `Token`, and
   `tokenize_markdown` must not change their signatures or observable behaviour.
+- **Shared fence tracking.** `tokenize_markdown()` in
+  `src/wrap/tokenize/mod.rs` uses the same `FenceTracker` implementation as
+  `wrap_text` and `src/wrap/fence.rs`, rather than a local boolean, to track
+  whether the tokenizer is inside a fenced code block. Once a structural
+  opening fence is observed, the tokenizer emits the opener, every interior
+  line, and the matching closer as `Token::Fence`, then resumes inline
+  tokenization for following prose. Every line inside an open fence preserves
+  its byte content verbatim, so post-wrap transforms such as `--ellipsis`,
+  `--renumber`, `--breaks`, and `--fences` cannot mutate fenced code block
+  bodies. This behaviour was introduced for issue `#329` in PR `#343`,
+  including nested literal fences whose marker run is shorter than the active
+  outer fence.
 - **Atomic fragments.** Inline code spans, Markdown links, and GFM footnote
   references are never split across lines; they move as a unit when they would
   overflow the target width. Opening punctuation that immediately precedes an

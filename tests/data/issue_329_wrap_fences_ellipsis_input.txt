@@ -1,0 +1,25 @@
+```sql
+-- Tenant root table
+CREATE TABLE tenants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'active'
+);
+
+-- Deterministic default tenant for migration safety and single-tenant dev mode.
+INSERT INTO tenants (id, slug, name, status)
+VALUES ('00000000-0000-0000-0000-000000000001', 'default', 'Default Tenant', 'active')
+ON CONFLICT (id) DO NOTHING;
+```
+
+```json
+// Payload example...
+{...}
+```
+
+````markdown
+```json
+{...}
+```
+````
