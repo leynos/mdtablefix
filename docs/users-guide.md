@@ -111,7 +111,19 @@ is applied only to prose paragraphs and prefixed lines.
 `[label]: URL` (with an optional inline title) are left untouched by the reflow
 pass. The definition line is preserved verbatim; when a valid standalone title
 continuation line follows (a separate line containing only the title in quotes
-or parentheses), that line is also preserved verbatim.
+or parentheses), that line is also preserved verbatim. Collapsed definitions
+that place the label on one line and an indented destination on the next line
+are also preserved, including the destination indentation:
+
+```markdown
+[users-guide]:
+  docs/users-guide.md
+```
+
+The indented destination continuation is distinct from a standalone title
+continuation. It must look like a link destination, so indented Markdown blocks
+such as lists, blockquotes, and headings are still routed through normal block
+wrapping.
 
 Two trailing spaces at the end of a line produce a hard line break in rendered
 Markdown. `mdtablefix --wrap` preserves those trailing spaces on the final
@@ -166,31 +178,39 @@ fence are outside any already-open fenced block.
 
 Before:
 
-    ````markdown
-    ```rust
-    fn main() {}
-    ```
-    ````
+`````markdown
+````markdown
+```rust
+fn main() {}
+```
+````
+`````
 
 After running `mdtablefix --fences`:
 
-    ````markdown
-    ```rust
-    fn main() {}
-    ```
-    ````
+`````markdown
+````markdown
+```rust
+fn main() {}
+```
+````
+`````
 
 Before:
 
-    ```rust
-    fn main() {}
-    ```
+````markdown
+```rust
+fn main() {}
+```
+````
 
 After running `mdtablefix --fences`:
 
-    ```rust
-    fn main() {}
-    ```
+````markdown
+```rust
+fn main() {}
+```
+````
 
 ## Library API notes
 

@@ -107,7 +107,9 @@ pub(crate) fn classify_block(
     if indent_width < 4 && FOOTNOTE_RE.is_match(line) {
         return Some(BlockKind::FootnoteDefinition);
     }
-    if indent_width < 4 && link_matcher.is_definition(line) {
+    if indent_width < 4
+        && (link_matcher.is_definition(line) || link_matcher.is_bare_label_only(line))
+    {
         return Some(BlockKind::LinkReferenceDefinition);
     }
     if indent_width < 4 && is_markdownlint_directive(line) {
@@ -153,7 +155,10 @@ mod tests {
             "[label]: https://example.com \"Optional title\"",
             Some(BlockKind::LinkReferenceDefinition)
         ),
+        case("[label]:", Some(BlockKind::LinkReferenceDefinition)),
+        case("  [label]:", Some(BlockKind::LinkReferenceDefinition)),
         case("    [label]: https://example.com", None),
+        case("    [label]:", None),
         case(
             "<!-- markdownlint-disable -->",
             Some(BlockKind::MarkdownlintDirective)
