@@ -19,6 +19,8 @@ use rstest::rstest;
 #[case("July 4, 2008")]
 #[case("25th Dec 2025")]
 #[case("Jul 4, 2008")]
+#[case("25th December 2025.")]
+#[case("July 4, 2008)")]
 fn wrap_text_keeps_date_sequence_intact(#[case] expected_date: &str) {
     let input = lines_vec![format!(
         "This paragraph has enough preceding prose to make {expected_date} a tempting wrap point."

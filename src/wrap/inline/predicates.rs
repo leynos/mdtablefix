@@ -73,9 +73,11 @@ pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
         .is_ok_and(is_day)
 }
 
-/// Returns whether `token` is a four-digit year in the range 1000 through 2999.
+/// Returns whether `token` is a year from 1000 through 2999, optionally
+/// followed by trailing prose punctuation.
 pub(in crate::wrap::inline) fn is_year(token: &str) -> bool {
     token
+        .trim_end_matches(is_trailing_punct)
         .parse::<u16>()
         .is_ok_and(|year| (1000..=2999).contains(&year))
 }
@@ -204,6 +206,7 @@ mod tests {
         is_trailing_punct,
         is_trailing_punctuation_token,
         is_whitespace_token,
+        is_year,
         looks_like_footnote_ref,
     };
 
@@ -342,5 +345,18 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(is_trailing_punctuation_token(token), expected);
+    }
+
+    #[rstest]
+    #[case("2025", true)]
+    #[case("2025.", true)]
+    #[case("2008)", true)]
+    #[case("2008).", true)]
+    #[case("999", false)]
+    #[case("3000", false)]
+    #[case("2025th.", false)]
+    #[case(".", false)]
+    fn is_year_accepts_sentence_trailing_punctuation(#[case] token: &str, #[case] expected: bool) {
+        assert_eq!(is_year(token), expected);
     }
 }

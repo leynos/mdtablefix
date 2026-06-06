@@ -1,5 +1,5 @@
-1. People following @[vee.cool](http://vee.cool) — Bluesky, accessed on July
-   20, 2025, <https://web-cdn.bsky.app/profile/vee.cool/followers>
+1. People following @[vee.cool](http://vee.cool) — Bluesky, accessed on
+   July 20, 2025, <https://web-cdn.bsky.app/profile/vee.cool/followers>
 
 2. Canop/termimad: A library to display rich (Markdown) snippets and texts in a
    rust terminal application - GitHub, accessed on July 20, 2025,
@@ -47,8 +47,9 @@
 15. Testing - Command Line Applications in Rust, accessed on July 20, 2025,
     <https://rust-cli.github.io/book/tutorial/testing.html>
 
-16. Test Organization - The Rust Programming Language, accessed on July 20,
-    2025, <https://doc.rust-lang.org/book/ch11-03-test-organization.html>
+16. Test Organization - The Rust Programming Language, accessed on
+    July 20, 2025,
+    <https://doc.rust-lang.org/book/ch11-03-test-organization.html>
 
 17. insta - [crates.io](http://crates.io): Rust Package Registry, accessed on
     July 20, 2025, <https://crates.io/crates/insta>
@@ -81,8 +82,8 @@
 25. Snapshot Testing - Rust Project Primer, accessed on July 20, 2025,
     <https://www.rustprojectprimer.com/testing/snapshot.html>
 
-26. Snapshot testing - Advanced Rust testing - Rust Exercises, accessed on July
-    20, 2025,
+26. Snapshot testing - Advanced Rust testing - Rust Exercises, accessed on
+    July 20, 2025,
     <https://rust-exercises.com/advanced-testing/02_snapshots/00_intro.html>
 
 27. insta - Rust, accessed on July 20, 2025,
@@ -91,8 +92,8 @@
 28. tempfile - Rust - [Docs.rs](http://Docs.rs), accessed on July 20, 2025,
     <https://docs.rs/tempfile/latest/tempfile/>
 
-29. Complete Guide To Testing Code In Rust | Zero To Mastery, accessed on July
-    20, 2025,
+29. Complete Guide To Testing Code In Rust | Zero To Mastery, accessed on
+    July 20, 2025,
     <https://zerotomastery.io/blog/complete-guide-to-testing-code-in-rust/>
 
 30. Ultimate Guide to Testing and Debugging Rust Code | 2024 - Rapid
