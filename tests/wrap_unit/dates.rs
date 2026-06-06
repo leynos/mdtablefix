@@ -19,8 +19,13 @@ use rstest::rstest;
 #[case("July 4, 2008")]
 #[case("25th Dec 2025")]
 #[case("Jul 4, 2008")]
+#[case("july 4, 2008")]
+#[case("JUL 4, 2008")]
+#[case("July 4 2008")]
+#[case("March 19 2018")]
 #[case("25th December 2025.")]
 #[case("July 4, 2008)")]
+#[case("July 4, 2008,")]
 fn wrap_text_keeps_date_sequence_intact(#[case] expected_date: &str) {
     let input = lines_vec![format!(
         "This paragraph has enough preceding prose to make {expected_date} a tempting wrap point."
@@ -35,6 +40,7 @@ fn wrap_text_keeps_date_sequence_intact(#[case] expected_date: &str) {
 
 #[test]
 fn wrap_text_handles_date_wider_than_width() {
+    // Baseline: date in the middle of a sentence.
     let input = lines_vec!["Remember 25th December 2025 when wrapping."];
     // Width 10 is intentionally narrower than `25th December 2025`, so this
     // exercises the long-atomic-token fallback path rather than normal fitting.
@@ -46,6 +52,29 @@ fn wrap_text_handles_date_wider_than_width() {
             .iter()
             .any(|line| line.contains("25th December 2025")),
         "over-width date should fall back to long-token emission: {output:?}"
+    );
+
+    let input_with_following_punct = lines_vec!["On 25th December 2025, we met."];
+    let output_with_following_punct = wrap_text(&input_with_following_punct, 10);
+
+    assert!(!output_with_following_punct.is_empty());
+    assert!(
+        output_with_following_punct
+            .iter()
+            .any(|line| line.contains("25th December 2025")),
+        "over-width date with following punctuation should stay atomic: \
+         {output_with_following_punct:?}"
+    );
+
+    let input_at_line_start = lines_vec!["25th December 2025. We met again."];
+    let output_at_line_start = wrap_text(&input_at_line_start, 10);
+
+    assert!(!output_at_line_start.is_empty());
+    assert!(
+        output_at_line_start
+            .iter()
+            .any(|line| line.contains("25th December 2025")),
+        "over-width date at line start should stay atomic: {output_at_line_start:?}"
     );
 }
 
