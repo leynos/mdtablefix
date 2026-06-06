@@ -146,6 +146,20 @@ fn wrap_preserving_code_keeps_opening_bracket_with_inline_code(
     }
 }
 
+fn citation_link_starts(expected_citation: &str) -> Vec<String> {
+    let mut markers = Vec::new();
+    let mut remaining = expected_citation;
+    while let Some(open_index) = remaining.find('[') {
+        let candidate = &remaining[open_index..];
+        let Some(close_index) = candidate.find("](") else {
+            break;
+        };
+        markers.push(candidate[..close_index + 2].to_string());
+        remaining = &candidate[close_index + 2..];
+    }
+    markers
+}
+
 #[rstest]
 #[case(
     "The formatter keeps pattern([1](https://example.com/ref)) attached while wrapping.",
@@ -166,6 +180,11 @@ fn wrap_preserving_code_keeps_inline_citation_links_attached(
     #[case] expected_citation: &str,
 ) {
     let lines = wrap_preserving_code(input, width);
+    let citation_link_starts = citation_link_starts(expected_citation);
+    assert!(
+        !citation_link_starts.is_empty(),
+        "expected citation fixture must contain at least one inline link",
+    );
     assert!(
         lines.iter().any(|line| line.contains(expected_citation)),
         "expected citation to stay attached in {lines:?}",
@@ -175,11 +194,12 @@ fn wrap_preserving_code_keeps_inline_citation_links_attached(
         "opening parenthesis must not be stranded at line end: {lines:?}",
     );
     assert!(
-        lines
-            .iter()
-            .all(|line| !line.trim_start().starts_with("[1](")
-                && !line.trim_start().starts_with("[6](")
-                && !line.trim_start().starts_with("[7](")),
+        lines.iter().all(|line| {
+            let trimmed = line.trim_start();
+            citation_link_starts
+                .iter()
+                .all(|marker| !trimmed.starts_with(marker))
+        }),
         "citation link must not start a continuation line: {lines:?}",
     );
     assert!(

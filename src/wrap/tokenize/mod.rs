@@ -124,11 +124,7 @@ fn scan_trailing_punctuation_end(text: &str, mut index: usize) -> usize {
         let Some(current) = text[index..].chars().next() else {
             break;
         };
-        if current == '('
-            && text
-                .get(index + 1..)
-                .is_some_and(|tail| tail.starts_with('['))
-        {
+        if starts_inline_citation(text, index) {
             break;
         }
         if !is_trailing_punctuation(current) {
@@ -137,6 +133,10 @@ fn scan_trailing_punctuation_end(text: &str, mut index: usize) -> usize {
         index += current.len_utf8();
     }
     index
+}
+
+fn starts_inline_citation(text: &str, index: usize) -> bool {
+    text.get(index..).is_some_and(|tail| tail.starts_with("(["))
 }
 
 fn append_escaped_backtick(tokens: &mut Vec<String>) {
@@ -148,7 +148,7 @@ fn append_escaped_backtick(tokens: &mut Vec<String>) {
 }
 
 fn scan_plain_text_end(text: &str, bytes: &[u8], mut index: usize) -> usize {
-    if text[index..].starts_with("([") {
+    if starts_inline_citation(text, index) && !has_odd_backslash_escape_bytes(bytes, index) {
         return index + 1;
     }
 
@@ -173,15 +173,20 @@ fn scan_plain_text_end(text: &str, bytes: &[u8], mut index: usize) -> usize {
 fn should_stop_plain_text(text: &str, bytes: &[u8], index: usize, current: (char, bool)) -> bool {
     let (ch, is_escaped) = current;
     if ch == '[' {
-        return !is_escaped && !bracket_follows_escaped_bang(bytes, index);
+        return !is_escaped
+            && !bracket_follows_escaped_bang(bytes, index)
+            && !bracket_follows_escaped_open_paren(bytes, index);
     }
     if ch == '(' {
-        return !is_escaped
-            && text
-                .get(index + 1..)
-                .is_some_and(|tail| tail.starts_with('['));
+        return !is_escaped && starts_inline_citation(text, index);
     }
     looks_like_image_start(text, index, ch) && !is_escaped
+}
+
+fn bracket_follows_escaped_open_paren(bytes: &[u8], index: usize) -> bool {
+    index.checked_sub(1).is_some_and(|previous| {
+        bytes[previous] == b'(' && has_odd_backslash_escape_bytes(bytes, previous)
+    })
 }
 
 fn is_closed_inline_code_span(token: &str) -> bool {

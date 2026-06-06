@@ -56,6 +56,22 @@ fn determine_token_span_groups_citation_openers(
 }
 
 #[rstest]
+#[case("word [link](url)", 0, "word")]
+#[case("word([link](url))", 2, "[link](url))")]
+#[case("word([link](url))", 3, ")")]
+fn determine_token_span_does_not_overcouple_citation_tokens(
+    #[case] input: &str,
+    #[case] start: usize,
+    #[case] expected_group: &str,
+) {
+    let tokens = segment_inline(input);
+    let (end, width) = determine_token_span(&tokens, start);
+    let grouped = tokens[start..end].join("");
+    assert_eq!(grouped, expected_group);
+    assert_eq!(width, unicode_width::UnicodeWidthStr::width(expected_group));
+}
+
+#[rstest]
 #[case("word[link](url)", &["word", "[link](url)"])]
 #[case(
     "word[link](url)[another](url2)",
@@ -75,6 +91,8 @@ fn segment_inline_splits_before_embedded_links(#[case] input: &str, #[case] expe
 #[case(r"word\[link](url)")]
 #[case(r"\![img](url)")]
 #[case(r"word\![img](url)")]
+#[case(r"\([link](url))")]
+#[case(r"word\([link](url))")]
 fn segment_inline_preserves_escaped_link_literals(#[case] input: &str) {
     assert_eq!(segment_inline(input), vec![input.to_string()]);
 }
