@@ -202,7 +202,10 @@ mod tests {
     use super::{
         ends_with_hyphen_prefix,
         is_inline_code_token,
+        is_month_name,
+        is_numeric_day,
         is_opening_punct,
+        is_ordinal_day,
         is_trailing_punct,
         is_trailing_punctuation_token,
         is_whitespace_token,
@@ -278,6 +281,170 @@ mod tests {
     #[test]
     fn looks_like_footnote_ref_rejects_empty_label() {
         assert!(!looks_like_footnote_ref("[^]"));
+    }
+
+    mod date_predicate_props {
+        //! Property tests for date predicate helpers.
+
+        use proptest::prelude::*;
+
+        use super::{
+            arbitrary_short_string_strategy,
+            is_month_name,
+            is_numeric_day,
+            is_ordinal_day,
+            is_year,
+        };
+
+        const MONTH_NAMES: [&str; 23] = [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+        ];
+
+        fn month_name_strategy() -> BoxedStrategy<String> {
+            prop::sample::select(&MONTH_NAMES)
+                .prop_flat_map(|month| {
+                    prop::collection::vec(any::<bool>(), month.len()).prop_map(move |upper| {
+                        month
+                            .chars()
+                            .zip(upper)
+                            .map(|(ch, is_upper)| {
+                                if is_upper {
+                                    ch.to_ascii_uppercase()
+                                } else {
+                                    ch.to_ascii_lowercase()
+                                }
+                            })
+                            .collect()
+                    })
+                })
+                .boxed()
+        }
+
+        fn ordinal_suffix_strategy() -> BoxedStrategy<&'static str> {
+            prop_oneof![Just("st"), Just("nd"), Just("rd"), Just("th")].boxed()
+        }
+
+        fn ordinal_day_strategy() -> BoxedStrategy<String> {
+            (1u8..=31, ordinal_suffix_strategy())
+                .prop_map(|(day, suffix)| format!("{day}{suffix}"))
+                .boxed()
+        }
+
+        fn ordinal_day_out_of_range_strategy() -> BoxedStrategy<String> {
+            (
+                prop_oneof![Just(0u8), (32u8..=u8::MAX)],
+                ordinal_suffix_strategy(),
+            )
+                .prop_map(|(day, suffix)| format!("{day}{suffix}"))
+                .boxed()
+        }
+
+        fn numeric_day_strategy() -> BoxedStrategy<String> {
+            (1u8..=31, any::<bool>())
+                .prop_map(|(day, append_comma)| {
+                    if append_comma {
+                        format!("{day},")
+                    } else {
+                        day.to_string()
+                    }
+                })
+                .boxed()
+        }
+
+        fn numeric_day_out_of_range_strategy() -> BoxedStrategy<String> {
+            (prop_oneof![Just(0u8), (32u8..=u8::MAX)], any::<bool>())
+                .prop_map(|(day, append_comma)| {
+                    if append_comma {
+                        format!("{day},")
+                    } else {
+                        day.to_string()
+                    }
+                })
+                .boxed()
+        }
+
+        fn year_strategy() -> BoxedStrategy<String> {
+            (1000u16..=2999).prop_map(|year| year.to_string()).boxed()
+        }
+
+        fn year_out_of_range_strategy() -> BoxedStrategy<String> {
+            prop_oneof![(0u16..=999u16), (3000u16..=u16::MAX)]
+                .prop_map(|year| year.to_string())
+                .boxed()
+        }
+
+        proptest! {
+            #[test]
+            fn prop_is_month_name_accepts_canonical_names_case_insensitively(
+                token in month_name_strategy(),
+            ) {
+                prop_assert!(is_month_name(&token));
+            }
+
+            #[test]
+            fn prop_is_month_name_rejects_arbitrary_strings(
+                token in arbitrary_short_string_strategy(),
+            ) {
+                prop_assume!(!MONTH_NAMES.iter().any(|month| token.eq_ignore_ascii_case(month)));
+                prop_assert!(!is_month_name(&token));
+            }
+
+            #[test]
+            fn prop_is_ordinal_day_accepts_valid_range(token in ordinal_day_strategy()) {
+                prop_assert!(is_ordinal_day(&token));
+            }
+
+            #[test]
+            fn prop_is_ordinal_day_rejects_out_of_range(
+                token in ordinal_day_out_of_range_strategy(),
+            ) {
+                prop_assert!(!is_ordinal_day(&token));
+            }
+
+            #[test]
+            fn prop_is_numeric_day_accepts_valid_range(token in numeric_day_strategy()) {
+                prop_assert!(is_numeric_day(&token));
+            }
+
+            #[test]
+            fn prop_is_numeric_day_rejects_out_of_range(
+                token in numeric_day_out_of_range_strategy(),
+            ) {
+                prop_assert!(!is_numeric_day(&token));
+            }
+
+            #[test]
+            fn prop_is_year_accepts_four_digit_range(token in year_strategy()) {
+                prop_assert!(is_year(&token));
+            }
+
+            #[test]
+            fn prop_is_year_rejects_out_of_range(token in year_out_of_range_strategy()) {
+                prop_assert!(!is_year(&token));
+            }
+        }
     }
 
     mod tracing_tests {

@@ -13,6 +13,8 @@ mod common;
 mod code_spans;
 #[path = "wrap_unit/dates.rs"]
 mod dates;
+#[path = "wrap_unit/dates_prop.rs"]
+mod dates_prop;
 #[path = "wrap_unit/footnotes.rs"]
 mod footnotes;
 #[path = "wrap_unit/prefixed.rs"]
