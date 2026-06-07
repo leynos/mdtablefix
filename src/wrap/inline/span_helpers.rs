@@ -57,53 +57,34 @@ pub(in crate::wrap::inline) fn try_match_date_sequence(
 }
 
 fn match_ordinal_day_month_year(tokens: &[String], start: usize) -> Option<usize> {
-    let day = tokens.get(start)?;
-    let space1 = tokens.get(start + 1)?;
-    let month = tokens.get(start + 2)?;
-    let space2 = tokens.get(start + 3)?;
-    let year = tokens.get(start + 4)?;
-
-    if is_ordinal_day(day)
-        && is_whitespace_token(space1)
-        && is_month_name(month)
-        && is_whitespace_token(space2)
-        && is_year(year)
-    {
-        Some(start + 5)
-    } else {
-        None
-    }
+    match_date_pattern(tokens, start, 0, 2, is_ordinal_day, is_month_name)
 }
 
 fn match_numeric_day_month_year(tokens: &[String], start: usize) -> Option<usize> {
-    let day = tokens.get(start)?;
-    let space1 = tokens.get(start + 1)?;
-    let month = tokens.get(start + 2)?;
-    let space2 = tokens.get(start + 3)?;
-    let year = tokens.get(start + 4)?;
-
-    if is_numeric_day(day)
-        && is_whitespace_token(space1)
-        && is_month_name(month)
-        && is_whitespace_token(space2)
-        && is_year(year)
-    {
-        Some(start + 5)
-    } else {
-        None
-    }
+    match_date_pattern(tokens, start, 0, 2, is_numeric_day, is_month_name)
 }
 
 fn match_month_numeric_day_year(tokens: &[String], start: usize) -> Option<usize> {
-    let month = tokens.get(start)?;
+    match_date_pattern(tokens, start, 2, 0, is_numeric_day, is_month_name)
+}
+
+fn match_date_pattern(
+    tokens: &[String],
+    start: usize,
+    day_offset: usize,
+    month_offset: usize,
+    is_day: fn(&str) -> bool,
+    is_month: fn(&str) -> bool,
+) -> Option<usize> {
+    let day = tokens.get(start + day_offset)?;
+    let month = tokens.get(start + month_offset)?;
     let space1 = tokens.get(start + 1)?;
-    let day = tokens.get(start + 2)?;
     let space2 = tokens.get(start + 3)?;
     let year = tokens.get(start + 4)?;
 
-    if is_month_name(month)
+    if is_day(day)
         && is_whitespace_token(space1)
-        && is_numeric_day(day)
+        && is_month(month)
         && is_whitespace_token(space2)
         && is_year(year)
     {
@@ -223,32 +204,7 @@ mod span_helper_props {
     use proptest::prelude::*;
 
     use super::try_match_date_sequence;
-
-    const MONTH_NAMES: [&str; 23] = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-    ];
+    use crate::wrap::inline::predicates::MONTH_NAMES;
 
     fn month_name_strategy() -> BoxedStrategy<String> {
         prop::sample::select(&MONTH_NAMES)

@@ -8,37 +8,7 @@
 
 use proptest::prelude::*;
 
-use super::{is_month_name, is_numeric_day, is_ordinal_day, is_year};
-
-/// Accepted full and short month names used to check `is_month_name`.
-///
-/// `MONTH_NAMES` has 23 entries: 12 full names plus 11 short forms, because
-/// `May` is identical in full and short form and is listed once.
-const MONTH_NAMES: [&str; 23] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-];
+use super::{MONTH_NAMES, is_month_name, is_numeric_day, is_ordinal_day, is_year};
 
 /// Generates arbitrary 0 to 24 character strings for negative predicate tests.
 ///
@@ -51,7 +21,7 @@ fn arbitrary_short_string_strategy() -> BoxedStrategy<String> {
         .boxed()
 }
 
-/// Generates accepted month names with random ASCII character casing.
+/// Generates accepted `MONTH_NAMES` values with random ASCII character casing.
 ///
 /// This exercises the case-insensitive `is_month_name` contract. Example: may
 /// produce `"jAn"` or `"JAN"`.

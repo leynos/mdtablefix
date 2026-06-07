@@ -3,86 +3,7 @@
 use mdtablefix::wrap::wrap_text;
 use proptest::prelude::*;
 
-const MONTH_NAMES: [&str; 23] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-];
-
-fn month_name_strategy() -> BoxedStrategy<String> {
-    prop::sample::select(&MONTH_NAMES)
-        .prop_map(str::to_string)
-        .boxed()
-}
-
-fn ordinal_day_strategy() -> BoxedStrategy<String> {
-    (
-        1u8..=31,
-        prop_oneof![Just("st"), Just("nd"), Just("rd"), Just("th")],
-    )
-        .prop_map(|(day, suffix)| format!("{day}{suffix}"))
-        .boxed()
-}
-
-fn numeric_day_strategy() -> BoxedStrategy<String> {
-    (1u8..=31, any::<bool>())
-        .prop_map(|(day, append_comma)| {
-            if append_comma {
-                format!("{day},")
-            } else {
-                day.to_string()
-            }
-        })
-        .boxed()
-}
-
-fn year_strategy() -> BoxedStrategy<String> {
-    (1000u16..=2999).prop_map(|year| year.to_string()).boxed()
-}
-
-fn date_sequence_tokens_strategy() -> BoxedStrategy<Vec<String>> {
-    prop_oneof![
-        (
-            ordinal_day_strategy(),
-            month_name_strategy(),
-            year_strategy()
-        )
-            .prop_map(|(day, month, year)| vec![day, " ".into(), month, " ".into(), year]),
-        (
-            numeric_day_strategy(),
-            month_name_strategy(),
-            year_strategy()
-        )
-            .prop_map(|(day, month, year)| vec![day, " ".into(), month, " ".into(), year]),
-        (
-            month_name_strategy(),
-            numeric_day_strategy(),
-            year_strategy()
-        )
-            .prop_map(|(month, day, year)| vec![month, " ".into(), day, " ".into(), year]),
-    ]
-    .boxed()
-}
+use crate::date_strategies::{date_sequence_tokens_strategy, month_name_strategy, year_strategy};
 
 fn prose_prefix_strategy() -> BoxedStrategy<String> {
     prop::collection::vec(
@@ -160,5 +81,21 @@ proptest! {
         let narrower = wrap_text(std::slice::from_ref(&input), width).len();
         let wider = wrap_text(std::slice::from_ref(&input), width + 1).len();
         prop_assert!(wider <= narrower);
+    }
+
+    #[test]
+    fn prop_partial_month_year_not_grouped(
+        (month, year) in (month_name_strategy(), year_strategy()),
+    ) {
+        let input = format!("Plan around {month} {year} carefully.");
+        let target = format!("{month} {year}");
+        let Some(year_start) = input.find(&year) else {
+            prop_assert!(false, "generated year must appear in the input");
+            unreachable!("prop_assert! returns before this point");
+        };
+        let width = input[..year_start].chars().count();
+        let output = wrap_text(std::slice::from_ref(&input), width);
+        prop_assert!(output.iter().all(|line| !line.contains(&target)));
+        prop_assert_eq!(output.join(" "), input);
     }
 }
