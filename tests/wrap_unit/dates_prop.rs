@@ -1,10 +1,9 @@
 //! Property tests for date-like sequence atomicity during wrapping.
 
-use mdtablefix::{
-    date_strategies::{date_sequence_tokens_strategy, month_name_strategy, year_strategy},
-    wrap::wrap_text,
-};
+use mdtablefix::wrap::wrap_text;
 use proptest::prelude::*;
+
+use crate::date_strategies::{date_sequence_tokens_strategy, month_name_strategy, year_strategy};
 
 fn prose_prefix_strategy() -> BoxedStrategy<String> {
     prop::collection::vec(

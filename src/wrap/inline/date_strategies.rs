@@ -8,7 +8,7 @@ use super::predicates::MONTH_NAMES;
 ///
 /// This exercises case-insensitive matching while keeping generated names tied
 /// to the production month-name source. Example: may produce `"jAn"`.
-pub fn month_name_strategy() -> BoxedStrategy<String> {
+pub(crate) fn month_name_strategy() -> BoxedStrategy<String> {
     prop::sample::select(&MONTH_NAMES)
         .prop_flat_map(|month| {
             prop::collection::vec(any::<bool>(), month.len()).prop_map(move |upper| {
@@ -32,7 +32,7 @@ pub fn month_name_strategy() -> BoxedStrategy<String> {
 ///
 /// The suffix set is intentionally syntactic, not calendar-aware. Example:
 /// may produce `"st"`.
-pub fn ordinal_suffix_strategy() -> BoxedStrategy<&'static str> {
+pub(crate) fn ordinal_suffix_strategy() -> BoxedStrategy<&'static str> {
     prop_oneof![Just("st"), Just("nd"), Just("rd"), Just("th")].boxed()
 }
 
@@ -40,13 +40,15 @@ pub fn ordinal_suffix_strategy() -> BoxedStrategy<&'static str> {
 ///
 /// The suffix is varied independently of the number to match current predicate
 /// behaviour. Example: may produce `"22st"`.
-pub fn ordinal_day_strategy() -> BoxedStrategy<String> { ordinal_day_with_range(1u8..=31) }
+pub(crate) fn ordinal_day_strategy() -> BoxedStrategy<String> { ordinal_day_with_range(1u8..=31) }
 
 /// Generates ordinal day tokens for the supplied day range.
 ///
 /// This supports valid and invalid predicate properties without duplicating
 /// suffix handling. Example: with `1u8..=1`, may produce `"1st"`.
-pub fn ordinal_day_with_range(range: impl Strategy<Value = u8> + 'static) -> BoxedStrategy<String> {
+pub(crate) fn ordinal_day_with_range(
+    range: impl Strategy<Value = u8> + 'static,
+) -> BoxedStrategy<String> {
     (range, ordinal_suffix_strategy())
         .prop_map(|(day, suffix)| format!("{day}{suffix}"))
         .boxed()
@@ -56,13 +58,15 @@ pub fn ordinal_day_with_range(range: impl Strategy<Value = u8> + 'static) -> Box
 ///
 /// The optional comma covers prose forms such as `4,`. Example: may produce
 /// `"19"` or `"19,"`.
-pub fn numeric_day_strategy() -> BoxedStrategy<String> { numeric_day_with_range(1u8..=31) }
+pub(crate) fn numeric_day_strategy() -> BoxedStrategy<String> { numeric_day_with_range(1u8..=31) }
 
 /// Generates numeric day tokens for the supplied day range.
 ///
 /// This supports valid and invalid predicate properties without duplicating
 /// comma handling. Example: with `4u8..=4`, may produce `"4,"`.
-pub fn numeric_day_with_range(range: impl Strategy<Value = u8> + 'static) -> BoxedStrategy<String> {
+pub(crate) fn numeric_day_with_range(
+    range: impl Strategy<Value = u8> + 'static,
+) -> BoxedStrategy<String> {
     (range, any::<bool>())
         .prop_map(|(day, append_comma)| {
             if append_comma {
@@ -78,7 +82,7 @@ pub fn numeric_day_with_range(range: impl Strategy<Value = u8> + 'static) -> Box
 ///
 /// This covers every accepted four-digit year value. Example: may produce
 /// `"2025"`.
-pub fn year_strategy() -> BoxedStrategy<String> {
+pub(crate) fn year_strategy() -> BoxedStrategy<String> {
     (1000u16..=2999).prop_map(|year| year.to_string()).boxed()
 }
 
@@ -88,7 +92,7 @@ pub fn year_strategy() -> BoxedStrategy<String> {
 /// variants. Examples include `["1st", " ", "January", " ", "2024"]`,
 /// `["1", " ", "January", " ", "2024"]`, and
 /// `["January", " ", "1", " ", "2024"]`.
-pub fn date_sequence_tokens_strategy() -> BoxedStrategy<Vec<String>> {
+pub(crate) fn date_sequence_tokens_strategy() -> BoxedStrategy<Vec<String>> {
     prop_oneof![
         (
             ordinal_day_strategy(),
