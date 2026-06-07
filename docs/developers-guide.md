@@ -224,7 +224,7 @@ The wrapping pipeline for `--wrap` is:
    to the next inline code span or Markdown link so wrapping never leaves a
    lone opener or prefix at the end of a line.
    `try_couple_inline_link_after_opener` applies the same rule to
-   parenthesised inline citation links such as `([1](url))`, grouping the
+   parenthesized inline citation links such as `([1](url))`, grouping the
    opener and link as one `SpanKind::Link` so adjacent citations like
    `([1](url))([2](url2))` do not split at the boundary. Trailing punctuation
    after those atomic spans is grouped in the same pass, and GFM footnote

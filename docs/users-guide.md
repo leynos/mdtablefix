@@ -39,7 +39,7 @@ footnote references (`[^label]`) are treated as unbreakable units. A span is
 never split across lines; it moves as a whole to the next line when it would
 otherwise exceed the target width.
 
-Parenthesised inline citations such as `pattern([1](url))` are also treated as
+Parenthesized inline citations such as `pattern([1](url))` are also treated as
 unbreakable units, keeping the citation link and its surrounding parentheses
 together during wrapping.
 
