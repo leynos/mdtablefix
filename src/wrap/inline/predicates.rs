@@ -25,23 +25,13 @@ pub(in crate::wrap::inline) fn is_trailing_punctuation_token(token: &str) -> boo
     !token.is_empty() && token.chars().all(is_trailing_punct)
 }
 
-/// Full and abbreviated English month names recognised in prose dates.
+/// Full and abbreviated English month names recognized in prose dates.
 ///
 /// There are 23 entries: twelve full names plus eleven abbreviations, because
-/// `May` is identical in both forms and is listed once.
+/// `May` is identical in both forms and is listed once. The entries are grouped
+/// by byte length so `is_month_name` can avoid scanning impossible candidates.
 pub(in crate::wrap::inline) const MONTH_NAMES: [&str; 23] = [
-    "January",
-    "February",
-    "March",
-    "April",
     "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
     "Jan",
     "Feb",
     "Mar",
@@ -53,13 +43,37 @@ pub(in crate::wrap::inline) const MONTH_NAMES: [&str; 23] = [
     "Oct",
     "Nov",
     "Dec",
+    "June",
+    "July",
+    "March",
+    "April",
+    "August",
+    "January",
+    "October",
+    "February",
+    "November",
+    "December",
+    "September",
 ];
 
 /// Returns whether `token` is a full or abbreviated English month name.
 pub(in crate::wrap::inline) fn is_month_name(token: &str) -> bool {
-    MONTH_NAMES
+    month_names_for_len(token.len())
         .iter()
         .any(|month| token.eq_ignore_ascii_case(month))
+}
+
+fn month_names_for_len(len: usize) -> &'static [&'static str] {
+    match len {
+        3 => &MONTH_NAMES[..12],
+        4 => &MONTH_NAMES[12..14],
+        5 => &MONTH_NAMES[14..16],
+        6 => &MONTH_NAMES[16..17],
+        7 => &MONTH_NAMES[17..19],
+        8 => &MONTH_NAMES[19..22],
+        9 => &MONTH_NAMES[22..],
+        _ => &[],
+    }
 }
 
 /// Returns whether `token` is an ordinal day number from 1st through 31st.
