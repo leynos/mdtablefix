@@ -82,6 +82,71 @@ fn test_cli_wrap_reflows_markdown(
     Ok(())
 }
 
+#[rstest]
+#[case::single(
+    concat!(
+        "This paragraph keeps pattern([1](https://github.com/leynos/mdtablefix/pull/url)) ",
+        "attached while the command-line wrapper reflows surrounding prose."
+    ),
+    "pattern([1](https://github.com/leynos/mdtablefix/pull/url))",
+)]
+#[case::adjacent(
+    concat!(
+        "This paragraph keeps pattern([1](https://github.com/leynos/mdtablefix/pull/url))",
+        "([2](https://github.com/leynos/mdtablefix/issues/325)) attached while wrapping."
+    ),
+    concat!(
+        "pattern([1](https://github.com/leynos/mdtablefix/pull/url))",
+        "([2](https://github.com/leynos/mdtablefix/issues/325))"
+    ),
+)]
+fn test_cli_wrap_keeps_inline_citation_links_attached(
+    #[case] paragraph: &str,
+    #[case] expected_citation: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let assertion = run_cli_with_stdin(&["--wrap"], &format!("{paragraph}\n"))?;
+    let success = assertion.success();
+    let output = String::from_utf8_lossy(&success.get_output().stdout);
+    let lines = output.lines().collect::<Vec<_>>();
+    let link_starts = citation_link_starts(expected_citation);
+
+    assert!(
+        output.contains(expected_citation),
+        "expected citation to stay attached in CLI output: {output}",
+    );
+    assert!(
+        lines.iter().all(|line| !line.ends_with('(')),
+        "opening citation punctuation must not be stranded: {lines:?}",
+    );
+    assert!(
+        lines.iter().all(|line| {
+            let trimmed = line.trim_start();
+            link_starts
+                .iter()
+                .all(|marker| !trimmed.starts_with(marker))
+        }),
+        "citation link must not start a continuation line: {lines:?}",
+    );
+    assert!(
+        lines.iter().all(|line| line.trim() != ")("),
+        "adjacent citation punctuation must not be orphaned: {lines:?}",
+    );
+    Ok(())
+}
+
+fn citation_link_starts(expected_citation: &str) -> Vec<String> {
+    let mut markers = Vec::new();
+    let mut remaining = expected_citation;
+    while let Some(start) = remaining.find('[') {
+        let after_start = &remaining[start..];
+        if let Some(end) = after_start.find("](") {
+            markers.push(after_start[..end + 2].to_owned());
+        }
+        remaining = &after_start[1..];
+    }
+    markers
+}
+
 /// Ensures `--wrap` preserves an explicit language specifier on fences.
 #[test]
 fn test_cli_wrap_preserves_language() -> Result<(), Box<dyn std::error::Error>> {
