@@ -370,3 +370,5 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 
     lines
 }
+
+mod date_strategies;

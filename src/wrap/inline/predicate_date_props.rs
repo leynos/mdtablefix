@@ -8,7 +8,21 @@
 
 use proptest::prelude::*;
 
-use super::{MONTH_NAMES, is_month_name, is_numeric_day, is_ordinal_day, is_year};
+use super::{
+    super::date_strategies::{
+        month_name_strategy,
+        numeric_day_strategy,
+        numeric_day_with_range,
+        ordinal_day_strategy,
+        ordinal_day_with_range,
+        year_strategy,
+    },
+    MONTH_NAMES,
+    is_month_name,
+    is_numeric_day,
+    is_ordinal_day,
+    is_year,
+};
 
 /// Generates arbitrary 0 to 24 character strings for negative predicate tests.
 ///
@@ -21,69 +35,12 @@ fn arbitrary_short_string_strategy() -> BoxedStrategy<String> {
         .boxed()
 }
 
-/// Generates accepted `MONTH_NAMES` values with random ASCII character casing.
-///
-/// This exercises the case-insensitive `is_month_name` contract. Example: may
-/// produce `"jAn"` or `"JAN"`.
-fn month_name_strategy() -> BoxedStrategy<String> {
-    prop::sample::select(&MONTH_NAMES)
-        .prop_flat_map(|month| {
-            prop::collection::vec(any::<bool>(), month.len()).prop_map(move |upper| {
-                month
-                    .chars()
-                    .zip(upper)
-                    .map(|(ch, is_upper)| {
-                        if is_upper {
-                            ch.to_ascii_uppercase()
-                        } else {
-                            ch.to_ascii_lowercase()
-                        }
-                    })
-                    .collect()
-            })
-        })
-        .boxed()
-}
-
-/// Generates the ordinal suffixes accepted by `is_ordinal_day`.
-///
-/// The suffix set is intentionally syntactic, not calendar-aware. Example:
-/// may produce `"st"`.
-fn ordinal_suffix_strategy() -> BoxedStrategy<&'static str> {
-    prop_oneof![Just("st"), Just("nd"), Just("rd"), Just("th")].boxed()
-}
-
-/// Generates ordinal day tokens in the accepted 1 through 31 range.
-///
-/// The suffix is varied independently of the number to match current predicate
-/// behaviour. Example: may produce `"22st"`.
-fn ordinal_day_strategy() -> BoxedStrategy<String> {
-    (1u8..=31, ordinal_suffix_strategy())
-        .prop_map(|(day, suffix)| format!("{day}{suffix}"))
-        .boxed()
-}
-
 /// Generates ordinal day tokens outside the accepted range.
 ///
 /// Includes zero and every `u8` value above 31 to exercise boundary rejection.
 /// Example: may produce `"32nd"`.
 fn ordinal_day_out_of_range_strategy() -> BoxedStrategy<String> {
-    (
-        prop_oneof![Just(0u8), (32u8..=u8::MAX)],
-        ordinal_suffix_strategy(),
-    )
-        .prop_map(|(day, suffix)| format!("{day}{suffix}"))
-        .boxed()
-}
-
-/// Generates numeric day tokens in the accepted 1 through 31 range.
-///
-/// The optional comma covers prose forms such as `4,`. Example: may produce
-/// `"19"` or `"19,"`.
-fn numeric_day_strategy() -> BoxedStrategy<String> {
-    (1u8..=31, any::<bool>())
-        .prop_map(|(day, append_comma)| format_day_with_optional_comma(day, append_comma))
-        .boxed()
+    ordinal_day_with_range(prop_oneof![Just(0u8), (32u8..=u8::MAX)])
 }
 
 /// Generates numeric day tokens outside the accepted range.
@@ -91,29 +48,7 @@ fn numeric_day_strategy() -> BoxedStrategy<String> {
 /// Includes zero and every `u8` value above 31, with and without a trailing
 /// comma. Example: may produce `"0,"`.
 fn numeric_day_out_of_range_strategy() -> BoxedStrategy<String> {
-    (prop_oneof![Just(0u8), (32u8..=u8::MAX)], any::<bool>())
-        .prop_map(|(day, append_comma)| format_day_with_optional_comma(day, append_comma))
-        .boxed()
-}
-
-/// Formats a day number with the optional comma used by numeric-day strategies.
-///
-/// This keeps valid and invalid numeric-day generation consistent. Example:
-/// `format_day_with_optional_comma(4, true)` returns `"4,"`.
-fn format_day_with_optional_comma(day: u8, append_comma: bool) -> String {
-    if append_comma {
-        format!("{day},")
-    } else {
-        day.to_string()
-    }
-}
-
-/// Generates year tokens in the accepted 1000 through 2999 range.
-///
-/// This covers every accepted four-digit year value. Example: may produce
-/// `"2025"`.
-fn year_strategy() -> BoxedStrategy<String> {
-    (1000u16..=2999).prop_map(|year| year.to_string()).boxed()
+    numeric_day_with_range(prop_oneof![Just(0u8), (32u8..=u8::MAX)])
 }
 
 /// Generates year tokens outside the accepted range.

@@ -57,41 +57,54 @@ pub(in crate::wrap::inline) fn try_match_date_sequence(
 }
 
 fn match_ordinal_day_month_year(tokens: &[String], start: usize) -> Option<usize> {
-    match_date_pattern(tokens, start, 0, 2, is_ordinal_day, is_month_name)
+    let tokens = extract_five(tokens, start)?;
+    match_pattern(tokens, is_ordinal_day, is_whitespace_token, is_month_name).then_some(start + 5)
 }
 
 fn match_numeric_day_month_year(tokens: &[String], start: usize) -> Option<usize> {
-    match_date_pattern(tokens, start, 0, 2, is_numeric_day, is_month_name)
+    let tokens = extract_five(tokens, start)?;
+    match_pattern(tokens, is_numeric_day, is_whitespace_token, is_month_name).then_some(start + 5)
 }
 
 fn match_month_numeric_day_year(tokens: &[String], start: usize) -> Option<usize> {
-    match_date_pattern(tokens, start, 2, 0, is_numeric_day, is_month_name)
+    let tokens = extract_five(tokens, start)?;
+    match_pattern(tokens, is_month_name, is_whitespace_token, is_numeric_day).then_some(start + 5)
 }
 
-fn match_date_pattern(
-    tokens: &[String],
-    start: usize,
-    day_offset: usize,
-    month_offset: usize,
-    is_day: fn(&str) -> bool,
-    is_month: fn(&str) -> bool,
-) -> Option<usize> {
-    let day = tokens.get(start + day_offset)?;
-    let month = tokens.get(start + month_offset)?;
-    let space1 = tokens.get(start + 1)?;
-    let space2 = tokens.get(start + 3)?;
-    let year = tokens.get(start + 4)?;
+struct FiveTokens<'a> {
+    first: &'a str,
+    space1: &'a str,
+    second: &'a str,
+    space2: &'a str,
+    year: &'a str,
+}
 
-    if is_day(day)
-        && is_whitespace_token(space1)
-        && is_month(month)
-        && is_whitespace_token(space2)
-        && is_year(year)
-    {
-        Some(start + 5)
-    } else {
-        None
-    }
+fn extract_five(tokens: &[String], start: usize) -> Option<FiveTokens<'_>> {
+    Some(FiveTokens {
+        first: tokens.get(start)?.as_str(),
+        space1: tokens.get(start + 1)?.as_str(),
+        second: tokens.get(start + 2)?.as_str(),
+        space2: tokens.get(start + 3)?.as_str(),
+        year: tokens.get(start + 4)?.as_str(),
+    })
+}
+
+fn match_pattern<F1, F2, F3>(
+    tokens: FiveTokens<'_>,
+    first_matches: F1,
+    separator_matches: F2,
+    second_matches: F3,
+) -> bool
+where
+    F1: Fn(&str) -> bool,
+    F2: Fn(&str) -> bool,
+    F3: Fn(&str) -> bool,
+{
+    first_matches(tokens.first)
+        && separator_matches(tokens.space1)
+        && second_matches(tokens.second)
+        && separator_matches(tokens.space2)
+        && is_year(tokens.year)
 }
 /// Decide whether whitespace between grouped tokens should stay attached to the
 /// current span.
@@ -204,80 +217,7 @@ mod span_helper_props {
     use proptest::prelude::*;
 
     use super::try_match_date_sequence;
-    use crate::wrap::inline::predicates::MONTH_NAMES;
-
-    fn month_name_strategy() -> BoxedStrategy<String> {
-        prop::sample::select(&MONTH_NAMES)
-            .prop_map(str::to_string)
-            .boxed()
-    }
-
-    fn ordinal_day_strategy() -> BoxedStrategy<String> {
-        (
-            1u8..=31,
-            prop_oneof![Just("st"), Just("nd"), Just("rd"), Just("th")],
-        )
-            .prop_map(|(day, suffix)| format!("{day}{suffix}"))
-            .boxed()
-    }
-
-    fn numeric_day_strategy() -> BoxedStrategy<String> {
-        (1u8..=31, any::<bool>())
-            .prop_map(|(day, append_comma)| {
-                if append_comma {
-                    format!("{day},")
-                } else {
-                    day.to_string()
-                }
-            })
-            .boxed()
-    }
-
-    fn year_strategy() -> BoxedStrategy<String> {
-        (1000u16..=2999).prop_map(|year| year.to_string()).boxed()
-    }
-
-    fn date_sequence_tokens_strategy() -> BoxedStrategy<Vec<String>> {
-        prop_oneof![
-            (
-                ordinal_day_strategy(),
-                month_name_strategy(),
-                year_strategy()
-            )
-                .prop_map(|(day, month, year)| vec![
-                    day,
-                    " ".into(),
-                    month,
-                    " ".into(),
-                    year
-                ]),
-            (
-                numeric_day_strategy(),
-                month_name_strategy(),
-                year_strategy()
-            )
-                .prop_map(|(day, month, year)| vec![
-                    day,
-                    " ".into(),
-                    month,
-                    " ".into(),
-                    year
-                ]),
-            (
-                month_name_strategy(),
-                numeric_day_strategy(),
-                year_strategy()
-            )
-                .prop_map(|(month, day, year)| vec![
-                    month,
-                    " ".into(),
-                    day,
-                    " ".into(),
-                    year
-                ]),
-        ]
-        .boxed()
-    }
+    use crate::wrap::inline::date_strategies::date_sequence_tokens_strategy;
 
     fn non_whitespace_separator_strategy() -> BoxedStrategy<String> {
         prop_oneof![Just("-"), Just("_"), Just("/"), Just(","), Just(".")]
