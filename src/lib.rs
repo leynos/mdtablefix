@@ -55,4 +55,4 @@ pub use io::{rewrite, rewrite_no_wrap};
 pub use lists::renumber_lists;
 pub use process::{Options, process_stream, process_stream_no_wrap, process_stream_opts};
 pub use table::{reflow_table, split_cells};
-pub use wrap::{Token, is_fence, tokenize_markdown, wrap_text};
+pub use wrap::{Token, date_strategies, is_fence, tokenize_markdown, wrap_text};

@@ -382,5 +382,4 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-#[cfg(test)]
-mod date_strategies;
+pub mod date_strategies;

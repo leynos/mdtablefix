@@ -29,6 +29,7 @@ use continuation::apply_continuation_chunk;
 /// inspects one line and returns the fence components (indentation, marker,
 /// info string) when the line opens a fenced code block, or `None` otherwise.
 pub use fence::{FenceTracker, is_fence};
+pub use inline::date_strategies;
 pub(crate) use link_reference::LinkReferenceMatcher;
 use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 /// Token emitted by the `tokenize::segment_inline` parser and used by
