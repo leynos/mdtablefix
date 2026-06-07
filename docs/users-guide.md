@@ -39,6 +39,12 @@ footnote references (`[^label]`) are treated as unbreakable units. A span is
 never split across lines; it moves as a whole to the next line when it would
 otherwise exceed the target width.
 
+Common English prose dates, such as `25th December 2025`, `19 March 2018`,
+and `July 4, 2008`, are also treated as unbreakable inline fragments. This
+applies to ordinal-day, numeric-day, and month-name-first forms with full or
+abbreviated month names. If a date is wider than the configured wrap width,
+the existing long-token fallback behaviour applies.
+
 Parenthesized inline citations such as `pattern([1](url))` are also treated as
 unbreakable units, keeping the citation link and its surrounding parentheses
 together during wrapping.

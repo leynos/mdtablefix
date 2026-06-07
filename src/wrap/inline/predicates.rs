@@ -3,6 +3,10 @@
 //! These helpers classify segmented tokens and rendered fragment text so span
 //! grouping and post-wrap heuristics can recognise links, code, footnotes, and
 //! punctuation without duplicating detection rules.
+//! The module also provides date-component predicates for date-sequence
+//! grouping: `is_month_name`, `is_ordinal_day`, `is_numeric_day`, and
+//! `is_year`. These recognise English month names, ordinal and numeric day
+//! tokens, and four-digit year tokens before wrapping.
 
 pub(in crate::wrap::inline) fn is_opening_punct(c: char) -> bool {
     matches!(c, '(' | '[') || "（［【《「『".contains(c)
@@ -57,6 +61,10 @@ pub(in crate::wrap::inline) const MONTH_NAMES: [&str; 23] = [
 ];
 
 /// Returns whether `token` is a full or abbreviated English month name.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value automatically.
+#[tracing::instrument(level = "trace", ret)]
 pub(in crate::wrap::inline) fn is_month_name(token: &str) -> bool {
     month_names_for_len(token.len())
         .iter()
@@ -77,6 +85,10 @@ fn month_names_for_len(len: usize) -> &'static [&'static str] {
 }
 
 /// Returns whether `token` is an ordinal day number from 1st through 31st.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value automatically.
+#[tracing::instrument(level = "trace", ret)]
 pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
     ["st", "nd", "rd", "th"]
         .iter()
@@ -85,6 +97,10 @@ pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
 }
 
 /// Returns whether `token` is a numeric day number from 1 through 31.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value automatically.
+#[tracing::instrument(level = "trace", ret)]
 pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
     token
         .strip_suffix(',')
@@ -95,6 +111,10 @@ pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
 
 /// Returns whether `token` is a year from 1000 through 2999, optionally
 /// followed by trailing prose punctuation.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value automatically.
+#[tracing::instrument(level = "trace", ret)]
 pub(in crate::wrap::inline) fn is_year(token: &str) -> bool {
     token
         .trim_end_matches(is_trailing_punct)
@@ -219,6 +239,10 @@ pub(in crate::wrap::inline) fn fragment_is_link(text: &str) -> bool {
 mod predicate_date_props;
 
 #[cfg(test)]
+#[path = "predicate_tracing_tests.rs"]
+mod predicate_tracing_tests;
+
+#[cfg(test)]
 mod tests {
     use proptest::prelude::*;
     use rstest::rstest;
@@ -302,44 +326,6 @@ mod tests {
     #[test]
     fn looks_like_footnote_ref_rejects_empty_label() {
         assert!(!looks_like_footnote_ref("[^]"));
-    }
-
-    mod tracing_tests {
-        //! Traced-event tests for predicate helpers.
-        //!
-        //! Verifies that `looks_like_footnote_ref` and
-        //! `ends_with_footnote_ref` emit TRACE events when called,
-        //! confirming that the `#[tracing::instrument]` attribute is
-        //! effective at the declared log level.
-
-        use tracing_test::traced_test;
-
-        use super::super::{
-            ends_with_footnote_ref,
-            ends_with_hyphen_prefix,
-            looks_like_footnote_ref,
-        };
-
-        #[traced_test]
-        #[test]
-        fn looks_like_footnote_ref_emits_trace_event() {
-            let _ = looks_like_footnote_ref("[^1]");
-            assert!(logs_contain("looks_like_footnote_ref"));
-        }
-
-        #[traced_test]
-        #[test]
-        fn ends_with_footnote_ref_emits_trace_event() {
-            let _ = ends_with_footnote_ref("word.[^1]");
-            assert!(logs_contain("ends_with_footnote_ref"));
-        }
-
-        #[traced_test]
-        #[test]
-        fn ends_with_hyphen_prefix_emits_trace_event() {
-            let _ = ends_with_hyphen_prefix("pre-");
-            assert!(logs_contain("ends_with_hyphen_prefix"));
-        }
     }
 
     #[rstest]
