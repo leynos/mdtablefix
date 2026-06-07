@@ -7,6 +7,7 @@
 //! beyond the example-based predicate checks.
 
 use proptest::prelude::*;
+use rstest::rstest;
 
 use super::{
     super::date_strategies::{
@@ -59,6 +60,30 @@ fn year_out_of_range_strategy() -> BoxedStrategy<String> {
     prop_oneof![(0u16..=999u16), (3000u16..=u16::MAX)]
         .prop_map(|year| year.to_string())
         .boxed()
+}
+
+#[rstest]
+#[case("(July", true)]
+#[case("\"December", true)]
+#[case("(foo", false)]
+fn is_month_name_strips_leading_openers(#[case] token: &str, #[case] expected: bool) {
+    assert_eq!(is_month_name(token), expected);
+}
+
+#[rstest]
+#[case("\"25th", true)]
+#[case("(1st", true)]
+#[case("(0th", false)]
+fn is_ordinal_day_strips_leading_openers(#[case] token: &str, #[case] expected: bool) {
+    assert_eq!(is_ordinal_day(token), expected);
+}
+
+#[rstest]
+#[case("(4,", true)]
+#[case("(19", true)]
+#[case("(foo", false)]
+fn is_numeric_day_strips_leading_openers(#[case] token: &str, #[case] expected: bool) {
+    assert_eq!(is_numeric_day(token), expected);
 }
 
 proptest! {

@@ -219,6 +219,18 @@ mod span_helper_props {
     use super::try_match_date_sequence;
     use crate::wrap::inline::date_strategies::date_sequence_tokens_strategy;
 
+    fn prefixed_date_sequence_tokens_strategy() -> BoxedStrategy<Vec<String>> {
+        (
+            date_sequence_tokens_strategy(),
+            prop_oneof![Just('('), Just('['), Just('"')],
+        )
+            .prop_map(|(mut tokens, opener)| {
+                tokens[0].insert(0, opener);
+                tokens
+            })
+            .boxed()
+    }
+
     fn non_whitespace_separator_strategy() -> BoxedStrategy<String> {
         prop_oneof![Just("-"), Just("_"), Just("/"), Just(","), Just(".")]
             .prop_map(str::to_string)
@@ -234,6 +246,13 @@ mod span_helper_props {
         #[test]
         fn prop_try_match_date_sequence_accepts_all_valid_patterns(
             tokens in date_sequence_tokens_strategy(),
+        ) {
+            prop_assert_eq!(try_match_date_sequence(&tokens, 0), Some(5));
+        }
+
+        #[test]
+        fn prop_try_match_date_sequence_accepts_leading_opener_on_first_component(
+            tokens in prefixed_date_sequence_tokens_strategy(),
         ) {
             prop_assert_eq!(try_match_date_sequence(&tokens, 0), Some(5));
         }

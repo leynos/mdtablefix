@@ -9,7 +9,7 @@
 //! tokens, and four-digit year tokens before wrapping.
 
 pub(in crate::wrap::inline) fn is_opening_punct(c: char) -> bool {
-    matches!(c, '(' | '[') || "（［【《「『".contains(c)
+    matches!(c, '(' | '[' | '"') || "“‘（［【《「『".contains(c)
 }
 
 pub(in crate::wrap::inline) fn is_trailing_punct(c: char) -> bool {
@@ -66,9 +66,23 @@ pub(in crate::wrap::inline) const MONTH_NAMES: [&str; 23] = [
 /// value automatically.
 #[tracing::instrument(level = "trace", ret)]
 pub(in crate::wrap::inline) fn is_month_name(token: &str) -> bool {
+    let token = strip_leading_openers(token);
     month_names_for_len(token.len())
         .iter()
         .any(|month| token.eq_ignore_ascii_case(month))
+}
+
+/// Strips all leading opener punctuation characters from `token`.
+fn strip_leading_openers(token: &str) -> &str {
+    let mut rest = token;
+    while let Some(ch) = rest.chars().next() {
+        if is_opening_punct(ch) {
+            rest = &rest[ch.len_utf8()..];
+        } else {
+            break;
+        }
+    }
+    rest
 }
 
 fn month_names_for_len(len: usize) -> &'static [&'static str] {
@@ -90,6 +104,7 @@ fn month_names_for_len(len: usize) -> &'static [&'static str] {
 /// value automatically.
 #[tracing::instrument(level = "trace", ret)]
 pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
+    let token = strip_leading_openers(token);
     ["st", "nd", "rd", "th"]
         .iter()
         .find_map(|suffix| token.strip_suffix(suffix))
@@ -102,6 +117,7 @@ pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
 /// value automatically.
 #[tracing::instrument(level = "trace", ret)]
 pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
+    let token = strip_leading_openers(token);
     token
         .strip_suffix(',')
         .unwrap_or(token)

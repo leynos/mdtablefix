@@ -103,6 +103,32 @@ fn wrap_text_keeps_footnote_reference_with_punctuated_date() {
 }
 
 #[test]
+fn wrap_text_keeps_parenthesised_month_day_year_intact() {
+    let input = lines_vec!["See (July 4, 2008) for details."];
+    let output = wrap_text(&input, 16);
+
+    assert!(
+        output.iter().any(|line| line.contains("(July 4, 2008)")),
+        "parenthesised date should stay atomic: {output:?}"
+    );
+    assert_eq!(output.join(" "), input[0]);
+}
+
+#[test]
+fn wrap_text_keeps_quoted_ordinal_date_intact() {
+    let input = lines_vec!["Mark \"25th December 2025 as important."];
+    let output = wrap_text(&input, 22);
+
+    assert!(
+        output
+            .iter()
+            .any(|line| line.contains("\"25th December 2025")),
+        "quoted ordinal date should stay atomic: {output:?}"
+    );
+    assert_eq!(output.join(" "), input[0]);
+}
+
+#[test]
 fn wrap_text_partial_date_not_grouped() {
     let input = lines_vec!["Plan around December 2025 carefully."];
     // Width 21 forces a break inside `December 2025` unless that partial date
