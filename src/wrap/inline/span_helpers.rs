@@ -8,16 +8,16 @@ use unicode_width::UnicodeWidthStr;
 
 use super::predicates::{
     is_inline_code_token,
+    is_month_name,
+    is_numeric_day,
     is_opening_punct,
+    is_ordinal_day,
     is_trailing_punct,
     is_trailing_punctuation_token,
+    is_whitespace_token,
+    is_year,
     looks_like_footnote_ref,
     looks_like_link,
-    is_ordinal_day,
-    is_month_name,
-    is_year,
-    is_numeric_day,
-    is_whitespace_token,
 };
 
 /// Marks how a grouped token span should behave during wrapping.
@@ -71,6 +71,7 @@ fn match_month_numeric_day_year(tokens: &[String], start: usize) -> Option<usize
     match_pattern(tokens, is_month_name, is_whitespace_token, is_numeric_day).then_some(start + 5)
 }
 
+#[derive(Clone, Copy)]
 struct FiveTokens<'a> {
     first: &'a str,
     space1: &'a str,
@@ -211,6 +212,7 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
     }
 }
 
+#[cfg(test)]
 mod span_helper_props {
     //! Property tests for inline span helper date matching.
 

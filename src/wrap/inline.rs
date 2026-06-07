@@ -54,28 +54,21 @@ use unicode_width::UnicodeWidthStr;
 
 use super::tokenize;
 
-/// Finds the next logical token group starting at `start`.
-///
-/// `tokens` is the segmented inline token stream and `start` is the first
-/// token in the next candidate group. The return value is `(end, width)`,
-/// where `end` is the exclusive end index of the grouped inline code span,
-/// link, or plain fragment, and `width` is its Unicode display width. This
-/// helper assumes `start < tokens.len()` and will panic if called out of
-/// bounds.
-pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
-    if let Some(date_end) = try_match_date_sequence(tokens, start) {
-        let mut date_width = tokens[start..date_end]
-            .iter()
-            .map(|token| UnicodeWidthStr::width(token.as_str()))
-            .sum();
-        if let Some((_, footnote_end)) =
-            try_couple_footnote_reference(tokens, date_end, SpanKind::General, &mut date_width)
-        {
-            return (footnote_end, date_width);
-        }
-        return (date_end, date_width);
+fn date_token_span(tokens: &[String], start: usize) -> Option<(usize, usize)> {
+    let date_end = try_match_date_sequence(tokens, start)?;
+    let mut date_width = tokens[start..date_end]
+        .iter()
+        .map(|token| UnicodeWidthStr::width(token.as_str()))
+        .sum();
+    if let Some((_, footnote_end)) =
+        try_couple_footnote_reference(tokens, date_end, SpanKind::General, &mut date_width)
+    {
+        return Some((footnote_end, date_width));
     }
+    Some((date_end, date_width))
+}
 
+fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKind) {
     let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());
     let mut kind = SpanKind::General;
@@ -124,6 +117,24 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
         kind = SpanKind::FootnoteRef;
         end = extend_punctuation(tokens, end, &mut width);
     }
+
+    (end, width, kind)
+}
+
+/// Finds the next logical token group starting at `start`.
+///
+/// `tokens` is the segmented inline token stream and `start` is the first
+/// token in the next candidate group. The return value is `(end, width)`,
+/// where `end` is the exclusive end index of the grouped inline code span,
+/// link, or plain fragment, and `width` is its Unicode display width. This
+/// helper assumes `start < tokens.len()` and will panic if called out of
+/// bounds.
+pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
+    if let Some(span) = date_token_span(tokens, start) {
+        return span;
+    }
+
+    let (mut end, mut width, mut kind) = initial_token_span(tokens, start);
 
     while end < tokens.len() {
         let token = &tokens[end];
@@ -371,4 +382,5 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
+#[cfg(test)]
 mod date_strategies;
