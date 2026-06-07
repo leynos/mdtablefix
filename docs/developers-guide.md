@@ -222,11 +222,23 @@ The wrapping pipeline for `--wrap` is:
    code or link tokens. `determine_token_span` forward-couples opening
    punctuation tokens (`(`, `[`, and CJK openers) and hyphen-prefix tokens
    to the next inline code span or Markdown link so wrapping never leaves a
-   lone opener or prefix at the end of a line. Trailing punctuation after
-   those atomic spans is grouped in the same
-   pass, and GFM footnote references that immediately follow inline code or
-   links (including opener-coupled spans) stay attached to the preceding
-   punctuation cluster.
+   lone opener or prefix at the end of a line.
+   `try_couple_inline_link_after_opener` applies the same rule to
+   parenthesized inline citation links such as `([1](url))`, grouping the
+   opener and link as one `SpanKind::Link` so adjacent citations like
+   `([1](url))([2](url2))` do not split at the boundary. At the tokeniser
+   level, `segment_inline` also stops trailing-punctuation and plain-text
+   scans at an unescaped `([` boundary via `scan_trailing_punctuation_end` and
+   `scan_plain_text_end`, both using `starts_inline_citation`, so the citation
+   opener `(` is emitted as its own token instead of being swallowed into the
+   preceding token's punctuation cluster. That boundary gives
+   `determine_token_span` and `try_couple_inline_link_after_opener` a clean
+   opener token to couple with the following inline link, making the full
+   `([n](url))` span atomic, while escaped sequences such as `\([` bypass the
+   early exit and remain plain text. Trailing punctuation after those atomic
+   spans is grouped in the same pass, and GFM footnote references that
+   immediately follow inline code or links (including opener-coupled spans)
+   stay attached to the preceding punctuation cluster.
 
 4. **Post-processing and rendering.** The `postprocess` module applies
    `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
@@ -319,6 +331,7 @@ Table: Key types and functions.
 | `classify_fragment`                                                                                                                                                                                                                                          | `src/wrap/inline/fragment.rs`     |
 | Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, …)                                                                                                                                                  | `src/wrap/inline/predicates.rs`   |
 | `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, …)                                                                                                                                                                    | `src/wrap/inline/span_helpers.rs` |
+| `try_couple_inline_link_after_opener`                                                                                                                                                                                                                        | `src/wrap/inline/span_helpers.rs` |
 | `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                     | `src/wrap/inline.rs`              |
 | `determine_token_span`                                                                                                                                                                                                                                       | `src/wrap/inline.rs`              |
 | `merge_whitespace_only_lines`                                                                                                                                                                                                                                | `src/wrap/inline/postprocess.rs`  |
@@ -331,6 +344,7 @@ Table: Key types and functions.
 | `pending_prefix_for_next_segment` — Selects the original pending prefix for the first deferred segment, then the continuation indent for later segments.                                                                                                     | `src/wrap/paragraph.rs`           |
 | `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                | `src/wrap/continuation.rs`        |
 | `join_pending_continuation`                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`        |
+| `starts_inline_citation`                                                                                                                                                                                                                                     | `src/wrap/tokenize/mod.rs`        |
 | `opening_fence_run_len` — Measures the length of an unescaped backtick run at the start of a byte slice; used to identify opening code-span fences.                                                                                                          | `src/wrap/tokenize/scanning.rs`   |
 | `position_after_close` — Finds a closing backtick fence with the exact opener length, rejects closers embedded in longer backtick runs, and treats backslashes inside code-span content as literal bytes.                                                    | `src/wrap/tokenize/scanning.rs`   |
 | `scan_continuation_span_state` — Incrementally scans a continuation string given a known open fence length, returning the remaining open fence length or `None` when all spans are balanced; used to avoid O(N²) rescanning of the accumulated pending text. | `src/wrap/tokenize/scanning.rs`   |

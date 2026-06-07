@@ -46,6 +46,7 @@ use span_helpers::{
     merge_code_span,
     should_couple_whitespace,
     try_couple_footnote_reference,
+    try_couple_inline_link_after_opener,
 };
 use textwrap::wrap_algorithms::wrap_first_fit;
 use unicode_width::UnicodeWidthStr;
@@ -136,6 +137,14 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
 
         let is_link = looks_like_link(token);
         let is_code = is_code_token(token);
+        if let Some((next_kind, next_end)) =
+            try_couple_inline_link_after_opener(tokens, end, &mut width)
+        {
+            kind = next_kind;
+            end = next_end;
+            continue;
+        }
+
         // Footnote markers must be coupled before consecutive link/code chaining;
         // otherwise `[^N]` stays a separate wrap token even when punctuation is
         // already attached to the preceding atomic span.
