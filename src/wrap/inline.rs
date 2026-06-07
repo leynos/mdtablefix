@@ -384,4 +384,3 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod date_strategies;
-pub use predicates::MONTH_NAMES;

@@ -34,7 +34,7 @@ pub(in crate::wrap::inline) fn is_trailing_punctuation_token(token: &str) -> boo
 /// There are 23 entries: twelve full names plus eleven abbreviations, because
 /// `May` is identical in both forms and is listed once. The entries are grouped
 /// by byte length so `is_month_name` can avoid scanning impossible candidates.
-pub const MONTH_NAMES: [&str; 23] = [
+pub(crate) const MONTH_NAMES: [&str; 23] = [
     "May",
     "Jan",
     "Feb",

@@ -1,7 +1,33 @@
 //! Shared property-test strategies for date-like wrap fixtures.
 
-use mdtablefix::MONTH_NAMES;
 use proptest::prelude::*;
+
+/// Full and abbreviated month names accepted by date-like wrap tests.
+const MONTH_NAMES: [&str; 23] = [
+    "May",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+    "June",
+    "July",
+    "March",
+    "April",
+    "August",
+    "January",
+    "October",
+    "February",
+    "November",
+    "December",
+    "September",
+];
 
 /// Generates full and abbreviated English month names.
 ///

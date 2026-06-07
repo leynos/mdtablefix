@@ -36,6 +36,10 @@ fn arbitrary_short_string_strategy() -> BoxedStrategy<String> {
         .boxed()
 }
 
+fn strip_leading_openers(token: &str) -> &str {
+    token.trim_start_matches(|ch| matches!(ch, '(' | '[' | '"') || "“‘（［【《「『".contains(ch))
+}
+
 /// Generates ordinal day tokens outside the accepted range.
 ///
 /// Includes zero and every `u8` value above 31 to exercise boundary rejection.
@@ -98,7 +102,10 @@ proptest! {
     fn prop_is_month_name_rejects_arbitrary_strings(
         token in arbitrary_short_string_strategy(),
     ) {
-        prop_assume!(!MONTH_NAMES.iter().any(|month| token.eq_ignore_ascii_case(month)));
+        let normalized = strip_leading_openers(&token);
+        prop_assume!(!MONTH_NAMES
+            .iter()
+            .any(|month| normalized.eq_ignore_ascii_case(month)));
         prop_assert!(!is_month_name(&token));
     }
 
