@@ -68,10 +68,15 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     let mut kind = SpanKind::General;
 
     if let Some(date_end) = try_match_date_sequence(tokens, start) {
-        let date_width = tokens[start..date_end]
+        let mut date_width = tokens[start..date_end]
             .iter()
             .map(|token| UnicodeWidthStr::width(token.as_str()))
             .sum();
+        if let Some((_, footnote_end)) =
+            try_couple_footnote_reference(tokens, date_end, SpanKind::General, &mut date_width)
+        {
+            return (footnote_end, date_width);
+        }
         return (date_end, date_width);
     }
 

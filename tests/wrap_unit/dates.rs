@@ -89,6 +89,20 @@ fn wrap_text_date_at_exact_boundary() {
 }
 
 #[test]
+fn wrap_text_keeps_footnote_reference_with_punctuated_date() {
+    let input = lines_vec![concat!(
+        "This sentence has enough preceding prose to make July 4, 2008.[^1] ",
+        "a tempting wrap point.",
+    )];
+    let output = wrap_text(&input, 48);
+
+    assert!(
+        output.iter().any(|line| line.contains("July 4, 2008.[^1]")),
+        "punctuated date and adjacent footnote should stay atomic: {output:?}"
+    );
+}
+
+#[test]
 fn wrap_text_partial_date_not_grouped() {
     let input = lines_vec!["Plan around December 2025 carefully."];
     // Width 21 forces a break inside `December 2025` unless that partial date
