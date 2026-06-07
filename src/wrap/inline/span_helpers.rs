@@ -3,6 +3,10 @@
 //! These functions extend grouped spans over punctuation, whitespace, adjacent
 //! footnote markers, and chained inline code or link tokens during
 //! `determine_token_span`.
+//! The module also provides `try_match_date_sequence`, which recognises
+//! contiguous day–month–year token runs and groups them into a single atomic
+//! span before `determine_token_span` performs the standard punctuation and
+//! link grouping pass.
 
 use unicode_width::UnicodeWidthStr;
 
