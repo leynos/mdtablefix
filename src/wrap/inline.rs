@@ -63,10 +63,6 @@ use super::tokenize;
 /// helper assumes `start < tokens.len()` and will panic if called out of
 /// bounds.
 pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
-    let mut end = start + 1;
-    let mut width = UnicodeWidthStr::width(tokens[start].as_str());
-    let mut kind = SpanKind::General;
-
     if let Some(date_end) = try_match_date_sequence(tokens, start) {
         let mut date_width = tokens[start..date_end]
             .iter()
@@ -79,6 +75,10 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
         }
         return (date_end, date_width);
     }
+
+    let mut end = start + 1;
+    let mut width = UnicodeWidthStr::width(tokens[start].as_str());
+    let mut kind = SpanKind::General;
 
     // Forward-couple opening punctuation to the next atomic span so wrapping
     // never leaves a lone `(` at the end of a line before inline code or a link.
