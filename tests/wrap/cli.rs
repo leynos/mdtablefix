@@ -134,6 +134,12 @@ fn test_cli_wrap_keeps_inline_citation_links_attached(
     Ok(())
 }
 
+/// Extracts link-start markers from `expected_citation`.
+///
+/// Given an `expected_citation: &str`, this helper returns a `Vec<String>` of
+/// derived marker prefixes such as `"[1]("`. The CLI citation tests use those
+/// markers for dynamic assertions instead of hard-coded citation text, avoiding
+/// false negatives when citation content or ordering changes.
 fn citation_link_starts(expected_citation: &str) -> Vec<String> {
     let mut markers = Vec::new();
     let mut remaining = expected_citation;

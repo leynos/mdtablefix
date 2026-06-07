@@ -27,6 +27,14 @@ fn inline_text_strategy() -> impl Strategy<Value = String> {
     ]
 }
 
+/// Builds the `inline_citation_strategy` inputs for citation-specific cases.
+///
+/// This strategy produces a single `pattern()` citation, multiple
+/// back-to-back `pattern()` citations, and a `reference()` citation so the
+/// property exercises those citation forms directly. Unlike
+/// `inline_text_strategy`, which generates general inline text, this helper
+/// keeps the input space focused on the parenthesized inline-link shapes that
+/// validate citation coupling.
 fn inline_citation_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
         Just("pattern([1](https://github.com/leynos/mdtablefix/pull/url))".to_string()),
@@ -41,6 +49,12 @@ fn inline_citation_strategy() -> impl Strategy<Value = String> {
     ]
 }
 
+/// Reconstructs span text by partitioning `tokens` with `determine_token_span`.
+///
+/// The `tokens: &[String]` input is the segmented inline token stream. The
+/// helper advances by each `end` index returned from `determine_token_span` and
+/// returns a `Vec<String>` whose entries are the joined tokens for consecutive
+/// spans, making span-boundary validation explicit in property assertions.
 fn grouped_spans(tokens: &[String]) -> Vec<String> {
     let mut spans = Vec::new();
     let mut index = 0;
