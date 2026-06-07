@@ -8,7 +8,8 @@ Hyphenated words are treated as indivisible during wrapping, so
 `very-long-word` will move to the next line intact rather than split at the
 hyphen. The wrap engine now delegates line fitting to the `textwrap` crate
 while preserving Markdown-aware token grouping for inline code, links, GFM
-footnote references, and hard breaks. The tool ignores fenced code blocks and
+footnote references, parenthesised inline citations such as
+`pattern([1](url))`, and hard breaks. The tool ignores fenced code blocks and
 respects escaped pipes (`\|`), making it safe to use on Markdown with mixed
 content.
 

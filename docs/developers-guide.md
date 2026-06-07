@@ -222,11 +222,14 @@ The wrapping pipeline for `--wrap` is:
    code or link tokens. `determine_token_span` forward-couples opening
    punctuation tokens (`(`, `[`, and CJK openers) and hyphen-prefix tokens
    to the next inline code span or Markdown link so wrapping never leaves a
-   lone opener or prefix at the end of a line. Trailing punctuation after
-   those atomic spans is grouped in the same
-   pass, and GFM footnote references that immediately follow inline code or
-   links (including opener-coupled spans) stay attached to the preceding
-   punctuation cluster.
+   lone opener or prefix at the end of a line.
+   `try_couple_inline_link_after_opener` applies the same rule to
+   parenthesised inline citation links such as `([1](url))`, grouping the
+   opener and link as one `SpanKind::Link` so adjacent citations like
+   `([1](url))([2](url2))` do not split at the boundary. Trailing punctuation
+   after those atomic spans is grouped in the same pass, and GFM footnote
+   references that immediately follow inline code or links (including
+   opener-coupled spans) stay attached to the preceding punctuation cluster.
 
 4. **Post-processing and rendering.** The `postprocess` module applies
    `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
@@ -303,6 +306,7 @@ Table: Key types and functions.
 | `classify_fragment`                                                                                                                                                                                                                                          | `src/wrap/inline/fragment.rs`     |
 | Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, …)                                                                                                                                                  | `src/wrap/inline/predicates.rs`   |
 | `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, …)                                                                                                                                                                    | `src/wrap/inline/span_helpers.rs` |
+| `try_couple_inline_link_after_opener`                                                                                                                                                                                                                        | `src/wrap/inline/span_helpers.rs` |
 | `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                     | `src/wrap/inline.rs`              |
 | `determine_token_span`                                                                                                                                                                                                                                       | `src/wrap/inline.rs`              |
 | `merge_whitespace_only_lines`                                                                                                                                                                                                                                | `src/wrap/inline/postprocess.rs`  |
