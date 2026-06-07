@@ -1,4 +1,13 @@
-//! Token grouping tests for inline segmentation and span determination.
+//! Tests for inline tokenisation and span grouping.
+//!
+//! These cases exercise `segment_inline` tokenisation and
+//! `determine_token_span` span grouping from `crate::wrap`, covering
+//! trailing-punctuation grouping after code and link tokens, multi-token
+//! coupling for footnote references and adjacent links, splitting before
+//! embedded inline links, and the parenthesized inline citation coupling added
+//! in issue #325. The suite includes positive grouping cases, negative cases
+//! that prevent over-coupling at non-opener positions, and escaped-sequence
+//! preservation.
 
 use rstest::rstest;
 

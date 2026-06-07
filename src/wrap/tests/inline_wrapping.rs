@@ -1,4 +1,12 @@
-//! Tests for inline wrapping that preserves code spans and links.
+//! Tests for the inline wrapping pipeline.
+//!
+//! These cases exercise `wrap_preserving_code` and
+//! `attach_punctuation_to_previous_line` from `crate::wrap::inline`, covering
+//! trailing-punctuation coupling with links, hard-break preservation, and the
+//! `([n](url))` inline citation attachment introduced in issue #325. The suite
+//! uses `proptest` for generated wrapping cases and `rstest` for fixture-driven
+//! and snapshot tests, verifying that parenthesized citation links and adjacent
+//! citation chains are never split across wrapped lines.
 
 use std::fmt::Write as _;
 
