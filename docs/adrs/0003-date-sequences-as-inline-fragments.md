@@ -15,12 +15,11 @@ when the full date would fit on one line.
 
 ## Decision
 
-In the context of paragraph wrapping, facing unwanted line breaks inside common
-English prose dates, we decided for matching contiguous date-component tokens
-inside `src/wrap/inline/span_helpers.rs`, and against adding a TeX-style
-penalty system to the line fitter, to achieve atomic wrapping behaviour through
-the existing `InlineFragment` grouping model, accepting that unsupported date
-forms remain ordinary prose until explicitly added.
+The implementation matches contiguous date-component tokens inside
+`src/wrap/inline/span_helpers.rs` before line fitting, instead of adding a
+TeX-style penalty system to the line fitter. This keeps date atomicity inside
+the existing `InlineFragment` grouping model, while unsupported date forms
+remain ordinary prose until explicitly added.
 
 The matcher recognises exactly the supported day-month-year forms with
 whitespace between components:

@@ -5,7 +5,7 @@
 //! twelve full names plus eleven three-letter abbreviations because `May` is
 //! identical in both forms.
 
-/// Full and abbreviated English month names recognised in prose dates.
+/// Full and abbreviated English month names recognized in prose dates.
 ///
 /// The entries are grouped by byte length so `is_month_name` can avoid
 /// scanning impossible candidates.
