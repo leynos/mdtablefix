@@ -49,7 +49,6 @@ use span_helpers::{
     should_couple_whitespace,
     try_couple_footnote_reference,
     try_couple_inline_link_after_opener,
-    try_match_date_sequence,
 };
 use textwrap::wrap_algorithms::wrap_first_fit;
 use tracing::trace;
@@ -214,23 +213,12 @@ fn push_span_text(text: &mut String, tokens: &[String], span: Range<usize>) {
 /// The return value preserves token order while grouping inline code, links,
 /// and whitespace runs into `InlineFragment` values with precomputed widths.
 /// This helper never panics when `tokens` is well-formed.
-fn build_fragments(tokens: &[String], wrap_width: usize) -> Vec<InlineFragment> {
+fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
     let mut fragments: Vec<InlineFragment> = Vec::new();
     let mut i = 0;
 
     while i < tokens.len() {
-        let (group_end, group_width) = determine_token_span(tokens, i);
-        if matches!(try_match_date_sequence(tokens, i), Some(date_end) if date_end <= group_end)
-            && group_width > wrap_width
-        {
-            tracing::info!(
-                start = i,
-                end = group_end,
-                width = group_width,
-                wrap_width,
-                "date span exceeds wrap width"
-            );
-        }
+        let (group_end, _group_width) = determine_token_span(tokens, i);
         let span = i..group_end;
         let text = if tokens[i..group_end]
             .iter()
@@ -337,7 +325,7 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         return Vec::new();
     }
 
-    let fragments = build_fragments(&tokens, width);
+    let fragments = build_fragments(&tokens);
     let mut lines = Vec::new();
     let mut buffer: Vec<InlineFragment> = Vec::new();
 

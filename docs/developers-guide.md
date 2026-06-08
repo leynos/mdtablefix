@@ -541,7 +541,7 @@ Table: Instrumented functions and their logging levels and fields.
 | `is_numeric_day` | trace | `token` (in), return value (out) |
 | `is_year` | trace | `token` (in), return value (out) |
 | `try_match_date_sequence` | trace, debug | `start` (in), `skip(tokens)`, return value (out); matched date pattern |
-| `date_token_span` | trace, info | `start` (in), `skip(tokens)`, return value (out); over-width date fallback |
+| `date_token_span` | trace | `start` (in), `skip(tokens)`, return value (out); over-width date fallback remains behaviour-only |
 | `parse_link_or_image` | debug | `idx` (in), `skip(text)`, return value (out) |
 | `find_footnote_end` | trace | `idx` (in), `skip(text)`, return value (out) |
 

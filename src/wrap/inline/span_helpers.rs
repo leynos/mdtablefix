@@ -344,7 +344,6 @@ mod tracing_tests {
     use tracing_test::traced_test;
 
     use super::{date_token_span, try_match_date_sequence};
-    use crate::wrap::inline::wrap_preserving_code;
 
     fn date_tokens() -> [String; 5] {
         [
@@ -384,13 +383,5 @@ mod tracing_tests {
         let _ = date_token_span(&tokens, 0);
 
         assert!(logs_contain("date_token_span"));
-    }
-
-    #[traced_test]
-    #[test]
-    fn wrap_preserving_code_logs_over_width_date_fallback() {
-        let _ = wrap_preserving_code("25th December 2025.", 10);
-
-        assert!(logs_contain("date span exceeds wrap width"));
     }
 }
