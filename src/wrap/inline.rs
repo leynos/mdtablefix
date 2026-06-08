@@ -8,6 +8,7 @@
 mod footnote_tests;
 mod fragment;
 mod month_names;
+mod normalize;
 mod postprocess;
 mod predicates;
 mod span_helpers;
@@ -27,6 +28,7 @@ fn is_code_token(token: &str) -> bool {
 use std::ops::Range;
 
 use fragment::{InlineFragment, width_as_f64};
+use normalize::normalize_footnote_ref_spacing;
 use postprocess::{merge_whitespace_only_lines, rebalance_atomic_tails};
 use predicates::looks_like_link;
 pub(in crate::wrap::inline) use predicates::{
@@ -325,6 +327,7 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         return Vec::new();
     }
 
+    let tokens = normalize_footnote_ref_spacing(&tokens);
     let fragments = build_fragments(&tokens);
     let mut lines = Vec::new();
     let mut buffer: Vec<InlineFragment> = Vec::new();

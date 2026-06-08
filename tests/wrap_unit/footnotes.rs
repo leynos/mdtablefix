@@ -23,6 +23,8 @@ fn assert_footnote_reference_is_intact(output: &[String], marker: &str) {
     assert!(rendered.contains(marker));
     assert!(!rendered.contains("[\n"));
     assert!(!rendered.contains("\n^"));
+    assert!(!rendered.contains(".\n["));
+    assert!(!rendered.contains(".\n ["));
 }
 
 #[rstest]
@@ -63,6 +65,64 @@ fn wrap_text_snapshots_inline_footnote_reference_outputs() {
         "inline_footnote_reference_wrap",
         wrap_text(&input, 80).join("\n")
     );
+}
+
+#[rstest]
+#[case(".", "Word.[^1]")]
+#[case(",", "Word,[^1]")]
+#[case(";", "Word;[^1]")]
+#[case(":", "Word:[^1]")]
+#[case("?", "Word?[^1]")]
+#[case("!", "Word![^1]")]
+#[case(")", "Word)[^1]")]
+#[case("\"", "Word\"[^1]")]
+fn wrap_text_removes_spacing_between_punctuation_and_footnote_ref(
+    #[case] punctuation: &str,
+    #[case] expected: &str,
+) {
+    let input = lines_vec![format!("Word{punctuation} [^1]")];
+
+    assert_eq!(wrap_text(&input, 80), lines_vec![expected]);
+}
+
+#[rstest]
+#[case("Word.\n[^1]")]
+#[case("Word.\n  [^1]")]
+fn wrap_text_normalizes_split_footnote_refs_in_same_paragraph(#[case] paragraph: &str) {
+    let input = lines_vec![paragraph.to_string()];
+
+    assert_eq!(wrap_text(&input, 80), lines_vec!["Word.[^1]"]);
+}
+
+#[test]
+fn wrap_text_keeps_punctuation_and_footnote_ref_attached_at_boundary() {
+    let input = lines_vec![concat!(
+        "This is a long sentence that eventually ends with a citation. [^7] ",
+        "The next sentence gives the wrapper somewhere else to break.",
+    )];
+
+    let wrapped = wrap_text(&input, 54);
+    let rendered = wrapped.join("\n");
+
+    assert!(rendered.contains("citation.[^7]"));
+    assert!(!rendered.contains("citation.\n[^7]"));
+    assert!(!rendered.contains("citation.\n [^7]"));
+
+    footnote_snapshot!("inline_footnote_reference_boundary_wrap", rendered);
+}
+
+#[test]
+fn wrap_text_preserves_footnote_definition_lines() {
+    let input = lines_vec!["[^1]: This is a definition."];
+
+    assert_eq!(wrap_text(&input, 80), input);
+}
+
+#[test]
+fn wrap_text_preserves_definition_after_blank_line() {
+    let input = lines_vec!["Word.", "", "[^1]: This is a definition."];
+
+    assert_eq!(wrap_text(&input, 80), input);
 }
 
 #[rstest]
