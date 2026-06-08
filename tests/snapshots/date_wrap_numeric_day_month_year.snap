@@ -1,0 +1,8 @@
+---
+source: tests/wrap/date_snapshots.rs
+expression: "wrap_lines(input, width)"
+---
+The archive references
+19 March 2018 before
+the next paragraph
+begins.

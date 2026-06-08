@@ -1,0 +1,7 @@
+---
+source: tests/wrap/date_snapshots.rs
+expression: "wrap_lines(input, width)"
+---
+The record cites
+July 4, 2008, before
+the follow-up note.

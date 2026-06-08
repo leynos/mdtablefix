@@ -1,0 +1,7 @@
+---
+source: tests/wrap/date_snapshots.rs
+expression: "wrap_lines(input, width)"
+---
+See (July 4, 2008).[^1]
+before editing the
+release note.

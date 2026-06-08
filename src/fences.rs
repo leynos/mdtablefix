@@ -97,21 +97,14 @@ fn rewrite_marker(line: &str, strategy: MarkerStrategy) -> Option<String> {
     let indent = cap.get(1).map_or("", |m| m.as_str());
     let original_marker = cap.get(2).map_or("", |m| m.as_str());
     let lang = cap.get(3).map_or("", |m| m.as_str());
-    // Use is_fence (which captures `[^\r\n]*`) to recover the full info string,
-    // including any trailing whitespace that the local FENCE_RE's `\s*$` discards.
-    let full_info = is_fence(line).map_or(lang, |(_, _, info)| info);
-    let trailing = &full_info[lang.len()..];
     let marker = match strategy {
         MarkerStrategy::Compressed => "```",
         MarkerStrategy::PreserveDelimiter => original_marker,
     };
     Some(if is_null_lang(lang) {
-        // The named language is absent or null; emit the marker followed only by
-        // any trailing whitespace that was present on the original line.
-        format!("{indent}{marker}{trailing}")
+        format!("{indent}{marker}")
     } else {
-        // Preserve the full info string (language + trailing whitespace).
-        format!("{indent}{marker}{full_info}")
+        format!("{indent}{marker}{lang}")
     })
 }
 

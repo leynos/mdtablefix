@@ -17,7 +17,7 @@ fn compresses_backtick_fences() {
 fn compresses_indented_backticks() {
     let input = lines_vec!["    `````foo,bar   "];
     let out = compress_fences(&input);
-    assert_eq!(out, lines_vec!["    ```foo,bar   "]);
+    assert_eq!(out, lines_vec!["    ```foo,bar"]);
 }
 
 #[test]
@@ -274,28 +274,24 @@ fn attaches_orphan_specifier_allows_spaces() {
 }
 
 #[rstest]
-#[case("````null", "````", "```")]
-#[case("````NULL", "````", "```")]
-#[case("````Null", "````", "```")]
-#[case("````null  ", "````", "```  ")]
-#[case("````   ", "````", "```   ")]
-#[case("````NULL  ", "````", "```  ")]
-#[case("````Null  ", "````", "```  ")]
-#[case("~~~~null", "~~~~", "```")]
-#[case("~~~~NULL", "~~~~", "```")]
-#[case("~~~~Null", "~~~~", "```")]
-#[case("~~~~null  ", "~~~~", "```  ")]
-#[case("~~~~   ", "~~~~", "```   ")]
-#[case("~~~~NULL  ", "~~~~", "```  ")]
-#[case("~~~~Null  ", "~~~~", "```  ")]
-fn compresses_null_language_to_empty(
-    #[case] open: &str,
-    #[case] close: &str,
-    #[case] expected_open: &str,
-) {
+#[case("````null", "````")]
+#[case("````NULL", "````")]
+#[case("````Null", "````")]
+#[case("````null  ", "````")]
+#[case("````   ", "````")]
+#[case("````NULL  ", "````")]
+#[case("````Null  ", "````")]
+#[case("~~~~null", "~~~~")]
+#[case("~~~~NULL", "~~~~")]
+#[case("~~~~Null", "~~~~")]
+#[case("~~~~null  ", "~~~~")]
+#[case("~~~~   ", "~~~~")]
+#[case("~~~~NULL  ", "~~~~")]
+#[case("~~~~Null  ", "~~~~")]
+fn compresses_null_language_to_empty(#[case] open: &str, #[case] close: &str) {
     let input = lines_vec![open, "code", close];
     let out = compress_fences(&input);
-    assert_eq!(out, lines_vec![expected_open, "code", "```"]);
+    assert_eq!(out, lines_vec!["```", "code", "```"]);
 }
 
 #[rstest]

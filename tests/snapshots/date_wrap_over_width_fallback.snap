@@ -1,0 +1,5 @@
+---
+source: tests/wrap/date_snapshots.rs
+expression: "wrap_lines(input, width)"
+---
+25th December 2025.
