@@ -3,9 +3,15 @@
 //! These helpers classify segmented tokens and rendered fragment text so span
 //! grouping and post-wrap heuristics can recognise links, code, footnotes, and
 //! punctuation without duplicating detection rules.
+//! The module also provides date-component predicates for date-sequence
+//! grouping: `is_month_name`, `is_ordinal_day`, `is_numeric_day`, and
+//! `is_year`. These recognise English month names, ordinal and numeric day
+//! tokens, and four-digit year tokens before wrapping.
+
+pub(crate) use super::month_names::MONTH_NAMES;
 
 pub(in crate::wrap::inline) fn is_opening_punct(c: char) -> bool {
-    matches!(c, '(' | '[') || "（［【《「『".contains(c)
+    matches!(c, '(' | '[' | '"') || "“‘（［【《「『".contains(c)
 }
 
 pub(in crate::wrap::inline) fn is_trailing_punct(c: char) -> bool {
@@ -24,6 +30,88 @@ pub(in crate::wrap::inline) fn is_trailing_punct(c: char) -> bool {
 pub(in crate::wrap::inline) fn is_trailing_punctuation_token(token: &str) -> bool {
     !token.is_empty() && token.chars().all(is_trailing_punct)
 }
+
+/// Returns whether `token` is a full or abbreviated English month name.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value automatically.
+#[tracing::instrument(level = "trace", ret)]
+pub(in crate::wrap::inline) fn is_month_name(token: &str) -> bool {
+    let token = strip_leading_openers(token);
+    month_names_for_len(token.len())
+        .iter()
+        .any(|month| token.eq_ignore_ascii_case(month))
+}
+
+/// Strips all leading opener punctuation characters from `token`.
+fn strip_leading_openers(token: &str) -> &str {
+    let mut rest = token;
+    while let Some(ch) = rest.chars().next() {
+        if is_opening_punct(ch) {
+            rest = &rest[ch.len_utf8()..];
+        } else {
+            break;
+        }
+    }
+    rest
+}
+
+fn month_names_for_len(len: usize) -> &'static [&'static str] {
+    match len {
+        3 => &MONTH_NAMES[..12],
+        4 => &MONTH_NAMES[12..14],
+        5 => &MONTH_NAMES[14..16],
+        6 => &MONTH_NAMES[16..17],
+        7 => &MONTH_NAMES[17..19],
+        8 => &MONTH_NAMES[19..22],
+        9 => &MONTH_NAMES[22..],
+        _ => &[],
+    }
+}
+
+/// Returns whether `token` is an ordinal day number from 1st through 31st.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value automatically.
+#[tracing::instrument(level = "trace", ret)]
+pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
+    let token = strip_leading_openers(token);
+    ["st", "nd", "rd", "th"]
+        .iter()
+        .find_map(|suffix| token.strip_suffix(suffix))
+        .is_some_and(is_day_number)
+}
+
+/// Returns whether `token` is a numeric day number from 1 through 31.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value automatically.
+#[tracing::instrument(level = "trace", ret)]
+pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
+    let token = strip_leading_openers(token);
+    token
+        .strip_suffix(',')
+        .unwrap_or(token)
+        .parse::<u8>()
+        .is_ok_and(is_day)
+}
+
+/// Returns whether `token` is a year from 1000 through 2999, optionally
+/// followed by trailing prose punctuation.
+///
+/// The `#[tracing::instrument]` attribute records the argument and return
+/// value automatically.
+#[tracing::instrument(level = "trace", ret)]
+pub(in crate::wrap::inline) fn is_year(token: &str) -> bool {
+    token
+        .trim_end_matches(is_trailing_punct)
+        .parse::<u16>()
+        .is_ok_and(|year| (1000..=2999).contains(&year))
+}
+
+fn is_day_number(token: &str) -> bool { token.parse::<u8>().is_ok_and(is_day) }
+
+fn is_day(day: u8) -> bool { (1..=31).contains(&day) }
 
 /// Returns whether `token` already looks like a complete Markdown link.
 pub(in crate::wrap::inline) fn looks_like_link(token: &str) -> bool {
@@ -134,6 +222,14 @@ pub(in crate::wrap::inline) fn fragment_is_link(text: &str) -> bool {
 }
 
 #[cfg(test)]
+#[path = "predicate_date_props.rs"]
+mod predicate_date_props;
+
+#[cfg(test)]
+#[path = "predicate_tracing_tests.rs"]
+mod predicate_tracing_tests;
+
+#[cfg(test)]
 mod tests {
     use proptest::prelude::*;
     use rstest::rstest;
@@ -145,6 +241,7 @@ mod tests {
         is_trailing_punct,
         is_trailing_punctuation_token,
         is_whitespace_token,
+        is_year,
         looks_like_footnote_ref,
     };
 
@@ -218,44 +315,6 @@ mod tests {
         assert!(!looks_like_footnote_ref("[^]"));
     }
 
-    mod tracing_tests {
-        //! Traced-event tests for predicate helpers.
-        //!
-        //! Verifies that `looks_like_footnote_ref` and
-        //! `ends_with_footnote_ref` emit TRACE events when called,
-        //! confirming that the `#[tracing::instrument]` attribute is
-        //! effective at the declared log level.
-
-        use tracing_test::traced_test;
-
-        use super::super::{
-            ends_with_footnote_ref,
-            ends_with_hyphen_prefix,
-            looks_like_footnote_ref,
-        };
-
-        #[traced_test]
-        #[test]
-        fn looks_like_footnote_ref_emits_trace_event() {
-            let _ = looks_like_footnote_ref("[^1]");
-            assert!(logs_contain("looks_like_footnote_ref"));
-        }
-
-        #[traced_test]
-        #[test]
-        fn ends_with_footnote_ref_emits_trace_event() {
-            let _ = ends_with_footnote_ref("word.[^1]");
-            assert!(logs_contain("ends_with_footnote_ref"));
-        }
-
-        #[traced_test]
-        #[test]
-        fn ends_with_hyphen_prefix_emits_trace_event() {
-            let _ = ends_with_hyphen_prefix("pre-");
-            assert!(logs_contain("ends_with_hyphen_prefix"));
-        }
-    }
-
     #[rstest]
     #[case("pre-", true)]
     #[case("LLM-", true)]
@@ -283,5 +342,20 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(is_trailing_punctuation_token(token), expected);
+    }
+
+    #[rstest]
+    #[case("2025", true)]
+    #[case("2025.", true)]
+    #[case("2025,", true)]
+    #[case("2008)", true)]
+    #[case("2008).", true)]
+    #[case("2008,)", true)]
+    #[case("999", false)]
+    #[case("3000", false)]
+    #[case("2025th.", false)]
+    #[case(".", false)]
+    fn is_year_accepts_sentence_trailing_punctuation(#[case] token: &str, #[case] expected: bool) {
+        assert_eq!(is_year(token), expected);
     }
 }

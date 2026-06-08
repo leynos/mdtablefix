@@ -1,0 +1,7 @@
+---
+source: tests/wrap/date_snapshots.rs
+expression: "wrap_lines(input, width)"
+---
+Remember 25th December 2025
+when wrapping prose near a
+boundary.

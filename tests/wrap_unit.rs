@@ -11,6 +11,12 @@ mod common;
 
 #[path = "wrap_unit/code_spans.rs"]
 mod code_spans;
+#[path = "wrap_unit/date_strategies.rs"]
+mod date_strategies;
+#[path = "wrap_unit/dates.rs"]
+mod dates;
+#[path = "wrap_unit/dates_prop.rs"]
+mod dates_prop;
 #[path = "wrap_unit/footnotes.rs"]
 mod footnotes;
 #[path = "wrap_unit/prefixed.rs"]

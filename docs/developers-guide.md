@@ -142,6 +142,11 @@ The rationale for the staged table reflow pipeline is recorded in
 parse, width-calculation, or separator-handling flow so implementation changes
 stay aligned with the documented design constraints.
 
+The rationale for treating date-like prose sequences as atomic inline
+fragments is recorded in `docs/adrs/0003-date-sequences-as-inline-fragments.md`.
+Refer to that ADR before adding new date forms or changing the span-grouping
+boundary.
+
 ## Wrap module architecture
 
 The wrapping pipeline for `--wrap` is:
@@ -239,6 +244,9 @@ The wrapping pipeline for `--wrap` is:
    spans is grouped in the same pass, and GFM footnote references that
    immediately follow inline code or links (including opener-coupled spans)
    stay attached to the preceding punctuation cluster.
+   Date-component predicates are applied by `try_match_date_sequence` in
+   `span_helpers.rs` before `determine_token_span` performs the standard
+   punctuation and link grouping pass.
 
 4. **Post-processing and rendering.** The `postprocess` module applies
    `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
@@ -329,8 +337,8 @@ Table: Key types and functions.
 | `classify_block`                                                                                                                                                                                                                                             | `src/wrap/block.rs`               |
 | `FragmentKind`, `InlineFragment`                                                                                                                                                                                                                             | `src/wrap/inline/fragment.rs`     |
 | `classify_fragment`                                                                                                                                                                                                                                          | `src/wrap/inline/fragment.rs`     |
-| Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, …)                                                                                                                                                  | `src/wrap/inline/predicates.rs`   |
-| `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, …)                                                                                                                                                                    | `src/wrap/inline/span_helpers.rs` |
+| Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, `is_month_name`, `is_ordinal_day`, `is_numeric_day`, `is_year`, …)                                                                                  | `src/wrap/inline/predicates.rs`   |
+| `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, `try_match_date_sequence`, …)                                                                                                                                         | `src/wrap/inline/span_helpers.rs` |
 | `try_couple_inline_link_after_opener`                                                                                                                                                                                                                        | `src/wrap/inline/span_helpers.rs` |
 | `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                     | `src/wrap/inline.rs`              |
 | `determine_token_span`                                                                                                                                                                                                                                       | `src/wrap/inline.rs`              |
@@ -528,6 +536,12 @@ Table: Instrumented functions and their logging levels and fields.
 | `looks_like_footnote_ref` | trace | `token` (in), return value (out) |
 | `ends_with_footnote_ref` | trace | `token` (in), return value (out) |
 | `ends_with_hyphen_prefix` | trace | `token` (in), return value (out) |
+| `is_month_name` | trace | `token` (in), return value (out) |
+| `is_ordinal_day` | trace | `token` (in), return value (out) |
+| `is_numeric_day` | trace | `token` (in), return value (out) |
+| `is_year` | trace | `token` (in), return value (out) |
+| `try_match_date_sequence` | trace, debug | `start` (in), `skip(tokens)`, return value (out); matched date pattern |
+| `date_token_span` | trace | `start` (in), `skip(tokens)`, return value (out); over-width date fallback remains behaviour-only |
 | `parse_link_or_image` | debug | `idx` (in), `skip(text)`, return value (out) |
 | `find_footnote_end` | trace | `idx` (in), `skip(text)`, return value (out) |
 
@@ -633,6 +647,10 @@ Matrix input fixtures live under `tests/data/cli-matrix/` and must use the
 `.dat` extension. Do not use `.md` or `.txt` for these fixtures because
 `make fmt` runs Markdown formatting and must not rewrite matrix inputs. The
 harness has a self-test that rejects non-`.dat` fixtures.
+
+`make typecheck` runs `cargo check --all-targets --all-features` to verify
+type-correctness without running tests. Use it for rapid feedback during
+development before moving on to the full lint and test gates.
 
 Before changing snapshots, run the harness self-tests:
 

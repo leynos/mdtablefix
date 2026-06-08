@@ -1,0 +1,7 @@
+---
+source: tests/wrap_unit/dates.rs
+expression: "wrap_text(input, width).join(\"\\n\")"
+---
+Remember 25th December 2025
+when wrapping prose near a
+boundary.

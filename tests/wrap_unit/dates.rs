@@ -1,0 +1,176 @@
+//! `wrap_text` tests covering date-like sequence atomicity.
+//!
+//! These cases ensure common English date strings such as
+//! `25th December 2025` are treated as contiguous inline fragments by the
+//! wrapping logic, so they are not split across lines when the configured width
+//! allows the full date to fit. The matcher assumes dates appear as adjacent
+//! day, month, and year token sequences separated by whitespace, including
+//! ordinal suffixes, numeric days with commas, and full or abbreviated month
+//! names. Very narrow widths are only a resilience case: the wrapper may emit
+//! an over-width date fragment just as it does for other long atomic tokens.
+//! This trades a little line-fill tightness for preserving prose dates.
+
+use mdtablefix::wrap::wrap_text;
+use rstest::rstest;
+
+fn assert_date_snapshot(name: &str, input: &[String], width: usize) {
+    insta::with_settings!(
+        {
+            snapshot_path => "../snapshots",
+            prepend_module_to_snapshot => false,
+        },
+        { insta::assert_snapshot!(name, wrap_text(input, width).join("\n")) }
+    );
+}
+
+#[rstest]
+#[case("25th December 2025")]
+#[case("19 March 2018")]
+#[case("July 4, 2008")]
+#[case("25th Dec 2025")]
+#[case("Jul 4, 2008")]
+#[case("july 4, 2008")]
+#[case("JUL 4, 2008")]
+#[case("July 4 2008")]
+#[case("March 19 2018")]
+#[case("25th December 2025.")]
+#[case("July 4, 2008)")]
+#[case("July 4, 2008,")]
+fn wrap_text_keeps_date_sequence_intact(#[case] expected_date: &str) {
+    let input = lines_vec![format!(
+        "This paragraph has enough preceding prose to make {expected_date} a tempting wrap point."
+    )];
+
+    // Width 48 forces `wrap_text` to choose near the date in this input while
+    // still leaving every supported date format short enough to fit intact.
+    let output = wrap_text(&input, 48);
+
+    assert!(output.iter().any(|line| line.contains(expected_date)));
+}
+
+#[test]
+fn wrap_text_handles_date_wider_than_width() {
+    // Baseline: date in the middle of a sentence.
+    let input = lines_vec!["Remember 25th December 2025 when wrapping."];
+    // Width 10 is intentionally narrower than `25th December 2025`, so this
+    // exercises the long-atomic-token fallback path rather than normal fitting.
+    let output = wrap_text(&input, 10);
+
+    assert!(!output.is_empty());
+    assert!(
+        output
+            .iter()
+            .any(|line| line.contains("25th December 2025")),
+        "over-width date should fall back to long-token emission: {output:?}"
+    );
+
+    let input_with_following_punct = lines_vec!["On 25th December 2025, we met."];
+    let output_with_following_punct = wrap_text(&input_with_following_punct, 10);
+
+    assert!(!output_with_following_punct.is_empty());
+    assert!(
+        output_with_following_punct
+            .iter()
+            .any(|line| line.contains("25th December 2025")),
+        "over-width date with following punctuation should stay atomic: \
+         {output_with_following_punct:?}"
+    );
+
+    let input_at_line_start = lines_vec!["25th December 2025. We met again."];
+    let output_at_line_start = wrap_text(&input_at_line_start, 10);
+
+    assert!(!output_at_line_start.is_empty());
+    assert!(
+        output_at_line_start
+            .iter()
+            .any(|line| line.contains("25th December 2025")),
+        "over-width date at line start should stay atomic: {output_at_line_start:?}"
+    );
+}
+
+#[test]
+fn wrap_text_date_at_exact_boundary() {
+    let input = lines_vec!["Then 25th December 2025 follows."];
+    // Width 23 equals the display width of `Then 25th December 2025`, so the
+    // date should fit exactly without forcing an internal break.
+    let output = wrap_text(&input, 23);
+
+    assert!(output.iter().any(|line| line == "Then 25th December 2025"));
+}
+
+#[test]
+fn wrap_text_keeps_footnote_reference_with_punctuated_date() {
+    let input = lines_vec![concat!(
+        "This sentence has enough preceding prose to make July 4, 2008.[^1] ",
+        "a tempting wrap point.",
+    )];
+    let output = wrap_text(&input, 48);
+
+    assert!(
+        output.iter().any(|line| line.contains("July 4, 2008.[^1]")),
+        "punctuated date and adjacent footnote should stay atomic: {output:?}"
+    );
+}
+
+#[test]
+fn wrap_text_keeps_parenthesised_month_day_year_intact() {
+    let input = lines_vec!["See (July 4, 2008) for details."];
+    let output = wrap_text(&input, 16);
+
+    assert!(
+        output.iter().any(|line| line.contains("(July 4, 2008)")),
+        "parenthesised date should stay atomic: {output:?}"
+    );
+    assert_eq!(output.join(" "), input[0]);
+}
+
+#[test]
+fn wrap_text_keeps_quoted_ordinal_date_intact() {
+    let input = lines_vec!["Mark \"25th December 2025 as important."];
+    let output = wrap_text(&input, 22);
+
+    assert!(
+        output
+            .iter()
+            .any(|line| line.contains("\"25th December 2025")),
+        "quoted ordinal date should stay atomic: {output:?}"
+    );
+    assert_eq!(output.join(" "), input[0]);
+}
+
+#[test]
+fn wrap_text_partial_date_not_grouped() {
+    let input = lines_vec!["Plan around December 2025 carefully."];
+    // Width 21 forces a break inside `December 2025` unless that partial date
+    // is incorrectly grouped as an atomic fragment.
+    let output = wrap_text(&input, 21);
+
+    assert!(!output.iter().any(|line| line.contains("December 2025")));
+    // Rejoining with single spaces checks content preservation after wrapping;
+    // these prose fixtures deliberately avoid significant repeated spacing.
+    assert_eq!(output.join(" "), input[0]);
+}
+
+#[rstest]
+#[case(
+    "date_ordinal_day_month_year_wrap",
+    lines_vec!["Remember 25th December 2025 when wrapping prose near a boundary."],
+    28
+)]
+#[case(
+    "date_month_day_year_punctuation_wrap",
+    lines_vec!["The record cites July 4, 2008, before the follow-up note."],
+    24
+)]
+#[case(
+    "date_parenthesised_and_footnote_wrap",
+    lines_vec!["See (July 4, 2008).[^1] before editing the release note."],
+    24
+)]
+fn wrap_text_snapshots_date_sequence_outputs(
+    #[case] name: &str,
+    #[case] input: Vec<String>,
+    #[case] width: usize,
+) {
+    assert_date_snapshot(name, &input, width);
+}

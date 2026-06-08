@@ -7,6 +7,7 @@
 #[cfg(test)]
 mod footnote_tests;
 mod fragment;
+mod month_names;
 mod postprocess;
 mod predicates;
 mod span_helpers;
@@ -42,6 +43,7 @@ pub(in crate::wrap::inline) use predicates::{
 use span_helpers::{
     SpanKind,
     absorb_token_and_trailing_punctuation,
+    date_token_span,
     extend_punctuation,
     merge_code_span,
     should_couple_whitespace,
@@ -49,19 +51,12 @@ use span_helpers::{
     try_couple_inline_link_after_opener,
 };
 use textwrap::wrap_algorithms::wrap_first_fit;
+use tracing::trace;
 use unicode_width::UnicodeWidthStr;
 
 use super::tokenize;
 
-/// Finds the next logical token group starting at `start`.
-///
-/// `tokens` is the segmented inline token stream and `start` is the first
-/// token in the next candidate group. The return value is `(end, width)`,
-/// where `end` is the exclusive end index of the grouped inline code span,
-/// link, or plain fragment, and `width` is its Unicode display width. This
-/// helper assumes `start < tokens.len()` and will panic if called out of
-/// bounds.
-pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
+fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKind) {
     let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());
     let mut kind = SpanKind::General;
@@ -110,6 +105,28 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
         kind = SpanKind::FootnoteRef;
         end = extend_punctuation(tokens, end, &mut width);
     }
+
+    (end, width, kind)
+}
+
+/// Finds the next logical token group starting at `start`.
+///
+/// `tokens` is the segmented inline token stream and `start` is the first
+/// token in the next candidate group. The return value is `(end, width)`,
+/// where `end` is the exclusive end index of the grouped inline code span,
+/// link, or plain fragment, and `width` is its Unicode display width. This
+/// helper assumes `start < tokens.len()` and will panic if called out of
+/// bounds.
+pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
+    if let Some((end, width)) = date_token_span(tokens, start) {
+        trace!(
+            start,
+            end, width, "determine_token_span grouped date sequence"
+        );
+        return (end, width);
+    }
+
+    let (mut end, mut width, mut kind) = initial_token_span(tokens, start);
 
     while end < tokens.len() {
         let token = &tokens[end];
@@ -201,7 +218,7 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
     let mut i = 0;
 
     while i < tokens.len() {
-        let (group_end, _) = determine_token_span(tokens, i);
+        let (group_end, _group_width) = determine_token_span(tokens, i);
         let span = i..group_end;
         let text = if tokens[i..group_end]
             .iter()
@@ -356,3 +373,6 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
 
     lines
 }
+
+#[cfg(test)]
+mod date_strategies;
