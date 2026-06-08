@@ -21,6 +21,7 @@ use super::{
     MONTH_NAMES,
     is_month_name,
     is_numeric_day,
+    is_opening_punct,
     is_ordinal_day,
     is_year,
 };
@@ -36,9 +37,7 @@ fn arbitrary_short_string_strategy() -> BoxedStrategy<String> {
         .boxed()
 }
 
-fn strip_leading_openers(token: &str) -> &str {
-    token.trim_start_matches(|ch| matches!(ch, '(' | '[' | '"') || "“‘（［【《「『".contains(ch))
-}
+fn strip_leading_openers(token: &str) -> &str { token.trim_start_matches(is_opening_punct) }
 
 /// Generates ordinal day tokens outside the accepted range.
 ///
