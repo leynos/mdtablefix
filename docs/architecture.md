@@ -386,15 +386,15 @@ module handles filesystem operations, delegating the text processing to
 It keeps the current indent, emits wrapped or verbatim lines into the caller's
 output buffer, and leaves inline fitting to the wrapping helpers.
 
-`HtmlTableState` buffers candidate HTML table lines until the surrounding
-table closes. Its depth counter tracks nested `<table>` blocks, so only the
-outermost table is converted at once, while incomplete input can still be
-flushed back verbatim.
+`HtmlTableState` buffers candidate HTML table lines until the surrounding table
+closes. Its depth counter tracks nested `<table>` blocks, so only the outermost
+table is converted at once, while incomplete input can still be flushed back
+verbatim.
 
 The `footnotes::renumber::definitions` submodule owns definition scanning and
 rewriting. `DefinitionScanState` coordinates the number mapping, collects
-already-parsed definitions, and stages numeric candidates for later
-conversion without cluttering the top-level renumber flow.
+already-parsed definitions, and stages numeric candidates for later conversion
+without cluttering the top-level renumber flow.
 
 `ListState` tracks the active indentation stack and per-indent counters for
 ordered list renumbering. It resets on headings and thematic breaks, and it
@@ -463,7 +463,7 @@ flowchart TD
 Figure: `wrap_text` control flow. The wrapper classifies each incoming line,
 passes fenced blocks, tables, headings, directives, and indented code through
 unchanged, flushes paragraphs on blanks, routes prose and prefixed lines through
- `ParagraphWriter`, computes visible widths with `unicode-width`, and delegates
+`ParagraphWriter`, computes visible widths with `unicode-width`, and delegates
 inline line fitting to `textwrap` before reconstructing the emitted Markdown
 lines.
 
@@ -594,6 +594,6 @@ absorbed into the code token during tokenization by `scan_code_suffix_end` in
 `src/wrap/tokenize/scanning.rs`. The combined code-and-suffix token is then
 classified as atomic by `has_inline_code_structure` in
 `src/wrap/inline/fragment.rs`, so wrapping treats the full string — for example,
-`` `VarGuard`s ``, `` `class`'s ``, `` `fetch`ed ``, or `` `run`ning `` — as an
-unbreakable unit. No line break is inserted between the closing backtick and the
-following letters.
+`` `VarGuard`s ``, `` `class`'s ``, `` `fetch`ed ``, or `` `run`ning `` — as
+an unbreakable unit. No line break is inserted between the closing backtick and
+the following letters.

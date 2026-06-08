@@ -39,11 +39,11 @@ footnote references (`[^label]`) are treated as unbreakable units. A span is
 never split across lines; it moves as a whole to the next line when it would
 otherwise exceed the target width.
 
-Common English prose dates, such as `25th December 2025`, `19 March 2018`,
-and `July 4, 2008`, are also treated as unbreakable inline fragments. This
-applies to ordinal-day, numeric-day, and month-name-first forms with full or
-abbreviated month names. If a date is wider than the configured wrap width,
-the existing long-token fallback behaviour applies.
+Common English prose dates, such as `25th December 2025`, `19 March 2018`, and
+`July 4, 2008`, are also treated as unbreakable inline fragments. This applies
+to ordinal-day, numeric-day, and month-name-first forms with full or
+abbreviated month names. If a date is wider than the configured wrap width, the
+existing long-token fallback behaviour applies.
 
 Parenthesized inline citations such as `pattern([1](url))` are also treated as
 unbreakable units, keeping the citation link and its surrounding parentheses
@@ -63,9 +63,9 @@ checklist item from being reformatted as several independent checklist entries.
 
 If joining a split inline code span would exceed the configured wrap width,
 `mdtablefix` preserves the existing multi-line shape instead of emitting an
-overlong line. Ambiguous close-and-reopen patterns are also preserved
-verbatim, so the formatter does not introduce Markdownlint MD038 spacing
-violations or change the intended code-span boundaries.
+overlong line. Ambiguous close-and-reopen patterns are also preserved verbatim,
+so the formatter does not introduce Markdownlint MD038 spacing violations or
+change the intended code-span boundaries.
 
 When `--wrap` is combined with `--renumber`, ordered list item boundaries are
 preserved even when a list item contains a long inline code span. The wrapper
@@ -141,9 +141,9 @@ wrapped line, so hard-break semantics are not lost after reformatting.
 
 Lines that consist entirely of whitespace — spaces, tabs, or any mixture — are
 normalized to empty strings during wrapping. Such lines act as paragraph
-boundaries and are never passed through with their original whitespace
-content, so the output uses a single uniform separator between paragraphs
-regardless of the input's incidental indentation.
+boundaries and are never passed through with their original whitespace content,
+so the output uses a single uniform separator between paragraphs regardless of
+the input's incidental indentation.
 
 When computing the indentation width for continuation lines in prefixed
 contexts (blockquotes, lists, and footnote definitions), `mdtablefix` measures
@@ -155,13 +155,12 @@ CJK punctuation.
 ## HTML table conversion
 
 `mdtablefix` converts `<table>…</table>` blocks that span multiple lines and
-carry leading indentation into Markdown pipe tables. The leading indentation
-is preserved on every emitted row, so the converted table sits at the same
+carry leading indentation into Markdown pipe tables. The leading indentation is
+preserved on every emitted row, so the converted table sits at the same
 indentation level as the original HTML. Surrounding non-table lines at that
-same indentation level are passed through unchanged. Nested `<table>` tags
-are tracked by depth, so the buffered structure is converted only once the
-outermost `</table>` is reached and never split into two separate
-conversions.
+same indentation level are passed through unchanged. Nested `<table>` tags are
+tracked by depth, so the buffered structure is converted only once the outermost
+`</table>` is reached and never split into two separate conversions.
 
 ## Fence normalization
 

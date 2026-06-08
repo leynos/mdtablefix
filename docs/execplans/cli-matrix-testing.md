@@ -253,8 +253,8 @@ the `insta` dev dependency. `tests/data/cli-matrix/` contains four `.dat`
 fixtures, and `tests/cli_matrix.rs` plus `tests/cli_matrix/support.rs` define
 the base catalogue, expansion checks, command runner, and `insta` snapshots.
 
-The harness now verifies case identifier uniqueness, `.dat` fixture use,
-stdout and `--in-place` expansion, wrapped and unwrapped expansion, per-flag
+The harness now verifies case identifier uniqueness, `.dat` fixture use, stdout
+and `--in-place` expansion, wrapped and unwrapped expansion, per-flag
 enabled/disabled coverage, and pairwise coverage for the seven non-wrap
 transform flags. The snapshot test executes 32 physical command runs and
 asserts that file-to-stdout output matches the corresponding `--in-place`

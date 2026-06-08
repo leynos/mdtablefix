@@ -1283,15 +1283,15 @@ wrappers to ensure that logging is correctly set up before each
 
 The `test-with` crate allows for conditional execution of tests based on
 various runtime conditions, such as the presence of environment variables, the
-existence of specific files or folders, or the availability of network
-services. [^22] It can be used with `rstest`. For example, an `rstest` test
-could be further annotated with `test-with` attributes to ensure it only runs
-if a particular database configuration file exists or if a dependent web
-service is reachable. The order of macros is important: `rstest` should
-typically generate the test cases first, and then `test-with` can apply its
-conditional execution logic to these generated tests.[^22] This allows `rstest`
-to focus on test structure and data provision, while `test-with` provides an
-orthogonal layer of control over test execution conditions.
+existence of specific files or folders, or the availability of network services.
+[^22] It can be used with `rstest`. For example, an `rstest` test could be
+further annotated with `test-with` attributes to ensure it only runs if a
+particular database configuration file exists or if a dependent web service is
+reachable. The order of macros is important: `rstest` should typically generate
+the test cases first, and then `test-with` can apply its conditional execution
+logic to these generated tests.[^22] This allows `rstest` to focus on test
+structure and data provision, while `test-with` provides an orthogonal layer of
+control over test execution conditions.
 
 ## XI. Conclusion and Further Resources
 

@@ -344,8 +344,8 @@ containing a shorter literal `~~~` block that must remain unchanged because it
 does not close the outer fence. Add one case that shows
 `attach_orphan_specifiers` must not attach a specifier-like line when it
 appears inside an already open outer fence. Add a CLI regression in
-`tests/cli_fences.rs` that exercises `--fences` on one of these documents so the
-user-visible behaviour is covered end to end.
+`tests/cli_fences.rs` that exercises `--fences` on one of these documents so
+the user-visible behaviour is covered end to end.
 
 Stage B is the implementation pass in `src/fences.rs`. Refactor
 `compress_fences` from a stateless `map` into a line-by-line loop that keeps a
