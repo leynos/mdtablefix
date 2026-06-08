@@ -70,6 +70,51 @@ fn wrap_text_oversized_code_span_stays_intact() {
     assert!(wrapped.iter().skip(1).all(|line| line.starts_with("   ")));
 }
 
+#[rstest]
+#[case::escaped_option(r"`Ensure the manifest exists or pass \`--file\` with the correct path.`")]
+#[case::escaped_inner_word(r"`word.\`inner\`.rest`")]
+fn tokenize_markdown_keeps_escaped_backtick_code_span_atomic(#[case] span: &str) {
+    let tokens = tokenize_markdown(span);
+
+    assert_eq!(
+        tokens,
+        vec![Token::Code {
+            raw: span,
+            fence: "`",
+            code: &span[1..span.len() - 1],
+        }]
+    );
+}
+
+#[test]
+fn wrap_text_keeps_escaped_backtick_code_span_atomic_in_list_item() {
+    let input = lines_vec![concat!(
+        r"- Message: `Ensure the manifest exists or pass \`--file\` with the correct path.` ",
+        "The docs should pin that wording."
+    )];
+    let wrapped = wrap_text(&input, 80);
+    let rendered = wrapped.join("\n");
+
+    assert!(
+        rendered
+            .contains(r"`Ensure the manifest exists or pass \`--file\` with the correct path.`")
+    );
+    assert!(wrapped.iter().all(|line| line.width() <= 80));
+}
+
+#[test]
+fn wrap_text_keeps_escaped_backtick_code_span_atomic_in_paragraph() {
+    let input = lines_vec![concat!(
+        r"Document `word.\`inner\`.rest` carefully because wrapping near the ",
+        "line boundary must keep the inline code span intact."
+    )];
+    let wrapped = wrap_text(&input, 80);
+    let rendered = wrapped.join("\n");
+
+    assert!(rendered.contains(r"`word.\`inner\`.rest`"));
+    assert!(wrapped.iter().all(|line| line.width() <= 80));
+}
+
 #[test]
 fn test_tokenize_backslash_terminated_code_span() {
     let tokens = tokenize_markdown(r"Install to `C:\path\bin\` and add");

@@ -181,7 +181,7 @@ fn should_emit_verbatim_for_width(text: &str, state: &ParagraphState) -> bool {
         + usize::from(!pending.rest.is_empty() && needs_space)
         + UnicodeWidthStr::width(text);
 
-    let closes_pending_span_at_end = position_after_close(text, open_fence_len)
+    let closes_pending_span_at_end = position_after_close(text, 0, open_fence_len)
         .is_some_and(|close_end| text[close_end..].trim().is_empty())
         && matches!(
             scan_continuation_span_state(text, open_fence_len),
@@ -237,7 +237,7 @@ fn split_reopen_span(
     existing_fence: usize,
 ) -> Option<(usize, usize)> {
     let search_offset = if existing_fence > 0 {
-        position_after_close(continuation, existing_fence)?
+        position_after_close(continuation, 0, existing_fence)?
     } else {
         0
     };
@@ -382,7 +382,7 @@ fn update_span_state(
     }
 }
 fn closing_fence_tail_starts_word(continuation: &str, raw_fence: usize) -> bool {
-    let Some(close_end) = position_after_close(continuation, raw_fence) else {
+    let Some(close_end) = position_after_close(continuation, 0, raw_fence) else {
         return false;
     };
     continuation[close_end..]
