@@ -142,6 +142,11 @@ The rationale for the staged table reflow pipeline is recorded in
 parse, width-calculation, or separator-handling flow so implementation changes
 stay aligned with the documented design constraints.
 
+The rationale for treating date-like prose sequences as atomic inline
+fragments is recorded in `docs/adrs/0003-date-sequences-as-inline-fragments.md`.
+Refer to that ADR before adding new date forms or changing the span-grouping
+boundary.
+
 ## Wrap module architecture
 
 The wrapping pipeline for `--wrap` is:

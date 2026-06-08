@@ -13,6 +13,16 @@
 use mdtablefix::wrap::wrap_text;
 use rstest::rstest;
 
+fn assert_date_snapshot(name: &str, input: &[String], width: usize) {
+    insta::with_settings!(
+        {
+            snapshot_path => "../snapshots",
+            prepend_module_to_snapshot => false,
+        },
+        { insta::assert_snapshot!(name, wrap_text(input, width).join("\n")) }
+    );
+}
+
 #[rstest]
 #[case("25th December 2025")]
 #[case("19 March 2018")]
@@ -139,4 +149,28 @@ fn wrap_text_partial_date_not_grouped() {
     // Rejoining with single spaces checks content preservation after wrapping;
     // these prose fixtures deliberately avoid significant repeated spacing.
     assert_eq!(output.join(" "), input[0]);
+}
+
+#[rstest]
+#[case(
+    "date_ordinal_day_month_year_wrap",
+    lines_vec!["Remember 25th December 2025 when wrapping prose near a boundary."],
+    28
+)]
+#[case(
+    "date_month_day_year_punctuation_wrap",
+    lines_vec!["The record cites July 4, 2008, before the follow-up note."],
+    24
+)]
+#[case(
+    "date_parenthesised_and_footnote_wrap",
+    lines_vec!["See (July 4, 2008).[^1] before editing the release note."],
+    24
+)]
+fn wrap_text_snapshots_date_sequence_outputs(
+    #[case] name: &str,
+    #[case] input: Vec<String>,
+    #[case] width: usize,
+) {
+    assert_date_snapshot(name, &input, width);
 }

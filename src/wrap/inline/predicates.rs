@@ -8,6 +8,8 @@
 //! `is_year`. These recognise English month names, ordinal and numeric day
 //! tokens, and four-digit year tokens before wrapping.
 
+pub(crate) use super::month_names::MONTH_NAMES;
+
 pub(in crate::wrap::inline) fn is_opening_punct(c: char) -> bool {
     matches!(c, '(' | '[' | '"') || "“‘（［【《「『".contains(c)
 }
@@ -28,37 +30,6 @@ pub(in crate::wrap::inline) fn is_trailing_punct(c: char) -> bool {
 pub(in crate::wrap::inline) fn is_trailing_punctuation_token(token: &str) -> bool {
     !token.is_empty() && token.chars().all(is_trailing_punct)
 }
-
-/// Full and abbreviated English month names recognized in prose dates.
-///
-/// There are 23 entries: twelve full names plus eleven abbreviations, because
-/// `May` is identical in both forms and is listed once. The entries are grouped
-/// by byte length so `is_month_name` can avoid scanning impossible candidates.
-pub(crate) const MONTH_NAMES: [&str; 23] = [
-    "May",
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-    "June",
-    "July",
-    "March",
-    "April",
-    "August",
-    "January",
-    "October",
-    "February",
-    "November",
-    "December",
-    "September",
-];
 
 /// Returns whether `token` is a full or abbreviated English month name.
 ///

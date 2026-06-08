@@ -7,6 +7,7 @@
 #[cfg(test)]
 mod footnote_tests;
 mod fragment;
+mod month_names;
 mod postprocess;
 mod predicates;
 mod span_helpers;
@@ -50,10 +51,12 @@ use span_helpers::{
     try_match_date_sequence,
 };
 use textwrap::wrap_algorithms::wrap_first_fit;
+use tracing::trace;
 use unicode_width::UnicodeWidthStr;
 
 use super::tokenize;
 
+#[tracing::instrument(level = "trace", skip(tokens), ret)]
 fn date_token_span(tokens: &[String], start: usize) -> Option<(usize, usize)> {
     let date_end = try_match_date_sequence(tokens, start)?;
     let mut date_width = tokens[start..date_end]
@@ -130,8 +133,12 @@ fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKin
 /// helper assumes `start < tokens.len()` and will panic if called out of
 /// bounds.
 pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
-    if let Some(span) = date_token_span(tokens, start) {
-        return span;
+    if let Some((end, width)) = date_token_span(tokens, start) {
+        trace!(
+            start,
+            end, width, "determine_token_span grouped date sequence"
+        );
+        return (end, width);
     }
 
     let (mut end, mut width, mut kind) = initial_token_span(tokens, start);

@@ -6,6 +6,9 @@
 
 - `--code-emphasis` flag to fix emphasis markers that adjoin inline code.
   Runs before wrapping and footnote conversion.
+- Treat common English date sequences as atomic inline fragments during
+  wrapping, including ordinal day, numeric day, and month-name-first forms.
+  ([#346](https://github.com/leynos/mdtablefix/issues/346))
 
 ### Changed
 

@@ -1,4 +1,10 @@
 //! Property tests for date-like sequence atomicity during wrapping.
+//!
+//! These tests exercise the public `wrap_text` behaviour using the same date
+//! token strategies as the inline predicate and span-helper unit tests. They
+//! complement the example-based cases in `dates.rs` by checking preservation,
+//! non-splitting, over-width fallback, and partial-date rejection across a
+//! generated set of English prose date forms.
 
 use mdtablefix::wrap::wrap_text;
 use proptest::prelude::*;

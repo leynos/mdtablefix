@@ -51,6 +51,7 @@ pub(in crate::wrap::inline) fn extend_punctuation(
 }
 
 /// Returns the exclusive end of a date-like token run beginning at `start`.
+#[tracing::instrument(level = "trace", skip(tokens), ret)]
 pub(in crate::wrap::inline) fn try_match_date_sequence(
     tokens: &[String],
     start: usize,

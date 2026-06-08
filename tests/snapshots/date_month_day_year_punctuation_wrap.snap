@@ -1,0 +1,7 @@
+---
+source: tests/wrap_unit/dates.rs
+expression: "wrap_text(input, width).join(\"\\n\")"
+---
+The record cites
+July 4, 2008, before
+the follow-up note.

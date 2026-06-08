@@ -1,8 +1,14 @@
 //! Shared property-test strategies for inline date token handling.
+//!
+//! Unit and integration tests use these generators to exercise the same date
+//! token shapes that production span grouping recognises. Keeping the
+//! strategies beside the inline wrapper avoids a second month list or a second
+//! day/year generator in the test tree while still compiling them only for
+//! test targets.
 
 use proptest::prelude::*;
 
-use super::predicates::MONTH_NAMES;
+use super::month_names::MONTH_NAMES;
 
 /// Generates accepted `MONTH_NAMES` values with random ASCII character casing.
 ///
