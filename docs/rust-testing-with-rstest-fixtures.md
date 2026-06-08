@@ -1284,7 +1284,7 @@ wrappers to ensure that logging is correctly set up before each
 The `test-with` crate allows for conditional execution of tests based on
 various runtime conditions, such as the presence of environment variables, the
 existence of specific files or folders, or the availability of network
-services. [^22] It can be used with `rstest`. For example, an `rstest` test
+services.[^22] It can be used with `rstest`. For example, an `rstest` test
 could be further annotated with `test-with` attributes to ensure it only runs
 if a particular database configuration file exists or if a dependent web
 service is reachable. The order of macros is important: `rstest` should

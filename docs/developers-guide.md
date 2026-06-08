@@ -142,10 +142,9 @@ The rationale for the staged table reflow pipeline is recorded in
 parse, width-calculation, or separator-handling flow so implementation changes
 stay aligned with the documented design constraints.
 
-The rationale for treating date-like prose sequences as atomic inline
-fragments is recorded in `docs/adrs/0003-date-sequences-as-inline-fragments.md`.
-Refer to that ADR before adding new date forms or changing the span-grouping
-boundary.
+The rationale for treating date-like prose sequences as atomic inline fragments
+is recorded in `docs/adrs/0003-date-sequences-as-inline-fragments.md`. Refer to
+that ADR before adding new date forms or changing the span-grouping boundary.
 
 ## Wrap module architecture
 
@@ -173,34 +172,33 @@ The wrapping pipeline for `--wrap` is:
    lines for ambiguity-preserving passthrough, and `synthetic_join_spaces`
    stores byte offsets for spaces inserted by continuation joining so only
    formatter-created code-span edge spaces are trimmed later. Subsequent source
-   lines are routed through
-   `handle_pending_continuation` (in `src/wrap.rs`) instead of the normal
-   wrapping path. `handle_pending_continuation` classifies the line and
-   delegates each soft-wrapped continuation chunk to `apply_continuation_chunk`
-   in `src/wrap/continuation.rs`, the module that owns the join/update/dispatch
-   state machine. Each continuation is joined onto `pending_prefix.rest` via
-   `join_pending_continuation`, which inserts a space unless the continuation
-   begins with the exact matching closing fence (detected by
-   `continuation_begins_with_closing_fence`). Blockquote continuations are only
-   joined when their prefix exactly matches the pending prefix. After joining,
-   `apply_continuation_chunk` consults `update_span_state` to drive a
-   `SpanStateUpdate` (`StillOpen`, `ClosedAndReopened`, or `Flush`); when the
-   same chunk both closes the pre-existing span and opens a new one, the helper
-   emits the closed prefix segment and keeps the new span pending rather than
-   inventing a closing fence. `ParagraphState::drain_pending_prefix` takes that
-   pending segment and clears the regular paragraph buffers before final
-   emission. `PendingPrefix::used_prefix` tracks whether the original prefix has
-   already been emitted, and
-   `pending_prefix_for_next_segment` uses it to give the first split segment the
-   original prefix and later split segments the continuation indent. If the
-   opener is at or near the end of its source line, `PendingPrefix` marks
-   subsequent continuations as verbatim, so joining does not create leading or
-   trailing spaces inside the code span. When the projected join would exceed
-   the available content width, the pending line and continuation are emitted
-   verbatim rather than joined into a Markdownlint-invalid overlong line. When
-   the scanner reports no open span and no close/reopen boundary exists,
-   `flush_paragraph` emits the buffered segment atomically using
-   `append_wrapped_with_prefix_width`. The exception is
+   lines are routed through `handle_pending_continuation` (in `src/wrap.rs`)
+   instead of the normal wrapping path. `handle_pending_continuation`
+   classifies the line and delegates each soft-wrapped continuation chunk to
+   `apply_continuation_chunk` in `src/wrap/continuation.rs`, the module that
+   owns the join/update/dispatch state machine. Each continuation is joined onto
+   `pending_prefix.rest` via `join_pending_continuation`, which inserts a
+   space unless the continuation begins with the exact matching closing fence
+   (detected by `continuation_begins_with_closing_fence`). Blockquote
+   continuations are only joined when their prefix exactly matches the pending
+   prefix. After joining, `apply_continuation_chunk` consults
+   `update_span_state` to drive a `SpanStateUpdate` (`StillOpen`,
+   `ClosedAndReopened`, or `Flush`); when the same chunk both closes the
+   pre-existing span and opens a new one, the helper emits the closed prefix
+   segment and keeps the new span pending rather than inventing a closing fence.
+   `ParagraphState::drain_pending_prefix` takes that pending segment and
+   clears the regular paragraph buffers before final emission.
+   `PendingPrefix::used_prefix` tracks whether the original prefix has already
+   been emitted, and `pending_prefix_for_next_segment` uses it to give the
+   first split segment the original prefix and later split segments the
+   continuation indent. If the opener is at or near the end of its source line,
+   `PendingPrefix` marks subsequent continuations as verbatim, so joining does
+   not create leading or trailing spaces inside the code span. When the
+   projected join would exceed the available content width, the pending line
+   and continuation are emitted verbatim rather than joined into a
+   Markdownlint-invalid overlong line. When the scanner reports no open span
+   and no close/reopen boundary exists, `flush_paragraph` emits the buffered
+   segment atomically using `append_wrapped_with_prefix_width`. The exception is
    `ContinuationMode::VerbatimFlush`: when the scanner sees a closing fence
    immediately followed by a word character, `flush_paragraph` emits
    `pending.original_lines` verbatim instead of rewrapping the buffer. When
@@ -213,8 +211,7 @@ The wrapping pipeline for `--wrap` is:
    `VerbatimFlush` preserves `pending.original_lines` for ambiguous close and
    reopen sequences. The `code_span_trim` module contains
    `trim_code_span_edge_spaces`, which matches code spans by exact fence length
-   and removes only spaces whose byte offsets appear in
-   `synthetic_join_spaces`.
+   and removes only spaces whose byte offsets appear in `synthetic_join_spaces`.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
@@ -225,27 +222,26 @@ The wrapping pipeline for `--wrap` is:
    in `src/wrap/inline/span_helpers.rs` extend grouped spans over trailing
    punctuation, couple adjacent footnote references, and merge chained inline
    code or link tokens. `determine_token_span` forward-couples opening
-   punctuation tokens (`(`, `[`, and CJK openers) and hyphen-prefix tokens
-   to the next inline code span or Markdown link so wrapping never leaves a
-   lone opener or prefix at the end of a line.
-   `try_couple_inline_link_after_opener` applies the same rule to
-   parenthesized inline citation links such as `([1](url))`, grouping the
-   opener and link as one `SpanKind::Link` so adjacent citations like
-   `([1](url))([2](url2))` do not split at the boundary. At the tokeniser
-   level, `segment_inline` also stops trailing-punctuation and plain-text
-   scans at an unescaped `([` boundary via `scan_trailing_punctuation_end` and
-   `scan_plain_text_end`, both using `starts_inline_citation`, so the citation
-   opener `(` is emitted as its own token instead of being swallowed into the
-   preceding token's punctuation cluster. That boundary gives
-   `determine_token_span` and `try_couple_inline_link_after_opener` a clean
-   opener token to couple with the following inline link, making the full
-   `([n](url))` span atomic, while escaped sequences such as `\([` bypass the
-   early exit and remain plain text. Trailing punctuation after those atomic
-   spans is grouped in the same pass, and GFM footnote references that
-   immediately follow inline code or links (including opener-coupled spans)
-   stay attached to the preceding punctuation cluster.
-   Date-component predicates are applied by `try_match_date_sequence` in
-   `span_helpers.rs` before `determine_token_span` performs the standard
+   punctuation tokens (`(`, `[`, and CJK openers) and hyphen-prefix tokens to
+   the next inline code span or Markdown link so wrapping never leaves a lone
+   opener or prefix at the end of a line. `try_couple_inline_link_after_opener`
+   applies the same rule to parenthesized inline citation links such as
+   `([1](url))`, grouping the opener and link as one `SpanKind::Link` so
+   adjacent citations like `([1](url))([2](url2))` do not split at the
+   boundary. At the tokeniser level, `segment_inline` also stops
+   trailing-punctuation and plain-text scans at an unescaped `([` boundary via
+   `scan_trailing_punctuation_end` and `scan_plain_text_end`, both using
+   `starts_inline_citation`, so the citation opener `(` is emitted as its own
+   token instead of being swallowed into the preceding token's punctuation
+   cluster. That boundary gives `determine_token_span` and
+   `try_couple_inline_link_after_opener` a clean opener token to couple with
+   the following inline link, making the full `([n](url))` span atomic, while
+   escaped sequences such as `\([` bypass the early exit and remain plain text.
+   Trailing punctuation after those atomic spans is grouped in the same pass,
+   and GFM footnote references that immediately follow inline code or links
+   (including opener-coupled spans) stay attached to the preceding punctuation
+   cluster. Date-component predicates are applied by `try_match_date_sequence`
+   in `span_helpers.rs` before `determine_token_span` performs the standard
    punctuation and link grouping pass.
 
 4. **Post-processing and rendering.** The `postprocess` module applies
@@ -393,25 +389,25 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   overflow the target width. Opening punctuation that immediately precedes an
   inline code span or link is grouped with that span during token grouping so
   the opener is not left on the previous line. Trailing punctuation after those
-  spans follows the same grouping rules. GFM footnote references that immediately
-  follow inline code or link spans without intervening whitespace are coupled
-  to the preceding punctuation cluster, so the marker is not wrapped onto the
-  next line alone. Inflectional affixes (`s`, `'s`, `ed`,
+  spans follows the same grouping rules. GFM footnote references that
+  immediately follow inline code or link spans without intervening whitespace
+  are coupled to the preceding punctuation cluster, so the marker is not
+  wrapped onto the next line alone. Inflectional affixes (`s`, `'s`, `ed`,
   `ing`) and hyphenated compounds that immediately follow a closed backtick
   fence are absorbed into the code token by `scan_code_suffix_end` in
-  `src/wrap/tokenize/scanning.rs`; the combined token is recognized as atomic
-  by `has_inline_code_structure` in `src/wrap/inline/fragment.rs`, so wrapping
+  `src/wrap/tokenize/scanning.rs`; the combined token is recognized as atomic by
+  `has_inline_code_structure` in `src/wrap/inline/fragment.rs`, so wrapping
   treats the full string as one unit. Leading-hyphen compounds — a token that
-  ends with a hyphen and contains at least one alphabetic character (for
-  example `pre-`, `LLM-`, `(API-`) — are coupled forward to the next inline
-  code span during span grouping by the `ends_with_hyphen_prefix` predicate in
+  ends with a hyphen and contains at least one alphabetic character (for example
+  `pre-`, `LLM-`, `(API-`) — are coupled forward to the next inline code span
+  during span grouping by the `ends_with_hyphen_prefix` predicate in
   `src/wrap/inline/predicates.rs`, applied in `determine_token_span` in
   `src/wrap/inline.rs`. The coupling mirrors the existing opening-punctuation
   pattern, so compounds such as `` pre-`LLMPort` `` and `` (API-`Foo`) ``
   remain atomic during wrapping. Internal hyphen chains (e.g.
-  `state-of-the-art-`) are accepted by design; bare dash runs such as `-`
-  or `---` are rejected. Unicode alphabetic characters (e.g. `pré-`,
-  `字-`) are intentionally supported.
+  `state-of-the-art-`) are accepted by design; bare dash runs such as `-` or
+  `---` are rejected. Unicode alphabetic characters (e.g. `pré-`, `字-`) are
+  intentionally supported.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur.
 - **Verbatim blocks.** Fenced code blocks must pass through unchanged, along
@@ -427,21 +423,21 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   content.
 - **Closing fence detection.** Backslash escape checks apply only while
   detecting opening backtick fences in ordinary Markdown text. Once a code span
-  is open, backslashes in the span content are literal bytes and must not make a
-  matching closing fence invisible. All tokenizer entry points that close code
-  spans use `position_after_close` so they also reject candidate closers
+  is open, backslashes in the span content are literal bytes and must not make
+  a matching closing fence invisible. All tokenizer entry points that close
+  code spans use `position_after_close` so they also reject candidate closers
   embedded in a longer backtick run.
 - **Width-aware inline-code carries.** `merge_whitespace_only_lines` receives
   the active wrap width from `wrap_preserving_code`. Before carrying a previous
   inline-code tail across a single-space wrap artefact, it must compute the
-  projected destination line width and skip the carry when that projection would
-  exceed the configured width.
+  projected destination line width and skip the carry when that projection
+  would exceed the configured width.
 - **`WRAP_COLS` public constant.** `mdtablefix::process::WRAP_COLS` is
-  exported as `pub` so that integration tests can reference the production
-  wrap width instead of hard-coding `80`. When writing tests that depend on
-  the column boundary (for example, wrap-boundary edge-case tests), import
-  and use `WRAP_COLS` as the single source of truth. Do not duplicate the
-  literal value `80` in test code.
+  exported as `pub` so that integration tests can reference the production wrap
+  width instead of hard-coding `80`. When writing tests that depend on the
+  column boundary (for example, wrap-boundary edge-case tests), import and use
+  `WRAP_COLS` as the single source of truth. Do not duplicate the literal value
+  `80` in test code.
 
 Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
 replacing `LineBuffer` with `textwrap`.
@@ -466,21 +462,21 @@ from library code.
 
 ### Field naming
 
-Use the stable structured field names `token`, `kind`, `start`, `end`,
-`width`, `truncated`, `reason`, and `is_image`.
+Use the stable structured field names `token`, `kind`, `start`, `end`, `width`,
+`truncated`, `reason`, and `is_image`.
 
 Table: Structured field names emitted by tracing instrumentation.
 
-| Field | Type | Used in | Meaning |
-| --- | --- | --- | --- |
-| `token` | `%str` | fragment, link, footnote events | The text slice that was classified or parsed |
-| `kind` | `?FragmentKind` | `fragment classified` | The computed fragment classification |
-| `start` | `usize` | span events | Byte offset where the span begins |
-| `end` | `usize` | span events | Byte offset where the span ends (exclusive) |
-| `width` | `usize` | span events | Display-column width of the span |
-| `truncated` | `bool` | `fragment classified` | Whether `token` was shortened to <= 80 bytes |
-| `reason` | `&str` | `footnote end not found` | Diagnostic tag: `"prefix_mismatch"` or `"unterminated_bracket"` |
-| `is_image` | `bool` | `link or image parsed` | `true` when the link token is an image literal (`![]()`) |
+| Field       | Type            | Used in                         | Meaning                                                         |
+| ----------- | --------------- | ------------------------------- | --------------------------------------------------------------- |
+| `token`     | `%str`          | fragment, link, footnote events | The text slice that was classified or parsed                    |
+| `kind`      | `?FragmentKind` | `fragment classified`           | The computed fragment classification                            |
+| `start`     | `usize`         | span events                     | Byte offset where the span begins                               |
+| `end`       | `usize`         | span events                     | Byte offset where the span ends (exclusive)                     |
+| `width`     | `usize`         | span events                     | Display-column width of the span                                |
+| `truncated` | `bool`          | `fragment classified`           | Whether `token` was shortened to <= 80 bytes                    |
+| `reason`    | `&str`          | `footnote end not found`        | Diagnostic tag: `"prefix_mismatch"` or `"unterminated_bracket"` |
+| `is_image`  | `bool`          | `link or image parsed`          | `true` when the link token is an image literal (`![]()`)        |
 
 For example:
 
@@ -502,8 +498,7 @@ identifiers, or other sensitive values.
 
 When enabling DEBUG or TRACE logging from this library in a production
 environment, configure the subscriber to redact or drop the `token` field
-before writing to any persistent sink. For example, with
-`tracing-subscriber`:
+before writing to any persistent sink. For example, with `tracing-subscriber`:
 
 ```rust
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -531,19 +526,19 @@ points.
 
 Table: Instrumented functions and their logging levels and fields.
 
-| Function | Level | Fields |
-| --- | --- | --- |
-| `looks_like_footnote_ref` | trace | `token` (in), return value (out) |
-| `ends_with_footnote_ref` | trace | `token` (in), return value (out) |
-| `ends_with_hyphen_prefix` | trace | `token` (in), return value (out) |
-| `is_month_name` | trace | `token` (in), return value (out) |
-| `is_ordinal_day` | trace | `token` (in), return value (out) |
-| `is_numeric_day` | trace | `token` (in), return value (out) |
-| `is_year` | trace | `token` (in), return value (out) |
-| `try_match_date_sequence` | trace, debug | `start` (in), `skip(tokens)`, return value (out); matched date pattern |
-| `date_token_span` | trace | `start` (in), `skip(tokens)`, return value (out); over-width date fallback remains behaviour-only |
-| `parse_link_or_image` | debug | `idx` (in), `skip(text)`, return value (out) |
-| `find_footnote_end` | trace | `idx` (in), `skip(text)`, return value (out) |
+| Function                  | Level        | Fields                                                                                            |
+| ------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
+| `looks_like_footnote_ref` | trace        | `token` (in), return value (out)                                                                  |
+| `ends_with_footnote_ref`  | trace        | `token` (in), return value (out)                                                                  |
+| `ends_with_hyphen_prefix` | trace        | `token` (in), return value (out)                                                                  |
+| `is_month_name`           | trace        | `token` (in), return value (out)                                                                  |
+| `is_ordinal_day`          | trace        | `token` (in), return value (out)                                                                  |
+| `is_numeric_day`          | trace        | `token` (in), return value (out)                                                                  |
+| `is_year`                 | trace        | `token` (in), return value (out)                                                                  |
+| `try_match_date_sequence` | trace, debug | `start` (in), `skip(tokens)`, return value (out); matched date pattern                            |
+| `date_token_span`         | trace        | `start` (in), `skip(tokens)`, return value (out); over-width date fallback remains behaviour-only |
+| `parse_link_or_image`     | debug        | `idx` (in), `skip(text)`, return value (out)                                                      |
+| `find_footnote_end`       | trace        | `idx` (in), `skip(text)`, return value (out)                                                      |
 
 ## Fences module
 
@@ -682,29 +677,28 @@ functions remain focused on traversal.
 ### `HtmlTableState` (`src/html.rs`)
 
 `HtmlTableState` buffers the lines belonging to an HTML `<table>…</table>`
-block and tracks the current nesting depth. `in_html()` returns `true`
-whenever the buffer is non-empty, so the caller knows a table is still being
-accumulated. `push_html_line` appends the supplied line, increments `depth`
-once for every `<table>` start tag found on the trimmed line, and decrements
-it once for every `</table>` end tag on the same trimmed line. When `depth`
-returns to zero, the buffered lines are converted by `table_lines_to_markdown`
-and the buffer is cleared. `flush_raw` exists for the fenced-block escape
-path: it emits the buffered lines verbatim without conversion, so raw HTML
-inside a fenced code block is preserved unchanged.
+block and tracks the current nesting depth. `in_html()` returns `true` whenever
+the buffer is non-empty, so the caller knows a table is still being accumulated.
+`push_html_line` appends the supplied line, increments `depth` once for every
+`<table>` start tag found on the trimmed line, and decrements it once for every
+`</table>` end tag on the same trimmed line. When `depth` returns to zero, the
+buffered lines are converted by `table_lines_to_markdown` and the buffer is
+cleared. `flush_raw` exists for the fenced-block escape path: it emits the
+buffered lines verbatim without conversion, so raw HTML inside a fenced code
+block is preserved unchanged.
 
 ### `DefinitionScanState` (`src/footnotes/renumber/definitions.rs`)
 
-`DefinitionScanState` accumulates the footnote-definition rewrite plan
-during a single scan over the input. It borrows the shared `(original →
-new)` mapping and the `next_number` counter so renumbering decisions stay
-consistent with explicit reference rewrites. Explicit `[^n]:` headers are
-appended to `definitions` as soon as they are encountered, producing a
-`DefinitionLine` per header in scan order. Ordered-list items that look like
-candidate footnote definitions are buffered as `NumericCandidate` entries
-during the scan and finalized at the end via `finalize_numeric_candidates`,
-which drains the buffer in reverse, so the assigned numbers reflect
-bottom-up ordering rather than the order in which the candidates were
-discovered.
+`DefinitionScanState` accumulates the footnote-definition rewrite plan during a
+single scan over the input. It borrows the shared `(original → new)` mapping
+and the `next_number` counter so renumbering decisions stay consistent with
+explicit reference rewrites. Explicit `[^n]:` headers are appended to
+`definitions` as soon as they are encountered, producing a `DefinitionLine` per
+header in scan order. Ordered-list items that look like candidate footnote
+definitions are buffered as `NumericCandidate` entries during the scan and
+finalized at the end via `finalize_numeric_candidates`, which drains the buffer
+in reverse, so the assigned numbers reflect bottom-up ordering rather than the
+order in which the candidates were discovered.
 
 ### `ListState` (`src/lists.rs`)
 
@@ -713,10 +707,10 @@ ordered-list renumbering. `next_number(indent)` first prunes indent levels
 deeper than `indent` (their counters disappear so a future deeper level
 restarts at 1), pushes `indent` onto the stack if it is new, and returns the
 next sequential number for that level — incrementing the counter, so the next
-call at the same indent receives the following integer. `reset()` clears
-both the stack and the counter map; the renumbering pass invokes it when a
-heading or thematic break is encountered, so the next list starts numbering
-from 1 again.
+call at the same indent receives the following integer. `reset()` clears both
+the stack and the counter map; the renumbering pass invokes it when a heading
+or thematic break is encountered, so the next list starts numbering from 1
+again.
 
 ## Test infrastructure
 
@@ -726,12 +720,12 @@ Integration-test helpers are organized under `tests/support/`:
 
 Table: Integration-test support modules and their purposes.
 
-| Module | Purpose |
-| --- | --- |
-| `cli_args.rs` | `run_cli_with_args` — invokes the binary with argument-only tests |
-| `cli_stdin.rs` | `run_cli_with_stdin` — invokes the binary feeding stdin |
-| `fixtures.rs` | Shared rstest fixtures (e.g. `broken_table`) |
-| `wrap_assertions.rs` | Higher-level assertions for wrapping output |
+| Module               | Purpose                                                           |
+| -------------------- | ----------------------------------------------------------------- |
+| `cli_args.rs`        | `run_cli_with_args` — invokes the binary with argument-only tests |
+| `cli_stdin.rs`       | `run_cli_with_stdin` — invokes the binary feeding stdin           |
+| `fixtures.rs`        | Shared rstest fixtures (e.g. `broken_table`)                      |
+| `wrap_assertions.rs` | Higher-level assertions for wrapping output                       |
 
 Each integration-test file declares the modules it needs via explicit
 `#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
@@ -743,20 +737,20 @@ integration-test crates:
 
 Table: Macros for building `Vec<String>` from literals and file lines.
 
-| Macro | Purpose |
-| --- | --- |
-| `lines_vec![…]` | Builds a `Vec<String>` from string-like values. |
-| `include_lines!("path")` | Builds a `Vec<String>` from file lines. |
+| Macro                    | Purpose                                         |
+| ------------------------ | ----------------------------------------------- |
+| `lines_vec![…]`          | Builds a `Vec<String>` from string-like values. |
+| `include_lines!("path")` | Builds a `Vec<String>` from file lines.         |
 
 `lines_vec![…]` reduces boilerplate when constructing fixture inputs.
 `include_lines!("path")` uses `include_str!` at compile time and returns one
 `String` per line of the referenced file.
 
 Both macros are exported rather than kept private because Rust's macro scoping
-rules require `#[macro_export]` for macros to be visible across integration-test
-binary crates. The `#[expect(unused_macros)]` suppressions that previously
-guarded them were replaced by the export attribute when it became clear that
-multiple test binaries depend on them.
+rules require `#[macro_export]` for macros to be visible across
+integration-test binary crates. The `#[expect(unused_macros)]` suppressions
+that previously guarded them were replaced by the export attribute when it
+became clear that multiple test binaries depend on them.
 
 ### `test-macros` crate
 
@@ -771,8 +765,7 @@ attribute applies to code that the compiler has not yet expanded, making
 `#[expect]` semantically unusable at that site. This is a known consequence of
 the `rstest` fixture expansion and is not a lint-integrity violation.
 
-Apply it to any fixture function whose single-expression body triggers the
-lint:
+Apply it to any fixture function whose single-expression body triggers the lint:
 
 ```rust
 #[test_macros::allow_fixture_expansion_lints]
@@ -785,7 +778,7 @@ pub fn broken_table() -> Vec<String> { … }
 `format_breaks` in [src/breaks.rs](../src/breaks.rs) returns
 `Vec<Cow<'_, str>>` so unchanged lines can be forwarded without allocating.
 Lines that do not match a thematic break are emitted as `Cow::Borrowed` slices
-into the input `&[String]`. Synthesized thematic-break lines are also emitted
-as `Cow::Borrowed`, pointing to the shared `LazyLock<String>` static
+into the input `&[String]`. Synthesized thematic-break lines are also emitted as
+`Cow::Borrowed`, pointing to the shared `LazyLock<String>` static
 `THEMATIC_BREAK_LINE`. Callers that need owned `String` values must call
 `.into_owned()` on each item.
