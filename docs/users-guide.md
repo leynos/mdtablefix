@@ -79,6 +79,14 @@ link without intervening whitespace—for example `` `code`.[^ref] `` or
 punctuation during wrapping. The same rule applies when opening punctuation is
 coupled to the span, such as `` (`code`).[^ref] ``.
 
+Inline GFM footnote references that immediately follow sentence punctuation are
+also kept attached as unbreakable units. For example, `Sentence.[^ref]`,
+`Sentence,[^ref]`, `Sentence?[^ref]`, and `Sentence"[^ref]` remain attached
+during wrapping, and previously split paragraph text such as `Sentence. [^ref]`
+or `Sentence.` followed by `[^ref]` is normalised back to `Sentence.[^ref]`.
+Footnote definition lines such as `[^ref]: note text` remain definitions and
+are not joined to preceding prose.
+
 Opening brackets and other opening punctuation (`(`, `[`, and CJK openers such
 as `（` and `「`) that immediately precede an inline code span or Markdown link
 stay coupled to that span during wrapping. This prevents a lone opener from
