@@ -648,6 +648,10 @@ Matrix input fixtures live under `tests/data/cli-matrix/` and must use the
 `make fmt` runs Markdown formatting and must not rewrite matrix inputs. The
 harness has a self-test that rejects non-`.dat` fixtures.
 
+`make typecheck` runs `cargo check --all-targets --all-features` to verify
+type-correctness without running tests. Use it for rapid feedback during
+development before moving on to the full lint and test gates.
+
 Before changing snapshots, run the harness self-tests:
 
 ```bash

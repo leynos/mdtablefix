@@ -21,7 +21,7 @@ TeX-style penalty system to the line fitter. This keeps date atomicity inside
 the existing `InlineFragment` grouping model, while unsupported date forms
 remain ordinary prose until explicitly added.
 
-The matcher recognises exactly the supported day-month-year forms with
+The matcher recognizes exactly the supported day-month-year forms with
 whitespace between components:
 
 - ordinal day, month name, year;
@@ -30,7 +30,7 @@ whitespace between components:
 
 Month names may be full or abbreviated, and numeric day tokens may carry a
 trailing comma. Year tokens may carry trailing prose punctuation or closing
-punctuation so sentence-final and parenthesised dates still form one span.
+punctuation so sentence-final and parenthesized dates still form one span.
 Leading opener punctuation on the first component is stripped by the
 date-component predicates. If the resulting date span is wider than the
 configured wrap width, it follows the same long-token fallback behaviour as
