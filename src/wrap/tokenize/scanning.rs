@@ -234,6 +234,28 @@ pub(crate) fn position_after_close(
     let bytes = text.as_bytes();
     let mut index = search_start;
     let mut escaped_candidate_end = None;
+
+    let has_matching_closing_fence = |search_from: usize| -> bool {
+        let mut close_index = search_from;
+
+        while close_index < text.len() {
+            let Some(ch) = text[close_index..].chars().next() else {
+                break;
+            };
+
+            if ch == '`'
+                && let Some(_end) = closing_fence_end(bytes, text, close_index, fence_len)
+                && !has_odd_backslash_escape_bytes(bytes, close_index)
+            {
+                return true;
+            }
+
+            close_index += ch.len_utf8();
+        }
+
+        false
+    };
+
     while index < text.len() {
         let ch = text[index..].chars().next()?;
         if ch == '`'
@@ -244,10 +266,10 @@ pub(crate) fn position_after_close(
                 index = end;
                 continue;
             }
-            if escaped_candidate_end.is_some()
-                && position_after_close(text, end, fence_len).is_some()
+            if let Some(escaped_end) = escaped_candidate_end
+                && has_matching_closing_fence(end)
             {
-                return escaped_candidate_end;
+                return Some(escaped_end);
             }
             return Some(end);
         }
