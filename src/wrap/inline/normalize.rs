@@ -4,6 +4,8 @@
 //! let the wrapping algorithm separate punctuation from the inline Markdown
 //! construct it annotates.
 
+use std::borrow::Cow;
+
 use super::{is_trailing_punct, looks_like_footnote_ref};
 
 /// Removes whitespace between trailing punctuation and an inline footnote ref.
@@ -11,12 +13,21 @@ use super::{is_trailing_punct, looks_like_footnote_ref};
 /// This keeps sentence punctuation and an immediately following GFM footnote
 /// reference as a single semantic unit before span building decides wrap
 /// boundaries.
-pub(in crate::wrap::inline) fn normalize_footnote_ref_spacing(tokens: &[String]) -> Vec<String> {
+pub(in crate::wrap::inline) fn normalize_footnote_ref_spacing(
+    tokens: &[String],
+) -> Cow<'_, [String]> {
+    let Some(first_match) =
+        (0..tokens.len()).find(|index| matches_footnote_ref_spacing(tokens, *index))
+    else {
+        return Cow::Borrowed(tokens);
+    };
+
     let mut normalized = Vec::with_capacity(tokens.len());
-    let mut index = 0;
+    normalized.extend_from_slice(&tokens[..first_match]);
+    let mut index = first_match;
 
     while index < tokens.len() {
-        if should_skip_footnote_ref_spacing(tokens, index) {
+        if matches_footnote_ref_spacing(tokens, index) {
             normalized.push(tokens[index].clone());
             normalized.push(tokens[index + 2].clone());
             index += 3;
@@ -26,20 +37,16 @@ pub(in crate::wrap::inline) fn normalize_footnote_ref_spacing(tokens: &[String])
         }
     }
 
-    normalized
+    Cow::Owned(normalized)
 }
 
-fn should_skip_footnote_ref_spacing(tokens: &[String], index: usize) -> bool {
-    tokens
-        .get(index..index + 3)
-        .is_some_and(is_footnote_ref_spacing)
-}
-
-fn is_footnote_ref_spacing(tokens: &[String]) -> bool {
-    !looks_like_footnote_ref(&tokens[0])
-        && tokens[0].chars().last().is_some_and(is_trailing_punct)
-        && tokens[1].chars().all(char::is_whitespace)
-        && looks_like_footnote_ref(&tokens[2])
+fn matches_footnote_ref_spacing(tokens: &[String], index: usize) -> bool {
+    tokens.get(index..index + 3).is_some_and(|window| {
+        !looks_like_footnote_ref(&window[0])
+            && window[0].chars().last().is_some_and(is_trailing_punct)
+            && window[1].chars().all(char::is_whitespace)
+            && looks_like_footnote_ref(&window[2])
+    })
 }
 
 #[cfg(test)]
@@ -149,7 +156,7 @@ mod tests {
     #[case::adjacent_references(&["a.", " ", "[^0]", " ", "[^_]"], &["a.", "[^0]", " ", "[^_]"])]
     fn normalizes_inline_footnote_ref_spacing(#[case] input: &[&str], #[case] expected: &[&str]) {
         assert_eq!(
-            normalize_footnote_ref_spacing(&strings(input)),
+            normalize_footnote_ref_spacing(&strings(input)).as_ref(),
             strings(expected)
         );
     }
@@ -183,10 +190,11 @@ mod tests {
         #[test]
         fn normalizing_is_idempotent(tokens in token_stream_strategy()) {
             let normalized = normalize_footnote_ref_spacing(&tokens);
+            let renormalized = normalize_footnote_ref_spacing(&normalized);
 
             prop_assert_eq!(
-                normalize_footnote_ref_spacing(&normalized),
-                normalized
+                renormalized.as_ref(),
+                normalized.as_ref()
             );
         }
 
