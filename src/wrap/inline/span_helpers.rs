@@ -293,3 +293,28 @@ mod span_helper_props {
         }
     }
 }
+
+#[cfg(test)]
+mod tracing_tests {
+    //! Traced-event tests for inline span helper instrumentation.
+
+    use tracing_test::traced_test;
+
+    use super::try_match_date_sequence;
+
+    #[traced_test]
+    #[test]
+    fn try_match_date_sequence_emits_trace_event() {
+        let tokens = [
+            "25th".to_string(),
+            " ".to_string(),
+            "December".to_string(),
+            " ".to_string(),
+            "2025".to_string(),
+        ];
+
+        let _ = try_match_date_sequence(&tokens, 0);
+
+        assert!(logs_contain("try_match_date_sequence"));
+    }
+}

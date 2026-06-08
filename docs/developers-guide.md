@@ -540,6 +540,8 @@ Table: Instrumented functions and their logging levels and fields.
 | `is_ordinal_day` | trace | `token` (in), return value (out) |
 | `is_numeric_day` | trace | `token` (in), return value (out) |
 | `is_year` | trace | `token` (in), return value (out) |
+| `try_match_date_sequence` | trace | `start` (in), `skip(tokens)`, return value (out) |
+| `date_token_span` | trace | `start` (in), `skip(tokens)`, return value (out) |
 | `parse_link_or_image` | debug | `idx` (in), `skip(text)`, return value (out) |
 | `find_footnote_end` | trace | `idx` (in), `skip(text)`, return value (out) |
 

@@ -7,6 +7,8 @@
 #[cfg(test)]
 mod footnote_tests;
 mod fragment;
+#[cfg(test)]
+mod inline_tracing_tests;
 mod month_names;
 mod postprocess;
 mod predicates;
