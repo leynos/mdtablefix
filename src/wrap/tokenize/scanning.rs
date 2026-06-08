@@ -244,6 +244,11 @@ pub(crate) fn position_after_close(
                 index = end;
                 continue;
             }
+            if escaped_candidate_end.is_some()
+                && position_after_close(text, end, fence_len).is_some()
+            {
+                return escaped_candidate_end;
+            }
             return Some(end);
         }
         index += ch.len_utf8();

@@ -134,6 +134,25 @@ fn test_tokenize_backslash_terminated_code_span() {
 }
 
 #[test]
+fn tokenize_markdown_backslash_terminated_span_not_swallowed_by_later_literal_fence() {
+    let tokens = tokenize_markdown(r"`C:\path\bin\` and then run `cmd`");
+    let code_tokens = tokens
+        .iter()
+        .filter(|token| matches!(token, Token::Code { .. }))
+        .collect::<Vec<_>>();
+
+    assert_eq!(code_tokens.len(), 2);
+    assert!(matches!(
+        code_tokens[0],
+        Token::Code {
+            raw: r"`C:\path\bin\`",
+            ..
+        }
+    ));
+    assert!(matches!(code_tokens[1], Token::Code { raw: "`cmd`", .. }));
+}
+
+#[test]
 fn wrap_text_preserves_hyphenated_words() {
     let input = lines_vec!["A word that is very-long-word indeed"];
     let wrapped = wrap_text(&input, 20);
