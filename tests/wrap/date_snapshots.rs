@@ -1,4 +1,10 @@
 //! Snapshot tests for date-like sequence atomicity during paragraph wrapping.
+//!
+//! These tests record full wrapped output for representative date formats, so
+//! line-boundary changes are reviewed as snapshot changes rather than inferred
+//! from individual string predicates. They complement the example-based
+//! `dates.rs` tests, which assert specific invariants for edge cases such as
+//! punctuation, footnotes, and over-width fallback behaviour.
 
 use mdtablefix::wrap::wrap_text;
 use rstest::rstest;

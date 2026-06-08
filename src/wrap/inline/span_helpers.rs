@@ -8,6 +8,7 @@
 //! span before `determine_token_span` performs the standard punctuation and
 //! link grouping pass.
 
+use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
 use super::predicates::{
@@ -56,9 +57,51 @@ pub(in crate::wrap::inline) fn try_match_date_sequence(
     tokens: &[String],
     start: usize,
 ) -> Option<usize> {
-    match_ordinal_day_month_year(tokens, start)
-        .or_else(|| match_numeric_day_month_year(tokens, start))
-        .or_else(|| match_month_numeric_day_year(tokens, start))
+    if let Some(end) = match_ordinal_day_month_year(tokens, start) {
+        debug!(
+            start,
+            end,
+            pattern = "ordinal_day_month_year",
+            "matched date sequence"
+        );
+        Some(end)
+    } else if let Some(end) = match_numeric_day_month_year(tokens, start) {
+        debug!(
+            start,
+            end,
+            pattern = "numeric_day_month_year",
+            "matched date sequence"
+        );
+        Some(end)
+    } else if let Some(end) = match_month_numeric_day_year(tokens, start) {
+        debug!(
+            start,
+            end,
+            pattern = "month_numeric_day_year",
+            "matched date sequence"
+        );
+        Some(end)
+    } else {
+        None
+    }
+}
+
+#[tracing::instrument(level = "trace", skip(tokens), ret)]
+pub(in crate::wrap::inline) fn date_token_span(
+    tokens: &[String],
+    start: usize,
+) -> Option<(usize, usize)> {
+    let date_end = try_match_date_sequence(tokens, start)?;
+    let mut date_width = tokens[start..date_end]
+        .iter()
+        .map(|token| UnicodeWidthStr::width(token.as_str()))
+        .sum();
+    if let Some((_, footnote_end)) =
+        try_couple_footnote_reference(tokens, date_end, SpanKind::General, &mut date_width)
+    {
+        return Some((footnote_end, date_width));
+    }
+    Some((date_end, date_width))
 }
 
 fn match_ordinal_day_month_year(tokens: &[String], start: usize) -> Option<usize> {
@@ -300,21 +343,54 @@ mod tracing_tests {
 
     use tracing_test::traced_test;
 
-    use super::try_match_date_sequence;
+    use super::{date_token_span, try_match_date_sequence};
+    use crate::wrap::inline::wrap_preserving_code;
 
-    #[traced_test]
-    #[test]
-    fn try_match_date_sequence_emits_trace_event() {
-        let tokens = [
+    fn date_tokens() -> [String; 5] {
+        [
             "25th".to_string(),
             " ".to_string(),
             "December".to_string(),
             " ".to_string(),
             "2025".to_string(),
-        ];
+        ]
+    }
+
+    #[traced_test]
+    #[test]
+    fn try_match_date_sequence_emits_trace_event() {
+        let tokens = date_tokens();
 
         let _ = try_match_date_sequence(&tokens, 0);
 
         assert!(logs_contain("try_match_date_sequence"));
+    }
+
+    #[traced_test]
+    #[test]
+    fn try_match_date_sequence_logs_matched_pattern() {
+        let tokens = date_tokens();
+
+        let _ = try_match_date_sequence(&tokens, 0);
+
+        assert!(logs_contain("ordinal_day_month_year"));
+    }
+
+    #[traced_test]
+    #[test]
+    fn date_token_span_emits_trace_event() {
+        let tokens = date_tokens();
+
+        let _ = date_token_span(&tokens, 0);
+
+        assert!(logs_contain("date_token_span"));
+    }
+
+    #[traced_test]
+    #[test]
+    fn wrap_preserving_code_logs_over_width_date_fallback() {
+        let _ = wrap_preserving_code("25th December 2025.", 10);
+
+        assert!(logs_contain("date span exceeds wrap width"));
     }
 }

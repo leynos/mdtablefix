@@ -7,8 +7,6 @@
 #[cfg(test)]
 mod footnote_tests;
 mod fragment;
-#[cfg(test)]
-mod inline_tracing_tests;
 mod month_names;
 mod postprocess;
 mod predicates;
@@ -45,6 +43,7 @@ pub(in crate::wrap::inline) use predicates::{
 use span_helpers::{
     SpanKind,
     absorb_token_and_trailing_punctuation,
+    date_token_span,
     extend_punctuation,
     merge_code_span,
     should_couple_whitespace,
@@ -57,21 +56,6 @@ use tracing::trace;
 use unicode_width::UnicodeWidthStr;
 
 use super::tokenize;
-
-#[tracing::instrument(level = "trace", skip(tokens), ret)]
-fn date_token_span(tokens: &[String], start: usize) -> Option<(usize, usize)> {
-    let date_end = try_match_date_sequence(tokens, start)?;
-    let mut date_width = tokens[start..date_end]
-        .iter()
-        .map(|token| UnicodeWidthStr::width(token.as_str()))
-        .sum();
-    if let Some((_, footnote_end)) =
-        try_couple_footnote_reference(tokens, date_end, SpanKind::General, &mut date_width)
-    {
-        return Some((footnote_end, date_width));
-    }
-    Some((date_end, date_width))
-}
 
 fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKind) {
     let mut end = start + 1;
@@ -230,12 +214,23 @@ fn push_span_text(text: &mut String, tokens: &[String], span: Range<usize>) {
 /// The return value preserves token order while grouping inline code, links,
 /// and whitespace runs into `InlineFragment` values with precomputed widths.
 /// This helper never panics when `tokens` is well-formed.
-fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
+fn build_fragments(tokens: &[String], wrap_width: usize) -> Vec<InlineFragment> {
     let mut fragments: Vec<InlineFragment> = Vec::new();
     let mut i = 0;
 
     while i < tokens.len() {
-        let (group_end, _) = determine_token_span(tokens, i);
+        let (group_end, group_width) = determine_token_span(tokens, i);
+        if matches!(try_match_date_sequence(tokens, i), Some(date_end) if date_end <= group_end)
+            && group_width > wrap_width
+        {
+            tracing::info!(
+                start = i,
+                end = group_end,
+                width = group_width,
+                wrap_width,
+                "date span exceeds wrap width"
+            );
+        }
         let span = i..group_end;
         let text = if tokens[i..group_end]
             .iter()
@@ -342,7 +337,7 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         return Vec::new();
     }
 
-    let fragments = build_fragments(&tokens);
+    let fragments = build_fragments(&tokens, width);
     let mut lines = Vec::new();
     let mut buffer: Vec<InlineFragment> = Vec::new();
 
