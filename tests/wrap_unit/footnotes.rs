@@ -89,7 +89,6 @@ fn wrap_text_removes_spacing_between_punctuation_and_footnote_ref(
 #[case(lines_vec!["Word.", "[^1]"])]
 #[case(lines_vec!["Word.", "  [^1]"])]
 fn wrap_text_normalizes_split_footnote_refs_in_same_paragraph(#[case] input: Vec<String>) {
-
     assert_eq!(wrap_text(&input, 80), lines_vec!["Word.[^1]"]);
 }
 
