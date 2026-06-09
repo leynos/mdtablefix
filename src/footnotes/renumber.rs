@@ -4,10 +4,14 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use regex::{Captures, Match, Regex};
 
-/// Owns the footnote-definition parsing and reordering machinery, delegated
+/// Owns the footnote-definition parsing and scanning machinery, delegated
 /// from the parent module so each source file remains readable and within
 /// the repository size limit.
 mod definitions;
+/// Owns footnote-definition block reordering, kept separate from the
+/// scanning machinery in [`definitions`] so each source file stays within
+/// the repository size limit.
+mod reorder;
 /// Re-exports the [`DefinitionParts`](super::parsing::DefinitionParts) shape
 /// from the sibling `parsing` module so the [`definitions`] submodule can
 /// reach it through `super::parsing::DefinitionParts` without taking a direct
@@ -19,12 +23,8 @@ mod parsing {
 
 #[cfg(test)]
 use definitions::numeric_candidate_from_line;
-use definitions::{
-    DefinitionUpdates,
-    collect_definition_updates,
-    reorder_definition_block,
-    rewrite_definition_headers,
-};
+use definitions::{DefinitionUpdates, collect_definition_updates, rewrite_definition_headers};
+use reorder::reorder_definition_block;
 
 use super::{
     lists::{footnote_block_range, has_existing_footnote_block, trimmed_range},
