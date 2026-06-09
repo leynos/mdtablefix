@@ -374,3 +374,36 @@ fn test_cli_wrap_preserves_step_definitions_guidance() -> Result<(), Box<dyn std
     }
     Ok(())
 }
+
+/// Guards issue `#354` end-to-end: `mdtablefix --wrap` must keep an inline code
+/// span that contains escaped backticks atomic when wrapping a list item, never
+/// splitting it across lines and preserving the escaped backticks verbatim.
+#[test]
+fn test_cli_wrap_keeps_escaped_backtick_code_span_atomic_in_list_item()
+-> Result<(), Box<dyn std::error::Error>> {
+    let input = concat!(
+        r"- Message: `Ensure the manifest exists or pass \`--file\` with the correct path.` ",
+        "The docs should pin that wording.\n",
+    );
+    let assertion = run_cli_with_stdin(&["--wrap"], input)?;
+    let success = assertion.success();
+    let output = String::from_utf8_lossy(&success.get_output().stdout);
+
+    let span = r"`Ensure the manifest exists or pass \`--file\` with the correct path.`";
+    // A contiguous, single-line match proves the span was never split across a
+    // line break during wrapping.
+    assert!(
+        output.lines().any(|line| line.contains(span)),
+        "escaped-backtick code span must stay atomic on one line: {output}",
+    );
+    // The list item is long enough to force wrapping onto several lines.
+    assert!(
+        output.lines().count() > 1,
+        "expected the list item to wrap onto multiple lines: {output}",
+    );
+    assert!(
+        output.lines().all(|line| line.len() <= 80),
+        "every wrapped line must fit the default width: {output}",
+    );
+    Ok(())
+}

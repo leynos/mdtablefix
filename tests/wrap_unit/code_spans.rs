@@ -70,6 +70,72 @@ fn wrap_text_oversized_code_span_stays_intact() {
     assert!(wrapped.iter().skip(1).all(|line| line.starts_with("   ")));
 }
 
+#[rstest]
+#[case::escaped_option(r"`Ensure the manifest exists or pass \`--file\` with the correct path.`")]
+#[case::escaped_inner_word(r"`word.\`inner\`.rest`")]
+fn tokenize_markdown_keeps_escaped_backtick_code_span_atomic(#[case] span: &str) {
+    let tokens = tokenize_markdown(span);
+
+    assert_eq!(
+        tokens,
+        vec![Token::Code {
+            raw: span,
+            fence: "`",
+            code: &span[1..span.len() - 1],
+        }]
+    );
+}
+
+/// Escaped backtick code spans must survive wrapping intact, whether they
+/// appear inside a list item or a paragraph. The `contains` check guards the
+/// atomic span specifically, while the snapshot guards the complete
+/// line-breaking structure. The explicit snapshot names match the committed
+/// `.snap` fixtures so they are reused regardless of the test function name.
+#[rstest]
+#[case::list_item(
+    concat!(
+        r"- Message: `Ensure the manifest exists or pass \`--file\` with the correct path.` ",
+        "The docs should pin that wording."
+    ),
+    r"`Ensure the manifest exists or pass \`--file\` with the correct path.`",
+    "wrap_text_keeps_escaped_backtick_code_span_atomic_in_list_item"
+)]
+#[case::paragraph(
+    concat!(
+        r"Document `word.\`inner\`.rest` carefully because wrapping near the ",
+        "line boundary must keep the inline code span intact."
+    ),
+    r"`word.\`inner\`.rest`",
+    "wrap_text_keeps_escaped_backtick_code_span_atomic_in_paragraph"
+)]
+fn wrap_text_keeps_escaped_backtick_code_span_atomic(
+    #[case] source: &str,
+    #[case] expected_span: &str,
+    #[case] snapshot_name: &str,
+) {
+    let input = lines_vec![source];
+    let wrapped = wrap_text(&input, 80);
+    let rendered = wrapped.join("\n");
+
+    // Structural guard: the atomic span must survive wrapping.
+    assert!(
+        rendered.contains(expected_span),
+        "expected atomic span {expected_span:?} to survive wrapping, got: {rendered}"
+    );
+    assert!(wrapped.iter().all(|line| line.width() <= 80));
+
+    // Snapshot: verifies complete line-breaking structure.
+    insta::with_settings!(
+        {
+            snapshot_path => "../../tests/snapshots",
+            prepend_module_to_snapshot => false,
+        },
+        {
+            insta::assert_snapshot!(snapshot_name, rendered);
+        }
+    );
+}
+
 #[test]
 fn test_tokenize_backslash_terminated_code_span() {
     let tokens = tokenize_markdown(r"Install to `C:\path\bin\` and add");
@@ -86,6 +152,25 @@ fn test_tokenize_backslash_terminated_code_span() {
             ..
         }
     ));
+}
+
+#[test]
+fn tokenize_markdown_backslash_terminated_span_not_swallowed_by_later_literal_fence() {
+    let tokens = tokenize_markdown(r"`C:\path\bin\` and then run `cmd`");
+    let code_tokens = tokens
+        .iter()
+        .filter(|token| matches!(token, Token::Code { .. }))
+        .collect::<Vec<_>>();
+
+    assert_eq!(code_tokens.len(), 2);
+    assert!(matches!(
+        code_tokens[0],
+        Token::Code {
+            raw: r"`C:\path\bin\`",
+            ..
+        }
+    ));
+    assert!(matches!(code_tokens[1], Token::Code { raw: "`cmd`", .. }));
 }
 
 #[test]

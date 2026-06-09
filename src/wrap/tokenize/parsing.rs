@@ -201,8 +201,7 @@ pub(super) fn handle_backtick_fence(text: &str, start_idx: usize) -> (String, us
     let fence_end = scan_while(text, start_idx, |ch| ch == '`');
     let fence_len = fence_end - start;
 
-    if let Some(relative_end) = position_after_close(&text[fence_end..], fence_len) {
-        let candidate_end = fence_end + relative_end;
+    if let Some(candidate_end) = position_after_close(text, fence_end, fence_len) {
         return (collect_range(text, start, candidate_end), candidate_end);
     }
 

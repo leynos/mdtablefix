@@ -1,5 +1,6 @@
 //! Unit tests for byte-level tokenizer scanning helpers.
 
+use proptest::prelude::*;
 use rstest::rstest;
 
 use super::*;
@@ -75,4 +76,116 @@ fn continuation_begins_with_closing_fence_matches_literal_closers_only(
 #[case("``a`b`", true)]
 fn has_unclosed_code_span_rejects_mid_run_closers(#[case] text: &str, #[case] expected: bool) {
     assert_eq!(has_unclosed_code_span(text), expected);
+}
+
+/// Verify `position_after_close` handles alternating escaped/literal fences correctly.
+#[rstest]
+// Single escaped candidate followed by a balanced literal pair: the escaped
+// candidate is the real closer for the outer span.
+#[case::escaped_then_balanced_literal(
+    r"`a\`` b `c`",
+    1,   // search_start: after opening `
+    1,   // fence_len
+    Some(r"`a\``` b ".len()), // byte offset of the first escaped-candidate closer
+)]
+// Three alternating escaped candidates before a literal that is itself paired:
+// the first escaped candidate is the real closer.
+#[case::three_escaped_then_paired_literal(
+    r"`a\`` x `b\`` y `c\`` z `d` e `f`",
+    1,
+    1,
+    Some(r"`a\``` x ".len()),
+)]
+// No escaped candidates: the first literal fence is accepted directly.
+#[case::no_escaped_candidates("`abc` def", 1, 1, Some(5))]
+// Escaped candidate at the end with no subsequent literal: the escaped
+// candidate is the fallback.
+#[case::only_escaped_candidate(r"`a\`", 1, 1, Some(r"`a\`".len()))]
+// A single-length escaped closer precedes a literal fence that itself re-opens
+// a span closed by a *later* escaped backtick. The forward look-ahead now
+// treats that escaped run as proof the literal fence re-opens, so the outer
+// span is closed by the escaped backtick before `x`, not the literal backtick
+// after it.
+#[case::escaped_closer_before_reopening_literal(r"`a\` x `b\`", 1, 1, Some(r"`a\`".len()))]
+fn position_after_close_alternating_cases(
+    #[case] text: &str,
+    #[case] search_start: usize,
+    #[case] fence_len: usize,
+    #[case] expected: Option<usize>,
+) {
+    assert_eq!(
+        position_after_close(text, search_start, fence_len),
+        expected
+    );
+}
+
+proptest! {
+    /// `position_after_close` must always terminate (no infinite loop) and must
+    /// never return an offset beyond `text.len()`.
+    #[test]
+    fn position_after_close_always_terminates_within_bounds(
+        text in "[ -~]{0,200}",   // printable ASCII, up to 200 chars
+        search_start in 0usize..=200usize,
+        fence_len in 1usize..=4usize,
+    ) {
+        let search_start = search_start.min(text.len());
+        let result = position_after_close(&text, search_start, fence_len);
+        if let Some(end) = result {
+            prop_assert!(
+                end <= text.len(),
+                "returned offset {end} exceeds text length {}",
+                text.len()
+            );
+            prop_assert!(
+                end >= search_start,
+                "returned offset {end} precedes search_start {search_start}"
+            );
+        }
+    }
+
+    /// A fence-length of zero must always return `None`.
+    #[test]
+    fn position_after_close_zero_fence_len_returns_none(
+        text in "[ -~]{0,100}",
+        search_start in 0usize..=100usize,
+    ) {
+        let search_start = search_start.min(text.len());
+        prop_assert_eq!(position_after_close(&text, search_start, 0), None);
+    }
+
+    /// Boundary integrity: when `position_after_close` returns `Some(end)`, the
+    /// closing run `text[end - fence_len .. end]` must be exactly `fence_len`
+    /// backticks with no backtick immediately before or after it. The returned
+    /// offset therefore always sits just past a complete, isolated fence — never
+    /// inside a longer backtick run.
+    #[test]
+    fn position_after_close_returns_isolated_fence_of_exact_length(
+        text in "[ -~]{0,200}",
+        search_start in 0usize..=200usize,
+        fence_len in 1usize..=4usize,
+    ) {
+        let search_start = search_start.min(text.len());
+        if let Some(end) = position_after_close(&text, search_start, fence_len) {
+            let bytes = text.as_bytes();
+            prop_assert!(end <= text.len());
+            prop_assert!(
+                end >= fence_len,
+                "returned offset {end} cannot hold a {fence_len}-byte fence"
+            );
+            let run_start = end - fence_len;
+            prop_assert!(
+                bytes[run_start..end].iter().all(|&byte| byte == b'`'),
+                "closing run {:?} is not exactly {fence_len} backticks",
+                &text[run_start..end]
+            );
+            prop_assert!(
+                run_start == 0 || bytes[run_start - 1] != b'`',
+                "closing run is preceded by a backtick (mid-run on the left)"
+            );
+            prop_assert!(
+                end == text.len() || bytes[end] != b'`',
+                "closing run is followed by a backtick (mid-run on the right)"
+            );
+        }
+    }
 }

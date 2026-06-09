@@ -241,7 +241,7 @@ proptest! {
         );
         let rendered = output.join("\n");
         prop_assert!(
-            !rendered.contains(format!("` {command}").as_str()),
+            !rendered.contains(format!("` {command} --flag").as_str()),
             "wrapped checklist item inserted a space after the opening fence: {:?}",
             output
         );

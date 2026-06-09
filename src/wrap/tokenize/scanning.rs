@@ -146,26 +146,12 @@ pub(crate) fn parse_open_code_span(text: &str) -> Option<(usize, &str)> {
         let fence_start = index;
         let fence_end = scan_while(text, index, |candidate| candidate == '`');
         let fence_len = fence_end - fence_start;
-        let mut search = fence_end;
-        let mut found_close = false;
-
-        while search < text.len() {
-            if let Some(candidate_end) = closing_fence_end(bytes, text, search, fence_len) {
-                found_close = true;
-                index = candidate_end;
-                break;
-            }
-
-            if let Some(next) = text[search..].chars().next() {
-                search += next.len_utf8();
-            } else {
-                break;
-            }
+        if let Some(candidate_end) = position_after_close(text, fence_end, fence_len) {
+            index = candidate_end;
+            continue;
         }
 
-        if !found_close {
-            return Some((fence_len, &text[fence_end..]));
-        }
+        return Some((fence_len, &text[fence_end..]));
     }
     None
 }
@@ -216,33 +202,19 @@ pub(crate) fn has_unclosed_code_span(text: &str) -> bool {
         let fence_start = index;
         let fence_end = scan_while(text, index, |candidate| candidate == '`');
         let fence_len = fence_end - fence_start;
-        let mut search = fence_end;
-        let mut found_close = false;
-
-        while search < text.len() {
-            if let Some(candidate_end) = closing_fence_end(bytes, text, search, fence_len) {
-                found_close = true;
-                index = candidate_end;
-                break;
-            }
-
-            if let Some(next) = text[search..].chars().next() {
-                search += next.len_utf8();
-            } else {
-                break;
-            }
+        if let Some(candidate_end) = position_after_close(text, fence_end, fence_len) {
+            index = candidate_end;
+            continue;
         }
 
-        if !found_close {
-            return true;
-        }
+        return true;
     }
     false
 }
 
 /// Returns the byte position just past the first matching closing fence run.
 ///
-/// Walks `continuation` looking for an unescaped backtick run of exactly
+/// Walks `text` looking for an unescaped backtick run of exactly
 /// `fence_len` characters. When one is found, returns the byte index of the
 /// character following the closing run. Returns `None` when no matching run
 /// exists, or when `fence_len` is zero (since a zero-length fence cannot
@@ -250,23 +222,59 @@ pub(crate) fn has_unclosed_code_span(text: &str) -> bool {
 ///
 /// This helper is used by `split_reopen_span` so it can skip past the close
 /// of a pre-existing span before searching the remainder for a new opener.
-pub(crate) fn position_after_close(continuation: &str, fence_len: usize) -> Option<usize> {
+pub(crate) fn position_after_close(
+    text: &str,
+    search_start: usize,
+    fence_len: usize,
+) -> Option<usize> {
     if fence_len == 0 {
         return None;
     }
 
-    let bytes = continuation.as_bytes();
-    let mut index = 0;
-    while index < continuation.len() {
-        let ch = continuation[index..].chars().next()?;
+    let bytes = text.as_bytes();
+    let mut index = search_start;
+    let mut escaped_candidate_end = None;
+
+    let has_matching_closing_fence = |search_from: usize| -> bool {
+        let mut close_index = search_from;
+
+        while close_index < text.len() {
+            let Some(ch) = text[close_index..].chars().next() else {
+                break;
+            };
+
+            if ch == '`'
+                && let Some(_end) = closing_fence_end(bytes, text, close_index, fence_len)
+            {
+                return true;
+            }
+
+            close_index += ch.len_utf8();
+        }
+
+        false
+    };
+
+    while index < text.len() {
+        let ch = text[index..].chars().next()?;
         if ch == '`'
-            && let Some(end) = closing_fence_end(bytes, continuation, index, fence_len)
+            && let Some(end) = closing_fence_end(bytes, text, index, fence_len)
         {
+            if has_odd_backslash_escape_bytes(bytes, index) {
+                escaped_candidate_end = Some(end);
+                index = end;
+                continue;
+            }
+            if let Some(escaped_end) = escaped_candidate_end
+                && has_matching_closing_fence(end)
+            {
+                return Some(escaped_end);
+            }
             return Some(end);
         }
         index += ch.len_utf8();
     }
-    None
+    escaped_candidate_end
 }
 
 pub(crate) fn scan_continuation_span_state(continuation: &str, fence_len: usize) -> Option<usize> {
