@@ -245,7 +245,6 @@ pub(crate) fn position_after_close(
 
             if ch == '`'
                 && let Some(_end) = closing_fence_end(bytes, text, close_index, fence_len)
-                && !has_odd_backslash_escape_bytes(bytes, close_index)
             {
                 return true;
             }

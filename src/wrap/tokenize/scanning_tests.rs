@@ -101,6 +101,12 @@ fn has_unclosed_code_span_rejects_mid_run_closers(#[case] text: &str, #[case] ex
 // Escaped candidate at the end with no subsequent literal: the escaped
 // candidate is the fallback.
 #[case::only_escaped_candidate(r"`a\`", 1, 1, Some(r"`a\`".len()))]
+// A single-length escaped closer precedes a literal fence that itself re-opens
+// a span closed by a *later* escaped backtick. The forward look-ahead now
+// treats that escaped run as proof the literal fence re-opens, so the outer
+// span is closed by the escaped backtick before `x`, not the literal backtick
+// after it.
+#[case::escaped_closer_before_reopening_literal(r"`a\` x `b\`", 1, 1, Some(r"`a\`".len()))]
 fn position_after_close_alternating_cases(
     #[case] text: &str,
     #[case] search_start: usize,
