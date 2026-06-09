@@ -326,6 +326,7 @@ still fits within the configured width.
 
 Table: Key types and functions.
 
+<!-- markdownlint-disable MD013 MD055 MD056 MD060 -->
 | Symbol                                                                                                                                                                                                                                                       | File                              |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
 | `LinkReferenceMatcher`                                                                                                                                                                                                                                       | `src/wrap/link_reference.rs`      |
@@ -356,6 +357,7 @@ Table: Key types and functions.
 | `handle_pending_continuation`                                                                                                                                                                                                                                | `src/wrap.rs`                     |
 | `scan_code_suffix_end`                                                                                                                                                                                                                                       | `src/wrap/tokenize/scanning.rs`   |
 | `has_inline_code_structure`                                                                                                                                                                                                                                  | `src/wrap/inline/fragment.rs`     |
+<!-- markdownlint-enable MD013 MD055 MD056 MD060 -->
 
 `ContinuationMode` in `src/wrap/paragraph.rs` selects normal joining,
 opener-at-EOL tight joining, or original-line verbatim flushing for
