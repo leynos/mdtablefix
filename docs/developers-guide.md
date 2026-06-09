@@ -237,12 +237,16 @@ The wrapping pipeline for `--wrap` is:
    `try_couple_inline_link_after_opener` a clean opener token to couple with
    the following inline link, making the full `([n](url))` span atomic, while
    escaped sequences such as `\([` bypass the early exit and remain plain text.
-   Trailing punctuation after those atomic spans is grouped in the same pass,
-   and GFM footnote references that immediately follow inline code or links
-   (including opener-coupled spans) stay attached to the preceding punctuation
-   cluster. Date-component predicates are applied by `try_match_date_sequence`
-   in `span_helpers.rs` before `determine_token_span` performs the standard
-   punctuation and link grouping pass.
+   `normalize_footnote_ref_spacing` in `src/wrap/inline/normalize.rs` then
+   removes whitespace tokens between trailing punctuation and inline GFM
+   footnote references before fragment construction, while leaving footnote
+   definition starts (`[^label]:`) untouched. Trailing punctuation after atomic
+   spans is grouped in the same pass, and GFM footnote references that
+   immediately follow inline code or links (including opener-coupled spans)
+   stay attached to the preceding punctuation cluster. Date-component
+   predicates are applied by `try_match_date_sequence` in `span_helpers.rs`
+   before `determine_token_span` performs the standard punctuation and link
+   grouping pass.
 
 4. **Post-processing and rendering.** The `postprocess` module applies
    `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
@@ -336,6 +340,7 @@ Table: Key types and functions.
 | Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, `is_month_name`, `is_ordinal_day`, `is_numeric_day`, `is_year`, …)                                                                                  | `src/wrap/inline/predicates.rs`   |
 | `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, `try_match_date_sequence`, …)                                                                                                                                         | `src/wrap/inline/span_helpers.rs` |
 | `try_couple_inline_link_after_opener`                                                                                                                                                                                                                        | `src/wrap/inline/span_helpers.rs` |
+| `normalize_footnote_ref_spacing`                                                                                                                                                                                                                             | `src/wrap/inline/normalize.rs`    |
 | `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                     | `src/wrap/inline.rs`              |
 | `determine_token_span`                                                                                                                                                                                                                                       | `src/wrap/inline.rs`              |
 | `merge_whitespace_only_lines`                                                                                                                                                                                                                                | `src/wrap/inline/postprocess.rs`  |

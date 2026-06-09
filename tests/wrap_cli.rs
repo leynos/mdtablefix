@@ -110,3 +110,23 @@ fn cli_wrap_in_place_preserves_inline_footnote_references() -> Result<(), Box<dy
     assert!(!actual.contains("\n^4]"));
     Ok(())
 }
+
+#[test]
+fn cli_wrap_in_place_reattaches_split_inline_footnote_reference()
+-> Result<(), Box<dyn std::error::Error>> {
+    let input = concat!(
+        "This paragraph was previously wrapped so that its sentence citation.\n",
+        "  [^353] drifted away from the punctuation that it annotates, while ",
+        "the rest of the paragraph remains ordinary prose.\n",
+        "\n",
+        "[^353]: Footnote body.\n",
+    );
+
+    let actual = run_wrap_in_place_and_read_back(input)?;
+
+    assert!(actual.contains("citation.[^353]"));
+    assert!(actual.contains("[^353]: Footnote body."));
+    assert!(!actual.contains(".\n[^353]"));
+    assert!(!actual.contains(".\n [^353]"));
+    Ok(())
+}

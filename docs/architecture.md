@@ -411,15 +411,17 @@ without splitting code spans, links, or punctuation groups.
 ```mermaid
 flowchart TD
     A["Input text (&str)"] --> B["Tokenize into whitespace and inline Markdown tokens"]
-    B --> C["Group tokens into Markdown-aware fragments"]
-    C --> D["Measure fragment widths with unicode-width"]
-    D --> E["Run textwrap wrap_first_fit over current fragments"]
-    E --> F["Merge whitespace-only continuation lines forward"]
-    F --> G["Render wrapped lines, trimming only a single trailing separator space"]
+    B --> C["Normalize inline footnote reference spacing"]
+    C --> D["Group tokens into Markdown-aware fragments"]
+    D --> E["Measure fragment widths with unicode-width"]
+    E --> F["Run textwrap wrap_first_fit over current fragments"]
+    F --> G["Merge whitespace-only continuation lines forward"]
+    G --> H["Render wrapped lines, trimming only a single trailing separator space"]
 ```
 
 Figure: Wrap-tokenizer flow. Starting from an input string, the wrapper emits
-whitespace and inline Markdown tokens, groups them into fragments, measures
+whitespace and inline Markdown tokens, normalises inline footnote references with
+`normalize_footnote_ref_spacing`, groups tokens into fragments, measures
 their display widths with `unicode-width`, feeds them through
 `textwrap::wrap_algorithms::wrap_first_fit`, and then reconstructs wrapped
 lines while preserving Markdown-aware spacing rules.
@@ -487,7 +489,8 @@ sequenceDiagram
         WT->>PW: handle_prefix_line / flush_paragraph
         alt Prefixed or plain paragraph content
             PW->>WP: wrap_preserving_code(text, width)
-            WP->>IH: build_fragments + merge/rebalance
+            WP->>IH: normalize_footnote_ref_spacing
+            IH->>IH: build_fragments + merge/rebalance
             IH->>TW: wrap_first_fit(fragments, line_widths)
             TW-->>IH: wrapped_fragment_groups
             IH-->>WP: wrapped_lines_with_spans

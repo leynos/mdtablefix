@@ -1,0 +1,8 @@
+---
+source: tests/wrap_unit/footnotes.rs
+assertion_line: 111
+expression: rendered
+---
+This is a long sentence that eventually ends with a
+citation.[^7] The next sentence gives the wrapper
+somewhere else to break.
