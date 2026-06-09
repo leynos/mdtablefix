@@ -83,7 +83,7 @@ Inline GFM footnote references that immediately follow sentence punctuation are
 also kept attached as unbreakable units. For example, `Sentence.[^ref]`,
 `Sentence,[^ref]`, `Sentence?[^ref]`, and `Sentence"[^ref]` remain attached
 during wrapping, and previously split paragraph text such as `Sentence. [^ref]`
-or `Sentence.` followed by `[^ref]` is normalised back to `Sentence.[^ref]`.
+or `Sentence.` followed by `[^ref]` is normalized back to `Sentence.[^ref]`.
 Footnote definition lines such as `[^ref]: note text` remain definitions and
 are not joined to preceding prose.
 

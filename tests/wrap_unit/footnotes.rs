@@ -89,7 +89,10 @@ fn wrap_text_removes_spacing_between_punctuation_and_footnote_ref(
 #[case("Word.\n[^1]")]
 #[case("Word.\n  [^1]")]
 fn wrap_text_normalizes_split_footnote_refs_in_same_paragraph(#[case] paragraph: &str) {
-    let input = lines_vec![paragraph.to_string()];
+    let input = paragraph
+        .split('\n')
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
 
     assert_eq!(wrap_text(&input, 80), lines_vec!["Word.[^1]"]);
 }
