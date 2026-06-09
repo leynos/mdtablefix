@@ -1,0 +1,8 @@
+---
+source: tests/wrap_unit/code_spans.rs
+assertion_line: 111
+expression: rendered
+---
+- Message:
+  `Ensure the manifest exists or pass \`--file\` with the correct path.` The
+  docs should pin that wording.

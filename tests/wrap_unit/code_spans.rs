@@ -100,6 +100,20 @@ fn wrap_text_keeps_escaped_backtick_code_span_atomic_in_list_item() {
             .contains(r"`Ensure the manifest exists or pass \`--file\` with the correct path.`")
     );
     assert!(wrapped.iter().all(|line| line.width() <= 80));
+
+    // Snapshot: verifies complete line-breaking structure.
+    insta::with_settings!(
+        {
+            snapshot_path => "../../tests/snapshots",
+            prepend_module_to_snapshot => false,
+        },
+        {
+            insta::assert_snapshot!(
+                "wrap_text_keeps_escaped_backtick_code_span_atomic_in_list_item",
+                rendered
+            );
+        }
+    );
 }
 
 #[test]
@@ -113,6 +127,19 @@ fn wrap_text_keeps_escaped_backtick_code_span_atomic_in_paragraph() {
 
     assert!(rendered.contains(r"`word.\`inner\`.rest`"));
     assert!(wrapped.iter().all(|line| line.width() <= 80));
+
+    insta::with_settings!(
+        {
+            snapshot_path => "../../tests/snapshots",
+            prepend_module_to_snapshot => false,
+        },
+        {
+            insta::assert_snapshot!(
+                "wrap_text_keeps_escaped_backtick_code_span_atomic_in_paragraph",
+                rendered
+            );
+        }
+    );
 }
 
 #[test]

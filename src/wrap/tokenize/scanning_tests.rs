@@ -1,5 +1,6 @@
 //! Unit tests for byte-level tokenizer scanning helpers.
 
+use proptest::prelude::*;
 use rstest::rstest;
 
 use super::*;
@@ -75,4 +76,74 @@ fn continuation_begins_with_closing_fence_matches_literal_closers_only(
 #[case("``a`b`", true)]
 fn has_unclosed_code_span_rejects_mid_run_closers(#[case] text: &str, #[case] expected: bool) {
     assert_eq!(has_unclosed_code_span(text), expected);
+}
+
+/// Verify `position_after_close` handles alternating escaped/literal fences correctly.
+#[rstest]
+// Single escaped candidate followed by a balanced literal pair: the escaped
+// candidate is the real closer for the outer span.
+#[case::escaped_then_balanced_literal(
+    r"`a\`` b `c`",
+    1,   // search_start: after opening `
+    1,   // fence_len
+    Some(r"`a\``` b ".len()), // byte offset of the first escaped-candidate closer
+)]
+// Three alternating escaped candidates before a literal that is itself paired:
+// the first escaped candidate is the real closer.
+#[case::three_escaped_then_paired_literal(
+    r"`a\`` x `b\`` y `c\`` z `d` e `f`",
+    1,
+    1,
+    Some(r"`a\``` x ".len()),
+)]
+// No escaped candidates: the first literal fence is accepted directly.
+#[case::no_escaped_candidates("`abc` def", 1, 1, Some(5))]
+// Escaped candidate at the end with no subsequent literal: the escaped
+// candidate is the fallback.
+#[case::only_escaped_candidate(r"`a\`", 1, 1, Some(r"`a\`".len()))]
+fn position_after_close_alternating_cases(
+    #[case] text: &str,
+    #[case] search_start: usize,
+    #[case] fence_len: usize,
+    #[case] expected: Option<usize>,
+) {
+    assert_eq!(
+        position_after_close(text, search_start, fence_len),
+        expected
+    );
+}
+
+proptest! {
+    /// `position_after_close` must always terminate (no infinite loop) and must
+    /// never return an offset beyond `text.len()`.
+    #[test]
+    fn position_after_close_always_terminates_within_bounds(
+        text in "[ -~]{0,200}",   // printable ASCII, up to 200 chars
+        search_start in 0usize..=200usize,
+        fence_len in 1usize..=4usize,
+    ) {
+        let search_start = search_start.min(text.len());
+        let result = position_after_close(&text, search_start, fence_len);
+        if let Some(end) = result {
+            prop_assert!(
+                end <= text.len(),
+                "returned offset {end} exceeds text length {}",
+                text.len()
+            );
+            prop_assert!(
+                end >= search_start,
+                "returned offset {end} precedes search_start {search_start}"
+            );
+        }
+    }
+
+    /// A fence-length of zero must always return `None`.
+    #[test]
+    fn position_after_close_zero_fence_len_returns_none(
+        text in "[ -~]{0,100}",
+        search_start in 0usize..=100usize,
+    ) {
+        let search_start = search_start.min(text.len());
+        prop_assert_eq!(position_after_close(&text, search_start, 0), None);
+    }
 }

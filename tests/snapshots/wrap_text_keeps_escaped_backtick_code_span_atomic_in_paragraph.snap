@@ -1,0 +1,7 @@
+---
+source: tests/wrap_unit/code_spans.rs
+assertion_line: 137
+expression: rendered
+---
+Document `word.\`inner\`.rest` carefully because wrapping near the line
+boundary must keep the inline code span intact.
