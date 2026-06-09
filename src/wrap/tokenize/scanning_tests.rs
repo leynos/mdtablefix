@@ -152,4 +152,40 @@ proptest! {
         let search_start = search_start.min(text.len());
         prop_assert_eq!(position_after_close(&text, search_start, 0), None);
     }
+
+    /// Boundary integrity: when `position_after_close` returns `Some(end)`, the
+    /// closing run `text[end - fence_len .. end]` must be exactly `fence_len`
+    /// backticks with no backtick immediately before or after it. The returned
+    /// offset therefore always sits just past a complete, isolated fence — never
+    /// inside a longer backtick run.
+    #[test]
+    fn position_after_close_returns_isolated_fence_of_exact_length(
+        text in "[ -~]{0,200}",
+        search_start in 0usize..=200usize,
+        fence_len in 1usize..=4usize,
+    ) {
+        let search_start = search_start.min(text.len());
+        if let Some(end) = position_after_close(&text, search_start, fence_len) {
+            let bytes = text.as_bytes();
+            prop_assert!(end <= text.len());
+            prop_assert!(
+                end >= fence_len,
+                "returned offset {end} cannot hold a {fence_len}-byte fence"
+            );
+            let run_start = end - fence_len;
+            prop_assert!(
+                bytes[run_start..end].iter().all(|&byte| byte == b'`'),
+                "closing run {:?} is not exactly {fence_len} backticks",
+                &text[run_start..end]
+            );
+            prop_assert!(
+                run_start == 0 || bytes[run_start - 1] != b'`',
+                "closing run is preceded by a backtick (mid-run on the left)"
+            );
+            prop_assert!(
+                end == text.len() || bytes[end] != b'`',
+                "closing run is followed by a backtick (mid-run on the right)"
+            );
+        }
+    }
 }
