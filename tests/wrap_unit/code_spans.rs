@@ -86,18 +86,41 @@ fn tokenize_markdown_keeps_escaped_backtick_code_span_atomic(#[case] span: &str)
     );
 }
 
-#[test]
-fn wrap_text_keeps_escaped_backtick_code_span_atomic_in_list_item() {
-    let input = lines_vec![concat!(
+/// Escaped backtick code spans must survive wrapping intact, whether they
+/// appear inside a list item or a paragraph. The `contains` check guards the
+/// atomic span specifically, while the snapshot guards the complete
+/// line-breaking structure. The explicit snapshot names match the committed
+/// `.snap` fixtures so they are reused regardless of the test function name.
+#[rstest]
+#[case::list_item(
+    concat!(
         r"- Message: `Ensure the manifest exists or pass \`--file\` with the correct path.` ",
         "The docs should pin that wording."
-    )];
+    ),
+    r"`Ensure the manifest exists or pass \`--file\` with the correct path.`",
+    "wrap_text_keeps_escaped_backtick_code_span_atomic_in_list_item"
+)]
+#[case::paragraph(
+    concat!(
+        r"Document `word.\`inner\`.rest` carefully because wrapping near the ",
+        "line boundary must keep the inline code span intact."
+    ),
+    r"`word.\`inner\`.rest`",
+    "wrap_text_keeps_escaped_backtick_code_span_atomic_in_paragraph"
+)]
+fn wrap_text_keeps_escaped_backtick_code_span_atomic(
+    #[case] source: &str,
+    #[case] expected_span: &str,
+    #[case] snapshot_name: &str,
+) {
+    let input = lines_vec![source];
     let wrapped = wrap_text(&input, 80);
     let rendered = wrapped.join("\n");
 
+    // Structural guard: the atomic span must survive wrapping.
     assert!(
-        rendered
-            .contains(r"`Ensure the manifest exists or pass \`--file\` with the correct path.`")
+        rendered.contains(expected_span),
+        "expected atomic span {expected_span:?} to survive wrapping, got: {rendered}"
     );
     assert!(wrapped.iter().all(|line| line.width() <= 80));
 
@@ -108,36 +131,7 @@ fn wrap_text_keeps_escaped_backtick_code_span_atomic_in_list_item() {
             prepend_module_to_snapshot => false,
         },
         {
-            insta::assert_snapshot!(
-                "wrap_text_keeps_escaped_backtick_code_span_atomic_in_list_item",
-                rendered
-            );
-        }
-    );
-}
-
-#[test]
-fn wrap_text_keeps_escaped_backtick_code_span_atomic_in_paragraph() {
-    let input = lines_vec![concat!(
-        r"Document `word.\`inner\`.rest` carefully because wrapping near the ",
-        "line boundary must keep the inline code span intact."
-    )];
-    let wrapped = wrap_text(&input, 80);
-    let rendered = wrapped.join("\n");
-
-    assert!(rendered.contains(r"`word.\`inner\`.rest`"));
-    assert!(wrapped.iter().all(|line| line.width() <= 80));
-
-    insta::with_settings!(
-        {
-            snapshot_path => "../../tests/snapshots",
-            prepend_module_to_snapshot => false,
-        },
-        {
-            insta::assert_snapshot!(
-                "wrap_text_keeps_escaped_backtick_code_span_atomic_in_paragraph",
-                rendered
-            );
+            insta::assert_snapshot!(snapshot_name, rendered);
         }
     );
 }
