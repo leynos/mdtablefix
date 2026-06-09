@@ -1,13 +1,16 @@
 //! High-level Markdown stream processing.
 
+mod buffer;
+
+use buffer::ProcessBuffer;
+
 use crate::{
     ellipsis::replace_ellipsis,
     fences::{attach_orphan_specifiers, compress_fences},
     footnotes::convert_footnotes,
     frontmatter::split_leading_yaml_frontmatter,
     html::convert_html_tables,
-    table::reflow_table,
-    wrap::{FenceTracker, LinkReferenceMatcher, classify_block, wrap_text},
+    wrap::{FenceTracker, wrap_text},
 };
 
 /// Column width used when wrapping text.
@@ -50,76 +53,6 @@ pub struct Options {
     pub code_emphasis: bool,
     /// Convert Setext-style headings into ATX (`#`) headings.
     pub headings: bool,
-}
-
-/// Flushes buffered lines to `out`, formatting as a table when required.
-struct ProcessBuffer {
-    out: Vec<String>,
-    buf: Vec<String>,
-    in_table: bool,
-    ellipsis: bool,
-}
-
-impl ProcessBuffer {
-    fn flush(&mut self) {
-        if self.buf.is_empty() {
-            return;
-        }
-        let buffered = std::mem::take(&mut self.buf);
-        if self.in_table {
-            let table_lines = if self.ellipsis {
-                replace_ellipsis(&buffered)
-            } else {
-                buffered
-            };
-            self.out.extend(reflow_table(&table_lines));
-        } else {
-            self.out.extend(buffered);
-        }
-        self.in_table = false;
-    }
-
-    fn push_verbatim(&mut self, line: &str) {
-        self.flush();
-        self.out.push(line.to_string());
-    }
-
-    fn handle_fence_line(&mut self, line: &str, fences: &mut FenceTracker) -> bool {
-        if !fences.observe(line) {
-            return false;
-        }
-
-        self.push_verbatim(line);
-        true
-    }
-
-    fn handle_table_line(&mut self, line: &str) -> bool {
-        if line.trim_start().starts_with('|') {
-            self.in_table = true;
-            self.buf.push(line.to_string());
-            return true;
-        }
-        if line.trim().is_empty() {
-            if self.in_table {
-                self.flush();
-            }
-            return false;
-        }
-        if self.in_table && (line.contains('|') || crate::table::SEP_RE.is_match(line.trim())) {
-            self.buf.push(line.to_string());
-            return true;
-        }
-        if self.in_table {
-            if classify_block(line, LinkReferenceMatcher::production()).is_some() {
-                // Flush when a new Markdown block begins so wrapping and table
-                // detection stay aligned.
-                self.flush();
-                return false;
-            }
-            self.flush();
-        }
-        false
-    }
 }
 
 /// Processes a stream of Markdown lines using the provided [`Options`].
