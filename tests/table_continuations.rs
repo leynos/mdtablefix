@@ -26,6 +26,22 @@ fn assert_uniform_display_widths(output: &[String]) {
     }
 }
 
+#[rstest(
+    block_line,
+    case::blockquote("> note | with pipe"),
+    case::bullet("- item | with pipe"),
+    case::footnote("[^a]: note | with pipe")
+)]
+fn reflows_table_before_block_line_containing_pipe(block_line: &str) {
+    // A block marker (`>`, `-`, `[^id]:`) may carry its own `|`. The buffer
+    // must recognise such a line as a new block rather than absorbing it into
+    // the active table run; otherwise the stray row makes `reflow_table` bail
+    // and the preceding table is left un-reflowed.
+    let input = lines_vec!["| a | b |", "| 1 | 22 |", block_line];
+    let expected = lines_vec!["| a | b  |", "| 1 | 22 |", block_line];
+    assert_eq!(process_stream(&input), expected);
+}
+
 #[test]
 fn reflow_table_preserves_leading_empty_continuation_cells() {
     let input = lines_vec![

@@ -67,17 +67,22 @@ impl ProcessBuffer {
             }
             return false;
         }
+        // Recognise a new Markdown block *before* the pipe heuristic below.
+        // Block markers such as `> `, `- `, or `[^id]:` may themselves contain
+        // a `|`; if the pipe check ran first it would absorb such a line into
+        // the table run, both corrupting the block and preventing the genuine
+        // table from being reflowed (a stray non-table row makes
+        // `reflow_table` bail). Flushing here keeps wrapping and table
+        // detection aligned.
+        if self.in_table && classify_block(line, LinkReferenceMatcher::production()).is_some() {
+            self.flush();
+            return false;
+        }
         if self.in_table && (line.contains('|') || crate::table::SEP_RE.is_match(line.trim())) {
             self.buf.push(line.to_string());
             return true;
         }
         if self.in_table {
-            if classify_block(line, LinkReferenceMatcher::production()).is_some() {
-                // Flush when a new Markdown block begins so wrapping and table
-                // detection stay aligned.
-                self.flush();
-                return false;
-            }
             self.flush();
         }
         false
