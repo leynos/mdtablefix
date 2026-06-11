@@ -62,6 +62,7 @@ proptest! {
             });
         }
 
+        let original_len = lines.len();
         reorder_definition_block(&mut lines, 0, definitions.len() + 2, &definitions);
 
         let emitted_numbers = lines
@@ -72,6 +73,11 @@ proptest! {
             .collect::<Vec<_>>();
         let mut sorted = emitted_numbers.clone();
         sorted.sort_unstable();
+        prop_assert_eq!(
+            lines.len(),
+            original_len,
+            "reorder_definition_block must preserve line count"
+        );
         prop_assert_eq!(emitted_numbers, sorted);
     }
 }
