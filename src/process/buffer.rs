@@ -5,11 +5,19 @@
 //! be reflowed. It is kept in its own module so the orchestration in the
 //! parent [`process`](super) module stays within the repository size limit.
 
+use tracing::debug;
+
 use crate::{
     ellipsis::replace_ellipsis,
     table::reflow_table,
     wrap::{FenceTracker, LinkReferenceMatcher, classify_block},
 };
+
+// Note: `warn` is intentionally not imported. `flush` only calls
+// `reflow_table` after its `buf.is_empty()` guard, and `reflow_table` returns
+// an empty vector solely for empty input; for any non-empty input it yields
+// either the reflowed table or the original lines verbatim. An empty result
+// from a non-empty buffer is therefore unreachable, so no `warn!` is needed.
 
 /// Flushes buffered lines to `out`, formatting as a table when required.
 ///
@@ -24,6 +32,11 @@ pub(super) struct ProcessBuffer {
 
 impl ProcessBuffer {
     pub(super) fn flush(&mut self) {
+        debug!(
+            in_table = self.in_table,
+            lines = self.buf.len(),
+            "ProcessBuffer::flush"
+        );
         if self.buf.is_empty() {
             return;
         }
@@ -57,6 +70,7 @@ impl ProcessBuffer {
 
     pub(super) fn handle_table_line(&mut self, line: &str) -> bool {
         if line.trim_start().starts_with('|') {
+            debug!(line, "ProcessBuffer: table-mode on");
             self.in_table = true;
             self.buf.push(line.to_string());
             return true;
@@ -75,6 +89,7 @@ impl ProcessBuffer {
         // `reflow_table` bail). Flushing here keeps wrapping and table
         // detection aligned.
         if self.in_table && classify_block(line, LinkReferenceMatcher::production()).is_some() {
+            debug!(line, "ProcessBuffer: flushing on block boundary");
             self.flush();
             return false;
         }
@@ -88,3 +103,6 @@ impl ProcessBuffer {
         false
     }
 }
+
+#[cfg(test)]
+mod tests;
