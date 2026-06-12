@@ -420,8 +420,8 @@ flowchart TD
 ```
 
 Figure: Wrap-tokenizer flow. Starting from an input string, the wrapper emits
-whitespace and inline Markdown tokens, normalises inline footnote references with
-`normalize_footnote_ref_spacing`, groups tokens into fragments, measures
+whitespace and inline Markdown tokens, normalises inline footnote references
+with `normalize_footnote_ref_spacing`, groups tokens into fragments, measures
 their display widths with `unicode-width`, feeds them through
 `textwrap::wrap_algorithms::wrap_first_fit`, and then reconstructs wrapped
 lines while preserving Markdown-aware spacing rules.
