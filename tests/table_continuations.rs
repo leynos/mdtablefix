@@ -26,6 +26,14 @@ fn assert_uniform_display_widths(output: &[String]) {
     }
 }
 
+#[test]
+fn preserves_four_space_indented_table_verbatim() {
+    // A four-space indent makes this a Markdown indented code block, not a
+    // table: it must pass through untouched rather than being reflowed.
+    let input = lines_vec!["    | a | b |", "    | --- | --- |", "    | 1 | 2 |",];
+    assert_eq!(process_stream(&input), input);
+}
+
 #[rstest(
     block_line,
     case::blockquote("> note | with pipe"),

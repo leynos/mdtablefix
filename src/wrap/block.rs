@@ -8,7 +8,7 @@ use regex::Regex;
 
 /// Returns the indentation width (treating tabs as four columns) and the byte
 /// offset of the first non-space or tab character.
-fn leading_indent(line: &str) -> (usize, usize) {
+pub(crate) fn leading_indent(line: &str) -> (usize, usize) {
     let mut width = 0;
     let mut bytes = 0;
     for &b in line.as_bytes() {

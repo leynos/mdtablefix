@@ -10,7 +10,7 @@ use tracing::debug;
 use crate::{
     ellipsis::replace_ellipsis,
     table::reflow_table,
-    wrap::{FenceTracker, LinkReferenceMatcher, classify_block},
+    wrap::{FenceTracker, LinkReferenceMatcher, classify_block, leading_indent},
 };
 
 // Note: `warn` is intentionally not imported. `flush` only calls
@@ -95,7 +95,11 @@ impl ProcessBuffer {
     }
 
     pub(super) fn handle_table_line(&mut self, line: &str) -> bool {
-        if line.trim_start().starts_with('|') {
+        // A leading indent of four or more columns marks a Markdown indented
+        // code block, so such a line must stay verbatim and never enter table
+        // mode (otherwise `reflow_table` would rewrite its contents). This
+        // mirrors the `indent_width < 4` gate in `classify_block`.
+        if leading_indent(line).0 < 4 && line.trim_start().starts_with('|') {
             debug!(line, "ProcessBuffer: table-mode on");
             self.in_table = true;
             self.buf.push(line.to_string());

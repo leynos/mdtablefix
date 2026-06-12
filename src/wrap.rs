@@ -20,7 +20,7 @@ mod link_reference;
 mod paragraph;
 mod tokenize;
 use block::{BLOCKQUOTE_RE, BULLET_RE, FOOTNOTE_RE};
-pub(crate) use block::{BlockKind, classify_block};
+pub(crate) use block::{BlockKind, classify_block, leading_indent};
 use continuation::apply_continuation_chunk;
 /// Fence-detection utilities re-exported for downstream callers.
 ///

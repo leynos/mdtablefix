@@ -30,6 +30,21 @@ fn plain_table_line_enters_table_mode() {
     assert!(buffer.out.is_empty());
 }
 
+#[rstest]
+#[case::four_spaces("    | not | a | table |")]
+#[case::leading_tab("\t| not | a | table |")]
+fn indented_code_block_line_does_not_enter_table_mode(#[case] line: &str) {
+    // Four or more columns of indentation marks an indented code block; it must
+    // stay verbatim rather than entering table mode and being reflowed.
+    let mut buffer = new_buffer();
+
+    let accepted = buffer.handle_table_line(line);
+
+    assert!(!accepted);
+    assert!(!buffer.in_table);
+    assert!(buffer.buf.is_empty());
+}
+
 #[test]
 fn empty_line_flushes_active_table() {
     let mut buffer = new_buffer();
