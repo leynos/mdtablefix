@@ -102,12 +102,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     let pre = convert_html_tables(&lines);
 
-    let mut state = ProcessBuffer {
-        out: Vec::new(),
-        buf: Vec::new(),
-        in_table: false,
-        ellipsis: opts.ellipsis,
-    };
+    let mut state = ProcessBuffer::new(opts.ellipsis);
     // Track fences so subsequent logic respects shared semantics.
     let mut fence_tracker = FenceTracker::default();
 
@@ -117,7 +112,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         }
 
         if fence_tracker.in_fence() {
-            state.out.push(line.clone());
+            state.push_out(line.clone());
             continue;
         }
 
@@ -126,12 +121,12 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         }
 
         state.flush();
-        state.out.push(line.clone());
+        state.push_out(line.clone());
     }
 
     state.flush();
 
-    let mut out = state.out;
+    let mut out = state.into_out();
     if opts.headings {
         out = crate::headings::convert_setext_headings(&out);
     }

@@ -21,16 +21,42 @@ use crate::{
 
 /// Flushes buffered lines to `out`, formatting as a table when required.
 ///
-/// Fields are visible to the parent module so the stream loop can construct
-/// the buffer, push verbatim output, and drain the accumulated lines.
+/// Fields are private; the parent module drives the buffer through the
+/// narrow [`new`](Self::new), [`push_out`](Self::push_out),
+/// [`handle_fence_line`](Self::handle_fence_line),
+/// [`handle_table_line`](Self::handle_table_line), [`flush`](Self::flush),
+/// and [`into_out`](Self::into_out) API so the table-detection invariants
+/// stay encapsulated.
 pub(super) struct ProcessBuffer {
-    pub(super) out: Vec<String>,
-    pub(super) buf: Vec<String>,
-    pub(super) in_table: bool,
-    pub(super) ellipsis: bool,
+    out: Vec<String>,
+    buf: Vec<String>,
+    in_table: bool,
+    ellipsis: bool,
 }
 
 impl ProcessBuffer {
+    /// Creates an empty buffer. `ellipsis` selects whether buffered table
+    /// cells have `...` replaced with `…` during [`flush`](Self::flush).
+    pub(super) fn new(ellipsis: bool) -> Self {
+        Self {
+            out: Vec::new(),
+            buf: Vec::new(),
+            in_table: false,
+            ellipsis,
+        }
+    }
+
+    /// Appends a finished line directly to the output, without touching the
+    /// pending table buffer. Callers that must preserve table/verbatim
+    /// ordering call [`flush`](Self::flush) first.
+    pub(super) fn push_out(&mut self, line: String) { self.out.push(line); }
+
+    /// Consumes the buffer and returns the accumulated output lines.
+    ///
+    /// Call [`flush`](Self::flush) beforehand to drain any pending buffered
+    /// lines into the output.
+    pub(super) fn into_out(self) -> Vec<String> { self.out }
+
     pub(super) fn flush(&mut self) {
         debug!(
             in_table = self.in_table,
