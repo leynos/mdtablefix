@@ -100,7 +100,11 @@ impl ProcessBuffer {
         // mode (otherwise `reflow_table` would rewrite its contents). This
         // mirrors the `indent_width < 4` gate in `classify_block`.
         if leading_indent(line).0 < 4 && line.trim_start().starts_with('|') {
-            debug!(line_len = line.len(), "ProcessBuffer: table-mode on");
+            debug!(
+                line_len = line.len(),
+                buffered_lines = self.buf.len(),
+                "ProcessBuffer: table-mode on"
+            );
             self.in_table = true;
             self.buf.push(line.to_string());
             return true;
@@ -121,6 +125,8 @@ impl ProcessBuffer {
         if self.in_table && classify_block(line, LinkReferenceMatcher::production()).is_some() {
             debug!(
                 line_len = line.len(),
+                in_table = self.in_table,
+                buffered_lines = self.buf.len(),
                 "ProcessBuffer: flushing on block boundary"
             );
             self.flush();

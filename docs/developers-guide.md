@@ -82,6 +82,25 @@ restores the separator row with widths derived from the final table body.
 - `format_separator_cells`: Expands separator cells to the target widths while
   preserving Markdown alignment markers.
 
+`src/process/buffer.rs`:
+
+- `ProcessBuffer`: Owns the stream-processing output buffer, the pending table
+  run, and the table-mode state for `process_stream_inner`. The parent process
+  module is responsible for orchestration; the buffer owns the boundary rules
+  that decide when fence lines pass through verbatim, when a pipe-led row starts
+  table mode, and when a new Markdown block flushes a pending table before the
+  block line is processed. Debug instrumentation in this module must not log
+  raw Markdown lines; use bounded fields such as line lengths and buffer counts.
+
+`src/footnotes/renumber/reorder.rs`:
+
+- `reorder_definition_block`: Reorders the final footnote-definition block
+  according to the numbering plan built by the sibling `definitions` module.
+  It keeps continuation lines attached to their definition, preserves block
+  prefixes, migrates leading separator blanks at the first segment boundary,
+  and skips mutation with a warning if the composed block would change row
+  count.
+
 `src/wrap/tokenize/scanning.rs`:
 
 - `scan_code_suffix_end(text: &str, start: usize) -> usize` advances `start`

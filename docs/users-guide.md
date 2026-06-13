@@ -17,6 +17,8 @@ as a bullet list item, blockquote, link reference definition, or footnote
 definition — `mdtablefix` flushes and reflows the buffered table before the new
 block is processed. This applies even when the block-opening line itself
 contains a pipe character; it is not treated as a table continuation row.
+For example, after a table, `> quote | with pipe` starts a blockquote rather
+than extending the table.
 
 Literal pipe characters inside cells must be written as `\|`. `mdtablefix`
 preserves that escaping during reflow, so a literal pipe remains part of the

@@ -144,6 +144,12 @@ enabled, it applies ellipsis replacement before calling `reflow_table`. This
 ordering ensures the width calculation sees the final glyphs, rather than
 aligning for `...` and shrinking the rendered column after the fact.
 
+`ProcessBuffer` owns the active table run during stream processing. It flushes
+that buffer before lines that open a new Markdown block, including blockquote,
+list-item, link-reference, and footnote-definition lines that themselves
+contain pipe characters. Those block-opening lines are then handled by the
+ordinary block pipeline rather than being absorbed as continuation rows.
+
 The rationale for these choices is captured in
 [Architecture Decision Record (ADR) 0001](adrs/0001-table-reflow-pipeline.md).
 
@@ -395,6 +401,9 @@ The `footnotes::renumber::definitions` submodule owns definition scanning and
 rewriting. `DefinitionScanState` coordinates the number mapping, collects
 already-parsed definitions, and stages numeric candidates for later conversion
 without cluttering the top-level renumber flow.
+The sibling `footnotes::renumber::reorder` submodule reorders the final
+definition block after numbering is known, while keeping continuation lines and
+spacing attached to the definition segment they belong to.
 
 `ListState` tracks the active indentation stack and per-indent counters for
 ordered list renumbering. It resets on headings and thematic breaks, and it
