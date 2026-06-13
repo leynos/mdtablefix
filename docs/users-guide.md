@@ -12,6 +12,12 @@ leading cells because its content continues from the previous row, those empty
 cells keep their original column positions instead of collapsing into the first
 non-empty cell.
 
+When a table run is followed by a line that opens a new Markdown block — such
+as a bullet list item, blockquote, link reference definition, or footnote
+definition — `mdtablefix` flushes and reflows the buffered table before the new
+block is processed. This applies even when the block-opening line itself
+contains a pipe character; it is not treated as a table continuation row.
+
 Literal pipe characters inside cells must be written as `\|`. `mdtablefix`
 preserves that escaping during reflow, so a literal pipe remains part of the
 cell content rather than being interpreted as a column boundary.
