@@ -60,6 +60,10 @@ incoming lines are buffered or emitted. Once the end of a table or fence is
 reached, buffered lines are flushed and possibly reformatted. The simplified
 behaviour is illustrated below.
 
+State-machine abstraction options for this and the wrapping continuation
+machines are evaluated in
+[Architecture Decision Record (ADR) 0004](adrs/0004-state-machine-abstractions.md).
+
 ```mermaid
 stateDiagram-v2
 
@@ -235,17 +239,15 @@ Text.
 
 ## Footnotes
 
- 1. First note
+ [^1]: First note
 
- 2. Second note
+ [^2]: Second note
 
-10. Final note
+[^10]: Final note
 ```
 
-After:
-
-```markdown
-Text.
+`convert_footnotes` only processes the final contiguous numeric list that
+immediately follows an H2 heading when these conditions are met.
 
 ## Footnotes
 
