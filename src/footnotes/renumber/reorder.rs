@@ -103,16 +103,14 @@ fn build_segments(
 }
 
 fn migrate_first_leading(segments: &mut [DefinitionSegment]) -> Vec<String> {
-    let mut first_leading = Vec::new();
     if let Some((_, _, first_segment)) = segments.first_mut() {
-        while first_segment
-            .first()
-            .is_some_and(|line| line.trim().is_empty() && !is_definition_continuation(line))
-        {
-            first_leading.push(first_segment.remove(0));
-        }
+        let first_content = first_segment
+            .iter()
+            .position(|line| !line.trim().is_empty() || is_definition_continuation(line))
+            .unwrap_or(first_segment.len());
+        return first_segment.drain(..first_content).collect();
     }
-    first_leading
+    Vec::new()
 }
 
 fn compose_reordered_block(
@@ -192,7 +190,9 @@ pub(super) fn reorder_definition_block(
     let reordered = compose_reordered_block(lines, start, prefix_len, segments, first_leading);
 
     if reordered.len() == end - start {
-        lines[start..end].clone_from_slice(&reordered);
+        for (target, source) in lines[start..end].iter_mut().zip(reordered) {
+            *target = source;
+        }
     } else {
         warn!(
             expected = end - start,

@@ -116,9 +116,9 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
             continue;
         }
 
-        if state.handle_table_line(&line) {
+        let Some(line) = state.handle_table_line(line) else {
             continue;
-        }
+        };
 
         state.flush();
         state.push_out(line);

@@ -18,13 +18,17 @@ fn new_buffer() -> ProcessBuffer {
 
 fn owned(lines: &[&str]) -> Vec<String> { lines.iter().map(|l| (*l).to_string()).collect() }
 
+fn handle_line(buffer: &mut ProcessBuffer, line: &str) -> Option<String> {
+    buffer.handle_table_line(line.to_string())
+}
+
 #[test]
 fn plain_table_line_enters_table_mode() {
     let mut buffer = new_buffer();
 
-    let accepted = buffer.handle_table_line("| a | b |");
+    let passthrough = handle_line(&mut buffer, "| a | b |");
 
-    assert!(accepted);
+    assert!(passthrough.is_none());
     assert!(buffer.in_table);
     assert_eq!(buffer.buf, owned(&["| a | b |"]));
     assert!(buffer.out.is_empty());
@@ -38,9 +42,9 @@ fn indented_code_block_line_does_not_enter_table_mode(#[case] line: &str) {
     // stay verbatim rather than entering table mode and being reflowed.
     let mut buffer = new_buffer();
 
-    let accepted = buffer.handle_table_line(line);
+    let passthrough = handle_line(&mut buffer, line);
 
-    assert!(!accepted);
+    assert_eq!(passthrough, Some(line.to_string()));
     assert!(!buffer.in_table);
     assert!(buffer.buf.is_empty());
 }
@@ -48,11 +52,11 @@ fn indented_code_block_line_does_not_enter_table_mode(#[case] line: &str) {
 #[test]
 fn empty_line_flushes_active_table() {
     let mut buffer = new_buffer();
-    buffer.handle_table_line("| a | b |");
+    handle_line(&mut buffer, "| a | b |");
 
-    let accepted = buffer.handle_table_line("");
+    let passthrough = handle_line(&mut buffer, "");
 
-    assert!(!accepted);
+    assert_eq!(passthrough, Some(String::new()));
     assert!(!buffer.in_table);
     assert!(buffer.buf.is_empty());
     assert_eq!(buffer.out, owned(&["| a | b |"]));
@@ -68,14 +72,11 @@ fn block_prefixed_pipe_line_flushes_table(#[case] block_line: &str) {
     // `|` must be recognised as a new block and flush the active table run,
     // not be absorbed into it by the `line.contains('|')` continuation check.
     let mut buffer = new_buffer();
-    buffer.handle_table_line("| a | b |");
+    handle_line(&mut buffer, "| a | b |");
 
-    let accepted = buffer.handle_table_line(block_line);
+    let passthrough = handle_line(&mut buffer, block_line);
 
-    assert!(
-        !accepted,
-        "block line should not be accepted as a table row"
-    );
+    assert_eq!(passthrough, Some(block_line.to_string()));
     assert!(!buffer.in_table, "block boundary should leave table mode");
     assert!(buffer.buf.is_empty(), "buffer should be flushed");
     // The flushed table reaches `out`; the block line itself is left for the
@@ -86,13 +87,13 @@ fn block_prefixed_pipe_line_flushes_table(#[case] block_line: &str) {
 #[test]
 fn plain_pipe_continuation_is_buffered() {
     let mut buffer = new_buffer();
-    buffer.handle_table_line("| a | b |");
+    handle_line(&mut buffer, "| a | b |");
 
     // No leading pipe and not block-prefixed, but contains `|`: a genuine
     // continuation row that belongs in the table buffer.
-    let accepted = buffer.handle_table_line("c | d");
+    let passthrough = handle_line(&mut buffer, "c | d");
 
-    assert!(accepted);
+    assert!(passthrough.is_none());
     assert!(buffer.in_table);
     assert_eq!(buffer.buf, owned(&["| a | b |", "c | d"]));
     assert!(buffer.out.is_empty());
@@ -144,11 +145,14 @@ fn flush_table_passes_lines_through_reflow() {
 fn table_continuation_then_block_line_splits_correctly() {
     let mut buffer = new_buffer();
 
-    assert!(buffer.handle_table_line("| a | b |"));
-    assert!(buffer.handle_table_line("| --- | --- |"));
-    assert!(buffer.handle_table_line("| 1 | 2 |"));
+    assert!(handle_line(&mut buffer, "| a | b |").is_none());
+    assert!(handle_line(&mut buffer, "| --- | --- |").is_none());
+    assert!(handle_line(&mut buffer, "| 1 | 2 |").is_none());
     // A block-prefixed line bearing a pipe ends the table run.
-    assert!(!buffer.handle_table_line("- note | x"));
+    assert_eq!(
+        handle_line(&mut buffer, "- note | x"),
+        Some("- note | x".to_string())
+    );
 
     assert!(!buffer.in_table);
     assert!(buffer.buf.is_empty());
@@ -162,10 +166,13 @@ fn table_continuation_then_block_line_splits_correctly() {
 fn table_followed_by_indented_pipe_line_flushes_table() {
     let mut buffer = new_buffer();
 
-    assert!(buffer.handle_table_line("| a | b |"));
-    assert!(buffer.handle_table_line("| --- | --- |"));
-    assert!(buffer.handle_table_line("| 1 | 2 |"));
-    assert!(!buffer.handle_table_line("    | indented | code |"));
+    assert!(handle_line(&mut buffer, "| a | b |").is_none());
+    assert!(handle_line(&mut buffer, "| --- | --- |").is_none());
+    assert!(handle_line(&mut buffer, "| 1 | 2 |").is_none());
+    assert_eq!(
+        handle_line(&mut buffer, "    | indented | code |"),
+        Some("    | indented | code |".to_string())
+    );
 
     assert!(!buffer.in_table);
     assert!(buffer.buf.is_empty());

@@ -20,6 +20,10 @@ contains a pipe character; it is not treated as a table continuation row.
 For example, after a table, `> quote | with pipe` starts a blockquote rather
 than extending the table.
 
+Pipe-looking lines indented by four or more columns are preserved as indented
+code blocks. For example, a source line with four leading spaces before
+`| not | a table |` is emitted verbatim rather than being table-reflowed.
+
 Literal pipe characters inside cells must be written as `\|`. `mdtablefix`
 preserves that escaping during reflow, so a literal pipe remains part of the
 cell content rather than being interpreted as a column boundary.

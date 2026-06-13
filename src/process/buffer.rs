@@ -102,26 +102,26 @@ impl ProcessBuffer {
         true
     }
 
-    pub(super) fn handle_table_line(&mut self, line: &str) -> bool {
+    pub(super) fn handle_table_line(&mut self, line: String) -> Option<String> {
         // A leading indent of four or more columns marks a Markdown indented
         // code block, so such a line must stay verbatim and never enter table
         // mode (otherwise `reflow_table` would rewrite its contents). This
         // mirrors the `indent_width < 4` gate in `classify_block`.
-        if leading_indent(line).0 < 4 && line.trim_start().starts_with('|') {
+        if leading_indent(&line).0 < 4 && line.trim_start().starts_with('|') {
             debug!(
                 line_len = line.len(),
                 buffered_lines = self.buf.len(),
                 "ProcessBuffer: table-mode on"
             );
             self.in_table = true;
-            self.buf.push(line.to_string());
-            return true;
+            self.buf.push(line);
+            return None;
         }
         if line.trim().is_empty() {
             if self.in_table {
                 self.flush();
             }
-            return false;
+            return Some(line);
         }
         // Recognise a new Markdown block *before* the pipe heuristic below.
         // Block markers such as `> `, `- `, or `[^id]:` may themselves contain
@@ -130,7 +130,7 @@ impl ProcessBuffer {
         // table from being reflowed (a stray non-table row makes
         // `reflow_table` bail). Flushing here keeps wrapping and table
         // detection aligned.
-        if self.in_table && classify_block(line, LinkReferenceMatcher::production()).is_some() {
+        if self.in_table && classify_block(&line, LinkReferenceMatcher::production()).is_some() {
             debug!(
                 line_len = line.len(),
                 in_table = self.in_table,
@@ -138,20 +138,20 @@ impl ProcessBuffer {
                 "ProcessBuffer: flushing on block boundary"
             );
             self.flush();
-            return false;
+            return Some(line);
         }
-        if self.in_table && is_indented_content_line(line) {
+        if self.in_table && is_indented_content_line(&line) {
             self.flush();
-            return false;
+            return Some(line);
         }
         if self.in_table && (line.contains('|') || crate::table::SEP_RE.is_match(line.trim())) {
-            self.buf.push(line.to_string());
-            return true;
+            self.buf.push(line);
+            return None;
         }
         if self.in_table {
             self.flush();
         }
-        false
+        Some(line)
     }
 }
 
