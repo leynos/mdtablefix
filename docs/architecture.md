@@ -144,6 +144,12 @@ enabled, it applies ellipsis replacement before calling `reflow_table`. This
 ordering ensures the width calculation sees the final glyphs, rather than
 aligning for `...` and shrinking the rendered column after the fact.
 
+`ProcessBuffer` owns the active table run during stream processing. It flushes
+that buffer before lines that open a new Markdown block, including blockquote,
+list-item, link-reference, and footnote-definition lines that themselves
+contain pipe characters. Those block-opening lines are then handled by the
+ordinary block pipeline rather than being absorbed as continuation rows.
+
 The rationale for these choices is captured in
 [Architecture Decision Record (ADR) 0001](adrs/0001-table-reflow-pipeline.md).
 
@@ -330,6 +336,14 @@ classDiagram
         <<module>>
         +convert_footnotes()
     }
+    class footnotes_renumber_definitions {
+        <<module>>
+        +DefinitionScanState
+    }
+    class footnotes_renumber_reorder {
+        <<module>>
+        +reorder_definition_block()
+    }
     class textproc {
         <<module>>
         +process_tokens()
@@ -338,6 +352,10 @@ classDiagram
         <<module>>
         +process_stream()
         +process_stream_no_wrap()
+    }
+    class process_buffer {
+        <<module>>
+        +ProcessBuffer
     }
     class io {
         <<module>>
@@ -364,6 +382,9 @@ classDiagram
     process ..> fences : uses compress_fences, attach_orphan_specifiers
     process ..> ellipsis : uses replace_ellipsis
     process ..> footnotes : uses convert_footnotes
+    process ..> process_buffer : buffers active table run
+    footnotes --> footnotes_renumber_definitions
+    footnotes_renumber_definitions --> footnotes_renumber_reorder : final definition block
     footnotes ..> wrap : uses tokenize_markdown
     footnotes ..> textproc : uses push_original_token
     io ..> process : uses process_stream, process_stream_no_wrap
@@ -391,10 +412,19 @@ closes. Its depth counter tracks nested `<table>` blocks, so only the outermost
 table is converted at once, while incomplete input can still be flushed back
 verbatim.
 
+`ProcessBuffer` owns the active table run during stream processing. It flushes
+that buffer before lines that open a new Markdown block, including blockquote,
+list-item, link-reference, and footnote-definition lines that themselves
+contain pipe characters, so those lines continue through the regular block
+pipeline rather than becoming continuation rows.
+
 The `footnotes::renumber::definitions` submodule owns definition scanning and
 rewriting. `DefinitionScanState` coordinates the number mapping, collects
 already-parsed definitions, and stages numeric candidates for later conversion
 without cluttering the top-level renumber flow.
+The sibling `footnotes::renumber::reorder` submodule reorders the final
+definition block after numbering is known, while keeping continuation lines and
+spacing attached to the definition segment they belong to.
 
 `ListState` tracks the active indentation stack and per-indent counters for
 ordered list renumbering. It resets on headings and thematic breaks, and it

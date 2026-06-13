@@ -20,7 +20,7 @@ mod link_reference;
 mod paragraph;
 mod tokenize;
 use block::{BLOCKQUOTE_RE, BULLET_RE, FOOTNOTE_RE};
-pub(crate) use block::{BlockKind, classify_block};
+pub(crate) use block::{BlockKind, classify_block, leading_indent};
 use continuation::apply_continuation_chunk;
 /// Fence-detection utilities re-exported for downstream callers.
 ///
@@ -51,15 +51,11 @@ pub(crate) use tokenize::{continuation_begins_with_closing_fence, has_unclosed_c
 // spaces in Markdown.
 
 fn is_indented_code_line(line: &str) -> bool {
-    // CommonMark expands tabs to four spaces when measuring indentation.
-    let indent_width = line
-        .as_bytes()
-        .iter()
-        .take_while(|b| **b == b' ' || **b == 0x09)
-        .map(|&b| if b == 0x09 { 4 } else { 1 })
-        .sum::<usize>();
-
-    indent_width >= 4 && line.chars().any(|c| !c.is_whitespace())
+    let (indent_width, first_content_byte) = leading_indent(line);
+    indent_width >= 4
+        && line[first_content_byte..]
+            .chars()
+            .any(|c| !c.is_whitespace())
 }
 
 fn is_table_or_separator(line: &str) -> bool {
