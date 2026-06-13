@@ -13,6 +13,14 @@ use crate::{
     wrap::{FenceTracker, LinkReferenceMatcher, classify_block, leading_indent},
 };
 
+fn is_indented_content_line(line: &str) -> bool {
+    let (indent_width, first_content_byte) = leading_indent(line);
+    indent_width >= 4
+        && line[first_content_byte..]
+            .chars()
+            .any(|c| !c.is_whitespace())
+}
+
 // Note: `warn` is intentionally not imported. `flush` only calls
 // `reflow_table` after its `buf.is_empty()` guard, and `reflow_table` returns
 // an empty vector solely for empty input; for any non-empty input it yields
@@ -129,6 +137,10 @@ impl ProcessBuffer {
                 buffered_lines = self.buf.len(),
                 "ProcessBuffer: flushing on block boundary"
             );
+            self.flush();
+            return false;
+        }
+        if self.in_table && is_indented_content_line(line) {
             self.flush();
             return false;
         }

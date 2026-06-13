@@ -157,3 +157,20 @@ fn table_continuation_then_block_line_splits_correctly() {
         owned(&["| a   | b   |", "| --- | --- |", "| 1   | 2   |"]),
     );
 }
+
+#[test]
+fn table_followed_by_indented_pipe_line_flushes_table() {
+    let mut buffer = new_buffer();
+
+    assert!(buffer.handle_table_line("| a | b |"));
+    assert!(buffer.handle_table_line("| --- | --- |"));
+    assert!(buffer.handle_table_line("| 1 | 2 |"));
+    assert!(!buffer.handle_table_line("    | indented | code |"));
+
+    assert!(!buffer.in_table);
+    assert!(buffer.buf.is_empty());
+    assert_eq!(
+        buffer.out,
+        owned(&["| a   | b   |", "| --- | --- |", "| 1   | 2   |"]),
+    );
+}
