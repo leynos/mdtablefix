@@ -1,6 +1,6 @@
 //! Line buffering and table-flush state machine for stream processing.
 //!
-//! [`ProcessBuffer`] accumulates lines while [`process_stream_inner`] walks
+//! [`ProcessBuffer`] accumulates lines while [`super::process_stream_inner`] walks
 //! the input, deciding when a run of lines forms a Markdown table and should
 //! be reflowed. It is kept in its own module so the orchestration in the
 //! parent [`process`](super) module stays within the repository size limit.

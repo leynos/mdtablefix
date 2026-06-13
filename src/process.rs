@@ -106,22 +106,22 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     // Track fences so subsequent logic respects shared semantics.
     let mut fence_tracker = FenceTracker::default();
 
-    for line in &pre {
-        if state.handle_fence_line(line, &mut fence_tracker) {
+    for line in pre {
+        if state.handle_fence_line(&line, &mut fence_tracker) {
             continue;
         }
 
         if fence_tracker.in_fence() {
-            state.push_out(line.clone());
+            state.push_out(line);
             continue;
         }
 
-        if state.handle_table_line(line) {
+        if state.handle_table_line(&line) {
             continue;
         }
 
         state.flush();
-        state.push_out(line.clone());
+        state.push_out(line);
     }
 
     state.flush();
