@@ -1,6 +1,6 @@
 # Architecture Decision Record (ADR) 0004: Keep bespoke state machines explicit
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-06-13
 
 ## Context
