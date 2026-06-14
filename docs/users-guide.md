@@ -57,10 +57,10 @@ the same line as the span content. This behaviour applies in all prefixed
 contexts — bulleted lists, ordered lists, blockquotes, and footnote definitions
 — as well as in plain paragraphs.
 
-An inline code span may itself contain backslash-escaped backticks — for
-example `` `pass \`--file\` to the tool` ``. `--wrap` keeps the whole span,
-including its escaped inner backticks, as a single atomic unit: it is never
-split across lines, and the escaped backticks are preserved verbatim.
+An inline code span may itself contain backslash-escaped backticks — for example
+`` `pass \`--file\` to the tool` ``. `--wrap` keeps the whole span, including
+its escaped inner backticks, as a single atomic unit: it is never split across
+lines, and the escaped backticks are preserved verbatim.
 
 For list items, deferred inline code continuations use continuation indentation
 rather than repeating the original list marker. This prevents a wrapped
