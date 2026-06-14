@@ -1,4 +1,4 @@
-# Architecture Decision Record (ADR) 0004: Keep bespoke state machines explicit
+# Architecture decision record (ADR) 0004: Keep bespoke state machines explicit
 
 ## Status
 
