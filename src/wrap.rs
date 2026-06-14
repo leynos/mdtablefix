@@ -137,7 +137,7 @@ fn normalized_passthrough_line(line: &str) -> &str {
     if !line.is_empty() && line.trim().is_empty() {
         trace!(
             line_len = line.len(),
-            "normalising whitespace-only passthrough line"
+            "normalizing whitespace-only passthrough line"
         );
         ""
     } else {

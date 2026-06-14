@@ -1,4 +1,4 @@
-//! Post-wrap normalisation helpers for inline fragment lines.
+//! Post-wrap normalization helpers for inline fragment lines.
 //!
 //! `wrap_preserving_code` first lets `textwrap` perform greedy line fitting
 //! over `InlineFragment` values. That provisional layout can expose
@@ -148,7 +148,7 @@ pub(super) fn merge_whitespace_only_lines(
             trace!(
                 index,
                 fragment_count = line.len(),
-                "normalising whitespace-only wrapped line"
+                "normalizing whitespace-only wrapped line"
             );
             let next_starts_atomic = lines
                 .get(index + 1)

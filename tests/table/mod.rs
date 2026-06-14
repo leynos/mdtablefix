@@ -7,7 +7,7 @@
 //! The module is organised into focused submodules:
 //! - `reflow`: Tests for `reflow_table` covering basic reflow, malformed tables,
 //!   header preservation, escaped pipes and indentation.
-//! - `process_stream_tests`: Tests for `process_stream` verifying normalisation
+//! - `process_stream_tests`: Tests for `process_stream` verifying normalization
 //!   of various HTML table variants and handling of multiple tables.
 //! - `uniform`: Regression tests ensuring uniform column widths after reflowing.
 //! - `convert_html`: Parameterised tests for HTML table conversion edge cases.

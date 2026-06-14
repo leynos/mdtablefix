@@ -1,4 +1,4 @@
-//! Unit tests for inline post-wrap normalisation.
+//! Unit tests for inline post-wrap normalization.
 //!
 //! These tests compile as a child module of `postprocess`, so they can cover
 //! private helpers while keeping test-only cases out of the production module.

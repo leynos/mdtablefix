@@ -316,7 +316,7 @@ fn render_line(
 /// Wraps inline Markdown `text` without splitting code spans or links.
 ///
 /// `text` is tokenised into `InlineFragment`s, fitted with
-/// `textwrap::wrap_algorithms::wrap_first_fit`, normalised with
+/// `textwrap::wrap_algorithms::wrap_first_fit`, normalized with
 /// `merge_whitespace_only_lines` plus `rebalance_atomic_tails`, and then
 /// rendered back into `Vec<String>` output lines. `width` is measured in
 /// Unicode display columns and must be at least one effective column after any

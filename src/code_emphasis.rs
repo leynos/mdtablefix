@@ -1,6 +1,6 @@
 //! Fix misplaced emphasis around inline code spans.
 //!
-//! The pass normalises emphasis markers that directly adjoin
+//! The pass normalizes emphasis markers that directly adjoin
 //! backtick-wrapped inline code. Only `*` and `_` markers are considered; other
 //! flavours such as tildes are ignored. Inline code is re-serialised using a
 //! backtick fence long enough to contain any inner backticks without escaping.
@@ -175,7 +175,7 @@ fn handle_code_token<'a>(
 /// Merge contiguous code and emphasis spans.
 ///
 /// Groups of emphasis markers and inline code with no separating spaces are
-/// normalised so that emphasis markers wrap the entire group or are removed
+/// normalized so that emphasis markers wrap the entire group or are removed
 /// when they solely surround code.
 ///
 /// # Examples

@@ -1,5 +1,5 @@
 //! `wrap_text` regression tests covering code spans, link preservation,
-//! whitespace normalisation, and basic overflow guards.
+//! whitespace normalization, and basic overflow guards.
 
 use mdtablefix::wrap::{Token, tokenize_markdown, wrap_text};
 use rstest::rstest;

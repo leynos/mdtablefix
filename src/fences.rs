@@ -262,8 +262,8 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 /// indentation is used. If the specifier's indentation extends the fence's, the
 /// deeper indentation is retained.
 ///
-/// Specifiers containing spaces are accepted and normalised. Fences labelled
-/// `null` are normalised to empty by `compress_fences`, so only empty languages
+/// Specifiers containing spaces are accepted and normalized. Fences labelled
+/// `null` are normalized to empty by `compress_fences`, so only empty languages
 /// are treated as absent.
 ///
 /// # Examples

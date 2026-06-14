@@ -1,6 +1,6 @@
 //! Integration tests for the `--code-emphasis` flag.
 //!
-//! Verifies that emphasis markers adjacent to inline code are normalised.
+//! Verifies that emphasis markers adjacent to inline code are normalized.
 
 use std::fs;
 
