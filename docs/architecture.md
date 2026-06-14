@@ -60,6 +60,10 @@ incoming lines are buffered or emitted. Once the end of a table or fence is
 reached, buffered lines are flushed and possibly reformatted. The simplified
 behaviour is illustrated below.
 
+State-machine abstraction options for this and the wrapping continuation
+machines are evaluated in
+[Architecture Decision Record (ADR) 0004](adrs/0004-state-machine-abstractions.md).
+
 ```mermaid
 stateDiagram-v2
 
@@ -450,8 +454,8 @@ flowchart TD
 ```
 
 Figure: Wrap-tokenizer flow. Starting from an input string, the wrapper emits
-whitespace and inline Markdown tokens, normalises inline footnote references with
-`normalize_footnote_ref_spacing`, groups tokens into fragments, measures
+whitespace and inline Markdown tokens, normalises inline footnote references
+with `normalize_footnote_ref_spacing`, groups tokens into fragments, measures
 their display widths with `unicode-width`, feeds them through
 `textwrap::wrap_algorithms::wrap_first_fit`, and then reconstructs wrapped
 lines while preserving Markdown-aware spacing rules.
