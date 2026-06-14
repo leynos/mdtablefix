@@ -1,9 +1,15 @@
 # Architecture Decision Record (ADR) 0004: Keep bespoke state machines explicit
 
-- Status: Accepted
-- Date: 2026-06-13
+## Status
 
-## Context
+Accepted. Keep the current parser and wrapping state machines explicit rather
+than adopting an external Rust state-machine crate.
+
+## Date
+
+2026-06-13.
+
+## Context and problem statement
 
 `mdtablefix` contains several small state machines that protect Markdown syntax
 while transforming a stream of lines. The clearest examples are:
@@ -57,7 +63,7 @@ The crates.io `state-machine` keyword page shows `statig` as the most prominent
 general-purpose crate by recent downloads, while other candidates either target
 testing, embedded generation, async actors, or lower-adoption niches.[^8]
 
-## Decision
+## Decision outcome
 
 Do not adopt an external Rust state-machine crate for the current `mdtablefix`
 parser and wrapping state machines.
@@ -107,7 +113,7 @@ Negative:
 - Different modules can still drift in style unless future changes follow the
   local pattern above.
 
-## Alternatives considered
+## Options considered
 
 ### Adopt `statig`
 
