@@ -88,6 +88,9 @@ methods, and standardize the local pattern for future state-machine work:
 - Add focused unit tests around each transition boundary. Use behavioural tests
   when a state machine affects externally visible stream output.
 
+The implementation work needed to apply this pattern is tracked in the
+[state-machine abstractions roadmap](../state-machine-abstractions-roadmap.md).
+
 ## Consequences
 
 Positive:

@@ -698,7 +698,11 @@ and arguments before accepting the new output.
 
 Three internal types centralize the buffered state used by the conversion
 pipeline. Each owns one slice of pipeline behaviour, so the surrounding
-functions remain focused on traversal.
+functions remain focused on traversal. Keep new parser and wrapping state
+machines explicit unless they meet the adoption threshold in
+[ADR 0004](adrs/0004-state-machine-abstractions.md). That decision records the
+crate research and the local pattern maintainers should follow when changing
+stateful helpers.
 
 ### `HtmlTableState` (`src/html.rs`)
 
