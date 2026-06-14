@@ -20,8 +20,6 @@
 
 - [Architecture](architecture.md): Current design for the Markdown parsing,
   wrapping, table reflow, and processing pipeline.
-- [Parallel processing roadmap](parallel-processing-roadmap.md): Planned
-  parallel processing work and its sequencing.
 
 ## Decision records
 
@@ -48,5 +46,7 @@
 - [Wrapping replacement](execplans/replace-bespoke-wrapping-with-textwrap-and-unicode-width.md):
   Plan for replacing bespoke wrapping internals with `textwrap` and
   `unicode-width`.
+- [Parallel processing roadmap](execplans/parallel-processing-roadmap.md):
+  Roadmap for parallel processing work.
 - [YAML frontmatter](execplans/yaml-frontmatter.md): Plan for YAML
   frontmatter handling.

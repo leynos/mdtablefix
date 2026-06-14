@@ -31,7 +31,7 @@ pub(crate) fn assert_transform_invariants(logical: &LogicalCase, stdout: &[u8]) 
         );
     }
     if logical.flags.contains(&TransformFlag::Fences) && fixture_has_fence_candidate(&fixture) {
-        // Validates `--fences`: eligible fence input must be normalised to backtick fences.
+        // Validates `--fences`: eligible fence input must be normalized to backtick fences.
         assert!(
             output.contains("```"),
             "{} should contain a backtick fenced code block delimiter",

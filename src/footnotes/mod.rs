@@ -1,7 +1,7 @@
-//! Footnote normalisation utilities.
+//! Footnote normalization utilities.
 //!
 //! Converts bare numeric references in text to GitHub-flavoured Markdown
-//! footnote links and normalises footnote numbering and ordering by
+//! footnote links and normalizes footnote numbering and ordering by
 //! orchestrating specialised submodules.
 
 mod inline;

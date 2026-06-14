@@ -71,10 +71,10 @@ _Figure 1: Simplified repository tree._
   the shared Rust agent template.
 - `docs/adrs/`: Accepted architecture decision records. Add narrow decision
   records here when design choices need a durable audit trail.
-- `docs/execplans/`: Living execution plans for larger implementation work.
-  Keep these current while the related work is active.
-- `docs/*.md`: Long-lived reference notes, process guides, and project
-  roadmaps. Link each stable document from `docs/contents.md`.
+- `docs/execplans/`: Living execution plans and roadmap documents for larger
+  implementation work. Keep these current while the related work is active.
+- `docs/*.md`: Long-lived reference notes and process guides. Link each stable
+  document from `docs/contents.md`.
 
 ## Source paths
 

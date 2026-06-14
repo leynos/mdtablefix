@@ -1,4 +1,4 @@
-//! Heading normalisation helpers.
+//! Heading normalization helpers.
 //!
 //! This module converts Setext-style headings (underlined with sequences of three or
 //! more `=` or `-` characters) into ATX headings that use leading hash markers.

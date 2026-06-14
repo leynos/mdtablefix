@@ -1,4 +1,4 @@
-//! Token stream normalisation before inline wrapping.
+//! Token stream normalization before inline wrapping.
 //!
 //! The helpers in this module repair token boundaries that would otherwise
 //! let the wrapping algorithm separate punctuation from the inline Markdown

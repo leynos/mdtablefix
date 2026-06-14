@@ -213,7 +213,7 @@ definitions, allowing references before the final footnote definition block.
 Definitions prefixed by blockquote markers (`>`) still count as existing
 blocks, but those inside fenced code blocks are ignored.
 
-Once inline references and trailing lists are normalised, `renumber_footnotes`
+Once inline references and trailing lists are normalized, `renumber_footnotes`
 walks the document in the order readers encounter references. It assigns
 sequential identifiers starting from one, rewrites every reference to use its
 new identifier, and updates footnote definitions to match. Trailing numeric
@@ -420,7 +420,7 @@ flowchart TD
 ```
 
 Figure: Wrap-tokenizer flow. Starting from an input string, the wrapper emits
-whitespace and inline Markdown tokens, normalises inline footnote references
+whitespace and inline Markdown tokens, normalizes inline footnote references
 with `normalize_footnote_ref_spacing`, groups tokens into fragments, measures
 their display widths with `unicode-width`, feeds them through
 `textwrap::wrap_algorithms::wrap_first_fit`, and then reconstructs wrapped

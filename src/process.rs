@@ -124,7 +124,7 @@ impl ProcessBuffer {
 
 /// Processes a stream of Markdown lines using the provided [`Options`].
 ///
-/// The function normalises code fences, converts HTML tables, detects
+/// The function normalizes code fences, converts HTML tables, detects
 /// Markdown tables and optionally wraps paragraphs. The exact behaviour is
 /// controlled by `opts`.
 ///
@@ -259,7 +259,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 
 /// Processes Markdown without wrapping paragraphs.
 ///
-/// Useful when only table reflow and code fence normalisation are required.
+/// Useful when only table reflow and code fence normalization are required.
 ///
 /// # Examples
 ///

@@ -1,4 +1,4 @@
-//! Tests for fence normalisation functionality.
+//! Tests for fence normalization functionality.
 
 #[macro_use]
 #[path = "common/mod.rs"]
