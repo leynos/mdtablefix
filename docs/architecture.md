@@ -239,15 +239,17 @@ Text.
 
 ## Footnotes
 
- [^1]: First note
+ 1. First note
 
- [^2]: Second note
+ 2. Second note
 
-[^10]: Final note
+10. Final note
 ```
 
-`convert_footnotes` only processes the final contiguous numeric list that
-immediately follows an H2 heading when these conditions are met.
+After:
+
+```markdown
+Text.
 
 ## Footnotes
 
@@ -261,7 +263,7 @@ immediately follows an H2 heading when these conditions are met.
 `convert_footnotes` only processes the final contiguous numeric list that
 immediately follows an H2 heading when these conditions are met.
 
-## HTML Table Support in `mdtablefix`
+## HTML table support in mdtablefix
 
 `mdtablefix` can format simple HTML `<table>` elements embedded in Markdown.
 These HTML tables are transformed into Markdown before the main table reflow
@@ -423,10 +425,10 @@ pipeline rather than becoming continuation rows.
 The `footnotes::renumber::definitions` submodule owns definition scanning and
 rewriting. `DefinitionScanState` coordinates the number mapping, collects
 already-parsed definitions, and stages numeric candidates for later conversion
-without cluttering the top-level renumber flow.
-The sibling `footnotes::renumber::reorder` submodule reorders the final
-definition block after numbering is known, while keeping continuation lines and
-spacing attached to the definition segment they belong to.
+without cluttering the top-level renumber flow. The sibling
+`footnotes::renumber::reorder` submodule reorders the final definition block
+after numbering is known, while keeping continuation lines and spacing attached
+to the definition segment they belong to.
 
 `ListState` tracks the active indentation stack and per-indent counters for
 ordered list renumbering. It resets on headings and thematic breaks, and it
