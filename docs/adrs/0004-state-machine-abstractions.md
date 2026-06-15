@@ -1,4 +1,4 @@
-# Architecture decision record (ADR) 0004: Keep bespoke state machines explicit
+# Architectural decision record (ADR) 0004: Keep bespoke state machines explicit
 
 ## Status
 
@@ -48,8 +48,8 @@ External research found several Rust finite-state-machine crates:
   users to implement state and transition traits around the generated graph.[^4]
 - `finny` provides a procedural builder API with compile-time transition graph
   validation, guards, actions, state regions, event queueing, submachines, and
-  timers. Its current public documentation is sparse, and the latest version is
-  `0.2.0`.[^5]
+  timers. Its current public documentation is sparse, and the latest version
+  listed as of 2026-06-13 is `0.2.0`.[^5]
 - `typed-fsm` is a recent zero-dependency-by-default event-driven framework
   with lifecycle hooks, optional logging, guards expressed in process handlers,
   and concurrency/interrupt support. It currently has low adoption compared
@@ -59,9 +59,10 @@ External research found several Rust finite-state-machine crates:
   Its project description says it is also a learning platform for Rubyists
   moving to Rust.[^7]
 
-The crates.io `state-machine` keyword page shows `statig` as the most prominent
-general-purpose crate by recent downloads, while other candidates either target
-testing, embedded generation, async actors, or lower-adoption niches.[^8]
+As of 2026-06-13, the crates.io `state-machine` keyword page shows `statig` as
+the most prominent general-purpose crate by recent downloads, while other
+candidates either target testing, embedded generation, async actors, or
+lower-adoption niches.[^8]
 
 ## Decision outcome
 
