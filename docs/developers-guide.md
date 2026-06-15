@@ -87,16 +87,17 @@ restores the separator row with widths derived from the final table body.
 - `ProcessBuffer`: Owns the stream-processing output buffer, the pending table
   run, and the table-mode state for `process_stream_inner`. The parent process
   module is responsible for orchestration; the buffer owns the boundary rules
-  that decide when fence lines pass through verbatim, when a pipe-led row starts
-  table mode, and when a new Markdown block flushes a pending table before the
-  block line is processed. Debug instrumentation in this module must not log
-  raw Markdown lines; use bounded fields such as line lengths and buffer counts.
+  that decide when fence lines pass through verbatim, when a pipe-led row
+  starts table mode, and when a new Markdown block flushes a pending table
+  before the block line is processed. Debug instrumentation in this module must
+  not log raw Markdown lines; use bounded fields such as line lengths and
+  buffer counts.
 
 `src/footnotes/renumber/reorder.rs`:
 
 - `reorder_definition_block`: Reorders the final footnote-definition block
-  according to the numbering plan built by the sibling `definitions` module.
-  It keeps continuation lines attached to their definition, preserves block
+  according to the numbering plan built by the sibling `definitions` module. It
+  keeps continuation lines attached to their definition, preserves block
   prefixes, migrates leading separator blanks at the first segment boundary,
   and skips mutation with a warning if the composed block would change row
   count.
@@ -368,7 +369,7 @@ Table: Key types and functions.
 | `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/paragraph.rs`           |
 | `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/wrap/paragraph.rs`           |
 | `PendingPrefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `src/wrap/paragraph.rs`           |
-| `emit_pending_with_verbatim_continuation` - Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/wrap/paragraph.rs`           |
+| `emit_pending_with_verbatim_continuation` — Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/wrap/paragraph.rs`           |
 | `drain_pending_prefix` — Takes the deferred prefixed segment and clears plain paragraph buffers before final emission.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/paragraph.rs`           |
 | `pending_prefix_for_next_segment` — Selects the original pending prefix for the first deferred segment, then the continuation indent for later segments.                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/paragraph.rs`           |
 | `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/continuation.rs`        |
@@ -698,7 +699,11 @@ and arguments before accepting the new output.
 
 Three internal types centralize the buffered state used by the conversion
 pipeline. Each owns one slice of pipeline behaviour, so the surrounding
-functions remain focused on traversal.
+functions remain focused on traversal. Keep new parser and wrapping state
+machines explicit unless they meet the adoption threshold in
+[ADR 0004](adrs/0004-state-machine-abstractions.md). That decision records the
+crate research and the local pattern maintainers should follow when changing
+stateful helpers.
 
 ### `HtmlTableState` (`src/html.rs`)
 

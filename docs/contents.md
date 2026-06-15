@@ -27,6 +27,10 @@
   decision covering the table parsing and rendering pipeline.
 - [Textwrap wrapping engine](adrs/0002-textwrap-wrapping-engine.md): Accepted
   decision covering the adoption of `textwrap` for paragraph wrapping.
+- [Treat prose dates as inline fragments](adrs/0003-date-sequences-as-inline-fragments.md):
+  Accepted
+- [Keep bespoke state machines explicit](adrs/0004-state-machine-abstractions.md):
+  Accepted
 
 ## Reference material
 
