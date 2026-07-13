@@ -109,9 +109,10 @@ mod tests {
     }
 
     #[test]
-    fn thematic_break_static_is_stable_across_threads() {
+    fn lazylock_initialisation_is_race_safe() {
         const THREADS: usize = 16;
 
+        // Document the application's reliance on the stdlib race-safety guarantee.
         let barrier = Arc::new(Barrier::new(THREADS));
         let handles = (0..THREADS)
             .map(|_| {
