@@ -31,6 +31,8 @@
   Accepted
 - [Keep bespoke state machines explicit](adrs/0004-state-machine-abstractions.md):
   Accepted
+- [Protect literal regions during ellipsis replacement](adrs/0005-ellipsis-literal-regions.md):
+  Accepted decision covering links, URLs, and filesystem-like tokens.
 
 ## Reference material
 

@@ -12,9 +12,11 @@
 //! similar post-processors from mutating fenced code block contents, fixing
 //! issue `#329`.
 
+mod link_span;
 mod parsing;
 mod scanning;
 
+pub(crate) use link_span::link_or_image_span;
 use parsing::{
     handle_backtick_fence,
     is_trailing_punctuation,

@@ -31,6 +31,10 @@
 - Preserve four-space and tab-indented code blocks when `--ellipsis` is used,
   so literal `...` in command output and source examples remains unchanged.
   ([#369](https://github.com/leynos/mdtablefix/issues/369))
+- Preserve semantic `...` sequences in links, URLs, and filesystem paths when
+  `--ellipsis` is used, preventing typographic normalization from changing
+  resource destinations.
+  ([#386](https://github.com/leynos/mdtablefix/issues/386))
 - Keep hyphenated compounds containing an inline code span atomic during
   wrapping, including the leading-hyphen forms such as `` pre-`LLMPort` `` and
   `` (API-`Foo`) ``. The hyphen-prefix token is coupled forward to the

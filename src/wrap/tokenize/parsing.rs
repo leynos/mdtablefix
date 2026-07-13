@@ -123,7 +123,7 @@ fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
     None
 }
 
-fn parse_link_text(text: &str, idx: usize) -> Option<usize> {
+pub(super) fn parse_link_text(text: &str, idx: usize) -> Option<usize> {
     if idx >= text.len() || !text[idx..].starts_with('[') {
         return None;
     }
@@ -136,7 +136,7 @@ fn parse_link_text(text: &str, idx: usize) -> Option<usize> {
     }
 }
 
-fn parse_link_url(text: &str, mut idx: usize) -> Option<usize> {
+pub(super) fn parse_link_url(text: &str, mut idx: usize) -> Option<usize> {
     if idx >= text.len() || !text[idx..].starts_with('(') {
         return None;
     }

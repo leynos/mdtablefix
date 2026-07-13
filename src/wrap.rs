@@ -41,6 +41,7 @@ use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 /// Re-export these so callers of [`crate::textproc`] can implement custom
 /// transformations without depending on internal modules.
 pub use tokenize::Token;
+pub(crate) use tokenize::link_or_image_span;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
 // Re-exported for unit tests; not used in production code.

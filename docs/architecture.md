@@ -158,6 +158,17 @@ lines, without changing the public tokenizer's token variants. Lines classified
 as code are forwarded byte-for-byte, while prose lines continue through the
 shared inline tokenizer so code spans remain opaque.
 
+Within prose tokens, the ellipsis-owned literal-region scanner protects inline
+links and images, autolinks, bare URLs, and filesystem-like tokens. It reuses
+the wrapping parser's balanced link-destination boundaries, then returns merged
+source ranges so protected bytes are copied directly and only the intervening
+prose is normalized. Link reference definition lines are classified by the
+shared block classifier and preserved in full. The scanner is private to the
+ellipsis feature; other transforms may reuse the balanced link span helper but
+must define their own literal-region policy rather than inheriting typography
+rules implicitly. The rationale is recorded in
+[ADR 0005](adrs/0005-ellipsis-literal-regions.md).
+
 `ProcessBuffer` owns the active table run during stream processing. It flushes
 that buffer before lines that open a new Markdown block, including blockquote,
 list-item, link-reference, and footnote-definition lines that themselves

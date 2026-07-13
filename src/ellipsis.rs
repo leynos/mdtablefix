@@ -10,9 +10,11 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::{
-    textproc::{Token, process_tokens, push_original_token},
-    wrap::{FenceTracker, leading_indent},
+    textproc::{Token, push_original_token, tokenize_markdown},
+    wrap::{BlockKind, FenceTracker, LinkReferenceMatcher, classify_block, leading_indent},
 };
+
+mod protected;
 
 static DOT_RE: LazyLock<Regex> = lazy_regex!(r"\.{3,}", "ellipsis pattern regex should compile");
 
@@ -54,25 +56,46 @@ impl IndentedCodeTracker {
 }
 
 fn replace_ellipsis_in_prose(line: &str) -> String {
-    process_tokens(&[line.to_owned()], |tok, out| match tok {
-        Token::Text(text) => {
-            if !DOT_RE.is_match(text) {
-                out.push_str(text);
-                return;
-            }
-            let replaced = DOT_RE.replace_all(text, |caps: &regex::Captures<'_>| {
-                let len = caps[0].len();
-                let ellipses = "…".repeat(len / 3);
-                let leftover = ".".repeat(len % 3);
-                format!("{ellipses}{leftover}")
-            });
-            out.push_str(&replaced);
+    let mut out = String::with_capacity(line.len());
+    for token in tokenize_markdown(line) {
+        match token {
+            Token::Text(text) => replace_text_ellipsis(text, &mut out),
+            _ => push_original_token(&token, &mut out),
         }
-        _ => push_original_token(&tok, out),
-    })
-    .into_iter()
-    .next()
-    .unwrap_or_default()
+    }
+    out
+}
+
+fn replace_text_ellipsis(text: &str, out: &mut String) {
+    let mut cursor = 0;
+    for span in protected::literal_spans(text) {
+        replace_dot_runs(&text[cursor..span.start], out);
+        out.push_str(&text[span.clone()]);
+        cursor = span.end;
+    }
+    replace_dot_runs(&text[cursor..], out);
+}
+
+fn replace_dot_runs(text: &str, out: &mut String) {
+    if !DOT_RE.is_match(text) {
+        out.push_str(text);
+        return;
+    }
+
+    let replaced = DOT_RE.replace_all(text, |caps: &regex::Captures<'_>| {
+        let len = caps[0].len();
+        let ellipses = "…".repeat(len / 3);
+        let leftover = ".".repeat(len % 3);
+        format!("{ellipses}{leftover}")
+    });
+    out.push_str(&replaced);
+}
+
+fn is_link_reference_definition(line: &str) -> bool {
+    matches!(
+        classify_block(line, LinkReferenceMatcher::production()),
+        Some(BlockKind::LinkReferenceDefinition)
+    )
 }
 
 /// Replace `...` with `…` outside code spans and code blocks.
@@ -86,7 +109,11 @@ pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
         .map(|line| {
             let is_indented_code = indented_code_tracker.observe(line);
             let is_fence = fence_tracker.observe(line);
-            if is_fence || fence_tracker.in_fence() || is_indented_code {
+            if is_fence
+                || fence_tracker.in_fence()
+                || is_indented_code
+                || is_link_reference_definition(line)
+            {
                 line.clone()
             } else {
                 replace_ellipsis_in_prose(line)
@@ -159,6 +186,40 @@ mod tests {
             replace_ellipsis(&[input.to_string()]),
             [expected.to_string()]
         );
+    }
+
+    #[rstest::rstest]
+    #[case::inline_link("[wait...](https://example.com/a...b)")]
+    #[case::image("![alt...](images/a...b.png)")]
+    #[case::uri_autolink("<https://example.com/a...b>")]
+    #[case::email_autolink("<first...last@example.com>")]
+    #[case::bare_url("https://github.com/org/repo/compare/v1...v2")]
+    #[case::relative_path("./fixtures/.../expected.txt")]
+    #[case::parent_path("../fixtures/a...b.txt")]
+    #[case::absolute_path("/var/lib/.../state")]
+    #[case::home_path("~/src/.../README.md")]
+    #[case::windows_path(r"C:\src\...\README.md")]
+    fn preserves_semantic_dot_runs(#[case] input: &str) {
+        assert_eq!(replace_ellipsis(&[input.to_string()]), [input.to_string()]);
+    }
+
+    #[test]
+    fn preserves_link_reference_destination() {
+        let input = vec![
+            concat!(
+                "[0.1.1]: https://github.com/leynos/diesel-cte-ext/compare/",
+                "v0.1.0...302d156361161fd73310926dcef6513b41f7b393",
+            )
+            .to_string(),
+        ];
+        assert_eq!(replace_ellipsis(&input), input);
+    }
+
+    #[test]
+    fn replaces_prose_beside_a_literal_url() {
+        let input = vec!["Compare... https://example.com/v1...v2".to_string()];
+        let expected = vec!["Compare… https://example.com/v1...v2".to_string()];
+        assert_eq!(replace_ellipsis(&input), expected);
     }
 
     #[test]

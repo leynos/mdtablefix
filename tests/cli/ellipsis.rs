@@ -73,6 +73,33 @@ fn preserves_indented_code_block() {
         .stdout(expected);
 }
 
+/// Tests that `--ellipsis` preserves semantic dot runs in literal regions.
+#[test]
+fn preserves_literal_regions() {
+    let input = concat!(
+        "Release... notes.\n",
+        "[0.1.1]: https://github.com/leynos/diesel-cte-ext/compare/",
+        "v0.1.0...302d156361161fd73310926dcef6513b41f7b393\n",
+        "See [comparison...](https://example.com/v1...v2).\n",
+        "Open ./fixtures/.../expected.txt.\n",
+    );
+    let expected = concat!(
+        "Release… notes.\n",
+        "[0.1.1]: https://github.com/leynos/diesel-cte-ext/compare/",
+        "v0.1.0...302d156361161fd73310926dcef6513b41f7b393\n",
+        "See [comparison...](https://example.com/v1...v2).\n",
+        "Open ./fixtures/.../expected.txt.\n",
+    );
+
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--ellipsis")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(expected);
+}
+
 /// Tests ellipsis replacement for sequences longer than three characters.
 #[test]
 fn replaces_long_sequence() {

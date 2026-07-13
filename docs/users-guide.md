@@ -40,6 +40,11 @@ tab-indented code blocks remain unchanged. An indented code block must start at
 the beginning of the document or after a blank line, matching Markdown's rule
 that it cannot interrupt a paragraph.
 
+The flag also preserves `...` where the dots are semantically significant:
+inline links and images, autolinks, bare URLs, link reference definitions, and
+filesystem-like tokens are passed through unchanged. For example, a GitHub
+compare destination containing `v1...v2` remains a valid URL.
+
 ## Paragraph wrapping
 
 Pass `--wrap` to reflow prose paragraphs so that every output line fits within
