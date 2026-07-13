@@ -5,6 +5,25 @@ use rstest::rstest;
 use super::*;
 
 #[test]
+fn parse_rows_preserves_literal_row_end_cell() {
+    let input = vec![
+        "| Name | Value |".to_string(),
+        "| marker | ROW_END |".to_string(),
+    ];
+
+    assert_eq!(
+        parse_rows(&input),
+        (
+            vec![
+                vec!["Name".to_string(), "Value".to_string()],
+                vec!["marker".to_string(), "ROW_END".to_string()],
+            ],
+            false,
+        )
+    );
+}
+
+#[test]
 fn protect_leading_empty_cells_reescapes_literal_pipes_after_marking() {
     let protected = protect_leading_empty_cells("|   | keep \\| literal | tail |");
 

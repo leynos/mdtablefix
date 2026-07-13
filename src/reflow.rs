@@ -15,7 +15,8 @@ const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 /// Parses reflow input into rows while preserving continuation-cell boundaries.
 ///
 /// Leading empty cells are protected before the global split so continuation
-/// rows keep their original column positions.
+/// rows keep their original column positions. Each resulting chunk is parsed
+/// directly into a row, keeping row boundaries out of the cell data.
 ///
 /// # Arguments
 ///
@@ -24,7 +25,7 @@ const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 /// # Returns
 ///
 /// A tuple containing the parsed rows and a flag indicating whether the
-/// sentinel split crossed an original line boundary.
+/// structural split crossed an original line boundary.
 ///
 /// # Examples
 ///
@@ -50,40 +51,13 @@ pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
     let chunks: Vec<&str> = SENTINEL_RE.split(&raw).collect();
     let split_within_line = chunks.len() > trimmed.len();
 
-    let cells = collect_cells(&chunks);
-    let rows = split_into_rows(cells);
+    let rows = chunks
+        .iter()
+        .map(|chunk| split_cells(chunk))
+        .filter(|row| !row.is_empty())
+        .collect();
 
     (rows, split_within_line)
-}
-
-fn collect_cells(chunks: &[&str]) -> Vec<String> {
-    let mut cells = Vec::new();
-    for (idx, chunk) in chunks.iter().enumerate() {
-        let mut ch = (*chunk).to_string();
-        if idx != chunks.len() - 1 {
-            ch.push_str(" |ROW_END|");
-        }
-        cells.extend(split_cells(&ch));
-    }
-    cells
-}
-
-fn split_into_rows(cells: Vec<String>) -> Vec<Vec<String>> {
-    let mut rows = Vec::new();
-    let mut current = Vec::new();
-    for cell in cells {
-        if cell == "ROW_END" {
-            if !current.is_empty() {
-                rows.push(std::mem::take(&mut current));
-            }
-        } else {
-            current.push(cell);
-        }
-    }
-    if !current.is_empty() {
-        rows.push(current);
-    }
-    rows
 }
 
 /// Restores parser markers and removes rows that contain only empty cells.
