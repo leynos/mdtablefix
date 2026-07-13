@@ -93,6 +93,17 @@ restores the separator row with widths derived from the final table body.
   not log raw Markdown lines; use bounded fields such as line lengths and
   buffer counts.
 
+`src/footnotes/renumber/definitions.rs`:
+
+- `collect_definition_updates`: Scans lines for footnote definitions and
+  promotable numeric-list candidates, assigns sequential numbers, and rewrites
+  inline references within definition bodies to produce the definition rewrite
+  plan.
+- `definition_segment_end`: Returns the exclusive end row of a definition
+  segment, absorbing continuation and connector-blank lines up to the block
+  end. The sibling `reorder` module shares this boundary primitive so scanning
+  and reordering compute definition boundaries identically.
+
 `src/footnotes/renumber/reorder.rs`:
 
 - `reorder_definition_block`: Reorders the final footnote-definition block
@@ -101,6 +112,9 @@ restores the separator row with widths derived from the final table body.
   prefixes, migrates leading separator blanks at the first segment boundary,
   and skips mutation with a warning if the composed block would change row
   count.
+
+The `reorder` module was extracted from `definitions` during the module-size
+refactoring audit covering issues `#357`–`#367` in PR `#368`.
 
 `src/wrap/tokenize/scanning.rs`:
 
