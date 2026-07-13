@@ -13,6 +13,7 @@ use std::borrow::Cow;
 use tracing::trace;
 
 mod block;
+mod blockquote;
 mod continuation;
 mod fence;
 mod inline;
@@ -21,6 +22,7 @@ mod paragraph;
 mod tokenize;
 use block::{BLOCKQUOTE_RE, BULLET_RE, FOOTNOTE_RE};
 pub(crate) use block::{BlockKind, classify_block, leading_indent};
+pub use blockquote::BlockquotePrefix;
 use continuation::apply_continuation_chunk;
 /// Fence-detection utilities re-exported for downstream callers.
 ///

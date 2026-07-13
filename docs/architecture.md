@@ -262,17 +262,15 @@ Text.
 
 ## Footnotes
 
- 1. First note
+ [^1]: First note
 
- 2. Second note
+ [^2]: Second note
 
-10. Final note
+[^10]: Final note
 ```
 
-After:
-
-```markdown
-Text.
+`convert_footnotes` only processes the final contiguous numeric list that
+immediately follows an H2 heading when these conditions are met.
 
 ## Footnotes
 
@@ -430,6 +428,15 @@ module handles filesystem operations, delegating the text processing to
 `process`.
 
 ### Stateful helpers
+
+`BlockquotePrefix` owns the wrap module's interpretation of leading blockquote
+structure. It borrows the source line, preserves the prefix's exact spacing,
+and exposes both nesting depth and stripped inner content. The type is the only
+blockquote-prefix parser used by the wrapping pipeline; downstream
+classification, fence detection, and prefix-aware emission consume its parsed
+view rather than matching blockquote syntax independently. It does not parse
+general Markdown containers or mutate content, so callers compose it with the
+existing list, fence, and inline parsers after stripping the outer prefix.
 
 `ParagraphWriter` owns paragraph buffering and flush boundaries for wrapping.
 It keeps the current indent, emits wrapped or verbatim lines into the caller's
