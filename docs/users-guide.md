@@ -37,10 +37,12 @@ sequence.
 
 ## Paragraph wrapping
 
-Pass `--wrap <width>` to reflow prose paragraphs so that every output line fits
-within `<width>` display columns. The width argument is measured in terminal
+Pass `--wrap=<width>` to reflow prose paragraphs so that every output line fits
+within `<width>` display columns. The equals sign keeps the optional width
+unambiguous when file operands follow. The width is measured in terminal
 columns, not bytes, so it accounts correctly for CJK glyphs, emoji, and
-accented characters.
+accented characters. Passing bare `--wrap` retains the backwards-compatible
+80-column default, while a width of zero is rejected.
 
 Line fitting is delegated to the `textwrap` crate using a greedy first-fit
 algorithm: each word is placed on the current line if it fits, and a new line
@@ -51,8 +53,8 @@ footnote references (`[^label]`) are treated as unbreakable units. A span is
 never split across lines; it moves as a whole to the next line when it would
 otherwise exceed the target width.
 
-Reference-style links such as `[text][reference]` are likewise unbreakable.
-The opening `[` always stays with the link label, avoiding leading whitespace
+Reference-style links such as `[text][reference]` are likewise unbreakable. The
+opening `[` always stays with the link label, avoiding leading whitespace
 inside link text after continuation indentation is applied.
 
 A colon-suffixed footnote reference in running prose, such as

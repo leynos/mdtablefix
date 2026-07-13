@@ -15,12 +15,18 @@ use std::{
     borrow::Cow,
     fs,
     io::{self, Read},
+    num::NonZeroUsize,
     path::{Path, PathBuf},
 };
 
 use anyhow::Context;
 use clap::Parser;
-use mdtablefix::{Options, format_breaks, process::process_stream_inner, renumber_lists};
+use mdtablefix::{
+    Options,
+    format_breaks,
+    process::{WRAP_COLS, process_stream_inner_with_width},
+    renumber_lists,
+};
 use rayon::prelude::*;
 
 use crate::frontmatter::split_leading_yaml_frontmatter;
@@ -43,9 +49,16 @@ struct Cli {
     reason = "CLI exposes independent flags via separate switches"
 )]
 struct FormatOpts {
-    /// Wrap paragraphs and list items to 80 columns
-    #[arg(long = "wrap")]
-    wrap: bool,
+    /// Wrap paragraphs and list items, optionally to WIDTH columns
+    #[arg(
+        long = "wrap",
+        value_name = "WIDTH",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "80",
+        value_parser = clap::value_parser!(NonZeroUsize)
+    )]
+    wrap: Option<NonZeroUsize>,
     /// Renumber ordered list items
     #[arg(long = "renumber")]
     renumber: bool,
@@ -73,7 +86,7 @@ struct FormatOpts {
 impl From<FormatOpts> for Options {
     fn from(opts: FormatOpts) -> Self {
         Self {
-            wrap: opts.wrap,
+            wrap: opts.wrap.is_some(),
             ellipsis: opts.ellipsis,
             fences: opts.fences,
             footnotes: opts.footnotes,
@@ -87,8 +100,9 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
     // Split off leading YAML frontmatter to preserve it from all transforms
     let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
 
-    // Use process_stream_inner directly since we've already split frontmatter
-    let mut out = process_stream_inner(body, opts.into());
+    // Use the width-aware inner pipeline because frontmatter is already split.
+    let wrap_width = opts.wrap.map_or(WRAP_COLS, NonZeroUsize::get);
+    let mut out = process_stream_inner_with_width(body, opts.into(), wrap_width);
     if opts.renumber {
         out = renumber_lists(&out);
     }

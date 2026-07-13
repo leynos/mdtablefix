@@ -28,6 +28,29 @@ fn test_cli_wrap_option() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[test]
+fn test_cli_wrap_accepts_custom_width() -> Result<(), Box<dyn std::error::Error>> {
+    let input = "alpha beta gamma delta epsilon zeta eta theta\n";
+    let assertion = run_cli_with_stdin(&["--wrap=20"], input)?;
+    let success = assertion.success();
+    let output = String::from_utf8_lossy(&success.get_output().stdout);
+
+    assert_eq!(
+        output.lines().collect::<Vec<_>>(),
+        ["alpha beta gamma", "delta epsilon zeta", "eta theta"]
+    );
+    assert!(output.lines().all(|line| line.len() <= 20));
+    Ok(())
+}
+
+#[test]
+fn test_cli_wrap_rejects_zero_width() -> Result<(), Box<dyn std::error::Error>> {
+    run_cli_with_stdin(&["--wrap=0"], "alpha beta\n")?
+        .failure()
+        .stderr(predicates::str::contains("invalid value '0'"));
+    Ok(())
+}
+
 /// Verifies `--wrap` reflows Markdown paragraphs while respecting inline code spans.
 #[rstest(
     paragraph,
