@@ -53,10 +53,10 @@ pub(super) fn has_h2_heading_before(lines: &[String], start: usize) -> bool {
 pub(super) fn has_existing_footnote_block(lines: &[String], start: usize) -> bool {
     let mut fences = FenceTracker::default();
     for l in &lines[..start] {
-        if fences.observe(l) {
+        if fences.observe(l, 0) {
             continue;
         }
-        if fences.in_fence() {
+        if fences.in_fence(0) {
             continue;
         }
         let mut t = l.trim_start();

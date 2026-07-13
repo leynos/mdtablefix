@@ -12,11 +12,6 @@ pub(super) static FENCE_RE: std::sync::LazyLock<Regex> =
         "wrapping fence delimiter and info string pattern should compile",
     );
 
-static BLOCKQUOTE_FENCE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
-    r"^(\s*(?:>\s*)+)(`{3,}|~{3,})([^\r\n]*)$",
-    "blockquote fence delimiter and info string pattern should compile",
-);
-
 /// Return fence components if the line starts a fenced code block.
 ///
 /// The function captures:
@@ -37,7 +32,7 @@ static BLOCKQUOTE_FENCE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
 #[must_use]
 #[rustfmt::skip]
 pub fn is_fence(line: &str) -> Option<(&str, &str, &str)> {
-    FENCE_RE.captures(line).or_else(|| BLOCKQUOTE_FENCE_RE.captures(line)).map(|cap| {
+    FENCE_RE.captures(line).map(|cap| {
         let indent = cap.get(1).map_or("", |m| m.as_str());
         let fence  = cap.get(2).map_or("", |m| m.as_str());
         let info   = cap.get(3).map_or("", |m| m.as_str());
@@ -50,11 +45,13 @@ pub fn is_fence(line: &str) -> Option<(&str, &str, &str)> {
 /// Returns `true` if the line was processed as a fence.
 pub(crate) fn handle_fence_line(
     line: &str,
+    inner_content: &str,
+    depth: usize,
     writer: &mut ParagraphWriter<'_>,
     state: &mut ParagraphState,
     tracker: &mut FenceTracker,
 ) -> bool {
-    if !tracker.observe(line) {
+    if !tracker.observe(inner_content, depth) {
         return false;
     }
 
@@ -73,15 +70,15 @@ pub(crate) fn handle_fence_line(
 /// use mdtablefix::wrap::FenceTracker;
 ///
 /// let mut tracker = FenceTracker::new();
-/// assert!(!tracker.in_fence());
-/// assert!(tracker.observe("```rust"));
-/// assert!(tracker.in_fence());
-/// assert!(tracker.observe("```"));
-/// assert!(!tracker.in_fence());
+/// assert!(!tracker.in_fence(0));
+/// assert!(tracker.observe("```rust", 0));
+/// assert!(tracker.in_fence(0));
+/// assert!(tracker.observe("```", 0));
+/// assert!(!tracker.in_fence(0));
 /// ```
 #[derive(Default, Debug)]
 pub struct FenceTracker {
-    state: Option<(char, usize)>,
+    state: Option<(char, usize, usize)>,
 }
 
 impl FenceTracker {
@@ -99,7 +96,14 @@ impl FenceTracker {
     /// Panics when the fence regular expression yields an empty marker, which
     /// would indicate the regex is inconsistent with Markdown fence rules.
     #[must_use]
-    pub fn observe(&mut self, line: &str) -> bool {
+    pub fn observe(&mut self, line: &str, depth: usize) -> bool {
+        if self
+            .state
+            .is_some_and(|(_open_ch, _open_len, open_depth)| depth < open_depth)
+        {
+            self.state = None;
+        }
+
         let Some((_indent, fence, _info)) = is_fence(line) else {
             return false;
         };
@@ -109,12 +113,14 @@ impl FenceTracker {
         let marker_len = chars.count() + 1;
 
         match self.state {
-            Some((open_ch, open_len)) if marker_ch == open_ch && marker_len >= open_len => {
+            Some((open_ch, open_len, open_depth))
+                if depth == open_depth && marker_ch == open_ch && marker_len >= open_len =>
+            {
                 self.state = None;
             }
             Some(_) => {}
             None => {
-                self.state = Some((marker_ch, marker_len));
+                self.state = Some((marker_ch, marker_len, depth));
             }
         }
 
@@ -123,7 +129,10 @@ impl FenceTracker {
 
     /// Check whether the tracker is currently inside a fenced block.
     #[must_use]
-    pub fn in_fence(&self) -> bool { self.state.is_some() }
+    pub fn in_fence(&self, current_depth: usize) -> bool {
+        self.state
+            .is_some_and(|(_marker_ch, _marker_len, open_depth)| current_depth >= open_depth)
+    }
 }
 
 #[cfg(test)]

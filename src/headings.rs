@@ -20,13 +20,13 @@ pub fn convert_setext_headings(lines: &[String]) -> Vec<String> {
     while idx < lines.len() {
         let line = &lines[idx];
 
-        if fence_tracker.observe(line) {
+        if fence_tracker.observe(line, 0) {
             out.push(line.clone());
             idx += 1;
             continue;
         }
 
-        if fence_tracker.in_fence() {
+        if fence_tracker.in_fence(0) {
             out.push(line.clone());
             idx += 1;
             continue;

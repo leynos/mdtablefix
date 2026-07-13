@@ -20,7 +20,7 @@ mod inline;
 mod link_reference;
 mod paragraph;
 mod tokenize;
-use block::{BLOCKQUOTE_RE, BULLET_RE, FOOTNOTE_RE};
+use block::{BULLET_RE, FOOTNOTE_RE};
 pub(crate) use block::{BlockKind, classify_block, leading_indent};
 pub use blockquote::BlockquotePrefix;
 use continuation::apply_continuation_chunk;
@@ -79,44 +79,63 @@ fn is_passthrough_block(block_kind: Option<BlockKind>, line: &str) -> bool {
         || is_indented_code_line(line)
 }
 
-fn prefix_line(line: &str) -> Option<PrefixLine<'_>> {
-    if let Some(cap) = BULLET_RE.captures(line) {
-        let prefix = cap.get(1).map(|m| m.as_str())?;
+fn prefix_line<'a>(
+    inner_content: &'a str,
+    blockquote: Option<BlockquotePrefix<'a>>,
+) -> Option<PrefixLine<'a>> {
+    let outer_prefix = blockquote.map(|prefix| prefix.raw_prefix());
+
+    if let Some(cap) = BULLET_RE.captures(inner_content) {
+        let inner_prefix = cap.get(1).map(|m| m.as_str())?;
         let rest = cap.get(2).map(|m| m.as_str())?;
         return Some(PrefixLine {
-            prefix: Cow::Borrowed(prefix),
+            prefix: outer_prefix.map_or_else(
+                || Cow::Borrowed(inner_prefix),
+                |outer| Cow::Owned(format!("{outer}{inner_prefix}")),
+            ),
             rest,
             repeat_prefix: false,
+            outer_prefix: outer_prefix.map(Cow::Borrowed),
         });
     }
 
-    if let Some(cap) = FOOTNOTE_RE.captures(line) {
+    if let Some(cap) = FOOTNOTE_RE.captures(inner_content) {
         let prefix = cap.get(1).map(|m| m.as_str())?;
         let marker = cap.get(2).map(|m| m.as_str())?;
         let rest = cap.get(3).map(|m| m.as_str())?;
+        let inner_prefix = format!("{prefix}{marker}");
         return Some(PrefixLine {
-            prefix: Cow::Owned(format!("{prefix}{marker}")),
+            prefix: Cow::Owned(format!(
+                "{}{inner_prefix}",
+                outer_prefix.unwrap_or_default()
+            )),
             rest,
             repeat_prefix: false,
+            outer_prefix: outer_prefix.map(Cow::Borrowed),
         });
     }
 
-    let Some(cap) = BLOCKQUOTE_RE.captures(line) else {
+    let Some(blockquote) = blockquote else {
         trace!(
-            line_len = line.len(),
+            line_len = inner_content.len(),
             "prefix_line found no supported prefix"
         );
         return None;
     };
-    let prefix = cap.get(1).map(|m| m.as_str())?;
-    let rest = cap.get(2).map(|m| m.as_str())?;
     Some(PrefixLine {
-        prefix: Cow::Borrowed(prefix),
-        rest,
+        prefix: Cow::Borrowed(blockquote.raw_prefix()),
+        rest: inner_content,
         repeat_prefix: true,
+        outer_prefix: Some(Cow::Borrowed(blockquote.raw_prefix())),
     })
 }
 
+struct LineContext<'a> {
+    original: &'a str,
+    inner: &'a str,
+    blockquote: Option<BlockquotePrefix<'a>>,
+    block_kind: Option<BlockKind>,
+}
 fn line_break_parts(line: &str) -> (String, bool) {
     let trimmed_end = line.trim_end();
     let text_without_html_breaks = trimmed_end
@@ -149,20 +168,31 @@ fn normalized_passthrough_line(line: &str) -> &str {
 }
 
 fn handle_pending_continuation(
-    line: &str,
-    block_kind: Option<BlockKind>,
+    line: LineContext<'_>,
     writer: &mut ParagraphWriter<'_>,
     state: &mut ParagraphState,
     link_matcher: LinkReferenceMatcher,
     link_title_window: &mut link_reference::LinkTitleWindow,
 ) {
-    if let Some(prefix_line) = prefix_line(line) {
+    let outer_matches_pending = line.blockquote.is_some_and(|prefix| {
+        state
+            .pending_prefix
+            .as_ref()
+            .is_some_and(|pending| pending.outer_prefix.as_deref() == Some(prefix.raw_prefix()))
+    });
+    if outer_matches_pending && line.block_kind.is_none() {
+        let (text, hard_break) = line_break_parts(line.inner);
+        apply_continuation_chunk(&text, line.original, hard_break, writer, state);
+        return;
+    }
+
+    if let Some(prefix_line) = prefix_line(line.inner, line.blockquote) {
         let matches_pending = state.pending_prefix.as_ref().is_some_and(|pending| {
             prefix_line.repeat_prefix && pending.prefix == prefix_line.prefix.as_ref()
         });
         if matches_pending {
             let (text, hard_break) = line_break_parts(prefix_line.rest);
-            apply_continuation_chunk(&text, line, hard_break, writer, state);
+            apply_continuation_chunk(&text, line.original, hard_break, writer, state);
             return;
         }
 
@@ -170,20 +200,20 @@ fn handle_pending_continuation(
         return;
     }
 
-    if is_passthrough_block(block_kind, line) {
-        if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
-            link_title_window.observe_definition(line, link_matcher);
+    if is_passthrough_block(line.block_kind, line.inner) {
+        if matches!(line.block_kind, Some(BlockKind::LinkReferenceDefinition)) {
+            link_title_window.observe_definition(line.inner, link_matcher);
         }
-        let emitted = normalized_passthrough_line(line);
+        let emitted = normalized_passthrough_line(line.original);
         writer.push_verbatim(state, emitted);
         return;
     }
 
-    let (text, hard_break) = line_break_parts(line);
+    let (text, hard_break) = line_break_parts(line.inner);
     if state.pending_prefix.is_none() {
         return;
     }
-    apply_continuation_chunk(&text, line, hard_break, writer, state);
+    apply_continuation_chunk(&text, line.original, hard_break, writer, state);
 }
 
 /// Wrap text lines to the given width.
@@ -198,30 +228,45 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut link_title_window = link_reference::LinkTitleWindow::default();
 
     for line in lines {
-        if fence::handle_fence_line(line, &mut writer, &mut state, &mut fence_tracker) {
+        let blockquote = BlockquotePrefix::parse(line);
+        let current_depth = blockquote.map_or(0, |prefix| prefix.depth());
+        let inner_content = blockquote.map_or(line.as_str(), |prefix| prefix.inner());
+
+        if fence::handle_fence_line(
+            line,
+            inner_content,
+            current_depth,
+            &mut writer,
+            &mut state,
+            &mut fence_tracker,
+        ) {
             link_title_window.observe_fence_context();
             continue;
         }
 
-        if fence_tracker.in_fence() {
+        if fence_tracker.in_fence(current_depth) {
             link_title_window.observe_fence_context();
             writer.push_verbatim(&mut state, line);
             continue;
         }
 
-        if let Some(outcome) = link_title_window.observe_next_line(line, link_matcher)
+        if let Some(outcome) = link_title_window.observe_next_line(inner_content, link_matcher)
             && outcome == link_reference::LinkTitleWindowOutcome::EmitVerbatim
         {
             writer.push_verbatim(&mut state, line);
             continue;
         }
 
-        let block_kind = classify_block(line, link_matcher);
+        let block_kind = classify_block(inner_content, link_matcher);
 
         if state.pending_prefix.is_some() {
             handle_pending_continuation(
-                line,
-                block_kind,
+                LineContext {
+                    original: line,
+                    inner: inner_content,
+                    blockquote,
+                    block_kind,
+                },
                 &mut writer,
                 &mut state,
                 link_matcher,
@@ -230,9 +275,9 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
-        if is_passthrough_block(block_kind, line) {
+        if is_passthrough_block(block_kind, inner_content) {
             if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
-                link_title_window.observe_definition(line, link_matcher);
+                link_title_window.observe_definition(inner_content, link_matcher);
             }
             // Whitespace-only lines act as paragraph breaks; emit them as empty
             // strings so downstream consumers see a uniform separator.
@@ -241,13 +286,13 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
-        if let Some(prefix_line) = prefix_line(line) {
+        if let Some(prefix_line) = prefix_line(inner_content, blockquote) {
             writer.handle_prefix_line(&mut state, &prefix_line);
             continue;
         }
 
-        state.note_indent(line);
-        let (text, hard_break) = line_break_parts(line);
+        state.note_indent(inner_content);
+        let (text, hard_break) = line_break_parts(inner_content);
         state.push(text, hard_break);
     }
 

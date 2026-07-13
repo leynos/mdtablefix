@@ -13,7 +13,7 @@ mod common;
 mod cli_stdin;
 #[path = "../support/wrap_assertions.rs"]
 mod wrap_assertions;
-
+mod blockquote_properties;
 mod blockquotes;
 mod checklist_code_spans;
 mod cli;

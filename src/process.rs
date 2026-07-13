@@ -111,7 +111,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
             continue;
         }
 
-        if fence_tracker.in_fence() {
+        if fence_tracker.in_fence(0) {
             state.push_out(line);
             continue;
         }

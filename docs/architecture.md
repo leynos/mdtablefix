@@ -506,7 +506,8 @@ preserved verbatim or emitted as wrapped output.
 
 ```mermaid
 flowchart TD
-    A[Start: wrap_text called with lines and width] --> B{Classify line}
+    A[Start: wrap_text called with lines and width] --> P[Parse blockquote prefix and depth]
+    P --> B{Classify stripped inner content}
 
     B -->|Fenced or indented code block| C[Preserve line verbatim]
     B -->|Table or heading or directive| C
@@ -533,12 +534,13 @@ flowchart TD
     N -->|No| O[Flush remaining paragraph and finish]
 ```
 
-Figure: `wrap_text` control flow. The wrapper classifies each incoming line,
-passes fenced blocks, tables, headings, directives, and indented code through
-unchanged, flushes paragraphs on blanks, routes prose and prefixed lines through
+Figure: `wrap_text` control flow. The wrapper first extracts blockquote depth
+and inner content, then classifies that inner content. It passes fenced blocks,
+tables, headings, directives, and indented code through unchanged, flushes
+paragraphs on blanks, routes prose and prefixed lines through
 `ParagraphWriter`, computes visible widths with `unicode-width`, and delegates
 inline line fitting to `textwrap` before reconstructing the emitted Markdown
-lines.
+lines with their original blockquote container.
 
 ### Wrap sequence
 

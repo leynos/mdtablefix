@@ -48,12 +48,12 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     let mut fences = FenceTracker::default();
 
     for line in lines {
-        if fences.observe(line) {
+        if fences.observe(line, 0) {
             out.push(Cow::Borrowed(line.as_str()));
             continue;
         }
 
-        if !fences.in_fence() && THEMATIC_BREAK_RE.is_match(line.trim_end()) {
+        if !fences.in_fence(0) && THEMATIC_BREAK_RE.is_match(line.trim_end()) {
             out.push(Cow::Borrowed(THEMATIC_BREAK_LINE.as_str()));
         } else {
             out.push(Cow::Borrowed(line.as_str()));
