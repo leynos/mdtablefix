@@ -20,6 +20,17 @@ fn determine_token_span_groups_punctuation_with_footnote_reference() {
     assert_eq!(width, unicode_width::UnicodeWidthStr::width("word.[^4]"));
 }
 
+#[test]
+fn determine_token_span_groups_definition_like_footnote_reference_with_prose() {
+    let input = "subcategories [^96]:";
+    let tokens = segment_inline(input);
+    let (end, width) = determine_token_span(&tokens, 0);
+    let grouped = tokens[..end].join("");
+
+    assert_eq!(grouped, input);
+    assert_eq!(width, unicode_width::UnicodeWidthStr::width(input));
+}
+
 #[rstest]
 #[case("`fn!()`.[^1]")]
 #[case("`value`,[^2]")]

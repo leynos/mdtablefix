@@ -160,16 +160,22 @@ where
 pub(in crate::wrap::inline) fn should_couple_whitespace(
     kind: SpanKind,
     next_token: Option<&String>,
+    following_token: Option<&String>,
 ) -> bool {
-    match (kind, next_token) {
-        (SpanKind::Link, Some(next))
+    match (kind, next_token, following_token) {
+        (SpanKind::Link, Some(next), _)
             if looks_like_link(next)
                 || is_inline_code_token(next)
                 || is_trailing_punctuation_token(next) =>
         {
             true
         }
-        (SpanKind::Code, Some(next)) if is_trailing_punctuation_token(next) => true,
+        (SpanKind::Code, Some(next), _) if is_trailing_punctuation_token(next) => true,
+        (SpanKind::General, Some(next), Some(following))
+            if looks_like_footnote_ref(next) && following == ":" =>
+        {
+            true
+        }
         _ => false,
     }
 }
@@ -244,7 +250,10 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
             let previous = end
                 .checked_sub(1)
                 .and_then(|previous| tokens.get(previous))?;
-            if !previous.chars().last().is_some_and(is_trailing_punct) {
+            let follows_punctuation = previous.chars().last().is_some_and(is_trailing_punct);
+            let follows_space_before_colon = previous.chars().all(char::is_whitespace)
+                && tokens.get(end + 1).is_some_and(|token| token == ":");
+            if !follows_punctuation && !follows_space_before_colon {
                 return None;
             }
             Some((

@@ -133,7 +133,7 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     while end < tokens.len() {
         let token = &tokens[end];
         if is_whitespace_token(token) {
-            if should_couple_whitespace(kind, tokens.get(end + 1)) {
+            if should_couple_whitespace(kind, tokens.get(end + 1), tokens.get(end + 2)) {
                 width += UnicodeWidthStr::width(token.as_str());
                 end += 1;
                 continue;

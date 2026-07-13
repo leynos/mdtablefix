@@ -51,6 +51,11 @@ footnote references (`[^label]`) are treated as unbreakable units. A span is
 never split across lines; it moves as a whole to the next line when it would
 otherwise exceed the target width.
 
+A colon-suffixed footnote reference in running prose, such as
+`subcategories [^96]:`, remains attached to the preceding word. The wrapper
+therefore cannot move `[^96]:` to column one, where Markdown would reinterpret
+the reference as a footnote definition.
+
 Common English prose dates, such as `25th December 2025`, `19 March 2018`, and
 `July 4, 2008`, are also treated as unbreakable inline fragments. This applies
 to ordinal-day, numeric-day, and month-name-first forms with full or

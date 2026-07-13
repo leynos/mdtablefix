@@ -131,6 +131,25 @@ fn wrap_preserving_code_splits_after_consecutive_whitespace() {
 }
 
 #[test]
+fn wrap_preserving_code_keeps_colon_suffixed_footnote_reference_with_prose() {
+    let input = concat!(
+        "The Lighthouse \"Progressive Web App\" category specifically checks for the technical ",
+        "requirements of a PWA. The audits are grouped into subcategories [^96]:",
+    );
+    let lines = wrap_preserving_code(input, 80);
+
+    assert_eq!(
+        lines,
+        vec![
+            "The Lighthouse \"Progressive Web App\" category specifically checks for the",
+            "technical requirements of a PWA. The audits are grouped into",
+            "subcategories [^96]:",
+        ]
+    );
+    assert!(lines.iter().all(|line| !line.starts_with("[^96]:")));
+}
+
+#[test]
 fn wrap_preserving_code_couples_opening_paren_before_inline_code() {
     let text = concat!(
         "- `src/cli/mod.rs` (240 lines): defines the `Cli` struct with ",
