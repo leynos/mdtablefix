@@ -240,15 +240,17 @@ Text.
 
 ## Footnotes
 
- [^1]: First note
+ 1. First note
 
- [^2]: Second note
+ 2. Second note
 
-[^10]: Final note
+10. Final note
 ```
 
-`convert_footnotes` only processes the final contiguous numeric list that
-immediately follows an H2 heading when these conditions are met.
+After:
+
+```markdown
+Text.
 
 ## Footnotes
 
