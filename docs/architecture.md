@@ -389,6 +389,7 @@ classDiagram
     process ..> process_buffer : buffers active table run
     footnotes --> footnotes_renumber_definitions
     footnotes_renumber_definitions --> footnotes_renumber_reorder : final definition block
+    footnotes_renumber_reorder --> footnotes_renumber_definitions : DefinitionLine, definition_segment_end
     footnotes ..> wrap : uses tokenize_markdown
     footnotes ..> textproc : uses push_original_token
     io ..> process : uses process_stream, process_stream_no_wrap
@@ -425,10 +426,16 @@ pipeline rather than becoming continuation rows.
 The `footnotes::renumber::definitions` submodule owns definition scanning and
 rewriting. `DefinitionScanState` coordinates the number mapping, collects
 already-parsed definitions, and stages numeric candidates for later conversion
-without cluttering the top-level renumber flow. The sibling
-`footnotes::renumber::reorder` submodule reorders the final definition block
-after numbering is known, while keeping continuation lines and spacing attached
-to the definition segment they belong to.
+without cluttering the top-level renumber flow.
+
+The sibling `footnotes::renumber::reorder` submodule consumes the
+`DefinitionLine` rewrite plan once scanning is complete, then reorders the
+final definition block by ascending new number, breaking ties by original
+index. It uses `definitions::definition_segment_end` so scanning and reordering
+compute identical segment boundaries, keeping definition headers and
+continuation lines grouped. Block prefixes remain in place, and leading
+separator blanks migrate at the first-segment boundary. If recomposing the
+block would change its row count, the reorder is skipped with a warning.
 
 `ListState` tracks the active indentation stack and per-indent counters for
 ordered list renumbering. It resets on headings and thematic breaks, and it
