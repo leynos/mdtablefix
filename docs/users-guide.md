@@ -35,6 +35,11 @@ ellipsis character `…` before the table is reflowed. This ensures column width
 are computed from the final emitted glyph rather than from the three-dot source
 sequence.
 
+Literal dot sequences in inline code, fenced code blocks, and four-space or
+tab-indented code blocks remain unchanged. An indented code block must start at
+the beginning of the document or after a blank line, matching Markdown's rule
+that it cannot interrupt a paragraph.
+
 ## Paragraph wrapping
 
 Pass `--wrap` to reflow prose paragraphs so that every output line fits within

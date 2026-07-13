@@ -150,6 +150,14 @@ enabled, it applies ellipsis replacement before calling `reflow_table`. This
 ordering ensures the width calculation sees the final glyphs, rather than
 aligning for `...` and shrinking the rendered column after the fact.
 
+Outside table buffering, `replace_ellipsis` maintains fence and indented-code
+state while it walks the original lines. Its private indented-code tracker is
+owned solely by the ellipsis pass: it preserves top-level code blocks that
+begin at the document boundary or after a blank line, including interior blank
+lines, without changing the public tokenizer's token variants. Lines classified
+as code are forwarded byte-for-byte, while prose lines continue through the
+shared inline tokenizer so code spans remain opaque.
+
 `ProcessBuffer` owns the active table run during stream processing. It flushes
 that buffer before lines that open a new Markdown block, including blockquote,
 list-item, link-reference, and footnote-definition lines that themselves
@@ -241,17 +249,15 @@ Text.
 
 ## Footnotes
 
- 1. First note
+ [^1]: First note
 
- 2. Second note
+ [^2]: Second note
 
-10. Final note
+[^10]: Final note
 ```
 
-After:
-
-```markdown
-Text.
+`convert_footnotes` only processes the final contiguous numeric list that
+immediately follows an H2 heading when these conditions are met.
 
 ## Footnotes
 

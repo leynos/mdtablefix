@@ -111,6 +111,41 @@ fn test_cli_ellipsis_fenced_block() {
         .stdout("```\nlet x = ...;\n```\n");
 }
 
+/// Tests that `--ellipsis` preserves command output in indented code blocks.
+#[test]
+fn test_cli_ellipsis_indented_code_block() {
+    let input = concat!(
+        "Expected test output:\n",
+        "\n",
+        "    running 2 tests\n",
+        "    test foo ... ok\n",
+        "    test bar ... ok\n",
+        "    ...\n",
+        "    test result: ok\n",
+        "\n",
+        "Prose...\n",
+    );
+    let expected = concat!(
+        "Expected test output:\n",
+        "\n",
+        "    running 2 tests\n",
+        "    test foo ... ok\n",
+        "    test bar ... ok\n",
+        "    ...\n",
+        "    test result: ok\n",
+        "\n",
+        "Prose…\n",
+    );
+
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--ellipsis")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(expected);
+}
+
 /// Tests ellipsis replacement for sequences longer than three characters.
 ///
 /// Confirms that only the first three dots are replaced with an ellipsis.
