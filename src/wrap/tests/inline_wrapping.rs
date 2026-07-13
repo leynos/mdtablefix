@@ -192,6 +192,27 @@ fn wrap_preserving_code_keeps_opening_bracket_with_inline_code(
     }
 }
 
+#[test]
+fn wrap_preserving_code_keeps_reference_link_opening_bracket_with_label() {
+    let input = concat!(
+        "Implicit fixture injection removes the need for attributes in most cases. ",
+        "[user guide][implicit-fixture-guide] · [trybuild][implicit-fixture-trybuild]",
+    );
+    let lines = wrap_preserving_code(input, 80);
+
+    assert_eq!(
+        lines,
+        vec![
+            "Implicit fixture injection removes the need for attributes in most cases.",
+            concat!(
+                "[user guide][implicit-fixture-guide] · ",
+                "[trybuild][implicit-fixture-trybuild]",
+            ),
+        ]
+    );
+    assert!(lines.iter().all(|line| !line.ends_with('[')));
+}
+
 fn citation_link_starts(expected_citation: &str) -> Vec<String> {
     let mut markers = Vec::new();
     let mut remaining = expected_citation;

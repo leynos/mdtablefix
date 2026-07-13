@@ -82,6 +82,7 @@ fn determine_token_span_does_not_overcouple_citation_tokens(
 
 #[rstest]
 #[case("word[link](url)", &["word", "[link](url)"])]
+#[case("word[link][reference]", &["word", "[link][reference]"])]
 #[case(
     "word[link](url)[another](url2)",
     &["word", "[link](url)", "[another](url2)"]

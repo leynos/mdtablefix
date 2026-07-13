@@ -51,6 +51,10 @@ footnote references (`[^label]`) are treated as unbreakable units. A span is
 never split across lines; it moves as a whole to the next line when it would
 otherwise exceed the target width.
 
+Reference-style links such as `[text][reference]` are likewise unbreakable.
+The opening `[` always stays with the link label, avoiding leading whitespace
+inside link text after continuation indentation is applied.
+
 A colon-suffixed footnote reference in running prose, such as
 `subcategories [^96]:`, remains attached to the preceding word. The wrapper
 therefore cannot move `[^96]:` to column one, where Markdown would reinterpret

@@ -64,6 +64,13 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
         return (collect_range(text, start, text.len()), text.len());
     }
 
+    if text_end < text.len()
+        && text[text_end..].starts_with('[')
+        && let Some(reference_end) = parse_link_text(text, text_end)
+    {
+        return (collect_range(text, start, reference_end), reference_end);
+    }
+
     fallback_single_char(text, start)
 }
 
@@ -298,6 +305,16 @@ mod tests {
         let (token, idx) = parse_link_or_image(text, 0);
         assert_eq!(token, "[^label](https://example.com)");
         assert_eq!(idx, token.len());
+    }
+
+    #[test]
+    fn parse_link_or_image_preserves_reference_style_link() {
+        let input = "[trybuild][implicit-fixture-trybuild]";
+
+        assert_eq!(
+            parse_link_or_image(input, 0),
+            (input.to_string(), input.len())
+        );
     }
 
     proptest! {
