@@ -4,9 +4,6 @@
 
 ### Added
 
-- Allow `--wrap=<width>` to accept a positive display-column width while bare
-  `--wrap` retains the 80-column default.
-  ([#388](https://github.com/leynos/mdtablefix/issues/388))
 - `--code-emphasis` flag to fix emphasis markers that adjoin inline code.
   Runs before wrapping and footnote conversion.
 - Treat common English date sequences as atomic inline fragments during
@@ -20,6 +17,8 @@
 
 ### Fixed
 
+- Document `--wrap` as a parameterless 80-column flag.
+  ([#388](https://github.com/leynos/mdtablefix/issues/388))
 - Keep reference-style links atomic while wrapping so an opening bracket cannot
   be stranded before its label.
   ([#374](https://github.com/leynos/mdtablefix/issues/374))

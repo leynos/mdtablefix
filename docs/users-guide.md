@@ -37,12 +37,10 @@ sequence.
 
 ## Paragraph wrapping
 
-Pass `--wrap=<width>` to reflow prose paragraphs so that every output line fits
-within `<width>` display columns. The equals sign keeps the optional width
-unambiguous when file operands follow. The width is measured in terminal
-columns, not bytes, so it accounts correctly for CJK glyphs, emoji, and
-accented characters. Passing bare `--wrap` retains the backwards-compatible
-80-column default, while a width of zero is rejected.
+Pass `--wrap` to reflow prose paragraphs so that every output line fits within
+80 display columns. Width is measured in terminal columns, not bytes, so the
+wrapper accounts correctly for CJK glyphs, emoji, and accented characters. The
+flag does not accept a width parameter.
 
 Line fitting is delegated to the `textwrap` crate using a greedy first-fit
 algorithm: each word is placed on the current line if it fits, and a new line

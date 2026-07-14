@@ -38,7 +38,7 @@ cargo install --path .
 ## Command-line usage
 
 ```bash
-mdtablefix [--version] [--wrap[=WIDTH]] [--renumber] [--breaks] [--ellipsis] [--fences]
+mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
           [--footnotes] [--code-emphasis] [--headings] [--in-place] [FILE...]
 ```
 
@@ -47,8 +47,8 @@ mdtablefix [--version] [--wrap[=WIDTH]] [--renumber] [--breaks] [--ellipsis] [--
 
 - Use `--version` to print the current version and exit.
 
-- Use `--wrap[=WIDTH]` to reflow paragraphs and list items. Bare `--wrap` uses
-  80 columns. Task list items (`- [ ]`/`- [x]`) are indented correctly.
+- Use `--wrap` to reflow paragraphs and list items to 80 columns. Task list
+  items (`- [ ]`/`- [x]`) are indented correctly.
 
 - Use `--renumber` to rewrite ordered lists with consistent sequential
   numbering. The renumbering logic correctly handles nested lists by tracking

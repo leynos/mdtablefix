@@ -93,37 +93,6 @@ pub struct Options {
 /// ```
 #[must_use]
 pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
-    process_stream_inner_with_width(lines, opts, WRAP_COLS)
-}
-
-/// Processes Markdown using `wrap_width` when wrapping is enabled.
-///
-/// This is the custom-width counterpart to [`process_stream_inner`]. It keeps
-/// the same transformation order while allowing command-line and library
-/// callers to select a positive display-column width.
-///
-/// # Examples
-///
-/// ```
-/// use mdtablefix::process::{Options, process_stream_inner_with_width};
-///
-/// let lines = vec!["alpha beta gamma delta".to_string()];
-/// let output = process_stream_inner_with_width(
-///     &lines,
-///     Options {
-///         wrap: true,
-///         ..Options::default()
-///     },
-///     12,
-/// );
-/// assert_eq!(output, vec!["alpha beta", "gamma delta"]);
-/// ```
-#[must_use]
-pub fn process_stream_inner_with_width(
-    lines: &[String],
-    opts: Options,
-    wrap_width: usize,
-) -> Vec<String> {
     let lines = if opts.fences {
         let tmp = compress_fences(lines);
         attach_orphan_specifiers(&tmp)
@@ -166,7 +135,7 @@ pub fn process_stream_inner_with_width(
     }
 
     let mut out = if opts.wrap {
-        wrap_text(&out, wrap_width)
+        wrap_text(&out, WRAP_COLS)
     } else {
         out
     };

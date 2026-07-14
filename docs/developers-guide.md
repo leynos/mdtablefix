@@ -474,16 +474,11 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   projected destination line width and skip the carry when that projection
   would exceed the configured width.
 - **`WRAP_COLS` public constant.** `mdtablefix::process::WRAP_COLS` is
-  exported as `pub` so that integration tests can reference the default wrap
+  exported as `pub` so that integration tests can reference the production wrap
   width instead of hard-coding `80`. When writing tests that depend on the
-  default column boundary, import and use `WRAP_COLS` as the single source of
-  truth.
-- **Custom-width processing.** `process_stream_inner_with_width` owns custom
-  wrap-width composition for callers that have already separated YAML
-  frontmatter. The CLI must route `--wrap=<width>` through this function so the
-  transformation order remains identical to `process_stream_inner`. Library
-  callers that need only raw paragraph wrapping should continue to call
-  `wrap_text`; other processing entry points retain the `WRAP_COLS` default.
+  column boundary (for example, wrap-boundary edge-case tests), import and use
+  `WRAP_COLS` as the single source of truth. Do not duplicate the literal value
+  `80` in test code.
 
 Refer to `docs/adrs/0002-textwrap-wrapping-engine.md` for the rationale behind
 replacing `LineBuffer` with `textwrap`.
