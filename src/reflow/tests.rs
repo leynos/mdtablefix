@@ -1,5 +1,6 @@
 //! Tests for the table reflow helper module.
 
+use proptest::prelude::*;
 use rstest::rstest;
 
 use super::*;
@@ -21,6 +22,25 @@ fn parse_rows_preserves_literal_row_end_cell() {
             false,
         )
     );
+}
+
+proptest! {
+    #[test]
+    fn parse_rows_keeps_generated_row_boundaries(
+        rows in proptest::collection::vec(
+            proptest::collection::vec("[A-Za-z0-9_]{1,16}", 1..=4),
+            1..=8,
+        ),
+    ) {
+        let input = rows
+            .iter()
+            .map(|row| format!("| {} |", row.join(" | ")))
+            .collect::<Vec<_>>();
+        let (parsed, split_within_line) = parse_rows(&input);
+
+        prop_assert_eq!(parsed, rows);
+        prop_assert!(!split_within_line);
+    }
 }
 
 #[test]

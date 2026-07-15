@@ -51,7 +51,7 @@ The table reflow pipeline is split into small stages so continuation rows and
 separator rows can be handled without losing column structure.
 
 `protect_leading_empty_cells` rewrites leading empty continuation cells to a
-marker before parsing. `parse_rows` then performs the sentinel-based split that
+marker before parsing. `parse_rows` then performs a structural row split that
 turns the buffered table text into row vectors. `clean_rows` restores the
 markers to empty strings and removes rows that are entirely empty.
 

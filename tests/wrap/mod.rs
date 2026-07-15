@@ -17,6 +17,7 @@ mod wrap_assertions;
 mod blockquotes;
 mod checklist_code_spans;
 mod cli;
+mod cli_files;
 mod cli_issue_329_property;
 mod date_snapshots;
 mod fence_behaviour;
