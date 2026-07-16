@@ -3,13 +3,10 @@
 //! The routines here parse raw rows, calculate cell widths, and format
 //! aligned output for the main [`reflow_table`] function.
 
-use regex::Regex;
 use unicode_width::UnicodeWidthStr;
 
 use crate::table::{SEP_RE, format_separator_cells, split_cells};
 
-static SENTINEL_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").unwrap());
 const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 
 /// Parses reflow input into rows while preserving continuation-cell boundaries.
@@ -42,22 +39,77 @@ const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 /// );
 /// assert!(!split_within_line);
 /// ```
+#[tracing::instrument(level = "trace", skip(trimmed), ret)]
 pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
     let protected = trimmed
         .iter()
         .map(|line| protect_leading_empty_cells(line))
         .collect::<Vec<_>>();
     let raw = protected.join(" ");
-    let chunks: Vec<&str> = SENTINEL_RE.split(&raw).collect();
+    let chunks = split_row_chunks(&raw);
     let split_within_line = chunks.len() > trimmed.len();
 
     let rows = chunks
         .iter()
-        .map(|chunk| split_cells(chunk))
-        .filter(|row| !row.is_empty())
+        .enumerate()
+        .filter_map(|(row_index, chunk)| {
+            let row = split_cells(chunk);
+            retain_parsed_row(row_index, &row).then_some(row)
+        })
         .collect();
 
     (rows, split_within_line)
+}
+
+fn split_row_chunks(raw: &str) -> Vec<&str> {
+    let mut chunks = Vec::new();
+    let mut chunk_start = 0;
+    let mut search_start = 0;
+
+    while let Some(relative_pipe) = raw[search_start..].find('|') {
+        let pipe_index = search_start + relative_pipe;
+        let after_pipe = pipe_index + '|'.len_utf8();
+        search_start = after_pipe;
+
+        if raw[..pipe_index].ends_with('\\') {
+            continue;
+        }
+
+        let separator_tail = raw[after_pipe..].trim_start_matches(char::is_whitespace);
+        let whitespace_len = raw[after_pipe..].len() - separator_tail.len();
+        let next_pipe_index = after_pipe + whitespace_len;
+        if !separator_tail.starts_with('|') || raw[..next_pipe_index].ends_with('\\') {
+            continue;
+        }
+
+        let after_second_pipe = next_pipe_index + '|'.len_utf8();
+        let remaining = &raw[after_second_pipe..];
+        let trimmed_remaining = remaining.trim_start_matches(char::is_whitespace);
+        if trimmed_remaining.is_empty() {
+            continue;
+        }
+        chunks.push(&raw[chunk_start..after_pipe]);
+        chunk_start = after_second_pipe + remaining.len() - trimmed_remaining.len();
+        search_start = chunk_start;
+    }
+
+    chunks.push(&raw[chunk_start..]);
+    chunks
+}
+
+fn retain_parsed_row(row_index: usize, row: &[String]) -> bool {
+    if row.is_empty() {
+        tracing::debug!(
+            row_index,
+            cell_count = 0,
+            error_category = "empty_row_discarded",
+            "discarded empty parsed row"
+        );
+        false
+    } else {
+        tracing::debug!(row_index, cell_count = row.len(), "parsed table row");
+        true
+    }
 }
 
 /// Restores parser markers and removes rows that contain only empty cells.

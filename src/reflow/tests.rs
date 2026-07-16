@@ -2,8 +2,55 @@
 
 use proptest::prelude::*;
 use rstest::rstest;
+use tracing_test::traced_test;
 
 use super::*;
+
+fn single_line_character_strategy() -> impl Strategy<Value = char> {
+    any::<char>().prop_filter("table cells must remain on one source line", |character| {
+        !matches!(character, '\r' | '\n' | '\u{1d}' | '\u{1f}')
+    })
+}
+
+fn arbitrary_non_empty_cell_strategy() -> BoxedStrategy<String> {
+    prop_oneof![
+        2 => Just("ROW_END".to_string()),
+        2 => Just("|".to_string()),
+        1 => Just("left | right".to_string()),
+        8 => prop::collection::vec(single_line_character_strategy(), 0..=24)
+            .prop_map(|characters| {
+                let content = characters.into_iter().collect::<String>();
+                format!("x{content}x")
+            }),
+    ]
+    .boxed()
+}
+
+fn table_rows_strategy() -> impl Strategy<Value = Vec<Vec<String>>> {
+    (2usize..=6).prop_flat_map(|column_count| {
+        prop::collection::vec(
+            (
+                prop::collection::vec(arbitrary_non_empty_cell_strategy(), column_count),
+                0usize..column_count,
+            )
+                .prop_map(|(mut cells, leading_empty_cell_count)| {
+                    for cell in cells.iter_mut().take(leading_empty_cell_count) {
+                        cell.clear();
+                    }
+                    cells
+                }),
+            1..=8,
+        )
+    })
+}
+
+fn render_table_row(row: &[String]) -> String {
+    let cells = row
+        .iter()
+        .map(|cell| escape_literal_pipes(cell))
+        .collect::<Vec<_>>();
+    format!("| {} |", cells.join(" | "))
+}
 
 #[test]
 fn parse_rows_preserves_literal_row_end_cell() {
@@ -24,21 +71,57 @@ fn parse_rows_preserves_literal_row_end_cell() {
     );
 }
 
+#[traced_test]
+#[test]
+fn parse_rows_logs_row_dimensions() {
+    let input = vec!["| Name | Value |".to_string()];
+
+    let _ = parse_rows(&input);
+
+    assert!(logs_contain("parsed table row"));
+    assert!(logs_contain("row_index=0"));
+    assert!(logs_contain("cell_count=2"));
+}
+
+#[traced_test]
+#[test]
+fn empty_parsed_rows_log_discard_category() {
+    assert!(!retain_parsed_row(0, &[]));
+
+    assert!(logs_contain("discarded empty parsed row"));
+    assert!(logs_contain("error_category=\"empty_row_discarded\""));
+}
+
 proptest! {
     #[test]
-    fn parse_rows_keeps_generated_row_boundaries(
-        rows in proptest::collection::vec(
-            proptest::collection::vec("[A-Za-z0-9_]{1,16}", 1..=4),
-            1..=8,
-        ),
-    ) {
+    fn parse_rows_keeps_generated_row_and_cell_boundaries(rows in table_rows_strategy()) {
         let input = rows
             .iter()
-            .map(|row| format!("| {} |", row.join(" | ")))
+            .map(|row| render_table_row(row))
             .collect::<Vec<_>>();
         let (parsed, split_within_line) = parse_rows(&input);
+        let normalized = parsed
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|cell| {
+                        if cell == LEADING_EMPTY_CELL_MARKER {
+                            String::new()
+                        } else {
+                            cell.clone()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
 
-        prop_assert_eq!(parsed, rows);
+        prop_assert_eq!(normalized.len(), rows.len());
+        let dimensions_match = normalized
+            .iter()
+            .zip(&rows)
+            .all(|(actual, expected)| actual.len() == expected.len());
+        prop_assert!(dimensions_match);
+        prop_assert_eq!(normalized, rows);
         prop_assert!(!split_within_line);
     }
 }
