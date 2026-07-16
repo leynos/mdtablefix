@@ -23,10 +23,11 @@ including inconsistent column counts and separator widths.
 
 The table reflow pipeline now follows these rules:
 
-- Protect leading empty continuation cells with a private marker before the
-  structural row split.
-- Parse every split chunk directly into a row instead of encoding row
-  boundaries as sentinel cell content.
+- Protect leading empty continuation cells with a private marker before
+  structural row parsing.
+- Preserve physical source-line boundaries, and use the inferred table width
+  to recover only complete legacy rows concatenated on one line instead of
+  encoding row boundaries as sentinel cell content.
 - Restore the protected cells only after parsing has completed.
 - Re-escape literal pipe characters in non-leading cells when rebuilding a
   protected row, so reparsing preserves the original cell boundaries.

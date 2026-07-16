@@ -28,42 +28,42 @@ fn arbitrary_non_empty_cell_strategy() -> BoxedStrategy<String> {
 
 fn table_rows_strategy() -> impl Strategy<Value = Vec<Vec<String>>> {
     (2usize..=6).prop_flat_map(|column_count| {
-        prop::collection::vec(
-            (
-                prop::collection::vec(arbitrary_non_empty_cell_strategy(), column_count),
-                prop::collection::vec(any::<bool>(), column_count - 1),
-            )
-                .prop_map(|(mut cells, empty_cell_flags)| {
-                    for (cell, is_empty) in cells.iter_mut().zip(empty_cell_flags) {
-                        if is_empty {
-                            cell.clear();
-                        }
-                    }
-                    cells
-                }),
-            1..=8,
-        )
+        let first_row = generated_row_strategy(column_count, Just(column_count - 1));
+        let remaining_rows =
+            prop::collection::vec(generated_row_strategy(column_count, 0..column_count), 0..=7);
+        (first_row, remaining_rows).prop_map(|(first_row, mut remaining_rows)| {
+            let mut rows = vec![first_row];
+            rows.append(&mut remaining_rows);
+            rows
+        })
     })
 }
 
-fn render_table_row(row: &[String]) -> String {
-    let mut rendered = String::new();
-    let mut has_non_empty_cell = false;
-    for cell in row {
-        rendered.push('|');
-        if cell.is_empty() {
-            if !has_non_empty_cell {
-                rendered.push(' ');
+fn generated_row_strategy(
+    column_count: usize,
+    non_empty_index: impl Strategy<Value = usize>,
+) -> impl Strategy<Value = Vec<String>> {
+    (
+        prop::collection::vec(arbitrary_non_empty_cell_strategy(), column_count),
+        prop::collection::vec(any::<bool>(), column_count),
+        non_empty_index,
+    )
+        .prop_map(|(mut cells, empty_cell_flags, non_empty_index)| {
+            for (index, (cell, is_empty)) in cells.iter_mut().zip(empty_cell_flags).enumerate() {
+                if is_empty && index != non_empty_index {
+                    cell.clear();
+                }
             }
-        } else {
-            rendered.push(' ');
-            rendered.push_str(&escape_literal_pipes(cell));
-            rendered.push(' ');
-            has_non_empty_cell = true;
-        }
-    }
-    rendered.push('|');
-    rendered
+            cells
+        })
+}
+
+fn render_table_row(row: &[String]) -> String {
+    let escaped = row
+        .iter()
+        .map(|cell| escape_literal_pipes(cell))
+        .collect::<Vec<_>>();
+    format!("| {} |", escaped.join(" | "))
 }
 
 #[test]
@@ -86,6 +86,23 @@ fn parse_rows_preserves_literal_row_end_cell() {
 }
 
 #[test]
+fn parse_rows_recovers_legacy_rows_with_embedded_separator() {
+    let input = vec!["| Name | Notes |  | --- | --- |  | alpha | value |".to_string()];
+
+    assert_eq!(
+        parse_rows(&input),
+        (
+            vec![
+                vec!["Name".to_string(), "Notes".to_string()],
+                vec!["---".to_string(), "---".to_string()],
+                vec!["alpha".to_string(), "value".to_string()],
+            ],
+            true,
+        )
+    );
+}
+
+#[test]
 fn parse_rows_preserves_adjacent_empty_interior_cell() {
     let input = vec!["| A || C |".to_string()];
 
@@ -99,15 +116,49 @@ fn parse_rows_preserves_adjacent_empty_interior_cell() {
 }
 
 #[test]
-fn parse_rows_splits_structural_rows_and_cleans_marker_only_row() {
-    let input = vec!["| A | B |  | C | D |".to_string(), "| | |".to_string()];
+fn parse_rows_preserves_whitespace_padded_empty_cells() {
+    let input = vec!["| A |  | C |".to_string()];
+
+    assert_eq!(
+        parse_rows(&input),
+        (
+            vec![vec!["A".to_string(), String::new(), "C".to_string()]],
+            false,
+        )
+    );
+}
+
+#[test]
+fn parse_rows_preserves_trailing_empty_cells() {
+    let input = vec!["| A | B | C |".to_string(), "| 1 | 2 |  |".to_string()];
+
+    assert_eq!(
+        parse_rows(&input),
+        (
+            vec![
+                vec!["A".to_string(), "B".to_string(), "C".to_string()],
+                vec!["1".to_string(), "2".to_string(), String::new()],
+            ],
+            false,
+        )
+    );
+}
+
+#[test]
+fn parse_rows_splits_structural_rows_and_drops_marker_only_row() {
+    let input = vec![
+        "| H1 | H2 |  |".to_string(),
+        "| A | B |  | C | D |".to_string(),
+        "| | |".to_string(),
+    ];
 
     let (rows, split_within_line) = parse_rows(&input);
 
     assert!(split_within_line);
     assert_eq!(
-        clean_rows(rows),
+        rows,
         vec![
+            vec!["H1".to_string(), "H2".to_string()],
             vec!["A".to_string(), "B".to_string()],
             vec!["C".to_string(), "D".to_string()],
         ]
@@ -129,9 +180,11 @@ fn parse_rows_logs_row_dimensions() {
 #[traced_test]
 #[test]
 fn empty_parsed_rows_log_discard_category() {
-    let row = [String::new(), String::new()];
+    let input = vec!["| | |".to_string()];
+    let (rows, split_within_line) = parse_rows(&input);
 
-    assert!(!retain_parsed_row(0, &row));
+    assert!(rows.is_empty());
+    assert!(!split_within_line);
 
     assert!(logs_contain("discarded empty parsed row"));
     assert!(logs_contain("cell_count=2"));
@@ -190,7 +243,6 @@ fn protect_leading_empty_cells_reescapes_literal_pipes_after_marking() {
 fn protect_leading_empty_cells_preserves_adjacent_interior_empty_cell() {
     let protected = protect_leading_empty_cells("| | ROW_END || ROW_END |");
 
-    assert_eq!(split_row_chunks(&protected), vec![protected.as_str()]);
     assert_eq!(
         split_cells(&protected),
         vec![

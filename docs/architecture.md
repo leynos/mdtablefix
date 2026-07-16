@@ -125,10 +125,11 @@ returns the updated stream for writing to disk or further manipulation.
 
 1. `extract_indent_and_trim` records any leading indentation and removes table
    escape lines such as `\-`.
-2. `parse_rows` protects continuation rows before the global split. When a row
-   starts with empty cells, `protect_leading_empty_cells` replaces those cells
-   with a private marker. Each resulting chunk is then parsed directly into a
-   row, so row boundaries remain structural and cannot collide with cell data.
+2. `parse_rows` preserves physical source-line boundaries. When a row starts
+   with empty cells, `protect_leading_empty_cells` replaces those cells with a
+   private marker. The parser uses the inferred table width to recover only
+   complete legacy rows concatenated on one line, so row boundaries remain
+   structural and cannot collide with cell data.
 3. `clean_rows`, `detect_separator`, and `calculate_widths` rebuild the logical
    table. Explicit separator lines are preferred, but the second parsed row can
    be promoted when the source embeds the separator in the body. Widths are
