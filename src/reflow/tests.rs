@@ -98,6 +98,22 @@ fn parse_rows_preserves_adjacent_empty_interior_cell() {
     );
 }
 
+#[test]
+fn parse_rows_splits_structural_rows_and_cleans_marker_only_row() {
+    let input = vec!["| A | B |  | C | D |".to_string(), "| | |".to_string()];
+
+    let (rows, split_within_line) = parse_rows(&input);
+
+    assert!(split_within_line);
+    assert_eq!(
+        clean_rows(rows),
+        vec![
+            vec!["A".to_string(), "B".to_string()],
+            vec!["C".to_string(), "D".to_string()],
+        ]
+    );
+}
+
 #[traced_test]
 #[test]
 fn parse_rows_logs_row_dimensions() {

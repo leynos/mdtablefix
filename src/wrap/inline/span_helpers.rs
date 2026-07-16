@@ -176,8 +176,8 @@ pub(in crate::wrap::inline) fn should_couple_whitespace(
         {
             debug!(
                 span_kind = ?kind,
-                token = next,
-                following_token = following,
+                token_length = next.chars().count(),
+                has_following_colon = following == ":",
                 "coupled whitespace before colon-suffixed footnote reference"
             );
             true
@@ -188,8 +188,8 @@ pub(in crate::wrap::inline) fn should_couple_whitespace(
             {
                 debug!(
                     span_kind = ?kind,
-                    token = next,
-                    following_token = following_token.map_or("", String::as_str),
+                    token_length = next.chars().count(),
+                    has_following_token = following_token.is_some(),
                     error_category = "footnote_colon_whitespace_coupling_declined",
                     "declined whitespace coupling before footnote reference"
                 );
@@ -262,7 +262,6 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
     let Some(token) = tokens.get(end) else {
         debug!(
             span_kind = ?kind,
-            token = "",
             error_category = "footnote_coupling_missing_token",
             "declined footnote reference coupling"
         );
@@ -271,7 +270,7 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
     if !looks_like_footnote_ref(token) {
         debug!(
             span_kind = ?kind,
-            token,
+            token_length = token.chars().count(),
             error_category = "footnote_coupling_token_mismatch",
             "declined footnote reference coupling"
         );
@@ -284,7 +283,7 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
             else {
                 debug!(
                     span_kind = ?kind,
-                    token,
+                    token_length = token.chars().count(),
                     error_category = "footnote_coupling_missing_previous_token",
                     "declined footnote reference coupling"
                 );
@@ -296,8 +295,10 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
             if !follows_punctuation && !follows_space_before_colon {
                 debug!(
                     span_kind = ?kind,
-                    token,
-                    previous_token = previous,
+                    token_length = token.chars().count(),
+                    previous_is_whitespace = previous.chars().all(char::is_whitespace),
+                    previous_has_trailing_punctuation = follows_punctuation,
+                    has_following_colon = tokens.get(end + 1).is_some_and(|token| token == ":"),
                     error_category = "footnote_coupling_context_mismatch",
                     "declined footnote reference coupling"
                 );
@@ -306,8 +307,8 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
             if follows_space_before_colon {
                 debug!(
                     span_kind = ?kind,
-                    token,
-                    following_token = ":",
+                    token_length = token.chars().count(),
+                    has_following_colon = true,
                     "coupled colon-suffixed footnote reference after whitespace"
                 );
             }
@@ -323,7 +324,7 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
         SpanKind::FootnoteRef => {
             debug!(
                 span_kind = ?kind,
-                token,
+                token_length = token.chars().count(),
                 error_category = "footnote_coupling_already_coupled",
                 "declined footnote reference coupling"
             );

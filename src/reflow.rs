@@ -39,7 +39,7 @@ const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 /// );
 /// assert!(!split_within_line);
 /// ```
-#[tracing::instrument(level = "trace", skip(trimmed), ret)]
+#[tracing::instrument(level = "trace", skip(trimmed))]
 pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
     let protected = trimmed
         .iter()

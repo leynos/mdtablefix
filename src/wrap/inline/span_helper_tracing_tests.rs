@@ -59,7 +59,8 @@ fn should_couple_whitespace_logs_colon_footnote_coupling() {
         "coupled whitespace before colon-suffixed footnote reference"
     ));
     assert!(logs_contain("span_kind=General"));
-    assert!(logs_contain("token=\"[^note]\""));
+    assert!(logs_contain("token_length=7"));
+    assert!(!logs_contain("[^note]"));
 }
 
 #[traced_test]
@@ -90,7 +91,8 @@ fn try_couple_footnote_reference_logs_whitespace_colon_coupling() {
         "coupled colon-suffixed footnote reference after whitespace"
     ));
     assert!(logs_contain("span_kind=General"));
-    assert!(logs_contain("token=\"[^note]\""));
+    assert!(logs_contain("token_length=7"));
+    assert!(!logs_contain("[^note]"));
 }
 
 #[traced_test]

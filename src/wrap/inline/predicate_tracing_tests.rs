@@ -34,4 +34,5 @@ use super::{
 fn predicate_emits_trace_event(predicate: fn(&str) -> bool, input: &str, expected_log: &str) {
     let _ = predicate(input);
     assert!(logs_contain(expected_log));
+    assert!(!logs_contain(input));
 }
