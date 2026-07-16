@@ -3,7 +3,9 @@
 use std::fs;
 
 use assert_cmd::Command;
+use mdtablefix::process::WRAP_COLS;
 use tempfile::NamedTempFile;
+use unicode_width::UnicodeWidthStr;
 
 /// Ensures a path after `--wrap` remains a positional input file.
 #[test]
@@ -12,6 +14,8 @@ fn cli_wrap_processes_positional_file() -> Result<(), Box<dyn std::error::Error>
         "This file-backed paragraph is deliberately long enough to require wrapping when the ",
         "parameterless flag processes its positional input file rather than treating the path ",
         "as a wrap width.\n",
+        "漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 ",
+        "漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂.\n",
     );
     let file = NamedTempFile::new()?;
     fs::write(file.path(), input)?;
@@ -29,7 +33,8 @@ fn cli_wrap_processes_positional_file() -> Result<(), Box<dyn std::error::Error>
 
     assert!(text.lines().count() > 1, "expected the file to be wrapped");
     assert!(
-        text.lines().all(|line| line.len() <= 80),
+        text.lines()
+            .all(|line| UnicodeWidthStr::width(line) <= WRAP_COLS),
         "expected every output line to fit the fixed wrap width: {text}",
     );
     Ok(())

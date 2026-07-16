@@ -44,5 +44,6 @@ The table reflow pipeline now follows these rules:
 - Tables that contain wide Unicode characters or ellipsis substitutions align
   by rendered width rather than byte length.
 - Literal cell content cannot be mistaken for an in-band row-boundary marker.
-- The parser carries a private marker and a re-escaping step for leading empty
-  continuation cells, which keeps the behaviour deterministic and testable.
+- The parser carries a private marker for leading empty continuation cells and
+  re-escapes literal pipes in non-leading cells during row rebuilding, which
+  keeps the behaviour deterministic and testable.

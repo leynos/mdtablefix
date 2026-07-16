@@ -78,7 +78,10 @@ fn split_row_chunks(raw: &str) -> Vec<&str> {
         let separator_tail = raw[after_pipe..].trim_start_matches(char::is_whitespace);
         let whitespace_len = raw[after_pipe..].len() - separator_tail.len();
         let next_pipe_index = after_pipe + whitespace_len;
-        if !separator_tail.starts_with('|') || raw[..next_pipe_index].ends_with('\\') {
+        if whitespace_len == 0
+            || !separator_tail.starts_with('|')
+            || raw[..next_pipe_index].ends_with('\\')
+        {
             continue;
         }
 
@@ -98,10 +101,10 @@ fn split_row_chunks(raw: &str) -> Vec<&str> {
 }
 
 fn retain_parsed_row(row_index: usize, row: &[String]) -> bool {
-    if row.is_empty() {
+    if row.iter().all(String::is_empty) {
         tracing::debug!(
             row_index,
-            cell_count = 0,
+            cell_count = row.len(),
             error_category = "empty_row_discarded",
             "discarded empty parsed row"
         );
@@ -361,7 +364,17 @@ fn protect_leading_empty_cells(line: &str) -> String {
         })
         .collect::<Vec<_>>();
 
-    format!("| {} |", protected_cells.join(" | "))
+    let mut protected_row = String::new();
+    for cell in protected_cells {
+        protected_row.push('|');
+        if !cell.is_empty() {
+            protected_row.push(' ');
+            protected_row.push_str(&cell);
+            protected_row.push(' ');
+        }
+    }
+    protected_row.push('|');
+    protected_row
 }
 
 fn pad_cell_to_width(cell: &str, width: usize) -> String {

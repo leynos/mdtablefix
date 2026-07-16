@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 32a2452859c95866bbf5d6bd3695ac990bb61f36b2edd4bebf7e055eb58a782e # shrinks to rows = [["|"]]
+cc b47f357ec963d23033bae58877ad8ffa6b7f3848fbe4a65300d904222178ae66 # shrinks to rows = [["", "ROW_END", "", "ROW_END"]]
