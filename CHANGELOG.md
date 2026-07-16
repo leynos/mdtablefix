@@ -19,7 +19,7 @@
 
 - Document `--wrap` as a parameterless 80-column flag.
   ([#388](https://github.com/leynos/mdtablefix/issues/388))
-- Keep reference-style links atomic while wrapping so an opening bracket cannot
+- Keep reference-style links atomic while wrapping, so an opening bracket cannot
   be stranded before its label.
   ([#374](https://github.com/leynos/mdtablefix/issues/374))
 - Keep colon-suffixed footnote references attached to preceding prose so they
