@@ -33,9 +33,14 @@ Preserve complete inline links and images, including their labels and optional
 titles. This keeps a Markdown construct atomic and avoids partially rewriting
 text whose exact bytes may be used by documentation tooling.
 
+Use the wrapping parser's `LinkTitleWindow` state machine for split link
+reference definitions. Destination and standalone-title continuation lines are
+copied byte-for-byte, just like a complete definition on one line.
+
 ## Consequences
 
 - GitHub compare URLs and path examples remain valid under `--ellipsis`.
+- Split link reference destinations and titles retain semantic dot runs.
 - Ordinary prose surrounding protected tokens continues to be normalized.
 - Some path-shaped prose, such as a slash-separated word containing `...`, is
   intentionally left unchanged.

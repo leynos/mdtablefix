@@ -11,7 +11,15 @@ use regex::Regex;
 
 use crate::{
     textproc::{Token, push_original_token, tokenize_markdown},
-    wrap::{BlockKind, FenceTracker, LinkReferenceMatcher, classify_block, leading_indent},
+    wrap::{
+        BlockKind,
+        FenceTracker,
+        LinkReferenceMatcher,
+        LinkTitleWindow,
+        LinkTitleWindowOutcome,
+        classify_block,
+        leading_indent,
+    },
 };
 
 mod protected;
@@ -91,33 +99,41 @@ fn replace_dot_runs(text: &str, out: &mut String) {
     out.push_str(&replaced);
 }
 
-fn is_link_reference_definition(line: &str) -> bool {
-    matches!(
-        classify_block(line, LinkReferenceMatcher::production()),
-        Some(BlockKind::LinkReferenceDefinition)
-    )
-}
-
 /// Replace `...` with `…` outside code spans and code blocks.
 #[must_use]
 pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
     let mut fence_tracker = FenceTracker::default();
     let mut indented_code_tracker = IndentedCodeTracker::default();
+    let link_matcher = LinkReferenceMatcher::production();
+    let mut link_title_window = LinkTitleWindow::default();
 
     lines
         .iter()
         .map(|line| {
             let is_indented_code = indented_code_tracker.observe(line);
             let is_fence = fence_tracker.observe(line);
-            if is_fence
-                || fence_tracker.in_fence()
-                || is_indented_code
-                || is_link_reference_definition(line)
-            {
-                line.clone()
-            } else {
-                replace_ellipsis_in_prose(line)
+            if is_fence || fence_tracker.in_fence() {
+                link_title_window.observe_fence_context();
+                return line.clone();
             }
+
+            if link_title_window.observe_next_line(line, link_matcher)
+                == Some(LinkTitleWindowOutcome::EmitVerbatim)
+            {
+                return line.clone();
+            }
+
+            let block_kind = classify_block(line, link_matcher);
+            if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
+                link_title_window.observe_definition(line, link_matcher);
+                return line.clone();
+            }
+
+            if is_indented_code {
+                return line.clone();
+            }
+
+            replace_ellipsis_in_prose(line)
         })
         .collect()
 }
@@ -213,6 +229,21 @@ mod tests {
             .to_string(),
         ];
         assert_eq!(replace_ellipsis(&input), input);
+    }
+
+    #[test]
+    fn preserves_split_link_reference_destination() {
+        let input = vec![
+            "[compare]:".to_string(),
+            "  https://github.com/leynos/mdtablefix/compare/v1...v2".to_string(),
+            "Prose... still changes.".to_string(),
+        ];
+        let expected = vec![
+            "[compare]:".to_string(),
+            "  https://github.com/leynos/mdtablefix/compare/v1...v2".to_string(),
+            "Prose… still changes.".to_string(),
+        ];
+        assert_eq!(replace_ellipsis(&input), expected);
     }
 
     #[test]

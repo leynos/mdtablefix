@@ -80,6 +80,8 @@ fn preserves_literal_regions() {
         "Release... notes.\n",
         "[0.1.1]: https://github.com/leynos/diesel-cte-ext/compare/",
         "v0.1.0...302d156361161fd73310926dcef6513b41f7b393\n",
+        "[split]:\n",
+        "  https://example.com/compare/v1...v2\n",
         "See [comparison...](https://example.com/v1...v2).\n",
         "Open ./fixtures/.../expected.txt.\n",
     );
@@ -87,6 +89,8 @@ fn preserves_literal_regions() {
         "Release… notes.\n",
         "[0.1.1]: https://github.com/leynos/diesel-cte-ext/compare/",
         "v0.1.0...302d156361161fd73310926dcef6513b41f7b393\n",
+        "[split]:\n",
+        "  https://example.com/compare/v1...v2\n",
         "See [comparison...](https://example.com/v1...v2).\n",
         "Open ./fixtures/.../expected.txt.\n",
     );
