@@ -10,4 +10,30 @@ mod month_names;
 #[path = "../../src/wrap/inline/date_strategies.rs"]
 mod source;
 
-pub(crate) use source::{date_sequence_tokens_strategy, month_name_strategy, year_strategy};
+use proptest::prelude::*;
+pub(crate) use source::{month_name_strategy, year_strategy};
+
+/// Generates tokenized date sequences for the integration properties.
+pub(crate) fn date_sequence_tokens_strategy() -> BoxedStrategy<Vec<String>> {
+    prop_oneof![
+        (
+            source::ordinal_day_strategy(),
+            month_name_strategy(),
+            year_strategy()
+        )
+            .prop_map(|(day, month, year)| vec![day, " ".into(), month, " ".into(), year]),
+        (
+            source::numeric_day_strategy(),
+            month_name_strategy(),
+            year_strategy()
+        )
+            .prop_map(|(day, month, year)| vec![day, " ".into(), month, " ".into(), year]),
+        (
+            month_name_strategy(),
+            source::numeric_day_strategy(),
+            year_strategy()
+        )
+            .prop_map(|(month, day, year)| vec![month, " ".into(), day, " ".into(), year]),
+    ]
+    .boxed()
+}

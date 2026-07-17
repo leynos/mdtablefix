@@ -334,9 +334,5 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
 }
 
 #[cfg(test)]
-#[path = "span_helper_props.rs"]
-mod span_helper_props;
-
-#[cfg(test)]
 #[path = "span_helper_tracing_tests.rs"]
 mod tracing_tests;

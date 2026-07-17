@@ -91,33 +91,3 @@ pub(crate) fn numeric_day_with_range(
 pub(crate) fn year_strategy() -> BoxedStrategy<String> {
     (1000u16..=2999).prop_map(|year| year.to_string()).boxed()
 }
-
-/// Generates tokenized date sequences separated by literal space tokens.
-///
-/// The strategy covers ordinal day first, numeric day first, and month first
-/// variants. Examples include `["1st", " ", "January", " ", "2024"]`,
-/// `["1", " ", "January", " ", "2024"]`, and
-/// `["January", " ", "1", " ", "2024"]`.
-pub(crate) fn date_sequence_tokens_strategy() -> BoxedStrategy<Vec<String>> {
-    prop_oneof![
-        (
-            ordinal_day_strategy(),
-            month_name_strategy(),
-            year_strategy()
-        )
-            .prop_map(|(day, month, year)| vec![day, " ".into(), month, " ".into(), year]),
-        (
-            numeric_day_strategy(),
-            month_name_strategy(),
-            year_strategy()
-        )
-            .prop_map(|(day, month, year)| vec![day, " ".into(), month, " ".into(), year]),
-        (
-            month_name_strategy(),
-            numeric_day_strategy(),
-            year_strategy()
-        )
-            .prop_map(|(month, day, year)| vec![month, " ".into(), day, " ".into(), year]),
-    ]
-    .boxed()
-}
