@@ -26,7 +26,7 @@ const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 /// # Returns
 ///
 /// A tuple containing the parsed rows and a flag indicating whether the
-/// a physical source line contained multiple complete logical rows.
+/// physical source line contained multiple complete logical rows.
 ///
 /// # Examples
 ///

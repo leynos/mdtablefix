@@ -2,13 +2,8 @@
 
 use tracing_test::traced_test;
 
-use super::{
-    SpanKind,
-    date_token_span,
-    should_couple_whitespace,
-    try_couple_footnote_reference,
-    try_match_date_sequence,
-};
+use super::{date_token_span, try_match_date_sequence};
+use crate::wrap::inline::determine_token_span;
 
 fn date_tokens() -> [String; 5] {
     [
@@ -46,15 +41,15 @@ fn date_token_span_emits_trace_event() {
 
 #[traced_test]
 #[test]
-fn should_couple_whitespace_logs_colon_footnote_coupling() {
-    let footnote = "[^note]".to_string();
-    let colon = ":".to_string();
+fn grouping_boundary_logs_colon_footnote_whitespace_coupling() {
+    let tokens = [
+        "word".to_string(),
+        " ".to_string(),
+        "[^note]".to_string(),
+        ":".to_string(),
+    ];
 
-    assert!(should_couple_whitespace(
-        SpanKind::General,
-        Some(&footnote),
-        Some(&colon),
-    ));
+    let _ = determine_token_span(&tokens, 0);
     assert!(logs_contain(
         "coupled whitespace before colon-suffixed footnote reference"
     ));
@@ -65,14 +60,10 @@ fn should_couple_whitespace_logs_colon_footnote_coupling() {
 
 #[traced_test]
 #[test]
-fn should_couple_whitespace_logs_declined_colon_footnote_coupling() {
-    let footnote = "[^note]".to_string();
+fn grouping_boundary_logs_declined_colon_footnote_whitespace_coupling() {
+    let tokens = ["word".to_string(), " ".to_string(), "[^note]".to_string()];
 
-    assert!(!should_couple_whitespace(
-        SpanKind::General,
-        Some(&footnote),
-        None,
-    ));
+    let _ = determine_token_span(&tokens, 0);
     assert!(logs_contain(
         "error_category=\"footnote_colon_whitespace_coupling_declined\""
     ));
@@ -80,13 +71,16 @@ fn should_couple_whitespace_logs_declined_colon_footnote_coupling() {
 
 #[traced_test]
 #[test]
-fn try_couple_footnote_reference_logs_whitespace_colon_coupling() {
-    let tokens = [" ".to_string(), "[^note]".to_string(), ":".to_string()];
-    let mut width = 0;
+fn grouping_boundary_logs_whitespace_colon_footnote_coupling() {
+    let tokens = [
+        "word".to_string(),
+        " ".to_string(),
+        "[^note]".to_string(),
+        ":".to_string(),
+    ];
 
-    let coupled = try_couple_footnote_reference(&tokens, 1, SpanKind::General, &mut width);
+    let _ = determine_token_span(&tokens, 0);
 
-    assert!(coupled.is_some());
     assert!(logs_contain(
         "coupled colon-suffixed footnote reference after whitespace"
     ));
@@ -97,13 +91,11 @@ fn try_couple_footnote_reference_logs_whitespace_colon_coupling() {
 
 #[traced_test]
 #[test]
-fn try_couple_footnote_reference_logs_declined_context() {
+fn grouping_boundary_logs_declined_footnote_context() {
     let tokens = ["word".to_string(), "[^note]".to_string()];
-    let mut width = 0;
 
-    let coupled = try_couple_footnote_reference(&tokens, 1, SpanKind::General, &mut width);
+    let _ = determine_token_span(&tokens, 0);
 
-    assert!(coupled.is_none());
     assert!(logs_contain(
         "error_category=\"footnote_coupling_context_mismatch\""
     ));

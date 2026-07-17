@@ -33,6 +33,10 @@ fn cli_wrap_processes_positional_file() -> Result<(), Box<dyn std::error::Error>
 
     assert!(text.lines().count() > 1, "expected the file to be wrapped");
     assert!(
+        text.contains("漢字🙂"),
+        "expected positional file content to be preserved: {text}",
+    );
+    assert!(
         text.lines()
             .all(|line| UnicodeWidthStr::width(line) <= WRAP_COLS),
         "expected every output line to fit the fixed wrap width: {text}",

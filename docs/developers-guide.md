@@ -497,67 +497,45 @@ log output must install their own subscriber (e.g.
 ### Log levels
 
 Use `debug!` for high-value classification outcomes: fragment kind, parsed
-token, span promotion result. Use `trace!` for branch-level checks: predicate
-matched, prefix mismatch, unterminated bracket. Never emit at `info!` or above
-from library code.
+token length, span promotion result. Use `trace!` for branch-level checks:
+predicate matched, prefix mismatch, unterminated bracket. Never emit at `info!`
+or above from library code.
 
 ### Field naming
 
-Use the stable structured field names `token`, `kind`, `start`, `end`, `width`,
-`truncated`, `reason`, and `is_image`.
+Use the stable structured field names `token_length`, `kind`, `start`, `end`,
+`width`, `reason`, and `is_image`.
 
 Table: Structured field names emitted by tracing instrumentation.
 
-| Field       | Type            | Used in                         | Meaning                                                         |
-| ----------- | --------------- | ------------------------------- | --------------------------------------------------------------- |
-| `token`     | `%str`          | fragment, link, footnote events | The text slice that was classified or parsed                    |
-| `kind`      | `?FragmentKind` | `fragment classified`           | The computed fragment classification                            |
-| `start`     | `usize`         | span events                     | Byte offset where the span begins                               |
-| `end`       | `usize`         | span events                     | Byte offset where the span ends (exclusive)                     |
-| `width`     | `usize`         | span events                     | Display-column width of the span                                |
-| `truncated` | `bool`          | `fragment classified`           | Whether `token` was shortened to <= 80 bytes                    |
-| `reason`    | `&str`          | `footnote end not found`        | Diagnostic tag: `"prefix_mismatch"` or `"unterminated_bracket"` |
-| `is_image`  | `bool`          | `link or image parsed`          | `true` when the link token is an image literal (`![]()`)        |
+| Field          | Type            | Used in                         | Meaning                                                         |
+| -------------- | --------------- | ------------------------------- | --------------------------------------------------------------- |
+| `token_length` | `usize`         | fragment, link, footnote events | Character count of the text that was classified or parsed       |
+| `kind`         | `?FragmentKind` | `fragment classified`           | The computed fragment classification                            |
+| `start`        | `usize`         | span events                     | Byte offset where the span begins                               |
+| `end`          | `usize`         | span events                     | Byte offset where the span ends (exclusive)                     |
+| `width`        | `usize`         | span events                     | Display-column width of the span                                |
+| `reason`       | `&str`          | `footnote end not found`        | Diagnostic tag: `"prefix_mismatch"` or `"unterminated_bracket"` |
+| `is_image`     | `bool`          | `link or image parsed`          | `true` when the link token is an image literal (`![]()`)        |
 
 For example:
 
 ```rust
-debug!(token = %token, kind = ?kind, "fragment classified");
+debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified");
 ```
 
 ### Performance discipline
 
-Guard any expression that allocates (e.g. `String` truncation) with
+Guard any expression that performs non-trivial work with
 `tracing::enabled!(Level::DEBUG)` or `tracing::enabled!(Level::TRACE)` before
 computing the value.
 
 ### Security considerations
 
-The `token` field records raw text slices from the input document, including
-URL tokens parsed by `parse_link_or_image`. URLs may embed API keys, session
-identifiers, or other sensitive values.
-
-When enabling DEBUG or TRACE logging from this library in a production
-environment, configure the subscriber to redact or drop the `token` field
-before writing to any persistent sink. For example, with `tracing-subscriber`:
-
-```rust
-use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::layer::SubscriberExt as _;
-use tracing_subscriber::util::SubscriberInitExt as _;
-
-tracing_subscriber::registry()
-    .with(
-        tracing_subscriber::fmt::layer()
-            .with_span_events(FmtSpan::NONE)
-            // Add a field-filtering layer here to drop `token` in production.
-    )
-    .init();
-```
-
-Do not enable DEBUG or TRACE logging from this library without a redacting
-subscriber in any environment where the input documents may contain
-confidential URLs.
+Tracing events must not include raw document content. Record bounded metadata
+such as indices, lengths, fragment kinds, and stable error categories instead.
+In particular, do not rely on downstream subscribers to redact link, footnote,
+table-row, or token text.
 
 ### Instrumented functions
 

@@ -39,6 +39,21 @@ fn table_rows_strategy() -> impl Strategy<Value = Vec<Vec<String>>> {
     })
 }
 
+fn legacy_concatenated_rows_strategy() -> impl Strategy<Value = Vec<Vec<String>>> {
+    (2usize..=6).prop_flat_map(|column_count| {
+        let header = generated_row_strategy(column_count, 0..column_count);
+        let body =
+            prop::collection::vec(generated_row_strategy(column_count, 0..column_count), 1..=6);
+        (header, body).prop_map(move |(header, body)| {
+            let separator = vec!["---".to_string(); column_count];
+            std::iter::once(header)
+                .chain(std::iter::once(separator))
+                .chain(body)
+                .collect()
+        })
+    })
+}
+
 fn generated_row_strategy(
     column_count: usize,
     non_empty_index: impl Strategy<Value = usize>,
@@ -64,6 +79,33 @@ fn render_table_row(row: &[String]) -> String {
         .map(|cell| escape_literal_pipes(cell))
         .collect::<Vec<_>>();
     format!("| {} |", escaped.join(" | "))
+}
+
+fn render_legacy_concatenated_rows(rows: &[Vec<String>]) -> String {
+    let mut cells = Vec::new();
+    for (index, row) in rows.iter().enumerate() {
+        if index > 0 {
+            cells.push(String::new());
+        }
+        cells.extend(row.iter().cloned());
+    }
+    render_table_row(&cells)
+}
+
+fn normalize_markers(rows: &[Vec<String>]) -> Vec<Vec<String>> {
+    rows.iter()
+        .map(|row| {
+            row.iter()
+                .map(|cell| {
+                    if cell == LEADING_EMPTY_CELL_MARKER {
+                        String::new()
+                    } else {
+                        cell.clone()
+                    }
+                })
+                .collect()
+        })
+        .collect()
 }
 
 #[test]
@@ -199,20 +241,7 @@ proptest! {
             .map(|row| render_table_row(row))
             .collect::<Vec<_>>();
         let (parsed, split_within_line) = parse_rows(&input);
-        let normalized = parsed
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|cell| {
-                        if cell == LEADING_EMPTY_CELL_MARKER {
-                            String::new()
-                        } else {
-                            cell.clone()
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
+        let normalized = normalize_markers(&parsed);
 
         prop_assert_eq!(normalized.len(), rows.len());
         let dimensions_match = normalized
@@ -222,6 +251,18 @@ proptest! {
         prop_assert!(dimensions_match);
         prop_assert_eq!(normalized, rows);
         prop_assert!(!split_within_line);
+    }
+
+
+    #[test]
+    fn parse_rows_recovers_generated_legacy_concatenated_rows(
+        rows in legacy_concatenated_rows_strategy(),
+    ) {
+        let input = vec![render_legacy_concatenated_rows(&rows)];
+        let (parsed, split_within_line) = parse_rows(&input);
+
+        prop_assert_eq!(normalize_markers(&parsed), rows);
+        prop_assert!(split_within_line);
     }
 }
 
