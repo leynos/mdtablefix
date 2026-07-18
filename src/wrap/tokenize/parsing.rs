@@ -1,8 +1,5 @@
-//! Higher-level parsing helpers for inline Markdown elements.
-//!
-//! Splitting these routines from the main tokenizer keeps `mod.rs` focused on
-//! public API surface area while giving the parsing logic a contained space for
-//! documentation and direct unit tests.
+//! Higher-level inline Markdown parsing helpers, isolated from tokenizer entry
+//! points so the parsing logic remains documented and directly testable.
 
 use tracing::{debug, trace};
 
@@ -14,13 +11,11 @@ use super::scanning::{collect_range, position_after_close, scan_while};
 /// immediately when they are not followed by a URL. Caret-labelled links with
 /// a following URL, such as `[^label](url)`, are still parsed as normal links.
 ///
-/// Handles nested parentheses within URLs by tracking the depth of opening and
-/// closing delimiters. Returns the parsed slice and the index after the closing
-/// parenthesis if one is found.
+/// Tracks nested URL parentheses and returns the parsed slice plus the index
+/// after the closing parenthesis, when present.
 ///
-/// The `#[tracing::instrument]` attribute records content-free entry metadata
-/// so callers can observe classification decisions without exposing document
-/// text.
+/// The `#[tracing::instrument]` attribute records content-free entry metadata,
+/// exposing classification decisions without document text.
 ///
 /// # Examples
 ///
@@ -224,6 +219,7 @@ pub(super) fn handle_backtick_fence(text: &str, start_idx: usize) -> (String, us
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
+    use rstest::rstest;
 
     use super::*;
 
@@ -313,7 +309,7 @@ mod tests {
         assert_eq!(idx, token.len());
     }
 
-    #[test]
+    #[rstest]
     fn parse_link_or_image_preserves_reference_style_link() {
         let input = "[trybuild][implicit-fixture-trybuild]";
 

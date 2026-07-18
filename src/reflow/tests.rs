@@ -95,11 +95,17 @@ fn render_legacy_concatenated_rows(rows: &[Vec<String>]) -> String {
 fn normalize_markers(rows: &[Vec<String>]) -> Vec<Vec<String>> {
     rows.iter()
         .map(|row| {
+            let mut has_seen_content = false;
             row.iter()
                 .map(|cell| {
                     if cell == LEADING_EMPTY_CELL_MARKER {
+                        assert!(
+                            !has_seen_content,
+                            "continuation marker must remain in the leading empty-cell run"
+                        );
                         String::new()
                     } else {
+                        has_seen_content |= !cell.is_empty();
                         cell.clone()
                     }
                 })

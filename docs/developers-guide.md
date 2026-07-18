@@ -51,9 +51,12 @@ The table reflow pipeline is split into small stages so continuation rows and
 separator rows can be handled without losing column structure.
 
 `protect_leading_empty_cells` rewrites leading empty continuation cells to a
-marker before parsing. `parse_rows` then performs a structural row split that
-turns the buffered table text into row vectors. `clean_rows` restores the
-markers to empty strings and removes rows that are entirely empty.
+marker before parsing. `parse_rows` preserves physical source-line boundaries
+and delegates logical-row recovery to `src/reflow/row_parsing.rs`. That module
+infers the expected table width, recognizes complete legacy rows concatenated
+on one physical line, and retains padded or trailing empty cells as cell data.
+`clean_rows` restores the markers to empty strings and removes rows that are
+entirely empty.
 
 `calculate_widths` measures each column using Unicode display width so the
 formatter sizes columns according to the glyphs that will actually be emitted.
@@ -76,6 +79,16 @@ restores the separator row with widths derived from the final table body.
   one was parsed or promoted.
 - `detect_separator`: Chooses the separator source, preferring an explicit
   separator line and otherwise promoting the second parsed row when valid.
+
+`src/reflow/row_parsing.rs`:
+
+- `cell_is_semantically_empty`: Treats both an empty string and the private
+  leading-cell marker as empty parser content.
+- `split_physical_rows`: Recovers complete logical rows from each physical row
+  using the inferred width, without treating padded cell delimiters as row
+  boundaries.
+- `infer_expected_width`: Derives the logical column count from the first row
+  and complete legacy concatenations, including embedded separator rows.
 
 `src/table.rs`:
 
@@ -504,19 +517,22 @@ or above from library code.
 ### Field naming
 
 Use the stable structured field names `token_length`, `kind`, `start`, `end`,
-`width`, `reason`, and `is_image`.
+`width`, `reason`, `is_image`, `row_index`, `cell_count`, and `error_category`.
 
 Table: Structured field names emitted by tracing instrumentation.
 
-| Field          | Type            | Used in                         | Meaning                                                         |
-| -------------- | --------------- | ------------------------------- | --------------------------------------------------------------- |
-| `token_length` | `usize`         | fragment, link, footnote events | Character count of the text that was classified or parsed       |
-| `kind`         | `?FragmentKind` | `fragment classified`           | The computed fragment classification                            |
-| `start`        | `usize`         | span events                     | Byte offset where the span begins                               |
-| `end`          | `usize`         | span events                     | Byte offset where the span ends (exclusive)                     |
-| `width`        | `usize`         | span events                     | Display-column width of the span                                |
-| `reason`       | `&str`          | `footnote end not found`        | Diagnostic tag: `"prefix_mismatch"` or `"unterminated_bracket"` |
-| `is_image`     | `bool`          | `link or image parsed`          | `true` when the link token is an image literal (`![]()`)        |
+| Field            | Type            | Used in                         | Meaning                                                         |
+| ---------------- | --------------- | ------------------------------- | --------------------------------------------------------------- |
+| `token_length`   | `usize`         | fragment, link, footnote events | Character count of the text that was classified or parsed       |
+| `kind`           | `?FragmentKind` | `fragment classified`           | The computed fragment classification                            |
+| `start`          | `usize`         | span events                     | Byte offset where the span begins                               |
+| `end`            | `usize`         | span events                     | Byte offset where the span ends (exclusive)                     |
+| `width`          | `usize`         | span events                     | Display-column width of the span                                |
+| `reason`         | `&str`          | `footnote end not found`        | Diagnostic tag: `"prefix_mismatch"` or `"unterminated_bracket"` |
+| `is_image`       | `bool`          | `link or image parsed`          | `true` when the link token is an image literal (`![]()`)        |
+| `row_index`      | `usize`         | table-row events                | Zero-based index of the parsed logical row                      |
+| `cell_count`     | `usize`         | table-row events                | Number of cells in the parsed logical row                       |
+| `error_category` | `&str`          | declined or discarded events    | Stable category for a non-successful classification outcome     |
 
 For example:
 
@@ -547,17 +563,18 @@ Table: Instrumented functions and their logging levels and fields.
 
 | Function                  | Level        | Fields                                                                                            |
 | ------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
-| `looks_like_footnote_ref` | trace        | `token` (in), return value (out)                                                                  |
-| `ends_with_footnote_ref`  | trace        | `token` (in), return value (out)                                                                  |
-| `ends_with_hyphen_prefix` | trace        | `token` (in), return value (out)                                                                  |
-| `is_month_name`           | trace        | `token` (in), return value (out)                                                                  |
-| `is_ordinal_day`          | trace        | `token` (in), return value (out)                                                                  |
-| `is_numeric_day`          | trace        | `token` (in), return value (out)                                                                  |
-| `is_year`                 | trace        | `token` (in), return value (out)                                                                  |
+| `looks_like_footnote_ref` | trace        | `skip(token)`, return value (out)                                                                 |
+| `ends_with_footnote_ref`  | trace        | `skip(token)`, return value (out)                                                                 |
+| `ends_with_hyphen_prefix` | trace        | `skip(token)`, return value (out)                                                                 |
+| `is_month_name`           | trace        | `skip(token)`, return value (out)                                                                 |
+| `is_ordinal_day`          | trace        | `skip(token)`, return value (out)                                                                 |
+| `is_numeric_day`          | trace        | `skip(token)`, return value (out)                                                                 |
+| `is_year`                 | trace        | `skip(token)`, return value (out)                                                                 |
 | `try_match_date_sequence` | trace, debug | `start` (in), `skip(tokens)`, return value (out); matched date pattern                            |
 | `date_token_span`         | trace        | `start` (in), `skip(tokens)`, return value (out); over-width date fallback remains behaviour-only |
-| `parse_link_or_image`     | debug        | `idx` (in), `skip(text)`, return value (out)                                                      |
+| `parse_link_or_image`     | debug        | `idx` (in), `skip(text)`; `token_length` and `is_image` events                                    |
 | `find_footnote_end`       | trace        | `idx` (in), `skip(text)`, return value (out)                                                      |
+| `parse_rows`              | trace, debug | `skip(trimmed)`; `row_index`, `cell_count`, and `error_category` events                           |
 
 ## Fences module
 
