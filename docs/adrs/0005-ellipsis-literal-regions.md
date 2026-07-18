@@ -24,10 +24,10 @@ autolink, bare URL, and filesystem-token classification itself. Protected
 source ranges are merged and copied byte-for-byte; ellipsis normalization is
 applied only to gaps between those ranges.
 
-Treat whitespace-delimited tokens containing `...` as filesystem-like when they
-use an absolute, relative, home-relative, or Windows drive prefix, or contain a
-path separator. This deliberately conservative heuristic favours preserving a
-possibly semantic token over applying typography inside it.
+Treat whitespace-delimited tokens containing `...` as filesystem-like only when
+they use an explicit absolute `/`, relative `./` or `../`, home `~/`, or
+Windows-drive prefix. Generic slash-delimited prose remains prose and is
+normalized.
 
 Preserve complete inline links and images, including their labels and optional
 titles. This keeps a Markdown construct atomic and avoids partially rewriting
@@ -42,7 +42,6 @@ copied byte-for-byte, just like a complete definition on one line.
 - GitHub compare URLs and path examples remain valid under `--ellipsis`.
 - Split link reference destinations and titles retain semantic dot runs.
 - Ordinary prose surrounding protected tokens continues to be normalized.
-- Some path-shaped prose, such as a slash-separated word containing `...`, is
-  intentionally left unchanged.
+- Generic slash-delimited prose containing `...` is normalized.
 - Transforms outwith ellipsis replacement do not inherit this policy
   automatically.

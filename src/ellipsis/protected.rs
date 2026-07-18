@@ -7,6 +7,8 @@
 
 use std::ops::Range;
 
+use tracing::{Level, trace};
+
 use crate::wrap::link_or_image_span;
 
 pub(super) fn literal_spans(text: &str) -> Vec<Range<usize>> {
@@ -92,7 +94,26 @@ fn semantic_token_spans(text: &str) -> Vec<Range<usize>> {
 }
 
 fn is_semantic_token(token: &str) -> bool {
-    token.contains("...") && (looks_like_bare_url(token) || looks_like_path(token))
+    if !token.contains("...") {
+        return false;
+    }
+
+    let kind = if looks_like_bare_url(token) {
+        Some("bare_url")
+    } else if looks_like_path(token) {
+        Some("filesystem_path")
+    } else {
+        None
+    };
+    if let Some(kind) = kind
+        && tracing::enabled!(Level::TRACE)
+    {
+        trace!(
+            token_length = token.chars().count(),
+            kind, "protected semantic ellipsis token"
+        );
+    }
+    kind.is_some()
 }
 
 fn looks_like_bare_url(token: &str) -> bool {
@@ -106,8 +127,6 @@ fn looks_like_path(token: &str) -> bool {
         || token.starts_with("../")
         || token.starts_with("~/")
         || is_windows_drive_path(token)
-        || token.contains('/')
-        || token.contains('\\')
 }
 
 fn is_wrapper(character: char) -> bool { matches!(character, '(' | '[' | '{' | '"' | '\'') }
@@ -138,6 +157,7 @@ fn merge_spans(mut spans: Vec<Range<usize>>) -> Vec<Range<usize>> {
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
+    use tracing_test::traced_test;
 
     use super::*;
 
@@ -146,12 +166,23 @@ mod tests {
     #[case::link("[wait...](target)", vec!["[wait...](target)"])]
     #[case::url("see https://example.com/a...b", vec!["https://example.com/a...b"])]
     #[case::path("open ./a/.../b next", vec!["./a/.../b"])]
+    #[case::slash_prose("choose and/or... input/output...", Vec::<&str>::new())]
     fn finds_literal_spans(#[case] input: &str, #[case] expected: Vec<&str>) {
         let actual = literal_spans(input)
             .into_iter()
             .map(|span| &input[span])
             .collect::<Vec<_>>();
         assert_eq!(actual, expected);
+    }
+
+    #[traced_test]
+    #[test]
+    fn semantic_classification_trace_omits_document_content() {
+        let input = "./private/.../secret.txt";
+        let _ = literal_spans(input);
+        assert!(logs_contain("protected semantic ellipsis token"));
+        assert!(logs_contain("kind=\"filesystem_path\""));
+        assert!(!logs_contain(input));
     }
 
     proptest! {

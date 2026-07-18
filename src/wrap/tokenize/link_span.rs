@@ -8,7 +8,7 @@ use std::ops::Range;
 
 use super::{
     parsing::{parse_link_text, parse_link_url},
-    scanning::has_odd_backslash_escape_bytes,
+    scanning::{bracket_follows_escaped_bang, has_odd_backslash_escape_bytes},
 };
 
 /// Return the complete source span for an inline link or image.
@@ -16,7 +16,11 @@ use super::{
 /// Escaped openers and reference labels without an inline destination are not
 /// classified. The returned range borrows the caller's original source.
 pub(crate) fn link_or_image_span(text: &str, start: usize) -> Option<Range<usize>> {
-    if start >= text.len() || has_odd_backslash_escape_bytes(text.as_bytes(), start) {
+    let bytes = text.as_bytes();
+    if start >= text.len()
+        || has_odd_backslash_escape_bytes(bytes, start)
+        || (bytes[start] == b'[' && bracket_follows_escaped_bang(bytes, start))
+    {
         return None;
     }
 
@@ -35,11 +39,16 @@ mod tests {
     use super::*;
 
     #[rstest::rstest]
-    #[case::link("[label](destination)", Some(0..20))]
-    #[case::image("![alt](image(a).png)", Some(0..20))]
-    #[case::reference("[label]", None)]
-    #[case::escaped(r"\[label](destination)", None)]
-    fn locates_complete_span(#[case] input: &str, #[case] expected: Option<Range<usize>>) {
-        assert_eq!(link_or_image_span(input, 0), expected);
+    #[case::link("[label](destination)", 0, Some(0..20))]
+    #[case::image("![alt](image(a).png)", 0, Some(0..20))]
+    #[case::reference("[label]", 0, None)]
+    #[case::escaped_link(r"\[label](destination)", 1, None)]
+    #[case::escaped_image(r"\![alt](destination)", 2, None)]
+    fn locates_complete_span(
+        #[case] input: &str,
+        #[case] start: usize,
+        #[case] expected: Option<Range<usize>>,
+    ) {
+        assert_eq!(link_or_image_span(input, start), expected);
     }
 }

@@ -8,6 +8,7 @@
 use std::sync::LazyLock;
 
 use regex::Regex;
+use tracing::trace;
 
 use crate::{
     textproc::{Token, push_original_token, tokenize_markdown},
@@ -59,6 +60,13 @@ impl IndentedCodeTracker {
 
         self.is_in_block = belongs_to_block;
         self.may_start_block = false;
+        if belongs_to_block {
+            trace!(
+                width = indent_width,
+                reason = "indented_code",
+                "preserving ellipsis input line verbatim"
+            );
+        }
         belongs_to_block
     }
 }
@@ -117,15 +125,24 @@ pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
                 return line.clone();
             }
 
-            if link_title_window.observe_next_line(line, link_matcher)
-                == Some(LinkTitleWindowOutcome::EmitVerbatim)
-            {
+            let continuation_outcome = link_title_window.observe_next_line(line, link_matcher);
+            if continuation_outcome == Some(LinkTitleWindowOutcome::EmitVerbatim) {
+                trace!(
+                    kind = ?continuation_outcome,
+                    reason = "link_reference_continuation",
+                    "preserving ellipsis input line verbatim"
+                );
                 return line.clone();
             }
 
             let block_kind = classify_block(line, link_matcher);
             if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
                 link_title_window.observe_definition(line, link_matcher);
+                trace!(
+                    kind = ?link_title_window,
+                    reason = "link_reference_definition",
+                    "preserving ellipsis input line verbatim"
+                );
                 return line.clone();
             }
 
@@ -244,6 +261,48 @@ mod tests {
             "Prose… still changes.".to_string(),
         ];
         assert_eq!(replace_ellipsis(&input), expected);
+    }
+
+    #[test]
+    fn preserves_split_link_reference_title() {
+        let input = vec![
+            "[compare]:".to_string(),
+            "  https://example.com/compare/v1...v2".to_string(),
+            "  \"Versions v1...v2\"".to_string(),
+            "Prose... still changes.".to_string(),
+        ];
+        let expected = vec![
+            "[compare]:".to_string(),
+            "  https://example.com/compare/v1...v2".to_string(),
+            "  \"Versions v1...v2\"".to_string(),
+            "Prose… still changes.".to_string(),
+        ];
+        assert_eq!(replace_ellipsis(&input), expected);
+    }
+
+    #[test]
+    fn normalizes_slash_delimited_prose() {
+        let input = vec!["Choose and/or... input/output...".to_string()];
+        let expected = vec!["Choose and/or… input/output…".to_string()];
+        assert_eq!(replace_ellipsis(&input), expected);
+    }
+
+    #[tracing_test::traced_test]
+    #[test]
+    fn preservation_traces_omit_document_content() {
+        let sensitive_line = "    private... payload".to_string();
+        let split_reference = vec![
+            "[private]:".to_string(),
+            "  https://example.com/private...target".to_string(),
+        ];
+
+        let _ = replace_ellipsis(std::slice::from_ref(&sensitive_line));
+        let _ = replace_ellipsis(&split_reference);
+
+        assert!(logs_contain("reason=\"indented_code\""));
+        assert!(logs_contain("reason=\"link_reference_continuation\""));
+        assert!(!logs_contain(&sensitive_line));
+        assert!(!logs_contain(&split_reference[1]));
     }
 
     #[test]

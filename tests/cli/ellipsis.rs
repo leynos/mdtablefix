@@ -82,7 +82,11 @@ fn preserves_literal_regions() {
         "v0.1.0...302d156361161fd73310926dcef6513b41f7b393\n",
         "[split]:\n",
         "  https://example.com/compare/v1...v2\n",
+        "  \"Versions v1...v2\"\n",
         "See [comparison...](https://example.com/v1...v2).\n",
+        "See ![diagram...](images/v1...v2.png).\n",
+        "Visit https://example.com/v1...v2 directly.\n",
+        "Visit <https://example.com/v1...v2> as an autolink.\n",
         "Open ./fixtures/.../expected.txt.\n",
     );
     let expected = concat!(
@@ -91,7 +95,11 @@ fn preserves_literal_regions() {
         "v0.1.0...302d156361161fd73310926dcef6513b41f7b393\n",
         "[split]:\n",
         "  https://example.com/compare/v1...v2\n",
+        "  \"Versions v1...v2\"\n",
         "See [comparison...](https://example.com/v1...v2).\n",
+        "See ![diagram...](images/v1...v2.png).\n",
+        "Visit https://example.com/v1...v2 directly.\n",
+        "Visit <https://example.com/v1...v2> as an autolink.\n",
         "Open ./fixtures/.../expected.txt.\n",
     );
 

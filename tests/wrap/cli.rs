@@ -364,6 +364,8 @@ fn combined_flags_preserve_generated_fenced_bodies() {
         .expect("generated fenced blocks are preserved by combined flags");
 }
 
+/// Whitespace-only fence suffixes are absent languages and normalize away.
+#[test]
 fn combined_flags_normalize_whitespace_only_fence_suffix() -> Result<(), Box<dyn std::error::Error>>
 {
     let input = "```  \n-- Payload example...\n```\n";
@@ -373,6 +375,9 @@ fn combined_flags_normalize_whitespace_only_fence_suffix() -> Result<(), Box<dyn
         .stdout("```\n-- Payload example...\n```\n");
     Ok(())
 }
+
+/// Ensures `--wrap` preserves emphasised step definition guidance with inline code spans.
+#[test]
 fn test_cli_wrap_preserves_step_definitions_guidance() -> Result<(), Box<dyn std::error::Error>> {
     let input = "- **Step Definitions:** Mirror the feature file structure in your `tests/steps/` \
                  directory.\n  Create a Rust module for each feature area (e.g., \
