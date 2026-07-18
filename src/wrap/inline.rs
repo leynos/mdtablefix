@@ -16,6 +16,7 @@ mod span_helpers;
 mod test_support;
 #[cfg(test)]
 mod tests;
+mod tracing_events;
 
 /// Returns whether `token` begins with a matched inline code fence, optionally
 /// followed by a non-whitespace suffix such as an inflectional affix.
@@ -54,6 +55,7 @@ use span_helpers::{
 };
 use textwrap::wrap_algorithms::wrap_first_fit;
 use tracing::trace;
+use tracing_events::{emit_footnote_reference_coupling, emit_whitespace_footnote_coupling};
 use unicode_width::UnicodeWidthStr;
 
 use super::tokenize;
@@ -133,7 +135,11 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
     while end < tokens.len() {
         let token = &tokens[end];
         if is_whitespace_token(token) {
-            if should_couple_whitespace(kind, tokens.get(end + 1)) {
+            let next_token = tokens.get(end + 1);
+            let following_token = tokens.get(end + 2);
+            let should_couple = should_couple_whitespace(kind, next_token, following_token);
+            emit_whitespace_footnote_coupling(kind, next_token, following_token, should_couple);
+            if should_couple {
                 width += UnicodeWidthStr::width(token.as_str());
                 end += 1;
                 continue;
@@ -167,9 +173,9 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
         // Footnote markers must be coupled before consecutive link/code chaining;
         // otherwise `[^N]` stays a separate wrap token even when punctuation is
         // already attached to the preceding atomic span.
-        if let Some((next_kind, next_end)) =
-            try_couple_footnote_reference(tokens, end, kind, &mut width)
-        {
+        let footnote_coupling = try_couple_footnote_reference(tokens, end, kind, &mut width);
+        emit_footnote_reference_coupling(tokens, end, kind, footnote_coupling.is_some());
+        if let Some((next_kind, next_end)) = footnote_coupling {
             kind = next_kind;
             end = next_end;
             continue;

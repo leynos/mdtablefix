@@ -33,9 +33,9 @@ pub(in crate::wrap::inline) fn is_trailing_punctuation_token(token: &str) -> boo
 
 /// Returns whether `token` is a full or abbreviated English month name.
 ///
-/// The `#[tracing::instrument]` attribute records the argument and return
-/// value automatically.
-#[tracing::instrument(level = "trace", ret)]
+/// The `#[tracing::instrument]` attribute records the return value while
+/// excluding document content from the span.
+#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_month_name(token: &str) -> bool {
     let token = strip_leading_openers(token);
     month_names_for_len(token.len())
@@ -71,9 +71,9 @@ fn month_names_for_len(len: usize) -> &'static [&'static str] {
 
 /// Returns whether `token` is an ordinal day number from 1st through 31st.
 ///
-/// The `#[tracing::instrument]` attribute records the argument and return
-/// value automatically.
-#[tracing::instrument(level = "trace", ret)]
+/// The `#[tracing::instrument]` attribute records the return value while
+/// excluding document content from the span.
+#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
     let token = strip_leading_openers(token);
     ["st", "nd", "rd", "th"]
@@ -84,9 +84,9 @@ pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
 
 /// Returns whether `token` is a numeric day number from 1 through 31.
 ///
-/// The `#[tracing::instrument]` attribute records the argument and return
-/// value automatically.
-#[tracing::instrument(level = "trace", ret)]
+/// The `#[tracing::instrument]` attribute records the return value while
+/// excluding document content from the span.
+#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
     let token = strip_leading_openers(token);
     token
@@ -99,9 +99,9 @@ pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
 /// Returns whether `token` is a year from 1000 through 2999, optionally
 /// followed by trailing prose punctuation.
 ///
-/// The `#[tracing::instrument]` attribute records the argument and return
-/// value automatically.
-#[tracing::instrument(level = "trace", ret)]
+/// The `#[tracing::instrument]` attribute records the return value while
+/// excluding document content from the span.
+#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_year(token: &str) -> bool {
     token
         .trim_end_matches(is_trailing_punct)
@@ -122,9 +122,9 @@ pub(in crate::wrap::inline) fn looks_like_link(token: &str) -> bool {
 
 /// Returns whether `token` looks like a complete GFM footnote reference.
 ///
-/// The `#[tracing::instrument]` attribute records the argument and return
-/// value automatically.
-#[tracing::instrument(level = "trace", ret)]
+/// The `#[tracing::instrument]` attribute records the return value while
+/// excluding document content from the span.
+#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn looks_like_footnote_ref(token: &str) -> bool {
     token
         .strip_prefix("[^")
@@ -134,9 +134,9 @@ pub(in crate::wrap::inline) fn looks_like_footnote_ref(token: &str) -> bool {
 
 /// Returns whether `token` ends with an inline footnote reference.
 ///
-/// The `#[tracing::instrument]` attribute records the argument and return
-/// value automatically.
-#[tracing::instrument(level = "trace", ret)]
+/// The `#[tracing::instrument]` attribute records the return value while
+/// excluding document content from the span.
+#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn ends_with_footnote_ref(token: &str) -> bool {
     let Some(start) = token.rfind("[^") else {
         return false;
@@ -165,9 +165,9 @@ pub(in crate::wrap::inline) fn is_inline_code_token(token: &str) -> bool {
 /// chains (`state-of-the-art-`) are also accepted because such compounds
 /// remain a single atomic wrap token by design.
 ///
-/// The `#[tracing::instrument]` attribute records the argument and return
-/// value as a TRACE-level event.
-#[tracing::instrument(level = "trace", ret)]
+/// The `#[tracing::instrument]` attribute records the return value while
+/// excluding document content from the span.
+#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn ends_with_hyphen_prefix(token: &str) -> bool {
     token.ends_with('-') && token.chars().any(char::is_alphabetic)
 }

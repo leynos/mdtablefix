@@ -17,6 +17,17 @@
 
 ### Fixed
 
+- Document `--wrap` as a parameterless 80-column flag.
+  ([#388](https://github.com/leynos/mdtablefix/issues/388))
+- Keep reference-style links atomic while wrapping, so an opening bracket cannot
+  be stranded before its label.
+  ([#374](https://github.com/leynos/mdtablefix/issues/374))
+- Keep colon-suffixed footnote references attached to preceding prose so they
+  cannot become column-one footnote definitions.
+  ([#372](https://github.com/leynos/mdtablefix/issues/372))
+- Represent table row boundaries structurally so literal `ROW_END` cell content
+  cannot corrupt reflow.
+  ([#364](https://github.com/leynos/mdtablefix/issues/364))
 - Keep hyphenated compounds containing an inline code span atomic during
   wrapping, including the leading-hyphen forms such as `` pre-`LLMPort` `` and
   `` (API-`Foo`) ``. The hyphen-prefix token is coupled forward to the

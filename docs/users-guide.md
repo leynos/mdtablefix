@@ -37,10 +37,10 @@ sequence.
 
 ## Paragraph wrapping
 
-Pass `--wrap <width>` to reflow prose paragraphs so that every output line fits
-within `<width>` display columns. The width argument is measured in terminal
-columns, not bytes, so it accounts correctly for CJK glyphs, emoji, and
-accented characters.
+Pass `--wrap` to reflow prose paragraphs so that every output line fits within
+80 display columns. Width is measured in terminal columns, not bytes, so the
+wrapper accounts correctly for CJK glyphs, emoji, and accented characters. The
+flag does not accept a width parameter.
 
 Line fitting is delegated to the `textwrap` crate using a greedy first-fit
 algorithm: each word is placed on the current line if it fits, and a new line
@@ -50,6 +50,15 @@ Inline code spans (`` `…` ``), Markdown links (`[text](url)`), and inline GFM
 footnote references (`[^label]`) are treated as unbreakable units. A span is
 never split across lines; it moves as a whole to the next line when it would
 otherwise exceed the target width.
+
+Reference-style links such as `[text][reference]` are likewise unbreakable. The
+opening `[` always stays with the link label, avoiding leading whitespace
+inside link text after continuation indentation is applied.
+
+A colon-suffixed footnote reference in running prose, such as
+`subcategories [^96]:`, remains attached to the preceding word. The wrapper
+therefore cannot move `[^96]:` to column one, where Markdown would reinterpret
+the reference as a footnote definition.
 
 Common English prose dates, such as `25th December 2025`, `19 March 2018`, and
 `July 4, 2008`, are also treated as unbreakable inline fragments. This applies

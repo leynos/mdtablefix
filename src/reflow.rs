@@ -3,19 +3,21 @@
 //! The routines here parse raw rows, calculate cell widths, and format
 //! aligned output for the main [`reflow_table`] function.
 
-use regex::Regex;
 use unicode_width::UnicodeWidthStr;
 
 use crate::table::{SEP_RE, format_separator_cells, split_cells};
 
-static SENTINEL_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"\|\s*\|\s*").unwrap());
+mod row_parsing;
+
+use row_parsing::{cell_is_semantically_empty, split_physical_rows};
+
 const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 
 /// Parses reflow input into rows while preserving continuation-cell boundaries.
 ///
-/// Leading empty cells are protected before the global split so continuation
-/// rows keep their original column positions.
+/// Leading empty cells are protected before each physical line is parsed so
+/// continuation rows keep their original column positions. Complete legacy
+/// rows concatenated on one line are recovered using the inferred table width.
 ///
 /// # Arguments
 ///
@@ -24,7 +26,7 @@ const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 /// # Returns
 ///
 /// A tuple containing the parsed rows and a flag indicating whether the
-/// sentinel split crossed an original line boundary.
+/// physical source line contained multiple complete logical rows.
 ///
 /// # Examples
 ///
@@ -41,49 +43,39 @@ const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 /// );
 /// assert!(!split_within_line);
 /// ```
+#[tracing::instrument(level = "trace", skip(trimmed))]
 pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
     let protected = trimmed
         .iter()
         .map(|line| protect_leading_empty_cells(line))
         .collect::<Vec<_>>();
-    let raw = protected.join(" ");
-    let chunks: Vec<&str> = SENTINEL_RE.split(&raw).collect();
-    let split_within_line = chunks.len() > trimmed.len();
-
-    let cells = collect_cells(&chunks);
-    let rows = split_into_rows(cells);
+    let physical_rows = protected
+        .iter()
+        .map(|line| split_cells(line))
+        .collect::<Vec<_>>();
+    let (parsed_rows, split_within_line) = split_physical_rows(physical_rows);
+    let rows = parsed_rows
+        .into_iter()
+        .enumerate()
+        .filter_map(|(row_index, row)| retain_parsed_row(row_index, &row).then_some(row))
+        .collect();
 
     (rows, split_within_line)
 }
 
-fn collect_cells(chunks: &[&str]) -> Vec<String> {
-    let mut cells = Vec::new();
-    for (idx, chunk) in chunks.iter().enumerate() {
-        let mut ch = (*chunk).to_string();
-        if idx != chunks.len() - 1 {
-            ch.push_str(" |ROW_END|");
-        }
-        cells.extend(split_cells(&ch));
+fn retain_parsed_row(row_index: usize, row: &[String]) -> bool {
+    if row.iter().all(|cell| cell_is_semantically_empty(cell)) {
+        tracing::debug!(
+            row_index,
+            cell_count = row.len(),
+            error_category = "empty_row_discarded",
+            "discarded empty parsed row"
+        );
+        false
+    } else {
+        tracing::debug!(row_index, cell_count = row.len(), "parsed table row");
+        true
     }
-    cells
-}
-
-fn split_into_rows(cells: Vec<String>) -> Vec<Vec<String>> {
-    let mut rows = Vec::new();
-    let mut current = Vec::new();
-    for cell in cells {
-        if cell == "ROW_END" {
-            if !current.is_empty() {
-                rows.push(std::mem::take(&mut current));
-            }
-        } else {
-            current.push(cell);
-        }
-    }
-    if !current.is_empty() {
-        rows.push(current);
-    }
-    rows
 }
 
 /// Restores parser markers and removes rows that contain only empty cells.

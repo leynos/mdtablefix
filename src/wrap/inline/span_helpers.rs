@@ -160,16 +160,22 @@ where
 pub(in crate::wrap::inline) fn should_couple_whitespace(
     kind: SpanKind,
     next_token: Option<&String>,
+    following_token: Option<&String>,
 ) -> bool {
-    match (kind, next_token) {
-        (SpanKind::Link, Some(next))
+    match (kind, next_token, following_token) {
+        (SpanKind::Link, Some(next), _)
             if looks_like_link(next)
                 || is_inline_code_token(next)
                 || is_trailing_punctuation_token(next) =>
         {
             true
         }
-        (SpanKind::Code, Some(next)) if is_trailing_punctuation_token(next) => true,
+        (SpanKind::Code, Some(next), _) if is_trailing_punctuation_token(next) => true,
+        (SpanKind::General, Some(next), Some(following))
+            if looks_like_footnote_ref(next) && following == ":" =>
+        {
+            true
+        }
         _ => false,
     }
 }
@@ -244,7 +250,10 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
             let previous = end
                 .checked_sub(1)
                 .and_then(|previous| tokens.get(previous))?;
-            if !previous.chars().last().is_some_and(is_trailing_punct) {
+            let follows_punctuation = previous.chars().last().is_some_and(is_trailing_punct);
+            let follows_space_before_colon = previous.chars().all(char::is_whitespace)
+                && tokens.get(end + 1).is_some_and(|token| token == ":");
+            if !follows_punctuation && !follows_space_before_colon {
                 return None;
             }
             Some((
@@ -261,127 +270,5 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
 }
 
 #[cfg(test)]
-mod span_helper_props {
-    //! Property tests for inline span helper date matching.
-
-    use proptest::prelude::*;
-
-    use super::try_match_date_sequence;
-    use crate::wrap::inline::date_strategies::date_sequence_tokens_strategy;
-
-    fn prefixed_date_sequence_tokens_strategy() -> BoxedStrategy<Vec<String>> {
-        (
-            date_sequence_tokens_strategy(),
-            prop_oneof![Just('('), Just('['), Just('"')],
-        )
-            .prop_map(|(mut tokens, opener)| {
-                tokens[0].insert(0, opener);
-                tokens
-            })
-            .boxed()
-    }
-
-    fn non_whitespace_separator_strategy() -> BoxedStrategy<String> {
-        prop_oneof![Just("-"), Just("_"), Just("/"), Just(","), Just(".")]
-            .prop_map(str::to_string)
-            .boxed()
-    }
-
-    #[test]
-    fn prop_try_match_date_sequence_rejects_empty_slice() {
-        assert!(try_match_date_sequence(&[], 0).is_none());
-    }
-
-    proptest! {
-        #[test]
-        fn prop_try_match_date_sequence_accepts_all_valid_patterns(
-            tokens in date_sequence_tokens_strategy(),
-        ) {
-            prop_assert_eq!(try_match_date_sequence(&tokens, 0), Some(5));
-        }
-
-        #[test]
-        fn prop_try_match_date_sequence_accepts_leading_opener_on_first_component(
-            tokens in prefixed_date_sequence_tokens_strategy(),
-        ) {
-            prop_assert_eq!(try_match_date_sequence(&tokens, 0), Some(5));
-        }
-
-        #[test]
-        fn prop_try_match_date_sequence_span_end_equals_start_plus_five(
-            (date_tokens, offset) in (date_sequence_tokens_strategy(), 0usize..=8usize),
-        ) {
-            let mut tokens = vec!["filler".to_string(); offset];
-            tokens.extend(date_tokens);
-            prop_assert_eq!(try_match_date_sequence(&tokens, offset), Some(offset + 5));
-        }
-
-        #[test]
-        fn prop_try_match_date_sequence_rejects_two_part(
-            mut tokens in date_sequence_tokens_strategy(),
-        ) {
-            tokens.truncate(3);
-            prop_assert!(try_match_date_sequence(&tokens, 0).is_none());
-        }
-
-        #[test]
-        fn prop_try_match_date_sequence_rejects_non_whitespace_separator(
-            (mut tokens, separator) in (
-                date_sequence_tokens_strategy(),
-                non_whitespace_separator_strategy(),
-            ),
-        ) {
-            tokens[1] = separator;
-            prop_assert!(try_match_date_sequence(&tokens, 0).is_none());
-        }
-    }
-}
-
-#[cfg(test)]
-mod tracing_tests {
-    //! Traced-event tests for inline span helper instrumentation.
-
-    use tracing_test::traced_test;
-
-    use super::{date_token_span, try_match_date_sequence};
-
-    fn date_tokens() -> [String; 5] {
-        [
-            "25th".to_string(),
-            " ".to_string(),
-            "December".to_string(),
-            " ".to_string(),
-            "2025".to_string(),
-        ]
-    }
-
-    #[traced_test]
-    #[test]
-    fn try_match_date_sequence_emits_trace_event() {
-        let tokens = date_tokens();
-
-        let _ = try_match_date_sequence(&tokens, 0);
-
-        assert!(logs_contain("try_match_date_sequence"));
-    }
-
-    #[traced_test]
-    #[test]
-    fn try_match_date_sequence_logs_matched_pattern() {
-        let tokens = date_tokens();
-
-        let _ = try_match_date_sequence(&tokens, 0);
-
-        assert!(logs_contain("ordinal_day_month_year"));
-    }
-
-    #[traced_test]
-    #[test]
-    fn date_token_span_emits_trace_event() {
-        let tokens = date_tokens();
-
-        let _ = date_token_span(&tokens, 0);
-
-        assert!(logs_contain("date_token_span"));
-    }
-}
+#[path = "span_helper_tracing_tests.rs"]
+mod tracing_tests;

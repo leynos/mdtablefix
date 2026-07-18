@@ -1,8 +1,5 @@
-//! Higher-level parsing helpers for inline Markdown elements.
-//!
-//! Splitting these routines from the main tokenizer keeps `mod.rs` focused on
-//! public API surface area while giving the parsing logic a contained space for
-//! documentation and direct unit tests.
+//! Higher-level inline Markdown parsing helpers, isolated from tokenizer entry
+//! points so the parsing logic remains documented and directly testable.
 
 use tracing::{debug, trace};
 
@@ -14,13 +11,11 @@ use super::scanning::{collect_range, position_after_close, scan_while};
 /// immediately when they are not followed by a URL. Caret-labelled links with
 /// a following URL, such as `[^label](url)`, are still parsed as normal links.
 ///
-/// Handles nested parentheses within URLs by tracking the depth of opening and
-/// closing delimiters. Returns the parsed slice and the index after the closing
-/// parenthesis if one is found.
+/// Tracks nested URL parentheses and returns the parsed slice plus the index
+/// after the closing parenthesis, when present.
 ///
-/// The `#[tracing::instrument]` attribute records the entry, arguments, and
-/// return value automatically so callers can observe classification decisions
-/// without the function body managing its own span events.
+/// The `#[tracing::instrument]` attribute records content-free entry metadata,
+/// exposing classification decisions without document text.
 ///
 /// # Examples
 ///
@@ -30,7 +25,7 @@ use super::scanning::{collect_range, position_after_close, scan_while};
 /// assert_eq!(tok, "![alt](a(b)c)");
 /// assert_eq!(idx, text.len());
 /// ```
-#[tracing::instrument(level = "debug", skip(text), ret)]
+#[tracing::instrument(level = "debug", skip(text))]
 pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize) {
     let start = idx;
 
@@ -38,7 +33,10 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
         && (text_end == text.len() || !text[text_end..].starts_with('('))
     {
         if tracing::enabled!(tracing::Level::DEBUG) {
-            debug!(token = %&text[start..text_end], "footnote reference parsed");
+            debug!(
+                token_length = text[start..text_end].chars().count(),
+                "footnote reference parsed"
+            );
         }
         return (collect_range(text, start, text_end), text_end);
     }
@@ -55,13 +53,23 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
         if let Some(url_end) = parse_link_url(text, text_end) {
             if tracing::enabled!(tracing::Level::DEBUG) {
                 let is_image = text[start..].starts_with('!');
-                debug!(token = %&text[start..url_end], is_image, "link or image parsed");
+                debug!(
+                    token_length = text[start..url_end].chars().count(),
+                    is_image, "link or image parsed"
+                );
             }
             return (collect_range(text, start, url_end), url_end);
         }
         // Unbalanced URL: mirror the original behaviour by returning
         // everything through the end of the string.
         return (collect_range(text, start, text.len()), text.len());
+    }
+
+    if text_end < text.len()
+        && text[text_end..].starts_with('[')
+        && let Some(reference_end) = parse_link_text(text, text_end)
+    {
+        return (collect_range(text, start, reference_end), reference_end);
     }
 
     fallback_single_char(text, start)
@@ -97,7 +105,7 @@ fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
                 trace!(
                     start = idx,
                     end = cursor,
-                    token = %&text[idx..cursor],
+                    token_length = text[idx..cursor].chars().count(),
                     "footnote label span recognized"
                 );
             }
@@ -211,6 +219,7 @@ pub(super) fn handle_backtick_fence(text: &str, start_idx: usize) -> (String, us
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
+    use rstest::rstest;
 
     use super::*;
 
@@ -300,6 +309,16 @@ mod tests {
         assert_eq!(idx, token.len());
     }
 
+    #[rstest]
+    fn parse_link_or_image_preserves_reference_style_link() {
+        let input = "[trybuild][implicit-fixture-trybuild]";
+
+        assert_eq!(
+            parse_link_or_image(input, 0),
+            (input.to_string(), input.len())
+        );
+    }
+
     proptest! {
         #[test]
         fn parse_link_or_image_preserves_footnote_references_with_escaped_brackets(
@@ -335,7 +354,8 @@ mod tests {
         fn parse_link_or_image_logs_footnote_reference() {
             let _ = parse_link_or_image("[^4] tail", 0);
             assert!(logs_contain("footnote reference parsed"));
-            assert!(logs_contain("token="));
+            assert!(logs_contain("token_length=4"));
+            assert!(!logs_contain("[^4]"));
         }
 
         #[traced_test]
@@ -343,7 +363,8 @@ mod tests {
         fn parse_link_or_image_logs_link_parsed() {
             let _ = parse_link_or_image("[link](url)", 0);
             assert!(logs_contain("link or image parsed"));
-            assert!(logs_contain("token="));
+            assert!(logs_contain("token_length=11"));
+            assert!(!logs_contain("[link](url)"));
             assert!(logs_contain("is_image="));
         }
 
@@ -363,7 +384,8 @@ mod tests {
             assert!(logs_contain("footnote label span recognized"));
             assert!(logs_contain("start="));
             assert!(logs_contain("end="));
-            assert!(logs_contain("token="));
+            assert!(logs_contain("token_length=4"));
+            assert!(!logs_contain("[^4]"));
         }
 
         #[traced_test]

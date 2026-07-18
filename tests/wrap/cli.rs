@@ -28,6 +28,14 @@ fn test_cli_wrap_option() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[test]
+fn test_cli_wrap_rejects_parameter() -> Result<(), Box<dyn std::error::Error>> {
+    run_cli_with_stdin(&["--wrap=80"], "alpha beta\n")?
+        .failure()
+        .stderr(predicates::str::contains("unexpected value '80'"));
+    Ok(())
+}
+
 /// Verifies `--wrap` reflows Markdown paragraphs while respecting inline code spans.
 #[rstest(
     paragraph,

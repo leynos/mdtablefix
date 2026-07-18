@@ -131,6 +131,25 @@ fn wrap_preserving_code_splits_after_consecutive_whitespace() {
 }
 
 #[test]
+fn wrap_preserving_code_keeps_colon_suffixed_footnote_reference_with_prose() {
+    let input = concat!(
+        "The Lighthouse \"Progressive Web App\" category specifically checks for the technical ",
+        "requirements of a PWA. The audits are grouped into subcategories [^96]:",
+    );
+    let lines = wrap_preserving_code(input, 80);
+
+    assert_eq!(
+        lines,
+        vec![
+            "The Lighthouse \"Progressive Web App\" category specifically checks for the",
+            "technical requirements of a PWA. The audits are grouped into",
+            "subcategories [^96]:",
+        ]
+    );
+    assert!(lines.iter().all(|line| !line.starts_with("[^96]:")));
+}
+
+#[test]
 fn wrap_preserving_code_couples_opening_paren_before_inline_code() {
     let text = concat!(
         "- `src/cli/mod.rs` (240 lines): defines the `Cli` struct with ",
@@ -171,6 +190,27 @@ fn wrap_preserving_code_keeps_opening_bracket_with_inline_code(
             );
         }
     }
+}
+
+#[test]
+fn wrap_preserving_code_keeps_reference_link_opening_bracket_with_label() {
+    let input = concat!(
+        "Implicit fixture injection removes the need for attributes in most cases. ",
+        "[user guide][implicit-fixture-guide] · [trybuild][implicit-fixture-trybuild]",
+    );
+    let lines = wrap_preserving_code(input, 80);
+
+    assert_eq!(
+        lines,
+        vec![
+            "Implicit fixture injection removes the need for attributes in most cases.",
+            concat!(
+                "[user guide][implicit-fixture-guide] · ",
+                "[trybuild][implicit-fixture-trybuild]",
+            ),
+        ]
+    );
+    assert!(lines.iter().all(|line| !line.ends_with('[')));
 }
 
 fn citation_link_starts(expected_citation: &str) -> Vec<String> {
