@@ -363,13 +363,13 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     // newline emission without borrowing issues from a `for` loop over
     // `&str` references.
     while let Some(line) = lines.next() {
-        if fence_tracker.observe(line, 0) {
+        if fence_tracker.observe_line(line) {
             tokens.push(Token::Fence(line));
             push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
             continue;
         }
 
-        if fence_tracker.in_fence(0) {
+        if fence_tracker.in_fence_for_line(line) {
             tokens.push(Token::Fence(line));
             push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
             continue;

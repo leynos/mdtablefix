@@ -13,7 +13,7 @@ use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use regex::Regex;
 use tracing::debug;
 
-use crate::wrap::is_fence;
+use crate::wrap::FenceTracker;
 
 /// Matches an HTML `<table>` tag at the start of a Markdown block, ignoring case.
 static TABLE_START_RE: LazyLock<Regex> = lazy_regex!(
@@ -329,19 +329,18 @@ pub(crate) fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
 pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut html_state = HtmlTableState::default();
-    let mut in_code = false;
+    let mut fences = FenceTracker::new();
 
     for line in lines {
-        if is_fence(line).is_some() {
+        if fences.observe_line(line) {
             if html_state.in_html() {
                 html_state.flush_raw(&mut out);
             }
-            in_code = !in_code;
             out.push(line.clone());
             continue;
         }
 
-        if in_code {
+        if fences.in_fence_for_line(line) {
             out.push(line.clone());
             continue;
         }

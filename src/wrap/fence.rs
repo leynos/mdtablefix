@@ -2,7 +2,10 @@
 
 use regex::Regex;
 
-use super::paragraph::{ParagraphState, ParagraphWriter};
+use super::{
+    BlockquotePrefix,
+    paragraph::{ParagraphState, ParagraphWriter},
+};
 
 pub(super) static FENCE_RE: std::sync::LazyLock<Regex> =
     // Capture: indent, fence run of 3+ backticks/tilde, and the full info string (incl. leading
@@ -26,20 +29,45 @@ pub(super) static FENCE_RE: std::sync::LazyLock<Regex> =
 /// assert_eq!(is_fence("```rust"), Some(("", "```", "rust")));
 /// assert_eq!(is_fence("``` rust"), Some(("", "```", " rust")));
 /// assert_eq!(is_fence("``` rust linenums"), Some(("", "```", " rust linenums")));
+/// assert_eq!(is_fence("> > ```rust"), Some(("> > ", "```", "rust")));
 /// assert!(is_fence("not a fence").is_none());
 /// ```
 #[doc(hidden)]
 #[must_use]
 #[rustfmt::skip]
 pub fn is_fence(line: &str) -> Option<(&str, &str, &str)> {
-    FENCE_RE.captures(line).map(|cap| {
-        let indent = cap.get(1).map_or("", |m| m.as_str());
+    let context = FenceLine::parse(line);
+    FENCE_RE.captures(context.inner).map(|cap| {
+        let inner_indent = cap.get(1).map_or("", |m| m.as_str());
+        let indent = &line[..context.prefix_len + inner_indent.len()];
         let fence  = cap.get(2).map_or("", |m| m.as_str());
         let info   = cap.get(3).map_or("", |m| m.as_str());
         (indent, fence, info)
     })
 }
 
+struct FenceLine<'a> {
+    inner: &'a str,
+    depth: usize,
+    prefix_len: usize,
+}
+
+impl<'a> FenceLine<'a> {
+    fn parse(line: &'a str) -> Self {
+        BlockquotePrefix::parse(line).map_or(
+            Self {
+                inner: line,
+                depth: 0,
+                prefix_len: 0,
+            },
+            |prefix| Self {
+                inner: prefix.inner(),
+                depth: prefix.depth(),
+                prefix_len: prefix.raw_prefix().len(),
+            },
+        )
+    }
+}
 /// Handle a potential fence line, updating state and emitting the line when needed.
 ///
 /// Returns `true` if the line was processed as a fence.
@@ -127,11 +155,49 @@ impl FenceTracker {
         true
     }
 
+    /// Update the tracker from a source line, including any blockquote prefix.
+    ///
+    /// This compatibility boundary is intended for processing stages that
+    /// receive raw Markdown rather than the prefix-stripped input used by
+    /// `wrap_text`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mdtablefix::wrap::FenceTracker;
+    ///
+    /// let mut tracker = FenceTracker::new();
+    /// assert!(tracker.observe_line("> > ```rust"));
+    /// assert!(tracker.in_fence(2));
+    /// ```
+    #[must_use]
+    pub fn observe_line(&mut self, line: &str) -> bool {
+        let context = FenceLine::parse(line);
+        self.observe(context.inner, context.depth)
+    }
+
     /// Check whether the tracker is currently inside a fenced block.
     #[must_use]
     pub fn in_fence(&self, current_depth: usize) -> bool {
         self.state
             .is_some_and(|(_marker_ch, _marker_len, open_depth)| current_depth >= open_depth)
+    }
+
+    /// Check fence state at the blockquote depth represented by a source line.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mdtablefix::wrap::FenceTracker;
+    ///
+    /// let mut tracker = FenceTracker::new();
+    /// assert!(tracker.observe_line("> ```"));
+    /// assert!(tracker.in_fence_for_line("> code"));
+    /// assert!(!tracker.in_fence_for_line("outside the quote"));
+    /// ```
+    #[must_use]
+    pub fn in_fence_for_line(&self, line: &str) -> bool {
+        self.in_fence(FenceLine::parse(line).depth)
     }
 }
 

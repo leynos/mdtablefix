@@ -94,7 +94,7 @@ impl ProcessBuffer {
     }
 
     pub(super) fn handle_fence_line(&mut self, line: &str, fences: &mut FenceTracker) -> bool {
-        if !fences.observe(line, 0) {
+        if !fences.observe_line(line) {
             return false;
         }
 

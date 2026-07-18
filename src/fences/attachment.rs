@@ -99,7 +99,7 @@ where
             }
             if let Some(fence_line) = lines.next() {
                 out.push(attach_specifier_to_fence(fence_line, specifier, indent));
-                let _ = tracker.observe(fence_line, 0);
+                let _ = tracker.observe_line(fence_line);
             }
             AttachmentOutcome::Attached
         }

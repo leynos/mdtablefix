@@ -211,12 +211,22 @@ that ADR before adding new date forms or changing the span-grouping boundary.
 
 The wrapping pipeline for `--wrap` is:
 
+`wrap_text` parses each leading blockquote with `BlockquotePrefix` before any
+block classification. The abstraction exposes the source prefix, nesting depth,
+and stripped inner content: downstream classification and prefix-aware wrapping
+receive the inner content, while emitted lines retain the source prefix.
+`FenceTracker` receives the same inner content and depth, so fences close only
+at their opening depth or when the blockquote depth decreases. Processing
+stages that receive raw Markdown use `observe_line` and `in_fence_for_line`;
+these compatibility helpers parse `BlockquotePrefix` before applying the same
+depth-aware tracking.
+
 1. **Block classification.** `classify_block` in `src/wrap/block.rs` inspects
-   each input line and decides whether it should pass through verbatim or enter
-   the paragraph wrapper. `wrap_text` injects a shared [`LinkReferenceMatcher`]
-   into each call. Fenced code blocks, indented code blocks, headings, tables,
-   directives, link reference definitions, and blank lines stop paragraph
-   accumulation.
+   each stripped inner line and decides whether it should pass through verbatim
+   or enter the paragraph wrapper. `wrap_text` injects a shared
+   [`LinkReferenceMatcher`] into each call. Fenced code blocks, indented code
+   blocks, headings, tables, directives, link reference definitions, and blank
+   lines stop paragraph accumulation.
 
 2. **Prefix-aware paragraph handling.** `ParagraphWriter` in
    `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.

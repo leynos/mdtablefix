@@ -136,8 +136,13 @@ fn wraps_a_list_item_inside_a_blockquote() {
 
     let output = process_stream(&input);
 
-    assert!(output[0].starts_with("> - "));
-    assert!(output[1..].iter().all(|line| line.starts_with(">   ")));
+    assert_eq!(
+        output,
+        lines_vec![
+            "> - This list item contains enough prose to wrap onto multiple lines while",
+            ">   retaining its compound prefix.",
+        ]
+    );
 }
 
 #[test]
@@ -149,6 +154,11 @@ fn wraps_an_ordered_list_inside_a_nested_blockquote() {
 
     let output = process_stream(&input);
 
-    assert!(output[0].starts_with("> > 1. "));
-    assert!(output[1..].iter().all(|line| line.starts_with("> >    ")));
+    assert_eq!(
+        output,
+        lines_vec![
+            "> > 1. This ordered item contains enough prose to wrap while preserving both",
+            "> >    quote levels on every continuation.",
+        ]
+    );
 }

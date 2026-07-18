@@ -530,7 +530,7 @@ flowchart TD
     L --> M
 
     M --> N{More input lines?}
-    N -->|Yes| B
+    N -->|Yes| P
     N -->|No| O[Flush remaining paragraph and finish]
 ```
 

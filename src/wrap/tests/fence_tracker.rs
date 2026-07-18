@@ -5,7 +5,7 @@
 
 use rstest::rstest;
 
-use crate::wrap::FenceTracker;
+use crate::wrap::{FenceTracker, is_fence};
 
 #[test]
 fn fence_tracker_new_starts_outside_fence() {
@@ -146,4 +146,30 @@ fn fence_tracker_remains_open_for_deeper_content() {
     assert!(tracker.observe("```rust", 1));
     assert!(!tracker.observe("plain text", 2));
     assert!(tracker.in_fence(2));
+}
+
+#[rstest]
+#[case("> ```rust", "> ", 1)]
+#[case("> > ~~~~toml", "> > ", 2)]
+#[case(">>```", ">>", 2)]
+fn raw_blockquote_fences_preserve_prefix_and_depth(
+    #[case] opening: &str,
+    #[case] expected_prefix: &str,
+    #[case] depth: usize,
+) {
+    let (prefix, _marker, _info) = is_fence(opening).expect("quoted fence should be recognized");
+    assert_eq!(prefix, expected_prefix);
+
+    let mut tracker = FenceTracker::new();
+    assert!(tracker.observe_line(opening));
+    assert!(tracker.in_fence_for_line(opening));
+    assert!(tracker.in_fence(depth));
+}
+
+#[test]
+fn raw_blockquote_fence_closes_when_quote_depth_decreases() {
+    let mut tracker = FenceTracker::new();
+    assert!(tracker.observe_line("> > ```rust"));
+    assert!(!tracker.observe_line("> ordinary quote text"));
+    assert!(!tracker.in_fence_for_line("> ordinary quote text"));
 }
