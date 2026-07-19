@@ -159,7 +159,7 @@ pub(crate) fn parse_open_code_span(text: &str) -> Option<(usize, &str)> {
 /// backslashes.
 ///
 /// An odd number of preceding backslashes means the byte is escaped.
-pub(super) fn has_odd_backslash_escape_bytes(bytes: &[u8], mut idx: usize) -> bool {
+pub(crate) fn has_odd_backslash_escape_bytes(bytes: &[u8], mut idx: usize) -> bool {
     let mut count = 0;
     while idx > 0 {
         idx -= 1;

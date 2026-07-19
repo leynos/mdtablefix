@@ -41,12 +41,12 @@ use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 /// Re-export these so callers of [`crate::textproc`] can implement custom
 /// transformations without depending on internal modules.
 pub use tokenize::Token;
-pub(crate) use tokenize::link_or_image_span;
 #[doc(inline)]
 pub use tokenize::tokenize_markdown;
 // Re-exported for unit tests; not used in production code.
 #[cfg(test)]
 pub(crate) use tokenize::{continuation_begins_with_closing_fence, has_unclosed_code_span};
+pub(crate) use tokenize::{has_odd_backslash_escape_bytes, link_or_image_span};
 
 // Permit GFM task list markers with flexible spacing and missing post-marker
 // spaces in Markdown.

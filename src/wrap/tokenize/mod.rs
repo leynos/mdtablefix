@@ -27,14 +27,9 @@ use parsing::{
 pub(crate) use scanning::continuation_begins_with_closing_fence;
 #[cfg(test)]
 pub(crate) use scanning::has_unclosed_code_span;
-use scanning::{
-    bracket_follows_escaped_bang,
-    collect_range,
-    has_odd_backslash_escape_bytes,
-    scan_code_suffix_end,
-    scan_while,
-};
+use scanning::{bracket_follows_escaped_bang, collect_range, scan_code_suffix_end, scan_while};
 pub(crate) use scanning::{
+    has_odd_backslash_escape_bytes,
     opening_fence_run_len,
     parse_open_code_span,
     position_after_close,

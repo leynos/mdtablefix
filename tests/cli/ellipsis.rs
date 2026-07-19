@@ -89,6 +89,7 @@ fn preserves_literal_regions() {
         "See [closing...](path\\)v1...v2).\n",
         "Visit https://example.com/v1...v2 directly.\n",
         "Visit <https://example.com/v1...v2> as an autolink.\n",
+        "Escaped \\<https://example.com/v1...v2> normalizes.\n",
         "Open ./fixtures/.../expected.txt.\n",
     );
     let expected = concat!(
@@ -104,6 +105,7 @@ fn preserves_literal_regions() {
         "See [closing...](path\\)v1...v2).\n",
         "Visit https://example.com/v1...v2 directly.\n",
         "Visit <https://example.com/v1...v2> as an autolink.\n",
+        "Escaped \\<https://example.com/v1…v2> normalizes.\n",
         "Open ./fixtures/.../expected.txt.\n",
     );
 

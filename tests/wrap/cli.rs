@@ -364,7 +364,7 @@ fn combined_flags_preserve_generated_fenced_bodies() {
         .expect("generated fenced blocks are preserved by combined flags");
 }
 
-/// Whitespace-only fence suffixes are absent languages and normalize away.
+/// Whitespace-only fence suffixes are absent info strings and normalize away.
 #[test]
 fn combined_flags_normalize_whitespace_only_fence_suffix() -> Result<(), Box<dyn std::error::Error>>
 {

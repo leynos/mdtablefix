@@ -325,6 +325,13 @@ mod tests {
         assert_eq!(replace_ellipsis(&input), expected);
     }
 
+    #[test]
+    fn normalizes_escaped_autolink() {
+        let input = vec![r"\<https://example.com/a...b>".to_string()];
+        let expected = vec![r"\<https://example.com/a…b>".to_string()];
+        assert_eq!(replace_ellipsis(&input), expected);
+    }
+
     #[tracing_test::traced_test]
     #[test]
     fn preservation_traces_omit_document_content() {

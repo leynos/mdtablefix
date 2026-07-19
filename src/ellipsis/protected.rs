@@ -9,7 +9,7 @@ use std::ops::Range;
 
 use tracing::{Level, trace};
 
-use crate::wrap::link_or_image_span;
+use crate::wrap::{has_odd_backslash_escape_bytes, link_or_image_span};
 
 pub(super) fn literal_spans(text: &str) -> Vec<Range<usize>> {
     let mut spans = markdown_spans(text);
@@ -34,6 +34,9 @@ fn markdown_spans(text: &str) -> Vec<Range<usize>> {
 }
 
 fn autolink_span(text: &str, start: usize) -> Option<Range<usize>> {
+    if has_odd_backslash_escape_bytes(text.as_bytes(), start) {
+        return None;
+    }
     let relative_end = text[start..].find('>')?;
     let end = start + relative_end + '>'.len_utf8();
     let content = &text[start + '<'.len_utf8()..end - '>'.len_utf8()];
@@ -117,7 +120,8 @@ fn is_semantic_token(token: &str) -> bool {
 }
 
 fn looks_like_bare_url(token: &str) -> bool {
-    token.contains("://") || token.trim_start_matches(is_wrapper).starts_with("www.")
+    let token = token.trim_start_matches(is_wrapper);
+    is_uri_autolink(token) || token.starts_with("www.")
 }
 
 fn looks_like_path(token: &str) -> bool {
@@ -165,6 +169,7 @@ mod tests {
     #[case::prose("wait...", Vec::<&str>::new())]
     #[case::link("[wait...](target)", vec!["[wait...](target)"])]
     #[case::url("see https://example.com/a...b", vec!["https://example.com/a...b"])]
+    #[case::escaped_autolink(r"\<https://example.com/a...b>", Vec::<&str>::new())]
     #[case::path("open ./a/.../b next", vec!["./a/.../b"])]
     #[case::slash_prose("choose and/or... input/output...", Vec::<&str>::new())]
     fn finds_literal_spans(#[case] input: &str, #[case] expected: Vec<&str>) {
