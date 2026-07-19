@@ -48,7 +48,7 @@ impl Default for IndentedCodeTracker {
 }
 
 impl IndentedCodeTracker {
-    fn observe(&mut self, line: &str) -> bool {
+    fn observe(&mut self, line: &str, completes_leaf_block: bool) -> bool {
         if line.trim().is_empty() {
             self.may_start_block = true;
             return self.is_in_block;
@@ -59,7 +59,9 @@ impl IndentedCodeTracker {
         let belongs_to_block = is_indented && (self.is_in_block || self.may_start_block);
 
         self.is_in_block = belongs_to_block;
-        self.may_start_block = false;
+        // A paragraph prevents indented code from starting on the next line.
+        // Complete leaf blocks, by contrast, leave no paragraph open.
+        self.may_start_block = completes_leaf_block;
         if belongs_to_block {
             trace!(
                 width = indent_width,
@@ -69,6 +71,22 @@ impl IndentedCodeTracker {
         }
         belongs_to_block
     }
+
+    fn observe_completed_block(&mut self) {
+        self.is_in_block = false;
+        self.may_start_block = true;
+    }
+}
+
+fn completes_leaf_block(block_kind: Option<BlockKind>) -> bool {
+    matches!(
+        block_kind,
+        Some(
+            BlockKind::Heading
+                | BlockKind::LinkReferenceDefinition
+                | BlockKind::MarkdownlintDirective
+        )
+    )
 }
 
 fn replace_ellipsis_in_prose(line: &str) -> String {
@@ -118,15 +136,16 @@ pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
     lines
         .iter()
         .map(|line| {
-            let is_indented_code = indented_code_tracker.observe(line);
             let is_fence = fence_tracker.observe(line);
             if is_fence || fence_tracker.in_fence() {
+                indented_code_tracker.observe_completed_block();
                 link_title_window.observe_fence_context();
                 return line.clone();
             }
 
             let continuation_outcome = link_title_window.observe_next_line(line, link_matcher);
             if continuation_outcome == Some(LinkTitleWindowOutcome::EmitVerbatim) {
+                indented_code_tracker.observe_completed_block();
                 trace!(
                     kind = ?continuation_outcome,
                     reason = "link_reference_continuation",
@@ -136,6 +155,8 @@ pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
             }
 
             let block_kind = classify_block(line, link_matcher);
+            let is_indented_code =
+                indented_code_tracker.observe(line, completes_leaf_block(block_kind));
             if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
                 link_title_window.observe_definition(line, link_matcher);
                 trace!(
@@ -208,6 +229,23 @@ mod tests {
         let input = vec!["paragraph".to_string(), "    prose...".to_string()];
         let expected = vec!["paragraph".to_string(), "    prose…".to_string()];
         assert_eq!(replace_ellipsis(&input), expected);
+    }
+
+    #[test]
+    fn heading_allows_following_indented_code() {
+        let input = vec!["# Heading".to_string(), "    literal...".to_string()];
+        assert_eq!(replace_ellipsis(&input), input);
+    }
+
+    #[test]
+    fn closed_fence_allows_following_indented_code() {
+        let input = vec![
+            "```".to_string(),
+            "fenced...".to_string(),
+            "```".to_string(),
+            "    literal...".to_string(),
+        ];
+        assert_eq!(replace_ellipsis(&input), input);
     }
 
     #[rstest::rstest]

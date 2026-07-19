@@ -156,12 +156,12 @@ owned solely by the ellipsis pass: it preserves top-level code blocks that
 begin at the document boundary or after a blank line, including interior blank
 lines, without changing the public tokenizer's token variants. Lines classified
 as code are forwarded byte-for-byte, while prose lines continue through the
-shared inline tokenizer so code spans remain opaque.
+shared inline tokenizer, so code spans remain opaque.
 
 Within prose tokens, the ellipsis-owned literal-region scanner protects inline
 links and images, autolinks, bare URLs, and filesystem-like tokens. It reuses
 the wrapping parser's balanced link-destination boundaries, then returns merged
-source ranges so protected bytes are copied directly and only the intervening
+source ranges, so protected bytes are copied directly and only the intervening
 prose is normalized. Link reference definition lines are classified by the
 shared block classifier and preserved in full. The pass also uses the wrapping
 parser's `LinkTitleWindow` state machine to preserve split destination and

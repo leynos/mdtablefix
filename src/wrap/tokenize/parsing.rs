@@ -1,21 +1,22 @@
-//! Higher-level inline Markdown parsing helpers, isolated from tokenizer entry
-//! points so the parsing logic remains documented and directly testable.
+//! Higher-level inline Markdown parsing helpers, isolated from tokenizer entry points.
 
 use tracing::{debug, trace};
 
-use super::scanning::{collect_range, position_after_close, scan_while};
+use super::scanning::{
+    collect_range,
+    has_odd_backslash_escape_bytes,
+    position_after_close,
+    scan_while,
+};
 
 /// Parse a Markdown link or image starting at `i`.
 ///
-/// Recognizes GFM footnote references of the form `[^label]` and returns them
-/// immediately when they are not followed by a URL. Caret-labelled links with
-/// a following URL, such as `[^label](url)`, are still parsed as normal links.
+/// Recognizes GFM footnote references of the form `[^label]` when they are not
+/// followed by a URL. Caret-labelled links such as `[^label](url)` remain links.
 ///
-/// Tracks nested URL parentheses and returns the parsed slice plus the index
-/// after the closing parenthesis, when present.
+/// Tracks nested URL parentheses and returns the parsed slice plus its end index.
 ///
-/// The `#[tracing::instrument]` attribute records content-free entry metadata,
-/// exposing classification decisions without document text.
+/// Instrumentation records content-free metadata without exposing document text.
 ///
 /// # Examples
 ///
@@ -146,10 +147,11 @@ pub(super) fn parse_link_url(text: &str, mut idx: usize) -> Option<usize> {
         let Some(ch) = text[idx..].chars().next() else {
             break;
         };
+        let is_escaped = has_odd_backslash_escape_bytes(text.as_bytes(), idx);
         idx += ch.len_utf8();
         match ch {
-            '(' => depth += 1,
-            ')' => {
+            '(' if !is_escaped => depth += 1,
+            ')' if !is_escaped => {
                 depth -= 1;
                 if depth == 0 {
                     return Some(idx);
@@ -244,7 +246,6 @@ mod tests {
         assert_eq!(token, "![alt](path(a(b)c))");
         assert_eq!(idx, token.len());
     }
-
     #[test]
     fn parse_link_or_image_falls_back_on_malformed_input() {
         let text = "[broken";
@@ -252,7 +253,6 @@ mod tests {
         assert_eq!(token, "[");
         assert_eq!(idx, "[".len());
     }
-
     #[test]
     fn parse_link_or_image_handles_deeply_nested_parentheses() {
         let text = "[link](url(a(b(c)d)e)) tail";
