@@ -1,10 +1,11 @@
-//! Property tests for date-sequence matching in the inline span helpers.
+//! Test-only property-test companion to the `span_helpers` module.
 //!
-//! This test-only module exercises `span_helpers::try_match_date_sequence`
-//! directly, pairing each generated valid date with equal-length near-misses
-//! so the matcher must validate token meaning and order rather than only span
-//! length. It composes the shared inline date strategies with local separator,
-//! opener, and offset generators used specifically at the span-helper boundary.
+//! It exercises `span_helpers::try_match_date_sequence` with the shared date
+//! component generators from `date_strategies`, pairing each generated valid
+//! date with equal-length near-misses. This companion exists to verify the
+//! internal matcher contract directly: token meaning, order, separators, and
+//! opening punctuation must determine a match rather than five-token length
+//! alone.
 
 use proptest::prelude::*;
 
