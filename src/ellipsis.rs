@@ -201,50 +201,23 @@ mod tests {
         assert_eq!(replace_ellipsis(&input), expected);
     }
 
-    #[test]
-    fn ignores_indented_code_blocks() {
-        let input = vec![
-            "Expected output:".to_string(),
-            String::new(),
-            "    running 2 tests".to_string(),
-            "    test foo ... ok".to_string(),
-            String::new(),
-            "    ...".to_string(),
-            "after...".to_string(),
-        ];
-        let expected = vec![
-            "Expected output:".to_string(),
-            String::new(),
-            "    running 2 tests".to_string(),
-            "    test foo ... ok".to_string(),
-            String::new(),
-            "    ...".to_string(),
-            "after…".to_string(),
-        ];
+    #[rstest::rstest]
+    #[case::code_block(
+        &["Expected output:", "", "    running 2 tests", "    test foo ... ok", "", "    ...", "after..."],
+        &["Expected output:", "", "    running 2 tests", "    test foo ... ok", "", "    ...", "after…"]
+    )]
+    #[case::paragraph_interruption(&["paragraph", "    prose..."], &["paragraph", "    prose…"])]
+    fn transforms_indented_lines(#[case] input: &[&str], #[case] expected: &[&str]) {
+        let input = input.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let expected = expected.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert_eq!(replace_ellipsis(&input), expected);
     }
 
-    #[test]
-    fn indented_code_cannot_interrupt_a_paragraph() {
-        let input = vec!["paragraph".to_string(), "    prose...".to_string()];
-        let expected = vec!["paragraph".to_string(), "    prose…".to_string()];
-        assert_eq!(replace_ellipsis(&input), expected);
-    }
-
-    #[test]
-    fn heading_allows_following_indented_code() {
-        let input = vec!["# Heading".to_string(), "    literal...".to_string()];
-        assert_eq!(replace_ellipsis(&input), input);
-    }
-
-    #[test]
-    fn closed_fence_allows_following_indented_code() {
-        let input = vec![
-            "```".to_string(),
-            "fenced...".to_string(),
-            "```".to_string(),
-            "    literal...".to_string(),
-        ];
+    #[rstest::rstest]
+    #[case::heading(&["# Heading", "    literal..."])]
+    #[case::closed_fence(&["```", "fenced...", "```", "    literal..."])]
+    fn completed_blocks_allow_following_indented_code(#[case] input: &[&str]) {
+        let input = input.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert_eq!(replace_ellipsis(&input), input);
     }
 

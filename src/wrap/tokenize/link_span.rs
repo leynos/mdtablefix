@@ -46,6 +46,7 @@ mod tests {
     #[case::escaped_image(r"\![alt](destination)", 2, None)]
     #[case::escaped_open_paren(r"[label](destination\(part)", 0, Some(0..26))]
     #[case::escaped_close_paren(r"[label](destination\)part)", 0, Some(0..26))]
+    #[case::escaped_label_bracket(r"[a\]](destination...)", 0, Some(0..21))]
     fn locates_complete_span(
         #[case] input: &str,
         #[case] start: usize,

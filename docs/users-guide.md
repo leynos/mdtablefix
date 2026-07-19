@@ -37,8 +37,9 @@ sequence.
 
 Literal dot sequences in inline code, fenced code blocks, and four-space or
 tab-indented code blocks remain unchanged. An indented code block must start at
-the beginning of the document or after a blank line, matching Markdown's rule
-that it cannot interrupt a paragraph.
+the document boundary or after a blank line, heading, closed fenced block, link
+reference definition, or markdownlint directive. This matches Markdown's rule
+that an indented code block cannot interrupt a paragraph.
 
 The flag also preserves `...` where the dots are semantically significant:
 inline links and images, autolinks, bare URLs, link reference definitions and

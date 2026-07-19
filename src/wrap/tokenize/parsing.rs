@@ -2,12 +2,7 @@
 
 use tracing::{debug, trace};
 
-use super::scanning::{
-    collect_range,
-    has_odd_backslash_escape_bytes,
-    position_after_close,
-    scan_while,
-};
+use super::scanning::{collect_range, position_after_close, scan_while};
 
 /// Parse a Markdown link or image starting at `i`.
 ///
@@ -15,7 +10,6 @@ use super::scanning::{
 /// followed by a URL. Caret-labelled links such as `[^label](url)` remain links.
 ///
 /// Tracks nested URL parentheses and returns the parsed slice plus its end index.
-///
 /// Instrumentation records content-free metadata without exposing document text.
 ///
 /// # Examples
@@ -129,12 +123,16 @@ pub(super) fn parse_link_text(text: &str, idx: usize) -> Option<usize> {
         return None;
     }
     let mut cursor = idx + '['.len_utf8();
-    cursor = scan_while(text, cursor, |c| c != ']');
-    if cursor < text.len() && text[cursor..].starts_with(']') {
-        Some(cursor + ']'.len_utf8())
-    } else {
-        None
+    let mut preceding_backslash_is_odd = false;
+    while cursor < text.len() {
+        let ch = text[cursor..].chars().next()?;
+        cursor += ch.len_utf8();
+        if ch == ']' && !preceding_backslash_is_odd {
+            return Some(cursor);
+        }
+        preceding_backslash_is_odd = ch == '\\' && !preceding_backslash_is_odd;
     }
+    None
 }
 
 pub(super) fn parse_link_url(text: &str, mut idx: usize) -> Option<usize> {
@@ -143,11 +141,12 @@ pub(super) fn parse_link_url(text: &str, mut idx: usize) -> Option<usize> {
     }
     idx += '('.len_utf8();
     let mut depth = 1;
+    let mut preceding_backslash_is_odd = false;
     while idx < text.len() {
         let Some(ch) = text[idx..].chars().next() else {
             break;
         };
-        let is_escaped = has_odd_backslash_escape_bytes(text.as_bytes(), idx);
+        let is_escaped = preceding_backslash_is_odd;
         idx += ch.len_utf8();
         match ch {
             '(' if !is_escaped => depth += 1,
@@ -159,6 +158,7 @@ pub(super) fn parse_link_url(text: &str, mut idx: usize) -> Option<usize> {
             }
             _ => {}
         }
+        preceding_backslash_is_odd = ch == '\\' && !preceding_backslash_is_odd;
     }
     None
 }
