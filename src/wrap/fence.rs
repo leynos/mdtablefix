@@ -1,6 +1,7 @@
 //! Fenced code block helpers.
 
 use regex::Regex;
+use tracing::{debug, trace};
 
 use super::{
     BlockquotePrefix,
@@ -125,10 +126,17 @@ impl FenceTracker {
     /// would indicate the regex is inconsistent with Markdown fence rules.
     #[must_use]
     pub fn observe(&mut self, line: &str, depth: usize) -> bool {
-        if self
-            .state
-            .is_some_and(|(_open_ch, _open_len, open_depth)| depth < open_depth)
+        if let Some((_open_ch, open_marker_len, open_depth)) = self.state
+            && depth < open_depth
         {
+            debug!(
+                transition = "implicit_close",
+                reason = "blockquote_depth_decreased",
+                depth,
+                open_depth,
+                open_marker_len,
+                "fence state changed"
+            );
             self.state = None;
         }
 
@@ -144,10 +152,36 @@ impl FenceTracker {
             Some((open_ch, open_len, open_depth))
                 if depth == open_depth && marker_ch == open_ch && marker_len >= open_len =>
             {
+                debug!(
+                    transition = "matching_close",
+                    depth,
+                    open_depth,
+                    marker_len,
+                    open_marker_len = open_len,
+                    "fence state changed"
+                );
                 self.state = None;
             }
-            Some(_) => {}
+            Some((_open_ch, open_marker_len, open_depth)) => {
+                trace!(
+                    transition = "unchanged",
+                    reason = "incompatible_active_opener",
+                    depth,
+                    open_depth,
+                    marker_len,
+                    open_marker_len,
+                    "fence marker did not change state"
+                );
+            }
             None => {
+                debug!(
+                    transition = "open",
+                    depth,
+                    open_depth = depth,
+                    marker_len,
+                    open_marker_len = marker_len,
+                    "fence state changed"
+                );
                 self.state = Some((marker_ch, marker_len, depth));
             }
         }

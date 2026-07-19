@@ -1,6 +1,7 @@
 //! Unit tests for semantic blockquote-prefix parsing.
 
 use rstest::rstest;
+use tracing_test::traced_test;
 
 use crate::wrap::BlockquotePrefix;
 
@@ -28,4 +29,33 @@ fn parses_blockquote_prefixes(
 #[case::fence("```rust")]
 fn rejects_non_blockquote_lines(#[case] line: &str) {
     assert_eq!(BlockquotePrefix::parse(line), None);
+}
+
+#[traced_test]
+#[test]
+fn successful_parse_logs_content_free_dimensions() {
+    let input = "> private blockquote payload";
+    let parsed = BlockquotePrefix::parse(input);
+
+    assert!(parsed.is_some());
+    assert!(logs_contain("blockquote prefix parsed"));
+    assert!(logs_contain(&format!("line_len={}", input.len())));
+    assert!(logs_contain("prefix_len=2"));
+    assert!(logs_contain("depth=1"));
+    assert!(logs_contain("inner_len=26"));
+    assert!(!logs_contain(input));
+    assert!(!logs_contain("private blockquote payload"));
+}
+
+#[traced_test]
+#[test]
+fn rejected_parse_logs_content_free_reason() {
+    let input = "private ordinary payload";
+    let parsed = BlockquotePrefix::parse(input);
+
+    assert!(parsed.is_none());
+    assert!(logs_contain("blockquote prefix rejected"));
+    assert!(logs_contain("reason=\"no_blockquote_prefix\""));
+    assert!(logs_contain(&format!("line_len={}", input.len())));
+    assert!(!logs_contain(input));
 }
