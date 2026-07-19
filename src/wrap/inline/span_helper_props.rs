@@ -1,4 +1,10 @@
-//! Property tests for inline span helper date matching.
+//! Property tests for date-sequence matching in the inline span helpers.
+//!
+//! This test-only module exercises `span_helpers::try_match_date_sequence`
+//! directly, pairing each generated valid date with equal-length near-misses
+//! so the matcher must validate token meaning and order rather than only span
+//! length. It composes the shared inline date strategies with local separator,
+//! opener, and offset generators used specifically at the span-helper boundary.
 
 use proptest::prelude::*;
 
@@ -22,40 +28,65 @@ fn whitespace_separator_strategy() -> BoxedStrategy<String> {
     .boxed()
 }
 
+fn ordinal_day_month_year_strategy() -> BoxedStrategy<Vec<String>> {
+    (
+        ordinal_day_strategy(),
+        whitespace_separator_strategy(),
+        month_name_strategy(),
+        whitespace_separator_strategy(),
+        year_strategy(),
+    )
+        .prop_map(|(day, separator1, month, separator2, year)| {
+            vec![day, separator1, month, separator2, year]
+        })
+        .boxed()
+}
+
+fn numeric_day_month_year_strategy() -> BoxedStrategy<Vec<String>> {
+    (
+        numeric_day_strategy(),
+        whitespace_separator_strategy(),
+        month_name_strategy(),
+        whitespace_separator_strategy(),
+        year_strategy(),
+    )
+        .prop_map(|(day, separator1, month, separator2, year)| {
+            vec![day, separator1, month, separator2, year]
+        })
+        .boxed()
+}
+
+fn month_numeric_day_year_strategy() -> BoxedStrategy<Vec<String>> {
+    (
+        month_name_strategy(),
+        whitespace_separator_strategy(),
+        numeric_day_strategy(),
+        whitespace_separator_strategy(),
+        year_strategy(),
+    )
+        .prop_map(|(month, separator1, day, separator2, year)| {
+            vec![month, separator1, day, separator2, year]
+        })
+        .boxed()
+}
+
 fn date_sequence_tokens_strategy() -> BoxedStrategy<Vec<String>> {
     prop_oneof![
-        (
-            ordinal_day_strategy(),
-            whitespace_separator_strategy(),
-            month_name_strategy(),
-            whitespace_separator_strategy(),
-            year_strategy(),
-        )
-            .prop_map(|(day, separator1, month, separator2, year)| {
-                vec![day, separator1, month, separator2, year]
-            }),
-        (
-            numeric_day_strategy(),
-            whitespace_separator_strategy(),
-            month_name_strategy(),
-            whitespace_separator_strategy(),
-            year_strategy(),
-        )
-            .prop_map(|(day, separator1, month, separator2, year)| {
-                vec![day, separator1, month, separator2, year]
-            }),
-        (
-            month_name_strategy(),
-            whitespace_separator_strategy(),
-            numeric_day_strategy(),
-            whitespace_separator_strategy(),
-            year_strategy(),
-        )
-            .prop_map(|(month, separator1, day, separator2, year)| {
-                vec![month, separator1, day, separator2, year]
-            }),
+        ordinal_day_month_year_strategy(),
+        numeric_day_month_year_strategy(),
+        month_numeric_day_year_strategy(),
     ]
     .boxed()
+}
+
+fn all_date_layouts_strategy() -> BoxedStrategy<Vec<Vec<String>>> {
+    (
+        ordinal_day_month_year_strategy(),
+        numeric_day_month_year_strategy(),
+        month_numeric_day_year_strategy(),
+    )
+        .prop_map(|(ordinal, numeric, month_first)| vec![ordinal, numeric, month_first])
+        .boxed()
 }
 
 fn opening_prefix_strategy() -> BoxedStrategy<String> {
@@ -66,6 +97,13 @@ fn opening_prefix_strategy() -> BoxedStrategy<String> {
         1..=3,
     )
     .prop_map(|characters| characters.into_iter().collect())
+    .boxed()
+}
+
+fn invalid_opener_strategy() -> BoxedStrategy<char> {
+    prop::sample::select(vec![
+        ')', ']', '\'', '”', '’', '）', '］', '】', '》', '」', '』',
+    ])
     .boxed()
 }
 
@@ -85,22 +123,71 @@ fn try_match_date_sequence_rejects_empty_slice() {
 
 proptest! {
     #[test]
-    fn try_match_date_sequence_accepts_prefixed_dates_at_generated_offsets(
+    fn try_match_date_sequence_distinguishes_valid_dates_from_five_token_near_misses(
         (
-            mut date_tokens,
+            date_layouts,
             opening_prefix,
+            invalid_opener,
             mut tokens,
         ) in (
-            date_sequence_tokens_strategy(),
+            all_date_layouts_strategy(),
             opening_prefix_strategy(),
+            invalid_opener_strategy(),
             preceding_tokens_strategy(),
         ),
     ) {
-        date_tokens[0].insert_str(0, &opening_prefix);
         let start = tokens.len();
-        tokens.extend(date_tokens);
+        for (layout_index, mut date_tokens) in date_layouts.into_iter().enumerate() {
+            date_tokens[0].insert_str(0, &opening_prefix);
+            tokens.truncate(start);
+            tokens.extend(date_tokens);
 
-        prop_assert_eq!(try_match_date_sequence(&tokens, start), Some(start + 5));
+            prop_assert_eq!(
+                try_match_date_sequence(&tokens, start),
+                Some(start + 5),
+                "valid date layout {} must match",
+                layout_index,
+            );
+
+            let mut non_date_component = tokens.clone();
+            non_date_component[start + 2] = "not-a-date".to_string();
+            prop_assert_eq!(
+                try_match_date_sequence(&non_date_component, start),
+                None,
+                "non-date component in layout {} must be rejected",
+                layout_index,
+            );
+
+            for separator_offset in [1usize, 3] {
+                let mut wrong_separator = tokens.clone();
+                wrong_separator[start + separator_offset] = "-".to_string();
+                prop_assert_eq!(
+                    try_match_date_sequence(&wrong_separator, start),
+                    None,
+                    "wrong separator {} in layout {} must be rejected",
+                    separator_offset,
+                    layout_index,
+                );
+            }
+
+            let mut wrong_order = tokens.clone();
+            wrong_order.swap(start, start + 4);
+            prop_assert_eq!(
+                try_match_date_sequence(&wrong_order, start),
+                None,
+                "wrong token order in layout {} must be rejected",
+                layout_index,
+            );
+
+            let mut wrong_opener = tokens.clone();
+            wrong_opener[start].insert(0, invalid_opener);
+            prop_assert_eq!(
+                try_match_date_sequence(&wrong_opener, start),
+                None,
+                "wrong opener in layout {} must be rejected",
+                layout_index,
+            );
+        }
     }
 
     #[test]
