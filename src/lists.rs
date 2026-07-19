@@ -129,12 +129,13 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut prev_blank = lines.first().map_or(true, |l| l.trim().is_empty());
 
     for line in lines {
-        if fences.observe_line(line) {
+        let fence = fences.observe_source_line(line);
+        if fence.is_fence_marker {
             out.push(line.clone());
             prev_blank = false;
             continue;
         }
-        if fences.in_fence_for_line(line) {
+        if fence.is_in_fence {
             out.push(line.clone());
             prev_blank = line.trim().is_empty();
             continue;

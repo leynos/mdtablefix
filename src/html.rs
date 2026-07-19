@@ -332,7 +332,8 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
     let mut fences = FenceTracker::new();
 
     for line in lines {
-        if fences.observe_line(line) {
+        let fence = fences.observe_source_line(line);
+        if fence.is_fence_marker {
             if html_state.in_html() {
                 html_state.flush_raw(&mut out);
             }
@@ -340,7 +341,7 @@ pub fn convert_html_tables(lines: &[String]) -> Vec<String> {
             continue;
         }
 
-        if fences.in_fence_for_line(line) {
+        if fence.is_in_fence {
             out.push(line.clone());
             continue;
         }

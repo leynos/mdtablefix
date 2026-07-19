@@ -203,13 +203,14 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
 
     for line in lines {
-        let was_in_fence = tracker.in_fence_for_line(line);
-        if !was_in_fence && let Some(block) = pending_block.take() {
+        let fence = tracker.observe_source_line(line);
+        if !fence.was_in_fence
+            && let Some(block) = pending_block.take()
+        {
             flush_original_block(block, &mut out);
         }
-        let observed_fence = tracker.observe_line(line);
 
-        if !was_in_fence {
+        if !fence.was_in_fence {
             let Some((_indent, opening_marker, _info)) = is_fence(line) else {
                 out.push(compressed_fence_line(line).unwrap_or_else(|| line.clone()));
                 continue;
@@ -228,20 +229,20 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
             continue;
         };
 
-        if observed_fence
-            && tracker.in_fence_for_line(line)
+        if fence.is_fence_marker
+            && fence.is_in_fence
             && interior_fence_requires_preserved_delimiters(&block.opening_marker, line)
         {
             block.has_conflicting_interior_fence = true;
         }
         block.lines.push(line.clone());
 
-        if !observed_fence {
+        if !fence.is_fence_marker {
             pending_block = Some(block);
             continue;
         }
 
-        if tracker.in_fence_for_line(line) {
+        if fence.is_in_fence {
             pending_block = Some(block);
             continue;
         }
@@ -293,8 +294,8 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
     let mut lines = lines.iter().peekable();
 
     while let Some(line) = lines.next() {
-        if tracker.in_fence_for_line(line) {
-            let _ = tracker.observe_line(line);
+        let fence = tracker.observe_source_line(line);
+        if fence.was_in_fence {
             out.push(line.clone());
             continue;
         }
@@ -307,7 +308,6 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
         }
 
         out.push(line.clone());
-        let _ = tracker.observe_line(line);
     }
 
     out

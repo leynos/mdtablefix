@@ -136,6 +136,12 @@ struct LineContext<'a> {
     blockquote: Option<BlockquotePrefix<'a>>,
     block_kind: Option<BlockKind>,
 }
+
+struct PreambleLine<'a> {
+    original: &'a str,
+    inner: &'a str,
+    depth: usize,
+}
 fn line_break_parts(line: &str) -> (String, bool) {
     let trimmed_end = line.trim_end();
     let text_without_html_breaks = trimmed_end
@@ -204,6 +210,7 @@ fn handle_pending_continuation(
         if matches!(line.block_kind, Some(BlockKind::LinkReferenceDefinition)) {
             link_title_window.observe_definition(line.inner, link_matcher);
         }
+        // Normalize whitespace-only paragraph separators for downstream consumers.
         let emitted = normalized_passthrough_line(line.original);
         writer.push_verbatim(state, emitted);
         return;
@@ -216,8 +223,70 @@ fn handle_pending_continuation(
     apply_continuation_chunk(&text, line.original, hard_break, writer, state);
 }
 
-/// Wrap text lines to the given width.
-#[must_use]
+fn handle_line_preamble(
+    line: PreambleLine<'_>,
+    writer: &mut ParagraphWriter<'_>,
+    state: &mut ParagraphState,
+    fence_tracker: &mut FenceTracker,
+    link_matcher: LinkReferenceMatcher,
+    link_title_window: &mut link_reference::LinkTitleWindow,
+) -> bool {
+    if fence::handle_fence_line(
+        line.original,
+        line.inner,
+        line.depth,
+        writer,
+        state,
+        fence_tracker,
+    ) {
+        link_title_window.observe_fence_context();
+        return true;
+    }
+
+    if fence_tracker.in_fence(line.depth) {
+        link_title_window.observe_fence_context();
+        writer.push_verbatim(state, line.original);
+        return true;
+    }
+
+    if let Some(outcome) = link_title_window.observe_next_line(line.inner, link_matcher)
+        && outcome == link_reference::LinkTitleWindowOutcome::EmitVerbatim
+    {
+        writer.push_verbatim(state, line.original);
+        return true;
+    }
+
+    false
+}
+
+fn dispatch_continuation(
+    line: LineContext<'_>,
+    writer: &mut ParagraphWriter<'_>,
+    state: &mut ParagraphState,
+    link_matcher: LinkReferenceMatcher,
+    link_title_window: &mut link_reference::LinkTitleWindow,
+) -> bool {
+    if state.pending_prefix.is_some() {
+        handle_pending_continuation(line, writer, state, link_matcher, link_title_window);
+        return true;
+    }
+
+    if is_passthrough_block(line.block_kind, line.inner) {
+        if matches!(line.block_kind, Some(BlockKind::LinkReferenceDefinition)) {
+            link_title_window.observe_definition(line.inner, link_matcher);
+        }
+        let emitted = normalized_passthrough_line(line.original);
+        writer.push_verbatim(state, emitted);
+        return true;
+    }
+
+    if let Some(prefix_line) = prefix_line(line.inner, line.blockquote) {
+        writer.handle_prefix_line(state, &prefix_line);
+        return true;
+    }
+
+    false
+}
 pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut state = ParagraphState::default();
@@ -232,62 +301,34 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
         let current_depth = blockquote.map_or(0, |prefix| prefix.depth());
         let inner_content = blockquote.map_or(line.as_str(), |prefix| prefix.inner());
 
-        if fence::handle_fence_line(
-            line,
-            inner_content,
-            current_depth,
+        if handle_line_preamble(
+            PreambleLine {
+                original: line,
+                inner: inner_content,
+                depth: current_depth,
+            },
             &mut writer,
             &mut state,
             &mut fence_tracker,
+            link_matcher,
+            &mut link_title_window,
         ) {
-            link_title_window.observe_fence_context();
-            continue;
-        }
-
-        if fence_tracker.in_fence(current_depth) {
-            link_title_window.observe_fence_context();
-            writer.push_verbatim(&mut state, line);
-            continue;
-        }
-
-        if let Some(outcome) = link_title_window.observe_next_line(inner_content, link_matcher)
-            && outcome == link_reference::LinkTitleWindowOutcome::EmitVerbatim
-        {
-            writer.push_verbatim(&mut state, line);
             continue;
         }
 
         let block_kind = classify_block(inner_content, link_matcher);
-
-        if state.pending_prefix.is_some() {
-            handle_pending_continuation(
-                LineContext {
-                    original: line,
-                    inner: inner_content,
-                    blockquote,
-                    block_kind,
-                },
-                &mut writer,
-                &mut state,
-                link_matcher,
-                &mut link_title_window,
-            );
-            continue;
-        }
-
-        if is_passthrough_block(block_kind, inner_content) {
-            if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
-                link_title_window.observe_definition(inner_content, link_matcher);
-            }
-            // Whitespace-only lines act as paragraph breaks; emit them as empty
-            // strings so downstream consumers see a uniform separator.
-            let emitted = normalized_passthrough_line(line);
-            writer.push_verbatim(&mut state, emitted);
-            continue;
-        }
-
-        if let Some(prefix_line) = prefix_line(inner_content, blockquote) {
-            writer.handle_prefix_line(&mut state, &prefix_line);
+        if dispatch_continuation(
+            LineContext {
+                original: line,
+                inner: inner_content,
+                blockquote,
+                block_kind,
+            },
+            &mut writer,
+            &mut state,
+            link_matcher,
+            &mut link_title_window,
+        ) {
             continue;
         }
 

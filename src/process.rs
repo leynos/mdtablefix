@@ -107,11 +107,12 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     let mut fence_tracker = FenceTracker::default();
 
     for line in pre {
-        if state.handle_fence_line(&line, &mut fence_tracker) {
+        let fence = fence_tracker.observe_source_line(&line);
+        if state.handle_fence_line(&line, fence.is_fence_marker) {
             continue;
         }
 
-        if fence_tracker.in_fence_for_line(&line) {
+        if fence.is_in_fence {
             state.push_out(line);
             continue;
         }

@@ -122,9 +122,24 @@ fn decreasing_depth_ends_a_nested_blockquote_fence() {
 
     let output = process_stream(&input);
 
-    assert_eq!(&output[..2], &input[..2]);
-    assert!(output[2..].iter().all(|line| line.starts_with("> ")));
-    assert!(output.len() > input.len());
+    assert_eq!(
+        output,
+        lines_vec![
+            "> > ```rust",
+            "> > let quoted = true;",
+            "> This depth-one prose follows the implicitly closed nested fence and is long",
+            "> enough to wrap.",
+        ]
+    );
+    let emitted_prose = output[2..]
+        .iter()
+        .map(|line| line.strip_prefix("> ").expect("prose should remain quoted"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let source_prose = input[2]
+        .strip_prefix("> ")
+        .expect("source prose should be quoted");
+    assert_eq!(emitted_prose, source_prose);
 }
 
 #[test]

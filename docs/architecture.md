@@ -507,9 +507,13 @@ preserved verbatim or emitted as wrapped output.
 ```mermaid
 flowchart TD
     A[Start: wrap_text called with lines and width] --> P[Parse blockquote prefix and depth]
-    P --> B{Classify stripped inner content}
+    P --> Q{handle_fence_line recognizes a marker at the current depth}
+    Q -->|Yes| C[Preserve line verbatim]
+    Q -->|No| R{FenceTracker active at the current depth}
+    R -->|Yes| C
+    R -->|No| B{Classify stripped inner content}
 
-    B -->|Fenced or indented code block| C[Preserve line verbatim]
+    B -->|Indented code block| C
     B -->|Table or heading or directive| C
     B -->|Blank line| D[Flush active paragraph and emit blank]
     B -->|Paragraph or prefixed line| E[Send to ParagraphWriter]
@@ -534,13 +538,14 @@ flowchart TD
     N -->|No| O[Flush remaining paragraph and finish]
 ```
 
-Figure: `wrap_text` control flow. The wrapper first extracts blockquote depth
-and inner content, then classifies that inner content. It passes fenced blocks,
-tables, headings, directives, and indented code through unchanged, flushes
-paragraphs on blanks, routes prose and prefixed lines through
-`ParagraphWriter`, computes visible widths with `unicode-width`, and delegates
-inline line fitting to `textwrap` before reconstructing the emitted Markdown
-lines with their original blockquote container.
+_Figure 2: `wrap_text` control flow. The wrapper first extracts blockquote
+depth and inner content, then applies depth-aware fence handling before
+classifying that inner content. It passes fenced blocks, tables, headings,
+directives, and indented code through unchanged, flushes paragraphs on blanks,
+routes prose and prefixed lines through `ParagraphWriter`, computes visible
+widths with `unicode-width`, and delegates inline line fitting to `textwrap`
+before reconstructing the emitted Markdown lines with their original blockquote
+container._
 
 ### Wrap sequence
 

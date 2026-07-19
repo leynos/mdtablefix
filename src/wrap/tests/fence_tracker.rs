@@ -175,6 +175,26 @@ fn raw_blockquote_fence_closes_when_quote_depth_decreases() {
     assert!(!tracker.in_fence_for_line("> ordinary quote text"));
 }
 
+#[test]
+fn source_line_observation_reports_transition_and_resulting_state() {
+    let mut tracker = FenceTracker::new();
+
+    let opening = tracker.observe_source_line("> > ```rust");
+    assert!(!opening.was_in_fence);
+    assert!(opening.is_fence_marker);
+    assert!(opening.is_in_fence);
+
+    let content = tracker.observe_source_line("> > code");
+    assert!(content.was_in_fence);
+    assert!(!content.is_fence_marker);
+    assert!(content.is_in_fence);
+
+    let shallower = tracker.observe_source_line("> prose");
+    assert!(!shallower.was_in_fence);
+    assert!(!shallower.is_fence_marker);
+    assert!(!shallower.is_in_fence);
+}
+
 #[traced_test]
 #[test]
 fn fence_opening_logs_content_free_transition() {

@@ -217,8 +217,11 @@ and stripped inner content: downstream classification and prefix-aware wrapping
 receive the inner content, while emitted lines retain the source prefix.
 `FenceTracker` receives the same inner content and depth, so fences close only
 at their opening depth or when the blockquote depth decreases. Processing
-stages that receive raw Markdown use `observe_line` and `in_fence_for_line`;
-these compatibility helpers parse `BlockquotePrefix` before applying the same
+stages that loop over raw Markdown use the crate-private `observe_source_line`
+helper. It parses `BlockquotePrefix` once and returns the fence state before
+observation, whether the line is a fence marker, and the resulting state. The
+public `observe_line` and `in_fence_for_line` compatibility helpers remain for
+callers that need one of those individual operations; they apply the same
 depth-aware tracking.
 
 1. **Block classification.** `classify_block` in `src/wrap/block.rs` inspects
