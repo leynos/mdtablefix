@@ -122,6 +122,82 @@ fn try_match_date_sequence_rejects_empty_slice() {
     assert_eq!(try_match_date_sequence(&[], 0), None);
 }
 
+/// Assert that replacing the month/day component with a non-date token defeats
+/// the match, proving the matcher inspects token meaning rather than length.
+fn assert_non_date_component_rejected(
+    tokens: &[String],
+    start: usize,
+    layout_index: usize,
+) -> Result<(), TestCaseError> {
+    let mut non_date_component = tokens.to_vec();
+    non_date_component[start + 2] = "not-a-date".to_string();
+    prop_assert_eq!(
+        try_match_date_sequence(&non_date_component, start),
+        None,
+        "non-date component in layout {} must be rejected",
+        layout_index,
+    );
+    Ok(())
+}
+
+/// Assert that substituting a hyphen for either whitespace separator defeats the
+/// match, proving the matcher requires whitespace between date components.
+fn assert_wrong_separators_rejected(
+    tokens: &[String],
+    start: usize,
+    layout_index: usize,
+) -> Result<(), TestCaseError> {
+    for separator_offset in [1usize, 3] {
+        let mut wrong_separator = tokens.to_vec();
+        wrong_separator[start + separator_offset] = "-".to_string();
+        prop_assert_eq!(
+            try_match_date_sequence(&wrong_separator, start),
+            None,
+            "wrong separator {} in layout {} must be rejected",
+            separator_offset,
+            layout_index,
+        );
+    }
+    Ok(())
+}
+
+/// Assert that swapping the leading and trailing components defeats the match,
+/// proving the matcher enforces token order rather than membership alone.
+fn assert_wrong_order_rejected(
+    tokens: &[String],
+    start: usize,
+    layout_index: usize,
+) -> Result<(), TestCaseError> {
+    let mut wrong_order = tokens.to_vec();
+    wrong_order.swap(start, start + 4);
+    prop_assert_eq!(
+        try_match_date_sequence(&wrong_order, start),
+        None,
+        "wrong token order in layout {} must be rejected",
+        layout_index,
+    );
+    Ok(())
+}
+
+/// Assert that prefixing an invalid opening punctuation character defeats the
+/// match, proving the matcher accepts only recognised opening punctuation.
+fn assert_wrong_opener_rejected(
+    tokens: &[String],
+    start: usize,
+    invalid_opener: char,
+    layout_index: usize,
+) -> Result<(), TestCaseError> {
+    let mut wrong_opener = tokens.to_vec();
+    wrong_opener[start].insert(0, invalid_opener);
+    prop_assert_eq!(
+        try_match_date_sequence(&wrong_opener, start),
+        None,
+        "wrong opener in layout {} must be rejected",
+        layout_index,
+    );
+    Ok(())
+}
+
 proptest! {
     #[test]
     fn try_match_date_sequence_distinguishes_valid_dates_from_five_token_near_misses(
@@ -150,44 +226,10 @@ proptest! {
                 layout_index,
             );
 
-            let mut non_date_component = tokens.clone();
-            non_date_component[start + 2] = "not-a-date".to_string();
-            prop_assert_eq!(
-                try_match_date_sequence(&non_date_component, start),
-                None,
-                "non-date component in layout {} must be rejected",
-                layout_index,
-            );
-
-            for separator_offset in [1usize, 3] {
-                let mut wrong_separator = tokens.clone();
-                wrong_separator[start + separator_offset] = "-".to_string();
-                prop_assert_eq!(
-                    try_match_date_sequence(&wrong_separator, start),
-                    None,
-                    "wrong separator {} in layout {} must be rejected",
-                    separator_offset,
-                    layout_index,
-                );
-            }
-
-            let mut wrong_order = tokens.clone();
-            wrong_order.swap(start, start + 4);
-            prop_assert_eq!(
-                try_match_date_sequence(&wrong_order, start),
-                None,
-                "wrong token order in layout {} must be rejected",
-                layout_index,
-            );
-
-            let mut wrong_opener = tokens.clone();
-            wrong_opener[start].insert(0, invalid_opener);
-            prop_assert_eq!(
-                try_match_date_sequence(&wrong_opener, start),
-                None,
-                "wrong opener in layout {} must be rejected",
-                layout_index,
-            );
+            assert_non_date_component_rejected(&tokens, start, layout_index)?;
+            assert_wrong_separators_rejected(&tokens, start, layout_index)?;
+            assert_wrong_order_rejected(&tokens, start, layout_index)?;
+            assert_wrong_opener_rejected(&tokens, start, invalid_opener, layout_index)?;
         }
     }
 
