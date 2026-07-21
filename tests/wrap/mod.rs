@@ -18,6 +18,7 @@ mod cli_files;
 mod cli_issue_329_property;
 #[path = "../support/cli_stdin.rs"]
 mod cli_stdin;
+mod code_span_reflow;
 mod date_snapshots;
 mod fence_behaviour;
 mod footnotes;
