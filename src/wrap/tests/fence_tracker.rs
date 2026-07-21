@@ -196,6 +196,26 @@ fn source_line_observation_reports_transition_and_resulting_state() {
     assert!(!shallower.is_in_fence);
 }
 
+#[test]
+fn observe_source_fence_exposes_structural_marker_with_prefix_indent() {
+    let mut tracker = FenceTracker::new();
+
+    let opening = tracker.observe_source_fence("> > ```rust");
+    assert!(opening.observation.is_fence_marker);
+    assert!(opening.observation.is_in_fence);
+    assert_eq!(opening.fence, Some(("> > ", "```", "rust")));
+
+    let content = tracker.observe_source_fence("> > code");
+    assert!(content.observation.is_in_fence);
+    assert!(!content.observation.is_fence_marker);
+    assert!(content.fence.is_none());
+
+    let closing = tracker.observe_source_fence("> > ```");
+    assert!(closing.observation.is_fence_marker);
+    assert!(!closing.observation.is_in_fence);
+    assert_eq!(closing.fence, Some(("> > ", "```", "")));
+}
+
 /// Build a blockquote-prefixed source line at the requested nesting depth.
 fn quoted_line(depth: usize, body: &str) -> String { format!("{}{body}", "> ".repeat(depth)) }
 

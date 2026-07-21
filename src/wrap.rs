@@ -24,7 +24,7 @@ use block::{BULLET_RE, FOOTNOTE_RE};
 pub(crate) use block::{BlockKind, classify_block, leading_indent};
 pub use blockquote::BlockquotePrefix;
 use continuation::apply_continuation_chunk;
-pub(crate) use fence::FenceObservation;
+pub(crate) use fence::{FenceObservation, ObservedFence};
 /// Fence-detection utilities re-exported for downstream callers.
 ///
 /// [`FenceTracker`] maintains fenced code-block state across lines, which is

@@ -126,7 +126,12 @@ pub(crate) struct FenceObservation {
     pub(crate) is_in_fence: bool,
 }
 
-#[derive(Default, Debug)]
+pub(crate) struct ObservedFence<'a> {
+    pub(crate) observation: FenceObservation,
+    /// The `(indent, marker, info)` components when the line is a fence marker,
+    /// with `indent` spanning any blockquote prefix, as [`is_fence`] returns.
+    pub(crate) fence: Option<(&'a str, &'a str, &'a str)>,
+}
 pub struct FenceTracker {
     state: Option<FenceState>,
 }
@@ -151,6 +156,12 @@ impl FenceTracker {
     }
 
     fn observe_inner(&mut self, line: &str, depth: usize) -> bool {
+        self.observe_parsed(depth, is_inner_fence(line))
+    }
+
+    /// Update the tracker from an already-parsed inner fence, avoiding a second
+    /// regex match when the caller has parsed the line itself.
+    fn observe_parsed(&mut self, depth: usize, parsed: Option<(&str, &str, &str)>) -> bool {
         if let Some(open) = self.state
             && depth < open.open_depth
         {
@@ -165,7 +176,7 @@ impl FenceTracker {
             self.state = None;
         }
 
-        let Some((_indent, fence, _info)) = is_inner_fence(line) else {
+        let Some((_indent, fence, _info)) = parsed else {
             return false;
         };
 
@@ -241,14 +252,32 @@ impl FenceTracker {
     }
 
     pub(crate) fn observe_source_line(&mut self, line: &str) -> FenceObservation {
+        self.observe_source_fence(line).observation
+    }
+
+    /// Observe a source line, returning the fence-state transition together with
+    /// the structural fence parse of the line.
+    ///
+    /// The line's blockquote prefix and fence marker are parsed exactly once and
+    /// reused for both the tracker update and the returned `fence` components, so
+    /// callers need not run [`is_fence`] again.
+    pub(crate) fn observe_source_fence<'a>(&mut self, line: &'a str) -> ObservedFence<'a> {
         let context = FenceLine::parse(line);
+        let parsed_inner = is_inner_fence(context.inner);
         let was_in_fence = self.in_fence(context.depth);
-        let is_fence_marker = self.observe_inner(context.inner, context.depth);
+        let is_fence_marker = self.observe_parsed(context.depth, parsed_inner);
         let is_in_fence = self.in_fence(context.depth);
-        FenceObservation {
-            was_in_fence,
-            is_fence_marker,
-            is_in_fence,
+        let fence = parsed_inner.map(|(inner_indent, marker, info)| {
+            let indent = &line[..context.prefix_len + inner_indent.len()];
+            (indent, marker, info)
+        });
+        ObservedFence {
+            observation: FenceObservation {
+                was_in_fence,
+                is_fence_marker,
+                is_in_fence,
+            },
+            fence,
         }
     }
 

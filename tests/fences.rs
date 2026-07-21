@@ -328,3 +328,50 @@ fn attaches_orphan_specifier_whitespace_language(#[case] fence: &str) {
     let out = attach_orphan_specifiers(&compress_fences(&input));
     assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
 }
+
+#[test]
+fn compresses_matched_fence_reusing_cached_opening_and_closing_rewrites() {
+    // Both delimiters are rewritable and are emitted from the per-line cache,
+    // while the interior content lines pass through untouched.
+    let input = lines_vec!["`````rust", "let x = 1;", "let y = 2;", "`````"];
+    let out = compress_fences(&input);
+    assert_eq!(
+        out,
+        lines_vec!["```rust", "let x = 1;", "let y = 2;", "```"]
+    );
+}
+
+#[test]
+fn unclosed_fence_falls_back_to_cached_per_line_rewrites() {
+    // No closing delimiter matches the six-backtick opener, so the block is
+    // emitted through the unmatched fallback. Each retained fence-like line must
+    // still be rewritten from its cached compressed form, matching the prior
+    // stateless per-line behaviour.
+    let input = lines_vec!["``````rust", "````js", "~~~"];
+    let out = compress_fences(&input);
+    assert_eq!(out, lines_vec!["```rust", "```js", "```"]);
+}
+
+#[rstest]
+#[case(lines_vec!["> ```rust", "> code", "> ```"])]
+#[case(lines_vec!["> > ````toml", "> > data", "> > ````"])]
+#[case(lines_vec![">```", ">code", ">```"])]
+fn preserves_quoted_and_nested_fences(#[case] input: Vec<String>) {
+    // Blockquoted delimiters are not normalization-compatible, so quoted and
+    // nested fenced blocks round-trip unchanged while remaining correctly opened
+    // and closed at their blockquote depth.
+    let out = compress_fences(&input);
+    assert_eq!(out, input);
+}
+
+#[test]
+fn compresses_top_level_fence_after_quoted_block() {
+    // A quoted block passes through untouched; the following unquoted block is
+    // compressed, proving depth transitions do not leak between the two.
+    let input = lines_vec!["> ````rust", "> code", "> ````", "````rust", "top", "````",];
+    let out = compress_fences(&input);
+    assert_eq!(
+        out,
+        lines_vec!["> ````rust", "> code", "> ````", "```rust", "top", "```",]
+    );
+}
