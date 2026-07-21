@@ -17,3 +17,9 @@ fn allow_fixture_expansion_lints_proc_macro_compiles() {
     let cases = trybuild::TestCases::new();
     cases.pass("tests/ui/allow_fixture_expansion_lints_pass.rs");
 }
+
+#[test]
+fn blockquote_and_fence_public_api_compiles() {
+    let cases = trybuild::TestCases::new();
+    cases.pass("tests/ui/blockquote_fence_api_pass.rs");
+}

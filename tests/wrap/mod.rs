@@ -10,6 +10,7 @@ use mdtablefix::process_stream;
 mod common;
 
 mod blockquote_properties;
+mod blockquote_snapshots;
 mod blockquotes;
 mod checklist_code_spans;
 mod cli;

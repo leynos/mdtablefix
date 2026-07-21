@@ -1,0 +1,6 @@
+---
+source: tests/wrap/blockquote_snapshots.rs
+expression: "wrap_text(input, WRAP_COLS).join(\"\\n\")"
+---
+> - This list item contains enough prose to wrap onto multiple lines while
+>   retaining its compound blockquote-plus-bullet prefix.

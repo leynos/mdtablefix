@@ -1,0 +1,6 @@
+---
+source: tests/wrap/blockquote_snapshots.rs
+expression: "wrap_text(input, WRAP_COLS).join(\"\\n\")"
+---
+> > This nested quote contains enough text to require wrapping so that we can
+> > verify multi-level handling across the configured wrap width.
