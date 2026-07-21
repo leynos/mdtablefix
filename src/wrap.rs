@@ -131,6 +131,7 @@ fn prefix_line<'a>(
     })
 }
 
+#[derive(Clone, Copy)]
 struct LineContext<'a> {
     original: &'a str,
     inner: &'a str,
@@ -138,6 +139,7 @@ struct LineContext<'a> {
     block_kind: Option<BlockKind>,
 }
 
+#[derive(Clone, Copy)]
 struct PreambleLine<'a> {
     original: &'a str,
     inner: &'a str,
@@ -288,6 +290,9 @@ fn dispatch_continuation(
 
     false
 }
+
+/// Wrap text lines to the given width.
+#[must_use]
 pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut state = ParagraphState::default();
