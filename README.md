@@ -1,5 +1,8 @@
 # mdtablefix
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](
+https://deepwiki.com/leynos/mdtablefix)
+
 `mdtablefix` unb0rks and reflows Markdown tables so that each column has a
 uniform width. When the `--wrap` option is used, it also wraps paragraphs and
 list items to 80 columns.
