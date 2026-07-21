@@ -12,7 +12,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use crate::wrap::{FenceTracker, is_fence};
+use crate::wrap::{FenceObservation, FenceTracker, is_fence};
 
 mod attachment;
 
@@ -200,29 +200,80 @@ fn flush_original_block(block: PendingFenceBlock, out: &mut Vec<String>) {
     out.extend(block.lines);
 }
 
-/// Normalize safe outer fence delimiters to exactly three backticks.
+/// Emit a completed block, rewriting its delimiters when both ends are safely
+/// rewritable and otherwise preserving the original lines.
+fn flush_completed_block(
+    block: PendingFenceBlock,
+    closing_compressed: Option<&str>,
+    out: &mut Vec<String>,
+) {
+    if block.opening_compressed.is_some() && closing_compressed.is_some() {
+        flush_matched_block(block, closing_compressed, out);
+    } else {
+        flush_original_block(block, out);
+    }
+}
+
+/// Begin a pending fence block for a line observed outside any active fence.
 ///
-/// `compress_fences` returns non-fence lines unchanged. Compatible backtick or
-/// tilde delimiters in matched fenced blocks may be rewritten to three
-/// backticks when doing so preserves the document structure.
-/// Fence-like lines inside a wider matched fenced block are literal content and
-/// are returned unchanged. An outer delimiter is also preserved when
-/// shortening or changing it would make an inner literal fence line look
-/// structural.
+/// Any block that was still pending is emitted verbatim first. When `line`
+/// opens a fence a fresh block is returned; otherwise the (possibly compressed)
+/// line is pushed to `out` and `None` is returned.
+fn start_fence_block(
+    previous: Option<PendingFenceBlock>,
+    line: &str,
+    parsed: Option<(&str, &str, &str)>,
+    compressed: Option<String>,
+    out: &mut Vec<String>,
+) -> Option<PendingFenceBlock> {
+    if let Some(block) = previous {
+        flush_original_block(block, out);
+    }
+    let Some((_indent, opening_marker, _info)) = parsed else {
+        out.push(compressed.unwrap_or_else(|| line.to_owned()));
+        return None;
+    };
+    Some(PendingFenceBlock {
+        opening_marker: opening_marker.to_owned(),
+        opening_compressed: compressed,
+        has_conflicting_interior_fence: false,
+        lines: vec![line.to_owned()],
+    })
+}
+
+/// Advance the pending fence block for a line observed inside an active fence,
+/// returning the block that remains pending afterwards (if any).
 ///
-/// Matched-block preservation does not apply to unclosed input. When input ends
-/// inside an unclosed fence, `compress_fences` uses `flush_unmatched_block` to
-/// fall back to stateless per-line rewriting, so fence-like lines inside that
-/// unclosed block may still be rewritten.
-///
-/// # Examples
-///
-/// ```
-/// use mdtablefix::fences::compress_fences;
-/// let out = compress_fences(&["````rust".to_string()]);
-/// assert_eq!(out, vec!["```rust".to_string()]);
-/// ```
-#[must_use]
+/// Interior fence markers are accumulated as literal content until the block
+/// closes at its opening depth, at which point it is flushed.
+fn advance_fence_block(
+    pending: Option<PendingFenceBlock>,
+    line: &str,
+    fence: FenceObservation,
+    parsed: Option<(&str, &str, &str)>,
+    compressed: Option<&str>,
+    out: &mut Vec<String>,
+) -> Option<PendingFenceBlock> {
+    let Some(mut block) = pending else {
+        out.push(line.to_owned());
+        return None;
+    };
+
+    if fence.is_fence_marker
+        && fence.is_in_fence
+        && interior_fence_requires_preserved_delimiters(&block.opening_marker, parsed)
+    {
+        block.has_conflicting_interior_fence = true;
+    }
+    block.lines.push(line.to_owned());
+
+    if !fence.is_fence_marker || fence.is_in_fence {
+        return Some(block);
+    }
+
+    flush_completed_block(block, compressed, out);
+    None
+}
 pub fn compress_fences(lines: &[String]) -> Vec<String> {
     let mut tracker = FenceTracker::new();
     let mut pending_block = None;
@@ -235,54 +286,18 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
         let parsed = is_fence(line);
         let compressed = compressed_fence_line(line);
 
-        if !fence.was_in_fence
-            && let Some(block) = pending_block.take()
-        {
-            flush_original_block(block, &mut out);
-        }
-
-        if !fence.was_in_fence {
-            let Some((_indent, opening_marker, _info)) = parsed else {
-                out.push(compressed.unwrap_or_else(|| line.clone()));
-                continue;
-            };
-            pending_block = Some(PendingFenceBlock {
-                opening_marker: opening_marker.to_owned(),
-                opening_compressed: compressed,
-                has_conflicting_interior_fence: false,
-                lines: vec![line.clone()],
-            });
-            continue;
-        }
-
-        let Some(mut block) = pending_block.take() else {
-            out.push(line.clone());
-            continue;
-        };
-
-        if fence.is_fence_marker
-            && fence.is_in_fence
-            && interior_fence_requires_preserved_delimiters(&block.opening_marker, parsed)
-        {
-            block.has_conflicting_interior_fence = true;
-        }
-        block.lines.push(line.clone());
-
-        if !fence.is_fence_marker {
-            pending_block = Some(block);
-            continue;
-        }
-
-        if fence.is_in_fence {
-            pending_block = Some(block);
-            continue;
-        }
-
-        if block.opening_compressed.is_some() && compressed.is_some() {
-            flush_matched_block(block, compressed.as_deref(), &mut out);
+        pending_block = if fence.was_in_fence {
+            advance_fence_block(
+                pending_block.take(),
+                line,
+                fence,
+                parsed,
+                compressed.as_deref(),
+                &mut out,
+            )
         } else {
-            flush_original_block(block, &mut out);
-        }
+            start_fence_block(pending_block.take(), line, parsed, compressed, &mut out)
+        };
     }
 
     if let Some(block) = pending_block {
