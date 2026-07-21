@@ -563,26 +563,26 @@ corresponding `reason` values are `no_blockquote_prefix`,
 
 Table: Structured field names emitted by tracing instrumentation.
 
-| Field             | Type            | Used in                         | Meaning                                                     |
-| ----------------- | --------------- | ------------------------------- | ----------------------------------------------------------- |
-| `token_length`    | `usize`         | fragment, link, footnote events | Character count of the text that was classified or parsed   |
-| `kind`            | `?FragmentKind` | `fragment classified`           | The computed fragment classification                        |
-| `start`           | `usize`         | span events                     | Byte offset where the span begins                           |
-| `end`             | `usize`         | span events                     | Byte offset where the span ends (exclusive)                 |
-| `width`           | `usize`         | span events                     | Display-column width of the span                            |
-| `reason`          | `&str`          | rejected or unchanged decisions | Stable diagnostic category for the decision                 |
-| `is_image`        | `bool`          | `link or image parsed`          | `true` when the link token is an image literal (`![]()`)    |
-| `row_index`       | `usize`         | table-row events                | Zero-based index of the parsed logical row                  |
-| `cell_count`      | `usize`         | table-row events                | Number of cells in the parsed logical row                   |
-| `error_category`  | `&str`          | declined or discarded events    | Stable category for a non-successful classification outcome |
-| `line_len`        | `usize`         | blockquote-prefix events        | Byte length of the examined source line                     |
-| `prefix_len`      | `usize`         | blockquote-prefix events        | Byte length of the recognized blockquote prefix             |
-| `depth`           | `usize`         | blockquote and fence events     | Current blockquote nesting depth                            |
-| `inner_len`       | `usize`         | blockquote-prefix events        | Byte length after removing the blockquote prefix            |
-| `open_depth`      | `usize`         | fence-state events              | Blockquote depth of the active fence opener                 |
-| `marker_len`      | `usize`         | fence-state events              | Length of the currently recognized fence marker             |
-| `open_marker_len` | `usize`         | fence-state events              | Length of the active opening fence marker                   |
-| `transition`      | `&str`          | fence-state events              | Stable fence-state transition category                      |
+| Field             | Type            | Used in                                       | Meaning                                                     |
+| ----------------- | --------------- | --------------------------------------------- | ----------------------------------------------------------- |
+| `token_length`    | `usize`         | fragment, link, footnote events               | Character count of the text that was classified or parsed   |
+| `kind`            | `?FragmentKind` | `fragment classified`                         | The computed fragment classification                        |
+| `start`           | `usize`         | span events                                   | Byte offset where the span begins                           |
+| `end`             | `usize`         | span events                                   | Byte offset where the span ends (exclusive)                 |
+| `width`           | `usize`         | span events                                   | Display-column width of the span                            |
+| `reason`          | `&str`          | rejected, unchanged, or fence-state decisions | Stable diagnostic category for any decision                 |
+| `is_image`        | `bool`          | `link or image parsed`                        | `true` when the link token is an image literal (`![]()`)    |
+| `row_index`       | `usize`         | table-row events                              | Zero-based index of the parsed logical row                  |
+| `cell_count`      | `usize`         | table-row events                              | Number of cells in the parsed logical row                   |
+| `error_category`  | `&str`          | declined or discarded events                  | Stable category for a non-successful classification outcome |
+| `line_len`        | `usize`         | blockquote-prefix events                      | Byte length of the examined source line                     |
+| `prefix_len`      | `usize`         | blockquote-prefix events                      | Byte length of the recognized blockquote prefix             |
+| `depth`           | `usize`         | blockquote and fence events                   | Current blockquote nesting depth                            |
+| `inner_len`       | `usize`         | blockquote-prefix events                      | Byte length after removing the blockquote prefix            |
+| `open_depth`      | `usize`         | fence-state events                            | Blockquote depth of the active fence opener                 |
+| `marker_len`      | `usize`         | fence-state events                            | Length of the currently recognized fence marker             |
+| `open_marker_len` | `usize`         | fence-state events                            | Length of the active opening fence marker                   |
+| `transition`      | `&str`          | fence-state events                            | Stable fence-state transition category                      |
 
 For example:
 
