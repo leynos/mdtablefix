@@ -7,7 +7,7 @@
 use regex::Regex;
 
 static ESCAPED_PIPE_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"\\\|").unwrap());
+    lazy_regex!(r"\\\|", "escaped table pipe pattern should compile");
 
 /// Split a Markdown table row into individual cell strings.
 ///
@@ -113,8 +113,10 @@ fn rows_mismatched(rows: &[Vec<String>], split_within_line: bool) -> bool {
 /// The pattern `^[\s|:-]+$` accepts common separator forms such as
 /// `| --- | :--: | --: |` while rejecting content rows that contain other
 /// characters.
-pub(crate) static SEP_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"^[\s|:-]+$").unwrap());
+pub(crate) static SEP_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^[\s|:-]+$",
+    "Markdown table separator row pattern should compile",
+);
 
 /// Holds the parsed and validated table data.
 ///

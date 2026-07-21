@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint typecheck fmt check-fmt markdownlint nixie
+.PHONY: help all clean test build release lint typecheck fmt check-fmt check-static-regexes markdownlint nixie
 
 APP ?= mdtablefix
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
@@ -21,7 +21,7 @@ test: ## Run tests with warnings treated as errors
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
 
-lint: ## Run Clippy with warnings denied
+lint: check-static-regexes ## Run Clippy with warnings denied
 	$(CARGO) clippy $(CLIPPY_FLAGS)
 
 typecheck: ## Type-check all targets and features
@@ -33,6 +33,12 @@ fmt: ## Format Rust and Markdown sources
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
+
+check-static-regexes: ## Reject hand-rolled static regular expressions
+	@if rg -U 'LazyLock::new\(\|\|\s*(\{\s*)?Regex::new' src/; then \
+		echo "static regular expressions must use lazy_regex!"; \
+		exit 1; \
+	fi
 
 markdownlint: ## Lint Markdown files
 	$(MDLINT) "**/*.md"

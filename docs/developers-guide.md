@@ -65,6 +65,13 @@ restores the separator row with widths derived from the final table body.
 
 ## Internal API reference
 
+`src/lib.rs`:
+
+- `lazy_regex!`: Declares every static regular expression through a single
+  `LazyLock<Regex>` initialization idiom. New static regular expressions must
+  use this macro and supply a descriptive expect message that identifies the
+  pattern whose compilation failed.
+
 `src/reflow.rs`:
 
 - `parse_rows`: Parses trimmed table lines into row vectors while preserving
