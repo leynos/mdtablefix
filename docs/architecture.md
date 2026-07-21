@@ -262,17 +262,15 @@ Text.
 
 ## Footnotes
 
- 1. First note
+ [^1]: First note
 
- 2. Second note
+ [^2]: Second note
 
-10. Final note
+[^10]: Final note
 ```
 
-After:
-
-```markdown
-Text.
+`convert_footnotes` only processes the final contiguous numeric list that
+immediately follows an H2 heading when these conditions are met.
 
 ## Footnotes
 
@@ -443,6 +441,20 @@ existing list, fence, and inline parsers after stripping the outer prefix.
 `ParagraphWriter` owns paragraph buffering and flush boundaries for wrapping.
 It keeps the current indent, emits wrapped or verbatim lines into the caller's
 output buffer, and leaves inline fitting to the wrapping helpers.
+
+Prefixed paragraphs whose inline-code span crosses a source line remain pending
+after the closing fence until the list, blockquote, or footnote continuation
+ends. This lets the closing-line tail and later continuation text participate
+in one greedy fit instead of requiring a second formatter pass. The pending
+state and prefix helpers live in `wrap::paragraph::pending`; they are private
+to the wrapping pipeline and are not a general Markdown-prefix API.
+
+Plain paragraph buffers retain their source segments until flush. The
+`wrap::paragraph::spanning_code` fallback inspects only source boundaries
+inside matched inline-code spans. If joining such a span would exceed the width
+while every source line already conforms, it emits those source lines
+unchanged. Ordinary prose and code spans that fit remain owned by the standard
+greedy wrapper.
 
 `HtmlTableState` buffers candidate HTML table lines until the surrounding table
 closes. Its depth counter tracks nested `<table>` blocks, so only the outermost

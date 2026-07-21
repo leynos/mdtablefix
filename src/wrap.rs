@@ -33,7 +33,7 @@ pub(crate) use fence::{FenceObservation, ObservedFence};
 /// info string) when the line opens a fenced code block, or `None` otherwise.
 pub use fence::{FenceTracker, is_fence};
 pub(crate) use link_reference::{LinkReferenceMatcher, LinkTitleWindow, LinkTitleWindowOutcome};
-use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
+use paragraph::{ParagraphState, ParagraphWriter, PrefixLine, continuation_prefix_for};
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
 ///
@@ -182,7 +182,7 @@ fn handle_pending_continuation(
     state: &mut ParagraphState,
     link_matcher: LinkReferenceMatcher,
     link_title_window: &mut link_reference::LinkTitleWindow,
-) {
+) -> bool {
     let outer_matches_pending = line.blockquote.is_some_and(|prefix| {
         state
             .pending_prefix
@@ -192,7 +192,7 @@ fn handle_pending_continuation(
     if outer_matches_pending && line.block_kind.is_none() {
         let (text, hard_break) = line_break_parts(line.inner);
         apply_continuation_chunk(&text, line.original, hard_break, writer, state);
-        return;
+        return true;
     }
 
     if let Some(prefix_line) = prefix_line(line.inner, line.blockquote) {
@@ -202,11 +202,11 @@ fn handle_pending_continuation(
         if matches_pending {
             let (text, hard_break) = line_break_parts(prefix_line.rest);
             apply_continuation_chunk(&text, line.original, hard_break, writer, state);
-            return;
+            return true;
         }
 
         writer.handle_prefix_line(state, &prefix_line);
-        return;
+        return true;
     }
 
     if is_passthrough_block(line.block_kind, line.inner) {
@@ -216,14 +216,31 @@ fn handle_pending_continuation(
         // Normalize whitespace-only paragraph separators for downstream consumers.
         let emitted = normalized_passthrough_line(line.original);
         writer.push_verbatim(state, emitted);
-        return;
+        return true;
+    }
+
+    let resolved_continuation_prefix = state.pending_prefix.as_ref().and_then(|pending| {
+        pending.open_fence_len.is_none().then(|| {
+            continuation_prefix_for(
+                pending.prefix.as_str(),
+                pending.repeat_prefix,
+                pending.outer_prefix.as_deref(),
+            )
+        })
+    });
+    if let Some(prefix) = resolved_continuation_prefix {
+        let Some(continuation) = line.original.strip_prefix(prefix.as_str()) else {
+            writer.flush_paragraph(state);
+            return false;
+        };
+        let (text, hard_break) = line_break_parts(continuation);
+        apply_continuation_chunk(&text, line.original, hard_break, writer, state);
+        return true;
     }
 
     let (text, hard_break) = line_break_parts(line.inner);
-    if state.pending_prefix.is_none() {
-        return;
-    }
     apply_continuation_chunk(&text, line.original, hard_break, writer, state);
+    true
 }
 
 fn handle_line_preamble(
@@ -269,8 +286,9 @@ fn dispatch_continuation(
     link_matcher: LinkReferenceMatcher,
     link_title_window: &mut link_reference::LinkTitleWindow,
 ) -> bool {
-    if state.pending_prefix.is_some() {
-        handle_pending_continuation(line, writer, state, link_matcher, link_title_window);
+    if state.pending_prefix.is_some()
+        && handle_pending_continuation(line, writer, state, link_matcher, link_title_window)
+    {
         return true;
     }
 

@@ -21,6 +21,7 @@ fn pending_prefix(
         open_fence_len: Some(1),
         continuation_mode,
         used_prefix: false,
+        tail_reflow: TailReflow::Allowed,
     }
 }
 

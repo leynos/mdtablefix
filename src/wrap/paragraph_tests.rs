@@ -15,6 +15,7 @@ use super::{
     ParagraphWriter,
     PendingPrefix,
     PrefixLine,
+    TailReflow,
     pending_prefix_for_next_segment,
 };
 
@@ -158,5 +159,6 @@ fn pending_prefix(prefix: &str, repeat_prefix: bool) -> PendingPrefix {
         open_fence_len: Some(1),
         continuation_mode: ContinuationMode::Normalize,
         used_prefix: false,
+        tail_reflow: TailReflow::Allowed,
     }
 }

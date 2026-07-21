@@ -12,6 +12,16 @@ use unicode_width::UnicodeWidthStr;
 use super::{inline::wrap_preserving_code, tokenize::parse_open_code_span};
 
 mod code_span_trim;
+mod pending;
+mod spanning_code;
+
+pub(super) use pending::{
+    ContinuationMode,
+    PendingPrefix,
+    TailReflow,
+    continuation_prefix_for,
+    pending_prefix_for_next_segment,
+};
 
 #[cfg(test)]
 #[path = "paragraph_tests.rs"]
@@ -27,43 +37,6 @@ pub(super) struct PrefixLine<'a> {
     pub(super) repeat_prefix: bool,
     /// Stores the blockquote portion repeated before an indented inner prefix.
     pub(super) outer_prefix: Option<Cow<'a, str>>,
-}
-
-/// Buffers a prefixed line whose inline code span continues on later source lines.
-pub(super) struct PendingPrefix {
-    /// Stores the bullet/blockquote/footnote marker plus any leading indent.
-    pub(super) prefix: String,
-    /// Stores the line content after the prefix, including any open code span.
-    pub(super) rest: String,
-    /// Stores the original source lines when unsafe continuations need passthrough.
-    pub(super) original_lines: Vec<String>,
-    /// Byte offsets of spaces inserted while joining continuation lines.
-    pub(super) synthetic_join_spaces: Vec<usize>,
-    /// Stores the precomputed content width available on the first line.
-    pub(super) rest_width: usize,
-    /// Marks whether continuation lines should repeat the full prefix.
-    pub(super) repeat_prefix: bool,
-    /// Stores the blockquote portion repeated before an indented inner prefix.
-    pub(super) outer_prefix: Option<String>,
-    /// Marks whether the closing continuation ended with a Markdown hard break.
-    pub(super) hard_break: bool,
-    /// Fence length of the inline code span that is currently open, if any.
-    pub(super) open_fence_len: Option<usize>,
-    /// Controls how continuation chunks are joined and flushed.
-    pub(super) continuation_mode: ContinuationMode,
-    /// Marks whether the original prefix has already been emitted.
-    pub(super) used_prefix: bool,
-}
-
-/// Controls how a pending prefixed continuation should be joined or emitted.
-#[derive(Debug, PartialEq)]
-pub(super) enum ContinuationMode {
-    /// Join continuations using normal Markdown soft-break spacing.
-    Normalize,
-    /// Join without adding a synthetic space after an opener at EOL.
-    TightCodeSpan,
-    /// Emit the original source lines instead of rewrapping ambiguous input.
-    VerbatimFlush,
 }
 
 /// Tracks buffered paragraph content and its shared indentation.
@@ -216,6 +189,29 @@ impl<'a> ParagraphWriter<'a> {
         }
     }
 
+    fn append_stable_pending_prefix(&mut self, line: &PrefixLine<'_>, available: usize) {
+        if line.repeat_prefix {
+            self.append_wrapped_with_prefix_width(line, available);
+            return;
+        }
+
+        let mut lines = wrap_preserving_code(line.rest, available).into_iter();
+        let Some(first_line) = lines.next() else {
+            self.out.push(line.prefix.to_string());
+            return;
+        };
+        self.out.push(format!("{}{first_line}", line.prefix));
+
+        let tail = lines.collect::<Vec<_>>().join(" ");
+        let continuation_prefix =
+            continuation_prefix_for(line.prefix.as_ref(), false, line.outer_prefix.as_deref());
+        self.out.extend(
+            wrap_preserving_code(&tail, available)
+                .into_iter()
+                .map(|wrapped_line| format!("{continuation_prefix}{wrapped_line}")),
+        );
+    }
+
     pub(super) fn ensure_trailing_hard_break_on_last_line(&mut self) {
         if let Some(last) = self.out.last_mut()
             && !last.ends_with("  ")
@@ -281,7 +277,7 @@ impl<'a> ParagraphWriter<'a> {
                 repeat_prefix: pending.repeat_prefix,
                 outer_prefix: pending.outer_prefix.as_deref().map(Cow::Borrowed),
             };
-            self.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
+            self.append_stable_pending_prefix(&prefix_line, pending.rest_width);
             if pending.hard_break {
                 self.ensure_trailing_hard_break_on_last_line();
             }
@@ -295,6 +291,14 @@ impl<'a> ParagraphWriter<'a> {
         }
 
         if state.buf.is_empty() {
+            return;
+        }
+
+        if let Some(lines) =
+            spanning_code::conforming_source_lines_for_overlong_span(&state.buf, self.width)
+        {
+            self.out.extend(lines);
+            state.clear();
             return;
         }
 
@@ -379,45 +383,11 @@ impl<'a> ParagraphWriter<'a> {
                 open_fence_len: Some(fence_len),
                 continuation_mode,
                 used_prefix: false,
+                tail_reflow: TailReflow::Allowed,
             });
             return;
         }
 
         self.append_wrapped_with_prefix(prefix_line);
     }
-}
-
-pub(super) fn pending_prefix_for_next_segment(pending: &mut PendingPrefix) -> String {
-    if pending.used_prefix {
-        continuation_prefix_for(
-            pending.prefix.as_str(),
-            pending.repeat_prefix,
-            pending.outer_prefix.as_deref(),
-        )
-    } else {
-        pending.used_prefix = true;
-        pending.prefix.clone()
-    }
-}
-
-fn continuation_prefix_for(
-    prefix: &str,
-    repeat_prefix: bool,
-    outer_prefix: Option<&str>,
-) -> String {
-    if repeat_prefix {
-        return prefix.to_string();
-    }
-
-    let prefix_width = UnicodeWidthStr::width(prefix);
-    if let Some(outer_prefix) = outer_prefix {
-        let outer_width = UnicodeWidthStr::width(outer_prefix);
-        return format!(
-            "{outer_prefix}{}",
-            " ".repeat(prefix_width.saturating_sub(outer_width))
-        );
-    }
-    let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
-    let indent_width = UnicodeWidthStr::width(indent_str.as_str());
-    format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width))
 }
