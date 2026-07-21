@@ -35,6 +35,19 @@ ellipsis character `…` before the table is reflowed. This ensures column width
 are computed from the final emitted glyph rather than from the three-dot source
 sequence.
 
+Literal dot sequences in inline code, fenced code blocks, and four-space or
+tab-indented code blocks remain unchanged. An indented code block must start at
+the document boundary or after a blank line, heading, closed fenced block, link
+reference definition, or markdownlint directive. This matches Markdown's rule
+that an indented code block cannot interrupt a paragraph.
+
+The flag also preserves `...` where the dots are semantically significant:
+inline links and images, autolinks, bare URLs, link reference definitions and
+their destination or title continuation lines, and filesystem-like tokens are
+passed through unchanged. For example, a GitHub compare destination containing
+`v1...v2` remains a valid URL even when it follows its reference label on the
+next line.
+
 ## Paragraph wrapping
 
 Pass `--wrap` to reflow prose paragraphs so that every output line fits within

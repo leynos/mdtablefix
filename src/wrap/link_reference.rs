@@ -165,7 +165,16 @@ pub(crate) enum LinkTitleWindow {
 
 impl LinkTitleWindow {
     /// Closes the window after leaving fenced code or other interrupting context.
-    pub(super) fn observe_fence_context(&mut self) { *self = Self::Closed; }
+    pub(crate) fn observe_fence_context(&mut self) { *self = Self::Closed; }
+
+    /// Opens the continuation window required by a link reference definition.
+    pub(crate) fn observe_definition(&mut self, line: &str, matcher: LinkReferenceMatcher) {
+        if matcher.is_bare_label_only(line) {
+            self.observe_bare_label();
+        } else if matcher.standalone_title_need(line) == Some(true) {
+            self.observe_bare_definition();
+        }
+    }
 
     /// Opens the window after emitting a bare link reference definition.
     pub(super) fn observe_bare_definition(&mut self) { *self = Self::AwaitingStandaloneTitle; }
@@ -177,7 +186,7 @@ impl LinkTitleWindow {
     ///
     /// Returns `None` when the window is closed. Otherwise the window is
     /// always closed before the caller acts on the outcome.
-    pub(super) fn observe_next_line(
+    pub(crate) fn observe_next_line(
         &mut self,
         line: &str,
         matcher: LinkReferenceMatcher,

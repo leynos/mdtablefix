@@ -29,7 +29,7 @@ use continuation::apply_continuation_chunk;
 /// inspects one line and returns the fence components (indentation, marker,
 /// info string) when the line opens a fenced code block, or `None` otherwise.
 pub use fence::{FenceTracker, is_fence};
-pub(crate) use link_reference::LinkReferenceMatcher;
+pub(crate) use link_reference::{LinkReferenceMatcher, LinkTitleWindow, LinkTitleWindowOutcome};
 use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
@@ -46,6 +46,7 @@ pub use tokenize::tokenize_markdown;
 // Re-exported for unit tests; not used in production code.
 #[cfg(test)]
 pub(crate) use tokenize::{continuation_begins_with_closing_fence, has_unclosed_code_span};
+pub(crate) use tokenize::{has_odd_backslash_escape_bytes, link_or_image_span};
 
 // Permit GFM task list markers with flexible spacing and missing post-marker
 // spaces in Markdown.
@@ -145,17 +146,6 @@ fn normalized_passthrough_line(line: &str) -> &str {
     }
 }
 
-fn update_link_title_window_for_definition(
-    line: &str,
-    link_matcher: &LinkReferenceMatcher,
-    link_title_window: &mut link_reference::LinkTitleWindow,
-) {
-    if link_matcher.is_bare_label_only(line) {
-        link_title_window.observe_bare_label();
-    } else if link_matcher.standalone_title_need(line) == Some(true) {
-        link_title_window.observe_bare_definition();
-    }
-}
 fn handle_pending_continuation(
     line: &str,
     block_kind: Option<BlockKind>,
@@ -180,7 +170,7 @@ fn handle_pending_continuation(
 
     if is_passthrough_block(block_kind, line) {
         if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
-            update_link_title_window_for_definition(line, &link_matcher, link_title_window);
+            link_title_window.observe_definition(line, link_matcher);
         }
         let emitted = normalized_passthrough_line(line);
         writer.push_verbatim(state, emitted);
@@ -240,11 +230,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 
         if is_passthrough_block(block_kind, line) {
             if matches!(block_kind, Some(BlockKind::LinkReferenceDefinition)) {
-                update_link_title_window_for_definition(
-                    line,
-                    &link_matcher,
-                    &mut link_title_window,
-                );
+                link_title_window.observe_definition(line, link_matcher);
             }
             // Whitespace-only lines act as paragraph breaks; emit them as empty
             // strings so downstream consumers see a uniform separator.

@@ -317,13 +317,18 @@ fn combined_flags_preserve_generated_fenced_bodies() {
                 .opening_line
                 .strip_prefix(&block.indent)
                 .ok_or_else(|| TestCaseError::fail("opening fence indentation changed"))?;
+            let expected_info_suffix = if block.info_suffix.trim().is_empty() {
+                ""
+            } else {
+                &block.info_suffix
+            };
             prop_assert!(
-                opening_without_indent.ends_with(&block.info_suffix),
+                opening_without_indent.ends_with(expected_info_suffix),
                 "opening fence info string changed after combined flags:\ninput:\n{}\noutput:\n{}",
                 block.input,
                 output
             );
-            let marker_len = opening_without_indent.len() - block.info_suffix.len();
+            let marker_len = opening_without_indent.len() - expected_info_suffix.len();
             let output_marker = &opening_without_indent[..marker_len];
             let marker_char = output_marker
                 .chars()
@@ -357,6 +362,18 @@ fn combined_flags_preserve_generated_fenced_bodies() {
             Ok(())
         })
         .expect("generated fenced blocks are preserved by combined flags");
+}
+
+/// Whitespace-only fence suffixes are absent info strings and normalize away.
+#[test]
+fn combined_flags_normalize_whitespace_only_fence_suffix() -> Result<(), Box<dyn std::error::Error>>
+{
+    let input = "```  \n-- Payload example...\n```\n";
+    let assertion = run_cli_with_stdin(ISSUE_329_COMBINED_FLAGS, input)?;
+    assertion
+        .success()
+        .stdout("```\n-- Payload example...\n```\n");
+    Ok(())
 }
 
 /// Ensures `--wrap` preserves emphasised step definition guidance with inline code spans.

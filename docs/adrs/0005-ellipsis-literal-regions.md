@@ -1,0 +1,47 @@
+# Protect literal regions during ellipsis replacement
+
+## Status
+
+Accepted.
+
+## Context
+
+The `--ellipsis` transform originally normalized every three-dot run in a
+plain-text tokenizer token. Markdown links, autolinks, bare URLs, and
+filesystem paths are represented as text by that tokenizer even though dots in
+those regions may carry syntax or identify a literal resource. GitHub compare
+URLs, for example, use `...` between revisions.
+
+Promoting URL and path recognition into the shared tokenizer would make a
+typography-specific policy part of its public token model. It would also risk a
+breaking change for consumers that exhaustively match the public `Token` enum.
+
+## Decision
+
+Keep literal-region policy local to the ellipsis transform. The transform
+reuses the wrapping parser's balanced link and image span detection, but owns
+autolink, bare URL, and filesystem-token classification itself. Protected
+source ranges are merged and copied byte-for-byte; ellipsis normalization is
+applied only to gaps between those ranges.
+
+Treat whitespace-delimited tokens containing `...` as filesystem-like only when
+they use an explicit absolute `/`, relative `./` or `../`, home `~/`, or
+Windows-drive prefix. Generic slash-delimited prose remains prose and is
+normalized.
+
+Preserve complete inline links and images, including their labels and optional
+titles. This keeps a Markdown construct atomic and avoids partially rewriting
+text whose exact bytes may be used by documentation tooling.
+
+Use the wrapping parser's `LinkTitleWindow` state machine for split link
+reference definitions. Destination and standalone-title continuation lines are
+copied byte-for-byte, just like a complete definition on one line.
+
+## Consequences
+
+- GitHub compare URLs and path examples remain valid under `--ellipsis`.
+- Split link reference destinations and titles retain semantic dot runs.
+- Ordinary prose surrounding protected tokens continues to be normalized.
+- Generic slash-delimited prose containing `...` is normalized.
+- Transforms outwith ellipsis replacement do not inherit this policy
+  automatically.

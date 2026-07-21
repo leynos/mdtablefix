@@ -337,12 +337,14 @@ inside link labels are not supported (for example, `[label [nested]]` or
 
 **`LinkTitleWindow`**
 
-Explicit state for standalone title continuation in `wrap_text`. Starts
-`Closed`. After a bare link reference definition, `observe_bare_definition()`
-opens `AwaitingStandaloneTitle`. While open, `observe_next_line(line, matcher)`
-returns `Some(EmitVerbatim)` for blank or title lines (and closes the window),
-or `Some(Reprocess)` when the line is ordinary prose (closing the window, so
-the caller reflows it).
+Explicit state for link reference continuations in `wrap_text` and
+`replace_ellipsis`. Starts `Closed`. Callers pass each classified definition to
+`observe_definition(line, matcher)`, which opens `AwaitingStandaloneTitle` for
+a bare definition or `AwaitingUrlContinuation` for a label-only definition.
+While a title is expected, `observe_next_line(line, matcher)` returns
+`Some(EmitVerbatim)` for blank or title lines (and closes the window), or
+`Some(Reprocess)` when the line is ordinary prose (closing the window, so the
+caller processes it normally).
 
 After a label-only reference definition, `observe_bare_label()` opens
 `AwaitingUrlContinuation`. A valid indented destination emits verbatim; if the
