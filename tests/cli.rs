@@ -71,6 +71,50 @@ fn test_cli_process_file(broken_table: Vec<String>) {
         .stdout("| A | B |\n| 1 | 2 |\n| 3 | 4 |\n");
 }
 
+/// Snapshots equivalent stdout and in-place output for a representative file.
+#[test]
+fn cli_output_modes_snapshot_table_prose() {
+    let input = include_str!("data/cli-output-parity.md");
+    let dir = tempdir().expect("failed to create temporary directory");
+    let stdout_path = dir.path().join("stdout.md");
+    let in_place_path = dir.path().join("in-place.md");
+    fs::write(&stdout_path, input).expect("failed to write stdout fixture");
+    fs::write(&in_place_path, input).expect("failed to write in-place fixture");
+
+    let stdout = Command::cargo_bin("mdtablefix")
+        .expect("failed to create cargo command for mdtablefix")
+        .arg(&stdout_path)
+        .output()
+        .expect("failed to run stdout command");
+    assert!(
+        stdout.status.success(),
+        "stdout command failed: {}",
+        String::from_utf8_lossy(&stdout.stderr)
+    );
+    insta::assert_snapshot!(
+        "format_to_string_table_prose",
+        String::from_utf8_lossy(&stdout.stdout)
+    );
+
+    let in_place = Command::cargo_bin("mdtablefix")
+        .expect("failed to create cargo command for mdtablefix")
+        .args([
+            "--in-place",
+            in_place_path.to_str().expect("temporary path is UTF-8"),
+        ])
+        .output()
+        .expect("failed to run in-place command");
+    assert!(
+        in_place.status.success(),
+        "in-place command failed: {}",
+        String::from_utf8_lossy(&in_place.stderr)
+    );
+    insta::assert_snapshot!(
+        "rewrite_in_place_table_prose",
+        fs::read_to_string(&in_place_path).expect("failed to read rewritten fixture")
+    );
+}
+
 /// Tests that the `--fences` option normalizes backtick fences.
 #[test]
 fn test_cli_fences_option() {
