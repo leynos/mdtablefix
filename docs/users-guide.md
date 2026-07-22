@@ -60,9 +60,11 @@ algorithm: each word is placed on the current line if it fits, and a new line
 is started otherwise. This produces predictable, diff-friendly output.
 
 Inline code spans (`` `…` ``), Markdown links (`[text](url)`), and inline GFM
-footnote references (`[^label]`) are treated as unbreakable units. A span is
-never split across lines; it moves as a whole to the next line when it would
-otherwise exceed the target width.
+footnote references (`[^label]`) are treated as unbreakable units during normal
+line fitting. `mdtablefix --wrap` never introduces a line break within an
+inline code span; the span otherwise moves as a whole to the next line when it
+would exceed the target width. The exception for an already cross-line overlong
+span is described below.
 
 Reference-style links such as `[text][reference]` are likewise unbreakable. The
 opening `[` always stays with the link label, avoiding leading whitespace
