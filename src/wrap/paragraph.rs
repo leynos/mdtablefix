@@ -294,9 +294,11 @@ impl<'a> ParagraphWriter<'a> {
             return;
         }
 
-        if let Some(lines) =
-            spanning_code::conforming_source_lines_for_overlong_span(&state.buf, self.width)
-        {
+        if let Some(lines) = spanning_code::conforming_source_lines_for_overlong_span(
+            &state.buf,
+            &state.indent,
+            self.width,
+        ) {
             self.out.extend(lines);
             state.clear();
             return;

@@ -230,6 +230,12 @@ fn handle_pending_continuation(
     });
     if let Some(prefix) = resolved_continuation_prefix {
         let Some(continuation) = line.original.strip_prefix(prefix.as_str()) else {
+            trace!(
+                mode = "pending_prefix",
+                boundary = "prefix_mismatch",
+                line_len = line.original.len(),
+                "flushing a pending continuation after its prefix changed"
+            );
             writer.flush_paragraph(state);
             return false;
         };
