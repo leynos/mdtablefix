@@ -5,6 +5,8 @@
 //! every authored line already fits, and joining the span would exceed the
 //! configured width. Ordinary prose remains owned by the greedy wrapper.
 
+use std::ops::Range;
+
 use tracing::trace;
 use unicode_width::UnicodeWidthStr;
 
@@ -15,10 +17,24 @@ use crate::wrap::{
 
 #[derive(Debug)]
 struct OverlongSpan {
-    text: String,
+    range: Range<usize>,
     pieces: Vec<String>,
 }
 
+/// Formats conforming source lines when an inline-code span must stay split.
+///
+/// `segments` contains the buffered source text and hard-break markers,
+/// `indent` is the leading whitespace restored on every emitted line, and
+/// `width` is the total display-column limit including that indent. The helper
+/// returns `Some` formatted lines only when an overlong inline-code span crosses
+/// authored boundaries. Otherwise it returns `None`, deferring emission to the
+/// ordinary greedy wrapper.
+///
+/// Detection runs before greedy wrapping. For `T` joined text bytes, `F` fence
+/// runs, and `B` authored boundaries, its worst case is `O(T × F + F log B)`.
+/// For `S` qualifying spans and `L` wrapped output bytes, the fallback adds
+/// `O(S × L)` output searches; wrapping and those searches run only after a
+/// qualifying span is found.
 pub(super) fn conforming_source_lines_for_overlong_span(
     segments: &[(String, bool)],
     indent: &str,
@@ -30,26 +46,30 @@ pub(super) fn conforming_source_lines_for_overlong_span(
         return None;
     }
 
-    let mut found_overlong_span = false;
-    let mut output = Vec::new();
-    for group in hard_break_groups(segments) {
-        let (joined, boundaries) = join_with_boundaries(group);
-        let spans = overlong_code_spans_crossing_boundaries(&joined, &boundaries, available);
-        found_overlong_span |= !spans.is_empty();
+    let groups = hard_break_groups(segments)
+        .map(|group| {
+            let (joined, boundaries) = join_with_boundaries(group);
+            let spans = overlong_code_spans_crossing_boundaries(&joined, &boundaries, available);
+            let has_hard_break = group.last().is_some_and(|(_, hard_break)| *hard_break);
+            (joined, spans, has_hard_break)
+        })
+        .collect::<Vec<_>>();
+    if groups.iter().all(|(_, spans, _)| spans.is_empty()) {
+        return None;
+    }
 
+    let mut output = Vec::new();
+    for (joined, spans, has_hard_break) in groups {
         let mut lines = wrap_preserving_code(&joined, available);
         for span in spans {
-            preserve_span_boundaries(&mut lines, &span, available);
+            preserve_span_boundaries(&mut lines, &joined, &span, available);
         }
-        if group.last().is_some_and(|(_, hard_break)| *hard_break) {
+        if has_hard_break {
             restore_last_hard_break(&mut lines);
         }
         output.extend(lines.into_iter().map(|line| format!("{indent}{line}")));
     }
 
-    if !found_overlong_span {
-        return None;
-    }
     trace!(
         mode = "preserve_authored_boundaries",
         width,
@@ -121,15 +141,13 @@ fn overlong_code_spans_crossing_boundaries(
             index = fence_end;
             continue;
         };
-        let span_boundaries = boundaries
-            .iter()
-            .copied()
-            .filter(|boundary| index < *boundary && *boundary < close_end)
-            .collect::<Vec<_>>();
+        let first_boundary = boundaries.partition_point(|boundary| *boundary <= index);
+        let last_boundary = boundaries.partition_point(|boundary| *boundary < close_end);
+        let span_boundaries = &boundaries[first_boundary..last_boundary];
         if !span_boundaries.is_empty() && text[index..close_end].width() > width {
             spans.push(OverlongSpan {
-                text: text[index..close_end].to_string(),
-                pieces: split_span_at_boundaries(text, index, close_end, &span_boundaries),
+                range: index..close_end,
+                pieces: split_span_at_boundaries(text, index, close_end, span_boundaries),
             });
         }
         index = close_end;
@@ -153,16 +171,22 @@ fn split_span_at_boundaries(
     pieces
 }
 
-fn preserve_span_boundaries(lines: &mut Vec<String>, span: &OverlongSpan, width: usize) {
+fn preserve_span_boundaries(
+    lines: &mut Vec<String>,
+    joined: &str,
+    span: &OverlongSpan,
+    width: usize,
+) {
+    let span_text = &joined[span.range.clone()];
     let Some((line_index, span_start)) = lines
         .iter()
         .enumerate()
-        .find_map(|(index, line)| line.find(&span.text).map(|offset| (index, offset)))
+        .find_map(|(index, line)| line.find(span_text).map(|offset| (index, offset)))
     else {
         return;
     };
     let line = lines.remove(line_index);
-    let span_end = span_start + span.text.len();
+    let span_end = span_start + span_text.len();
     let before = &line[..span_start];
     let after = &line[span_end..];
     let mut replacement = span.pieces.clone();
