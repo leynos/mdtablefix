@@ -648,6 +648,21 @@ Together, these helpers make the rest of the processing pipeline deal with a
 single normalized fence, and avoid carrying separate logic for detached
 specifier lines.
 
+
+### Strategy enum
+
+`Strategy` is the canonical private choice for fence-marker rewriting. Its
+variants have the following effects:
+
+- `Compress` rewrites the marker to exactly three backticks while preserving
+  indentation and the language specifier.
+- `Preserve` retains the original marker character and run length when an
+  interior fence would otherwise become structural.
+
+All fence-marker rewriting must dispatch on `Strategy` through `rewrite_marker`;
+`rewrite_fence_line` retains the additional matched-block handling required by
+the preserve path.
+
 ### Architecture
 
 The earlier implementation used two slice-and-index helpers,
