@@ -79,6 +79,15 @@ restores the separator row with widths derived from the final table body.
   use this macro and supply a descriptive expect message that identifies the
   pattern whose compilation failed.
 
+`src/textproc.rs`:
+
+- `leading_indent(s: &str) -> &str`: Returns the leading whitespace prefix of
+  `s` as a borrowed slice. Whitespace follows [`char::is_whitespace`], so
+  Unicode whitespace and tabs are included. It returns an empty string when `s`
+  has no leading whitespace and returns all of `s` when every character is
+  whitespace. New indent extraction must reuse this helper rather than
+  duplicating its logic.
+
 `src/reflow.rs`:
 
 - `parse_rows`: Parses trimmed table lines into row vectors while preserving

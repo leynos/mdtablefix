@@ -248,3 +248,26 @@ mod tests {
         assert_eq!(buf, "\n");
     }
 }
+
+/// Return the leading Unicode-whitespace prefix of `s` without allocating.
+///
+/// Whitespace is defined by [`char::is_whitespace`]. The returned slice is
+/// empty when `s` begins with a non-whitespace character and is `s` itself
+/// when every character is whitespace.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::textproc::leading_indent;
+///
+/// assert_eq!(leading_indent("  hello"), "  ");
+/// ```
+#[inline]
+#[must_use]
+pub fn leading_indent(s: &str) -> &str {
+    let end = s
+        .char_indices()
+        .find_map(|(index, character)| (!character.is_whitespace()).then_some(index))
+        .unwrap_or(s.len());
+    &s[..end]
+}
