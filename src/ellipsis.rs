@@ -203,6 +203,19 @@ mod tests {
         assert_eq!(replace_ellipsis(&input), expected);
     }
 
+    #[test]
+    fn ignores_blockquoted_fenced_blocks() {
+        // The depth-aware fence tracker recognises a fence opened inside a
+        // blockquote, so the enclosed `...` stays literal.
+        let input = vec![
+            "> ```".to_string(),
+            "> ...".to_string(),
+            "> ```".to_string(),
+        ];
+        let expected = input.clone();
+        assert_eq!(replace_ellipsis(&input), expected);
+    }
+
     #[rstest::rstest]
     #[case::code_block(
         &["Expected output:", "", "    running 2 tests", "    test foo ... ok", "", "    ...", "after..."],

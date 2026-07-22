@@ -62,13 +62,16 @@ fn preserves_nested_or_spaced_fence_blocks(
 
 #[test]
 fn does_not_compress_mixed_fences() {
+    // Each block is unclosed because the trailing delimiter uses a different
+    // marker character, so only the opening delimiter is normalized and the
+    // interior line is preserved verbatim.
     let input = lines_vec!["~~~rust", "code", "```"];
     let out = compress_fences(&input);
     assert_eq!(out, lines_vec!["```rust", "code", "```"]);
 
     let input2 = lines_vec!["```rust", "code", "~~~"];
     let out2 = compress_fences(&input2);
-    assert_eq!(out2, lines_vec!["```rust", "code", "```"]);
+    assert_eq!(out2, lines_vec!["```rust", "code", "~~~"]);
 }
 
 #[test]
@@ -342,14 +345,14 @@ fn compresses_matched_fence_reusing_cached_opening_and_closing_rewrites() {
 }
 
 #[test]
-fn unclosed_fence_falls_back_to_cached_per_line_rewrites() {
+fn unclosed_fence_rewrites_only_the_opening_delimiter() {
     // No closing delimiter matches the six-backtick opener, so the block is
-    // emitted through the unmatched fallback. Each retained fence-like line must
-    // still be rewritten from its cached compressed form, matching the prior
-    // stateless per-line behaviour.
+    // emitted through the unmatched fallback. Only the opening delimiter is
+    // normalized; the interior fence-like lines are literal content of the
+    // unclosed fence and are preserved verbatim.
     let input = lines_vec!["``````rust", "````js", "~~~"];
     let out = compress_fences(&input);
-    assert_eq!(out, lines_vec!["```rust", "```js", "```"]);
+    assert_eq!(out, lines_vec!["```rust", "````js", "~~~"]);
 }
 
 #[rstest]

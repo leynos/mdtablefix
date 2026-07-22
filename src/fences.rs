@@ -168,12 +168,17 @@ fn rewrite_delimiter(cached: CachedLine, rewrite: FenceRewrite) -> String {
     }
 }
 fn flush_unmatched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
-    out.extend(
-        block
-            .lines
-            .into_iter()
-            .map(|cached| cached.compressed.unwrap_or(cached.line)),
-    );
+    // The block never closed, so its interior lines are literal content of the
+    // unclosed fence: normalize only the opening delimiter and emit every
+    // interior line verbatim, so fence-like content is not rewritten.
+    for (index, cached) in block.lines.into_iter().enumerate() {
+        let emitted = if index == 0 {
+            cached.compressed.unwrap_or(cached.line)
+        } else {
+            cached.line
+        };
+        out.push(emitted);
+    }
 }
 
 fn flush_matched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
@@ -299,6 +304,30 @@ fn advance_fence_block(
     flush_completed_block(block, out);
     None
 }
+
+/// Normalize safe outer fence delimiters to exactly three backticks.
+///
+/// `compress_fences` returns non-fence lines unchanged. Compatible backtick or
+/// tilde delimiters in matched fenced blocks may be rewritten to three
+/// backticks when doing so preserves the document structure.
+/// Fence-like lines inside a wider matched fenced block are literal content and
+/// are returned unchanged. An outer delimiter is also preserved when
+/// shortening or changing it would make an inner literal fence line look
+/// structural.
+///
+/// When input ends inside an unclosed fence, `compress_fences` uses
+/// `flush_unmatched_block`, which normalizes only the opening delimiter and
+/// emits every interior line verbatim, so fence-like content inside that
+/// unclosed block is preserved rather than rewritten.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::fences::compress_fences;
+/// let out = compress_fences(&["````rust".to_string()]);
+/// assert_eq!(out, vec!["```rust".to_string()]);
+/// ```
+#[must_use]
 pub fn compress_fences(lines: &[String]) -> Vec<String> {
     let mut tracker = FenceTracker::new();
     let mut pending_block = None;

@@ -245,7 +245,10 @@ proptest! {
         prop_assert!(!open_obs.was_in_fence);
         prop_assert!(open_obs.is_in_fence);
 
-        // A compatible marker nested deeper than the opener is literal content.
+        // A compatible marker nested deeper than the opener matches fence-marker
+        // syntax, but the tracker does not transition: the close is gated on the
+        // opening depth, so a deeper line cannot close the fence. `is_in_fence`
+        // therefore stays true, so the deeper line remains fenced content.
         let nested = quoted_line(open_depth + nested_offset, &run.repeat(open_len + close_extra));
         let nested_obs = tracker.observe_source_line(&nested);
         prop_assert!(nested_obs.is_fence_marker);

@@ -215,8 +215,11 @@ The wrapping pipeline for `--wrap` is:
 block classification. The abstraction exposes the source prefix, nesting depth,
 and stripped inner content: downstream classification and prefix-aware wrapping
 receive the inner content, while emitted lines retain the source prefix.
-`FenceTracker` receives the same inner content and depth, so fences close only
-at their opening depth or when the blockquote depth decreases. Processing
+`FenceTracker` receives the same inner content and depth. An open fence closes
+when a compatible marker is observed at its opening depth, or implicitly when
+the current depth drops below that opening depth (the `depth < open_depth`
+contract). A transition from depth 3 to depth 2 therefore retains a fence
+opened at depth 2; it closes only once the depth falls below 2. Processing
 stages that loop over raw Markdown use the crate-private `observe_source_line`
 helper. It parses `BlockquotePrefix` once and returns the fence state before
 observation, whether the line is a fence marker, and the resulting state. The
