@@ -95,6 +95,34 @@ pub(crate) fn handle_fence_line(
     true
 }
 
+#[derive(Clone, Copy, Debug)]
+struct FenceState {
+    marker: char,
+    marker_len: usize,
+    open_depth: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FenceObservation {
+    pub(crate) was_in_fence: bool,
+    pub(crate) is_fence_marker: bool,
+    pub(crate) is_in_fence: bool,
+}
+
+/// A source-line fence observation paired with the structural fence parse of
+/// that same line.
+///
+/// Callers that need the marker components (indentation, marker run, info
+/// string) obtain them here rather than re-running [`is_fence`], keeping
+/// [`FenceTracker`] the single authority for the line's fence classification.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ObservedFence<'a> {
+    pub(crate) observation: FenceObservation,
+    /// The `(indent, marker, info)` components when the line is a fence marker,
+    /// with `indent` spanning any blockquote prefix, as [`is_fence`] returns.
+    pub(crate) fence: Option<(&'a str, &'a str, &'a str)>,
+}
+
 /// Tracks Markdown fenced code block state across lines.
 ///
 /// The tracker centralises fence matching logic so that callers share the
@@ -112,26 +140,7 @@ pub(crate) fn handle_fence_line(
 /// assert!(tracker.observe("```", 0));
 /// assert!(!tracker.in_fence(0));
 /// ```
-#[derive(Clone, Copy, Debug)]
-struct FenceState {
-    marker: char,
-    marker_len: usize,
-    open_depth: usize,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct FenceObservation {
-    pub(crate) was_in_fence: bool,
-    pub(crate) is_fence_marker: bool,
-    pub(crate) is_in_fence: bool,
-}
-
-pub(crate) struct ObservedFence<'a> {
-    pub(crate) observation: FenceObservation,
-    /// The `(indent, marker, info)` components when the line is a fence marker,
-    /// with `indent` spanning any blockquote prefix, as [`is_fence`] returns.
-    pub(crate) fence: Option<(&'a str, &'a str, &'a str)>,
-}
+#[derive(Default, Debug)]
 pub struct FenceTracker {
     state: Option<FenceState>,
 }

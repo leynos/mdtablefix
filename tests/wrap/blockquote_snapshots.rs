@@ -60,9 +60,9 @@ fn blockquote_snapshot_depth_decrease_ends_fence() {
 
 #[test]
 fn blockquote_snapshot_mixed_space_tab_prefix() {
-    let input = lines_vec![
-        "> \t> \tThis blockquote mixes spaces and tabs in the prefix and is long enough to wrap \
-         while preserving that exact prefix spelling.",
-    ];
+    let input = lines_vec![concat!(
+        "> \t> \tThis blockquote mixes spaces and tabs in the prefix and is long enough to wrap ",
+        "while preserving that exact prefix spelling."
+    )];
     assert_blockquote_snapshot("blockquote_mixed_space_tab_prefix", &input);
 }

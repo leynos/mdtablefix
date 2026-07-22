@@ -364,13 +364,7 @@ pub fn tokenize_markdown(source: &str) -> Vec<Token<'_>> {
     // `&str` references.
     while let Some(line) = lines.next() {
         let fence = fence_tracker.observe_source_line(line);
-        if fence.is_fence_marker {
-            tokens.push(Token::Fence(line));
-            push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
-            continue;
-        }
-
-        if fence.is_in_fence {
+        if fence.is_fence_marker || fence.is_in_fence {
             tokens.push(Token::Fence(line));
             push_newline_if_needed(&mut tokens, &mut lines, had_trailing_newline);
             continue;

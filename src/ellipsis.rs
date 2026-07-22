@@ -136,8 +136,8 @@ pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
     lines
         .iter()
         .map(|line| {
-            let is_fence = fence_tracker.observe_line(line);
-            if is_fence || fence_tracker.in_fence_for_line(line) {
+            let fence = fence_tracker.observe_source_line(line);
+            if fence.is_fence_marker || fence.is_in_fence {
                 indented_code_tracker.observe_completed_block();
                 link_title_window.observe_fence_context();
                 return line.clone();

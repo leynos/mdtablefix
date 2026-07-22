@@ -54,10 +54,7 @@ pub(super) fn has_existing_footnote_block(lines: &[String], start: usize) -> boo
     let mut fences = FenceTracker::default();
     for l in &lines[..start] {
         let fence = fences.observe_source_line(l);
-        if fence.is_fence_marker {
-            continue;
-        }
-        if fence.is_in_fence {
+        if fence.is_fence_marker || fence.is_in_fence {
             continue;
         }
         let mut t = l.trim_start();
