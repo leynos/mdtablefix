@@ -176,7 +176,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn process_stream(lines: &[String]) -> Vec<String> {
-    process_with_frontmatter(
+    process_stream_opts(
         lines,
         Options {
             wrap: true,
@@ -210,7 +210,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
-    process_with_frontmatter(lines, Options::default())
+    process_stream_opts(lines, Options::default())
 }
 
 /// Runs [`process_stream_inner`] with custom [`Options`].
@@ -238,15 +238,22 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn process_stream_opts(lines: &[String], opts: Options) -> Vec<String> {
-    process_with_frontmatter(lines, opts)
+    process_with_frontmatter(lines, |body| process_stream_inner(body, opts))
 }
 
-/// Helper to split frontmatter, process body, and rejoin.
-fn process_with_frontmatter(lines: &[String], opts: Options) -> Vec<String> {
+/// Processes a Markdown body while preserving leading YAML frontmatter verbatim.
+///
+/// This is the canonical frontmatter split/rejoin boundary. `body_fn` receives
+/// only the post-frontmatter body slice; the leading frontmatter prefix is never
+/// passed to it and is prepended verbatim to the closure's output.
+#[must_use]
+pub fn process_with_frontmatter<F>(lines: &[String], body_fn: F) -> Vec<String>
+where
+    F: FnOnce(&[String]) -> Vec<String>,
+{
     let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
-    let out = process_stream_inner(body, opts);
     let mut result = frontmatter_prefix.to_vec();
-    result.extend(out);
+    result.extend(body_fn(body));
     result
 }
 

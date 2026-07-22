@@ -5,12 +5,6 @@
 //! rewritten in place. Without paths the tool reads from standard input and
 //! prints results to stdout while preserving the input order.
 
-/// Detects and splits leading YAML frontmatter for CLI processing so command
-/// handlers can preserve the prefix while applying transforms to the Markdown
-/// body.
-#[path = "frontmatter.rs"]
-mod frontmatter;
-
 use std::{
     borrow::Cow,
     fs,
@@ -20,10 +14,13 @@ use std::{
 
 use anyhow::Context;
 use clap::Parser;
-use mdtablefix::{Options, format_breaks, process::process_stream_inner, renumber_lists};
+use mdtablefix::{
+    Options,
+    format_breaks,
+    process::{process_stream_inner, process_with_frontmatter},
+    renumber_lists,
+};
 use rayon::prelude::*;
-
-use crate::frontmatter::split_leading_yaml_frontmatter;
 
 #[derive(Parser)]
 #[command(version, about = "Reflow broken markdown tables")]
@@ -84,25 +81,19 @@ impl From<FormatOpts> for Options {
 }
 
 fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
-    // Split off leading YAML frontmatter to preserve it from all transforms
-    let (frontmatter_prefix, body) = split_leading_yaml_frontmatter(lines);
-
-    // Use process_stream_inner directly since we've already split frontmatter
-    let mut out = process_stream_inner(body, opts.into());
-    if opts.renumber {
-        out = renumber_lists(&out);
-    }
-    if opts.breaks {
-        out = format_breaks(&out)
-            .into_iter()
-            .map(Cow::into_owned)
-            .collect();
-    }
-
-    // Prepend the preserved frontmatter prefix
-    let mut result = frontmatter_prefix.to_vec();
-    result.extend(out);
-    result
+    process_with_frontmatter(lines, |body| {
+        let mut out = process_stream_inner(body, opts.into());
+        if opts.renumber {
+            out = renumber_lists(&out);
+        }
+        if opts.breaks {
+            out = format_breaks(&out)
+                .into_iter()
+                .map(Cow::into_owned)
+                .collect();
+        }
+        out
+    })
 }
 
 fn handle_file(path: &Path, in_place: bool, opts: FormatOpts) -> anyhow::Result<Option<String>> {
