@@ -42,6 +42,8 @@ pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for footnote conversion.
+
     use super::convert_footnotes;
 
     #[test]

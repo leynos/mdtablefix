@@ -100,6 +100,8 @@ fn ordered_marker(line: &str) -> Option<OrderedMarker> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for generated CLI-matrix invariants.
+
     use super::{fixture_has_fence_candidate, ordered_marker, unordered_fixture_markers};
 
     #[test]

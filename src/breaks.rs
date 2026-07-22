@@ -65,6 +65,8 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for thematic-break formatting.
+
     use std::{
         borrow::Cow,
         sync::{Arc, Barrier},

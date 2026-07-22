@@ -150,6 +150,8 @@ fn needs_space_after(prefix: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for heading conversion.
+
     use rstest::rstest;
 
     use super::*;

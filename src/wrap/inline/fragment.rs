@@ -215,6 +215,8 @@ fn log_fragment_classification(text: &str, kind: &FragmentKind) {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for inline-fragment classification.
+
     use proptest::prelude::*;
 
     use super::*;

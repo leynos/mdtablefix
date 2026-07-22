@@ -62,6 +62,8 @@ pub(crate) fn split_leading_yaml_frontmatter(lines: &[String]) -> (&[String], &[
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for frontmatter detection.
+
     use rstest::rstest;
 
     use super::*;

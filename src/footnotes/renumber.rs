@@ -12,12 +12,12 @@ mod definitions;
 /// scanning machinery in [`definitions`] so each source file stays within
 /// the repository size limit.
 mod reorder;
-/// Re-exports the [`DefinitionParts`](super::parsing::DefinitionParts) shape
-/// from the sibling `parsing` module so the [`definitions`] submodule can
-/// reach it through `super::parsing::DefinitionParts` without taking a direct
-/// dependency on the grandparent path. Treat this as an internal alias only;
-/// no new types belong here.
 mod parsing {
+    //! Re-exports [`DefinitionParts`](super::super::parsing::DefinitionParts)
+    //! from the parent module so [`definitions`](super::definitions) can use
+    //! `super::parsing::DefinitionParts` without depending directly on its
+    //! grandparent path. This is an internal alias; no new types belong here.
+
     pub(super) use super::super::parsing::DefinitionParts;
 }
 

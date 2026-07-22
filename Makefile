@@ -6,6 +6,7 @@ BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= $(or $(shell command -v markdownlint-cli2 2>/dev/null),$(HOME)/.bun/bin/markdownlint-cli2)
 NIXIE ?= nixie
+RG ?= rg
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -35,10 +36,13 @@ check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 
 check-static-regexes: ## Reject hand-rolled static regular expressions
-	@if rg -U 'LazyLock::new\(\|\|\s*(\{\s*)?Regex::new' src/; then \
-		echo "static regular expressions must use lazy_regex!"; \
-		exit 1; \
-	fi
+	@status=0; \
+	$(RG) -U --glob '*.rs' '\bstatic\b[^;=]*=\s*(?:[[:alnum:]_]+::)*LazyLock::new\s*\(\s*\|\|\s*(\{\s*)?(?:[[:alnum:]_]+::)*Regex::new' . || status=$$?; \
+	case $$status in \
+		0) echo "static regular expressions must use lazy_regex!"; exit 1 ;; \
+		1) ;; \
+		*) echo "failed to scan Rust sources (rg exit $$status)" >&2; exit $$status ;; \
+	esac
 
 markdownlint: ## Lint Markdown files
 	$(MDLINT) "**/*.md"

@@ -118,6 +118,8 @@ pub fn process_text(out: &str, trailing_blanks: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for token processing.
+
     use super::*;
 
     #[test]

@@ -42,6 +42,8 @@ pub fn rewrite_no_wrap(path: &Path) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for file rewriting.
+
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     use std::{fs::Permissions, path::Path};

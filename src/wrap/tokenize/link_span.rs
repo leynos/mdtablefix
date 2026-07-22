@@ -36,6 +36,8 @@ pub(crate) fn link_or_image_span(text: &str, start: usize) -> Option<Range<usize
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for Markdown link-span parsing.
+
     use super::*;
 
     #[rstest::rstest]

@@ -233,6 +233,8 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for table parsing and formatting.
+
     use rstest::rstest;
 
     use super::*;
