@@ -79,6 +79,18 @@ restores the separator row with widths derived from the final table body.
   use this macro and supply a descriptive expect message that identifies the
   pattern whose compilation failed.
 
+`src/main.rs` file-output functions:
+
+- `format_to_string(path, opts) -> anyhow::Result<String>` reads and formats a
+  file without modifying it. Its returned text uses the same trailing-newline
+  convention as a rewritten file.
+- `rewrite_in_place(path, opts) -> anyhow::Result<()>` reads and formats a
+  file, then writes the formatted text back to that path.
+
+Callers select the function that matches their intent rather than passing a
+Boolean mode flag. This keeps stdout and in-place contracts explicit while
+allowing both paths to share the exact formatting result.
+
 `src/reflow.rs`:
 
 - `parse_rows`: Parses trimmed table lines into row vectors while preserving

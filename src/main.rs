@@ -105,25 +105,24 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
     result
 }
 
-fn handle_file(path: &Path, in_place: bool, opts: FormatOpts) -> anyhow::Result<Option<String>> {
+/// Reads and formats a file without modifying it.
+fn format_to_string(path: &Path, opts: FormatOpts) -> anyhow::Result<String> {
     let content =
         fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
     let fixed = process_lines(&lines, opts);
-    if in_place {
-        // Preserve compatibility with the `rewrite` helper by always ending files with a
-        // trailing newline when content exists. This mirrors typical Unix tool behaviour
-        // and avoids spurious diffs when rewriting in place.
-        let output = if fixed.is_empty() {
-            String::new()
-        } else {
-            fixed.join("\n") + "\n"
-        };
-        fs::write(path, output).with_context(|| format!("writing {}", path.display()))?;
-        Ok(None)
+    // Keep file output newline-terminated, matching the CLI stdout contract.
+    Ok(if fixed.is_empty() {
+        String::new()
     } else {
-        Ok(Some(fixed.join("\n")))
-    }
+        fixed.join("\n") + "\n"
+    })
+}
+
+/// Reads, formats, and rewrites a file in place.
+fn rewrite_in_place(path: &Path, opts: FormatOpts) -> anyhow::Result<()> {
+    let output = format_to_string(path, opts)?;
+    fs::write(path, output).with_context(|| format!("writing {}", path.display()))
 }
 
 fn report_results<T, F>(results: Vec<anyhow::Result<T>>, mut on_ok: F) -> anyhow::Result<()>
@@ -188,21 +187,90 @@ fn main() -> anyhow::Result<()> {
         let results: Vec<anyhow::Result<()>> = cli
             .files
             .par_iter()
-            .map(|p| handle_file(p, true, cli.opts).map(|_| ()))
+            .map(|p| rewrite_in_place(p, cli.opts))
             .collect();
         report_results(results, |()| {})?;
     } else {
-        let results: Vec<anyhow::Result<Option<String>>> = cli
+        let results: Vec<anyhow::Result<String>> = cli
             .files
             .par_iter()
-            .map(|p| handle_file(p, false, cli.opts))
+            .map(|p| format_to_string(p, cli.opts))
             .collect();
-        report_results(results, |maybe_out| {
-            if let Some(out) = maybe_out {
-                println!("{out}");
-            }
-        })?;
+        report_results(results, |out| print!("{out}"))?;
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit and property tests for the binary's file-output contracts.
+
+    use std::fs;
+
+    use proptest::prelude::*;
+
+    use super::{FormatOpts, format_to_string, rewrite_in_place};
+
+    fn prose_word_strategy() -> impl Strategy<Value = String> {
+        prop::collection::vec(
+            prop_oneof![
+                Just("alpha".to_string()),
+                Just("beta".to_string()),
+                Just("gamma".to_string()),
+                Just("delta".to_string()),
+                Just("evidence".to_string()),
+                Just("formatting".to_string()),
+            ],
+            1..20,
+        )
+        .prop_map(|words| words.join(" "))
+    }
+
+    proptest! {
+        #[test]
+        fn formatting_matches_in_place_output(
+            prose in prose_word_strategy(),
+            table_cell in prose_word_strategy(),
+        ) {
+            let input = format!(
+                "{prose}\n\n| Name | Notes |\n|---|---|\n| {table_cell} | value |\n"
+            );
+            let directory = tempfile::tempdir()
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            let formatted_path = directory.path().join("formatted.md");
+            let rewritten_path = directory.path().join("rewritten.md");
+            fs::write(&formatted_path, &input)
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            fs::write(&rewritten_path, input)
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+            let formatted = format_to_string(&formatted_path, FormatOpts {
+                wrap: false,
+                renumber: false,
+                breaks: false,
+                ellipsis: false,
+                fences: false,
+                footnotes: false,
+                code_emphasis: false,
+                headings: false,
+            })
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            rewrite_in_place(&rewritten_path, FormatOpts {
+                wrap: false,
+                renumber: false,
+                breaks: false,
+                ellipsis: false,
+                fences: false,
+                footnotes: false,
+                code_emphasis: false,
+                headings: false,
+            })
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            let rewritten = fs::read_to_string(&rewritten_path)
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+            prop_assert_eq!(formatted, rewritten);
+        }
+    }
 }
