@@ -90,17 +90,20 @@ paragraph is greedily reflowed during the same pass, including later
 continuation lines in a list item. Running `--wrap` again therefore produces no
 further changes.
 
-When joining the span would exceed the configured width and each authored line
-already fits, the wrapper retains the source boundaries inside the code span.
-Markdown renders those soft breaks as spaces, while the physical lines remain
-within the limit. These rules apply in all prefixed contexts — bulleted lists,
-ordered lists, blockquotes, and footnote definitions — as well as in plain
-paragraphs.
+The wrapper never introduces a new line break inside an inline-code span. When
+joining the span would exceed the configured width and each authored line
+already fits, however, it may retain the authored boundaries inside that span.
+Markdown renders those retained soft breaks as spaces, while the physical lines
+remain within the limit. These rules apply in all prefixed contexts — bulleted
+lists, ordered lists, blockquotes, and footnote definitions — as well as in
+plain paragraphs.
 
 An inline code span may itself contain backslash-escaped backticks — for example
 `` `pass \`--file\` to the tool` ``. `--wrap` keeps the whole span, including
-its escaped inner backticks, as a single atomic unit: it is never split across
-lines, and the escaped backticks are preserved verbatim.
+its escaped inner backticks, opaque to ordinary line fitting. It does not
+introduce a split inside the span, and the escaped backticks are preserved
+verbatim; an already conforming authored boundary may still be retained under
+the overlong-span rule above.
 
 For list items, deferred inline code continuations use continuation indentation
 rather than repeating the original list marker. This prevents a wrapped

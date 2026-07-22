@@ -25,11 +25,12 @@ proptest! {
 
     #[test]
     fn conforming_cross_line_code_span_never_becomes_overlong(
-        first in "[a-z]{8,24}",
-        second in "[a-z]{8,24}",
-        third in "[a-z]{8,24}",
-        width in 48usize..=80,
+        first in "[a-z]{20,36}",
+        second in "[a-z]{20,36}",
+        third in "[a-z]{20,36}",
+        width in 48usize..=64,
     ) {
+        let joined_span = format!("`{first} {second} {third}`");
         let input = vec![
             "Introductory prose:".to_string(),
             format!("`{first}"),
@@ -37,9 +38,11 @@ proptest! {
             format!("{third}`"),
         ];
         prop_assume!(input.iter().all(|line| UnicodeWidthStr::width(line.as_str()) <= width));
+        prop_assume!(UnicodeWidthStr::width(joined_span.as_str()) > width);
 
         let output = wrap_text(&input, width);
 
+        prop_assert_eq!(&output, &input);
         prop_assert!(output.iter().all(|line| UnicodeWidthStr::width(line.as_str()) <= width));
     }
 }
