@@ -21,29 +21,27 @@ points rather than by calling the frontmatter helper directly.
 - Make the intended layering explicit: frontmatter detection supports stream
   processing, but it is not a general-purpose parsing API.
 
-### Implications for internal code organization
+### Canonical frontmatter boundary
 
-The package binary in [src/main.rs](../src/main.rs) is compiled as a separate
-crate from the library, so it cannot use library items marked `pub(crate)`. To
-preserve CLI access without reopening the library surface, the binary includes
-[src/frontmatter.rs](../src/frontmatter.rs) privately via:
+[`process_with_frontmatter`](../src/process.rs) is the single authoritative
+boundary for splitting and rejoining leading YAML frontmatter. It never passes
+the frontmatter prefix to `body_fn`, and it prepends that prefix verbatim to
+the closure's output.
 
-```rust
-#[path = "frontmatter.rs"]
-mod frontmatter;
-```
-
-This arrangement keeps the helper available to both the library and the CLI
-while maintaining a closed external API boundary.
+Callers must not split, transform, or restore frontmatter outside this
+boundary. Both [`process_stream_opts`](../src/process.rs) in the library and
+`process_lines` in the package binary route through it. All body transforms
+must run inside the closure, including CLI-only transforms such as
+`renumber_lists` and `format_breaks`.
 
 When working in this area:
 
-- Prefer wiring new behaviour through `process_stream_inner` or other public
-  formatting APIs instead of exporting frontmatter helpers.
+- Prefer wiring new behaviour through `process_with_frontmatter` rather than
+  exporting frontmatter helpers.
 - Treat changes to frontmatter parsing rules as internal architectural changes
   that should update this guide and any affected behaviour documentation.
-- Keep module documentation in sync in both `src/frontmatter.rs` and the
-  private module declaration used by the binary.
+- Keep the split/rejoin contract and its tests in sync with changes to
+  `src/frontmatter.rs`.
 
 ## Table reflow architecture
 
