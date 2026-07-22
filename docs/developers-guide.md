@@ -773,7 +773,7 @@ committing. Snapshot churn across many cases usually means the fixture is too
 broad or a shared transform changed behaviour; inspect the labelled case, mode,
 and arguments before accepting the new output.
 
-## Stateful pipeline helpers
+## 1. Stateful pipeline helpers
 
 Internal state carriers centralize the buffered state used by the conversion
 pipeline. Each owns one slice of pipeline behaviour, so the surrounding
@@ -783,8 +783,7 @@ machines explicit unless they meet the adoption threshold in
 crate research and the local pattern maintainers should follow when changing
 stateful helpers.
 
-
-### State-machine adoption checklist
+### 1.1. State-machine adoption checklist
 
 Keep an explicit Rust struct, enum, and event-shaped helper unless every item
 below is true. If every item is true, build a small comparison spike before
@@ -803,8 +802,7 @@ for a compact transition table. Record graph size, event mapping, lifecycle and
 error semantics, observability, generated-code legibility, and dependency
 adoption risk in an ADR update before adding a crate.
 
-
-### Wrapping continuation state (`src/wrap/paragraph.rs`)
+### 1.2. Wrapping continuation state (`src/wrap/paragraph.rs`)
 
 `ParagraphState` owns buffered prose, shared indentation, remembered
 continuation indentation, and an optional `PendingPrefix`. `PendingPrefix`
@@ -819,7 +817,7 @@ wrapping. Emit stable `trace!` fields at verbatim-preservation,
 prefix-mismatch, and tail-reflow transitions so maintainers can inspect why
 output changed.
 
-### `HtmlTableState` (`src/html.rs`)
+### 1.3. `HtmlTableState` (`src/html.rs`)
 
 `HtmlTableState` buffers the lines belonging to an HTML `<table>…</table>`
 block and tracks the current nesting depth. `in_html()` returns `true` whenever
@@ -832,7 +830,7 @@ cleared. `flush_raw` exists for the fenced-block escape path: it emits the
 buffered lines verbatim without conversion, so raw HTML inside a fenced code
 block is preserved unchanged.
 
-### `DefinitionScanState` (`src/footnotes/renumber/definitions.rs`)
+### 1.4. `DefinitionScanState` (`src/footnotes/renumber/definitions.rs`)
 
 `DefinitionScanState` accumulates the footnote-definition rewrite plan during a
 single scan over the input. It borrows the shared `(original → new)` mapping
@@ -845,7 +843,7 @@ finalized at the end via `finalize_numeric_candidates`, which drains the buffer
 in reverse, so the assigned numbers reflect bottom-up ordering rather than the
 order in which the candidates were discovered.
 
-### `ListState` (`src/lists.rs`)
+### 1.5. `ListState` (`src/lists.rs`)
 
 `ListState` maintains an indent stack and a per-indent counter map for
 ordered-list renumbering. `next_number(indent)` first prunes indent levels
@@ -857,9 +855,9 @@ the stack and the counter map; the renumbering pass invokes it when a heading
 or thematic break is encountered, so the next list starts numbering from 1
 again.
 
-## Test infrastructure
+## 2. Test infrastructure
 
-### `tests/support/` module
+### 2.1. `tests/support/` module
 
 Integration-test helpers are organized under `tests/support/`:
 
@@ -875,7 +873,7 @@ Table: Integration-test support modules and their purposes.
 Each integration-test file declares the modules it needs via explicit
 `#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
 
-### Exported test macros (`tests/common/mod.rs`)
+### 2.2. Exported test macros (`tests/common/mod.rs`)
 
 `tests/common/mod.rs` exports two `#[macro_export]` macros available to all
 integration-test crates:
@@ -897,7 +895,7 @@ integration-test binary crates. The `#[expect(unused_macros)]` suppressions
 that previously guarded them were replaced by the export attribute when it
 became clear that multiple test binaries depend on them.
 
-### `test-macros` crate
+### 2.3. `test-macros` crate
 
 The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
 proc-macro attribute. It suppresses the `unused_braces` lint that `rstest`
@@ -918,7 +916,7 @@ Apply it to any fixture function whose single-expression body triggers the lint:
 pub fn broken_table() -> Vec<String> { … }
 ```
 
-## Breaks module – Cow allocation strategy
+## 3. Breaks module – Cow allocation strategy
 
 `format_breaks` in [src/breaks.rs](../src/breaks.rs) returns
 `Vec<Cow<'_, str>>` so unchanged lines can be forwarded without allocating.
