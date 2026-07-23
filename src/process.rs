@@ -246,6 +246,30 @@ pub fn process_stream_opts(lines: &[String], opts: Options) -> Vec<String> {
 /// This is the canonical frontmatter split/rejoin boundary. `body_fn` receives
 /// only the post-frontmatter body slice; the leading frontmatter prefix is never
 /// passed to it and is prepended verbatim to the closure's output.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::process::process_with_frontmatter;
+///
+/// let lines = vec![
+///     "---".to_string(),
+///     "title: Example".to_string(),
+///     "---".to_string(),
+///     "markdown body".to_string(),
+/// ];
+/// let mut received = Vec::new();
+/// let output = process_with_frontmatter(&lines, |body| {
+///     received = body.to_vec();
+///     body.iter().map(|line| line.to_uppercase()).collect()
+/// });
+///
+/// assert_eq!(received, vec!["markdown body"]);
+/// assert_eq!(
+///     output,
+///     vec!["---", "title: Example", "---", "MARKDOWN BODY"]
+/// );
+/// ```
 #[must_use]
 pub fn process_with_frontmatter<F>(lines: &[String], body_fn: F) -> Vec<String>
 where

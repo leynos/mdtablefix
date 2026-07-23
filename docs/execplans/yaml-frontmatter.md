@@ -96,14 +96,16 @@ according to the selected options.
 - [x] (2026-04-09) Run `make check-fmt`, `make lint`, `make test`,
       `make markdownlint`,
   and `make nixie` if Mermaid content changes.
+- [x] (2026-07-23) Make `process_with_frontmatter` the canonical public
+  split/rejoin boundary, route the library and CLI through its body closure,
+  and update the user, architecture, and developer documentation.
 
 ## Surprises & discoveries
 
 - Observation: `src/main.rs` applies `renumber_lists` and `format_breaks`
-  after `process_stream_opts`, so shielding only `process_stream_inner` would
-  still allow the frontmatter delimiters to be rewritten. Evidence:
-  `process_lines` in `src/main.rs`. Impact: the plan must protect the body
-  before or around CLI-only transforms, not just inside `src/process.rs`.
+  after the inner stream processing. The canonical boundary must therefore
+  accept a closure so that those CLI-only transforms run on the body before the
+  frontmatter prefix is restored. Evidence: `process_lines` in `src/main.rs`.
 
 - Observation: `src/process.rs` is 343 lines before this feature.
   Evidence: `leta files` output for `src/process.rs`. Impact: new helper logic
@@ -123,14 +125,19 @@ according to the selected options.
   entire file into a special mode and preserves current behaviour for malformed
   input. Date/Author: 2026-04-05 22:45Z / Droid.
 
+- Decision: make `process_with_frontmatter` the single public split/rejoin
+  boundary. Rationale: passing the body transform as a closure keeps the YAML
+  prefix out of every transform, including CLI-only transforms, without
+  duplicating detection or restoration logic. Date/Author: 2026-07-23 / leynos.
+
 ## Outcomes & retrospective
 
-The frontmatter splitter was successfully implemented in the `frontmatter`
-module and integrated through both the `process` module and `main` module. Test
-coverage was added covering detection, wrapping, and `--breaks` flags for both
-library and CLI paths. All transforms now correctly skip the frontmatter
-prefix, preserving the leading YAML block exactly while formatting the Markdown
-body.
+The internal frontmatter splitter is now owned by the public
+`process_with_frontmatter` boundary. Both the library pipeline and
+`process_lines` in the binary supply body closures to that boundary, so all
+transforms skip the prefix and the leading YAML block is restored exactly.
+Property tests cover prefix preservation, closure confinement, and documents
+without frontmatter; snapshots pin both library and CLI output.
 
 ## Context and orientation
 
@@ -139,11 +146,10 @@ reflow, fence tracking, HTML table conversion, heading conversion, wrapping,
 ellipsis replacement, and footnote conversion through
 `process_stream_inner(lines, opts)`.
 
-The CLI entry point lives in `src/main.rs`. Its `process_lines` function first
-calls `process_stream_opts`, then applies ordered-list renumbering and
-thematic-break formatting. This is important because the YAML delimiter `---`
-looks like a thematic break, so protecting the frontmatter only in
-`src/process.rs` is insufficient.
+The CLI entry point lives in `src/main.rs`. Its `process_lines` function calls
+`process_with_frontmatter` and runs stream processing, ordered-list
+renumbering, and thematic-break formatting inside the supplied body closure.
+This is important because the YAML delimiter `---` looks like a thematic break.
 
 In-place file rewriting is handled by `src/io.rs`, which delegates to the
 library functions and therefore benefits automatically once the shared library
@@ -170,11 +176,10 @@ unchanged prefix to the processed body. Keep the current ordering of fences,
 HTML tables, wrapping, headings, ellipsis, and footnotes for the body.
 
 Stage C wires the same protection through the CLI-only transforms. In
-`src/main.rs`, split the original input once in `process_lines`, pass only the
-body slice through `process_stream_opts`, `renumber_lists`, and `format_breaks`
-as needed, then prepend the original prefix before returning the final lines.
-This ensures `--breaks` cannot rewrite the `---` delimiters in the frontmatter
-block.
+`src/main.rs`, call `process_with_frontmatter` in `process_lines` and run
+`process_stream_inner`, `renumber_lists`, and `format_breaks` inside its body
+closure. The canonical boundary then restores the original prefix, ensuring
+`--breaks` cannot rewrite the `---` delimiters in the frontmatter block.
 
 Stage D adds regression coverage. Put detector-specific unit tests in
 `src/frontmatter.rs` and a pipeline regression in `src/process.rs` or a small
@@ -317,23 +322,17 @@ Add a new internal module at `src/frontmatter.rs` with a helper shaped like:
 pub(crate) mod frontmatter;
 ```
 
-The helper `split_leading_yaml_frontmatter` returns `(prefix, body)`, where
-`prefix` is the untouched leading YAML block, or an empty slice if no valid
-block exists. The library keeps the helper internal, and the binary includes
-the same source file privately so CLI code can continue to use it without
-reopening the public API.
+The internal `split_leading_yaml_frontmatter` helper returns `(prefix, body)`,
+where `prefix` is the untouched leading YAML block, or an empty slice if no
+valid block exists. `process_with_frontmatter(lines, body_fn)` is the public
+canonical boundary: it invokes `body_fn` only with `body` and prepends `prefix`
+verbatim to the closure's result.
 
-`src/process.rs` calls the helper in `process_stream`,
-`process_stream_no_wrap`, and `process_stream_opts` before existing body
-processing. `src/main.rs` calls the same helper in `process_lines` before
-CLI-only transforms (`--renumber`, `--breaks`).
-
-Interface note: The library now declares `frontmatter` as `pub(crate)` and does
-not re-export `split_leading_yaml_frontmatter`. The binary crate (`main.rs`)
-remains able to use the helper by including `src/frontmatter.rs` privately with
-`#[path = "frontmatter.rs"] mod frontmatter;`. This keeps YAML frontmatter
-detection available to internal callers while closing the external library
-surface.
+`src/process.rs` routes `process_stream`, `process_stream_no_wrap`, and
+`process_stream_opts` through this boundary. `src/main.rs` uses the same public
+function in `process_lines`, keeping CLI-only transforms (`--renumber`,
+`--breaks`) inside the body closure. The `frontmatter` module remains
+`pub(crate)`; external callers use the boundary rather than its detector.
 
 Revision note: Delivered. The implementation follows the plan with the
 visibility adjustment noted above. All tests pass and the feature is ready for
