@@ -65,6 +65,13 @@ restores the separator row with widths derived from the final table body.
 
 ## Internal API reference
 
+`Makefile`:
+
+- `check-static-regexes`: Runs before Clippy as part of `make lint` and uses
+  ripgrep (`rg`) to reject hand-rolled static regular expression declarations.
+  Contributors must install ripgrep locally; Continuous Integration (CI)
+  installs the pinned version before running the lint gate.
+
 `src/lib.rs`:
 
 - `lazy_regex!`: Declares every static regular expression through a single

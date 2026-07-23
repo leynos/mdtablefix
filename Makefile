@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint typecheck fmt check-fmt check-static-regexes markdownlint nixie
+.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes markdownlint nixie
 
 APP ?= mdtablefix
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
@@ -35,7 +35,13 @@ fmt: ## Format Rust and Markdown sources
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 
-check-static-regexes: ## Reject hand-rolled static regular expressions
+check-ripgrep: ## Verify ripgrep is available
+	@command -v "$(firstword $(RG))" >/dev/null 2>&1 || { \
+		echo "ripgrep (rg) is required for static-regex linting" >&2; \
+		exit 1; \
+	}
+
+check-static-regexes: check-ripgrep ## Reject hand-rolled static regular expressions
 	@status=0; \
 	$(RG) -U --glob '*.rs' '\bstatic\b[^;=]*=\s*(?:[[:alnum:]_]+::)*LazyLock::new\s*\(\s*\|\|\s*(\{\s*)?(?:[[:alnum:]_]+::)*Regex::new' . || status=$$?; \
 	case $$status in \
