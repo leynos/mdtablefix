@@ -334,6 +334,6 @@ function in `process_lines`, keeping CLI-only transforms (`--renumber`,
 `--breaks`) inside the body closure. The `frontmatter` module remains
 `pub(crate)`; external callers use the boundary rather than its detector.
 
-Revision note: Delivered. The implementation follows the plan with the
-visibility adjustment noted above. All tests pass and the feature is ready for
-use.
+Revision note: Delivered. `process_with_frontmatter` now owns the split/rejoin
+contract while the `frontmatter` module remains internal. All tests pass and
+the feature is ready for use.
