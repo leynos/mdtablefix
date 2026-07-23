@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn ignores_blockquoted_fenced_blocks() {
-        // The depth-aware fence tracker recognises a fence opened inside a
+        // The depth-aware fence tracker recognizes a fence opened inside a
         // blockquote, so the enclosed `...` stays literal.
         let input = vec![
             "> ```".to_string(),
