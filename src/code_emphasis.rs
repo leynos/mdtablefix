@@ -219,6 +219,8 @@ pub fn fix_code_emphasis(lines: &[String]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for code-emphasis normalization.
+
     use super::*;
 
     #[test]

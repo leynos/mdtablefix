@@ -127,6 +127,8 @@ pub(super) fn is_markdownlint_directive(line: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for block classification.
+
     use rstest::rstest;
 
     use super::*;

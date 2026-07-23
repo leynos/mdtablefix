@@ -252,6 +252,8 @@ fn process_with_frontmatter(lines: &[String], opts: Options) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for Markdown processing.
+
     use super::*;
 
     #[test]

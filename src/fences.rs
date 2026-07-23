@@ -18,12 +18,15 @@ mod attachment;
 
 use attachment::attach_to_next_fence;
 
-static FENCE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$").unwrap());
+static FENCE_RE: LazyLock<Regex> = lazy_regex!(
+    r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$",
+    "fence delimiter and language specifier pattern should compile",
+);
 
-static ORPHAN_LANG_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-](?:,[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-])*$").unwrap()
-});
+static ORPHAN_LANG_RE: LazyLock<Regex> = lazy_regex!(
+    r"^[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-](?:,[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-])*$",
+    "orphaned fence language specifier pattern should compile",
+);
 
 /// Determine whether a language specifier denotes an absent language.
 ///

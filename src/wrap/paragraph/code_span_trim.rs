@@ -110,6 +110,8 @@ fn has_odd_backslash_escape(bytes: &[u8], mut index: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for code-span edge-space trimming.
+
     use std::borrow::Cow;
 
     use super::trim_code_span_edge_spaces;

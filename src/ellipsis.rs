@@ -178,6 +178,8 @@ pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for ellipsis replacement.
+
     use super::*;
 
     #[test]

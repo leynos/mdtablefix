@@ -51,6 +51,8 @@ fn matches_footnote_ref_spacing(tokens: &[String], index: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for inline footnote-reference normalization.
+
     use proptest::prelude::*;
     use rstest::rstest;
 

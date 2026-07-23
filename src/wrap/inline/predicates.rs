@@ -231,6 +231,8 @@ mod predicate_tracing_tests;
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for inline-token predicates.
+
     use proptest::prelude::*;
     use rstest::rstest;
 

@@ -372,7 +372,10 @@ pub(crate) fn has_flag(case: &BaseCase, flag: TransformFlag) -> bool { case.flag
 
 #[cfg(test)]
 #[rustfmt::skip]
-mod tests { use super::{BaseCase, TransformFlag, has_flag, is_case_id, non_wrap_signature};
+mod tests {
+    //! Unit tests for CLI-matrix support helpers.
+
+    use super::{BaseCase, TransformFlag, has_flag, is_case_id, non_wrap_signature};
     use rstest::rstest;
 
     #[rstest]

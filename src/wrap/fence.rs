@@ -7,13 +7,15 @@ use super::paragraph::{ParagraphState, ParagraphWriter};
 pub(super) static FENCE_RE: std::sync::LazyLock<Regex> =
     // Capture: indent, fence run of 3+ backticks/tilde, and the full info string (incl. leading
     // spaces)
-    std::sync::LazyLock::new(|| {
-        Regex::new(r"^(\s*)(`{3,}|~{3,})([^\r\n]*)$").expect("valid fence regex")
-    });
+    lazy_regex!(
+        r"^(\s*)(`{3,}|~{3,})([^\r\n]*)$",
+        "wrapping fence delimiter and info string pattern should compile",
+    );
 
-static BLOCKQUOTE_FENCE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r"^(\s*(?:>\s*)+)(`{3,}|~{3,})([^\r\n]*)$").expect("valid blockquote fence regex")
-});
+static BLOCKQUOTE_FENCE_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^(\s*(?:>\s*)+)(`{3,}|~{3,})([^\r\n]*)$",
+    "blockquote fence delimiter and info string pattern should compile",
+);
 
 /// Return fence components if the line starts a fenced code block.
 ///
@@ -122,4 +124,45 @@ impl FenceTracker {
     /// Check whether the tracker is currently inside a fenced block.
     #[must_use]
     pub fn in_fence(&self) -> bool { self.state.is_some() }
+}
+
+#[cfg(test)]
+mod property_tests {
+    //! Property coverage for the capture contract shared by wrapping fences.
+
+    use proptest::prelude::*;
+
+    use super::is_fence;
+
+    proptest! {
+        #[test]
+        fn fence_captures_round_trip_generated_delimiters(
+            indent in "[ \\t]{0,4}",
+            blockquote_depth in 0_usize..=4,
+            marker in prop_oneof![Just('`'), Just('~')],
+            marker_length in 3_usize..=12,
+            info in "[^\\r\\n]{0,40}",
+        ) {
+            let blockquote = "> ".repeat(blockquote_depth);
+            let prefix = format!("{indent}{blockquote}");
+            let delimiter = marker.to_string().repeat(marker_length);
+            let line = format!("{prefix}{delimiter}{info}");
+            let absorbed_marker_count = info.chars().take_while(|character| *character == marker).count();
+            let expected_delimiter = marker.to_string().repeat(marker_length + absorbed_marker_count);
+            let expected_info = &info[absorbed_marker_count..];
+
+            let captures = is_fence(&line);
+
+            prop_assert_eq!(
+                captures,
+                Some((prefix.as_str(), expected_delimiter.as_str(), expected_info)),
+            );
+            let (captured_prefix, captured_delimiter, captured_info) =
+                captures.expect("generated fence should match");
+            prop_assert_eq!(
+                format!("{captured_prefix}{captured_delimiter}{captured_info}"),
+                line,
+            );
+        }
+    }
 }

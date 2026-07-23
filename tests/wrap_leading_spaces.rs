@@ -9,15 +9,15 @@ mod common;
 
 use std::sync::LazyLock;
 
-use mdtablefix::process_stream;
+use mdtablefix::{lazy_regex, process_stream};
 use proptest::prelude::*;
 use regex::Regex;
 use unicode_width::UnicodeWidthStr;
 
-static BULLET_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(\s*(?:[-*+]|\d+[.)])\s+(?:\[\s*(?:[xX]|\s)\s*\]\s*)?)(.*)")
-        .expect("bullet pattern regex should compile")
-});
+static BULLET_RE: LazyLock<Regex> = lazy_regex!(
+    r"^(\s*(?:[-*+]|\d+[.)])\s+(?:\[\s*(?:[xX]|\s)\s*\]\s*)?)(.*)",
+    "bullet pattern regex should compile",
+);
 
 /// Returns the expected continuation indent for a wrapped list item output.
 fn list_continuation_indent(first_line: &str) -> Option<String> {

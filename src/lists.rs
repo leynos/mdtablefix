@@ -12,14 +12,16 @@ const FORMATTING_CHARS: [char; 3] = ['*', '_', '`'];
 
 // Lines starting with optional indentation followed by '#' characters denote
 // Markdown ATX headings. A space or end of line must follow the hashes.
-static HEADING_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r"^[ ]{0,3}#{1,6}(?:\s|$)").expect("valid heading regex")
-});
+static HEADING_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^[ ]{0,3}#{1,6}(?:\s|$)",
+    "ATX heading prefix pattern should compile",
+);
 
 fn parse_numbered(line: &str) -> Option<(usize, &str, &str, &str)> {
-    static NUMBERED_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-        Regex::new(r"^(\s*)(?:[1-9][0-9]*)\.(\s+)(.*)").expect("valid list number regex")
-    });
+    static NUMBERED_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+        r"^(\s*)(?:[1-9][0-9]*)\.(\s+)(.*)",
+        "numbered list item pattern should compile",
+    );
     let cap = NUMBERED_RE.captures(line)?;
     let indent_str = cap.get(1)?.as_str();
     let indent = indent_len(indent_str);

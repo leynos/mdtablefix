@@ -160,6 +160,8 @@ fn merge_spans(mut spans: Vec<Range<usize>>) -> Vec<Range<usize>> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for detecting ellipsis-protected Markdown spans.
+
     use proptest::prelude::*;
     use tracing_test::traced_test;
 

@@ -17,6 +17,8 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@eff100c965da05e14fd4e07d7ea518408b312cb8
+      - name: Install ripgrep
+        run: cargo binstall --no-confirm --locked ripgrep@15.2.0
       - name: Format
         run: make check-fmt
       - name: Markdown lint

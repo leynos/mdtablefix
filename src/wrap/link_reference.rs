@@ -221,6 +221,8 @@ impl LinkTitleWindow {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for link-reference matching.
+
     use rstest::rstest;
 
     use super::*;
