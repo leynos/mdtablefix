@@ -14,7 +14,7 @@ jobs:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@eff100c965da05e14fd4e07d7ea518408b312cb8
       - name: Install ripgrep
