@@ -114,7 +114,8 @@ pub(super) fn apply_continuation_chunk(
             pending.tail_reflow = TailReflow::Disallowed;
             trace!(
                 mode = ?pending.continuation_mode,
-                boundary = split_at,
+                boundary = "span_reopened",
+                offset = split_at,
                 line_count = pending.original_lines.len(),
                 "disabled pending-prefix tail reflow after a reopened span"
             );

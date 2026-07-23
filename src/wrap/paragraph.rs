@@ -189,6 +189,10 @@ impl<'a> ParagraphWriter<'a> {
         }
     }
 
+    /// Intentionally splits in two stages and rewraps the tail independently,
+    /// making each flush deterministic and idempotent for the same prefix,
+    /// rest, and available width. Do not replace this with the single-pass
+    /// approach used by `append_wrapped_with_prefix_width`.
     fn append_stable_pending_prefix(&mut self, line: &PrefixLine<'_>, available: usize) {
         if line.repeat_prefix {
             self.append_wrapped_with_prefix_width(line, available);
