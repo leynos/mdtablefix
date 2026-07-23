@@ -262,17 +262,15 @@ Text.
 
 ## Footnotes
 
- 1. First note
+ [^1]: First note
 
- 2. Second note
+ [^2]: Second note
 
-10. Final note
+[^10]: Final note
 ```
 
-After:
-
-```markdown
-Text.
+`convert_footnotes` only processes the final contiguous numeric list that
+immediately follows an H2 heading when these conditions are met.
 
 ## Footnotes
 
@@ -612,19 +610,31 @@ and may reduce performance if many tiny files are processed.
 sequenceDiagram
     participant User as actor User
     participant CLI as CLI Main
-    participant FileHandler as handle_file
+    participant Formatter as format_to_string
+    participant Rewriter as rewrite_in_place
     participant Stdout as Stdout
     participant Stderr as Stderr
 
-    User->>CLI: Run CLI with multiple files (not in-place)
-    CLI->>FileHandler: handle_file(file1)
-    CLI->>FileHandler: handle_file(file2)
-    CLI->>FileHandler: handle_file(file3)
-    Note over CLI,FileHandler: Files processed in parallel
-    FileHandler-->>CLI: Result (Ok(Some(output)) or Err(error))
-    loop For each file in input order
-        CLI->>Stdout: Print output (if Ok)
-        CLI->>Stderr: Print error (if Err)
+    User->>CLI: Run CLI with multiple files
+    alt Stdout mode
+        CLI->>Formatter: format_to_string(file1)
+        CLI->>Formatter: format_to_string(file2)
+        CLI->>Formatter: format_to_string(file3)
+        Note over CLI,Formatter: Files processed in parallel
+        Formatter-->>CLI: Result<String> or Err(error)
+        loop For each file in input order
+            CLI->>Stdout: Print text (if Ok)
+            CLI->>Stderr: Print error (if Err)
+        end
+    else In-place mode
+        CLI->>Rewriter: rewrite_in_place(file1)
+        CLI->>Rewriter: rewrite_in_place(file2)
+        CLI->>Rewriter: rewrite_in_place(file3)
+        Note over CLI,Rewriter: Files processed in parallel
+        Rewriter-->>CLI: Result<()> or Err(error)
+        loop For each file in input order
+            CLI->>Stderr: Print error (if Err)
+        end
     end
     CLI-->>User: Exit (with error if any file errored)
 ```
