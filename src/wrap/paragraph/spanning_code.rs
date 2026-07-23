@@ -42,19 +42,26 @@ pub(super) fn conforming_source_lines_for_overlong_span(
 ) -> Option<Vec<String>> {
     let indent_width = indent.width();
     let available = width.saturating_sub(indent_width).max(1);
-    if segments.len() < 2 || segments.iter().any(|(line, _)| line.width() > available) {
+    if segments.len() < 2 {
         return None;
     }
 
+    let mut found_overlong_span = false;
     let groups = hard_break_groups(segments)
         .map(|group| {
             let (joined, boundaries) = join_with_boundaries(group);
-            let spans = overlong_code_spans_crossing_boundaries(&joined, &boundaries, available);
+            let spans = if group.len() < 2 || group.iter().any(|(line, _)| line.width() > available)
+            {
+                Vec::new()
+            } else {
+                overlong_code_spans_crossing_boundaries(&joined, &boundaries, available)
+            };
+            found_overlong_span |= !spans.is_empty();
             let has_hard_break = group.last().is_some_and(|(_, hard_break)| *hard_break);
             (joined, spans, has_hard_break)
         })
         .collect::<Vec<_>>();
-    if groups.iter().all(|(_, spans, _)| spans.is_empty()) {
+    if !found_overlong_span {
         return None;
     }
 

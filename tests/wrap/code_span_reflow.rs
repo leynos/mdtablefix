@@ -104,6 +104,22 @@ fn overlong_spanning_code_preserves_paragraph_indent() {
 }
 
 #[test]
+fn mixed_hard_break_groups_preserve_eligible_span_boundaries() {
+    let input = lines_vec![
+        "`This first hard-break group is an intentionally overlong atomic inline-code span.`  ",
+        "`Implement backend/crates/pagination providing opaque cursor encoding,",
+        "PageParams, and Paginated<T> envelopes with navigation links, backed by unit",
+        "tests for cursor round-tripping.`",
+    ];
+
+    let output = wrap_text(&input, WRAP_COLS);
+
+    assert_eq!(output, input);
+    assert!(UnicodeWidthStr::width(output[0].as_str()) > WRAP_COLS);
+    assert!(lines_conform(&output[1..]));
+}
+
+#[test]
 fn prose_outside_overlong_spanning_code_is_greedily_reflowed() {
     let input = lines_vec![
         "Introductory prose has an unnecessarily",
