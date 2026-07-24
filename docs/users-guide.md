@@ -60,9 +60,11 @@ algorithm: each word is placed on the current line if it fits, and a new line
 is started otherwise. This produces predictable, diff-friendly output.
 
 Inline code spans (`` `…` ``), Markdown links (`[text](url)`), and inline GFM
-footnote references (`[^label]`) are treated as unbreakable units. A span is
-never split across lines; it moves as a whole to the next line when it would
-otherwise exceed the target width.
+footnote references (`[^label]`) are treated as unbreakable units during normal
+line fitting. `mdtablefix --wrap` never introduces a line break within an
+inline code span; the span otherwise moves as a whole to the next line when it
+would exceed the target width. The exception for an already cross-line overlong
+span is described below.
 
 Reference-style links such as `[text][reference]` are likewise unbreakable. The
 opening `[` always stays with the link label, avoiding leading whitespace
@@ -85,26 +87,33 @@ together during wrapping.
 
 When an inline code span is split across two or more soft-wrapped source lines,
 `--wrap` first joins the continuation lines into a single span before applying
-any line-length limit. The joined span is then treated as an indivisible unit:
-no line break is inserted inside it, and the closing backtick always remains on
-the same line as the span content. This behaviour applies in all prefixed
-contexts — bulleted lists, ordered lists, blockquotes, and footnote definitions
-— as well as in plain paragraphs.
+the line-length limit. When the joined span fits, the remainder of the
+paragraph is greedily reflowed during the same pass, including later
+continuation lines in a list item. Running `--wrap` again therefore produces no
+further changes.
+
+The wrapper never introduces a new line break inside an inline-code span. When
+joining the span would exceed the configured width and each authored line
+already fits, however, it may retain the authored boundaries inside that span.
+Markdown renders those retained soft breaks as spaces, while the physical lines
+remain within the limit. These rules apply in all prefixed contexts — bulleted
+lists, ordered lists, blockquotes, and footnote definitions — as well as in
+plain paragraphs.
 
 An inline code span may itself contain backslash-escaped backticks — for example
 `` `pass \`--file\` to the tool` ``. `--wrap` keeps the whole span, including
-its escaped inner backticks, as a single atomic unit: it is never split across
-lines, and the escaped backticks are preserved verbatim.
+its escaped inner backticks, opaque to ordinary line fitting. It does not
+introduce a split inside the span, and the escaped backticks are preserved
+verbatim; an already conforming authored boundary may still be retained under
+the overlong-span rule above.
 
 For list items, deferred inline code continuations use continuation indentation
 rather than repeating the original list marker. This prevents a wrapped
 checklist item from being reformatted as several independent checklist entries.
 
-If joining a split inline code span would exceed the configured wrap width,
-`mdtablefix` preserves the existing multi-line shape instead of emitting an
-overlong line. Ambiguous close-and-reopen patterns are also preserved verbatim,
-so the formatter does not introduce Markdownlint MD038 spacing violations or
-change the intended code-span boundaries.
+Ambiguous close-and-reopen patterns are preserved verbatim, so the formatter
+does not introduce Markdownlint MD038 spacing violations or change the intended
+code-span boundaries.
 
 When `--wrap` is combined with `--renumber`, ordered list item boundaries are
 preserved even when a list item contains a long inline code span. The wrapper

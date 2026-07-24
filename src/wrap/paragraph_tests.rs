@@ -15,6 +15,7 @@ use super::{
     ParagraphWriter,
     PendingPrefix,
     PrefixLine,
+    TailReflow,
     pending_prefix_for_next_segment,
 };
 
@@ -71,6 +72,27 @@ fn handle_prefix_line_can_repeat_or_change_the_continuation_prefix() {
             "> alpha".to_string(),
             "> beta".to_string(),
             "> gamma".to_string(),
+        ]
+    );
+
+    let mut quoted_list_out = Vec::new();
+    let mut quoted_list_writer = ParagraphWriter::new(&mut quoted_list_out, 10);
+    let mut quoted_list_state = ParagraphState::default();
+    quoted_list_writer.handle_prefix_line(
+        &mut quoted_list_state,
+        &PrefixLine {
+            prefix: Cow::Borrowed("> - "),
+            rest: "alpha beta gamma",
+            repeat_prefix: false,
+            outer_prefix: Some(Cow::Borrowed("> ")),
+        },
+    );
+    assert_eq!(
+        quoted_list_out,
+        vec![
+            "> - alpha".to_string(),
+            ">   beta".to_string(),
+            ">   gamma".to_string(),
         ]
     );
 }
@@ -158,5 +180,6 @@ fn pending_prefix(prefix: &str, repeat_prefix: bool) -> PendingPrefix {
         open_fence_len: Some(1),
         continuation_mode: ContinuationMode::Normalize,
         used_prefix: false,
+        tail_reflow: TailReflow::Allowed,
     }
 }

@@ -91,7 +91,7 @@ This step answers where maintainers should look before adopting `statig`,
 `smlang`, or another state-machine crate. The outcome keeps dependency review
 close to the code that would use the abstraction.
 
-- [ ] 2.1.1. Extend the developer guide with a state-machine adoption checklist
+- [x] 2.1.1. Extend the developer guide with a state-machine adoption checklist
   that mirrors ADR 0004's recommendation threshold.
   - See ADR 0004 and docs/developers-guide.md §Stateful pipeline helpers.
   - Success: a maintainer can decide when to spike an external crate without

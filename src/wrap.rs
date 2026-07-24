@@ -33,7 +33,7 @@ pub(crate) use fence::{FenceObservation, ObservedFence};
 /// info string) when the line opens a fenced code block, or `None` otherwise.
 pub use fence::{FenceTracker, is_fence};
 pub(crate) use link_reference::{LinkReferenceMatcher, LinkTitleWindow, LinkTitleWindowOutcome};
-use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
+use paragraph::{ParagraphState, ParagraphWriter, PrefixLine, continuation_prefix_for};
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
 ///
@@ -176,23 +176,89 @@ fn normalized_passthrough_line(line: &str) -> &str {
     }
 }
 
-fn handle_pending_continuation(
+fn try_blockquote_fast_path(
     line: LineContext<'_>,
     writer: &mut ParagraphWriter<'_>,
     state: &mut ParagraphState,
-    link_matcher: LinkReferenceMatcher,
-    link_title_window: &mut link_reference::LinkTitleWindow,
-) {
+) -> bool {
     let outer_matches_pending = line.blockquote.is_some_and(|prefix| {
         state
             .pending_prefix
             .as_ref()
             .is_some_and(|pending| pending.outer_prefix.as_deref() == Some(prefix.raw_prefix()))
     });
-    if outer_matches_pending && line.block_kind.is_none() {
-        let (text, hard_break) = line_break_parts(line.inner);
+    if !outer_matches_pending || line.block_kind.is_some() {
+        return false;
+    }
+
+    let (text, hard_break) = line_break_parts(line.inner);
+    apply_continuation_chunk(&text, line.original, hard_break, writer, state);
+    true
+}
+
+fn try_passthrough_block(
+    line: LineContext<'_>,
+    writer: &mut ParagraphWriter<'_>,
+    state: &mut ParagraphState,
+    link_matcher: LinkReferenceMatcher,
+    link_title_window: &mut link_reference::LinkTitleWindow,
+) -> bool {
+    if !is_passthrough_block(line.block_kind, line.inner) {
+        return false;
+    }
+
+    if matches!(line.block_kind, Some(BlockKind::LinkReferenceDefinition)) {
+        link_title_window.observe_definition(line.inner, link_matcher);
+    }
+    let emitted = normalized_passthrough_line(line.original);
+    writer.push_verbatim(state, emitted);
+    true
+}
+
+fn resolve_or_fallback_continuation(
+    line: LineContext<'_>,
+    writer: &mut ParagraphWriter<'_>,
+    state: &mut ParagraphState,
+) -> bool {
+    let resolved_continuation_prefix = state.pending_prefix.as_ref().and_then(|pending| {
+        pending.open_fence_len.is_none().then(|| {
+            continuation_prefix_for(
+                pending.prefix.as_str(),
+                pending.repeat_prefix,
+                pending.outer_prefix.as_deref(),
+            )
+        })
+    });
+    if let Some(prefix) = resolved_continuation_prefix {
+        let Some(continuation) = line.original.strip_prefix(prefix.as_str()) else {
+            trace!(
+                mode = "pending_prefix",
+                boundary = "prefix_mismatch",
+                line_len = line.original.len(),
+                "flushing a pending continuation after its prefix changed"
+            );
+            writer.flush_paragraph(state);
+            return false;
+        };
+        let (text, hard_break) = line_break_parts(continuation);
         apply_continuation_chunk(&text, line.original, hard_break, writer, state);
-        return;
+        return true;
+    }
+
+    let (text, hard_break) = line_break_parts(line.inner);
+    apply_continuation_chunk(&text, line.original, hard_break, writer, state);
+    true
+}
+
+fn handle_pending_continuation(
+    line: LineContext<'_>,
+    writer: &mut ParagraphWriter<'_>,
+    state: &mut ParagraphState,
+    link_matcher: LinkReferenceMatcher,
+    link_title_window: &mut link_reference::LinkTitleWindow,
+) -> bool {
+    if try_blockquote_fast_path(line, writer, state) {
+        return true;
     }
 
     if let Some(prefix_line) = prefix_line(line.inner, line.blockquote) {
@@ -202,28 +268,18 @@ fn handle_pending_continuation(
         if matches_pending {
             let (text, hard_break) = line_break_parts(prefix_line.rest);
             apply_continuation_chunk(&text, line.original, hard_break, writer, state);
-            return;
+            return true;
         }
 
         writer.handle_prefix_line(state, &prefix_line);
-        return;
+        return true;
     }
 
-    if is_passthrough_block(line.block_kind, line.inner) {
-        if matches!(line.block_kind, Some(BlockKind::LinkReferenceDefinition)) {
-            link_title_window.observe_definition(line.inner, link_matcher);
-        }
-        // Normalize whitespace-only paragraph separators for downstream consumers.
-        let emitted = normalized_passthrough_line(line.original);
-        writer.push_verbatim(state, emitted);
-        return;
+    if try_passthrough_block(line, writer, state, link_matcher, link_title_window) {
+        return true;
     }
 
-    let (text, hard_break) = line_break_parts(line.inner);
-    if state.pending_prefix.is_none() {
-        return;
-    }
-    apply_continuation_chunk(&text, line.original, hard_break, writer, state);
+    resolve_or_fallback_continuation(line, writer, state)
 }
 
 fn handle_line_preamble(
@@ -269,17 +325,13 @@ fn dispatch_continuation(
     link_matcher: LinkReferenceMatcher,
     link_title_window: &mut link_reference::LinkTitleWindow,
 ) -> bool {
-    if state.pending_prefix.is_some() {
-        handle_pending_continuation(line, writer, state, link_matcher, link_title_window);
+    if state.pending_prefix.is_some()
+        && handle_pending_continuation(line, writer, state, link_matcher, link_title_window)
+    {
         return true;
     }
 
-    if is_passthrough_block(line.block_kind, line.inner) {
-        if matches!(line.block_kind, Some(BlockKind::LinkReferenceDefinition)) {
-            link_title_window.observe_definition(line.inner, link_matcher);
-        }
-        let emitted = normalized_passthrough_line(line.original);
-        writer.push_verbatim(state, emitted);
+    if try_passthrough_block(line, writer, state, link_matcher, link_title_window) {
         return true;
     }
 

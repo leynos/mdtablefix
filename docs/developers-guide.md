@@ -238,7 +238,9 @@ depth-aware tracking.
    `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.
    `wrap_with_prefix` computes the available content width once from the
    Unicode display width of the first-line prefix, then feeds the paragraph
-   text into `wrap_preserving_code`.
+   text into `wrap_preserving_code`. `ParagraphState` owns the ordinary
+   paragraph segments, their shared indentation, any remembered continuation
+   indentation, and an optional deferred `PendingPrefix`.
 
    **Pending prefix deferral.** When `handle_prefix_line` processes a line
    whose text contains an unclosed inline code span (checked by
@@ -268,15 +270,17 @@ depth-aware tracking.
    `PendingPrefix::used_prefix` tracks whether the original prefix has already
    been emitted, and `pending_prefix_for_next_segment` uses it to give the
    first split segment the original prefix and later split segments the
-   continuation indent. If the opener is at or near the end of its source line,
-   `PendingPrefix` marks subsequent continuations as verbatim, so joining does
-   not create leading or trailing spaces inside the code span. When the
-   projected join would exceed the available content width, the pending line
-   and continuation are emitted verbatim rather than joined into a
-   Markdownlint-invalid overlong line. When the scanner reports no open span
-   and no close/reopen boundary exists, `flush_paragraph` emits the buffered
-   segment atomically using `append_wrapped_with_prefix_width`. The exception is
-   `ContinuationMode::VerbatimFlush`: when the scanner sees a closing fence
+   continuation indent. `TailReflow` records whether prose after a resolved
+   span may remain buffered for greedy reflow or must flush after an ambiguous
+   close-and-reopen transition. If the opener is at or near the end of its
+   source line, `PendingPrefix` marks subsequent continuations as verbatim, so
+   joining does not create leading or trailing spaces inside the code span.
+   When the projected join would exceed the available content width, the
+   pending line and continuation retain conforming authored boundaries inside
+   that span rather than forming a Markdownlint-invalid overlong line.
+   Otherwise, `flush_paragraph` passes resolved content through the ordinary
+   wrapper so prose after the span is reflowed in the same pass. The exception
+   is `ContinuationMode::VerbatimFlush`: when the scanner sees a closing fence
    immediately followed by a word character, `flush_paragraph` emits
    `pending.original_lines` verbatim instead of rewrapping the buffer. When
    `hard_break` is set, two trailing spaces are appended to the last emitted
@@ -288,7 +292,14 @@ depth-aware tracking.
    `VerbatimFlush` preserves `pending.original_lines` for ambiguous close and
    reopen sequences. The `code_span_trim` module contains
    `trim_code_span_edge_spaces`, which matches code spans by exact fence length
-   and removes only spaces whose byte offsets appear in `synthetic_join_spaces`.
+   and removes only spaces whose byte offsets appear in
+   `synthetic_join_spaces`. The `spanning_code` module handles ordinary
+   paragraphs whose code span crosses a source boundary: when the joined span
+   is overlong but every source line conforms, it retains only boundaries
+   inside that span, restores the paragraph indentation, and leaves surrounding
+   prose to the greedy wrapper. Trace events record width-triggered
+   preservation, prefix-mismatch flushes, and `TailReflow` transitions at these
+   non-obvious decision boundaries.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
@@ -410,40 +421,42 @@ still fits within the configured width.
 Table: Key types and functions.
 
 <!-- markdownlint-disable MD013 MD055 MD056 MD060 -->
-| Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | File                              |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
-| `LinkReferenceMatcher`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/link_reference.rs`      |
-| `LinkTitleWindow`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `src/wrap/link_reference.rs`      |
-| `classify_block`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/block.rs`               |
-| `FragmentKind`, `InlineFragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/fragment.rs`     |
-| `classify_fragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/wrap/inline/fragment.rs`     |
-| Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, `is_month_name`, `is_ordinal_day`, `is_numeric_day`, `is_year`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/inline/predicates.rs`   |
-| `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, `try_match_date_sequence`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `src/wrap/inline/span_helpers.rs` |
-| `try_couple_inline_link_after_opener`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/inline/span_helpers.rs` |
-| `normalize_footnote_ref_spacing`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/normalize.rs`    |
-| `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline.rs`              |
-| `determine_token_span`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/inline.rs`              |
-| `merge_whitespace_only_lines`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/inline/postprocess.rs`  |
-| `rebalance_atomic_tails`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline/postprocess.rs`  |
-| `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/paragraph.rs`           |
-| `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/wrap/paragraph.rs`           |
-| `PendingPrefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `src/wrap/paragraph.rs`           |
-| `emit_pending_with_verbatim_continuation` — Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/wrap/paragraph.rs`           |
-| `drain_pending_prefix` — Takes the deferred prefixed segment and clears plain paragraph buffers before final emission.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/paragraph.rs`           |
-| `pending_prefix_for_next_segment` — Selects the original pending prefix for the first deferred segment, then the continuation indent for later segments.                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/paragraph.rs`           |
-| `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/continuation.rs`        |
-| `join_pending_continuation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`        |
-| `starts_inline_citation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/tokenize/mod.rs`        |
-| `opening_fence_run_len` — Measures the length of an unescaped backtick run at the start of a byte slice; used to identify opening code-span fences.                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/wrap/tokenize/scanning.rs`   |
-| `position_after_close(text, search_start, fence_len)` — Walks `text` from absolute byte offset `search_start` to find the first closing backtick fence of exactly `fence_len` characters. Escaped closing candidates (backtick runs preceded by an odd number of backslashes) are recorded but skipped; a literal (unescaped) closing fence is returned unless an iterative forward look-ahead confirms that fence is itself the opener of a subsequent balanced span, in which case the earlier escaped candidate is returned instead. Returns `None` when no matching close exists or `fence_len` is zero. | `src/wrap/tokenize/scanning.rs`   |
-| `scan_continuation_span_state` — Incrementally scans a continuation string given a known open fence length, returning the remaining open fence length or `None` when all spans are balanced; used to avoid O(N²) rescanning of the accumulated pending text.                                                                                                                                                                                                                                                                                                                                                 | `src/wrap/tokenize/scanning.rs`   |
-| `handle_backtick_fence` — Tokenizes an inline code span from the opening fence byte offset and delegates closing-fence detection to `position_after_close`.                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/tokenize/parsing.rs`    |
-| `handle_pending_continuation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap.rs`                     |
-| `scan_code_suffix_end`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/tokenize/scanning.rs`   |
-| `has_inline_code_structure`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/inline/fragment.rs`     |
+| Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | File                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| `LinkReferenceMatcher`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/link_reference.rs`          |
+| `LinkTitleWindow`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `src/wrap/link_reference.rs`          |
+| `classify_block`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/block.rs`                   |
+| `FragmentKind`, `InlineFragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/fragment.rs`         |
+| `classify_fragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/wrap/inline/fragment.rs`         |
+| Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, `is_month_name`, `is_ordinal_day`, `is_numeric_day`, `is_year`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/inline/predicates.rs`       |
+| `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, `try_match_date_sequence`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `src/wrap/inline/span_helpers.rs`     |
+| `try_couple_inline_link_after_opener`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/inline/span_helpers.rs`     |
+| `normalize_footnote_ref_spacing`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/normalize.rs`        |
+| `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline.rs`                  |
+| `determine_token_span`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/inline.rs`                  |
+| `merge_whitespace_only_lines`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/inline/postprocess.rs`      |
+| `rebalance_atomic_tails`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline/postprocess.rs`      |
+| `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/paragraph.rs`               |
+| `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/wrap/paragraph.rs`               |
+| `PendingPrefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `src/wrap/paragraph/pending.rs`       |
+| `ContinuationMode`, `TailReflow`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/paragraph/pending.rs`       |
+| `conforming_source_lines_for_overlong_span` — Retains conforming authored boundaries only inside a cross-line code span that would be overlong when joined.                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/paragraph/spanning_code.rs` |
+| `emit_pending_with_verbatim_continuation` — Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/wrap/paragraph.rs`               |
+| `drain_pending_prefix` — Takes the deferred prefixed segment and clears plain paragraph buffers before final emission.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/paragraph.rs`               |
+| `pending_prefix_for_next_segment` — Selects the original pending prefix for the first deferred segment, then the continuation indent for later segments.                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/paragraph/pending.rs`       |
+| `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/continuation.rs`            |
+| `join_pending_continuation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`            |
+| `starts_inline_citation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/tokenize/mod.rs`            |
+| `opening_fence_run_len` — Measures the length of an unescaped backtick run at the start of a byte slice; used to identify opening code-span fences.                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/wrap/tokenize/scanning.rs`       |
+| `position_after_close(text, search_start, fence_len)` — Walks `text` from absolute byte offset `search_start` to find the first closing backtick fence of exactly `fence_len` characters. Escaped closing candidates (backtick runs preceded by an odd number of backslashes) are recorded but skipped; a literal (unescaped) closing fence is returned unless an iterative forward look-ahead confirms that fence is itself the opener of a subsequent balanced span, in which case the earlier escaped candidate is returned instead. Returns `None` when no matching close exists or `fence_len` is zero. | `src/wrap/tokenize/scanning.rs`       |
+| `scan_continuation_span_state` — Incrementally scans a continuation string given a known open fence length, returning the remaining open fence length or `None` when all spans are balanced; used to avoid O(N²) rescanning of the accumulated pending text.                                                                                                                                                                                                                                                                                                                                                 | `src/wrap/tokenize/scanning.rs`       |
+| `handle_backtick_fence` — Tokenizes an inline code span from the opening fence byte offset and delegates closing-fence detection to `position_after_close`.                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/tokenize/parsing.rs`        |
+| `handle_pending_continuation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap.rs`                         |
+| `scan_code_suffix_end`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/tokenize/scanning.rs`       |
+| `has_inline_code_structure`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/inline/fragment.rs`         |
 <!-- markdownlint-enable MD013 MD055 MD056 MD060 -->
 
-`ContinuationMode` in `src/wrap/paragraph.rs` selects normal joining,
+`ContinuationMode` in `src/wrap/paragraph/pending.rs` selects normal joining,
 opener-at-EOL tight joining, or original-line verbatim flushing for
 `PendingPrefix`. The private `code_span_trim` module provides
 `trim_code_span_edge_spaces` for metadata-guided trimming of synthetic
@@ -470,30 +483,32 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   bodies. This behaviour was introduced for issue `#329` in PR `#343`,
   including nested literal fences whose marker run is shorter than the active
   outer fence.
-- **Atomic fragments.** Inline code spans, Markdown links, and GFM footnote
-  references are never split across lines; they move as a unit when they would
-  overflow the target width. Opening punctuation that immediately precedes an
-  inline code span or link is grouped with that span during token grouping so
-  the opener is not left on the previous line. Trailing punctuation after those
-  spans follows the same grouping rules. GFM footnote references that
-  immediately follow inline code or link spans without intervening whitespace
-  are coupled to the preceding punctuation cluster, so the marker is not
-  wrapped onto the next line alone. Inflectional affixes (`s`, `'s`, `ed`,
-  `ing`) and hyphenated compounds that immediately follow a closed backtick
-  fence are absorbed into the code token by `scan_code_suffix_end` in
-  `src/wrap/tokenize/scanning.rs`; the combined token is recognized as atomic by
-  `has_inline_code_structure` in `src/wrap/inline/fragment.rs`, so wrapping
-  treats the full string as one unit. Leading-hyphen compounds — a token that
-  ends with a hyphen and contains at least one alphabetic character (for example
-  `pre-`, `LLM-`, `(API-`) — are coupled forward to the next inline code span
-  during span grouping by the `ends_with_hyphen_prefix` predicate in
-  `src/wrap/inline/predicates.rs`, applied in `determine_token_span` in
-  `src/wrap/inline.rs`. The coupling mirrors the existing opening-punctuation
-  pattern, so compounds such as `` pre-`LLMPort` `` and `` (API-`Foo`) ``
-  remain atomic during wrapping. Internal hyphen chains (e.g.
-  `state-of-the-art-`) are accepted by design; bare dash runs such as `-` or
-  `---` are rejected. Unicode alphabetic characters (e.g. `pré-`, `字-`) are
-  intentionally supported.
+- **Atomic fragments.** The inline fitter never introduces a new break inside
+  inline code spans, Markdown links, or GFM footnote references. These
+  fragments move as a unit when they would overflow the target width. A
+  conforming source boundary already inside an overlong cross-line code span
+  may instead be retained; Markdown renders that soft break as a space. Opening
+  punctuation that immediately precedes an inline code span or link is grouped
+  with that span during token grouping so the opener is not left on the
+  previous line. Trailing punctuation after those spans follows the same
+  grouping rules. GFM footnote references that immediately follow inline code
+  or link spans without intervening whitespace are coupled to the preceding
+  punctuation cluster, so the marker is not wrapped onto the next line alone.
+  Inflectional affixes (`s`, `'s`, `ed`, `ing`) and hyphenated compounds that
+  immediately follow a closed backtick fence are absorbed into the code token by
+  `scan_code_suffix_end` in `src/wrap/tokenize/scanning.rs`; the combined
+  token is recognized as atomic by `has_inline_code_structure` in
+  `src/wrap/inline/fragment.rs`, so wrapping treats the full string as one
+  unit. Leading-hyphen compounds — a token that ends with a hyphen and contains
+  at least one alphabetic character (for example `pre-`, `LLM-`, `(API-`) — are
+  coupled forward to the next inline code span during span grouping by the
+  `ends_with_hyphen_prefix` predicate in `src/wrap/inline/predicates.rs`,
+  applied in `determine_token_span` in `src/wrap/inline.rs`. The coupling
+  mirrors the existing opening-punctuation pattern, so compounds such as
+  `` pre-`LLMPort` `` and `` (API-`Foo`) `` remain atomic during wrapping.
+  Internal hyphen chains (e.g. `state-of-the-art-`) are accepted by design;
+  bare dash runs such as `-` or `---` are rejected. Unicode alphabetic
+  characters (e.g. `pré-`, `字-`) are intentionally supported.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur.
 - **Verbatim blocks.** Fenced code blocks must pass through unchanged, along
@@ -503,10 +518,11 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   non-ASCII prefix characters (e.g. `「` in CJK blockquotes) are accounted for
   correctly.
 - **Cross-line code spans.** When a prefixed line contains an unclosed inline
-  code span, the entire continuation is buffered in `PendingPrefix` and emitted
-  atomically once the span closes. No line break may be inserted inside the
-  span, and the closing backtick must remain on the same line as the span
-  content.
+  code span, `PendingPrefix` buffers the continuation until the span closes.
+  The wrapper does not introduce a new break inside the span. If the joined
+  span exceeds the width, it may preserve conforming authored boundaries inside
+  the span, including the correct repeated or indented continuation prefix,
+  while prose outside the span remains eligible for ordinary greedy reflow.
 - **Closing fence detection.** Backslash escape checks apply only while
   detecting opening backtick fences in ordinary Markdown text. Once a code span
   is open, backslashes in the span content are literal bytes and must not make
@@ -757,9 +773,9 @@ committing. Snapshot churn across many cases usually means the fixture is too
 broad or a shared transform changed behaviour; inspect the labelled case, mode,
 and arguments before accepting the new output.
 
-## Stateful pipeline helpers
+## 1. Stateful pipeline helpers
 
-Three internal types centralize the buffered state used by the conversion
+Internal state carriers centralize the buffered state used by the conversion
 pipeline. Each owns one slice of pipeline behaviour, so the surrounding
 functions remain focused on traversal. Keep new parser and wrapping state
 machines explicit unless they meet the adoption threshold in
@@ -767,7 +783,41 @@ machines explicit unless they meet the adoption threshold in
 crate research and the local pattern maintainers should follow when changing
 stateful helpers.
 
-### `HtmlTableState` (`src/html.rs`)
+### 1.1. State-machine adoption checklist
+
+Keep an explicit Rust struct, enum, and event-shaped helper unless every item
+below is true. If every item is true, build a small comparison spike before
+proposing a dependency:
+
+- the transition graph is larger or more important than its Markdown parsing
+  predicates;
+- explicit events, rather than source-line predicates, drive transitions;
+- lifecycle hooks, recoverable transition errors, or introspection would
+  otherwise be duplicated across modules; and
+- the spike demonstrates that generated or framework-driven code is shorter
+  and more legible than equivalent explicit Rust.
+
+Evaluate `statig` first for a dynamic event-driven machine and `smlang` second
+for a compact transition table. Record graph size, event mapping, lifecycle and
+error semantics, observability, generated-code legibility, and dependency
+adoption risk in an ADR update before adding a crate.
+
+### 1.2. Wrapping continuation state (`src/wrap/paragraph.rs`)
+
+`ParagraphState` owns buffered prose, shared indentation, remembered
+continuation indentation, and an optional `PendingPrefix`. `PendingPrefix`
+carries the prefix, source lines, synthetic join offsets, available width, and
+open-fence metadata while an inline-code span crosses source lines.
+`ContinuationMode` selects normalized, tight, or verbatim emission, while
+`TailReflow` decides whether prose after a resolved span may remain buffered.
+The private `wrap::paragraph::spanning_code` helper preserves a conforming
+authored boundary when joining its overlong span would exceed the width; it
+restores stored indentation and returns prose outside that span to normal
+wrapping. Emit stable `trace!` fields at verbatim-preservation,
+prefix-mismatch, and tail-reflow transitions so maintainers can inspect why
+output changed.
+
+### 1.3. `HtmlTableState` (`src/html.rs`)
 
 `HtmlTableState` buffers the lines belonging to an HTML `<table>…</table>`
 block and tracks the current nesting depth. `in_html()` returns `true` whenever
@@ -780,7 +830,7 @@ cleared. `flush_raw` exists for the fenced-block escape path: it emits the
 buffered lines verbatim without conversion, so raw HTML inside a fenced code
 block is preserved unchanged.
 
-### `DefinitionScanState` (`src/footnotes/renumber/definitions.rs`)
+### 1.4. `DefinitionScanState` (`src/footnotes/renumber/definitions.rs`)
 
 `DefinitionScanState` accumulates the footnote-definition rewrite plan during a
 single scan over the input. It borrows the shared `(original → new)` mapping
@@ -793,7 +843,7 @@ finalized at the end via `finalize_numeric_candidates`, which drains the buffer
 in reverse, so the assigned numbers reflect bottom-up ordering rather than the
 order in which the candidates were discovered.
 
-### `ListState` (`src/lists.rs`)
+### 1.5. `ListState` (`src/lists.rs`)
 
 `ListState` maintains an indent stack and a per-indent counter map for
 ordered-list renumbering. `next_number(indent)` first prunes indent levels
@@ -805,9 +855,9 @@ the stack and the counter map; the renumbering pass invokes it when a heading
 or thematic break is encountered, so the next list starts numbering from 1
 again.
 
-## Test infrastructure
+## 2. Test infrastructure
 
-### `tests/support/` module
+### 2.1. `tests/support/` module
 
 Integration-test helpers are organized under `tests/support/`:
 
@@ -823,7 +873,7 @@ Table: Integration-test support modules and their purposes.
 Each integration-test file declares the modules it needs via explicit
 `#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
 
-### Exported test macros (`tests/common/mod.rs`)
+### 2.2. Exported test macros (`tests/common/mod.rs`)
 
 `tests/common/mod.rs` exports two `#[macro_export]` macros available to all
 integration-test crates:
@@ -845,7 +895,7 @@ integration-test binary crates. The `#[expect(unused_macros)]` suppressions
 that previously guarded them were replaced by the export attribute when it
 became clear that multiple test binaries depend on them.
 
-### `test-macros` crate
+### 2.3. `test-macros` crate
 
 The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
 proc-macro attribute. It suppresses the `unused_braces` lint that `rstest`
@@ -866,7 +916,7 @@ Apply it to any fixture function whose single-expression body triggers the lint:
 pub fn broken_table() -> Vec<String> { … }
 ```
 
-## Breaks module – Cow allocation strategy
+## 3. Breaks module – Cow allocation strategy
 
 `format_breaks` in [src/breaks.rs](../src/breaks.rs) returns
 `Vec<Cow<'_, str>>` so unchanged lines can be forwarded without allocating.
