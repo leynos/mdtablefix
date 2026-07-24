@@ -69,7 +69,7 @@ pub(super) fn conforming_source_lines_for_overlong_span(
     for (joined, spans, has_hard_break) in groups {
         let mut lines = wrap_preserving_code(&joined, available);
         for span in spans {
-            preserve_span_boundaries(&mut lines, &joined, &span, available);
+            preserve_span_boundaries(&mut lines, &joined, span, available);
         }
         if has_hard_break {
             restore_last_hard_break(&mut lines);
@@ -181,10 +181,11 @@ fn split_span_at_boundaries(
 fn preserve_span_boundaries(
     lines: &mut Vec<String>,
     joined: &str,
-    span: &OverlongSpan,
+    span: OverlongSpan,
     width: usize,
 ) {
-    let span_text = &joined[span.range.clone()];
+    let OverlongSpan { range, pieces } = span;
+    let span_text = &joined[range];
     let Some((line_index, span_start)) = lines
         .iter()
         .enumerate()
@@ -196,7 +197,7 @@ fn preserve_span_boundaries(
     let span_end = span_start + span_text.len();
     let before = &line[..span_start];
     let after = &line[span_end..];
-    let mut replacement = span.pieces.clone();
+    let mut replacement = pieces;
 
     prepend_prose(&mut replacement, before, width);
     append_prose(&mut replacement, after, width);
