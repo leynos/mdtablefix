@@ -1,0 +1,13 @@
+# Output parity fixture
+
+Before formatting, this prose introduces a representative document.
+
+|Name|Notes|
+|-|-|
+|alpha|Use *`cargo test`* before merging.|
+
+```rust
+fn main() {
+    println!("fixture");
+}
+```

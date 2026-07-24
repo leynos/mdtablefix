@@ -69,7 +69,8 @@ fn test_cli_process_file(broken_table: Vec<String>) {
 /// Snapshots equivalent stdout and in-place output for a representative file.
 #[test]
 fn cli_output_modes_snapshot_table_prose() {
-    let input = include_str!("data/cli-output-parity.md");
+    let input = include_str!("data/cli-output-parity.dat");
+    let expected = include_str!("data/cli-output-parity.expected.md");
     let dir = tempdir().expect("failed to create temporary directory");
     let (directory, parent_path) = capability_directory(&dir);
     let stdout_path = parent_path.join("stdout.md");
@@ -91,10 +92,16 @@ fn cli_output_modes_snapshot_table_prose() {
         "stdout command failed: {}",
         String::from_utf8_lossy(&stdout.stderr)
     );
-    insta::assert_snapshot!(
-        "format_to_string_table_prose",
-        String::from_utf8_lossy(&stdout.stdout)
+    let stdout_text = String::from_utf8_lossy(&stdout.stdout);
+    assert_eq!(stdout_text, expected, "stdout output must match the oracle");
+    assert_eq!(
+        directory
+            .read_to_string("stdout.md")
+            .expect("failed to read stdout fixture"),
+        input,
+        "stdout formatting must not modify the input file"
     );
+    insta::assert_snapshot!("format_to_string_table_prose", stdout_text);
 
     let in_place = Command::cargo_bin("mdtablefix")
         .expect("failed to create cargo command for mdtablefix")
@@ -111,12 +118,11 @@ fn cli_output_modes_snapshot_table_prose() {
         "in-place command wrote unexpected stdout: {}",
         String::from_utf8_lossy(&in_place.stdout)
     );
-    insta::assert_snapshot!(
-        "rewrite_in_place_table_prose",
-        directory
-            .read_to_string("in-place.md")
-            .expect("failed to read rewritten fixture")
-    );
+    let rewritten = directory
+        .read_to_string("in-place.md")
+        .expect("failed to read rewritten fixture");
+    assert_eq!(rewritten, expected, "in-place output must match the oracle");
+    insta::assert_snapshot!("rewrite_in_place_table_prose", rewritten);
 }
 
 /// Tests that the `--fences` option normalizes backtick fences.
