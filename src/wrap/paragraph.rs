@@ -206,19 +206,55 @@ impl<'a> ParagraphWriter<'a> {
         };
         self.out.push(format!("{}{first_line}", line.prefix));
 
-        let tail = lines.collect::<Vec<_>>().join(" ");
         let continuation_prefix =
             continuation_prefix_for(line.prefix.as_ref(), false, line.outer_prefix.as_deref());
+        let mut tail_segment = String::new();
+        for wrapped_line in lines {
+            let trailing_backslashes = wrapped_line
+                .chars()
+                .rev()
+                .take_while(|character| *character == '\\')
+                .count();
+            let marker_len = if wrapped_line.ends_with("  ") {
+                2
+            } else {
+                usize::from(trailing_backslashes % 2 == 1)
+            };
+            let content_end = wrapped_line.len() - marker_len;
+            if !tail_segment.is_empty() {
+                tail_segment.push(' ');
+            }
+            tail_segment.push_str(&wrapped_line[..content_end]);
+
+            if marker_len > 0 {
+                self.out.extend(
+                    wrap_preserving_code(&tail_segment, available)
+                        .into_iter()
+                        .map(|tail_line| format!("{continuation_prefix}{tail_line}")),
+                );
+                if let Some(last_line) = self.out.last_mut() {
+                    last_line.push_str(&wrapped_line[content_end..]);
+                }
+                tail_segment.clear();
+            }
+        }
         self.out.extend(
-            wrap_preserving_code(&tail, available)
+            wrap_preserving_code(&tail_segment, available)
                 .into_iter()
-                .map(|wrapped_line| format!("{continuation_prefix}{wrapped_line}")),
+                .map(|tail_line| format!("{continuation_prefix}{tail_line}")),
         );
     }
 
     pub(super) fn ensure_trailing_hard_break_on_last_line(&mut self) {
         if let Some(last) = self.out.last_mut()
             && !last.ends_with("  ")
+            && last
+                .chars()
+                .rev()
+                .take_while(|character| *character == '\\')
+                .count()
+                % 2
+                == 0
         {
             last.push_str("  ");
         }
@@ -316,6 +352,9 @@ impl<'a> ParagraphWriter<'a> {
             segment.push_str(text);
             if *hard_break {
                 self.push_wrapped_segment(&state.indent, &segment);
+                if !state.indent.is_empty() {
+                    self.ensure_trailing_hard_break_on_last_line();
+                }
                 segment.clear();
             }
         }

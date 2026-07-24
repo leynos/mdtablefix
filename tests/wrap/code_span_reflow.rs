@@ -65,6 +65,33 @@ fn cross_line_code_span_reflow_is_idempotent(
     assert_eq!(wrap_text(&once, WRAP_COLS), once);
 }
 
+#[rstest]
+#[case::trailing_spaces("  ", "  ")]
+#[case::odd_backslash("\\", "\\")]
+fn stable_pending_tail_preserves_hard_breaks(
+    #[case] authored_marker: &str,
+    #[case] emitted_marker: &str,
+) {
+    let input = vec![
+        "- Intro `code span".to_string(),
+        "  closes here` with trailing prose that".to_string(),
+        format!("  keeps flowing until a hard break marker{authored_marker}"),
+        "  Following prose remains separate.".to_string(),
+    ];
+
+    let once = wrap_text(&input, WRAP_COLS);
+    let expected = vec![
+        "- Intro `code span closes here` with trailing prose that keeps flowing until a"
+            .to_string(),
+        format!("  hard break marker{emitted_marker}"),
+        "  Following prose remains separate.".to_string(),
+    ];
+
+    assert_eq!(once, expected);
+    assert!(once[1..].iter().all(|line| line.starts_with("  ")));
+    assert_eq!(wrap_text(&once, WRAP_COLS), once);
+}
+
 #[test]
 fn later_differently_sized_fence_preserves_overlong_span_boundaries() {
     let input = lines_vec![

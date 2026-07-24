@@ -468,12 +468,12 @@ Table: Key types and functions.
 | `rebalance_atomic_tails`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline/postprocess.rs`      |
 | `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/paragraph.rs`               |
 | `ParagraphState`, `PrefixLine`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/wrap/paragraph.rs`               |
-| `PendingPrefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `src/wrap/paragraph.rs`               |
+| `PendingPrefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `src/wrap/paragraph/pending.rs`       |
 | `ContinuationMode`, `TailReflow`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/paragraph/pending.rs`       |
 | `conforming_source_lines_for_overlong_span` — Retains conforming authored boundaries only inside a cross-line code span that would be overlong when joined.                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/paragraph/spanning_code.rs` |
 | `emit_pending_with_verbatim_continuation` — Emits a pending prefix plus raw continuation for ambiguous inline-code source.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/wrap/paragraph.rs`               |
 | `drain_pending_prefix` — Takes the deferred prefixed segment and clears plain paragraph buffers before final emission.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/paragraph.rs`               |
-| `pending_prefix_for_next_segment` — Selects the original pending prefix for the first deferred segment, then the continuation indent for later segments.                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/paragraph.rs`               |
+| `pending_prefix_for_next_segment` — Selects the original pending prefix for the first deferred segment, then the continuation indent for later segments.                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/paragraph/pending.rs`       |
 | `apply_continuation_chunk` — Centralized join/update/dispatch entry point that reconciles a single continuation chunk with the active `PendingPrefix` buffer.                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/continuation.rs`            |
 | `join_pending_continuation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/continuation.rs`            |
 | `starts_inline_citation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/tokenize/mod.rs`            |
@@ -486,7 +486,7 @@ Table: Key types and functions.
 | `has_inline_code_structure`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/inline/fragment.rs`         |
 <!-- markdownlint-enable MD013 MD055 MD056 MD060 -->
 
-`ContinuationMode` in `src/wrap/paragraph.rs` selects normal joining,
+`ContinuationMode` in `src/wrap/paragraph/pending.rs` selects normal joining,
 opener-at-EOL tight joining, or original-line verbatim flushing for
 `PendingPrefix`. The private `code_span_trim` module provides
 `trim_code_span_edge_spaces` for metadata-guided trimming of synthetic
@@ -828,7 +828,6 @@ machines explicit unless they meet the adoption threshold in
 crate research and the local pattern maintainers should follow when changing
 stateful helpers.
 
-
 ### 1.1. State-machine adoption checklist
 
 Keep an explicit Rust struct, enum, and event-shaped helper unless every item
@@ -848,7 +847,6 @@ for a compact transition table. Record graph size, event mapping, lifecycle and
 error semantics, observability, generated-code legibility, and dependency
 adoption risk in an ADR update before adding a crate.
 
-
 ### 1.2. Wrapping continuation state (`src/wrap/paragraph.rs`)
 
 `ParagraphState` owns buffered prose, shared indentation, remembered
@@ -864,7 +862,6 @@ wrapping. Emit stable `trace!` fields at verbatim-preservation,
 prefix-mismatch, and tail-reflow transitions so maintainers can inspect why
 output changed.
 
-
 ### 1.3. `HtmlTableState` (`src/html.rs`)
 
 `HtmlTableState` buffers the lines belonging to an HTML `<table>…</table>`
@@ -877,7 +874,6 @@ buffered lines are converted by `table_lines_to_markdown` and the buffer is
 cleared. `flush_raw` exists for the fenced-block escape path: it emits the
 buffered lines verbatim without conversion, so raw HTML inside a fenced code
 block is preserved unchanged.
-
 
 ### 1.4. `DefinitionScanState` (`src/footnotes/renumber/definitions.rs`)
 
@@ -892,7 +888,6 @@ finalized at the end via `finalize_numeric_candidates`, which drains the buffer
 in reverse, so the assigned numbers reflect bottom-up ordering rather than the
 order in which the candidates were discovered.
 
-
 ### 1.5. `ListState` (`src/lists.rs`)
 
 `ListState` maintains an indent stack and a per-indent counter map for
@@ -906,7 +901,6 @@ or thematic break is encountered, so the next list starts numbering from 1
 again.
 
 ## 2. Test infrastructure
-
 
 ### 2.1. `tests/support/` module
 
@@ -923,7 +917,6 @@ Table: Integration-test support modules and their purposes.
 
 Each integration-test file declares the modules it needs via explicit
 `#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
-
 
 ### 2.2. Exported test macros (`tests/common/mod.rs`)
 
@@ -947,7 +940,6 @@ integration-test binary crates. The `#[expect(unused_macros)]` suppressions
 that previously guarded them were replaced by the export attribute when it
 became clear that multiple test binaries depend on them.
 
-
 ### 2.3. `test-macros` crate
 
 The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
@@ -968,7 +960,6 @@ Apply it to any fixture function whose single-expression body triggers the lint:
 #[rstest::fixture]
 pub fn broken_table() -> Vec<String> { … }
 ```
-
 
 ## 3. Breaks module – Cow allocation strategy
 
