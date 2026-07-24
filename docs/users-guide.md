@@ -28,6 +28,20 @@ Literal pipe characters inside cells must be written as `\|`. `mdtablefix`
 preserves that escaping during reflow, so a literal pipe remains part of the
 cell content rather than being interpreted as a column boundary.
 
+## YAML frontmatter
+
+When a document begins with a valid YAML frontmatter block, `mdtablefix`
+preserves the entire block verbatim and formats only the Markdown body that
+follows it. A frontmatter block begins with `---` as the first line and ends
+with `---` or `...`.
+
+This applies to standard CLI formatting as well as options such as `--wrap`,
+`--renumber`, and `--breaks`; in particular, `--breaks` never rewrites the
+frontmatter delimiters. The library stream functions provide the same
+preservation behaviour. Advanced library callers can use
+`process_with_frontmatter` to run their own body transform without receiving
+the frontmatter lines.
+
 ## Ellipsis handling
 
 The `--ellipsis` flag replaces `...` inside table cells with the Unicode

@@ -1,0 +1,10 @@
+---
+source: tests/process_frontmatter_snapshots.rs
+expression: process_document(input)
+---
+---
+title: Dot closer
+...
+
+| A | B |
+| 1 | 2 |

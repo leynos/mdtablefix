@@ -19,14 +19,18 @@ implementation lives in [src/process.rs](../src/process.rs). Its signature is:
 pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String>
 ```
 
+The public stream entry points call `process_with_frontmatter` before invoking
+this function. It is the canonical boundary for leading YAML frontmatter: it
+passes only the post-frontmatter body to a caller-provided closure and restores
+the prefix verbatim after the closure returns. The library pipeline and
+`process_lines` in the binary both use this boundary, with CLI-only transforms
+such as `renumber_lists` and `format_breaks` inside the binary's closure.
+
 The function combines several helpers documented in `docs/`:
 
-- `frontmatter::split_leading_yaml_frontmatter` detects and splits a leading
-  YAML frontmatter block from the document body. A valid frontmatter block
-  starts with `---` on the first line and ends with `---` or `...` before any
-  body content. The prefix is preserved verbatim while only the body is
-  processed. This shielding also applies to CLI-only transforms such as
-  `renumber_lists` and `format_breaks`.
+- `frontmatter::split_leading_yaml_frontmatter` detects a valid leading YAML
+  frontmatter block for `process_with_frontmatter`. A block starts with `---`
+  on the first line and ends with `---` or `...` before any body content.
 - `fences::compress_fences` and `attach_orphan_specifiers` normalize code block
   delimiters. Fence normalization uses the same `FenceTracker` semantics as
   wrapping, so fence-like lines inside an already open fenced block remain
