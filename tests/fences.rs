@@ -4,6 +4,9 @@
 #[path = "common/mod.rs"]
 mod common;
 
+use mdtablefix::{attach_orphan_specifiers, compress_fences};
+use rstest::rstest;
+
 fn assert_fence_snapshot(name: &str, input: &[String]) {
     insta::with_settings!({
         snapshot_path => "snapshots",

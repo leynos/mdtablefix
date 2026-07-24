@@ -648,7 +648,6 @@ Together, these helpers make the rest of the processing pipeline deal with a
 single normalized fence, and avoid carrying separate logic for detached
 specifier lines.
 
-
 ### Strategy enum
 
 `Strategy` is the canonical private choice for fence-marker rewriting. Its
