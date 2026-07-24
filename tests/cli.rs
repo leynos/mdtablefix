@@ -109,6 +109,11 @@ fn cli_output_modes_snapshot_table_prose() {
         "in-place command failed: {}",
         String::from_utf8_lossy(&in_place.stderr)
     );
+    assert!(
+        in_place.stdout.is_empty(),
+        "in-place command wrote unexpected stdout: {}",
+        String::from_utf8_lossy(&in_place.stdout)
+    );
     insta::assert_snapshot!(
         "rewrite_in_place_table_prose",
         fs::read_to_string(&in_place_path).expect("failed to read rewritten fixture")
