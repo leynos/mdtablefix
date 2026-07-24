@@ -6,10 +6,9 @@
 #[macro_use]
 #[path = "common/mod.rs"]
 mod common;
-
 use std::sync::LazyLock;
 
-use mdtablefix::{lazy_regex, process_stream};
+use mdtablefix::{lazy_regex, process_stream, textproc::leading_indent};
 use proptest::prelude::*;
 use regex::Regex;
 use unicode_width::UnicodeWidthStr;
@@ -22,9 +21,9 @@ static BULLET_RE: LazyLock<Regex> = lazy_regex!(
 /// Returns the expected continuation indent for a wrapped list item output.
 fn list_continuation_indent(first_line: &str) -> Option<String> {
     let prefix = BULLET_RE.captures(first_line)?.get(1)?.as_str();
-    let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
+    let indent_str = leading_indent(prefix);
     let prefix_width = UnicodeWidthStr::width(prefix);
-    let indent_width = UnicodeWidthStr::width(indent_str.as_str());
+    let indent_width = UnicodeWidthStr::width(indent_str);
     Some(format!(
         "{}{}",
         indent_str,

@@ -100,7 +100,7 @@ impl ParagraphState {
     /// panics.
     pub(super) fn note_indent(&mut self, line: &str) {
         if self.buf.is_empty() {
-            let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+            let indent = crate::textproc::leading_indent(line).to_string();
             if indent.is_empty() {
                 self.continuation_indent = None;
                 self.indent.clear();
@@ -417,7 +417,7 @@ fn continuation_prefix_for(
             " ".repeat(prefix_width.saturating_sub(outer_width))
         );
     }
-    let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
-    let indent_width = UnicodeWidthStr::width(indent_str.as_str());
+    let indent_str = crate::textproc::leading_indent(prefix);
+    let indent_width = UnicodeWidthStr::width(indent_str);
     format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width))
 }
