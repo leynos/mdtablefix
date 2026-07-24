@@ -46,7 +46,6 @@ pub(super) fn conforming_source_lines_for_overlong_span(
         return None;
     }
 
-    let mut found_overlong_span = false;
     let groups = hard_break_groups(segments)
         .map(|group| {
             let (joined, boundaries) = join_with_boundaries(group);
@@ -56,11 +55,11 @@ pub(super) fn conforming_source_lines_for_overlong_span(
             } else {
                 overlong_code_spans_crossing_boundaries(&joined, &boundaries, available)
             };
-            found_overlong_span |= !spans.is_empty();
             let has_hard_break = group.last().is_some_and(|(_, hard_break)| *hard_break);
             (joined, spans, has_hard_break)
         })
         .collect::<Vec<_>>();
+    let found_overlong_span = groups.iter().any(|(_, spans, _)| !spans.is_empty());
     if !found_overlong_span {
         return None;
     }
@@ -191,6 +190,14 @@ fn preserve_span_boundaries(
         .enumerate()
         .find_map(|(index, line)| line.find(span_text).map(|offset| (index, offset)))
     else {
+        trace!(
+            mode = "preserve_authored_boundaries",
+            width,
+            boundary = "span_lookup_miss",
+            line_count = lines.len(),
+            span_width = span_text.width(),
+            "skipped authored boundaries because the wrapped span was not found"
+        );
         return;
     };
     let line = lines.remove(line_index);

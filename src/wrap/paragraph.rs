@@ -210,16 +210,7 @@ impl<'a> ParagraphWriter<'a> {
             continuation_prefix_for(line.prefix.as_ref(), false, line.outer_prefix.as_deref());
         let mut tail_segment = String::new();
         for wrapped_line in lines {
-            let trailing_backslashes = wrapped_line
-                .chars()
-                .rev()
-                .take_while(|character| *character == '\\')
-                .count();
-            let marker_len = if wrapped_line.ends_with("  ") {
-                2
-            } else {
-                usize::from(trailing_backslashes % 2 == 1)
-            };
+            let marker_len = trailing_hard_break_marker_len(&wrapped_line);
             let content_end = wrapped_line.len() - marker_len;
             if !tail_segment.is_empty() {
                 tail_segment.push(' ');
@@ -227,34 +218,38 @@ impl<'a> ParagraphWriter<'a> {
             tail_segment.push_str(&wrapped_line[..content_end]);
 
             if marker_len > 0 {
-                self.out.extend(
-                    wrap_preserving_code(&tail_segment, available)
-                        .into_iter()
-                        .map(|tail_line| format!("{continuation_prefix}{tail_line}")),
+                self.emit_tail_segment(
+                    &mut tail_segment,
+                    &wrapped_line[content_end..],
+                    continuation_prefix.as_str(),
+                    available,
                 );
-                if let Some(last_line) = self.out.last_mut() {
-                    last_line.push_str(&wrapped_line[content_end..]);
-                }
-                tail_segment.clear();
             }
         }
+        self.emit_tail_segment(&mut tail_segment, "", &continuation_prefix, available);
+    }
+
+    fn emit_tail_segment(
+        &mut self,
+        tail_segment: &mut String,
+        marker: &str,
+        continuation_prefix: &str,
+        available: usize,
+    ) {
         self.out.extend(
-            wrap_preserving_code(&tail_segment, available)
+            wrap_preserving_code(tail_segment, available)
                 .into_iter()
                 .map(|tail_line| format!("{continuation_prefix}{tail_line}")),
         );
+        if let Some(last_line) = self.out.last_mut() {
+            last_line.push_str(marker);
+        }
+        tail_segment.clear();
     }
 
     pub(super) fn ensure_trailing_hard_break_on_last_line(&mut self) {
         if let Some(last) = self.out.last_mut()
-            && !last.ends_with("  ")
-            && last
-                .chars()
-                .rev()
-                .take_while(|character| *character == '\\')
-                .count()
-                % 2
-                == 0
+            && trailing_hard_break_marker_len(last) == 0
         {
             last.push_str("  ");
         }
@@ -352,9 +347,7 @@ impl<'a> ParagraphWriter<'a> {
             segment.push_str(text);
             if *hard_break {
                 self.push_wrapped_segment(&state.indent, &segment);
-                if !state.indent.is_empty() {
-                    self.ensure_trailing_hard_break_on_last_line();
-                }
+                self.ensure_trailing_hard_break_on_last_line();
                 segment.clear();
             }
         }
@@ -435,4 +428,15 @@ impl<'a> ParagraphWriter<'a> {
 
         self.append_wrapped_with_prefix(prefix_line);
     }
+}
+
+fn trailing_hard_break_marker_len(line: &str) -> usize {
+    if line.ends_with("  ") {
+        return 2;
+    }
+    line.chars()
+        .rev()
+        .take_while(|character| *character == '\\')
+        .count()
+        % 2
 }

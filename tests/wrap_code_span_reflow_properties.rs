@@ -20,6 +20,15 @@ proptest! {
         ];
 
         let once = wrap_text(&input, width);
+        let joined_span = format!("`{code_first} {code_second}`");
+        prop_assume!(UnicodeWidthStr::width(joined_span.as_str()) <= width - 2);
+        prop_assert!(once.iter().any(|line| line.contains(&joined_span)));
+        for word in tail.split_whitespace() {
+            prop_assert!(
+                once.iter()
+                    .any(|line| line.split_whitespace().any(|actual| actual == word))
+            );
+        }
         prop_assert_eq!(wrap_text(&once, width), once);
     }
 

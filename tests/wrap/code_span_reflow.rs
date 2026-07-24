@@ -114,6 +114,7 @@ fn later_differently_sized_fence_preserves_overlong_span_boundaries() {
         ]
     );
     assert!(lines_conform(&output));
+    assert_eq!(wrap_text(&output, WRAP_COLS), output);
 }
 
 #[test]
@@ -128,6 +129,7 @@ fn overlong_spanning_code_preserves_paragraph_indent() {
 
     assert_eq!(output, input);
     assert!(lines_conform(&output));
+    assert_eq!(wrap_text(&output, WRAP_COLS), output);
 }
 
 #[test]
@@ -144,6 +146,20 @@ fn mixed_hard_break_groups_preserve_eligible_span_boundaries() {
     assert_eq!(output, input);
     assert!(UnicodeWidthStr::width(output[0].as_str()) > WRAP_COLS);
     assert!(lines_conform(&output[1..]));
+    assert_eq!(wrap_text(&output, WRAP_COLS), output);
+}
+
+#[test]
+fn top_level_paragraph_preserves_trailing_spaces_hard_break() {
+    let input = lines_vec![
+        "Top-level prose ends with an authored hard break.  ",
+        "Following prose remains separate.",
+    ];
+
+    let output = wrap_text(&input, WRAP_COLS);
+
+    assert_eq!(output, input);
+    assert_eq!(wrap_text(&output, WRAP_COLS), output);
 }
 
 #[test]

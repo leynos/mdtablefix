@@ -817,7 +817,6 @@ committing. Snapshot churn across many cases usually means the fixture is too
 broad or a shared transform changed behaviour; inspect the labelled case, mode,
 and arguments before accepting the new output.
 
-
 ## 1. Stateful pipeline helpers
 
 Internal state carriers centralize the buffered state used by the conversion
