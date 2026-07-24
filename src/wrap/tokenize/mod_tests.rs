@@ -101,6 +101,22 @@ fn tokenize_markdown_treats_escaped_inline_backtick_as_text() {
     assert_eq!(tokens, vec![Token::Text(r"foo\`bar")]);
 }
 
+#[test]
+fn tokenize_markdown_preserves_nested_blockquote_fences() {
+    let source = "> > ```rust\n> > let value = **literal**;\n> > ```";
+
+    assert_eq!(
+        tokenize_markdown(source),
+        vec![
+            Token::Fence("> > ```rust"),
+            Token::Newline,
+            Token::Fence("> > let value = **literal**;"),
+            Token::Newline,
+            Token::Fence("> > ```"),
+        ]
+    );
+}
+
 #[rstest]
 #[case::german_umlauts(r"ß\`å", vec![r"ß\`", "å"])]
 #[case::chinese_characters(r"前\`后", vec![r"前\`", "后"])]

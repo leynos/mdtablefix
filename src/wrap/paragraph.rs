@@ -25,6 +25,8 @@ pub(super) struct PrefixLine<'a> {
     pub(super) rest: &'a str,
     /// Marks whether continuation lines should repeat the full prefix.
     pub(super) repeat_prefix: bool,
+    /// Stores the blockquote portion repeated before an indented inner prefix.
+    pub(super) outer_prefix: Option<Cow<'a, str>>,
 }
 
 /// Buffers a prefixed line whose inline code span continues on later source lines.
@@ -41,6 +43,8 @@ pub(super) struct PendingPrefix {
     pub(super) rest_width: usize,
     /// Marks whether continuation lines should repeat the full prefix.
     pub(super) repeat_prefix: bool,
+    /// Stores the blockquote portion repeated before an indented inner prefix.
+    pub(super) outer_prefix: Option<String>,
     /// Marks whether the closing continuation ended with a Markdown hard break.
     pub(super) hard_break: bool,
     /// Fence length of the inline code span that is currently open, if any.
@@ -193,7 +197,8 @@ impl<'a> ParagraphWriter<'a> {
         available: usize,
     ) {
         let prefix = line.prefix.as_ref();
-        let continuation_prefix = continuation_prefix_for(prefix, line.repeat_prefix);
+        let continuation_prefix =
+            continuation_prefix_for(prefix, line.repeat_prefix, line.outer_prefix.as_deref());
 
         let lines = wrap_preserving_code(line.rest, available);
         if lines.is_empty() {
@@ -260,6 +265,7 @@ impl<'a> ParagraphWriter<'a> {
                     state.remember_continuation_indent(continuation_prefix_for(
                         pending.prefix.as_str(),
                         pending.repeat_prefix,
+                        pending.outer_prefix.as_deref(),
                     ));
                 }
                 self.out.extend(pending.original_lines);
@@ -273,6 +279,7 @@ impl<'a> ParagraphWriter<'a> {
                 prefix: Cow::Owned(prefix),
                 rest: rest.as_ref(),
                 repeat_prefix: pending.repeat_prefix,
+                outer_prefix: pending.outer_prefix.as_deref().map(Cow::Borrowed),
             };
             self.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
             if pending.hard_break {
@@ -282,6 +289,7 @@ impl<'a> ParagraphWriter<'a> {
                 state.remember_continuation_indent(continuation_prefix_for(
                     pending.prefix.as_str(),
                     pending.repeat_prefix,
+                    pending.outer_prefix.as_deref(),
                 ));
             }
         }
@@ -366,6 +374,7 @@ impl<'a> ParagraphWriter<'a> {
                 synthetic_join_spaces: Vec::new(),
                 rest_width: self.width.saturating_sub(prefix_width).max(1),
                 repeat_prefix: prefix_line.repeat_prefix,
+                outer_prefix: prefix_line.outer_prefix.as_deref().map(ToOwned::to_owned),
                 hard_break: false,
                 open_fence_len: Some(fence_len),
                 continuation_mode,
@@ -380,19 +389,34 @@ impl<'a> ParagraphWriter<'a> {
 
 pub(super) fn pending_prefix_for_next_segment(pending: &mut PendingPrefix) -> String {
     if pending.used_prefix {
-        continuation_prefix_for(pending.prefix.as_str(), pending.repeat_prefix)
+        continuation_prefix_for(
+            pending.prefix.as_str(),
+            pending.repeat_prefix,
+            pending.outer_prefix.as_deref(),
+        )
     } else {
         pending.used_prefix = true;
         pending.prefix.clone()
     }
 }
 
-fn continuation_prefix_for(prefix: &str, repeat_prefix: bool) -> String {
+fn continuation_prefix_for(
+    prefix: &str,
+    repeat_prefix: bool,
+    outer_prefix: Option<&str>,
+) -> String {
     if repeat_prefix {
         return prefix.to_string();
     }
 
     let prefix_width = UnicodeWidthStr::width(prefix);
+    if let Some(outer_prefix) = outer_prefix {
+        let outer_width = UnicodeWidthStr::width(outer_prefix);
+        return format!(
+            "{outer_prefix}{}",
+            " ".repeat(prefix_width.saturating_sub(outer_width))
+        );
+    }
     let indent_str: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
     let indent_width = UnicodeWidthStr::width(indent_str.as_str());
     format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width))

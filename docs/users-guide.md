@@ -155,10 +155,13 @@ such as a full stop or comma, `mdtablefix` keeps that punctuation attached to
 the same wrapped unit. It does not leave the punctuation orphaned on a line by
 itself after wrapping.
 
-Blockquote prefixes (`>`), task-list item markers (`- [ ]`, `- [x]`), and
-footnote definition labels (`[^n]:`) are detected automatically. The first
-wrapped line carries the original prefix; subsequent wrapped lines are indented
-to the same visual column, so the text stays aligned.
+Blockquote prefixes (`>`) are parsed before their inner content at every
+nesting depth, including compact (`>>`) and spaced (`> >`) forms. Fenced code
+blocks, inline code spans, task-list item markers (`- [ ]`, `- [x]`), ordinary
+list markers, and footnote definition labels (`[^n]:`) therefore retain their
+usual meaning inside blockquotes. Wrapped prose repeats the complete blockquote
+prefix. For a list inside a blockquote, continuations repeat the blockquote
+portion and replace only the list marker with an alignment indent.
 
 Fenced code blocks, HTML blocks, indented code blocks (four or more leading
 spaces or a leading tab), and table rows are passed through unchanged. Wrapping

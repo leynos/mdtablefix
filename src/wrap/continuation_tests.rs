@@ -16,6 +16,7 @@ fn pending_prefix(
         synthetic_join_spaces: Vec::new(),
         rest_width,
         repeat_prefix: false,
+        outer_prefix: None,
         hard_break: false,
         open_fence_len: Some(1),
         continuation_mode,
@@ -88,6 +89,7 @@ fn handle_prefix_line_selects_tight_mode_for_opener_at_eol() {
         prefix: Cow::Borrowed("- "),
         rest: "run `",
         repeat_prefix: false,
+        outer_prefix: None,
     };
 
     writer.handle_prefix_line(&mut state, &line);
@@ -109,6 +111,7 @@ fn handle_prefix_line_selects_normal_mode_for_nonempty_tail() {
         prefix: Cow::Borrowed("- "),
         rest: "run `code",
         repeat_prefix: false,
+        outer_prefix: None,
     };
 
     writer.handle_prefix_line(&mut state, &line);

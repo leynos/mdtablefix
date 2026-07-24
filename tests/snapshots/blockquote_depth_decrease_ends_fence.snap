@@ -1,0 +1,8 @@
+---
+source: tests/wrap/blockquote_snapshots.rs
+expression: "wrap_text(input, WRAP_COLS).join(\"\\n\")"
+---
+> > ```rust
+> > let quoted = true;
+> This depth-one prose follows the implicitly closed nested fence and is long
+> enough to wrap across the configured width.

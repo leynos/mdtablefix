@@ -316,6 +316,7 @@ fn emit_pending_prefix_segment(
         prefix: Cow::Owned(prefix),
         rest: flushed.as_str(),
         repeat_prefix: pending.repeat_prefix,
+        outer_prefix: pending.outer_prefix.as_deref().map(Cow::Borrowed),
     };
     writer.append_wrapped_with_prefix_width(&prefix_line, pending.rest_width);
     if pending.hard_break {

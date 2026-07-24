@@ -3,8 +3,9 @@
 //! `compress_fences` reduces safe outer delimiters to three backticks while
 //! preserving nested fence-like content whose marker runs are literal text.
 //! The local `FENCE_RE` defines which delimiter lines this module can
-//! normalize, while `wrap::is_fence` and `FenceTracker` provide the structural
-//! Markdown fence semantics shared with wrapping.
+//! normalize, while `FenceTracker` provides the depth-aware structural Markdown
+//! fence semantics shared with wrapping; its `observe_source_fence` supplies the
+//! structural marker parse so this module never re-runs `wrap::is_fence`.
 //! `attach_orphan_specifiers` then finds orphaned fence specifier lines and
 //! attaches them to the following fence, preserving the retained indentation
 //! and normalized language specifier.
@@ -12,7 +13,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use crate::wrap::{FenceTracker, is_fence};
+use crate::wrap::{FenceObservation, FenceTracker, ObservedFence};
 
 mod attachment;
 
@@ -86,11 +87,22 @@ enum MarkerStrategy {
     PreserveDelimiter,
 }
 
+/// A retained source line together with its compressed rewrite, computed once
+/// when the line was parsed.
+///
+/// Caching `compressed` here lets every flush path emit the line without running
+/// the normalization regex again, including `flush_unmatched_block`, which may
+/// rewrite any retained line.
+struct CachedLine {
+    line: String,
+    /// The line rewritten with a compressed three-backtick delimiter, or `None`
+    /// when the line is not a normalization-compatible fence delimiter.
+    compressed: Option<String>,
+}
 struct PendingFenceBlock {
     opening_marker: String,
-    opening_rewritable: bool,
     has_conflicting_interior_fence: bool,
-    lines: Vec<String>,
+    lines: Vec<CachedLine>,
 }
 
 fn marker_char(marker: &str) -> Option<char> { marker.chars().next() }
@@ -119,8 +131,11 @@ fn preserved_fence_line(line: &str) -> Option<String> {
     rewrite_marker(line, MarkerStrategy::PreserveDelimiter)
 }
 
-fn interior_fence_requires_preserved_delimiters(opening_marker: &str, line: &str) -> bool {
-    let Some((_indent, marker, _info)) = is_fence(line) else {
+fn interior_fence_requires_preserved_delimiters(
+    opening_marker: &str,
+    parsed: Option<(&str, &str, &str)>,
+) -> bool {
+    let Some((_indent, marker, _info)) = parsed else {
         return false;
     };
     let Some(opening_ch) = marker_char(opening_marker) else {
@@ -140,38 +155,154 @@ fn opening_rewrite(has_conflicting_interior_fence: bool) -> FenceRewrite {
     }
 }
 
-fn rewrite_fence_line(line: &str, rewrite: FenceRewrite) -> String {
+/// Emit a delimiter line, reusing its cached compressed rewrite for the
+/// `Compress` strategy and computing the preserved rewrite on demand.
+///
+/// The `PreserveDelimiters` strategy is only chosen once per block, so its
+/// rewrite is not worth caching per line.
+fn rewrite_delimiter(cached: CachedLine, rewrite: FenceRewrite) -> String {
+    let CachedLine { line, compressed } = cached;
     match rewrite {
-        FenceRewrite::Compress => compressed_fence_line(line).unwrap_or_else(|| line.to_owned()),
-        FenceRewrite::PreserveDelimiters => {
-            preserved_fence_line(line).unwrap_or_else(|| line.to_owned())
-        }
+        FenceRewrite::Compress => compressed.unwrap_or(line),
+        FenceRewrite::PreserveDelimiters => preserved_fence_line(&line).unwrap_or(line),
     }
 }
-
 fn flush_unmatched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
-    out.extend(
-        block
-            .lines
-            .into_iter()
-            .map(|line| compressed_fence_line(&line).unwrap_or(line)),
-    );
+    // The block never closed, so its interior lines are literal content of the
+    // unclosed fence: normalize only the opening delimiter and emit every
+    // interior line verbatim, so fence-like content is not rewritten.
+    for (index, cached) in block.lines.into_iter().enumerate() {
+        let emitted = if index == 0 {
+            cached.compressed.unwrap_or(cached.line)
+        } else {
+            cached.line
+        };
+        out.push(emitted);
+    }
 }
 
 fn flush_matched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
     let rewrite = opening_rewrite(block.has_conflicting_interior_fence);
     let closing_index = block.lines.len() - 1;
-    for (index, line) in block.lines.into_iter().enumerate() {
-        if index == 0 || index == closing_index {
-            out.push(rewrite_fence_line(&line, rewrite));
+    for (index, cached) in block.lines.into_iter().enumerate() {
+        let emitted = if index == 0 || index == closing_index {
+            rewrite_delimiter(cached, rewrite)
         } else {
-            out.push(line);
-        }
+            cached.line
+        };
+        out.push(emitted);
     }
 }
 
 fn flush_original_block(block: PendingFenceBlock, out: &mut Vec<String>) {
-    out.extend(block.lines);
+    out.extend(block.lines.into_iter().map(|cached| cached.line));
+}
+
+/// Emit a completed block, rewriting its delimiters when both ends carry a
+/// cached compressed rewrite and otherwise preserving the original lines.
+fn flush_completed_block(block: PendingFenceBlock, out: &mut Vec<String>) {
+    let opening_rewritable = block.lines.first().is_some_and(|c| c.compressed.is_some());
+    let closing_rewritable = block.lines.last().is_some_and(|c| c.compressed.is_some());
+    if opening_rewritable && closing_rewritable {
+        flush_matched_block(block, out);
+    } else {
+        flush_original_block(block, out);
+    }
+}
+
+/// A source line parsed once for `compress_fences`.
+///
+/// Bundles the fence-state observation, the structural marker components, and
+/// the compressed rewrite so that opening, closing, conflicting-interior, and
+/// flush decisions all draw from a single parse of the line.
+struct ParsedLine<'a> {
+    line: &'a str,
+    observation: FenceObservation,
+    fence: Option<(&'a str, &'a str, &'a str)>,
+    compressed: Option<String>,
+}
+
+impl<'a> ParsedLine<'a> {
+    /// Observe `line` against `tracker` and compute its compressed rewrite once.
+    ///
+    /// The blockquote depth and structural fence marker come from the tracker's
+    /// single parse via [`FenceTracker::observe_source_fence`]; only the local
+    /// normalization regex runs in addition, so the raw line is never handed to
+    /// `is_fence` again.
+    fn observe(tracker: &mut FenceTracker, line: &'a str) -> Self {
+        let observed: ObservedFence<'a> = tracker.observe_source_fence(line);
+        Self {
+            line,
+            observation: observed.observation,
+            fence: observed.fence,
+            compressed: compressed_fence_line(line),
+        }
+    }
+
+    fn into_cached(self) -> CachedLine {
+        CachedLine {
+            line: self.line.to_owned(),
+            compressed: self.compressed,
+        }
+    }
+}
+/// Begin a pending fence block for a line observed outside any active fence.
+///
+/// Any block that was still pending is emitted verbatim first. When the line
+/// opens a fence a fresh block is returned; otherwise the (possibly compressed)
+/// line is pushed to `out` and `None` is returned.
+fn start_fence_block(
+    previous: Option<PendingFenceBlock>,
+    parsed: ParsedLine<'_>,
+    out: &mut Vec<String>,
+) -> Option<PendingFenceBlock> {
+    if let Some(block) = previous {
+        flush_original_block(block, out);
+    }
+    let Some((_indent, opening_marker, _info)) = parsed.fence else {
+        out.push(parsed.compressed.unwrap_or_else(|| parsed.line.to_owned()));
+        return None;
+    };
+    let opening_marker = opening_marker.to_owned();
+    Some(PendingFenceBlock {
+        opening_marker,
+        has_conflicting_interior_fence: false,
+        lines: vec![parsed.into_cached()],
+    })
+}
+
+/// Advance the pending fence block for a line observed inside an active fence,
+/// returning the block that remains pending afterwards (if any).
+///
+/// Interior fence markers are accumulated as literal content until the block
+/// closes at its opening depth, at which point it is flushed.
+fn advance_fence_block(
+    pending: Option<PendingFenceBlock>,
+    parsed: ParsedLine<'_>,
+    out: &mut Vec<String>,
+) -> Option<PendingFenceBlock> {
+    let Some(mut block) = pending else {
+        out.push(parsed.line.to_owned());
+        return None;
+    };
+
+    let observation = parsed.observation;
+    if observation.is_fence_marker
+        && observation.is_in_fence
+        && interior_fence_requires_preserved_delimiters(&block.opening_marker, parsed.fence)
+    {
+        block.has_conflicting_interior_fence = true;
+    }
+
+    let keep_open = !observation.is_fence_marker || observation.is_in_fence;
+    block.lines.push(parsed.into_cached());
+
+    if keep_open {
+        return Some(block);
+    }
+
+    flush_completed_block(block, out);
+    None
 }
 
 /// Normalize safe outer fence delimiters to exactly three backticks.
@@ -184,10 +315,10 @@ fn flush_original_block(block: PendingFenceBlock, out: &mut Vec<String>) {
 /// shortening or changing it would make an inner literal fence line look
 /// structural.
 ///
-/// Matched-block preservation does not apply to unclosed input. When input ends
-/// inside an unclosed fence, `compress_fences` uses `flush_unmatched_block` to
-/// fall back to stateless per-line rewriting, so fence-like lines inside that
-/// unclosed block may still be rewritten.
+/// When input ends inside an unclosed fence, `compress_fences` uses
+/// `flush_unmatched_block`, which normalizes only the opening delimiter and
+/// emits every interior line verbatim, so fence-like content inside that
+/// unclosed block is preserved rather than rewritten.
 ///
 /// # Examples
 ///
@@ -203,50 +334,15 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
 
     for line in lines {
-        if !tracker.in_fence() {
-            let Some((_indent, opening_marker, _info)) = is_fence(line) else {
-                out.push(compressed_fence_line(line).unwrap_or_else(|| line.clone()));
-                continue;
-            };
-            let _ = tracker.observe(line);
-            pending_block = Some(PendingFenceBlock {
-                opening_marker: opening_marker.to_owned(),
-                opening_rewritable: compressed_fence_line(line).is_some(),
-                has_conflicting_interior_fence: false,
-                lines: vec![line.clone()],
-            });
-            continue;
-        }
-
-        let Some(mut block) = pending_block.take() else {
-            out.push(line.clone());
-            continue;
-        };
-
-        let observed_fence = tracker.observe(line);
-        if observed_fence
-            && tracker.in_fence()
-            && interior_fence_requires_preserved_delimiters(&block.opening_marker, line)
-        {
-            block.has_conflicting_interior_fence = true;
-        }
-        block.lines.push(line.clone());
-
-        if !observed_fence {
-            pending_block = Some(block);
-            continue;
-        }
-
-        if tracker.in_fence() {
-            pending_block = Some(block);
-            continue;
-        }
-
-        if block.opening_rewritable && compressed_fence_line(line).is_some() {
-            flush_matched_block(block, &mut out);
+        // Parse each source line once: the tracker supplies the blockquote depth
+        // and structural fence marker, and the compressed rewrite is computed a
+        // single time and cached on the block for every flush path.
+        let parsed = ParsedLine::observe(&mut tracker, line);
+        pending_block = if parsed.observation.was_in_fence {
+            advance_fence_block(pending_block.take(), parsed, &mut out)
         } else {
-            flush_original_block(block, &mut out);
-        }
+            start_fence_block(pending_block.take(), parsed, &mut out)
+        };
     }
 
     if let Some(block) = pending_block {
@@ -289,8 +385,8 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
     let mut lines = lines.iter().peekable();
 
     while let Some(line) = lines.next() {
-        if tracker.in_fence() {
-            let _ = tracker.observe(line);
+        let fence = tracker.observe_source_line(line);
+        if fence.was_in_fence {
             out.push(line.clone());
             continue;
         }
@@ -303,7 +399,6 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
         }
 
         out.push(line.clone());
-        let _ = tracker.observe(line);
     }
 
     out

@@ -431,6 +431,15 @@ module handles filesystem operations, delegating the text processing to
 
 ### Stateful helpers
 
+`BlockquotePrefix` owns the wrap module's interpretation of leading blockquote
+structure. It borrows the source line, preserves the prefix's exact spacing,
+and exposes both nesting depth and stripped inner content. The type is the only
+blockquote-prefix parser used by the wrapping pipeline; downstream
+classification, fence detection, and prefix-aware emission consume its parsed
+view rather than matching blockquote syntax independently. It does not parse
+general Markdown containers or mutate content, so callers compose it with the
+existing list, fence, and inline parsers after stripping the outer prefix.
+
 `ParagraphWriter` owns paragraph buffering and flush boundaries for wrapping.
 It keeps the current indent, emits wrapped or verbatim lines into the caller's
 output buffer, and leaves inline fitting to the wrapping helpers.
@@ -499,9 +508,14 @@ preserved verbatim or emitted as wrapped output.
 
 ```mermaid
 flowchart TD
-    A[Start: wrap_text called with lines and width] --> B{Classify line}
+    A[Start: wrap_text called with lines and width] --> P[Parse blockquote prefix and depth]
+    P --> Q{handle_fence_line recognizes a marker at the current depth}
+    Q -->|Yes| C[Preserve line verbatim]
+    Q -->|No| R{FenceTracker active at the current depth}
+    R -->|Yes| C
+    R -->|No| B{Classify stripped inner content}
 
-    B -->|Fenced or indented code block| C[Preserve line verbatim]
+    B -->|Indented code block| C
     B -->|Table or heading or directive| C
     B -->|Blank line| D[Flush active paragraph and emit blank]
     B -->|Paragraph or prefixed line| E[Send to ParagraphWriter]
@@ -522,16 +536,18 @@ flowchart TD
     L --> M
 
     M --> N{More input lines?}
-    N -->|Yes| B
+    N -->|Yes| P
     N -->|No| O[Flush remaining paragraph and finish]
 ```
 
-Figure: `wrap_text` control flow. The wrapper classifies each incoming line,
-passes fenced blocks, tables, headings, directives, and indented code through
-unchanged, flushes paragraphs on blanks, routes prose and prefixed lines through
-`ParagraphWriter`, computes visible widths with `unicode-width`, and delegates
-inline line fitting to `textwrap` before reconstructing the emitted Markdown
-lines.
+_Figure 2: `wrap_text` control flow. The wrapper first extracts blockquote
+depth and inner content, then applies depth-aware fence handling before
+classifying that inner content. It passes fenced blocks, tables, headings,
+directives, and indented code through unchanged, flushes paragraphs on blanks,
+routes prose and prefixed lines through `ParagraphWriter`, computes visible
+widths with `unicode-width`, and delegates inline line fitting to `textwrap`
+before reconstructing the emitted Markdown lines with their original blockquote
+container._
 
 ### Wrap sequence
 

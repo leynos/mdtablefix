@@ -10,7 +10,7 @@ use tracing::debug;
 use crate::{
     ellipsis::replace_ellipsis,
     table::reflow_table,
-    wrap::{FenceTracker, LinkReferenceMatcher, classify_block, leading_indent},
+    wrap::{LinkReferenceMatcher, classify_block, leading_indent},
 };
 
 fn is_indented_content_line(line: &str) -> bool {
@@ -93,8 +93,8 @@ impl ProcessBuffer {
         self.out.push(line.to_string());
     }
 
-    pub(super) fn handle_fence_line(&mut self, line: &str, fences: &mut FenceTracker) -> bool {
-        if !fences.observe(line) {
+    pub(super) fn handle_fence_line(&mut self, line: &str, is_fence_marker: bool) -> bool {
+        if !is_fence_marker {
             return false;
         }
 

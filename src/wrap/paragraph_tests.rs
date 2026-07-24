@@ -45,6 +45,7 @@ fn handle_prefix_line_can_repeat_or_change_the_continuation_prefix() {
             prefix: Cow::Borrowed("- [ ] "),
             rest: "alpha beta",
             repeat_prefix: false,
+            outer_prefix: None,
         },
     );
     assert_eq!(
@@ -61,6 +62,7 @@ fn handle_prefix_line_can_repeat_or_change_the_continuation_prefix() {
             prefix: Cow::Borrowed("> "),
             rest: "alpha beta gamma",
             repeat_prefix: true,
+            outer_prefix: None,
         },
     );
     assert_eq!(
@@ -151,6 +153,7 @@ fn pending_prefix(prefix: &str, repeat_prefix: bool) -> PendingPrefix {
         synthetic_join_spaces: Vec::new(),
         rest_width: 74,
         repeat_prefix,
+        outer_prefix: None,
         hard_break: false,
         open_fence_len: Some(1),
         continuation_mode: ContinuationMode::Normalize,

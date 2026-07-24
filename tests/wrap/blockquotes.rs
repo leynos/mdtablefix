@@ -1,5 +1,7 @@
 //! Blockquote wrapping tests.
 
+use rstest::rstest;
+
 use super::{wrap_assertions::assert_wrapped_blockquote, *};
 
 #[test]
@@ -92,4 +94,86 @@ fn test_wrap_blockquote_short() {
     let input = lines_vec!["> short"];
     let output = process_stream(&input);
     assert_eq!(output, input);
+}
+
+#[rstest]
+#[case::spaced("> > ")]
+#[case::compact(">>")]
+fn nested_blockquote_fences_are_preserved(#[case] prefix: &str) {
+    let input = lines_vec![
+        format!("{prefix}```rust"),
+        format!("{prefix}fn main() {{}}"),
+        format!("{prefix}```"),
+    ];
+
+    assert_eq!(process_stream(&input), input);
+}
+
+#[test]
+fn decreasing_depth_ends_a_nested_blockquote_fence() {
+    let input = lines_vec![
+        "> > ```rust",
+        "> > let quoted = true;",
+        concat!(
+            "> This depth-one prose follows the implicitly closed nested fence and is long ",
+            "enough to wrap."
+        ),
+    ];
+
+    let output = process_stream(&input);
+
+    assert_eq!(
+        output,
+        lines_vec![
+            "> > ```rust",
+            "> > let quoted = true;",
+            "> This depth-one prose follows the implicitly closed nested fence and is long",
+            "> enough to wrap.",
+        ]
+    );
+    let emitted_prose = output[2..]
+        .iter()
+        .map(|line| line.strip_prefix("> ").expect("prose should remain quoted"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let source_prose = input[2]
+        .strip_prefix("> ")
+        .expect("source prose should be quoted");
+    assert_eq!(emitted_prose, source_prose);
+}
+
+#[test]
+fn wraps_a_list_item_inside_a_blockquote() {
+    let input = lines_vec![concat!(
+        "> - This list item contains enough prose to wrap onto multiple lines while retaining ",
+        "its compound prefix."
+    )];
+
+    let output = process_stream(&input);
+
+    assert_eq!(
+        output,
+        lines_vec![
+            "> - This list item contains enough prose to wrap onto multiple lines while",
+            ">   retaining its compound prefix.",
+        ]
+    );
+}
+
+#[test]
+fn wraps_an_ordered_list_inside_a_nested_blockquote() {
+    let input = lines_vec![concat!(
+        "> > 1. This ordered item contains enough prose to wrap while preserving both quote ",
+        "levels on every continuation."
+    )];
+
+    let output = process_stream(&input);
+
+    assert_eq!(
+        output,
+        lines_vec![
+            "> > 1. This ordered item contains enough prose to wrap while preserving both",
+            "> >    quote levels on every continuation.",
+        ]
+    );
 }

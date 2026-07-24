@@ -12,6 +12,10 @@
 
 ### Changed
 
+- Require callers of `FenceTracker::observe` and `FenceTracker::in_fence` to
+  provide the current blockquote depth. This is a breaking API change for
+  existing one-argument callers.
+  ([#347](https://github.com/leynos/mdtablefix/issues/347))
 - `format_breaks` now returns `Vec<Cow<'_, str>>` rather than `Vec<String>`,
   so unchanged lines stay borrowed instead of forcing heap allocations.
 

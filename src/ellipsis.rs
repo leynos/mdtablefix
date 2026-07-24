@@ -136,8 +136,8 @@ pub fn replace_ellipsis(lines: &[String]) -> Vec<String> {
     lines
         .iter()
         .map(|line| {
-            let is_fence = fence_tracker.observe(line);
-            if is_fence || fence_tracker.in_fence() {
+            let fence = fence_tracker.observe_source_line(line);
+            if fence.is_fence_marker || fence.is_in_fence {
                 indented_code_tracker.observe_completed_block();
                 link_title_window.observe_fence_context();
                 return line.clone();
@@ -199,6 +199,19 @@ mod tests {
     #[test]
     fn ignores_fenced_blocks() {
         let input = vec!["```".to_string(), "...".to_string(), "```".to_string()];
+        let expected = input.clone();
+        assert_eq!(replace_ellipsis(&input), expected);
+    }
+
+    #[test]
+    fn ignores_blockquoted_fenced_blocks() {
+        // The depth-aware fence tracker recognizes a fence opened inside a
+        // blockquote, so the enclosed `...` stays literal.
+        let input = vec![
+            "> ```".to_string(),
+            "> ...".to_string(),
+            "> ```".to_string(),
+        ];
         let expected = input.clone();
         assert_eq!(replace_ellipsis(&input), expected);
     }

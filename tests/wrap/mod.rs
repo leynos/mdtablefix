@@ -9,16 +9,15 @@ use mdtablefix::process_stream;
 #[path = "../common/mod.rs"]
 mod common;
 
-#[path = "../support/cli_stdin.rs"]
-mod cli_stdin;
-#[path = "../support/wrap_assertions.rs"]
-mod wrap_assertions;
-
+mod blockquote_properties;
+mod blockquote_snapshots;
 mod blockquotes;
 mod checklist_code_spans;
 mod cli;
 mod cli_files;
 mod cli_issue_329_property;
+#[path = "../support/cli_stdin.rs"]
+mod cli_stdin;
 mod date_snapshots;
 mod fence_behaviour;
 mod footnotes;
@@ -31,3 +30,5 @@ mod lists;
 mod paragraphs;
 mod spanning_code_spans;
 mod tokenize_markdown;
+#[path = "../support/wrap_assertions.rs"]
+mod wrap_assertions;
