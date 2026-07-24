@@ -8,8 +8,7 @@
 mod common;
 use std::sync::LazyLock;
 
-use mdtablefix::{lazy_regex, process_stream};
-use mdtablefix::{process_stream, textproc::leading_indent};
+use mdtablefix::{lazy_regex, process_stream, textproc::leading_indent};
 use proptest::prelude::*;
 use regex::Regex;
 use unicode_width::UnicodeWidthStr;
