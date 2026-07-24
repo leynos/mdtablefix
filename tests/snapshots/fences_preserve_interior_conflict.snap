@@ -1,0 +1,9 @@
+---
+source: tests/fences.rs
+expression: "compress_fences(&input).join(\"\\n\")"
+---
+````markdown
+```rust
+fn main() {}
+```
+````

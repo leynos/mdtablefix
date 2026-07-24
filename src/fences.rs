@@ -17,6 +17,10 @@ use crate::wrap::{FenceObservation, FenceTracker, ObservedFence};
 
 mod attachment;
 
+#[cfg(test)]
+#[path = "fences_properties.rs"]
+mod properties;
+
 use attachment::attach_to_next_fence;
 
 static FENCE_RE: LazyLock<Regex> = lazy_regex!(
@@ -75,16 +79,11 @@ fn normalize_specifier(line: &str) -> (String, String) {
     (cleaned, indent)
 }
 
+/// Select how a recognized fence marker is normalized.
 #[derive(Clone, Copy)]
-enum FenceRewrite {
+enum Strategy {
     Compress,
-    PreserveDelimiters,
-}
-
-#[derive(Clone, Copy)]
-enum MarkerStrategy {
-    Compressed,
-    PreserveDelimiter,
+    Preserve,
 }
 
 /// A retained source line together with its compressed rewrite, computed once
@@ -107,28 +106,20 @@ struct PendingFenceBlock {
 
 fn marker_char(marker: &str) -> Option<char> { marker.chars().next() }
 
-fn rewrite_marker(line: &str, strategy: MarkerStrategy) -> Option<String> {
+fn rewrite_marker(line: &str, strategy: Strategy) -> Option<String> {
     let cap = FENCE_RE.captures(line)?;
     let indent = cap.get(1).map_or("", |m| m.as_str());
     let original_marker = cap.get(2).map_or("", |m| m.as_str());
     let lang = cap.get(3).map_or("", |m| m.as_str());
     let marker = match strategy {
-        MarkerStrategy::Compressed => "```",
-        MarkerStrategy::PreserveDelimiter => original_marker,
+        Strategy::Compress => "```",
+        Strategy::Preserve => original_marker,
     };
     Some(if is_null_lang(lang) {
         format!("{indent}{marker}")
     } else {
         format!("{indent}{marker}{lang}")
     })
-}
-
-fn compressed_fence_line(line: &str) -> Option<String> {
-    rewrite_marker(line, MarkerStrategy::Compressed)
-}
-
-fn preserved_fence_line(line: &str) -> Option<String> {
-    rewrite_marker(line, MarkerStrategy::PreserveDelimiter)
 }
 
 fn interior_fence_requires_preserved_delimiters(
@@ -147,24 +138,24 @@ fn interior_fence_requires_preserved_delimiters(
     marker_ch == opening_ch || marker_ch == '`'
 }
 
-fn opening_rewrite(has_conflicting_interior_fence: bool) -> FenceRewrite {
+fn opening_rewrite(has_conflicting_interior_fence: bool) -> Strategy {
     if has_conflicting_interior_fence {
-        FenceRewrite::PreserveDelimiters
+        Strategy::Preserve
     } else {
-        FenceRewrite::Compress
+        Strategy::Compress
     }
 }
 
-/// Emit a delimiter line, reusing its cached compressed rewrite for the
+/// Emit a fence line, reusing its cached compressed rewrite for the
 /// `Compress` strategy and computing the preserved rewrite on demand.
 ///
-/// The `PreserveDelimiters` strategy is only chosen once per block, so its
+/// The `Preserve` strategy is only chosen once per block, so its
 /// rewrite is not worth caching per line.
-fn rewrite_delimiter(cached: CachedLine, rewrite: FenceRewrite) -> String {
+fn rewrite_fence_line(cached: CachedLine, strategy: Strategy) -> String {
     let CachedLine { line, compressed } = cached;
-    match rewrite {
-        FenceRewrite::Compress => compressed.unwrap_or(line),
-        FenceRewrite::PreserveDelimiters => preserved_fence_line(&line).unwrap_or(line),
+    match strategy {
+        Strategy::Compress => compressed.unwrap_or(line),
+        Strategy::Preserve => rewrite_marker(&line, Strategy::Preserve).unwrap_or(line),
     }
 }
 fn flush_unmatched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
@@ -186,7 +177,7 @@ fn flush_matched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
     let closing_index = block.lines.len() - 1;
     for (index, cached) in block.lines.into_iter().enumerate() {
         let emitted = if index == 0 || index == closing_index {
-            rewrite_delimiter(cached, rewrite)
+            rewrite_fence_line(cached, rewrite)
         } else {
             cached.line
         };
@@ -235,7 +226,7 @@ impl<'a> ParsedLine<'a> {
             line,
             observation: observed.observation,
             fence: observed.fence,
-            compressed: compressed_fence_line(line),
+            compressed: rewrite_marker(line, Strategy::Compress),
         }
     }
 
