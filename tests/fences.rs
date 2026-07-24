@@ -50,6 +50,16 @@ fn compresses_tilde_fences() {
     assert_eq!(out, lines_vec!["```rust", "code", "```"]);
 }
 
+#[test]
+fn preserves_null_language_during_interior_conflict() {
+    let input = lines_vec!["````null", "```rust", "fn main() {}", "```", "````"];
+    let out = compress_fences(&input);
+
+    assert_eq!(
+        out,
+        lines_vec!["````", "```rust", "fn main() {}", "```", "````"]
+    );
+}
 #[rstest]
 #[case(
     lines_vec!["````markdown", "```rust", "fn main() {}", "```", "````"],

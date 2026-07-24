@@ -659,9 +659,9 @@ variants have the following effects:
 - `Preserve` retains the original marker character and run length when an
   interior fence would otherwise become structural.
 
-All fence-marker rewriting must dispatch on `Strategy` through `rewrite_marker`;
-`rewrite_fence_line` retains the additional matched-block handling required by
-the preserve path.
+All fence-marker rewriting must dispatch on `Strategy` through `rewrite_marker`.
+`flush_matched_block` selects the matched-block strategy, while
+`rewrite_fence_line` only dispatches it and falls back to the original line.
 
 ### Architecture
 

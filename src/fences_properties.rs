@@ -15,7 +15,15 @@ fn fence_line_strategy() -> impl ProptestStrategy<Value = (String, String, char,
         prop::collection::vec(Just(' '), 0..=8),
         prop_oneof![Just('`'), Just('~')],
         3_usize..=10,
-        prop_oneof![Just(String::new()), "[a-z][a-z0-9_+.-]{0,8}"],
+        prop_oneof![
+            Just(String::new()),
+            Just("null".to_owned()),
+            Just("NULL".to_owned()),
+            Just("Null".to_owned()),
+            "[a-z][a-z0-9_+.-]{0,8}".prop_filter("excludes null language variants", |language| {
+                !language.eq_ignore_ascii_case("null")
+            }),
+        ],
     )
         .prop_map(|(indent, marker, marker_length, language)| {
             let indent: String = indent.into_iter().collect();
@@ -32,7 +40,13 @@ proptest! {
     ) {
         let rewritten = rewrite_marker(&line, Strategy::Compress).expect("generated fence matches");
 
-        prop_assert_eq!(rewritten, format!("{indent}```{language}"));
+        let expected_language = if language.eq_ignore_ascii_case("null") {
+            ""
+        } else {
+            &language
+        };
+
+        prop_assert_eq!(rewritten, format!("{indent}```{expected_language}"));
     }
 
     #[test]
@@ -42,7 +56,13 @@ proptest! {
         let rewritten = rewrite_marker(&line, Strategy::Preserve).expect("generated fence matches");
         let expected_marker: String = std::iter::repeat_n(marker, marker_length).collect();
 
-        prop_assert_eq!(rewritten, format!("{indent}{expected_marker}{language}"));
+        let expected_language = if language.eq_ignore_ascii_case("null") {
+            ""
+        } else {
+            &language
+        };
+
+        prop_assert_eq!(rewritten, format!("{indent}{expected_marker}{expected_language}"));
     }
 
     #[test]
