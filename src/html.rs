@@ -193,7 +193,7 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
 fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
     let indent: String = lines
         .first()
-        .map(|l| l.chars().take_while(|c| c.is_whitespace()).collect())
+        .map(|line| crate::textproc::leading_indent(line).to_string())
         .unwrap_or_default();
     let html: String = lines.join("\n");
     let opts = ParseOpts::default();

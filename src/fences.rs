@@ -63,7 +63,7 @@ fn is_null_lang(s: &str) -> bool {
 /// assert_eq!(indent, "  ");
 /// ```
 fn normalize_specifier(line: &str) -> (String, String) {
-    let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+    let indent = crate::textproc::leading_indent(line).to_string();
     let cleaned = line
         .trim()
         .split(',')

@@ -1,0 +1,7 @@
+---
+source: tests/leading_indent_snapshots.rs
+expression: "output.join(\"\\n\")"
+---
+  An indented paragraph keeps
+  its indentation when it
+  wraps across lines.

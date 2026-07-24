@@ -137,7 +137,7 @@ struct ParsedTable {
 /// Lines beginning with `\-` are removed after trimming. These lines escape a
 /// leading pipe marker and should not be part of the table.
 fn extract_indent_and_trim(lines: &[String]) -> (String, Vec<String>) {
-    let indent: String = lines[0].chars().take_while(|c| c.is_whitespace()).collect();
+    let indent = crate::textproc::leading_indent(&lines[0]).to_string();
     let trimmed = lines
         .iter()
         .map(|l| l.trim().to_string())
