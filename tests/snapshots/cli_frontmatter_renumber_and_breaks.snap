@@ -1,0 +1,12 @@
+---
+source: tests/cli_frontmatter_snapshots.rs
+expression: "run_cli(input, args)"
+---
+---
+title: Example
+---
+
+1. Third item
+2. Fifth item
+
+______________________________________________________________________

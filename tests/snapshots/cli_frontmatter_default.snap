@@ -1,0 +1,10 @@
+---
+source: tests/cli_frontmatter_snapshots.rs
+expression: "run_cli(input, args)"
+---
+---
+title: Example
+---
+
+| A | B |
+| 1 | 2 |

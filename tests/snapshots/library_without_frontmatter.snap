@@ -1,0 +1,6 @@
+---
+source: tests/process_frontmatter_snapshots.rs
+expression: process_document(input)
+---
+| A | B |
+| 1 | 2 |

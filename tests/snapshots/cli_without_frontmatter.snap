@@ -1,0 +1,6 @@
+---
+source: tests/cli_frontmatter_snapshots.rs
+expression: "run_cli(input, args)"
+---
+| A | B |
+| 1 | 2 |
