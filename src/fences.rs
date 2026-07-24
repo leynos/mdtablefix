@@ -89,9 +89,8 @@ enum Strategy {
 /// A retained source line together with its compressed rewrite, computed once
 /// when the line was parsed.
 ///
-/// Caching `compressed` here lets every flush path emit the line without running
-/// the normalization regex again, including `flush_unmatched_block`, which may
-/// rewrite any retained line.
+/// Caching `compressed` avoids repeated compression work and supports
+/// `flush_unmatched_block`, which rewrites only the opening delimiter.
 struct CachedLine {
     line: String,
     /// The line rewritten with a compressed three-backtick delimiter, or `None`
