@@ -13,12 +13,13 @@ mod frontmatter;
 
 use std::{
     borrow::Cow,
-    fs,
     io::{self, Read},
     path::{Path, PathBuf},
 };
 
 use anyhow::Context;
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use clap::Parser;
 use mdtablefix::{Options, format_breaks, process::process_stream_inner, renumber_lists};
 use rayon::prelude::*;
@@ -105,25 +106,48 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
     result
 }
 
-fn handle_file(path: &Path, in_place: bool, opts: FormatOpts) -> anyhow::Result<Option<String>> {
-    let content =
-        fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+/// Opens a file's parent directory and returns its relative UTF-8 path.
+///
+/// This is the only ambient filesystem boundary for CLI file processing. The
+/// returned directory capability restricts subsequent handler I/O to the
+/// selected file's parent directory.
+fn open_file_parent(path: &Path) -> anyhow::Result<(Dir, Utf8PathBuf)> {
+    let path = Utf8Path::from_path(path)
+        .with_context(|| format!("converting {} to a UTF-8 path", path.display()))?;
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_str().is_empty())
+        .unwrap_or(Utf8Path::new("."));
+    let file_name = path
+        .file_name()
+        .with_context(|| format!("selecting file name from {path}"))?;
+    let directory = Dir::open_ambient_dir(parent, ambient_authority())
+        .with_context(|| format!("opening {parent}"))?;
+
+    Ok((directory, Utf8PathBuf::from(file_name)))
+}
+
+/// Reads and formats a capability-scoped file without modifying it.
+fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
+    let content = directory
+        .read_to_string(path)
+        .with_context(|| format!("reading {path}"))?;
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
     let fixed = process_lines(&lines, opts);
-    if in_place {
-        // Preserve compatibility with the `rewrite` helper by always ending files with a
-        // trailing newline when content exists. This mirrors typical Unix tool behaviour
-        // and avoids spurious diffs when rewriting in place.
-        let output = if fixed.is_empty() {
-            String::new()
-        } else {
-            fixed.join("\n") + "\n"
-        };
-        fs::write(path, output).with_context(|| format!("writing {}", path.display()))?;
-        Ok(None)
+    // Keep file output newline-terminated, matching the CLI stdout contract.
+    Ok(if fixed.is_empty() {
+        String::new()
     } else {
-        Ok(Some(fixed.join("\n")))
-    }
+        fixed.join("\n") + "\n"
+    })
+}
+
+/// Reads, formats, and rewrites a capability-scoped file in place.
+fn rewrite_in_place(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<()> {
+    let output = format_to_string(directory, path, opts)?;
+    directory
+        .write(path, output)
+        .with_context(|| format!("writing {path}"))
 }
 
 fn report_results<T, F>(results: Vec<anyhow::Result<T>>, mut on_ok: F) -> anyhow::Result<()>
@@ -188,21 +212,100 @@ fn main() -> anyhow::Result<()> {
         let results: Vec<anyhow::Result<()>> = cli
             .files
             .par_iter()
-            .map(|p| handle_file(p, true, cli.opts).map(|_| ()))
+            .map(|path| {
+                let (directory, file_name) = open_file_parent(path)?;
+                rewrite_in_place(&directory, &file_name, cli.opts)
+            })
             .collect();
         report_results(results, |()| {})?;
     } else {
-        let results: Vec<anyhow::Result<Option<String>>> = cli
+        let results: Vec<anyhow::Result<String>> = cli
             .files
             .par_iter()
-            .map(|p| handle_file(p, false, cli.opts))
+            .map(|path| {
+                let (directory, file_name) = open_file_parent(path)?;
+                format_to_string(&directory, &file_name, cli.opts)
+            })
             .collect();
-        report_results(results, |maybe_out| {
-            if let Some(out) = maybe_out {
-                println!("{out}");
-            }
-        })?;
+        report_results(results, |out| print!("{out}"))?;
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit and property tests for the binary's file-output contracts.
+
+    use camino::{Utf8Path, Utf8PathBuf};
+    use cap_std::{ambient_authority, fs_utf8::Dir};
+    use proptest::prelude::*;
+
+    use super::{FormatOpts, format_to_string, rewrite_in_place};
+
+    fn prose_word_strategy() -> impl Strategy<Value = String> {
+        prop::collection::vec(
+            prop_oneof![
+                Just("alpha".to_string()),
+                Just("beta".to_string()),
+                Just("gamma".to_string()),
+                Just("delta".to_string()),
+                Just("evidence".to_string()),
+                Just("formatting".to_string()),
+            ],
+            1..20,
+        )
+        .prop_map(|words| words.join(" "))
+    }
+
+    proptest! {
+        #[test]
+        fn formatting_matches_in_place_output(
+            prose in prose_word_strategy(),
+            table_cell in prose_word_strategy(),
+        ) {
+            let input = format!(
+                "{prose}\n\n| Name | Notes |\n|---|---|\n| {table_cell} | value |\n"
+            );
+            let directory = tempfile::tempdir()
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            let directory_path = Utf8PathBuf::from_path_buf(directory.path().to_path_buf())
+                .map_err(|path| TestCaseError::fail(path.display().to_string()))?;
+            let directory = Dir::open_ambient_dir(&directory_path, ambient_authority())
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            let formatted_path = Utf8Path::new("formatted.md");
+            let rewritten_path = Utf8Path::new("rewritten.md");
+            directory.write(formatted_path, &input)
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            directory.write(rewritten_path, input)
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+            let formatted = format_to_string(&directory, formatted_path, FormatOpts {
+                wrap: false,
+                renumber: false,
+                breaks: false,
+                ellipsis: false,
+                fences: false,
+                footnotes: false,
+                code_emphasis: false,
+                headings: false,
+            })
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            rewrite_in_place(&directory, rewritten_path, FormatOpts {
+                wrap: false,
+                renumber: false,
+                breaks: false,
+                ellipsis: false,
+                fences: false,
+                footnotes: false,
+                code_emphasis: false,
+                headings: false,
+            })
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            let rewritten = directory.read_to_string(rewritten_path)
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+            prop_assert_eq!(formatted, rewritten);
+        }
+    }
 }

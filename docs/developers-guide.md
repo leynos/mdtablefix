@@ -79,6 +79,24 @@ restores the separator row with widths derived from the final table body.
   use this macro and supply a descriptive expect message that identifies the
   pattern whose compilation failed.
 
+`src/main.rs` file-output functions:
+
+- `open_file_parent(path) -> anyhow::Result<(Dir, Utf8PathBuf)>` is the CLI's
+  sole ambient filesystem boundary. It opens the selected file's parent
+  directory and returns a relative UTF-8 path for capability-scoped handling.
+- `format_to_string(directory, path, opts) -> anyhow::Result<String>` reads and
+  formats a file through `cap_std::fs_utf8::Dir` without modifying it. Its
+  returned text uses the same trailing-newline convention as a rewritten file.
+- `rewrite_in_place(directory, path, opts) -> anyhow::Result<()>` reads and
+  formats a capability-scoped file, then writes the formatted text back through
+  the same directory capability.
+
+Callers select the function that matches their intent rather than passing a
+Boolean mode flag. This keeps stdout and in-place contracts explicit while
+allowing both paths to share the exact formatting result. New file-output call
+sites must receive a directory capability and relative `camino::Utf8Path`
+rather than performing ambient filesystem access themselves.
+
 `src/reflow.rs`:
 
 - `parse_rows`: Parses trimmed table lines into row vectors while preserving
