@@ -1,0 +1,5 @@
+---
+source: src/wrap/inline/span_helper_tracing_tests.rs
+expression: event
+---
+DEBUG snapshots_matched_date_sequence_event:date_token_span{start=0}:try_match_date_sequence{start=0}: mdtablefix::wrap::inline::span_helpers: matched date sequence start=0 end=5 pattern="ordinal_day_month_year"

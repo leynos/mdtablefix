@@ -1,0 +1,5 @@
+---
+source: src/wrap/inline/span_helper_tracing_tests.rs
+expression: event
+---
+TRACE snapshots_grouped_date_sequence_event: mdtablefix::wrap::inline: determine_token_span grouped date sequence start=0 end=5 width=18

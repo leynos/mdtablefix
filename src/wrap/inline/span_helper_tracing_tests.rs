@@ -1,10 +1,12 @@
 //! Traced-event tests for inline span helper instrumentation.
 
+use std::cell::RefCell;
+
 use rstest::{fixture, rstest};
 use tracing_test::traced_test;
 
 use super::{date_token_span, try_match_date_sequence};
-use crate::wrap::inline::determine_token_span;
+use crate::wrap::{inline::determine_token_span, tracing_snapshot_support::normalise_event_lines};
 
 #[fixture]
 fn date_tokens() -> Vec<String> {
@@ -86,4 +88,43 @@ fn grouping_boundary_logs_declined_footnote_coupling(
         "error_category=\"{error_category}\""
     )));
     assert!(!logs_contain("[^note]"));
+}
+
+#[traced_test]
+#[rstest]
+fn snapshots_grouped_date_sequence_event(date_tokens: Vec<String>) {
+    let captured = RefCell::new(String::new());
+    let _ = determine_token_span(&date_tokens, 0);
+    logs_assert(|lines| {
+        captured.replace(normalise_event_lines(
+            lines,
+            "determine_token_span grouped date sequence",
+        ));
+        (!captured.borrow().is_empty())
+            .then_some(())
+            .ok_or_else(|| "expected grouped date sequence event".to_string())
+    });
+    let event = captured.into_inner();
+
+    insta::with_settings!({prepend_module_to_snapshot => false}, {
+        insta::assert_snapshot!("determine-token-span-grouped-date-sequence-event", event);
+    });
+}
+
+#[traced_test]
+#[rstest]
+fn snapshots_matched_date_sequence_event(date_tokens: Vec<String>) {
+    let captured = RefCell::new(String::new());
+    let _ = determine_token_span(&date_tokens, 0);
+    logs_assert(|lines| {
+        captured.replace(normalise_event_lines(lines, "matched date sequence"));
+        (!captured.borrow().is_empty())
+            .then_some(())
+            .ok_or_else(|| "expected matched date sequence event".to_string())
+    });
+    let event = captured.into_inner();
+
+    insta::with_settings!({prepend_module_to_snapshot => false}, {
+        insta::assert_snapshot!("matched-date-sequence-event", event);
+    });
 }

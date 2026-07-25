@@ -221,3 +221,7 @@ pub(super) fn handle_backtick_fence(text: &str, start_idx: usize) -> (String, us
 #[cfg(test)]
 #[path = "parsing_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "parsing_tracing_snapshots.rs"]
+mod parsing_tracing_snapshots;
