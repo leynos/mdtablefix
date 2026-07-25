@@ -12,7 +12,6 @@
 //! throughout the wrapping pipeline.
 
 use textwrap::core::Fragment;
-use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
 use super::{
@@ -26,22 +25,20 @@ use super::{
     looks_like_footnote_ref,
 };
 
-/// Classifies an inline fragment for post-wrap heuristics.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum FragmentKind {
-    /// Marks a fragment that contains only whitespace.
-    Whitespace,
-    /// Marks a fragment that contains inline code.
-    InlineCode,
-    /// Marks a fragment that contains a Markdown link.
-    Link,
-    /// Marks a fragment that contains a GFM footnote reference.
-    FootnoteRef,
-    /// Marks a fragment that contains a bare numeric bracket reference.
-    BracketedRef,
-    /// Marks a fragment that contains ordinary prose.
-    Plain,
-}
+use crate::wrap::observer::{Event, FragmentKind, Observer};
+
+//! Inline fragment types used by Markdown-aware wrapping.
+//!
+//! This module defines the small units passed from `wrap_preserving_code` to
+//! `textwrap`. Each `InlineFragment` stores rendered text, display width, and
+//! ordinary prose, and Markdown syntax that must remain atomic.
+//!
+//! The classification here feeds `inline::postprocess`, which uses cheap
+//! predicates such as `is_atomic` and `is_plain` to merge whitespace artefacts
+//! and rebalance tails after greedy line fitting. Keeping the fragment model in
+//! one module avoids repeating link, code, and GFM footnote-reference detection
+//! throughout the wrapping pipeline.
+};
 
 /// Stores rendered fragment text, width, and classification for wrapping.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,10 +57,23 @@ impl InlineFragment {
     /// The parameter is stored verbatim. The returned fragment also carries
     /// its Unicode display width, computed with `UnicodeWidthStr::width`, and
     /// its `FragmentKind`, computed once through `classify_fragment`.
+    #[cfg(test)]
     pub(super) fn new(text: String) -> Self {
+        let mut observer = crate::wrap::observer::NoOpObserver;
+        Self::new_observed(text, &mut Some(&mut observer))
+    }
+
+    pub(super) fn new_observed(text: String, observer: &mut Option<&mut dyn Observer>) -> Self {
         let width = UnicodeWidthStr::width(text.as_str());
-        let kind = classify_fragment(text.as_str());
-        log_fragment_classification(text.as_str(), &kind);
+        let kind = classify_fragment(text.as_str(), observer);
+        if let Some(observer) = observer.as_deref_mut() {
+            let (token, truncated) = trace_text_snippet(text.as_str());
+            observer.observe(Event::FragmentClassified {
+                token,
+                truncated,
+                kind,
+            });
+        }
         Self { text, width, kind }
     }
 
@@ -160,7 +170,7 @@ fn contains_link_with_trailing_punctuation(text: &str) -> bool {
 /// still recognised as links or code spans. Footnote references also recognise
 /// the `word.[^label]` suffix shape that the wrapper groups to avoid splitting
 /// sentence punctuation from the marker.
-fn classify_fragment(text: &str) -> FragmentKind {
+fn classify_fragment(text: &str, observer: &mut Option<&mut dyn Observer>) -> FragmentKind {
     if is_whitespace_token(text) {
         return FragmentKind::Whitespace;
     }
@@ -174,9 +184,9 @@ fn classify_fragment(text: &str) -> FragmentKind {
         || has_inline_code_structure(text)
     {
         FragmentKind::InlineCode
-    } else if looks_like_footnote_ref(text)
-        || looks_like_footnote_ref(trimmed)
-        || ends_with_footnote_ref(text)
+    } else if looks_like_footnote_ref(text, observer)
+        || looks_like_footnote_ref(trimmed, observer)
+        || ends_with_footnote_ref(text, observer)
     {
         FragmentKind::FootnoteRef
     } else if looks_like_bracketed_reference(text) || looks_like_bracketed_reference(trimmed) {
@@ -207,20 +217,6 @@ fn trace_text_snippet(text: &str) -> (&str, bool) {
 
     (&text[..byte_end], true)
 }
-
-/// Emits a structured trace when fragment classification logging is enabled.
-fn log_fragment_classification(text: &str, kind: &FragmentKind) {
-    if tracing::enabled!(tracing::Level::DEBUG) {
-        let (snippet, truncated) = trace_text_snippet(text);
-        debug!(
-            token = %snippet,
-            truncated,
-            kind = ?kind,
-            "fragment classified"
-        );
-    }
-}
-
 #[cfg(test)]
 mod tests {
     //! Unit tests for inline-fragment classification.
@@ -355,7 +351,8 @@ mod tracing_tests {
     // Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
     use test_macros::traced_test;
 
-    use super::{FragmentKind, InlineFragment};
+    use super::InlineFragment;
+    use crate::wrap::{observer::FragmentKind, tracing_adapter::TracingObserver};
 
     #[traced_test]
     #[rstest]
@@ -365,7 +362,8 @@ mod tracing_tests {
     #[case("   ", "Whitespace")]
     #[case("plain", "Plain")]
     fn fragment_classification_logs_kind(#[case] input: &str, #[case] expected: &str) {
-        let _fragment = InlineFragment::new(input.to_string());
+        let mut observer = TracingObserver;
+        let _fragment = InlineFragment::new_observed(input.to_string(), &mut Some(&mut observer));
         assert!(logs_contain("fragment classified"));
         assert!(logs_contain(&format!("kind={expected}")));
         assert!(logs_contain("token="));

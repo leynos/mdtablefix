@@ -8,7 +8,6 @@
 //! span before `determine_token_span` performs the standard punctuation and
 //! link grouping pass.
 
-use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
 use super::predicates::{
@@ -24,6 +23,18 @@ use super::predicates::{
     looks_like_bracketed_reference,
     looks_like_footnote_ref,
     looks_like_link,
+};
+
+
+//! Span-grouping helpers for inline token streams.
+//!
+//! These functions extend grouped spans over punctuation, whitespace, adjacent
+//! footnote markers, and chained inline code or link tokens during
+//! `determine_token_span`.
+//! The module also provides `try_match_date_sequence`, which recognizes
+//! contiguous day–month–year token runs and groups them into a single atomic
+//! span before `determine_token_span` performs the standard punctuation and
+//! link grouping pass.
 };
 
 /// Marks how a grouped token span should behave during wrapping.
@@ -55,37 +66,16 @@ pub(in crate::wrap::inline) fn extend_punctuation(
 }
 
 /// Returns the exclusive end of a date-like token run beginning at `start`.
-#[tracing::instrument(level = "trace", skip(tokens), ret)]
 pub(in crate::wrap::inline) fn try_match_date_sequence(
     tokens: &[String],
     start: usize,
 ) -> Option<usize> {
     if let Some(end) = match_ordinal_day_month_year(tokens, start) {
-        debug!(
-            start,
-            end,
-            pattern = "ordinal_day_month_year",
-            "matched date sequence"
-        );
         Some(end)
     } else if let Some(end) = match_numeric_day_month_year(tokens, start) {
-        debug!(
-            start,
-            end,
-            pattern = "numeric_day_month_year",
-            "matched date sequence"
-        );
-        Some(end)
-    } else if let Some(end) = match_month_numeric_day_year(tokens, start) {
-        debug!(
-            start,
-            end,
-            pattern = "month_numeric_day_year",
-            "matched date sequence"
-        );
         Some(end)
     } else {
-        None
+        match_month_numeric_day_year(tokens, start)
     }
 }
 
@@ -94,7 +84,6 @@ pub(in crate::wrap::inline) fn try_match_date_sequence(
 ///
 /// The width is calculated over every token in the date so the wrapping stage
 /// treats the date as one indivisible display unit.
-#[tracing::instrument(level = "trace", skip(tokens), ret)]
 pub(in crate::wrap::inline) fn date_token_span(
     tokens: &[String],
     start: usize,
@@ -104,9 +93,13 @@ pub(in crate::wrap::inline) fn date_token_span(
         .iter()
         .map(|token| UnicodeWidthStr::width(token.as_str()))
         .sum();
-    if let Some((_, footnote_end)) =
-        try_couple_footnote_reference(tokens, date_end, SpanKind::General, &mut date_width)
-    {
+    if let Some((_, footnote_end)) = try_couple_footnote_reference(
+        tokens,
+        date_end,
+        SpanKind::General,
+        &mut date_width,
+        &mut None,
+    ) {
         return Some((footnote_end, date_width));
     }
     Some((date_end, date_width))
@@ -195,7 +188,7 @@ pub(in crate::wrap::inline) fn should_couple_whitespace(
         }
         (SpanKind::Code, Some(next), _) if is_trailing_punctuation_token(next) => true,
         (SpanKind::General, Some(next), Some(following))
-            if looks_like_footnote_ref(next) && following == ":" =>
+            if looks_like_footnote_ref(next, &mut None) && following == ":" =>
         {
             true
         }
@@ -288,9 +281,10 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
     end: usize,
     kind: SpanKind,
     width: &mut usize,
+    observer: &mut Option<&mut dyn crate::wrap::observer::Observer>,
 ) -> Option<(SpanKind, usize)> {
     let token = tokens.get(end)?;
-    if !looks_like_footnote_ref(token) {
+    if !looks_like_footnote_ref(token, observer) {
         return None;
     }
 
@@ -327,7 +321,3 @@ mod coupling_tests;
 #[cfg(test)]
 #[path = "span_helper_props.rs"]
 mod span_helper_props;
-
-#[cfg(test)]
-#[path = "span_helper_tracing_tests.rs"]
-mod tracing_tests;

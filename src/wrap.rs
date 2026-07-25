@@ -18,9 +18,11 @@ mod continuation;
 mod fence;
 mod inline;
 mod link_reference;
+mod observer;
 mod paragraph;
 mod pending;
 mod tokenize;
+mod tracing_adapter;
 #[cfg(test)]
 pub(crate) mod tracing_snapshot_support;
 use block::{BULLET_RE, FOOTNOTE_RE};
