@@ -42,10 +42,10 @@ pub(in crate::wrap::inline) fn normalize_footnote_ref_spacing(
 
 fn matches_footnote_ref_spacing(tokens: &[String], index: usize) -> bool {
     tokens.get(index..index + 3).is_some_and(|window| {
-        !looks_like_footnote_ref(&window[0])
+        !looks_like_footnote_ref(&window[0], &mut None)
             && window[0].chars().last().is_some_and(is_trailing_punct)
             && window[1].chars().all(char::is_whitespace)
-            && looks_like_footnote_ref(&window[2])
+            && looks_like_footnote_ref(&window[2], &mut None)
     })
 }
 
@@ -125,10 +125,10 @@ mod tests {
             return false;
         };
 
-        !looks_like_footnote_ref(&window[0])
+        !looks_like_footnote_ref(&window[0], &mut None)
             && window[0].chars().last().is_some_and(is_trailing_punct)
             && window[1].chars().all(char::is_whitespace)
-            && looks_like_footnote_ref(&window[2])
+            && looks_like_footnote_ref(&window[2], &mut None)
     }
 
     fn removed_spacing_count(tokens: &[String]) -> usize {

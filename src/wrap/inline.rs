@@ -16,7 +16,6 @@ mod span_helpers;
 mod test_support;
 #[cfg(test)]
 mod tests;
-mod tracing_events;
 
 /// Returns whether `token` begins with a matched inline code fence, optionally
 /// followed by a non-whitespace suffix such as an inflectional affix.
@@ -54,13 +53,15 @@ use span_helpers::{
     try_couple_inline_link_after_opener,
 };
 use textwrap::wrap_algorithms::wrap_first_fit;
-use tracing::trace;
-use tracing_events::{emit_footnote_reference_coupling, emit_whitespace_footnote_coupling};
 use unicode_width::UnicodeWidthStr;
 
 use super::tokenize;
 
-fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKind) {
+fn initial_token_span(
+    tokens: &[String],
+    start: usize,
+    observer: &mut Option<&mut dyn crate::wrap::observer::Observer>,
+) -> (usize, usize, SpanKind) {
     let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());
     let mut kind = SpanKind::General;
@@ -105,7 +106,7 @@ fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKin
     } else if looks_like_link(&tokens[start]) {
         kind = SpanKind::Link;
         end = extend_punctuation(tokens, end, &mut width);
-    } else if looks_like_footnote_ref(&tokens[start]) {
+    } else if looks_like_footnote_ref(&tokens[start], observer) {
         kind = SpanKind::FootnoteRef;
         end = extend_punctuation(tokens, end, &mut width);
     }
@@ -121,16 +122,21 @@ fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKin
 /// link, or plain fragment, and `width` is its Unicode display width. This
 /// helper assumes `start < tokens.len()` and will panic if called out of
 /// bounds.
+#[cfg(test)]
 pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
+    determine_token_span_observed(tokens, start, &mut None)
+}
+
+fn determine_token_span_observed(
+    tokens: &[String],
+    start: usize,
+    observer: &mut Option<&mut dyn crate::wrap::observer::Observer>,
+) -> (usize, usize) {
     if let Some((end, width)) = date_token_span(tokens, start) {
-        trace!(
-            start,
-            end, width, "determine_token_span grouped date sequence"
-        );
         return (end, width);
     }
 
-    let (mut end, mut width, mut kind) = initial_token_span(tokens, start);
+    let (mut end, mut width, mut kind) = initial_token_span(tokens, start, observer);
 
     while end < tokens.len() {
         let token = &tokens[end];
@@ -138,7 +144,6 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
             let next_token = tokens.get(end + 1);
             let following_token = tokens.get(end + 2);
             let should_couple = should_couple_whitespace(kind, next_token, following_token);
-            emit_whitespace_footnote_coupling(kind, next_token, following_token, should_couple);
             if should_couple {
                 width += UnicodeWidthStr::width(token.as_str());
                 end += 1;
@@ -173,8 +178,8 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
         // Footnote markers must be coupled before consecutive link/code chaining;
         // otherwise `[^N]` stays a separate wrap token even when punctuation is
         // already attached to the preceding atomic span.
-        let footnote_coupling = try_couple_footnote_reference(tokens, end, kind, &mut width);
-        emit_footnote_reference_coupling(tokens, end, kind, footnote_coupling.is_some());
+        let footnote_coupling =
+            try_couple_footnote_reference(tokens, end, kind, &mut width, observer);
         if let Some((next_kind, next_end)) = footnote_coupling {
             kind = next_kind;
             end = next_end;
@@ -221,12 +226,15 @@ fn push_span_text(text: &mut String, tokens: &[String], span: Range<usize>) {
 /// The return value preserves token order while grouping inline code, links,
 /// and whitespace runs into `InlineFragment` values with precomputed widths.
 /// This helper never panics when `tokens` is well-formed.
-fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
+fn build_fragments(
+    tokens: &[String],
+    observer: &mut Option<&mut dyn crate::wrap::observer::Observer>,
+) -> Vec<InlineFragment> {
     let mut fragments: Vec<InlineFragment> = Vec::new();
     let mut i = 0;
 
     while i < tokens.len() {
-        let (group_end, _group_width) = determine_token_span(tokens, i);
+        let (group_end, _group_width) = determine_token_span_observed(tokens, i, observer);
         let span = i..group_end;
         let text = if tokens[i..group_end]
             .iter()
@@ -238,7 +246,7 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
             push_span_text(&mut text, tokens, span);
             text
         };
-        fragments.push(InlineFragment::new(text));
+        fragments.push(InlineFragment::new_observed(text, observer));
         i = group_end;
     }
 
@@ -247,7 +255,7 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
 
 /// Returns whether `line` contains one link fragment.
 fn is_single_link_line(line: &[InlineFragment]) -> bool {
-    line.len() == 1 && line[0].kind == fragment::FragmentKind::Link
+    line.len() == 1 && line[0].kind == crate::wrap::observer::FragmentKind::Link
 }
 
 /// Returns the total display width of a fragment line.
@@ -265,7 +273,7 @@ fn split_boundary_link_line(
     if !(previous_width == width || previous_width + 1 == width)
         || !line
             .first()
-            .is_some_and(|fragment| fragment.kind == fragment::FragmentKind::Link)
+            .is_some_and(|fragment| fragment.kind == crate::wrap::observer::FragmentKind::Link)
         || !line
             .get(1)
             .is_some_and(|fragment| fragment.is_whitespace() || fragment.is_plain())
@@ -327,14 +335,24 @@ fn render_line(
 /// rendered back into `Vec<String>` output lines. `width` is measured in
 /// Unicode display columns and must be at least one effective column after any
 /// caller prefix handling. This helper never panics for valid input.
+#[cfg(test)]
 pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
-    let tokens = tokenize::segment_inline(text);
+    let mut observer = crate::wrap::observer::NoOpObserver;
+    wrap_preserving_code_observed(text, width, &mut Some(&mut observer))
+}
+
+pub(super) fn wrap_preserving_code_observed(
+    text: &str,
+    width: usize,
+    observer: &mut Option<&mut dyn crate::wrap::observer::Observer>,
+) -> Vec<String> {
+    let tokens = tokenize::segment_inline_observed(text, observer);
     if tokens.is_empty() {
         return Vec::new();
     }
 
     let tokens = normalize_footnote_ref_spacing(&tokens);
-    let fragments = build_fragments(&tokens);
+    let fragments = build_fragments(&tokens, observer);
     let mut lines = Vec::new();
     let mut buffer: Vec<InlineFragment> = Vec::new();
 

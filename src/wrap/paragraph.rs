@@ -9,7 +9,11 @@ use code_span_trim::trim_code_span_edge_spaces;
 use tracing::trace;
 use unicode_width::UnicodeWidthStr;
 
-use super::{inline::wrap_preserving_code, tokenize::parse_open_code_span};
+use super::{
+    inline::wrap_preserving_code_observed,
+    tokenize::parse_open_code_span,
+    tracing_adapter::TracingObserver,
+};
 
 mod code_span_trim;
 mod hard_break;
@@ -138,7 +142,8 @@ impl<'a> ParagraphWriter<'a> {
     fn wrap_with_prefix(&mut self, prefix: &str, continuation_prefix: &str, text: &str) {
         let prefix_width = UnicodeWidthStr::width(prefix);
         let available = self.width.saturating_sub(prefix_width).max(1);
-        let lines = wrap_preserving_code(text, available);
+        let mut observer = TracingObserver;
+        let lines = wrap_preserving_code_observed(text, available, &mut Some(&mut observer));
         if lines.is_empty() {
             self.out.push(prefix.to_string());
             return;
@@ -175,7 +180,8 @@ impl<'a> ParagraphWriter<'a> {
         let continuation_prefix =
             continuation_prefix_for(prefix, line.repeat_prefix, line.outer_prefix.as_deref());
 
-        let lines = wrap_preserving_code(line.rest, available);
+        let mut observer = TracingObserver;
+        let lines = wrap_preserving_code_observed(line.rest, available, &mut Some(&mut observer));
         if lines.is_empty() {
             self.out.push(prefix.to_string());
             return;

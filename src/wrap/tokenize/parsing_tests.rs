@@ -72,21 +72,21 @@ fn balanced_url_inner() -> impl Strategy<Value = String> {
 #[test]
 fn parse_link_or_image_handles_nested_parentheses() {
     let text = "![alt](path(a(b)c)) more";
-    let (token, idx) = parse_link_or_image(text, 0);
+    let (token, idx) = parse_link_or_image(text, 0, &mut None);
     assert_eq!(token, "![alt](path(a(b)c))");
     assert_eq!(idx, token.len());
 }
 #[test]
 fn parse_link_or_image_falls_back_on_malformed_input() {
     let text = "[broken";
-    let (token, idx) = parse_link_or_image(text, 0);
+    let (token, idx) = parse_link_or_image(text, 0, &mut None);
     assert_eq!(token, "[");
     assert_eq!(idx, "[".len());
 }
 #[test]
 fn parse_link_or_image_handles_deeply_nested_parentheses() {
     let text = "[link](url(a(b(c)d)e)) tail";
-    let (token, idx) = parse_link_or_image(text, 0);
+    let (token, idx) = parse_link_or_image(text, 0, &mut None);
     assert_eq!(token, "[link](url(a(b(c)d)e))");
     assert_eq!(idx, token.len());
 }
@@ -94,7 +94,7 @@ fn parse_link_or_image_handles_deeply_nested_parentheses() {
 #[test]
 fn parse_link_or_image_handles_nested_parentheses_for_images() {
     let text = "![alt](path(a(b(c)d)e))";
-    let (token, idx) = parse_link_or_image(text, 0);
+    let (token, idx) = parse_link_or_image(text, 0, &mut None);
     assert_eq!(token, "![alt](path(a(b(c)d)e))");
     assert_eq!(idx, token.len());
 }
@@ -102,7 +102,7 @@ fn parse_link_or_image_handles_nested_parentheses_for_images() {
 #[test]
 fn parse_link_or_image_handles_text_ending_at_bracket() {
     let text = "[";
-    let (token, idx) = parse_link_or_image(text, 0);
+    let (token, idx) = parse_link_or_image(text, 0, &mut None);
     assert_eq!(token, "[");
     assert_eq!(idx, 1);
 }
@@ -110,7 +110,7 @@ fn parse_link_or_image_handles_text_ending_at_bracket() {
 #[test]
 fn parse_link_or_image_preserves_footnote_reference() {
     let text = "[^4] tail";
-    let (token, idx) = parse_link_or_image(text, 0);
+    let (token, idx) = parse_link_or_image(text, 0, &mut None);
     assert_eq!(token, "[^4]");
     assert_eq!(idx, token.len());
 }
@@ -118,7 +118,7 @@ fn parse_link_or_image_preserves_footnote_reference() {
 #[test]
 fn parse_link_or_image_preserves_footnote_reference_with_escaped_bracket() {
     let text = r"[^a\]b] tail";
-    let (token, idx) = parse_link_or_image(text, 0);
+    let (token, idx) = parse_link_or_image(text, 0, &mut None);
     assert_eq!(token, r"[^a\]b]");
     assert_eq!(idx, token.len());
 }
@@ -126,7 +126,7 @@ fn parse_link_or_image_preserves_footnote_reference_with_escaped_bracket() {
 #[test]
 fn parse_link_or_image_preserves_footnote_at_end() {
     let text = "[^4]";
-    let (token, idx) = parse_link_or_image(text, 0);
+    let (token, idx) = parse_link_or_image(text, 0, &mut None);
     assert_eq!(token, "[^4]");
     assert_eq!(idx, token.len());
 }
@@ -134,7 +134,7 @@ fn parse_link_or_image_preserves_footnote_at_end() {
 #[test]
 fn parse_link_or_image_keeps_caret_text_links_as_links() {
     let text = "[^label](https://example.com) tail";
-    let (token, idx) = parse_link_or_image(text, 0);
+    let (token, idx) = parse_link_or_image(text, 0, &mut None);
     assert_eq!(token, "[^label](https://example.com)");
     assert_eq!(idx, token.len());
 }
@@ -144,7 +144,7 @@ fn parse_link_or_image_preserves_reference_style_link() {
     let input = "[trybuild][implicit-fixture-trybuild]";
 
     assert_eq!(
-        parse_link_or_image(input, 0),
+        parse_link_or_image(input, 0, &mut None),
         (input.to_string(), input.len())
     );
 }
@@ -159,7 +159,7 @@ proptest! {
         let expected_len = expected.len();
         let text = format!("{expected} tail");
 
-        let (token, idx) = parse_link_or_image(&text, 0);
+        let (token, idx) = parse_link_or_image(&text, 0, &mut None);
 
         prop_assert_eq!(token, expected);
         prop_assert_eq!(idx, expected_len);
@@ -233,11 +233,13 @@ mod tracing_tests {
     use tracing_test::traced_test;
 
     use super::*;
+    use crate::wrap::tracing_adapter::TracingObserver;
 
     #[traced_test]
     #[test]
     fn parse_link_or_image_logs_footnote_reference() {
-        let _ = parse_link_or_image("[^4] tail", 0);
+        let mut observer = TracingObserver;
+        let _ = parse_link_or_image("[^4] tail", 0, &mut Some(&mut observer));
         assert!(logs_contain("footnote reference parsed"));
         assert!(logs_contain("token_length=4"));
         assert!(!logs_contain("[^4]"));
@@ -246,7 +248,8 @@ mod tracing_tests {
     #[traced_test]
     #[test]
     fn parse_link_or_image_logs_link_parsed() {
-        let _ = parse_link_or_image("[link](url)", 0);
+        let mut observer = TracingObserver;
+        let _ = parse_link_or_image("[link](url)", 0, &mut Some(&mut observer));
         assert!(logs_contain("link or image parsed"));
         assert!(logs_contain("token_length=11"));
         assert!(!logs_contain("[link](url)"));
@@ -256,7 +259,8 @@ mod tracing_tests {
     #[traced_test]
     #[test]
     fn find_footnote_end_logs_prefix_mismatch() {
-        let _ = find_footnote_end("no-caret", 0);
+        let mut observer = TracingObserver;
+        let _ = find_footnote_end("no-caret", 0, &mut Some(&mut observer));
         assert!(logs_contain("footnote end not found"));
         assert!(logs_contain("reason="));
         assert!(logs_contain("prefix_mismatch"));
@@ -265,7 +269,8 @@ mod tracing_tests {
     #[traced_test]
     #[test]
     fn parse_link_or_image_logs_footnote_label_span() {
-        let _ = parse_link_or_image("[^4] tail", 0);
+        let mut observer = TracingObserver;
+        let _ = parse_link_or_image("[^4] tail", 0, &mut Some(&mut observer));
         assert!(logs_contain("footnote label span recognized"));
         assert!(logs_contain("start="));
         assert!(logs_contain("end="));
@@ -276,7 +281,8 @@ mod tracing_tests {
     #[traced_test]
     #[test]
     fn find_footnote_end_logs_unterminated_bracket() {
-        let _ = find_footnote_end("[^unterminated", 0);
+        let mut observer = TracingObserver;
+        let _ = find_footnote_end("[^unterminated", 0, &mut Some(&mut observer));
         assert!(logs_contain("footnote end not found"));
         assert!(logs_contain("reason="));
         assert!(logs_contain("unterminated_bracket"));

@@ -9,6 +9,7 @@
 //! tokens, and four-digit year tokens before wrapping.
 
 pub(crate) use super::month_names::MONTH_NAMES;
+use crate::wrap::observer::{Event, Observer};
 
 pub(in crate::wrap::inline) fn is_opening_punct(c: char) -> bool {
     matches!(c, '(' | '[' | '"') || "“‘（［【《「『".contains(c)
@@ -32,10 +33,6 @@ pub(in crate::wrap::inline) fn is_trailing_punctuation_token(token: &str) -> boo
 }
 
 /// Returns whether `token` is a full or abbreviated English month name.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_month_name(token: &str) -> bool {
     let token = strip_leading_openers(token);
     month_names_for_len(token.len())
@@ -70,10 +67,6 @@ fn month_names_for_len(len: usize) -> &'static [&'static str] {
 }
 
 /// Returns whether `token` is an ordinal day number from 1st through 31st.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
     let token = strip_leading_openers(token);
     ["st", "nd", "rd", "th"]
@@ -83,10 +76,6 @@ pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
 }
 
 /// Returns whether `token` is a numeric day number from 1 through 31.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
     let token = strip_leading_openers(token);
     token
@@ -98,10 +87,6 @@ pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
 
 /// Returns whether `token` is a year from 1000 through 2999, optionally
 /// followed by trailing prose punctuation.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_year(token: &str) -> bool {
     token
         .trim_end_matches(is_trailing_punct)
@@ -121,28 +106,30 @@ pub(in crate::wrap::inline) fn looks_like_link(token: &str) -> bool {
 }
 
 /// Returns whether `token` looks like a complete GFM footnote reference.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
-pub(in crate::wrap::inline) fn looks_like_footnote_ref(token: &str) -> bool {
-    token
+pub(in crate::wrap::inline) fn looks_like_footnote_ref(
+    token: &str,
+    observer: &mut Option<&mut dyn Observer>,
+) -> bool {
+    let result = token
         .strip_prefix("[^")
         .and_then(|label| label.strip_suffix(']'))
-        .is_some_and(|label| !label.is_empty())
+        .is_some_and(|label| !label.is_empty());
+    if let Some(observer) = observer.as_deref_mut() {
+        observer.observe(Event::FootnoteRefChecked { token, result });
+    }
+    result
 }
 
 /// Returns whether `token` ends with an inline footnote reference.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
-pub(in crate::wrap::inline) fn ends_with_footnote_ref(token: &str) -> bool {
+pub(in crate::wrap::inline) fn ends_with_footnote_ref(
+    token: &str,
+    observer: &mut Option<&mut dyn Observer>,
+) -> bool {
     let Some(start) = token.rfind("[^") else {
         return false;
     };
 
-    looks_like_footnote_ref(&token[start..])
+    looks_like_footnote_ref(&token[start..], observer)
 }
 
 /// Returns whether `token` contains only Unicode whitespace.
@@ -164,10 +151,6 @@ pub(in crate::wrap::inline) fn is_inline_code_token(token: &str) -> bool {
 /// `字-`) are intentionally accepted alongside ASCII prefixes. Internal hyphen
 /// chains (`state-of-the-art-`) are also accepted because such compounds
 /// remain a single atomic wrap token by design.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn ends_with_hyphen_prefix(token: &str) -> bool {
     token.ends_with('-') && token.chars().any(char::is_alphabetic)
 }
@@ -224,10 +207,6 @@ pub(in crate::wrap::inline) fn fragment_is_link(text: &str) -> bool {
 #[cfg(test)]
 #[path = "predicate_date_props.rs"]
 mod predicate_date_props;
-
-#[cfg(test)]
-#[path = "predicate_tracing_tests.rs"]
-mod predicate_tracing_tests;
 
 #[cfg(test)]
 mod tests {
@@ -308,13 +287,13 @@ mod tests {
     fn looks_like_footnote_ref_implies_non_empty_label() {
         proptest!(|(label in footnote_label_strategy())| {
             let token = format!("[^{label}]");
-            prop_assert!(looks_like_footnote_ref(&token));
+            prop_assert!(looks_like_footnote_ref(&token, &mut None));
         });
     }
 
     #[test]
     fn looks_like_footnote_ref_rejects_empty_label() {
-        assert!(!looks_like_footnote_ref("[^]"));
+        assert!(!looks_like_footnote_ref("[^]", &mut None));
     }
 
     #[rstest]

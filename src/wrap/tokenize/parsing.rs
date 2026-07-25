@@ -1,8 +1,7 @@
 //! Higher-level inline Markdown parsing helpers, isolated from tokenizer entry points.
 
-use tracing::{debug, trace};
-
 use super::scanning::{collect_range, position_after_close, scan_while};
+use crate::wrap::observer::{Event, Observer};
 
 /// Parse a Markdown link or image starting at `i`.
 ///
@@ -20,18 +19,20 @@ use super::scanning::{collect_range, position_after_close, scan_while};
 /// assert_eq!(tok, "![alt](a(b)c)");
 /// assert_eq!(idx, text.len());
 /// ```
-#[tracing::instrument(level = "debug", skip(text))]
-pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize) {
+pub(super) fn parse_link_or_image(
+    text: &str,
+    mut idx: usize,
+    observer: &mut Option<&mut dyn Observer>,
+) -> (String, usize) {
     let start = idx;
 
-    if let Some(text_end) = find_footnote_end(text, idx)
+    if let Some(text_end) = find_footnote_end(text, idx, observer)
         && (text_end == text.len() || !text[text_end..].starts_with('('))
     {
-        if tracing::enabled!(tracing::Level::DEBUG) {
-            debug!(
-                token_length = text[start..text_end].chars().count(),
-                "footnote reference parsed"
-            );
+        if let Some(observer) = observer.as_deref_mut() {
+            observer.observe(Event::FootnoteReferenceParsed {
+                token_length: text[start..text_end].chars().count(),
+            });
         }
         return (collect_range(text, start, text_end), text_end);
     }
@@ -46,12 +47,11 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
 
     if text_end < text.len() && text[text_end..].starts_with('(') {
         if let Some(url_end) = parse_link_url(text, text_end) {
-            if tracing::enabled!(tracing::Level::DEBUG) {
-                let is_image = text[start..].starts_with('!');
-                debug!(
-                    token_length = text[start..url_end].chars().count(),
-                    is_image, "link or image parsed"
-                );
+            if let Some(observer) = observer.as_deref_mut() {
+                observer.observe(Event::LinkOrImageParsed {
+                    token_length: text[start..url_end].chars().count(),
+                    is_image: text[start..].starts_with('!'),
+                });
             }
             return (collect_range(text, start, url_end), url_end);
         }
@@ -70,15 +70,17 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
     fallback_single_char(text, start)
 }
 
-#[tracing::instrument(level = "trace", skip(text), ret)]
-fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
+fn find_footnote_end(
+    text: &str,
+    idx: usize,
+    observer: &mut Option<&mut dyn Observer>,
+) -> Option<usize> {
     if idx >= text.len() || !text[idx..].starts_with("[^") {
-        if tracing::enabled!(tracing::Level::TRACE) {
-            trace!(
-                start = idx,
-                reason = "prefix_mismatch",
-                "footnote end not found"
-            );
+        if let Some(observer) = observer.as_deref_mut() {
+            observer.observe(Event::FootnoteEndNotFound {
+                start: idx,
+                reason: "prefix_mismatch",
+            });
         }
         return None;
     }
@@ -96,24 +98,22 @@ fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
         }
 
         if ch == ']' {
-            if tracing::enabled!(tracing::Level::TRACE) {
-                trace!(
-                    start = idx,
-                    end = cursor,
-                    token_length = text[idx..cursor].chars().count(),
-                    "footnote label span recognized"
-                );
+            if let Some(observer) = observer.as_deref_mut() {
+                observer.observe(Event::FootnoteLabelRecognized {
+                    start: idx,
+                    end: cursor,
+                    token_length: text[idx..cursor].chars().count(),
+                });
             }
             return Some(cursor);
         }
     }
 
-    if tracing::enabled!(tracing::Level::TRACE) {
-        trace!(
-            start = idx,
-            reason = "unterminated_bracket",
-            "footnote end not found"
-        );
+    if let Some(observer) = observer.as_deref_mut() {
+        observer.observe(Event::FootnoteEndNotFound {
+            start: idx,
+            reason: "unterminated_bracket",
+        });
     }
     None
 }
