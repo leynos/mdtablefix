@@ -3,9 +3,35 @@
 #[macro_use]
 #[path = "common/mod.rs"]
 mod common;
+
 use mdtablefix::{attach_orphan_specifiers, compress_fences};
 use rstest::rstest;
 
+fn assert_fence_snapshot(name: &str, input: &[String]) {
+    insta::with_settings!({
+        snapshot_path => "snapshots",
+        prepend_module_to_snapshot => false,
+    }, {
+        insta::assert_snapshot!(name, compress_fences(input).join("\n"));
+    });
+}
+
+#[rstest]
+#[case(
+    "fences_compress_overlong_backticks",
+    lines_vec!["`````rust", "fn main() {}", "`````"]
+)]
+#[case(
+    "fences_compress_tilde_fences",
+    lines_vec!["~~~~~python", "print('hello')", "~~~~~"]
+)]
+#[case(
+    "fences_preserve_interior_conflict",
+    lines_vec!["````markdown", "```rust", "fn main() {}", "```", "````"]
+)]
+fn fence_normalization_snapshots(#[case] name: &str, #[case] input: Vec<String>) {
+    assert_fence_snapshot(name, &input);
+}
 #[test]
 fn compresses_backtick_fences() {
     let input = lines_vec!["````rust", "code", "````"];
@@ -27,6 +53,16 @@ fn compresses_tilde_fences() {
     assert_eq!(out, lines_vec!["```rust", "code", "```"]);
 }
 
+#[test]
+fn preserves_null_language_during_interior_conflict() {
+    let input = lines_vec!["````null", "```rust", "fn main() {}", "```", "````"];
+    let out = compress_fences(&input);
+
+    assert_eq!(
+        out,
+        lines_vec!["````", "```rust", "fn main() {}", "```", "````"]
+    );
+}
 #[rstest]
 #[case(
     lines_vec!["````markdown", "```rust", "fn main() {}", "```", "````"],

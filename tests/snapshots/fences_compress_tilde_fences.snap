@@ -1,0 +1,7 @@
+---
+source: tests/fences.rs
+expression: "compress_fences(&input).join(\"\\n\")"
+---
+```python
+print('hello')
+```
