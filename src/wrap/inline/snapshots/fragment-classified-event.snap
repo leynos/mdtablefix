@@ -1,5 +1,5 @@
 ---
-source: src/wrap/inline/fragment.rs
+source: src/wrap/inline/fragment_tracing_snapshots.rs
 expression: event
 ---
 DEBUG snapshots_fragment_classified_event: mdtablefix::wrap::inline::fragment: fragment classified token=plain truncated=false kind=Plain

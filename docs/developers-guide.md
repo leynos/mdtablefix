@@ -659,6 +659,52 @@ Table: Instrumented functions and their logging levels and fields.
 | `find_footnote_end`       | trace        | `idx` (in), `skip(text)`, return value (out)                                                      |
 | `parse_rows`              | trace, debug | `skip(trimmed)`; `row_index`, `cell_count`, and `error_category` events                           |
 
+### Tracing-event snapshot tests
+
+The stable structured fields above are pinned by `insta` snapshots so that
+accidental changes to a tracing event's level, target, message, or field set
+are caught in review. These tests live next to the instrumented code:
+
+- `src/wrap/inline/fragment_tracing_snapshots.rs` – `fragment classified`.
+- `src/wrap/inline/span_helper_tracing_tests.rs` – date-span events.
+- `src/wrap/tokenize/parsing_tracing_snapshots.rs` – link, image, and footnote
+  events.
+
+Each is wired into its owning module as a `#[cfg(test)]` `#[path = "…"]`
+submodule so the snapshot test sits beside the code it pins while keeping the
+production module within the 400-line limit. The `.snap` fixtures live under the
+neighbouring `snapshots/` directory.
+
+A test captures events with `tracing-test`'s `#[traced_test]`, then normalizes
+the captured lines through the shared
+`crate::wrap::tracing_snapshot_support::normalise_event_lines` helper before
+asserting the snapshot.
+
+#### `normalise_event_lines` helper
+
+`tracing-test` prefixes every captured line with a volatile timestamp and span
+context, which would make raw snapshots non-deterministic.
+`normalise_event_lines(lines, message)` retains only the lines containing
+`message`, strips the volatile prefix up to the event level (`TRACE`/`DEBUG`),
+trims trailing whitespace, and joins the survivors. The level, target, message,
+and structured fields are preserved verbatim, so the snapshot still fails if any
+of those change.
+
+Re-use policy for this helper:
+
+- **Ownership.** Owned by the wrap module (`src/wrap/tracing_snapshot_support.rs`)
+  and gated behind `#[cfg(test)]`; it is `pub(crate)` test-support code, not part
+  of any public or runtime API.
+- **Permitted call-sites.** Only tracing-event snapshot tests. Call it from
+  inside a `#[traced_test]` function through the injected `logs_assert` closure,
+  copying the normalized result into an owned buffer before asserting the
+  snapshot after the closure returns (see the modules listed above for the
+  canonical shape).
+- **Composition.** Do not layer additional normalization on top; if a new event
+  needs different masking, extend the helper (and this section) rather than
+  post-processing its output at the call-site, so every snapshot shares one
+  normalization contract.
+
 ## Fences module
 
 The `fences` module in [src/fences.rs](../src/fences.rs) is responsible for
