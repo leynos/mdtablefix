@@ -1,7 +1,7 @@
 //! Higher-level inline Markdown parsing helpers, isolated from tokenizer entry points.
 
 use super::scanning::{collect_range, position_after_close, scan_while};
-use crate::wrap::observer::{Event, Observer};
+use crate::wrap::observer::{Event, ObserverHandle};
 
 /// Parse a Markdown link or image starting at `i`.
 ///
@@ -22,7 +22,7 @@ use crate::wrap::observer::{Event, Observer};
 pub(super) fn parse_link_or_image(
     text: &str,
     mut idx: usize,
-    observer: &mut Option<&mut dyn Observer>,
+    observer: &mut ObserverHandle<'_>,
 ) -> (String, usize) {
     let start = idx;
 
@@ -31,7 +31,7 @@ pub(super) fn parse_link_or_image(
     {
         if let Some(observer) = observer.as_deref_mut() {
             observer.observe(Event::FootnoteReferenceParsed {
-                token_length: text[start..text_end].chars().count(),
+                token: &text[start..text_end],
             });
         }
         return (collect_range(text, start, text_end), text_end);
@@ -49,7 +49,7 @@ pub(super) fn parse_link_or_image(
         if let Some(url_end) = parse_link_url(text, text_end) {
             if let Some(observer) = observer.as_deref_mut() {
                 observer.observe(Event::LinkOrImageParsed {
-                    token_length: text[start..url_end].chars().count(),
+                    token: &text[start..url_end],
                     is_image: text[start..].starts_with('!'),
                 });
             }
@@ -70,11 +70,7 @@ pub(super) fn parse_link_or_image(
     fallback_single_char(text, start)
 }
 
-fn find_footnote_end(
-    text: &str,
-    idx: usize,
-    observer: &mut Option<&mut dyn Observer>,
-) -> Option<usize> {
+fn find_footnote_end(text: &str, idx: usize, observer: &mut ObserverHandle<'_>) -> Option<usize> {
     if idx >= text.len() || !text[idx..].starts_with("[^") {
         if let Some(observer) = observer.as_deref_mut() {
             observer.observe(Event::FootnoteEndNotFound {
@@ -102,7 +98,7 @@ fn find_footnote_end(
                 observer.observe(Event::FootnoteLabelRecognized {
                     start: idx,
                     end: cursor,
-                    token_length: text[idx..cursor].chars().count(),
+                    token: &text[idx..cursor],
                 });
             }
             return Some(cursor);

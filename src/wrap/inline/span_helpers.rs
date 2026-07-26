@@ -23,6 +23,7 @@ use super::predicates::{
     looks_like_footnote_ref,
     looks_like_link,
 };
+use crate::wrap::observer::{Event, ObserverHandle};
 
 /// Marks how a grouped token span should behave during wrapping.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -67,8 +68,15 @@ pub(in crate::wrap::inline) fn try_match_date_sequence(
 pub(in crate::wrap::inline) fn date_token_span(
     tokens: &[String],
     start: usize,
+    observer: &mut ObserverHandle<'_>,
 ) -> Option<(usize, usize)> {
     let date_end = try_match_date_sequence(tokens, start)?;
+    if let Some(observer) = observer.as_deref_mut() {
+        observer.observe(Event::DateSequenceMatched {
+            start,
+            end: date_end,
+        });
+    }
     let mut date_width = tokens[start..date_end]
         .iter()
         .map(|token| UnicodeWidthStr::width(token.as_str()))
@@ -78,7 +86,7 @@ pub(in crate::wrap::inline) fn date_token_span(
         date_end,
         SpanKind::General,
         &mut date_width,
-        &mut None,
+        observer,
     ) {
         return Some((footnote_end, date_width));
     }
@@ -142,6 +150,7 @@ pub(in crate::wrap::inline) fn should_couple_whitespace(
     kind: SpanKind,
     next_token: Option<&String>,
     following_token: Option<&String>,
+    observer: &mut ObserverHandle<'_>,
 ) -> bool {
     match (kind, next_token, following_token) {
         (SpanKind::Link, Some(next), _)
@@ -153,7 +162,7 @@ pub(in crate::wrap::inline) fn should_couple_whitespace(
         }
         (SpanKind::Code, Some(next), _) if is_trailing_punctuation_token(next) => true,
         (SpanKind::General, Some(next), Some(following))
-            if looks_like_footnote_ref(next, &mut None) && following == ":" =>
+            if looks_like_footnote_ref(next, observer) && following == ":" =>
         {
             true
         }
@@ -220,7 +229,7 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
     end: usize,
     kind: SpanKind,
     width: &mut usize,
-    observer: &mut Option<&mut dyn crate::wrap::observer::Observer>,
+    observer: &mut ObserverHandle<'_>,
 ) -> Option<(SpanKind, usize)> {
     let token = tokens.get(end)?;
     if !looks_like_footnote_ref(token, observer) {
@@ -254,3 +263,32 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
 #[cfg(test)]
 #[path = "span_helper_props.rs"]
 mod span_helper_props;
+
+#[cfg(test)]
+mod tracing_tests {
+    //! Traced-event test for date-sequence grouping.
+    //!
+    //! Verifies that `date_token_span` emits the DEBUG `matched date sequence`
+    //! event with its `start` and `end` fields through the tracing adapter.
+
+    use tracing_test::traced_test;
+
+    use super::date_token_span;
+    use crate::wrap::tracing_adapter::TracingObserver;
+
+    #[traced_test]
+    #[test]
+    fn date_token_span_logs_matched_sequence() {
+        let tokens: Vec<String> = ["1st", " ", "January", " ", "2020"]
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        let mut observer = TracingObserver;
+        let span = date_token_span(&tokens, 0, &mut Some(&mut observer));
+
+        assert_eq!(span.map(|(end, _)| end), Some(5));
+        assert!(logs_contain("matched date sequence"));
+        assert!(logs_contain("start=0"));
+        assert!(logs_contain("end=5"));
+    }
+}

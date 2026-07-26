@@ -266,17 +266,15 @@ Text.
 
 ## Footnotes
 
- 1. First note
+ [^1]: First note
 
- 2. Second note
+ [^2]: Second note
 
-10. Final note
+[^10]: Final note
 ```
 
-After:
-
-```markdown
-Text.
+`convert_footnotes` only processes the final contiguous numeric list that
+immediately follows an H2 heading when these conditions are met.
 
 ## Footnotes
 
@@ -612,6 +610,25 @@ lines bypass the inline wrapping path and are emitted unchanged.
 
 The helper `html_table_to_markdown` is retained for backward compatibility but
 is deprecated. New code should call `convert_html_tables` instead.
+
+
+### Observer boundary for inline diagnostics
+
+The tokenizing and classification helpers in the wrap sequence above —
+`build_fragments`, `parse_link_or_image`, `find_footnote_end`,
+`looks_like_footnote_ref`, `ends_with_footnote_ref`, and `date_token_span` —
+do not call `tracing` directly. They emit borrowed `Event` values, defined in
+[src/wrap/observer.rs](../src/wrap/observer.rs), through a
+`&mut ObserverHandle<'_>` parameter threaded alongside the fragment-building
+call chain shown in the [wrap sequence](#wrap-sequence) diagram.
+[src/wrap/tracing_adapter.rs](../src/wrap/tracing_adapter.rs) provides the
+crate's single `Observer` implementation, `TracingObserver`, which owns the
+`tracing::enabled!` level gates and any derived computation, such as Unicode
+length counts and bounded-snippet truncation. This keeps the tokenizer and
+fragment-classification logic free of vendor-specific logging concerns. See
+[ADR 0006](adrs/0006-observer-boundary-for-tracing.md) for the rationale and
+[the developer's guide](developers-guide.md#inline-classification-observer-boundary)
+for the ownership and reuse policy governing this port.
 
 ## Concurrency with `rayon`
 

@@ -7,17 +7,19 @@
 use std::borrow::Cow;
 
 use super::{is_trailing_punct, looks_like_footnote_ref};
+use crate::wrap::observer::ObserverHandle;
 
 /// Removes whitespace between trailing punctuation and an inline footnote ref.
 ///
 /// This keeps sentence punctuation and an immediately following GFM footnote
 /// reference as a single semantic unit before span building decides wrap
 /// boundaries.
-pub(in crate::wrap::inline) fn normalize_footnote_ref_spacing(
-    tokens: &[String],
-) -> Cow<'_, [String]> {
+pub(in crate::wrap::inline) fn normalize_footnote_ref_spacing<'a>(
+    tokens: &'a [String],
+    observer: &mut ObserverHandle<'_>,
+) -> Cow<'a, [String]> {
     let Some(first_match) =
-        (0..tokens.len()).find(|index| matches_footnote_ref_spacing(tokens, *index))
+        (0..tokens.len()).find(|index| matches_footnote_ref_spacing(tokens, *index, observer))
     else {
         return Cow::Borrowed(tokens);
     };
@@ -27,7 +29,7 @@ pub(in crate::wrap::inline) fn normalize_footnote_ref_spacing(
     let mut index = first_match;
 
     while index < tokens.len() {
-        if matches_footnote_ref_spacing(tokens, index) {
+        if matches_footnote_ref_spacing(tokens, index, observer) {
             normalized.push(tokens[index].clone());
             normalized.push(tokens[index + 2].clone());
             index += 3;
@@ -40,12 +42,16 @@ pub(in crate::wrap::inline) fn normalize_footnote_ref_spacing(
     Cow::Owned(normalized)
 }
 
-fn matches_footnote_ref_spacing(tokens: &[String], index: usize) -> bool {
+fn matches_footnote_ref_spacing(
+    tokens: &[String],
+    index: usize,
+    observer: &mut ObserverHandle<'_>,
+) -> bool {
     tokens.get(index..index + 3).is_some_and(|window| {
-        !looks_like_footnote_ref(&window[0], &mut None)
+        !looks_like_footnote_ref(&window[0], observer)
             && window[0].chars().last().is_some_and(is_trailing_punct)
             && window[1].chars().all(char::is_whitespace)
-            && looks_like_footnote_ref(&window[2], &mut None)
+            && looks_like_footnote_ref(&window[2], observer)
     })
 }
 
@@ -158,7 +164,7 @@ mod tests {
     #[case::adjacent_references(&["a.", " ", "[^0]", " ", "[^_]"], &["a.", "[^0]", " ", "[^_]"])]
     fn normalizes_inline_footnote_ref_spacing(#[case] input: &[&str], #[case] expected: &[&str]) {
         assert_eq!(
-            normalize_footnote_ref_spacing(&strings(input)).as_ref(),
+            normalize_footnote_ref_spacing(&strings(input), &mut None).as_ref(),
             strings(expected)
         );
     }
@@ -166,7 +172,7 @@ mod tests {
     proptest! {
         #[test]
         fn normalizing_preserves_non_whitespace_tokens(tokens in token_stream_strategy()) {
-            let normalized = normalize_footnote_ref_spacing(&tokens);
+            let normalized = normalize_footnote_ref_spacing(&tokens, &mut None);
             let input_non_whitespace = tokens
                 .iter()
                 .filter(|token| !token.chars().all(char::is_whitespace))
@@ -181,7 +187,7 @@ mod tests {
 
         #[test]
         fn normalizing_removes_only_matched_spacing_tokens(tokens in token_stream_strategy()) {
-            let normalized = normalize_footnote_ref_spacing(&tokens);
+            let normalized = normalize_footnote_ref_spacing(&tokens, &mut None);
 
             prop_assert_eq!(
                 normalized.len() + removed_spacing_count(&tokens),
@@ -191,8 +197,8 @@ mod tests {
 
         #[test]
         fn normalizing_is_idempotent(tokens in token_stream_strategy()) {
-            let normalized = normalize_footnote_ref_spacing(&tokens);
-            let renormalized = normalize_footnote_ref_spacing(&normalized);
+            let normalized = normalize_footnote_ref_spacing(&tokens, &mut None);
+            let renormalized = normalize_footnote_ref_spacing(&normalized, &mut None);
 
             prop_assert_eq!(
                 renormalized.as_ref(),
@@ -212,7 +218,7 @@ mod tests {
             tokens.extend([punctuated.clone(), whitespace, reference.clone()]);
             tokens.extend(suffix);
 
-            let normalized = normalize_footnote_ref_spacing(&tokens);
+            let normalized = normalize_footnote_ref_spacing(&tokens, &mut None);
 
             prop_assert!(
                 normalized
@@ -234,7 +240,7 @@ mod tests {
             tokens.extend([punctuated.clone(), whitespace.clone(), definition.clone()]);
             tokens.extend(suffix);
 
-            let normalized = normalize_footnote_ref_spacing(&tokens);
+            let normalized = normalize_footnote_ref_spacing(&tokens, &mut None);
 
             prop_assert!(
                 normalized

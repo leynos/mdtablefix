@@ -9,7 +9,7 @@
 //! tokens, and four-digit year tokens before wrapping.
 
 pub(crate) use super::month_names::MONTH_NAMES;
-use crate::wrap::observer::{Event, Observer};
+use crate::wrap::observer::{Event, ObserverHandle};
 
 pub(in crate::wrap::inline) fn is_opening_punct(c: char) -> bool {
     matches!(c, '(' | '[' | '"') || "“‘（［【《「『".contains(c)
@@ -108,7 +108,7 @@ pub(in crate::wrap::inline) fn looks_like_link(token: &str) -> bool {
 /// Returns whether `token` looks like a complete GFM footnote reference.
 pub(in crate::wrap::inline) fn looks_like_footnote_ref(
     token: &str,
-    observer: &mut Option<&mut dyn Observer>,
+    observer: &mut ObserverHandle<'_>,
 ) -> bool {
     let result = token
         .strip_prefix("[^")
@@ -123,7 +123,7 @@ pub(in crate::wrap::inline) fn looks_like_footnote_ref(
 /// Returns whether `token` ends with an inline footnote reference.
 pub(in crate::wrap::inline) fn ends_with_footnote_ref(
     token: &str,
-    observer: &mut Option<&mut dyn Observer>,
+    observer: &mut ObserverHandle<'_>,
 ) -> bool {
     let Some(start) = token.rfind("[^") else {
         return false;
@@ -207,6 +207,62 @@ pub(in crate::wrap::inline) fn fragment_is_link(text: &str) -> bool {
 #[cfg(test)]
 #[path = "predicate_date_props.rs"]
 mod predicate_date_props;
+
+#[cfg(test)]
+mod tracing_tests {
+    //! Traced-event tests for the footnote-reference predicates.
+    //!
+    //! Verify that `looks_like_footnote_ref` and `ends_with_footnote_ref` emit
+    //! the TRACE `footnote reference checked` event through the tracing adapter,
+    //! including its `token_length` and `result` fields, and that the raw token
+    //! text never reaches the log.
+
+    use tracing_test::traced_test;
+
+    use super::{ends_with_footnote_ref, looks_like_footnote_ref};
+    use crate::wrap::tracing_adapter::TracingObserver;
+
+    #[traced_test]
+    #[test]
+    fn looks_like_footnote_ref_logs_positive_check() {
+        let mut observer = TracingObserver;
+        assert!(looks_like_footnote_ref("[^note]", &mut Some(&mut observer)));
+        assert!(logs_contain("footnote reference checked"));
+        assert!(logs_contain("token_length=7"));
+        assert!(logs_contain("result=true"));
+        assert!(!logs_contain("[^note]"));
+    }
+
+    #[traced_test]
+    #[test]
+    fn looks_like_footnote_ref_logs_negative_check() {
+        let mut observer = TracingObserver;
+        assert!(!looks_like_footnote_ref("plain", &mut Some(&mut observer)));
+        assert!(logs_contain("footnote reference checked"));
+        assert!(logs_contain("token_length=5"));
+        assert!(logs_contain("result=false"));
+    }
+
+    #[traced_test]
+    #[test]
+    fn ends_with_footnote_ref_logs_positive_check() {
+        let mut observer = TracingObserver;
+        assert!(ends_with_footnote_ref(
+            "word.[^1]",
+            &mut Some(&mut observer)
+        ));
+        assert!(logs_contain("footnote reference checked"));
+        assert!(logs_contain("token_length=4"));
+        assert!(logs_contain("result=true"));
+        assert!(!logs_contain("[^1]"));
+    }
+
+    #[test]
+    fn footnote_ref_check_does_not_require_subscriber() {
+        assert!(looks_like_footnote_ref("[^1]", &mut None));
+        assert!(!looks_like_footnote_ref("plain", &mut None));
+    }
+}
 
 #[cfg(test)]
 mod tests {

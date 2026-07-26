@@ -23,7 +23,7 @@ use super::{
     is_whitespace_token,
     looks_like_footnote_ref,
 };
-use crate::wrap::observer::{Event, FragmentKind, Observer};
+use crate::wrap::observer::{Event, FragmentKind, ObserverHandle};
 
 /// Stores rendered fragment text, width, and classification for wrapping.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,14 +48,12 @@ impl InlineFragment {
         Self::new_observed(text, &mut Some(&mut observer))
     }
 
-    pub(super) fn new_observed(text: String, observer: &mut Option<&mut dyn Observer>) -> Self {
+    pub(super) fn new_observed(text: String, observer: &mut ObserverHandle<'_>) -> Self {
         let width = UnicodeWidthStr::width(text.as_str());
         let kind = classify_fragment(text.as_str(), observer);
         if let Some(observer) = observer.as_deref_mut() {
-            let (token, truncated) = trace_text_snippet(text.as_str());
             observer.observe(Event::FragmentClassified {
-                token,
-                truncated,
+                token: text.as_str(),
                 kind,
             });
         }
@@ -152,7 +150,7 @@ fn contains_link_with_trailing_punctuation(text: &str) -> bool {
 /// still recognised as links or code spans. Footnote references also recognise
 /// the `word.[^label]` suffix shape that the wrapper groups to avoid splitting
 /// sentence punctuation from the marker.
-fn classify_fragment(text: &str, observer: &mut Option<&mut dyn Observer>) -> FragmentKind {
+fn classify_fragment(text: &str, observer: &mut ObserverHandle<'_>) -> FragmentKind {
     if is_whitespace_token(text) {
         return FragmentKind::Whitespace;
     }
@@ -174,28 +172,6 @@ fn classify_fragment(text: &str, observer: &mut Option<&mut dyn Observer>) -> Fr
     } else {
         FragmentKind::Plain
     }
-}
-
-/// Returns a UTF-8-safe prefix of `text` for debug logging.
-///
-/// The prefix contains at most 80 bytes and never splits a multi-byte
-/// character. The second tuple element is `true` when `text` was shortened.
-fn trace_text_snippet(text: &str) -> (&str, bool) {
-    const MAX_TRACE_BYTES: usize = 80;
-    if text.len() <= MAX_TRACE_BYTES {
-        return (text, false);
-    }
-
-    let mut byte_end = 0;
-    for (idx, ch) in text.char_indices() {
-        let next_end = idx + ch.len_utf8();
-        if next_end > MAX_TRACE_BYTES {
-            break;
-        }
-        byte_end = next_end;
-    }
-
-    (&text[..byte_end], true)
 }
 #[cfg(test)]
 mod tests {
@@ -296,28 +272,6 @@ mod tests {
         }
     }
 }
-
-#[cfg(test)]
-mod trace_snippet_tests {
-    //! Tests for the `trace_text_snippet` helper.
-    //!
-    //! Verifies that the UTF-8-safe truncation helper produces a slice at a
-    //! valid character boundary and sets the truncation flag correctly.
-
-    use super::trace_text_snippet;
-
-    #[test]
-    fn trace_text_snippet_truncates_on_char_boundary() {
-        let ascii = "a".repeat(79);
-        let text = format!("{ascii}étail");
-        let (snippet, truncated) = trace_text_snippet(&text);
-
-        assert!(truncated);
-        assert_eq!(snippet, ascii.as_str());
-        assert!(snippet.is_char_boundary(snippet.len()));
-    }
-}
-
 #[cfg(test)]
 mod tracing_tests {
     //! Traced-event tests for `InlineFragment` classification.
@@ -353,32 +307,6 @@ mod tracing_tests {
     fn fragment_classification_does_not_require_subscriber() {
         let fragment = InlineFragment::new("[^1]".to_string());
         assert_eq!(fragment.kind, FragmentKind::FootnoteRef);
-    }
-}
-
-#[cfg(test)]
-mod proptests {
-    //! Property tests for `trace_text_snippet` invariants.
-    //!
-    //! Verifies on arbitrary Unicode input that the helper never panics, the
-    //! result is a valid UTF-8 slice of at most 80 bytes, and the truncation
-    //! flag accurately reflects whether the input exceeded that limit.
-
-    use proptest::prelude::*;
-
-    use super::trace_text_snippet;
-
-    proptest! {
-        #[test]
-        fn trace_text_snippet_never_panics(s in "\\PC*") {
-            let (snippet, truncated) = trace_text_snippet(&s);
-            // Invariant 1: result is always valid UTF-8 at a char boundary.
-            assert!(snippet.is_char_boundary(snippet.len()));
-            // Invariant 2: result never exceeds 80 bytes.
-            assert!(snippet.len() <= 80);
-            // Invariant 3: truncation flag is accurate.
-            assert_eq!(truncated, s.len() > 80);
-        }
     }
 }
 #[cfg(test)]

@@ -83,7 +83,7 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
 
 pub(super) fn segment_inline_observed(
     text: &str,
-    observer: &mut Option<&mut dyn crate::wrap::observer::Observer>,
+    observer: &mut crate::wrap::observer::ObserverHandle<'_>,
 ) -> Vec<String> {
     let mut tokens = Vec::new();
     let bytes = text.as_bytes();
