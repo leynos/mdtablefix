@@ -67,6 +67,11 @@ restores the separator row with widths derived from the final table body.
 
 - `check-static-regexes`: Runs before Clippy as part of `make lint` and uses
   ripgrep (`rg`) to reject hand-rolled static regular expression declarations.
+  The scan lives in `scripts/check-static-regexes.sh` and rejects any `static`
+  that wraps `Regex::new` directly in a supported lazy-wrapper constructor —
+  `std::sync::LazyLock::new` or `once_cell::sync::Lazy::new`, whether spelled
+  directly or fully qualified — so `lazy_regex!` remains the sole sanctioned
+  idiom. `tests/static_regex_lint.rs` exercises every supported form.
   Contributors must install ripgrep locally; Continuous Integration (CI)
   installs the pinned version before running the lint gate.
 

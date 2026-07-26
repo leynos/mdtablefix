@@ -1,0 +1,1 @@
+static RE: Lazy<Regex> = Lazy::new(|| Regex::new("c").unwrap());

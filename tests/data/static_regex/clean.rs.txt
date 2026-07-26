@@ -1,0 +1,2 @@
+static RE: LazyLock<Regex> = lazy_regex!("clean");
+fn build() { let _ = Regex::new("local").unwrap(); }
