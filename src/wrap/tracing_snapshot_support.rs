@@ -49,3 +49,62 @@ fn stable_event_start(line: &str) -> &str {
         .min()
         .map_or(line, |index| &line[index..])
 }
+
+#[cfg(test)]
+mod proptests {
+    //! Property tests for the normalisation helpers.
+    //!
+    //! These prove the prefix-stripping and suffix-preserving contract holds
+    //! over arbitrary log lines, complementing the fixed event snapshots.
+
+    use proptest::prelude::*;
+
+    use super::{normalise_event_lines, stable_event_start};
+
+    proptest! {
+        /// The normalised event start is always a suffix of the input line, and
+        /// re-normalising it is a no-op (the level already sits at the front).
+        #[test]
+        fn stable_event_start_returns_idempotent_suffix(line in "[^\n]*") {
+            let start = stable_event_start(&line);
+            prop_assert!(line.ends_with(start));
+            prop_assert_eq!(stable_event_start(start), start);
+        }
+
+        /// Given a synthetic `tracing-test` line — a volatile prefix, the event
+        /// level, then stable content — the prefix is stripped while the level
+        /// and every following field survive verbatim. The prefix charset omits
+        /// the letters in `TRACE`/`DEBUG`, so it cannot masquerade as a level.
+        #[test]
+        fn stable_event_start_strips_prefix_and_keeps_event(
+            prefix in "[0-9TZ:. -]+ ",
+            level in prop_oneof![Just("TRACE"), Just("DEBUG")],
+            rest in "[^\n]*",
+        ) {
+            let stable = format!("{level} {rest}");
+            let line = format!("{prefix}{stable}");
+            prop_assert_eq!(stable_event_start(&line), stable.as_str());
+        }
+
+        /// `normalise_event_lines` keeps exactly the lines containing `message`,
+        /// leaves no trailing whitespace, and neither invents nor drops lines.
+        #[test]
+        fn normalise_event_lines_filters_and_trims(
+            lines in prop::collection::vec("[^\n]*", 0..8),
+            message in "[^\n]{1,4}",
+        ) {
+            let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+            let out = normalise_event_lines(&refs, &message);
+            let matching = refs.iter().filter(|l| l.contains(message.as_str())).count();
+
+            if matching == 0 {
+                prop_assert!(out.is_empty());
+            } else {
+                prop_assert_eq!(out.split('\n').count(), matching);
+                for segment in out.split('\n') {
+                    prop_assert_eq!(segment, segment.trim_end());
+                }
+            }
+        }
+    }
+}

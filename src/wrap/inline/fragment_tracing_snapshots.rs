@@ -11,7 +11,11 @@ use crate::wrap::tracing_snapshot_support::normalise_event_lines;
 #[test]
 fn snapshots_fragment_classified_event() {
     let captured = RefCell::new(String::new());
-    let _ = InlineFragment::new("plain".to_string());
+    let fragment = InlineFragment::new("plain".to_string());
+    // Assert the observable classification the traced event mirrors; the
+    // snapshot below is supplementary evidence of the emitted event shape.
+    assert!(fragment.is_plain(), "a bare word must classify as Plain");
+    assert_eq!(fragment.text, "plain");
     logs_assert(|lines| {
         captured.replace(normalise_event_lines(lines, "fragment classified"));
         (!captured.borrow().is_empty())

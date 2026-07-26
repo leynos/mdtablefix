@@ -11,7 +11,11 @@ use crate::wrap::tracing_snapshot_support::normalise_event_lines;
 #[test]
 fn snapshots_footnote_reference_parsed_event() {
     let captured = RefCell::new(String::new());
-    let _ = parse_link_or_image("[^4] tail", 0);
+    // Observable parse result: the footnote reference is kept atomic and the
+    // cursor advances past it. The snapshot is supplementary.
+    let (token, idx) = parse_link_or_image("[^4] tail", 0);
+    assert_eq!(token, "[^4]");
+    assert_eq!(idx, token.len());
     logs_assert(|lines| {
         captured.replace(normalise_event_lines(lines, "footnote reference parsed"));
         (!captured.borrow().is_empty())
@@ -29,7 +33,11 @@ fn snapshots_footnote_reference_parsed_event() {
 #[test]
 fn snapshots_link_or_image_parsed_event() {
     let captured = RefCell::new(String::new());
-    let _ = parse_link_or_image("[link](url)", 0);
+    // Observable parse result: the whole link is kept atomic. Supplementary
+    // snapshot follows.
+    let (token, idx) = parse_link_or_image("[link](url)", 0);
+    assert_eq!(token, "[link](url)");
+    assert_eq!(idx, token.len());
     logs_assert(|lines| {
         captured.replace(normalise_event_lines(lines, "link or image parsed"));
         (!captured.borrow().is_empty())

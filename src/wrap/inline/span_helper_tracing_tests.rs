@@ -32,21 +32,24 @@ fn colon_footnote_tokens() -> Vec<String> {
 #[traced_test]
 #[rstest]
 fn try_match_date_sequence_emits_trace_event(date_tokens: Vec<String>) {
-    let _ = try_match_date_sequence(&date_tokens, 0);
+    // Observable result: all five date tokens form one sequence (exclusive end).
+    assert_eq!(try_match_date_sequence(&date_tokens, 0), Some(5));
     assert!(logs_contain("try_match_date_sequence"));
 }
 
 #[traced_test]
 #[rstest]
 fn try_match_date_sequence_logs_matched_pattern(date_tokens: Vec<String>) {
-    let _ = try_match_date_sequence(&date_tokens, 0);
+    assert_eq!(try_match_date_sequence(&date_tokens, 0), Some(5));
     assert!(logs_contain("ordinal_day_month_year"));
 }
 
 #[traced_test]
 #[rstest]
 fn date_token_span_emits_trace_event(date_tokens: Vec<String>) {
-    let _ = date_token_span(&date_tokens, 0);
+    // Observable result: the span covers all five tokens with display width 18
+    // ("25th December 2025"); no footnote coupling applies here.
+    assert_eq!(date_token_span(&date_tokens, 0), Some((5, 18)));
     assert!(logs_contain("date_token_span"));
 }
 
@@ -83,7 +86,13 @@ fn grouping_boundary_logs_declined_footnote_coupling(
         .iter()
         .map(|token| (*token).to_string())
         .collect::<Vec<_>>();
-    let _ = determine_token_span(&tokens, 0);
+    let (end, _width) = determine_token_span(&tokens, 0);
+    // Observable edge-case result: a declined coupling leaves the footnote
+    // reference outside the returned span rather than grouping it.
+    assert!(
+        !tokens[..end].join("").contains("[^note]"),
+        "declined coupling must not group the footnote reference",
+    );
     assert!(logs_contain(&format!(
         "error_category=\"{error_category}\""
     )));
@@ -94,7 +103,11 @@ fn grouping_boundary_logs_declined_footnote_coupling(
 #[rstest]
 fn snapshots_grouped_date_sequence_event(date_tokens: Vec<String>) {
     let captured = RefCell::new(String::new());
-    let _ = determine_token_span(&date_tokens, 0);
+    // Observable grouping result: the date tokens form one atomic span of
+    // width 18. The snapshot below supplements this behavioural assertion.
+    let (end, width) = determine_token_span(&date_tokens, 0);
+    assert_eq!(date_tokens[..end].join(""), "25th December 2025");
+    assert_eq!(width, 18);
     logs_assert(|lines| {
         captured.replace(normalise_event_lines(
             lines,
@@ -115,7 +128,10 @@ fn snapshots_grouped_date_sequence_event(date_tokens: Vec<String>) {
 #[rstest]
 fn snapshots_matched_date_sequence_event(date_tokens: Vec<String>) {
     let captured = RefCell::new(String::new());
-    let _ = determine_token_span(&date_tokens, 0);
+    // Observable grouping result backing the supplementary snapshot.
+    let (end, width) = determine_token_span(&date_tokens, 0);
+    assert_eq!(date_tokens[..end].join(""), "25th December 2025");
+    assert_eq!(width, 18);
     logs_assert(|lines| {
         captured.replace(normalise_event_lines(lines, "matched date sequence"));
         (!captured.borrow().is_empty())
