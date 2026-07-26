@@ -6,6 +6,8 @@ expression: "fs::read_to_string(&in_place_path).expect(\"failed to read rewritte
 
 Before formatting, this prose introduces a representative document.
 
+Table 1: Representative pre-merge command.
+
 | Name  | Notes                              |
 | ----- | ---------------------------------- |
 | alpha | Use *`cargo test`* before merging. |
