@@ -6,14 +6,11 @@
 //! - Error handling for invalid argument combinations
 //! - Processing of Markdown files through the CLI interface
 
-use std::{
-    fs::{self, File},
-    io::Write,
-};
-
 use assert_cmd::Command;
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::rstest;
-use tempfile::tempdir;
+use tempfile::{TempDir, tempdir};
 
 #[macro_use]
 #[path = "common/mod.rs"]
@@ -56,19 +53,76 @@ fn test_cli_version_flag() {
 #[rstest]
 fn test_cli_process_file(broken_table: Vec<String>) {
     let dir = tempdir().expect("failed to create temporary directory");
-    let file_path = dir.path().join("sample.md");
-    let mut f = File::create(&file_path).expect("failed to create temporary file");
-    for line in &broken_table {
-        writeln!(f, "{line}").expect("failed to write line");
-    }
-    f.flush().expect("failed to flush file");
-    drop(f);
+    let (directory, parent_path) = capability_directory(&dir);
+    let file_name = Utf8Path::new("sample.md");
+    directory
+        .write(file_name, format!("{}\n", broken_table.join("\n")))
+        .expect("failed to write temporary file");
     Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
-        .arg(&file_path)
+        .arg(parent_path.join(file_name).as_std_path())
         .assert()
         .success()
         .stdout("| A | B |\n| 1 | 2 |\n| 3 | 4 |\n");
+}
+
+/// Snapshots equivalent stdout and in-place output for a representative file.
+#[test]
+fn cli_output_modes_snapshot_table_prose() {
+    let input = include_str!("data/cli-output-parity.dat");
+    let expected = include_str!("data/cli-output-parity.expected.md");
+    let dir = tempdir().expect("failed to create temporary directory");
+    let (directory, parent_path) = capability_directory(&dir);
+    let stdout_path = parent_path.join("stdout.md");
+    let in_place_path = parent_path.join("in-place.md");
+    directory
+        .write("stdout.md", input)
+        .expect("failed to write stdout fixture");
+    directory
+        .write("in-place.md", input)
+        .expect("failed to write in-place fixture");
+
+    let stdout = Command::cargo_bin("mdtablefix")
+        .expect("failed to create cargo command for mdtablefix")
+        .arg(stdout_path.as_std_path())
+        .output()
+        .expect("failed to run stdout command");
+    assert!(
+        stdout.status.success(),
+        "stdout command failed: {}",
+        String::from_utf8_lossy(&stdout.stderr)
+    );
+    let stdout_text = String::from_utf8_lossy(&stdout.stdout);
+    assert_eq!(stdout_text, expected, "stdout output must match the oracle");
+    assert_eq!(
+        directory
+            .read_to_string("stdout.md")
+            .expect("failed to read stdout fixture"),
+        input,
+        "stdout formatting must not modify the input file"
+    );
+    insta::assert_snapshot!("format_to_string_table_prose", stdout_text);
+
+    let in_place = Command::cargo_bin("mdtablefix")
+        .expect("failed to create cargo command for mdtablefix")
+        .args(["--in-place", in_place_path.as_str()])
+        .output()
+        .expect("failed to run in-place command");
+    assert!(
+        in_place.status.success(),
+        "in-place command failed: {}",
+        String::from_utf8_lossy(&in_place.stderr)
+    );
+    assert!(
+        in_place.stdout.is_empty(),
+        "in-place command wrote unexpected stdout: {}",
+        String::from_utf8_lossy(&in_place.stdout)
+    );
+    let rewritten = directory
+        .read_to_string("in-place.md")
+        .expect("failed to read rewritten fixture");
+    assert_eq!(rewritten, expected, "in-place output must match the oracle");
+    insta::assert_snapshot!("rewrite_in_place_table_prose", rewritten);
 }
 
 /// Tests that the `--fences` option normalizes backtick fences.
@@ -252,20 +306,26 @@ fn test_cli_footnotes_option() {
 /// Executes an in-place rewrite with the provided flags and asserts idempotence.
 fn run_in_place(flags: &[&str], input: &str, expected: &str) {
     let dir = tempdir().expect("failed to create temporary directory");
-    let file_path = dir.path().join("sample.md");
-    fs::write(&file_path, input).expect("failed to write test file");
+    let (directory, parent_path) = capability_directory(&dir);
+    let file_name = Utf8Path::new("sample.md");
+    let file_path = parent_path.join(file_name);
+    directory
+        .write(file_name, input)
+        .expect("failed to write test file");
 
     Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .args(["--in-place"])
         .args(flags)
-        .arg(&file_path)
+        .arg(file_path.as_std_path())
         .assert()
         .success()
         .stdout("")
         .stderr("");
 
-    let out = fs::read_to_string(&file_path).expect("failed to read output file");
+    let out = directory
+        .read_to_string(file_name)
+        .expect("failed to read output file");
     assert_eq!(out.trim_end(), expected.trim_end());
     assert!(
         out.ends_with('\n'),
@@ -277,18 +337,29 @@ fn run_in_place(flags: &[&str], input: &str, expected: &str) {
         .expect("Failed to create cargo command for mdtablefix")
         .args(["--in-place"])
         .args(flags)
-        .arg(&file_path)
+        .arg(file_path.as_std_path())
         .assert()
         .success()
         .stdout("")
         .stderr("");
 
-    let out2 = fs::read_to_string(&file_path).expect("failed to read output file");
+    let out2 = directory
+        .read_to_string(file_name)
+        .expect("failed to read output file");
     assert!(
         out2.ends_with('\n'),
         "output file must end with a trailing newline"
     );
     assert_eq!(out2, out);
+}
+
+/// Opens a temporary directory as the capability-scoped I/O boundary for a test.
+fn capability_directory(tempdir: &TempDir) -> (Dir, Utf8PathBuf) {
+    let path = Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf())
+        .expect("temporary directory path is UTF-8");
+    let directory = Dir::open_ambient_dir(&path, ambient_authority())
+        .expect("failed to open temporary directory");
+    (directory, path)
 }
 
 /// Ensures `--in-place` rewrites files correctly for multiple flag combinations.
