@@ -28,6 +28,18 @@ fn test_process_stream_ignores_code_fences() {
 
     let tilde_lines = lines_vec!["~~~", "| not | a | table |", "~~~"];
     assert_eq!(process_stream(&tilde_lines), tilde_lines);
+
+    // A same-marker line bearing an info string is literal content, not a
+    // closing fence (CommonMark), so the following pipe line stays fenced and
+    // must not be reflowed into a table row.
+    let info_string_lines = lines_vec![
+        "```rust",
+        "let table = build();",
+        "```rust extra info",
+        "| tee /tmp/test.log",
+        "```",
+    ];
+    assert_eq!(process_stream(&info_string_lines), info_string_lines);
 }
 
 #[rstest]

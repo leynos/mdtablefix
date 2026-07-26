@@ -414,3 +414,19 @@ fn compresses_top_level_fence_after_quoted_block() {
         lines_vec!["> ````rust", "> code", "> ````", "```rust", "top", "```",]
     );
 }
+
+#[test]
+fn keeps_info_string_marker_as_literal_content() {
+    // A same-marker line carrying an info string is not a closing fence
+    // (CommonMark), so the block stays open through the pipe line and the whole
+    // fenced block round-trips verbatim rather than closing early.
+    let input = lines_vec![
+        "```rust",
+        "let table = build();",
+        "```rust extra info",
+        "| tee /tmp/test.log",
+        "```",
+    ];
+    let out = compress_fences(&input);
+    assert_eq!(out, input);
+}

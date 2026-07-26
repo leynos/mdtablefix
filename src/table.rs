@@ -165,6 +165,16 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
     if let Some(idx) = sep_index_within(sep_row_idx, output_rows.len()) {
         output_rows.remove(idx);
     }
+    // A lone single-cell candidate with no separator row is not a table: it is a
+    // stray pipe-prefixed line, such as a shell pipeline continuation inside a
+    // code block. Formatting it would fabricate a trailing pipe, so treat it as
+    // structurally insufficient and return the input unchanged.
+    if sep_cells.is_none()
+        && output_rows.len() == 1
+        && output_rows.first().is_some_and(|row| row.len() == 1)
+    {
+        return None;
+    }
     Some(ParsedTable {
         output_rows,
         sep_cells,
@@ -288,6 +298,16 @@ mod tests {
         let sep_cells = vec!["---".to_string()];
 
         assert!(format_separator_cells(&[3, 4], &sep_cells).is_empty());
+    }
+
+    #[test]
+    fn reflow_table_returns_lone_single_cell_line_unchanged() {
+        // A single pipe-prefixed line with no separator row is a stray pipe
+        // (for example a shell pipeline continuation), not a table. It must pass
+        // through verbatim rather than gaining a fabricated trailing pipe.
+        let lines = vec!["| tee /tmp/test.log".to_string()];
+
+        assert_eq!(reflow_table(&lines), lines);
     }
 
     #[test]

@@ -331,7 +331,7 @@ fn fence_opening_logs_content_free_transition() {
 #[test]
 fn matching_fence_closure_logs_content_free_transition() {
     let opening = "````private-opening-info";
-    let closing = "````private-closing-info";
+    let closing = "````";
     let mut tracker = FenceTracker::new();
 
     assert!(tracker.observe(opening, 1));
@@ -342,7 +342,43 @@ fn matching_fence_closure_logs_content_free_transition() {
     assert!(logs_contain("marker_len=4"));
     assert!(logs_contain("open_marker_len=4"));
     assert!(!logs_contain(opening));
-    assert!(!logs_contain(closing));
+    assert!(!logs_contain("private-opening-info"));
+}
+
+#[test]
+fn fence_tracker_treats_info_string_marker_as_content_not_close() {
+    // Per CommonMark, a closing fence must not carry an info string. A
+    // same-marker line bearing trailing text is literal content and leaves the
+    // fence open, while a bare (or whitespace-only) marker still closes it.
+    let mut tracker = FenceTracker::new();
+    assert!(tracker.observe("```rust", 0));
+    assert!(tracker.in_fence(0));
+
+    // Same marker, but a non-whitespace info string: not a close.
+    assert!(tracker.observe("```rust", 0));
+    assert!(tracker.in_fence(0));
+
+    // A bare marker closes as usual.
+    assert!(tracker.observe("```", 0));
+    assert!(!tracker.in_fence(0));
+}
+
+#[traced_test]
+#[test]
+fn info_string_marker_logs_content_free_unchanged_transition() {
+    let opening = "````private-opening-info";
+    let info_marker = "````private-closing-info";
+    let mut tracker = FenceTracker::new();
+
+    assert!(tracker.observe(opening, 1));
+    // A same-length, same-marker line with an info string does not close.
+    assert!(tracker.observe(info_marker, 1));
+    assert!(tracker.in_fence(1));
+    assert!(logs_contain("transition=\"unchanged\""));
+    assert!(logs_contain("reason=\"closing_fence_has_info_string\""));
+    assert!(!logs_contain(opening));
+    assert!(!logs_contain(info_marker));
+    assert!(!logs_contain("private-closing-info"));
 }
 
 #[traced_test]
