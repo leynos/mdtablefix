@@ -696,6 +696,39 @@ that derived work, such as Unicode length counts and bounded-snippet
 truncation, only inside the guarded match arm, so a disabled subscriber pays
 nothing beyond the initial branch.
 
+
+#### Benchmarking the observer boundary
+
+The `benches/wrap_observer.rs` Criterion benchmark protects that invariant.
+Run it with:
+
+```sh
+make bench
+
+
+# or, equivalently:
+cargo bench --features bench-internals --bench wrap_observer
+```
+
+The `bench-internals` feature exposes `#[doc(hidden)]` shims in
+`src/wrap/bench_internals.rs`; it is never enabled in production. The benchmark
+covers three cases over large, realistic wrapping inputs (prose mixed with
+inline links, inline code, and footnote references):
+
+- `wrap_text_realistic_document` — the public `wrap_text` path over a
+  multi-paragraph document, which always runs through `TracingObserver`.
+- `inline_wrapping/observer_none` — the inline hot path with no observer
+  attached (`ObserverHandle` is `None`), the pure-domain baseline.
+- `inline_wrapping/tracing_observer_disabled` — the same inline input through
+  `TracingObserver` with no DEBUG or TRACE subscriber installed.
+
+The last two cases should measure the same: with tracing disabled, the derived
+Unicode length counts and snippet truncation must stay inside `TracingObserver`
+behind its `tracing::enabled!` gates, so the adapter adds no per-event work
+beyond one branch. A widening gap between `observer_none` and
+`tracing_observer_disabled` signals that derived-payload work has leaked back
+onto the hot path.
+
 ### Security considerations
 
 Tracing events must not include raw document content. Record bounded metadata

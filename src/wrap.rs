@@ -405,3 +405,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "bench-internals")]
+#[doc(hidden)]
+pub mod bench_internals;
