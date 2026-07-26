@@ -245,8 +245,12 @@ proptest! {
             "wrapped checklist item inserted a space after the opening fence: {:?}",
             output
         );
+        // Check the actual closing fence (immediately after `--flag`). Matching
+        // on `format!("{command} `")` would collide with the opening fence when
+        // `before` ends with the same letters as `command` (e.g. before "aqu",
+        // command "qu" both yield "qu `" around the opener), a false positive.
         prop_assert!(
-            !rendered.contains(format!("{command} `").as_str()),
+            !rendered.contains("--flag `"),
             "wrapped checklist item inserted a space before the closing fence: {:?}",
             output
         );

@@ -956,6 +956,41 @@ rather than removal (see `docs/execplans/check-option.md`, the "keep
 `googletest`, `pretty_assertions`, and `rstest-bdd` despite the review's
 objection" entry).
 
+
+### Inline classification observer boundary
+
+The `Observer` trait in
+[src/wrap/observer.rs](../src/wrap/observer.rs) is the sole boundary between
+inline-wrapping domain logic (tokenizing, span grouping, and fragment
+classification under `src/wrap/tokenize/` and `src/wrap/inline/`) and any
+diagnostics backend. Domain helpers never reference `tracing` directly; they
+emit a domain-level `Event` through a `&mut ObserverHandle<'_>` — an alias for
+`Option<&mut dyn Observer>` — threaded through the wrapping pipeline. `Event`
+variants carry only cheap, borrowed data: indices, flags, and `&str` slices.
+`TracingObserver` in
+[src/wrap/tracing_adapter.rs](../src/wrap/tracing_adapter.rs) is the only
+adapter and translates each `Event` into the crate's `tracing` records; it
+owns every vendor-specific concern, including the `tracing::enabled!` level
+gate and any derived value that costs more than a copy. `NoOpObserver`, also
+declared in `observer.rs`, is `#[cfg(test)]`-only and discards every event.
+
+This is the abstraction's ownership and reuse policy, per the
+abstraction/port/helper policy in `AGENTS.md`:
+
+- **Ownership:** the `Observer` port and the `Event`/`FragmentKind` types are
+  owned by `crate::wrap`. They are not exposed outside the crate.
+- **Permitted call sites:** only the inline wrapping, tokenizing, and
+  classification domain helpers under `src/wrap/tokenize/` and
+  `src/wrap/inline/` may accept an `ObserverHandle` parameter and call
+  `observer.observe(...)`.
+- **Composition rule:** when a new diagnostics need arises, add an `Event`
+  variant and a matching arm in `TracingObserver::observe`. Do not import
+  `tracing` into a domain module, and do not add a second adapter; if another
+  backend is ever required, it must implement `Observer` rather than
+  replacing `TracingObserver` inline.
+
+See [ADR 0006](adrs/0006-observer-boundary-for-tracing.md) for the rationale.
+
 ### Log levels
 
 Use `debug!` for high-value classification outcomes: fragment kind, parsed
@@ -1052,6 +1087,7 @@ Table: Structured field names emitted by tracing instrumentation.
 | `row_index`       | `usize`         | table-row events                                        | Zero-based index of the parsed logical row                |
 | `cell_count`      | `usize`         | table-row events                                        | Number of cells in the parsed logical row                 |
 | `error_category`  | `&str`, Debug   | declined, discarded, replacement, and analysis failures | Stable category or I/O error kind for a failure           |
+| `result`          | `bool`          | `footnote reference checked`                            | Whether the checked token is a footnote reference         |
 | `attempt`         | `u32`           | `replace_file` events                                   | Zero-based index of the temporary-file creation attempt   |
 | `bytes`           | `usize`         | `replace_file` events                                   | Byte length of the formatted replacement that was written |
 | `line_len`        | `usize`         | blockquote-prefix events                                | Byte length of the examined source line                   |
@@ -1063,10 +1099,20 @@ Table: Structured field names emitted by tracing instrumentation.
 | `open_marker_len` | `usize`         | fence-state events                                      | Length of the active opening fence marker                 |
 | `transition`      | `&str`          | fence-state events                                      | Stable fence-state transition category                    |
 
-For example:
+For example, a domain helper emits a borrowed event without touching
+`tracing`:
 
 ```rust
-debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified");
+observer.observe(Event::FragmentClassified { token, kind });
+```
+
+`TracingObserver` then gates and enriches it:
+
+```rust
+Event::FragmentClassified { token, kind } if tracing::enabled!(tracing::Level::DEBUG) => {
+    let (snippet, truncated) = trace_text_snippet(token);
+    debug!(token = %snippet, truncated, kind = ?kind, "fragment classified");
+}
 ```
 
 ### Metrics
@@ -1162,7 +1208,12 @@ tests do the same for `mdtablefix_run_total`.
 
 Guard any expression that performs non-trivial work with
 `tracing::enabled!(Level::DEBUG)` or `tracing::enabled!(Level::TRACE)` before
-computing the value.
+computing the value. Domain emitters hand `TracingObserver` only cheap
+borrowed data — indices, flags, and `&str` slices copied by reference — never
+a pre-computed `chars().count()` or truncated snippet. The adapter performs
+that derived work, such as Unicode length counts and bounded-snippet
+truncation, only inside the guarded match arm, so a disabled subscriber pays
+nothing beyond the initial branch.
 
 ### Security considerations
 
@@ -1173,27 +1224,48 @@ table-row, or token text.
 
 ### Instrumented functions
 
-Functions decorated with `#[tracing::instrument]` are listed below with their
-level and notable fields. Update this list when adding new instrumented entry
-points.
+The inline-wrapping, tokenizing, and classification helpers under
+`src/wrap/tokenize/` and `src/wrap/inline/` are no longer decorated with
+`#[tracing::instrument]`; they emit `Event` values through the `Observer`
+port described in
+["Inline classification observer boundary"](#inline-classification-observer-boundary)
+instead. The instrumented entry points that remain all sit outside the wrap
+domain, at the reflow, I/O, metrics, and process boundaries. Update the tables
+below when adding new domain events or new instrumented entry points.
 
 Table: Instrumented functions and their logging levels and fields.
 
-| Function                  | Level        | Fields                                                                                            |
-| ------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
-| `looks_like_footnote_ref` | trace        | `skip(token)`, return value (out)                                                                 |
-| `ends_with_footnote_ref`  | trace        | `skip(token)`, return value (out)                                                                 |
-| `ends_with_hyphen_prefix` | trace        | `skip(token)`, return value (out)                                                                 |
-| `is_month_name`           | trace        | `skip(token)`, return value (out)                                                                 |
-| `is_ordinal_day`          | trace        | `skip(token)`, return value (out)                                                                 |
-| `is_numeric_day`          | trace        | `skip(token)`, return value (out)                                                                 |
-| `is_year`                 | trace        | `skip(token)`, return value (out)                                                                 |
-| `try_match_date_sequence` | trace, debug | `start` (in), `skip(tokens)`, return value (out); matched date pattern                            |
-| `date_token_span`         | trace        | `start` (in), `skip(tokens)`, return value (out); over-width date fallback remains behaviour-only |
-| `parse_link_or_image`     | debug        | `idx` (in), `skip(text)`; `token_length` and `is_image` events                                    |
-| `find_footnote_end`       | trace        | `idx` (in), `skip(text)`, return value (out)                                                      |
-| `parse_rows`              | trace, debug | `skip(trimmed)`; `row_index`, `cell_count`, and `error_category` events                           |
-| `replace_file`            | debug        | `path` (in); emits the in-place rewrite events                                                    |
+| Function                   | Level        | Fields                                                                  |
+| -------------------------- | ------------ | ----------------------------------------------------------------------- |
+| `parse_rows`               | trace, debug | `skip(trimmed)`; `row_index`, `cell_count`, and `error_category` events |
+| `replace_file`             | debug        | `path` (in); emits the in-place rewrite events                          |
+| `replace_file_if_unchanged`| debug        | `path` (in); emits the in-place rewrite events                          |
+| `record_analysis`          | debug        | `mode`, `path` (in); `outcome`, `elapsed_seconds` (recorded)            |
+| `GitLsFiles::run`          | debug        | span `git`: `operation` (in); `outcome`, `elapsed_seconds` (recorded)   |
+
+Table: Domain events and their tracing output.
+
+| Event                     | tracing message                  | Level | Fields                                         |
+| ------------------------- | -------------------------------- | ----- | ---------------------------------------------- |
+| `FootnoteReferenceParsed` | `footnote reference parsed`      | debug | `token_length`                                 |
+| `LinkOrImageParsed`       | `link or image parsed`           | debug | `token_length`, `is_image`                     |
+| `FootnoteEndNotFound`     | `footnote end not found`         | trace | `start`, `reason`                              |
+| `FootnoteLabelRecognized` | `footnote label span recognized` | trace | `start`, `end`, `token_length`                 |
+| `FootnoteRefChecked`      | `footnote reference checked`     | trace | `token_length`, `result`                       |
+| `DateSequenceMatched`     | `matched date sequence`          | debug | `start`, `end`                                 |
+| `FragmentClassified`      | `fragment classified`            | debug | `token` (bounded snippet), `truncated`, `kind` |
+
+`FootnoteReferenceParsed` and `LinkOrImageParsed` are emitted from
+`parse_link_or_image` and `find_footnote_end` in
+`src/wrap/tokenize/parsing.rs`; `FootnoteEndNotFound` and
+`FootnoteLabelRecognized` are emitted from `find_footnote_end` in the same
+module. `FootnoteRefChecked` is emitted from `looks_like_footnote_ref` and
+`ends_with_footnote_ref` in `src/wrap/inline/predicates.rs`.
+`DateSequenceMatched` is emitted from `date_token_span` in
+`src/wrap/inline/span_helpers.rs`; the over-width date fallback remains
+behaviour-only and emits no event. `FragmentClassified` is emitted from
+`InlineFragment::new_observed` and `classify_fragment` in
+`src/wrap/inline/fragment.rs`.
 
 ### Tracing-event snapshot tests
 
