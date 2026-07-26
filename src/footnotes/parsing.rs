@@ -38,8 +38,15 @@ pub(super) struct DefinitionParts<'a> {
 
 /// Extracts the parts of a definition header without allocating its slices.
 ///
-/// Invalid numeric identifiers are rejected so callers can rely on a valid
-/// mapping key when assigning sequential numbers.
+/// `line` is a definition header when it matches [`DEF_RE`]: an optional
+/// blockquote prefix (`>` markers with surrounding whitespace), a `[^N]:`
+/// marker bearing a decimal footnote number, and the body following the colon.
+/// The returned [`DefinitionParts`] borrows `prefix` and `rest` from `line`.
+///
+/// Returns [`None`] when `line` is not a definition header, or when the
+/// captured number does not parse as a [`usize`]. Rejecting invalid numeric
+/// identifiers lets callers rely on a valid mapping key when assigning
+/// sequential numbers.
 pub(super) fn parse_definition(line: &str) -> Option<DefinitionParts<'_>> {
     DEF_RE.captures(line).and_then(|caps| {
         let number = caps["num"].parse::<usize>().ok()?;
@@ -51,10 +58,13 @@ pub(super) fn parse_definition(line: &str) -> Option<DefinitionParts<'_>> {
     })
 }
 
-/// Reports whether a line can continue an indented footnote definition.
+/// Reports whether `line` can continue an indented footnote definition.
 ///
-/// Any leading whitespace qualifies; blank lines are handled separately by
-/// block scanners because they can separate adjacent definitions.
+/// Returns `true` when the first character of `line` is whitespace, marking
+/// indented body text that belongs to the definition above it. An empty `line`
+/// has no leading character and so returns `false`; blank lines are handled
+/// separately by block scanners because they can separate adjacent
+/// definitions.
 #[inline]
 pub(super) fn is_definition_continuation(line: &str) -> bool {
     line.chars().next().is_some_and(char::is_whitespace)
