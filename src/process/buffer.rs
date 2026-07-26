@@ -65,6 +65,16 @@ impl ProcessBuffer {
     /// lines into the output.
     pub(super) fn into_out(self) -> Vec<String> { self.out }
 
+    /// Drains any buffered lines into `out`, reflowing them as a table when
+    /// the run was recognised as one.
+    ///
+    /// Upholds the buffer invariant that `buf` is empty and `in_table` is
+    /// `false` on return, so the next line starts a fresh detection window.
+    /// Ellipsis replacement is applied here, *before* [`reflow_table`], because
+    /// the substitution must reach the cell text while it is still row-shaped;
+    /// running it after reflow would have to re-parse the emitted table. An
+    /// empty buffer short-circuits so ordering against [`push_out`](Self::push_out)
+    /// is preserved without emitting a spurious blank flush.
     pub(super) fn flush(&mut self) {
         debug!(
             in_table = self.in_table,
@@ -88,11 +98,26 @@ impl ProcessBuffer {
         self.in_table = false;
     }
 
+    /// Emits `line` verbatim after first flushing any pending table.
+    ///
+    /// The flush is mandatory: a verbatim line (a code fence, for instance)
+    /// closes whatever table run preceded it, and appending it directly to
+    /// `out` without flushing would let it jump ahead of buffered rows that
+    /// belong earlier in the document. Flushing first keeps source ordering
+    /// intact.
     pub(super) fn push_verbatim(&mut self, line: &str) {
         self.flush();
         self.out.push(line.to_string());
     }
 
+    /// Consumes a code-fence marker line, returning `true` when it was handled.
+    ///
+    /// A fence marker can never be part of a table, so it must terminate the
+    /// current run; the line is emitted through [`push_verbatim`](Self::push_verbatim)
+    /// so the pending table flushes first and ordering is preserved. Non-marker
+    /// lines return `false` immediately, signalling the caller to fall through
+    /// to its in-fence and table-detection handling; this method deliberately
+    /// makes no decision about lines *inside* a fence.
     pub(super) fn handle_fence_line(&mut self, line: &str, is_fence_marker: bool) -> bool {
         if !is_fence_marker {
             return false;
@@ -102,6 +127,19 @@ impl ProcessBuffer {
         true
     }
 
+    /// Routes a non-fence line through table detection, buffering it or handing
+    /// it back for verbatim emission.
+    ///
+    /// Returns `None` when the line has been absorbed into the pending table
+    /// run (`buf`), and `Some(line)` when the caller should emit it after the
+    /// buffer has been flushed. The invariant is that `buf` only ever holds
+    /// genuine table rows: every path that meets a line which cannot belong to
+    /// the current table flushes before yielding it, so a stray row can never
+    /// make [`reflow_table`] bail on an otherwise valid table. The ordering of
+    /// the guards is load-bearing — indented code blocks and block boundaries
+    /// (see the inline comments) must be recognised *before* the permissive
+    /// pipe heuristic, which would otherwise swallow lines that merely happen
+    /// to contain a `|`.
     pub(super) fn handle_table_line(&mut self, line: String) -> Option<String> {
         // A leading indent of four or more columns marks a Markdown indented
         // code block, so such a line must stay verbatim and never enter table
