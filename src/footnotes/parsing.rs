@@ -30,6 +30,14 @@ pub(super) struct DefinitionParts<'a> {
 ///
 /// Returns [`None`] when `line` is not a definition, or when the captured
 /// number does not parse as a [`usize`].
+///
+/// # Examples
+///
+/// ```text
+/// "[^1]: See the note."  => Some { prefix: "", number: 1, rest: " See the note." }
+/// "> > [^2]: Nested."     => Some { prefix: "> > ", number: 2, rest: " Nested." }
+/// "    indented body"     => None  // no `[^N]:` marker
+/// ```
 pub(super) fn parse_definition(line: &str) -> Option<DefinitionParts<'_>> {
     DEF_RE.captures(line).and_then(|caps| {
         let number = caps["num"].parse::<usize>().ok()?;
@@ -47,6 +55,15 @@ pub(super) fn parse_definition(line: &str) -> Option<DefinitionParts<'_>> {
 /// indented body text that belongs to the definition above it rather than
 /// beginning a new construct. An empty `line` has no leading character and so
 /// returns `false`.
+///
+/// # Examples
+///
+/// ```text
+/// "    continued text" => true   // leading whitespace
+/// "\tcontinued text"   => true   // leading tab
+/// "[^1]: definition"   => false  // starts a new definition
+/// ""                   => false  // no leading character
+/// ```
 #[inline]
 pub(super) fn is_definition_continuation(line: &str) -> bool {
     line.chars().next().is_some_and(char::is_whitespace)
