@@ -97,22 +97,26 @@ mod proptests {
         ) {
             let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
             let out = normalise_event_lines(&refs, &message);
-            // Independently derive the expected, ordered normalisation.
-            let expected: Vec<String> = refs
+            // The ordered subsequence of input lines that should survive.
+            let matched: Vec<&str> = refs
                 .iter()
+                .copied()
                 .filter(|line| line.contains(message.as_str()))
-                .map(|line| stable_event_start(line).trim_end().to_string())
                 .collect();
 
-            if expected.is_empty() {
+            if matched.is_empty() {
                 prop_assert!(out.is_empty());
             } else {
                 let segments: Vec<&str> = out.split('\n').collect();
                 // Count check: neither invents nor drops lines.
-                prop_assert_eq!(segments.len(), expected.len());
-                for (segment, want) in segments.iter().zip(expected.iter()) {
-                    // Content check: the normalised segment matches in order.
-                    prop_assert_eq!(*segment, want.as_str());
+                prop_assert_eq!(segments.len(), matched.len());
+                for (segment, line) in segments.iter().zip(matched.iter()) {
+                    // Content check: the segment is the matched line with its
+                    // volatile prefix stripped and trailing whitespace trimmed.
+                    prop_assert_eq!(*segment, stable_event_start(line).trim_end());
+                    // Provenance check (independent of the helper's internals):
+                    // the segment is a trailing slice of its matched input line.
+                    prop_assert!(line.trim_end().ends_with(segment));
                     // Trim check: no trailing whitespace survives.
                     prop_assert_eq!(*segment, segment.trim_end());
                 }
