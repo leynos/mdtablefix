@@ -1215,7 +1215,6 @@ that derived work, such as Unicode length counts and bounded-snippet
 truncation, only inside the guarded match arm, so a disabled subscriber pays
 nothing beyond the initial branch.
 
-
 #### Benchmarking the observer boundary
 
 The `benches/wrap_observer.rs` Criterion benchmark protects that invariant.

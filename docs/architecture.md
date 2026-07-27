@@ -710,7 +710,6 @@ lines bypass the inline wrapping path and are emitted unchanged.
 The helper `html_table_to_markdown` is retained for backward compatibility but
 is deprecated. New code should call `convert_html_tables` instead.
 
-
 ### Observer boundary for inline diagnostics
 
 The tokenizing and classification helpers in the wrap sequence above —
