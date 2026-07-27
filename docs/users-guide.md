@@ -24,9 +24,9 @@ Pipe-looking lines indented by four or more columns are preserved as indented
 code blocks. For example, a source line with four leading spaces before
 `| not | a table |` is emitted verbatim rather than being table-reflowed.
 
-Content inside fenced code blocks is treated the same way. A line beginning
-with `|` inside such a block — for example a shell pipeline continuation such
-as `| tee /tmp/test.log` — is never treated as a Markdown table row and never
+Content inside fenced code blocks is treated the same way. A line beginning with
+`|` inside such a block — for example a shell pipeline continuation such as
+`| tee /tmp/test.log` — is never treated as a Markdown table row and never
 gains an appended trailing `|`.
 
 Literal pipe characters inside cells must be written as `\|`. `mdtablefix`

@@ -12,11 +12,10 @@ Issue: <https://github.com/leynos/mdtablefix/issues/373>
 
 A line inside a code block that begins with `|` — for example a shell pipeline
 continuation such as `| tee /tmp/test.log` (indented under the pipeline) — was
-being treated as a
-Markdown table row and "balanced" with an appended trailing `|`. The result,
-`| tee /tmp/test.log |`, is an unterminated shell pipeline that hangs or errors
-when copied and run. markdownlint does not catch the corruption, so it ships
-silently.
+being treated as a Markdown table row and "balanced" with an appended trailing
+`|`. The result, `| tee /tmp/test.log |`, is an unterminated shell pipeline
+that hangs or errors when copied and run. markdownlint does not catch the
+corruption, so it ships silently.
 
 After this change, content inside indented and fenced code blocks is treated as
 literal. A leading `|` in a code block is never rewritten with a trailing `|`,
@@ -37,7 +36,8 @@ pipeline.
 
 - Multi-row or multi-column degenerate tables (without a separator) keep their
   current behaviour; only the lone single-cell candidate is newly guarded.
-- Whitespace-only info strings on a closing fence still close the fence, matching
+- Whitespace-only info strings on a closing fence still close the fence,
+  matching
   CommonMark's "spaces and tabs are ignored" allowance.
 
 ## Risks

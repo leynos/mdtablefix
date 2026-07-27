@@ -25,14 +25,13 @@
   shell pipeline continuations such as `| tee /tmp/test.log` are no longer
   corrupted into unterminated pipelines. A same-marker line carrying an info
   string is now treated as literal content rather than a closing fence, per
-  CommonMark.
-  ([#373](https://github.com/leynos/mdtablefix/issues/373))
+  CommonMark. ([#373](https://github.com/leynos/mdtablefix/issues/373))
 - Reflow the prose following a joined cross-line inline-code span in the same
   `--wrap` pass, so formatter output is immediately idempotent.
   ([#375](https://github.com/leynos/mdtablefix/issues/375))
 - Preserve authored line boundaries inside a cross-line inline-code span when
-  joining it would exceed the wrap width and every authored source line
-  already fits within that width, preventing new MD013 violations.
+  joining it would exceed the wrap width and every authored source line already
+  fits within that width, preventing new MD013 violations.
   ([#370](https://github.com/leynos/mdtablefix/issues/370))
 - Document `--wrap` as a parameterless 80-column flag.
   ([#388](https://github.com/leynos/mdtablefix/issues/388))
