@@ -32,13 +32,17 @@ const PROHIBITED_DIAGNOSTIC: &str = "static regular expressions must use lazy_re
 ///
 ///   * `lazylock_direct`           — `LazyLock::new(|| Regex::new(...))`
 ///   * `lazylock_qualified`        — `std::sync::LazyLock::new(|| Regex::new(...))`
+///   * `lazylock_move`             — `LazyLock::new(move || Regex::new(...))`
 ///   * `once_cell_lazy_direct`     — `Lazy::new(|| Regex::new(...))`
 ///   * `once_cell_lazy_qualified`  — `once_cell::sync::Lazy::new(|| Regex::new(...))`
+///   * `once_cell_lazy_move`       — `once_cell::sync::Lazy::new(move || Regex::new(...))`
 const PROHIBITED_FORMS: &[&str] = &[
     "lazylock_direct",
     "lazylock_qualified",
+    "lazylock_move",
     "once_cell_lazy_direct",
     "once_cell_lazy_qualified",
+    "once_cell_lazy_move",
 ];
 
 fn manifest_dir() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
@@ -64,15 +68,18 @@ fn scan_dir_with(label: &str) -> TempDir {
 fn run_guard(scan_dir: &Path, rg: Option<&Path>) -> std::process::Output {
     let mut cmd = Command::new(script_path());
     cmd.arg(scan_dir);
-    if let Some(rg) = rg {
-        cmd.env("RG", rg);
-    }
+    // Control the ripgrep dependency explicitly: override it for `Some`, and
+    // clear any ambient `RG` for `None` so default-path runs are deterministic.
+    match rg {
+        Some(rg) => cmd.env("RG", rg),
+        None => cmd.env_remove("RG"),
+    };
     cmd.output()
         .expect("failed to execute check-static-regexes.sh")
 }
 
 #[rstest]
-fn rejects_prohibited_lazy_wrapper_form(#[values(0, 1, 2, 3)] index: usize) {
+fn rejects_prohibited_lazy_wrapper_form(#[values(0, 1, 2, 3, 4, 5)] index: usize) {
     let label = PROHIBITED_FORMS[index];
     let dir = scan_dir_with(label);
 

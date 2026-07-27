@@ -12,7 +12,9 @@
 # Usage: check-static-regexes.sh [SCAN_DIR]
 #
 # SCAN_DIR defaults to the current directory. The RG environment variable
-# overrides the ripgrep executable (default: `rg`).
+# overrides the ripgrep command (default: `rg`). It is split on whitespace, so
+# it may carry arguments — for example `RG='rg --pcre2'` — matching the way the
+# Makefile's `$(RG)` expansion behaved before the scan was extracted here.
 #
 # Exit status:
 #   0  no prohibited declaration found
@@ -20,16 +22,17 @@
 #   *  ripgrep failed to scan (diagnostic on stderr; rg's status propagated)
 set -euo pipefail
 
-RG="${RG:-rg}"
+read -r -a rg_cmd <<<"${RG:-rg}"
 scan_dir="${1:-.}"
 
 # `(?:[[:alnum:]_]+::)*` absorbs any module qualification (for example the
 # `once_cell::sync::` in `once_cell::sync::Lazy::new`), so both the direct and
 # fully qualified spellings of each supported constructor are rejected.
-pattern='\bstatic\b[^;=]*=\s*(?:[[:alnum:]_]+::)*(?:LazyLock|Lazy)::new\s*\(\s*\|\|\s*(\{\s*)?(?:[[:alnum:]_]+::)*Regex::new'
+# `(?:move\s+)?` covers `move` closures such as `LazyLock::new(move || ...)`.
+pattern='\bstatic\b[^;=]*=\s*(?:[[:alnum:]_]+::)*(?:LazyLock|Lazy)::new\s*\(\s*(?:move\s+)?\|\|\s*(\{\s*)?(?:[[:alnum:]_]+::)*Regex::new'
 
 status=0
-"$RG" -U --glob '*.rs' "$pattern" "$scan_dir" || status=$?
+"${rg_cmd[@]}" -U --glob '*.rs' "$pattern" "$scan_dir" || status=$?
 case $status in
 	0) echo "static regular expressions must use lazy_regex!"; exit 1 ;;
 	1) exit 0 ;;
