@@ -68,13 +68,15 @@ impl ProcessBuffer {
     /// Drains any buffered lines into `out`, reflowing them as a table when
     /// the run was recognised as one.
     ///
-    /// Upholds the buffer invariant that `buf` is empty and `in_table` is
-    /// `false` on return, so the next line starts a fresh detection window.
+    /// When the buffer is non-empty this upholds the invariant that `buf` is
+    /// empty and `in_table` is `false` on return, so the next line starts a
+    /// fresh detection window. An empty buffer short-circuits and leaves
+    /// `in_table` untouched: with nothing to drain there is no run to close, so
+    /// flushing is a no-op that preserves ordering against
+    /// [`push_out`](Self::push_out) without emitting a spurious blank flush.
     /// Ellipsis replacement is applied here, *before* [`reflow_table`], because
     /// the substitution must reach the cell text while it is still row-shaped;
-    /// running it after reflow would have to re-parse the emitted table. An
-    /// empty buffer short-circuits so ordering against [`push_out`](Self::push_out)
-    /// is preserved without emitting a spurious blank flush.
+    /// running it after reflow would have to re-parse the emitted table.
     pub(super) fn flush(&mut self) {
         debug!(
             in_table = self.in_table,
