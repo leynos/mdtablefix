@@ -585,6 +585,15 @@ global subscriber or metrics recorder. Executables and test harnesses that want
 log output must install their own subscriber (e.g.
 `tracing_subscriber::fmt::init()` in `main`).
 
+`tracing-test` is enabled with its `no-env-filter` feature. By default
+`#[traced_test]` installs a per-crate environment filter that only captures
+events emitted from the test's own crate, so an integration test under `tests/`
+would silently miss events emitted from the `mdtablefix` library crate and its
+`logs_contain(...)` assertions would fail even when the event fires. The
+`no-env-filter` feature removes that filter, so integration-level traced tests
+observe the library's instrumentation. Keep this feature enabled when adding
+end-to-end traced tests that assert on library events.
+
 ### Log levels
 
 Use `debug!` for high-value classification outcomes: fragment kind, parsed
