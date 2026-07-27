@@ -19,9 +19,10 @@ proptest! {
             "  concluding words extend the same list item.".to_string(),
         ];
 
-        let once = wrap_text(&input, width);
         let joined_span = format!("`{code_first} {code_second}`");
         prop_assume!(UnicodeWidthStr::width(joined_span.as_str()) <= width - 2);
+
+        let once = wrap_text(&input, width);
         prop_assert!(once.iter().any(|line| line.contains(&joined_span)));
         for word in tail.split_whitespace() {
             prop_assert!(

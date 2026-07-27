@@ -5,7 +5,13 @@
 //! markers, isolating that logic from the buffer-management code in the parent
 //! module.
 
-use super::{ParagraphWriter, PrefixLine, continuation_prefix_for, wrap_preserving_code};
+use super::{
+    ParagraphWriter,
+    PrefixLine,
+    continuation_prefix_for,
+    hard_break::trailing_hard_break_marker_len,
+    wrap_preserving_code,
+};
 
 impl ParagraphWriter<'_> {
     /// Intentionally splits in two stages and rewraps the tail independently,
@@ -66,6 +72,11 @@ impl ParagraphWriter<'_> {
         tail_segment.clear();
     }
 
+    /// Appends a two-space hard-break marker to the last emitted line,
+    /// mutating it in place rather than pushing a new line. Does nothing if
+    /// `out` is empty. An odd trailing-backslash run is treated as an
+    /// existing hard break (via `trailing_hard_break_marker_len`), so such a
+    /// line is left untouched.
     pub(in crate::wrap) fn ensure_trailing_hard_break_on_last_line(&mut self) {
         if let Some(last) = self.out.last_mut()
             && trailing_hard_break_marker_len(last) == 0
@@ -73,15 +84,4 @@ impl ParagraphWriter<'_> {
             last.push_str("  ");
         }
     }
-}
-
-fn trailing_hard_break_marker_len(line: &str) -> usize {
-    if line.ends_with("  ") {
-        return 2;
-    }
-    line.chars()
-        .rev()
-        .take_while(|character| *character == '\\')
-        .count()
-        % 2
 }

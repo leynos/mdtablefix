@@ -12,6 +12,7 @@ use unicode_width::UnicodeWidthStr;
 use super::{inline::wrap_preserving_code, tokenize::parse_open_code_span};
 
 mod code_span_trim;
+mod hard_break;
 mod pending;
 mod spanning_code;
 mod tail_reflow;

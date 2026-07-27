@@ -10,6 +10,7 @@ use std::ops::Range;
 use tracing::trace;
 use unicode_width::UnicodeWidthStr;
 
+use super::hard_break::trailing_hard_break_marker_len;
 use crate::wrap::{
     inline::wrap_preserving_code,
     tokenize::{has_odd_backslash_escape_bytes, position_after_close},
@@ -240,7 +241,7 @@ fn append_prose(lines: &mut Vec<String>, after: &str, width: usize) {
 
 fn restore_last_hard_break(lines: &mut [String]) {
     if let Some(line) = lines.last_mut()
-        && !line.ends_with("  ")
+        && trailing_hard_break_marker_len(line) == 0
     {
         line.push_str("  ");
     }
