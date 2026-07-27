@@ -193,8 +193,11 @@ impl FenceTracker {
         let marker_ch = chars.next().expect("FENCE_RE guarantees a non-empty fence");
         let marker_len = chars.count() + 1;
         // CommonMark forbids an info string on a closing fence: a same-marker
-        // line carrying trailing text is literal content, not a close.
-        let closes_fence = info.trim().is_empty();
+        // line carrying trailing text is literal content, not a close. Only
+        // ASCII spaces and tabs may follow a closing marker, so avoid the
+        // Unicode-aware `trim`, which would wrongly accept a no-break space
+        // (U+00A0) or form feed (U+000C) as blank trailing whitespace.
+        let closes_fence = info.bytes().all(|b| b == b' ' || b == b'\t');
 
         match self.state {
             Some(open)

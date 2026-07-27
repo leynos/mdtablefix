@@ -5,6 +5,7 @@
 //! Provides helpers used by the `reflow` module and `reflow_table` itself.
 
 use regex::Regex;
+use tracing::debug;
 
 static ESCAPED_PIPE_RE: std::sync::LazyLock<Regex> =
     lazy_regex!(r"\\\|", "escaped table pipe pattern should compile");
@@ -159,6 +160,12 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
     let (sep_cells, sep_row_idx) = crate::reflow::detect_separator(sep_line, &rows, max_cols);
     let cleaned = crate::reflow::clean_rows(rows);
     if rows_mismatched(&cleaned, split_within_line) {
+        debug!(
+            reason = "rows_mismatched",
+            row_count = cleaned.len(),
+            has_separator = sep_cells.is_some(),
+            "table candidate rejected"
+        );
         return None;
     }
     let mut output_rows = cleaned.clone();
@@ -173,6 +180,12 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
         && output_rows.len() == 1
         && output_rows.first().is_some_and(|row| row.len() == 1)
     {
+        debug!(
+            reason = "lone_single_cell",
+            row_count = output_rows.len(),
+            has_separator = sep_cells.is_some(),
+            "table candidate rejected"
+        );
         return None;
     }
     Some(ParsedTable {

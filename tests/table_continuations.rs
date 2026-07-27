@@ -1,6 +1,7 @@
 //! Regression tests for Markdown tables that use continuation rows.
 
 use mdtablefix::{Options, process_stream, process_stream_opts, reflow_table};
+use proptest::prelude::*;
 use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
 
@@ -216,6 +217,20 @@ fn process_stream_preserves_indented_pipe_continuation() {
         "Done.",
     ];
     assert_eq!(process_stream(&input), input);
+}
+
+proptest! {
+    /// A single pipe-prefixed line whose sole cell is ordinary content — no
+    /// embedded pipe and not a separator run — is not a table and must pass
+    /// through `reflow_table` unchanged, never gaining a trailing pipe.
+    #[test]
+    fn reflow_table_passes_arbitrary_lone_single_cell_through(
+        content in "[A-Za-z0-9][A-Za-z0-9 ./_-]{0,30}",
+    ) {
+        let input = vec![format!("| {content}")];
+        let output = reflow_table(&input);
+        prop_assert_eq!(output, input);
+    }
 }
 
 #[test]
