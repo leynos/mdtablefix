@@ -266,15 +266,17 @@ Text.
 
 ## Footnotes
 
- [^1]: First note
+ 1. First note
 
- [^2]: Second note
+ 2. Second note
 
-[^10]: Final note
+10. Final note
 ```
 
-`convert_footnotes` only processes the final contiguous numeric list that
-immediately follows an H2 heading when these conditions are met.
+After:
+
+```markdown
+Text.
 
 ## Footnotes
 
@@ -610,7 +612,6 @@ lines bypass the inline wrapping path and are emitted unchanged.
 
 The helper `html_table_to_markdown` is retained for backward compatibility but
 is deprecated. New code should call `convert_html_tables` instead.
-
 
 ### Observer boundary for inline diagnostics
 

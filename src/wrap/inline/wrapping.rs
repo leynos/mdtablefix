@@ -321,9 +321,17 @@ fn render_line(
 /// rendered back into `Vec<String>` output lines. `width` is measured in
 /// Unicode display columns and must be at least one effective column after any
 /// caller prefix handling. This helper never panics for valid input.
-#[cfg(test)]
+///
+/// This is the production entry point used across the paragraph-wrapping
+/// helpers. It centralises the observer wiring by translating inline
+/// classification events through a [`TracingObserver`], so callers never
+/// construct an observer themselves and every wrapped paragraph passes through
+/// the same boundary. With no DEBUG or TRACE subscriber installed the adapter's
+/// level gates suppress all derived work.
+///
+/// [`TracingObserver`]: crate::wrap::tracing_adapter::TracingObserver
 pub(in crate::wrap) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
-    let mut observer = crate::wrap::observer::NoOpObserver;
+    let mut observer = crate::wrap::tracing_adapter::TracingObserver;
     wrap_preserving_code_observed(text, width, &mut Some(&mut observer))
 }
 

@@ -585,7 +585,6 @@ global subscriber or metrics recorder. Executables and test harnesses that want
 log output must install their own subscriber (e.g.
 `tracing_subscriber::fmt::init()` in `main`).
 
-
 ### Inline classification observer boundary
 
 The `Observer` trait in
@@ -695,7 +694,6 @@ a pre-computed `chars().count()` or truncated snippet. The adapter performs
 that derived work, such as Unicode length counts and bounded-snippet
 truncation, only inside the guarded match arm, so a disabled subscriber pays
 nothing beyond the initial branch.
-
 
 #### Benchmarking the observer boundary
 

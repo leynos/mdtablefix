@@ -38,11 +38,16 @@ pub(in crate::wrap::inline) use predicates::{
 /// line when `current` is empty.
 #[cfg(test)]
 pub(super) use test_support::attach_punctuation_to_previous_line;
+#[cfg(test)]
+pub(super) use wrapping::determine_token_span;
 // Public wrapping entry points, defined in `wrapping` and surfaced here so
 // `paragraph` and the wrap test suites keep using `inline::…` paths.
+pub(super) use wrapping::wrap_preserving_code;
+// The observer-threaded entry point is only reached directly by the
+// benchmark-only shims in `bench_internals`; production code goes through
+// `wrap_preserving_code`, which wires up the `TracingObserver`.
+#[cfg(feature = "bench-internals")]
 pub(super) use wrapping::wrap_preserving_code_observed;
-#[cfg(test)]
-pub(super) use wrapping::{determine_token_span, wrap_preserving_code};
 
 #[cfg(test)]
 mod date_strategies;

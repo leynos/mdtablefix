@@ -9,11 +9,7 @@ use code_span_trim::trim_code_span_edge_spaces;
 use tracing::trace;
 use unicode_width::UnicodeWidthStr;
 
-use super::{
-    inline::wrap_preserving_code_observed,
-    tokenize::parse_open_code_span,
-    tracing_adapter::TracingObserver,
-};
+use super::{inline::wrap_preserving_code, tokenize::parse_open_code_span};
 
 mod code_span_trim;
 mod hard_break;
@@ -32,17 +28,6 @@ pub(super) use pending::{
 #[cfg(test)]
 #[path = "paragraph_tests.rs"]
 mod tests;
-
-/// Wraps `text` at `available` columns, translating inline-classification
-/// events through a `TracingObserver`.
-///
-/// This centralises the observer wiring shared by the prefixed-wrapping helpers
-/// so the `TracingObserver` construction and `wrap_preserving_code_observed`
-/// call live in exactly one place.
-fn wrap_observed(text: &str, available: usize) -> Vec<String> {
-    let mut observer = TracingObserver;
-    wrap_preserving_code_observed(text, available, &mut Some(&mut observer))
-}
 /// Carries the parsed prefix metadata for a line that should be wrapped.
 pub(super) struct PrefixLine<'a> {
     /// Stores the literal prefix emitted on the first wrapped line.
@@ -152,7 +137,7 @@ impl<'a> ParagraphWriter<'a> {
     fn wrap_with_prefix(&mut self, prefix: &str, continuation_prefix: &str, text: &str) {
         let prefix_width = UnicodeWidthStr::width(prefix);
         let available = self.width.saturating_sub(prefix_width).max(1);
-        let lines = wrap_observed(text, available);
+        let lines = wrap_preserving_code(text, available);
         if lines.is_empty() {
             self.out.push(prefix.to_string());
             return;
@@ -189,7 +174,7 @@ impl<'a> ParagraphWriter<'a> {
         let continuation_prefix =
             continuation_prefix_for(prefix, line.repeat_prefix, line.outer_prefix.as_deref());
 
-        let lines = wrap_observed(line.rest, available);
+        let lines = wrap_preserving_code(line.rest, available);
         if lines.is_empty() {
             self.out.push(prefix.to_string());
             return;
