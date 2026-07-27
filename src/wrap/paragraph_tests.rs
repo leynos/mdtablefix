@@ -7,6 +7,7 @@
 use std::borrow::Cow;
 
 use proptest::prelude::*;
+use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
 
 use super::{
@@ -15,6 +16,7 @@ use super::{
     ParagraphWriter,
     PendingPrefix,
     PrefixLine,
+    TailReflow,
     pending_prefix_for_next_segment,
 };
 
@@ -34,45 +36,38 @@ fn wrap_with_prefix_uses_continuation_prefix_on_wrapped_lines() {
     assert_eq!(out, vec!["> alpha beta".to_string(), "  gamma".to_string()]);
 }
 
-#[test]
-fn handle_prefix_line_can_repeat_or_change_the_continuation_prefix() {
+#[rstest]
+#[case::plain_list(14, "- [ ] ", "alpha beta", false, None, "- [ ] alpha\n      beta")]
+#[case::repeated_quote(10, "> ", "alpha beta gamma", true, None, "> alpha\n> beta\n> gamma")]
+#[case::quoted_list(
+    10,
+    "> - ",
+    "alpha beta gamma",
+    false,
+    Some("> "),
+    "> - alpha\n>   beta\n>   gamma"
+)]
+fn handle_prefix_line_can_repeat_or_change_the_continuation_prefix(
+    #[case] width: usize,
+    #[case] prefix: &str,
+    #[case] rest: &str,
+    #[case] repeat_prefix: bool,
+    #[case] outer_prefix: Option<&str>,
+    #[case] expected: &str,
+) {
     let mut out = Vec::new();
-    let mut writer = ParagraphWriter::new(&mut out, 14);
+    let mut writer = ParagraphWriter::new(&mut out, width);
     let mut state = ParagraphState::default();
     writer.handle_prefix_line(
         &mut state,
         &PrefixLine {
-            prefix: Cow::Borrowed("- [ ] "),
-            rest: "alpha beta",
-            repeat_prefix: false,
-            outer_prefix: None,
+            prefix: Cow::Borrowed(prefix),
+            rest,
+            repeat_prefix,
+            outer_prefix: outer_prefix.map(Cow::Borrowed),
         },
     );
-    assert_eq!(
-        out,
-        vec!["- [ ] alpha".to_string(), "      beta".to_string()]
-    );
-
-    let mut quoted_out = Vec::new();
-    let mut quoted_writer = ParagraphWriter::new(&mut quoted_out, 10);
-    let mut quoted_state = ParagraphState::default();
-    quoted_writer.handle_prefix_line(
-        &mut quoted_state,
-        &PrefixLine {
-            prefix: Cow::Borrowed("> "),
-            rest: "alpha beta gamma",
-            repeat_prefix: true,
-            outer_prefix: None,
-        },
-    );
-    assert_eq!(
-        quoted_out,
-        vec![
-            "> alpha".to_string(),
-            "> beta".to_string(),
-            "> gamma".to_string(),
-        ]
-    );
+    assert_eq!(out.join("\n"), expected);
 }
 
 #[test]
@@ -158,5 +153,6 @@ fn pending_prefix(prefix: &str, repeat_prefix: bool) -> PendingPrefix {
         open_fence_len: Some(1),
         continuation_mode: ContinuationMode::Normalize,
         used_prefix: false,
+        tail_reflow: TailReflow::Allowed,
     }
 }

@@ -21,6 +21,7 @@ use super::{
         ParagraphWriter,
         PendingPrefix,
         PrefixLine,
+        TailReflow,
         pending_prefix_for_next_segment,
     },
     tokenize,
@@ -98,14 +99,34 @@ pub(super) fn apply_continuation_chunk(
         return;
     }
     match update_span_state(text, continuation_offset, pending) {
-        SpanStateUpdate::StillOpen => {}
+        SpanStateUpdate::StillOpen => {
+            if pending.continuation_mode == ContinuationMode::VerbatimFlush {
+                pending.tail_reflow = TailReflow::Disallowed;
+                trace!(
+                    mode = ?pending.continuation_mode,
+                    boundary = "span_still_open",
+                    line_count = pending.original_lines.len(),
+                    "disabled pending-prefix tail reflow"
+                );
+            }
+        }
         SpanStateUpdate::ClosedAndReopened { split_at, new_len } => {
+            pending.tail_reflow = TailReflow::Disallowed;
+            trace!(
+                mode = ?pending.continuation_mode,
+                boundary = "span_reopened",
+                offset = split_at,
+                line_count = pending.original_lines.len(),
+                "disabled pending-prefix tail reflow after a reopened span"
+            );
             if reopen_pending_span(writer, pending, split_at, new_len) {
                 writer.flush_paragraph(state);
             }
         }
         SpanStateUpdate::Flush => {
-            writer.flush_paragraph(state);
+            if hard_break || pending.tail_reflow == TailReflow::Disallowed {
+                writer.flush_paragraph(state);
+            }
         }
     }
 }

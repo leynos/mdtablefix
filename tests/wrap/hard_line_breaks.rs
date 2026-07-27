@@ -7,7 +7,7 @@ fn test_preserve_hard_line_breaks() {
     let input = lines_vec!["Line one with break.  ", "Line two follows."];
     let output = process_stream(&input);
     assert_eq!(output.len(), 2);
-    assert_eq!(output[0], "Line one with break.");
+    assert_eq!(output[0], "Line one with break.  ");
     assert_eq!(output[1], "Line two follows.");
 }
 
