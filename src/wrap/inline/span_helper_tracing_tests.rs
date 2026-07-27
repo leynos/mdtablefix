@@ -86,11 +86,14 @@ fn grouping_boundary_logs_declined_footnote_coupling(
         .iter()
         .map(|token| (*token).to_string())
         .collect::<Vec<_>>();
-    let (end, _width) = determine_token_span(&tokens, 0);
-    // Observable edge-case result: a declined coupling leaves the footnote
-    // reference outside the returned span rather than grouping it.
+    let (end, width) = determine_token_span(&tokens, 0);
+    // Observable edge-case result: a declined coupling groups only the leading
+    // "word" span, leaving the footnote reference outside the returned span.
+    let grouped = tokens[..end].join("");
+    assert_eq!(grouped, "word");
+    assert_eq!(width, 4);
     assert!(
-        !tokens[..end].join("").contains("[^note]"),
+        !grouped.contains("[^note]"),
         "declined coupling must not group the footnote reference",
     );
     assert!(logs_contain(&format!(

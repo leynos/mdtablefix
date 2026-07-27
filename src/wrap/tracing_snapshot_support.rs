@@ -88,6 +88,8 @@ mod proptests {
 
         /// `normalise_event_lines` keeps exactly the lines containing `message`,
         /// leaves no trailing whitespace, and neither invents nor drops lines.
+        /// Each output segment must equal the stable-prefix slice of its
+        /// corresponding matching line, trailing whitespace trimmed.
         #[test]
         fn normalise_event_lines_filters_and_trims(
             lines in prop::collection::vec("[^\n]*", 0..8),
@@ -95,14 +97,24 @@ mod proptests {
         ) {
             let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
             let out = normalise_event_lines(&refs, &message);
-            let matching = refs.iter().filter(|l| l.contains(message.as_str())).count();
+            // Independently derive the expected, ordered normalisation.
+            let expected: Vec<String> = refs
+                .iter()
+                .filter(|line| line.contains(message.as_str()))
+                .map(|line| stable_event_start(line).trim_end().to_string())
+                .collect();
 
-            if matching == 0 {
+            if expected.is_empty() {
                 prop_assert!(out.is_empty());
             } else {
-                prop_assert_eq!(out.split('\n').count(), matching);
-                for segment in out.split('\n') {
-                    prop_assert_eq!(segment, segment.trim_end());
+                let segments: Vec<&str> = out.split('\n').collect();
+                // Count check: neither invents nor drops lines.
+                prop_assert_eq!(segments.len(), expected.len());
+                for (segment, want) in segments.iter().zip(expected.iter()) {
+                    // Content check: the normalised segment matches in order.
+                    prop_assert_eq!(*segment, want.as_str());
+                    // Trim check: no trailing whitespace survives.
+                    prop_assert_eq!(*segment, segment.trim_end());
                 }
             }
         }
