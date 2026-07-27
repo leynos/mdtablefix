@@ -21,6 +21,12 @@
 
 ### Fixed
 
+- Stop appending a trailing `|` to lone pipe-prefixed lines in code blocks, so
+  shell pipeline continuations such as `| tee /tmp/test.log` are no longer
+  corrupted into unterminated pipelines. A same-marker line carrying an info
+  string is now treated as literal content rather than a closing fence, per
+  CommonMark.
+  ([#373](https://github.com/leynos/mdtablefix/issues/373))
 - Document `--wrap` as a parameterless 80-column flag.
   ([#388](https://github.com/leynos/mdtablefix/issues/388))
 - Keep reference-style links atomic while wrapping, so an opening bracket cannot

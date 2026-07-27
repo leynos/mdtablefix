@@ -185,19 +185,26 @@ impl FenceTracker {
             self.state = None;
         }
 
-        let Some((_indent, fence, _info)) = parsed else {
+        let Some((_indent, fence, info)) = parsed else {
             return false;
         };
 
         let mut chars = fence.chars();
         let marker_ch = chars.next().expect("FENCE_RE guarantees a non-empty fence");
         let marker_len = chars.count() + 1;
+        // CommonMark forbids an info string on a closing fence: a same-marker
+        // line carrying trailing text is literal content, not a close. Only
+        // ASCII spaces and tabs may follow a closing marker, so avoid the
+        // Unicode-aware `trim`, which would wrongly accept a no-break space
+        // (U+00A0) or form feed (U+000C) as blank trailing whitespace.
+        let closes_fence = info.bytes().all(|b| b == b' ' || b == b'\t');
 
         match self.state {
             Some(open)
                 if depth == open.open_depth
                     && marker_ch == open.marker
-                    && marker_len >= open.marker_len =>
+                    && marker_len >= open.marker_len
+                    && closes_fence =>
             {
                 debug!(
                     transition = "matching_close",
@@ -208,6 +215,21 @@ impl FenceTracker {
                     "fence state changed"
                 );
                 self.state = None;
+            }
+            Some(open)
+                if depth == open.open_depth
+                    && marker_ch == open.marker
+                    && marker_len >= open.marker_len =>
+            {
+                trace!(
+                    transition = "unchanged",
+                    reason = "closing_fence_has_info_string",
+                    depth,
+                    open_depth = open.open_depth,
+                    marker_len,
+                    open_marker_len = open.marker_len,
+                    "fence marker did not change state"
+                );
             }
             Some(open) => {
                 trace!(

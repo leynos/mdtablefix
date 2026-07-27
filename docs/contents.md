@@ -49,6 +49,8 @@
   matrix coverage.
 - [Nested code block handling](execplans/issue-262-nested-code-block-handling.md):
   Plan for nested code block handling.
+- [Code-block pipe lines](execplans/issue-373-code-block-pipe-line-trailing-pipe.md):
+  Plan for stopping code-block pipe lines from gaining a trailing pipe.
 - [Wrapping replacement](execplans/replace-bespoke-wrapping-with-textwrap-and-unicode-width.md):
   Plan for replacing bespoke wrapping internals with `textwrap` and
   `unicode-width`.

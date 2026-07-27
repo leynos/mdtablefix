@@ -1,6 +1,7 @@
 //! Regression tests for Markdown tables that use continuation rows.
 
 use mdtablefix::{Options, process_stream, process_stream_opts, reflow_table};
+use proptest::prelude::*;
 use rstest::rstest;
 use unicode_width::UnicodeWidthStr;
 
@@ -190,4 +191,59 @@ fn reflow_table_uses_unicode_display_widths(#[case] input: Vec<String>) {
     let output = reflow_table(&input);
 
     assert_uniform_display_widths(&output);
+}
+
+#[test]
+fn reflow_table_passes_single_pipe_line_through_verbatim() {
+    // A lone pipe-prefixed content line (for example a shell pipeline
+    // continuation) is not a table. It must pass through `reflow_table`
+    // unchanged rather than gaining a fabricated trailing pipe.
+    let input = lines_vec!["| tee /tmp/test.log"];
+    assert_eq!(reflow_table(&input), input);
+}
+
+#[test]
+fn process_stream_preserves_indented_pipe_continuation() {
+    // The reported reproduction: an indented (code block) shell pipeline whose
+    // continuation line begins with `|`. The block is literal, so the pipe line
+    // must not be reflowed into a table row, and the whole document is
+    // idempotent under the full stream pipeline.
+    let input = lines_vec![
+        "Run the helper:",
+        "",
+        "    timeout 300 make test 2>&1 \\",
+        "        | tee /tmp/test.log",
+        "",
+        "Done.",
+    ];
+    assert_eq!(process_stream(&input), input);
+}
+
+proptest! {
+    /// A single pipe-prefixed line whose sole cell is ordinary content — no
+    /// embedded pipe and not a separator run — is not a table and must pass
+    /// through `reflow_table` unchanged, never gaining a trailing pipe.
+    #[test]
+    fn reflow_table_passes_arbitrary_lone_single_cell_through(
+        content in "[A-Za-z0-9][A-Za-z0-9 ./_-]{0,30}",
+    ) {
+        let input = vec![format!("| {content}")];
+        let output = reflow_table(&input);
+        prop_assert_eq!(output, input);
+    }
+}
+
+#[test]
+fn process_stream_keeps_pipe_line_in_fenced_block_with_info_string() {
+    // A same-marker line bearing an info string is literal content, not a
+    // closing fence (CommonMark). The fence stays open through the pipe line,
+    // which must therefore remain verbatim rather than becoming a table row.
+    let input = lines_vec![
+        "```rust",
+        "let table = build();",
+        "```rust extra info",
+        "| tee /tmp/test.log",
+        "```",
+    ];
+    assert_eq!(process_stream(&input), input);
 }

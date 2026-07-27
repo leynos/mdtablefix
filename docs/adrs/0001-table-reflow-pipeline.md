@@ -19,6 +19,13 @@ continuation-row fixes exposed three coupled failure modes:
 These regressions produced malformed tables and markdownlint failures,
 including inconsistent column counts and separator widths.
 
+A further false positive surfaced later:
+
+- A degenerate candidate consisting of a single pipe-prefixed line with no
+  separator row, such as a shell pipeline continuation (`| tee /tmp/test.log`)
+  inside a code block, was treated as a one-cell table and reformatted with a
+  fabricated trailing `|`, corrupting otherwise literal content.
+
 ## Decision
 
 The table reflow pipeline now follows these rules:
@@ -35,6 +42,9 @@ The table reflow pipeline now follows these rules:
   columns at a minimum width of three dashes while preserving alignment markers.
 - Apply ellipsis replacement to buffered table lines before calling
   `reflow_table`, so the formatter sees the final cell contents.
+- Enforce a minimum-structure guard in `reflow_table`: a candidate with no
+  separator row that resolves to a single row of a single cell is not a table
+  and is returned unchanged rather than reformatted.
 
 ## Consequences
 
@@ -48,3 +58,6 @@ The table reflow pipeline now follows these rules:
 - The parser carries a private marker for leading empty continuation cells and
   re-escapes literal pipes in non-leading cells during row rebuilding, which
   keeps the behaviour deterministic and testable.
+- Degenerate single-cell candidates with no separator row are returned
+  unchanged, so stray pipe-prefixed lines (for example shell pipeline
+  continuations in code blocks) are never fabricated into one-cell tables.

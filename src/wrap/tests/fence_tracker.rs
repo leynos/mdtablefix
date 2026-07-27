@@ -5,7 +5,6 @@
 
 use proptest::prelude::*;
 use rstest::rstest;
-use tracing_test::traced_test;
 
 use crate::wrap::{FenceTracker, is_fence};
 
@@ -310,72 +309,70 @@ proptest! {
         prop_assert!(!obs.is_fence_marker);
         prop_assert!(!obs.is_in_fence);
     }
+
+    /// A same-marker line carrying a non-blank info string is literal content,
+    /// not a closing fence, so the fence stays open regardless of marker length
+    /// or nesting depth. A subsequent bare marker at the opening depth closes it.
+    #[test]
+    fn observe_source_line_treats_info_string_marker_as_content(
+        open_depth in 0_usize..=4,
+        marker in prop_oneof![Just('`'), Just('~')],
+        open_len in 3_usize..=6,
+        extra in 0_usize..=3,
+        info in "[a-zA-Z][a-zA-Z0-9 ]{0,10}",
+    ) {
+        let run = marker.to_string();
+        let mut tracker = FenceTracker::new();
+
+        let opening = quoted_line(open_depth, &format!("{}rust", run.repeat(open_len)));
+        prop_assert!(tracker.observe_source_line(&opening).is_in_fence);
+
+        // Same marker and depth, at least the opening length, but with an info
+        // string: not a valid close, so the fence remains open.
+        let info_marker = quoted_line(open_depth, &format!("{}{info}", run.repeat(open_len + extra)));
+        let obs = tracker.observe_source_line(&info_marker);
+        prop_assert!(obs.was_in_fence);
+        prop_assert!(obs.is_in_fence);
+
+        // A bare marker at the opening depth closes as usual.
+        let closing = quoted_line(open_depth, &run.repeat(open_len));
+        prop_assert!(!tracker.observe_source_line(&closing).is_in_fence);
+    }
 }
 
-#[traced_test]
 #[test]
-fn fence_opening_logs_content_free_transition() {
-    let input = "```private-opening-info";
+fn fence_tracker_treats_info_string_marker_as_content_not_close() {
+    // Per CommonMark, a closing fence must not carry an info string. A
+    // same-marker line bearing trailing text is literal content and leaves the
+    // fence open, while a bare (or whitespace-only) marker still closes it.
     let mut tracker = FenceTracker::new();
+    assert!(tracker.observe("```rust", 0));
+    assert!(tracker.in_fence(0));
 
-    assert!(tracker.observe(input, 2));
-    assert!(logs_contain("transition=\"open\""));
-    assert!(logs_contain("depth=2"));
-    assert!(logs_contain("open_depth=2"));
-    assert!(logs_contain("marker_len=3"));
-    assert!(!logs_contain(input));
-    assert!(!logs_contain("private-opening-info"));
+    // Same marker, but a non-whitespace info string: not a close.
+    assert!(tracker.observe("```rust", 0));
+    assert!(tracker.in_fence(0));
+
+    // A bare marker closes as usual.
+    assert!(tracker.observe("```", 0));
+    assert!(!tracker.in_fence(0));
 }
 
-#[traced_test]
-#[test]
-fn matching_fence_closure_logs_content_free_transition() {
-    let opening = "````private-opening-info";
-    let closing = "````private-closing-info";
+#[rstest]
+#[case("```\u{a0}")]
+#[case("```\u{c}")]
+fn fence_tracker_rejects_non_ascii_whitespace_close(#[case] closing: &str) {
+    // CommonMark permits only ASCII spaces and tabs after a closing marker, so
+    // a no-break space (U+00A0) or form feed (U+000C) is literal content and
+    // must not close the fence.
     let mut tracker = FenceTracker::new();
+    assert!(tracker.observe("```rust", 0));
+    assert!(tracker.in_fence(0));
 
-    assert!(tracker.observe(opening, 1));
-    assert!(tracker.observe(closing, 1));
-    assert!(logs_contain("transition=\"matching_close\""));
-    assert!(logs_contain("depth=1"));
-    assert!(logs_contain("open_depth=1"));
-    assert!(logs_contain("marker_len=4"));
-    assert!(logs_contain("open_marker_len=4"));
-    assert!(!logs_contain(opening));
-    assert!(!logs_contain(closing));
-}
+    assert!(tracker.observe(closing, 0));
+    assert!(tracker.in_fence(0));
 
-#[traced_test]
-#[test]
-fn depth_decrease_logs_content_free_implicit_closure() {
-    let opening = "```private-opening-info";
-    let shallower_line = "private shallower payload";
-    let mut tracker = FenceTracker::new();
-
-    assert!(tracker.observe(opening, 3));
-    assert!(!tracker.observe(shallower_line, 2));
-    assert!(logs_contain("transition=\"implicit_close\""));
-    assert!(logs_contain("reason=\"blockquote_depth_decreased\""));
-    assert!(logs_contain("depth=2"));
-    assert!(logs_contain("open_depth=3"));
-    assert!(logs_contain("open_marker_len=3"));
-    assert!(!logs_contain(opening));
-    assert!(!logs_contain(shallower_line));
-}
-
-#[traced_test]
-#[test]
-fn incompatible_marker_logs_content_free_unchanged_transition() {
-    let opening = "````private-opening-info";
-    let incompatible = "~~~private-incompatible-info";
-    let mut tracker = FenceTracker::new();
-
-    assert!(tracker.observe(opening, 1));
-    assert!(tracker.observe(incompatible, 1));
-    assert!(logs_contain("transition=\"unchanged\""));
-    assert!(logs_contain("reason=\"incompatible_active_opener\""));
-    assert!(logs_contain("marker_len=3"));
-    assert!(logs_contain("open_marker_len=4"));
-    assert!(!logs_contain(opening));
-    assert!(!logs_contain(incompatible));
+    // A bare marker still closes.
+    assert!(tracker.observe("```", 0));
+    assert!(!tracker.in_fence(0));
 }

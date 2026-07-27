@@ -24,6 +24,11 @@ Pipe-looking lines indented by four or more columns are preserved as indented
 code blocks. For example, a source line with four leading spaces before
 `| not | a table |` is emitted verbatim rather than being table-reflowed.
 
+Content inside fenced code blocks is treated the same way. A line beginning
+with `|` inside such a block — for example a shell pipeline continuation such
+as `| tee /tmp/test.log` — is never treated as a Markdown table row and never
+gains an appended trailing `|`.
+
 Literal pipe characters inside cells must be written as `\|`. `mdtablefix`
 preserves that escaping during reflow, so a literal pipe remains part of the
 cell content rather than being interpreted as a column boundary.
@@ -238,6 +243,12 @@ normalization would turn an inner literal fence into a structural close, the
 outer fence is kept, so the inner content remains literal. Preservation applies
 when the inner fence uses the same marker character as the outer fence, or when
 a tilde outer fence wraps a literal inner backtick fence.
+
+A fence closes only on a bare marker line (`` ``` `` or `~~~`) optionally
+followed by ASCII spaces or tabs. A same-marker line that also carries an info
+string — trailing non-whitespace text — is literal content rather than a
+closing fence, per CommonMark. This keeps pipe lines and other content inside
+such blocks verbatim.
 
 If a language specifier starts a block, either at the start of the file or
 immediately after a blank line, and appears before the next unlabelled opening

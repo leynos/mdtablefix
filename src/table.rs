@@ -5,6 +5,7 @@
 //! Provides helpers used by the `reflow` module and `reflow_table` itself.
 
 use regex::Regex;
+use tracing::debug;
 
 static ESCAPED_PIPE_RE: std::sync::LazyLock<Regex> =
     lazy_regex!(r"\\\|", "escaped table pipe pattern should compile");
@@ -159,11 +160,33 @@ fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<P
     let (sep_cells, sep_row_idx) = crate::reflow::detect_separator(sep_line, &rows, max_cols);
     let cleaned = crate::reflow::clean_rows(rows);
     if rows_mismatched(&cleaned, split_within_line) {
+        debug!(
+            reason = "rows_mismatched",
+            row_count = cleaned.len(),
+            has_separator = sep_cells.is_some(),
+            "table candidate rejected"
+        );
         return None;
     }
     let mut output_rows = cleaned.clone();
     if let Some(idx) = sep_index_within(sep_row_idx, output_rows.len()) {
         output_rows.remove(idx);
+    }
+    // A lone single-cell candidate with no separator row is not a table: it is a
+    // stray pipe-prefixed line, such as a shell pipeline continuation inside a
+    // code block. Formatting it would fabricate a trailing pipe, so treat it as
+    // structurally insufficient and return the input unchanged.
+    if sep_cells.is_none()
+        && output_rows.len() == 1
+        && output_rows.first().is_some_and(|row| row.len() == 1)
+    {
+        debug!(
+            reason = "lone_single_cell",
+            row_count = output_rows.len(),
+            has_separator = sep_cells.is_some(),
+            "table candidate rejected"
+        );
+        return None;
     }
     Some(ParsedTable {
         output_rows,
@@ -288,6 +311,16 @@ mod tests {
         let sep_cells = vec!["---".to_string()];
 
         assert!(format_separator_cells(&[3, 4], &sep_cells).is_empty());
+    }
+
+    #[test]
+    fn reflow_table_returns_lone_single_cell_line_unchanged() {
+        // A single pipe-prefixed line with no separator row is a stray pipe
+        // (for example a shell pipeline continuation), not a table. It must pass
+        // through verbatim rather than gaining a fabricated trailing pipe.
+        let lines = vec!["| tee /tmp/test.log".to_string()];
+
+        assert_eq!(reflow_table(&lines), lines);
     }
 
     #[test]
