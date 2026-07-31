@@ -102,24 +102,27 @@ fn is_element(handle: &Handle, tag: &str) -> bool {
 /// Returns `true` if `handle` represents a `<td>` or `<th>` element.
 fn is_table_cell(handle: &Handle) -> bool { is_element(handle, "td") || is_element(handle, "th") }
 
-/// Walks the DOM tree collecting `<table>` nodes under `handle`.
-fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
-    if is_element(handle, "table") {
-        tables.push(handle.clone());
+/// Walks the DOM tree in pre-order, cloning nodes that satisfy `pred` into `out`.
+fn collect_matching<F>(handle: &Handle, pred: F, out: &mut Vec<Handle>)
+where
+    F: Fn(&Handle) -> bool + Copy,
+{
+    if pred(handle) {
+        out.push(handle.clone());
     }
     for child in handle.children.borrow().iter() {
-        collect_tables(child, tables);
+        collect_matching(child, pred, out);
     }
+}
+
+/// Walks the DOM tree collecting `<table>` nodes under `handle`.
+fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
+    collect_matching(handle, |node| is_element(node, "table"), tables);
 }
 
 /// Collects all `<tr>` nodes beneath `handle`.
 fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
-    if is_element(handle, "tr") {
-        rows.push(handle.clone());
-    }
-    for child in handle.children.borrow().iter() {
-        collect_rows(child, rows);
-    }
+    collect_matching(handle, |node| is_element(node, "tr"), rows);
 }
 
 fn is_bold_tag(tag: &str) -> bool {
