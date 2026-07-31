@@ -26,6 +26,7 @@ output and most test fixtures.
 │   ├── developers-guide.md
 │   ├── documentation-style-guide.md
 │   ├── repository-layout.md
+│   ├── whitaker-users-guide.md
 │   └── users-guide.md
 ├── src/
 │   ├── fences/
@@ -69,6 +70,8 @@ _Figure 1: Simplified repository tree._
   the Markdown processing pipeline.
 - `docs/documentation-style-guide.md`: Documentation style rules imported from
   the shared Rust agent template.
+- `docs/whitaker-users-guide.md`: Imported Whitaker lint reference, including
+  crate-level and path-level filesystem exclusion configuration.
 - `docs/adrs/`: Accepted architecture decision records. Add narrow decision
   records here when design choices need a durable audit trail.
 - `docs/execplans/`: Living execution plans and roadmap documents for larger
@@ -98,8 +101,9 @@ _Figure 1: Simplified repository tree._
 
 - `tests/*.rs`: Integration and behavioural tests for command-line workflows
   and Markdown transformations.
-- `tests/common/`: Shared integration test support. Keep helpers explicit and
-  avoid direct environment mutation.
+- `tests/common/`: Shared integration test support. `fs.rs` owns temporary
+  directory capability setup; keep other helpers explicit and avoid direct
+  environment mutation.
 - `tests/cli_matrix/`: Matrix-test support for command-line option combinations
   and invariants.
 - `tests/data/`: Input and expected-output fixtures. Treat these as reviewable

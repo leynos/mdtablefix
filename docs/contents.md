@@ -40,6 +40,8 @@
   Rust documentation tests that avoid brittle or misleading examples.
 - [Rust testing with rstest fixtures](rust-testing-with-rstest-fixtures.md):
   Reference for the fixture and parameterization patterns used in tests.
+- [Whitaker user's guide](whitaker-users-guide.md): Imported reference for
+  Whitaker lints, including path-level `no_std_fs_operations` exclusions.
 - [Trailing spaces](trailing-spaces.md): Notes on preserving Markdown hard line
   breaks and other trailing-space-sensitive content.
 
