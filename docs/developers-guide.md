@@ -77,6 +77,14 @@ restores the separator row with widths derived from the final table body.
   use this macro and supply a descriptive expect message that identifies the
   pattern whose compilation failed.
 
+`src/html.rs`:
+
+- `collect_matching`: Performs the canonical pre-order, depth-first DOM
+  traversal and clones each matching handle into the supplied output vector.
+  `collect_tables` and `collect_rows` delegate their predicates to this helper;
+  all new DOM collection must reuse it rather than introduce another recursive
+  walker.
+
 `src/textproc.rs`:
 
 - `leading_indent(s: &str) -> &str`: Returns the leading whitespace prefix of
@@ -873,6 +881,10 @@ buffered lines are converted by `table_lines_to_markdown` and the buffer is
 cleared. `flush_raw` exists for the fenced-block escape path: it emits the
 buffered lines verbatim without conversion, so raw HTML inside a fenced code
 block is preserved unchanged.
+
+DOM conversion uses `collect_tables` and `collect_rows` as semantic entry
+points. Both delegate traversal to the canonical `collect_matching` walker, so
+pre-order traversal, handle cloning, and child borrowing remain consistent.
 
 ### 1.4. `DefinitionScanState` (`src/footnotes/renumber/definitions.rs`)
 

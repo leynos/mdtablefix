@@ -102,6 +102,10 @@ fn is_element(handle: &Handle, tag: &str) -> bool {
 /// Returns `true` if `handle` represents a `<td>` or `<th>` element.
 fn is_table_cell(handle: &Handle) -> bool { is_element(handle, "td") || is_element(handle, "th") }
 
+/// DOM input is unbounded; bounded model checking is not a good fit for
+/// verifying traversal over arbitrary tree depth. Property tests cover
+/// invariants via random small-tree generation instead.
+///
 /// Walks the DOM tree in pre-order, cloning nodes that satisfy `pred` into `out`.
 fn collect_matching<F>(handle: &Handle, pred: F, out: &mut Vec<Handle>)
 where
