@@ -13,7 +13,7 @@ label spans, and matched date sequences. This coupled parsing and
 classification helpers — code whose correctness is independent of any
 logging vendor — to a specific observability crate. It also pushed
 `tracing::enabled!` level gates and derived-value computation (Unicode
-`chars().count()` scans, bounded snippet truncation) into the same functions
+`chars().count()` scans) into the same functions
 that decide fragment boundaries, making it harder to unit test the domain
 logic without a `tracing` subscriber and harder to change logging behaviour
 without touching parsing code.
@@ -40,8 +40,10 @@ constructing an event costs no more than a few copies.
 `src/wrap/tracing_adapter.rs` and translates each `Event` into the crate's
 existing `tracing` records. It owns every vendor-specific concern: the
 `tracing::enabled!` level gate for each event and any derived value that
-costs more than a copy, such as `chars().count()` or the bounded-snippet
-truncation used for `fragment classified`. A `#[cfg(test)]`-only
+costs more than a copy, such as the `chars().count()` used to report
+`token_length`. Diagnostics are metadata-only: the adapter derives bounded
+values from the borrowed token text but never records the text itself, so no
+raw document content reaches a subscriber. A `#[cfg(test)]`-only
 `NoOpObserver` in `observer.rs` discards every event for tests that need an
 `ObserverHandle` without a subscriber.
 

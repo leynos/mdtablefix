@@ -9,9 +9,9 @@
 //!
 //! The two wrapping shims expose the crate-internal
 //! `wrap_preserving_code_observed` entry point so the benchmark can prove that,
-//! with tracing disabled, the adapter adds no derived-payload work (Unicode
-//! length counts and snippet truncation) beyond a single `tracing::enabled!`
-//! branch per event.
+//! with tracing disabled, the adapter performs no derived-payload work (such as
+//! Unicode length counts): the residual cost is bounded by one dynamic dispatch,
+//! event match, and `tracing::enabled!` check per event.
 
 use super::{inline::wrap_preserving_code_observed, tracing_adapter::TracingObserver};
 
@@ -37,10 +37,16 @@ pub fn wrap_with_tracing_observer(text: &str, width: usize) -> Vec<String> {
 }
 
 /// Number of paragraphs in [`realistic_markdown_document`].
-const DOCUMENT_PARAGRAPHS: usize = 60;
+///
+/// Exposed so fixture tests can assert every generated construct, not just the
+/// first.
+pub const DOCUMENT_PARAGRAPHS: usize = 60;
 
 /// Number of clauses in [`large_inline_paragraph`].
-const INLINE_CLAUSES: usize = 120;
+///
+/// Exposed so fixture tests can assert every generated construct, not just the
+/// first.
+pub const INLINE_CLAUSES: usize = 120;
 
 /// Builds a large, realistic multi-line Markdown document that mixes ordinary
 /// prose with inline links, inline code, and footnote references.

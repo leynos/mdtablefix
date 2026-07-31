@@ -2,11 +2,15 @@
 //!
 //! These benchmarks protect the performance invariant introduced with the
 //! observer/tracing adapter (see `docs/adrs/0006-observer-boundary-for-tracing.md`):
-//! with tracing disabled, `TracingObserver` must add no derived-payload work —
-//! Unicode length counts or snippet truncation — beyond a single
-//! `tracing::enabled!` branch per event. Comparing the `observer_none` and
-//! `tracing_observer_disabled` inline cases makes any regression in that
-//! invariant visible as a growing gap between the two.
+//! with tracing disabled, `TracingObserver` must perform no derived-payload
+//! work, such as Unicode length counts.
+//!
+//! `tracing_observer_disabled` is not expected to match `observer_none`
+//! exactly: it still pays a dynamic dispatch, an `Event` match, and one
+//! `tracing::enabled!` check per event. The invariant is that this residual
+//! overhead stays small and roughly constant per event instead of scaling with
+//! token length, so treat the pair as a bounded-overhead check rather than an
+//! equality check.
 //!
 //! Run with:
 //!
