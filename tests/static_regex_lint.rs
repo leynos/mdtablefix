@@ -15,13 +15,18 @@
 //! tests copy each fixture into a temporary directory as a `.rs` file before
 //! scanning.
 
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::process::Command;
 
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, PermissionsExt as _},
+};
 use rstest::rstest;
-use tempfile::TempDir;
+
+#[path = "common/fs.rs"]
+mod test_fs;
+use test_fs::TestDir;
 
 /// The diagnostic emitted when a prohibited declaration is found.
 const PROHIBITED_DIAGNOSTIC: &str = "static regular expressions must use lazy_regex!";
@@ -45,20 +50,27 @@ const PROHIBITED_FORMS: &[&str] = &[
     "once_cell_lazy_move",
 ];
 
-fn manifest_dir() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
+fn manifest_path() -> &'static Utf8Path { Utf8Path::new(env!("CARGO_MANIFEST_DIR")) }
 
-fn script_path() -> PathBuf { manifest_dir().join("scripts/check-static-regexes.sh") }
+fn manifest_directory() -> Dir {
+    Dir::open_ambient_dir(manifest_path(), ambient_authority())
+        .expect("failed to open repository root")
+}
+
+fn script_path() -> Utf8PathBuf { manifest_path().join("scripts/check-static-regexes.sh") }
 
 fn fixture(label: &str) -> String {
-    let path = manifest_dir().join(format!("tests/data/static_regex/{label}.rs.txt"));
-    std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("failed to read fixture {}: {e}", path.display()))
+    let path = Utf8PathBuf::from(format!("tests/data/static_regex/{label}.rs.txt"));
+    manifest_directory()
+        .read_to_string(&path)
+        .unwrap_or_else(|error| panic!("failed to read fixture {path}: {error}"))
 }
 
 /// Materialize `label`'s fixture as a `.rs` file inside a fresh temp directory.
-fn scan_dir_with(label: &str) -> TempDir {
-    let dir = TempDir::new().expect("failed to create temp dir");
-    std::fs::write(dir.path().join(format!("{label}.rs")), fixture(label))
+fn scan_dir_with(label: &str) -> TestDir {
+    let dir = TestDir::new().expect("failed to create temp dir");
+    dir.directory()
+        .write(format!("{label}.rs"), fixture(label))
         .expect("failed to write fixture into temp dir");
     dir
 }
@@ -70,8 +82,8 @@ fn scan_dir_with(label: &str) -> TempDir {
 /// `rg --pcre2`); the guard splits it on whitespace. Passing `None` clears any
 /// ambient `RG` so default-path runs exercise the guard's own `rg` default
 /// deterministically.
-fn run_guard(scan_dir: &Path, rg: Option<&str>) -> std::process::Output {
-    let mut cmd = Command::new(script_path());
+fn run_guard(scan_dir: &Utf8Path, rg: Option<&str>) -> std::process::Output {
+    let mut cmd = Command::new(script_path().as_std_path());
     cmd.arg(scan_dir);
     match rg {
         Some(rg) => cmd.env("RG", rg),
@@ -82,16 +94,18 @@ fn run_guard(scan_dir: &Path, rg: Option<&str>) -> std::process::Output {
 }
 
 /// Write `script` to `<dir>/<name>` and mark it executable.
-fn write_stub(dir: &Path, name: &str, script: &str) -> PathBuf {
-    let path = dir.join(name);
-    std::fs::write(&path, script).expect("failed to write stub");
+fn write_stub(dir: &TestDir, name: &str, script: &str) -> Utf8PathBuf {
+    dir.directory()
+        .write(name, script)
+        .expect("failed to write stub");
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+        let permissions = cap_std::fs_utf8::Permissions::from_mode(0o755);
+        dir.directory()
+            .set_permissions(name, permissions)
             .expect("failed to chmod stub");
     }
-    path
+    dir.path().join(name)
 }
 
 #[rstest]
@@ -131,11 +145,11 @@ fn accepts_clean_sources() {
 
 #[test]
 fn propagates_ripgrep_scan_failure() {
-    let dir = TempDir::new().expect("failed to create temp dir");
+    let dir = TestDir::new().expect("failed to create temp dir");
     // A stub standing in for ripgrep that fails with a distinctive status.
-    let stub = write_stub(dir.path(), "rg-stub.sh", "#!/bin/sh\nexit 3\n");
+    let stub = write_stub(&dir, "rg-stub.sh", "#!/bin/sh\nexit 3\n");
 
-    let output = run_guard(dir.path(), Some(&stub.display().to_string()));
+    let output = run_guard(dir.path(), Some(stub.as_str()));
 
     assert_eq!(
         output.status.code(),
@@ -156,20 +170,19 @@ fn propagates_ripgrep_scan_failure() {
 /// own, rather than treating the whole value as one executable name.
 #[test]
 fn preserves_arguments_supplied_through_rg() {
-    let dir = TempDir::new().expect("failed to create temp dir");
+    let dir = TestDir::new().expect("failed to create temp dir");
     let argv_log = dir.path().join("argv.txt");
     // A stub that records its argv, then reports "no matches" so the guard
     // takes its clean-scan path.
     let stub = write_stub(
-        dir.path(),
+        &dir,
         "rg-stub.sh",
         &format!(
-            "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > '{}'\nexit 1\n",
-            argv_log.display()
+            "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > '{argv_log}'\nexit 1\n"
         ),
     );
 
-    let output = run_guard(dir.path(), Some(&format!("{} --pcre2", stub.display())));
+    let output = run_guard(dir.path(), Some(&format!("{stub} --pcre2")));
 
     assert_eq!(
         output.status.code(),
@@ -178,7 +191,9 @@ fn preserves_arguments_supplied_through_rg() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let argv: Vec<String> = std::fs::read_to_string(&argv_log)
+    let argv: Vec<String> = dir
+        .directory()
+        .read_to_string("argv.txt")
         .expect("stub should have recorded its argv")
         .lines()
         .map(str::to_owned)
@@ -194,7 +209,7 @@ fn preserves_arguments_supplied_through_rg() {
     );
     assert_eq!(
         argv.last().map(String::as_str),
-        Some(dir.path().to_str().expect("temp dir path should be UTF-8")),
+        Some(dir.path().as_str()),
         "the scan directory must remain the final argument, got: {argv:?}"
     );
 }

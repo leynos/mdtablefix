@@ -7,14 +7,15 @@
 //! - Processing of Markdown files through the CLI interface
 
 use assert_cmd::Command;
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use camino::Utf8Path;
 use rstest::rstest;
-use tempfile::{TempDir, tempdir};
 
 #[macro_use]
 #[path = "common/mod.rs"]
 mod common;
+#[path = "common/fs.rs"]
+mod test_fs;
+use test_fs::TestDir;
 #[path = "cli/ellipsis.rs"]
 mod ellipsis;
 #[path = "support/fixtures.rs"]
@@ -52,8 +53,9 @@ fn test_cli_version_flag() {
 /// and asserts that the output is the expected fixed table.
 #[rstest]
 fn test_cli_process_file(broken_table: Vec<String>) {
-    let dir = tempdir().expect("failed to create temporary directory");
-    let (directory, parent_path) = capability_directory(&dir);
+    let dir = TestDir::new().expect("failed to create temporary directory");
+    let directory = dir.directory();
+    let parent_path = dir.path();
     let file_name = Utf8Path::new("sample.md");
     directory
         .write(file_name, format!("{}\n", broken_table.join("\n")))
@@ -71,8 +73,9 @@ fn test_cli_process_file(broken_table: Vec<String>) {
 fn cli_output_modes_snapshot_table_prose() {
     let input = include_str!("data/cli-output-parity.dat");
     let expected = include_str!("data/cli-output-parity.expected.md");
-    let dir = tempdir().expect("failed to create temporary directory");
-    let (directory, parent_path) = capability_directory(&dir);
+    let dir = TestDir::new().expect("failed to create temporary directory");
+    let directory = dir.directory();
+    let parent_path = dir.path();
     let stdout_path = parent_path.join("stdout.md");
     let in_place_path = parent_path.join("in-place.md");
     directory
@@ -305,8 +308,9 @@ fn test_cli_footnotes_option() {
 
 /// Executes an in-place rewrite with the provided flags and asserts idempotence.
 fn run_in_place(flags: &[&str], input: &str, expected: &str) {
-    let dir = tempdir().expect("failed to create temporary directory");
-    let (directory, parent_path) = capability_directory(&dir);
+    let dir = TestDir::new().expect("failed to create temporary directory");
+    let directory = dir.directory();
+    let parent_path = dir.path();
     let file_name = Utf8Path::new("sample.md");
     let file_path = parent_path.join(file_name);
     directory
@@ -351,15 +355,6 @@ fn run_in_place(flags: &[&str], input: &str, expected: &str) {
         "output file must end with a trailing newline"
     );
     assert_eq!(out2, out);
-}
-
-/// Opens a temporary directory as the capability-scoped I/O boundary for a test.
-fn capability_directory(tempdir: &TempDir) -> (Dir, Utf8PathBuf) {
-    let path = Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf())
-        .expect("temporary directory path is UTF-8");
-    let directory = Dir::open_ambient_dir(&path, ambient_authority())
-        .expect("failed to open temporary directory");
-    (directory, path)
 }
 
 /// Ensures `--in-place` rewrites files correctly for multiple flag combinations.

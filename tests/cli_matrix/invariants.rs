@@ -1,10 +1,8 @@
 //! Independent output invariants for CLI matrix snapshots.
 
-use std::fs;
+use anyhow::Result;
 
-use anyhow::{Context as _, Result};
-
-use super::{LogicalCase, TransformFlag, fixture_path};
+use super::{LogicalCase, TransformFlag, read_fixture};
 
 const ELLIPSIS_UTF8: &[u8] = b"\xE2\x80\xA6";
 
@@ -15,9 +13,7 @@ struct OrderedMarker {
 
 /// Asserts output properties that prove enabled transforms changed matching input.
 pub(crate) fn assert_transform_invariants(logical: &LogicalCase, stdout: &[u8]) -> Result<()> {
-    let fixture_path = fixture_path(logical.fixture);
-    let fixture = fs::read_to_string(&fixture_path)
-        .with_context(|| format!("read matrix fixture '{}'", fixture_path.display()))?;
+    let fixture = read_fixture(logical.fixture)?;
     let output = String::from_utf8_lossy(stdout);
 
     if logical.flags.contains(&TransformFlag::Ellipsis) && fixture.contains("...") {

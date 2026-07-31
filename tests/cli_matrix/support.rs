@@ -1,17 +1,20 @@
 //! Support types and runners for the CLI matrix integration test.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    process::Output,
-};
+use std::process::Output;
 
 use anyhow::{Context as _, Result};
 use assert_cmd::Command;
-use tempfile::tempdir;
+use camino::{Utf8Path, Utf8PathBuf};
 
+#[path = "fixture_io.rs"]
+mod fixture_io;
 #[path = "invariants.rs"]
 mod invariants;
+#[path = "../common/fs.rs"]
+mod test_fs;
+pub(crate) use fixture_io::{fixture_exists, fixture_path};
+use fixture_io::{manifest_directory, read_fixture};
+use test_fs::TestDir;
 
 /// Represents a non-wrap CLI transform flag.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -293,30 +296,30 @@ pub(crate) fn assert_transform_invariants(logical: &LogicalCase, stdout: &[u8]) 
 /// Copies a matrix fixture into the temporary command directory.
 ///
 /// The staged input preserves the fixture extension for debugging clarity.
-pub(crate) fn stage_fixture(case: &PhysicalCase, dir: &Path) -> Result<PathBuf> {
+pub(crate) fn stage_fixture(case: &PhysicalCase, dir: &TestDir) -> Result<Utf8PathBuf> {
     let fixture = fixture_path(case.logical.fixture);
-    let file_path = dir
-        .join("input")
-        .with_extension(fixture.extension().unwrap_or_default());
-    fs::copy(&fixture, &file_path).with_context(|| {
-        format!(
-            "copy fixture '{}' to '{}'",
-            case.logical.fixture,
-            file_path.display(),
-        )
-    })?;
+    let file_path = Utf8Path::new("input").with_extension(fixture.extension().unwrap_or_default());
+    let contents = manifest_directory()?
+        .read(&fixture)
+        .with_context(|| format!("read fixture '{fixture}'"))?;
+    dir.directory()
+        .write(&file_path, contents)
+        .with_context(|| format!("copy fixture '{}' to '{file_path}'", case.logical.fixture))?;
     Ok(file_path)
 }
 
 /// Builds a run result from process output and the temporary input file.
 pub(crate) fn collect_result(
     output: Output,
-    file_path: &Path,
+    dir: &TestDir,
+    file_path: &Utf8Path,
     mode: ExecutionMode,
 ) -> Result<RunResult> {
     let file_content = match mode {
-        ExecutionMode::Stdout | ExecutionMode::InPlace => fs::read(file_path)
-            .with_context(|| format!("read file '{}' after {:?} run", file_path.display(), mode))?,
+        ExecutionMode::Stdout | ExecutionMode::InPlace => dir
+            .directory()
+            .read(file_path)
+            .with_context(|| format!("read file '{file_path}' after {mode:?} run"))?,
     };
     Ok(RunResult {
         output,
@@ -326,27 +329,19 @@ pub(crate) fn collect_result(
 
 /// Runs a physical matrix case through the real `mdtablefix` binary.
 pub(crate) fn run_physical_case(case: &PhysicalCase) -> Result<RunResult> {
-    let dir = tempdir().context("create temporary directory for matrix case")?;
-    let file_path = stage_fixture(case, dir.path())?;
+    let dir = TestDir::new().context("create temporary directory for matrix case")?;
+    let file_path = stage_fixture(case, &dir)?;
+    let command_path = dir.path().join(&file_path);
 
     let mut command = Command::cargo_bin("mdtablefix").context("create mdtablefix test command")?;
-    command.args(case.args()).arg(&file_path);
+    command.args(case.args()).arg(command_path.as_std_path());
     let output = command.output().with_context(|| {
         format!(
             "execute mdtablefix for matrix case '{}'",
             case.snapshot_name()
         )
     })?;
-    collect_result(output, &file_path, case.mode)
-}
-
-/// Returns the repository-relative path to a matrix fixture.
-pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("data")
-        .join("cli-matrix")
-        .join(file_name)
+    collect_result(output, &dir, &file_path, case.mode)
 }
 
 /// Returns whether a matrix case identifier uses the documented character set.
@@ -371,30 +366,5 @@ pub(crate) fn non_wrap_signature(fixture: &str, flags: &[TransformFlag]) -> Stri
 pub(crate) fn has_flag(case: &BaseCase, flag: TransformFlag) -> bool { case.flags.contains(&flag) }
 
 #[cfg(test)]
-#[rustfmt::skip]
-mod tests {
-    //! Unit tests for CLI-matrix support helpers.
-
-    use super::{BaseCase, TransformFlag, has_flag, is_case_id, non_wrap_signature};
-    use rstest::rstest;
-
-    #[rstest]
-    #[case("row_001", true)] #[case("row-001", true)] #[case("abc123", true)]
-    #[case("", false)] #[case("Row_001", false)] #[case("row 001", false)]
-    fn is_case_id_returns_expected_value(#[case] id: &str, #[case] expected: bool) {
-        assert_eq!(is_case_id(id), expected);
-    }
-
-    #[test] fn non_wrap_signature_ignores_wrap_variant() {
-        let flags = [TransformFlag::Renumber, TransformFlag::Fences]; let (unwrapped, wrapped) = (false, true);
-        assert_ne!(unwrapped, wrapped); assert_eq!(non_wrap_signature("fixture.dat", &flags), non_wrap_signature("fixture.dat", &flags)); }
-    #[test] fn non_wrap_signature_distinguishes_flag_lists() {
-        assert_ne!(non_wrap_signature("fixture.dat", &[TransformFlag::Renumber]), non_wrap_signature("fixture.dat", &[TransformFlag::Fences])); }
-
-    #[rstest]
-    #[case(TransformFlag::Renumber, true)] #[case(TransformFlag::Fences, false)]
-    fn has_flag_returns_expected_value(#[case] flag: TransformFlag, #[case] expected: bool) {
-        let case = BaseCase { id: "row_001", fixture: "fixture.dat", flags: &[TransformFlag::Renumber] };
-        assert_eq!(has_flag(&case, flag), expected);
-    }
-}
+#[path = "support_tests.rs"]
+mod tests;

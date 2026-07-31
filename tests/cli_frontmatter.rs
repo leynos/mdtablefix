@@ -3,18 +3,30 @@
 use assert_cmd::Command;
 use rstest::{fixture, rstest};
 
+#[path = "common/fs.rs"]
+mod test_fs;
+use test_fs::TestDir;
+
 /// Fixture providing an in-place test runner closure.
 #[fixture]
 fn in_place_runner() -> impl Fn(&[&str], &str, &str) {
     |args: &[&str], input: &str, expected: &str| {
-        let temp = tempfile::NamedTempFile::new().expect("create temp file");
-        std::fs::write(temp.path(), input).expect("write temp file");
+        let dir = TestDir::new().expect("create temp directory");
+        dir.directory()
+            .write("input.md", input)
+            .expect("write temp file");
+        let file_path = dir.path().join("input.md");
 
         let mut cmd = Command::cargo_bin("mdtablefix").expect("find binary");
-        cmd.arg("--in-place").args(args).arg(temp.path());
+        cmd.arg("--in-place")
+            .args(args)
+            .arg(file_path.as_std_path());
         cmd.assert().success();
 
-        let actual = std::fs::read_to_string(temp.path()).expect("read temp file");
+        let actual = dir
+            .directory()
+            .read_to_string("input.md")
+            .expect("read temp file");
         assert_eq!(actual, expected, "in-place content mismatch");
     }
 }
