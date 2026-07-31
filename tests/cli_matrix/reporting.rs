@@ -6,11 +6,9 @@
 //! diff body, and the printed text are three renderings of one assessment, and
 //! the assertions below hold them to each other.
 
-use std::fs;
+use anyhow::Result;
 
-use anyhow::{Context as _, Result};
-
-use super::{ExecutionMode, PhysicalCase, RunResult, STAGED_FILE, fixture_path};
+use super::{ExecutionMode, PhysicalCase, RunResult, STAGED_FILE, read_fixture};
 
 /// The line counts one reporting mode claims for one file.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,16 +42,15 @@ pub(crate) fn assert_reporting_invariants(
     printed: &str,
     result: &RunResult,
 ) -> Result<bool> {
-    let fixture = fs::read(fixture_path(case.logical.fixture))
-        .with_context(|| format!("read matrix fixture '{}'", case.logical.fixture))?;
+    let fixture = read_fixture(case.logical.fixture)?;
     assert_eq!(
         result.file_content,
-        fixture,
+        fixture.as_bytes(),
         "{}: a reporting mode must not write",
         case.snapshot_name(),
     );
 
-    let source = std::str::from_utf8(&fixture).expect("matrix fixtures are UTF-8");
+    let source = fixture.as_str();
     let drifted = printed != source;
     let expected = i32::from(drifted);
     assert_eq!(
