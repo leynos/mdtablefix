@@ -19,8 +19,8 @@ clean: ## Remove build artifacts
 test: ## Run tests with warnings treated as errors
 	RUSTFLAGS="-D warnings" $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
 
-bench: ## Run the observer-boundary wrapping benchmarks
-	$(CARGO) bench --features bench-internals --bench wrap_observer
+bench: ## Run the observer-boundary wrapping benchmarks with warnings denied
+	RUSTFLAGS="$$RUSTFLAGS -D warnings" $(CARGO) bench --features bench-internals --bench wrap_observer
 
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)

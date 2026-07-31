@@ -258,9 +258,21 @@ mod tracing_tests {
     }
 
     #[test]
-    fn footnote_ref_check_does_not_require_subscriber() {
+    fn footnote_ref_check_without_observer_returns_result() {
         assert!(looks_like_footnote_ref("[^1]", &mut None));
         assert!(!looks_like_footnote_ref("plain", &mut None));
+    }
+
+    // Deliberately not `#[traced_test]`: `tracing_test` installs its subscriber
+    // only for the test it decorates, so this test exercises `TracingObserver`
+    // with no subscriber active — the configuration production callers use.
+    #[test]
+    fn footnote_ref_check_with_observer_but_no_subscriber_returns_result() {
+        let mut observer = TracingObserver;
+        let mut handle = Some(&mut observer as &mut dyn crate::wrap::observer::Observer);
+        assert!(looks_like_footnote_ref("[^1]", &mut handle));
+        assert!(!looks_like_footnote_ref("plain", &mut handle));
+        assert!(ends_with_footnote_ref("word.[^1]", &mut handle));
     }
 }
 

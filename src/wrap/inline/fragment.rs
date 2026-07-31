@@ -50,7 +50,7 @@ impl InlineFragment {
 
     pub(super) fn new_observed(text: String, observer: &mut ObserverHandle<'_>) -> Self {
         let width = UnicodeWidthStr::width(text.as_str());
-        let kind = classify_fragment(text.as_str(), observer);
+        let kind = classify_fragment(text.as_str());
         if let Some(observer) = observer.as_deref_mut() {
             observer.observe(Event::FragmentClassified {
                 token: text.as_str(),
@@ -150,7 +150,14 @@ fn contains_link_with_trailing_punctuation(text: &str) -> bool {
 /// still recognised as links or code spans. Footnote references also recognise
 /// the `word.[^label]` suffix shape that the wrapper groups to avoid splitting
 /// sentence punctuation from the marker.
-fn classify_fragment(text: &str, observer: &mut ObserverHandle<'_>) -> FragmentKind {
+///
+/// The footnote probes below deliberately pass `&mut None` rather than the
+/// caller's observer. They are speculative shape tests over three variants of
+/// the same fragment, so forwarding the observer would emit up to three
+/// `FootnoteRefChecked` events per fragment describing internal branch attempts
+/// rather than an outcome. `FragmentClassified`, emitted once by
+/// [`InlineFragment::new_observed`], is the single event reporting the result.
+fn classify_fragment(text: &str) -> FragmentKind {
     if is_whitespace_token(text) {
         return FragmentKind::Whitespace;
     }
@@ -164,9 +171,9 @@ fn classify_fragment(text: &str, observer: &mut ObserverHandle<'_>) -> FragmentK
         || has_inline_code_structure(text)
     {
         FragmentKind::InlineCode
-    } else if looks_like_footnote_ref(text, observer)
-        || looks_like_footnote_ref(trimmed, observer)
-        || ends_with_footnote_ref(text, observer)
+    } else if looks_like_footnote_ref(text, &mut None)
+        || looks_like_footnote_ref(trimmed, &mut None)
+        || ends_with_footnote_ref(text, &mut None)
     {
         FragmentKind::FootnoteRef
     } else {
@@ -277,9 +284,10 @@ mod tracing_tests {
     //! Traced-event tests for `InlineFragment` classification.
     //!
     //! Each test verifies that constructing an `InlineFragment` emits a DEBUG
-    //! `fragment classified` event with the correct structured fields (`kind`,
-    //! `token`, `truncated`).  One test verifies that construction succeeds
-    //! without any tracing subscriber installed.
+    //! `fragment classified` event with the correct content-free fields
+    //! (`kind`, `token_length`) and that the fragment text never reaches the
+    //! log. One test verifies that construction succeeds without any tracing
+    //! subscriber installed.
 
     use rstest::rstest;
     use tracing_test::traced_test;
@@ -299,8 +307,21 @@ mod tracing_tests {
         let _fragment = InlineFragment::new_observed(input.to_string(), &mut Some(&mut observer));
         assert!(logs_contain("fragment classified"));
         assert!(logs_contain(&format!("kind={expected}")));
-        assert!(logs_contain("token="));
-        assert!(logs_contain("truncated="));
+        assert!(logs_contain(&format!(
+            "token_length={}",
+            input.chars().count()
+        )));
+    }
+
+    #[traced_test]
+    #[test]
+    fn fragment_classification_does_not_log_fragment_text() {
+        let mut observer = TracingObserver;
+        let text = "[unmistakable-label](https://example.com/unmistakable-path)";
+        let _fragment = InlineFragment::new_observed(text.to_string(), &mut Some(&mut observer));
+        assert!(logs_contain("fragment classified"));
+        assert!(!logs_contain("unmistakable-label"));
+        assert!(!logs_contain("unmistakable-path"));
     }
 
     #[test]

@@ -675,12 +675,12 @@ For example, a domain helper emits a borrowed event without touching
 observer.observe(Event::FragmentClassified { token, kind });
 ```
 
-`TracingObserver` then gates and enriches it:
+`TracingObserver` then gates it and derives content-free metadata from the
+borrowed token, which is never itself recorded:
 
 ```rust
 Event::FragmentClassified { token, kind } if tracing::enabled!(tracing::Level::DEBUG) => {
-    let (snippet, truncated) = trace_text_snippet(token);
-    debug!(token = %snippet, truncated, kind = ?kind, "fragment classified");
+    debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified");
 }
 ```
 
@@ -690,10 +690,9 @@ Guard any expression that performs non-trivial work with
 `tracing::enabled!(Level::DEBUG)` or `tracing::enabled!(Level::TRACE)` before
 computing the value. Domain emitters hand `TracingObserver` only cheap
 borrowed data — indices, flags, and `&str` slices copied by reference — never
-a pre-computed `chars().count()` or truncated snippet. The adapter performs
-that derived work, such as Unicode length counts and bounded-snippet
-truncation, only inside the guarded match arm, so a disabled subscriber pays
-nothing beyond the initial branch.
+a pre-computed `chars().count()`. The adapter performs that derived work, such
+as Unicode length counts, only inside the guarded match arm, so a disabled
+subscriber performs no derived-payload work at all.
 
 #### Benchmarking the observer boundary
 
@@ -720,12 +719,19 @@ inline links, inline code, and footnote references):
 - `inline_wrapping/tracing_observer_disabled` — the same inline input through
   `TracingObserver` with no DEBUG or TRACE subscriber installed.
 
-The last two cases should measure the same: with tracing disabled, the derived
-Unicode length counts and snippet truncation must stay inside `TracingObserver`
-behind its `tracing::enabled!` gates, so the adapter adds no per-event work
-beyond one branch. A widening gap between `observer_none` and
-`tracing_observer_disabled` signals that derived-payload work has leaked back
-onto the hot path.
+The last two cases are not expected to produce identical timings.
+`tracing_observer_disabled` still pays, per event, a dynamic dispatch through
+`dyn Observer`, the match over `Event`, and one `tracing::enabled!` check —
+costs `observer_none` avoids entirely because it emits no events. The invariant
+under test is narrower: with tracing disabled, **no derived-payload work** runs
+(the Unicode length counts stay inside `TracingObserver` behind its
+`tracing::enabled!` gates), so the residual overhead stays small and roughly
+constant per event rather than scaling with token length.
+
+Read the pair as a bounded-overhead check, not an equality check. A small,
+stable gap is expected. A gap that grows with input size, or that widens
+markedly between runs on comparable hardware, indicates derived-payload work has
+leaked back onto the hot path.
 
 ### Security considerations
 
@@ -761,7 +767,7 @@ Table: Domain events and their tracing output.
 | `FootnoteLabelRecognized` | `footnote label span recognized` | trace | `start`, `end`, `token_length`                 |
 | `FootnoteRefChecked`      | `footnote reference checked`     | trace | `token_length`, `result`                       |
 | `DateSequenceMatched`     | `matched date sequence`          | debug | `start`, `end`                                 |
-| `FragmentClassified`      | `fragment classified`            | debug | `token` (bounded snippet), `truncated`, `kind` |
+| `FragmentClassified`      | `fragment classified`            | debug | `token_length`, `kind`                         |
 
 `FootnoteReferenceParsed` and `LinkOrImageParsed` are emitted from
 `parse_link_or_image` and `find_footnote_end` in

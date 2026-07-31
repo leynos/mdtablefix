@@ -335,6 +335,19 @@ pub(in crate::wrap) fn wrap_preserving_code(text: &str, width: usize) -> Vec<Str
     wrap_preserving_code_observed(text, width, &mut Some(&mut observer))
 }
 
+/// Wraps inline Markdown `text` while reporting classification events to
+/// `observer`.
+///
+/// This is the observer-threaded form of [`wrap_preserving_code`]; wrapping
+/// behaviour and the meaning of `width` are identical, and it never panics for
+/// valid input. Events are emitted only while `observer` is `Some`; passing
+/// `None` runs the pure domain path and emits nothing.
+///
+/// Events carry borrowed data only. Deriving anything costlier than a copy —
+/// Unicode length counts, for example — is the observer's responsibility, so an
+/// adapter that gates on a disabled log level performs no per-event work.
+/// Observers must record content-free metadata only and never the token text
+/// itself.
 pub(in crate::wrap) fn wrap_preserving_code_observed(
     text: &str,
     width: usize,
@@ -345,7 +358,7 @@ pub(in crate::wrap) fn wrap_preserving_code_observed(
         return Vec::new();
     }
 
-    let tokens = normalize_footnote_ref_spacing(&tokens, observer);
+    let tokens = normalize_footnote_ref_spacing(&tokens);
     let fragments = build_fragments(&tokens, observer);
     let mut lines = Vec::new();
     let mut buffer: Vec<InlineFragment> = Vec::new();

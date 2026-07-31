@@ -21,9 +21,14 @@ pub(crate) enum FragmentKind {
 ///
 /// Every variant carries only cheap, borrowed data (indices, flags, and string
 /// slices). Any derived value that costs more than a copy — a Unicode scan such
-/// as `chars().count()`, or a truncated snippet — is deliberately left for the
-/// [`Observer`] to compute so a disabled observer pays nothing. Emitters must
-/// not pre-compute those values before handing an event to an observer.
+/// as `chars().count()` — is deliberately left for the [`Observer`] to compute
+/// so a disabled observer pays nothing. Emitters must not pre-compute those
+/// values before handing an event to an observer.
+///
+/// Borrowed token text lets an observer derive bounded metadata such as a
+/// character count. Observers must not record the text itself: diagnostics stay
+/// content-free, as required by the security guidance in
+/// `docs/developers-guide.md`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Event<'a> {
     /// A complete footnote reference was parsed.
