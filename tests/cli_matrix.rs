@@ -20,6 +20,7 @@ use support::{
     assert_transform_invariants,
     check_counts,
     diff_counts,
+    fixture_exists,
     fixture_has_table,
     fixture_path,
     has_flag,
@@ -50,9 +51,12 @@ fn matrix_case_ids_accept_documented_characters() {
 fn matrix_case_fixtures_are_dat_files() {
     for case in BASE_MATRIX_CASES {
         let fixture = fixture_path(case.fixture);
-        assert!(fixture.exists(), "missing fixture {}", fixture.display());
+        assert!(
+            fixture_exists(case.fixture).expect("inspect matrix fixture"),
+            "missing fixture {fixture}"
+        );
         assert_eq!(
-            fixture.extension().and_then(|ext| ext.to_str()),
+            fixture.extension(),
             Some("dat"),
             "a reporting mode echoes the name the file was staged under, and the harness stages \
              every fixture as 'input.dat', so only '.dat' fixtures stay snapshot-stable",
