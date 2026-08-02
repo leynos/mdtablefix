@@ -990,7 +990,6 @@ integration-test binary crates. The `#[expect(unused_macros)]` suppressions
 that previously guarded them were replaced by the export attribute when it
 became clear that multiple test binaries depend on them.
 
-
 ### 2.3. Capability-scoped test filesystem access
 
 All integration tests under `tests/` use `camino::Utf8Path` and
@@ -1026,28 +1025,6 @@ path-level exclusion only when the boundary cannot be expressed through
 `cap_std`, and record the reason beside the configuration. See the imported
 [Whitaker user's guide](whitaker-users-guide.md#no_std_fs_operations) for the
 configuration syntax and segment-matching rules.
-
-
-### 2.4. `test-macros` crate
-
-The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
-proc-macro attribute. It suppresses the `unused_braces` lint that `rstest`
-fixture expansion triggers when `fn_single_line = true` is set in
-`rustfmt.toml`.
-
-The macro emits `#[allow(unused_braces, …)]` rather than `#[expect(…)]` because
-the Rust proc-macro API delivers a pre-parsed token stream; the emitted lint
-attribute applies to code that the compiler has not yet expanded, making
-`#[expect]` semantically unusable at that site. This is a known consequence of
-the `rstest` fixture expansion and is not a lint-integrity violation.
-
-Apply it to any fixture function whose single-expression body triggers the lint:
-
-```rust
-#[test_macros::allow_fixture_expansion_lints]
-#[rstest::fixture]
-pub fn broken_table() -> Vec<String> { … }
-```
 
 ### 2.4. `test-macros` crate
 
