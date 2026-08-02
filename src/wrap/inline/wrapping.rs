@@ -36,7 +36,7 @@ use super::{
     },
 };
 use crate::wrap::{
-    observer::{FragmentKind, ObserverHandle},
+    observer::{Event, FragmentKind, ObserverHandle},
     tokenize,
 };
 
@@ -120,12 +120,77 @@ pub(in crate::wrap) fn determine_token_span(tokens: &[String], start: usize) -> 
     determine_token_span_observed(tokens, start, &mut None)
 }
 
-fn determine_token_span_observed(
+/// Reports whether whitespace before a colon-suffixed footnote reference was
+/// coupled into the current span.
+///
+/// Nothing is reported unless the next token really is a footnote reference, so
+/// the event describes a grouping decision rather than every whitespace run.
+/// The probe passes `&mut None`: it only selects whether to report, and
+/// forwarding the observer would emit a `FootnoteRefChecked` event for it.
+fn emit_whitespace_footnote_coupling(
+    kind: SpanKind,
+    next_token: Option<&String>,
+    following_token: Option<&String>,
+    coupled: bool,
+    observer: &mut ObserverHandle<'_>,
+) {
+    let Some(token) = next_token.filter(|token| looks_like_footnote_ref(token, &mut None)) else {
+        return;
+    };
+    if let Some(observer) = observer.as_deref_mut() {
+        observer.observe(Event::WhitespaceFootnoteCoupling {
+            kind,
+            token,
+            has_following_colon: following_token.is_some_and(|following| following == ":"),
+            coupled,
+        });
+    }
+}
+
+/// Reports whether an adjacent footnote reference was coupled into the current
+/// span, and the context that decided it.
+fn emit_footnote_reference_coupling(
+    tokens: &[String],
+    end: usize,
+    kind: SpanKind,
+    coupled: bool,
+    observer: &mut ObserverHandle<'_>,
+) {
+    let Some(token) = tokens
+        .get(end)
+        .filter(|token| looks_like_footnote_ref(token, &mut None))
+    else {
+        return;
+    };
+    let follows_space_before_colon = end
+        .checked_sub(1)
+        .and_then(|previous| tokens.get(previous))
+        .is_some_and(|previous| previous.chars().all(char::is_whitespace))
+        && tokens
+            .get(end + 1)
+            .is_some_and(|following| following == ":");
+    if let Some(observer) = observer.as_deref_mut() {
+        observer.observe(Event::FootnoteReferenceCoupling {
+            kind,
+            token,
+            follows_space_before_colon,
+            coupled,
+        });
+    }
+}
+
+// `pub(in crate::wrap::inline)` so the span-helper tracing tests can group
+// tokens with a live observer attached; production callers reach this through
+// `wrap_preserving_code_observed`.
+pub(in crate::wrap::inline) fn determine_token_span_observed(
     tokens: &[String],
     start: usize,
     observer: &mut ObserverHandle<'_>,
 ) -> (usize, usize) {
     if let Some((end, width)) = date_token_span(tokens, start, observer) {
+        if let Some(observer) = observer.as_deref_mut() {
+            observer.observe(Event::DateSequenceGrouped { start, end, width });
+        }
         return (end, width);
     }
 
@@ -138,6 +203,13 @@ fn determine_token_span_observed(
             let following_token = tokens.get(end + 2);
             let should_couple =
                 should_couple_whitespace(kind, next_token, following_token, observer);
+            emit_whitespace_footnote_coupling(
+                kind,
+                next_token,
+                following_token,
+                should_couple,
+                observer,
+            );
             if should_couple {
                 width += UnicodeWidthStr::width(token.as_str());
                 end += 1;
@@ -174,6 +246,7 @@ fn determine_token_span_observed(
         // already attached to the preceding atomic span.
         let footnote_coupling =
             try_couple_footnote_reference(tokens, end, kind, &mut width, observer);
+        emit_footnote_reference_coupling(tokens, end, kind, footnote_coupling.is_some(), observer);
         if let Some((next_kind, next_end)) = footnote_coupling {
             kind = next_kind;
             end = next_end;

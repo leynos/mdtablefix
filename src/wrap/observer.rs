@@ -17,6 +17,22 @@ pub(crate) enum FragmentKind {
     Plain,
 }
 
+/// Marks how a grouped token span should behave during wrapping.
+///
+/// This lives beside [`FragmentKind`] because it is domain vocabulary carried
+/// on [`Event`] values, not a detail of any one grouping helper.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum SpanKind {
+    /// Treat the span as ordinary prose.
+    General,
+    /// Treat the span as an inline code sequence.
+    Code,
+    /// Treat the span as a Markdown link or image link.
+    Link,
+    /// Treat the span as a GitHub Flavoured Markdown footnote reference.
+    FootnoteRef,
+}
+
 /// An observable outcome from inline parsing or classification.
 ///
 /// Every variant carries only cheap, borrowed data (indices, flags, and string
@@ -45,8 +61,36 @@ pub(crate) enum Event<'a> {
     },
     /// A footnote-reference predicate was evaluated.
     FootnoteRefChecked { token: &'a str, result: bool },
-    /// A contiguous day–month–year run was grouped into one atomic span.
-    DateSequenceMatched { start: usize, end: usize },
+    /// A contiguous day–month–year run matched a recognised date pattern.
+    ///
+    /// `pattern` is a stable category name, never document text.
+    DateSequenceMatched {
+        start: usize,
+        end: usize,
+        pattern: &'static str,
+    },
+    /// A matched date sequence was grouped into one atomic wrap span.
+    DateSequenceGrouped {
+        start: usize,
+        end: usize,
+        width: usize,
+    },
+    /// Whitespace before a colon-suffixed footnote reference was considered for
+    /// coupling into the current span.
+    WhitespaceFootnoteCoupling {
+        kind: SpanKind,
+        token: &'a str,
+        has_following_colon: bool,
+        coupled: bool,
+    },
+    /// An adjacent footnote reference was considered for coupling into the
+    /// current span.
+    FootnoteReferenceCoupling {
+        kind: SpanKind,
+        token: &'a str,
+        follows_space_before_colon: bool,
+        coupled: bool,
+    },
     /// A rendered fragment was classified.
     FragmentClassified { token: &'a str, kind: FragmentKind },
 }

@@ -759,15 +759,23 @@ Table: `parse_rows` instrumentation.
 
 Table: Domain events and their tracing output.
 
-| Event                     | tracing message                  | Level | Fields                                         |
-| ------------------------- | -------------------------------- | ----- | ---------------------------------------------- |
-| `FootnoteReferenceParsed` | `footnote reference parsed`      | debug | `token_length`                                 |
-| `LinkOrImageParsed`       | `link or image parsed`           | debug | `token_length`, `is_image`                     |
-| `FootnoteEndNotFound`     | `footnote end not found`         | trace | `start`, `reason`                              |
-| `FootnoteLabelRecognized` | `footnote label span recognized` | trace | `start`, `end`, `token_length`                 |
-| `FootnoteRefChecked`      | `footnote reference checked`     | trace | `token_length`, `result`                       |
-| `DateSequenceMatched`     | `matched date sequence`          | debug | `start`, `end`                                 |
-| `FragmentClassified`      | `fragment classified`            | debug | `token_length`, `kind`                         |
+Events whose outcome varies emit one of two messages, so they appear once per
+message.
+
+| Event                        | tracing message                                               | Level | Fields                                                                      |
+| ---------------------------- | ------------------------------------------------------------- | ----- | --------------------------------------------------------------------------- |
+| `FootnoteReferenceParsed`    | `footnote reference parsed`                                   | debug | `token_length`                                                              |
+| `LinkOrImageParsed`          | `link or image parsed`                                        | debug | `token_length`, `is_image`                                                  |
+| `FootnoteEndNotFound`        | `footnote end not found`                                      | trace | `start`, `reason`                                                           |
+| `FootnoteLabelRecognized`    | `footnote label span recognized`                              | trace | `start`, `end`, `token_length`                                              |
+| `FootnoteRefChecked`         | `footnote reference checked`                                  | trace | `token_length`, `result`                                                    |
+| `DateSequenceMatched`        | `matched date sequence`                                       | debug | `start`, `end`, `pattern`                                                   |
+| `DateSequenceGrouped`        | `determine_token_span grouped date sequence`                  | trace | `start`, `end`, `width`                                                     |
+| `WhitespaceFootnoteCoupling` | `coupled whitespace before colon-suffixed footnote reference` | debug | `span_kind`, `token_length`, `has_following_colon`                          |
+| `WhitespaceFootnoteCoupling` | `declined whitespace coupling before footnote reference`      | debug | `span_kind`, `token_length`, `has_following_colon`, `error_category`        |
+| `FootnoteReferenceCoupling`  | `coupled colon-suffixed footnote reference after whitespace`  | debug | `span_kind`, `token_length`, `has_following_colon`                          |
+| `FootnoteReferenceCoupling`  | `declined footnote reference coupling`                        | debug | `span_kind`, `token_length`, `follows_space_before_colon`, `error_category` |
+| `FragmentClassified`         | `fragment classified`                                         | debug | `token_length`, `kind`                                                      |
 
 `FootnoteReferenceParsed` and `LinkOrImageParsed` are emitted from
 `parse_link_or_image` and `find_footnote_end` in
@@ -775,17 +783,29 @@ Table: Domain events and their tracing output.
 `FootnoteLabelRecognized` are emitted from `find_footnote_end` in the same
 module. `FootnoteRefChecked` is emitted from `looks_like_footnote_ref` and
 `ends_with_footnote_ref` in `src/wrap/inline/predicates.rs`.
-`DateSequenceMatched` is emitted from `date_token_span` in
-`src/wrap/inline/span_helpers.rs`; the over-width date fallback remains
-behaviour-only and emits no event. `FragmentClassified` is emitted from
-`InlineFragment::new_observed` and `classify_fragment` in
-`src/wrap/inline/fragment.rs`.
+`DateSequenceMatched` is emitted from `try_match_date_sequence` in
+`src/wrap/inline/span_helpers.rs`, where the matched pattern is known; the
+over-width date fallback remains behaviour-only and emits no event.
+`DateSequenceGrouped`, `WhitespaceFootnoteCoupling`, and
+`FootnoteReferenceCoupling` are emitted from `determine_token_span_observed` in
+`src/wrap/inline/wrapping.rs`, which is where those grouping decisions are
+made. The two coupling events report only when the token concerned really is a
+footnote reference, so they describe grouping decisions rather than every
+whitespace run. `FragmentClassified` is emitted from
+`InlineFragment::new_observed` in `src/wrap/inline/fragment.rs`.
+
+Because the adapter owns every `tracing` call, all of these records carry
+`mdtablefix::wrap::tracing_adapter` as their target rather than the module that
+made the decision, and none of them sit inside a `#[tracing::instrument]` span.
+The snapshots below pin that shape.
 
 ### Tracing-event snapshot tests
 
 The stable structured fields above are pinned by `insta` snapshots so that
 accidental changes to a tracing event's level, target, message, or field set
-are caught in review. These tests live next to the instrumented code:
+are caught in review. Each test attaches a `TracingObserver` so the events pass
+through the adapter exactly as they do in production. They live next to the
+code whose events they pin:
 
 - `src/wrap/inline/fragment_tracing_snapshots.rs` – `fragment classified`.
 - `src/wrap/inline/span_helper_tracing_tests.rs` – date-span events.

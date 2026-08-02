@@ -2,7 +2,62 @@
 
 use tracing::{debug, trace};
 
-use super::observer::{Event, Observer};
+use super::observer::{Event, Observer, SpanKind};
+
+/// Records the outcome of weighing whitespace before a footnote reference.
+///
+/// Split out of `observe` so each grouping-boundary translation stays readable
+/// and the match arm keeps to one statement.
+fn log_whitespace_footnote_coupling(
+    kind: SpanKind,
+    token: &str,
+    has_following_colon: bool,
+    coupled: bool,
+) {
+    let token_length = token.chars().count();
+    if coupled {
+        debug!(
+            span_kind = ?kind,
+            token_length,
+            has_following_colon,
+            "coupled whitespace before colon-suffixed footnote reference"
+        );
+    } else {
+        debug!(
+            span_kind = ?kind,
+            token_length,
+            has_following_colon,
+            error_category = "footnote_colon_whitespace_coupling_declined",
+            "declined whitespace coupling before footnote reference"
+        );
+    }
+}
+
+/// Records the outcome of weighing an adjacent footnote reference.
+fn log_footnote_reference_coupling(
+    kind: SpanKind,
+    token: &str,
+    follows_space_before_colon: bool,
+    coupled: bool,
+) {
+    let token_length = token.chars().count();
+    if coupled && follows_space_before_colon {
+        debug!(
+            span_kind = ?kind,
+            token_length,
+            has_following_colon = true,
+            "coupled colon-suffixed footnote reference after whitespace"
+        );
+    } else if !coupled {
+        debug!(
+            span_kind = ?kind,
+            token_length,
+            follows_space_before_colon,
+            error_category = "footnote_coupling_context_mismatch",
+            "declined footnote reference coupling"
+        );
+    }
+}
 
 /// Translates domain events into the crate's existing `tracing` events.
 ///
@@ -58,10 +113,36 @@ impl Observer for TracingObserver {
                     result, "footnote reference checked"
                 );
             }
-            Event::DateSequenceMatched { start, end }
-                if tracing::enabled!(tracing::Level::DEBUG) =>
+            Event::DateSequenceMatched {
+                start,
+                end,
+                pattern,
+            } if tracing::enabled!(tracing::Level::DEBUG) => {
+                debug!(start, end, pattern, "matched date sequence");
+            }
+            Event::DateSequenceGrouped { start, end, width }
+                if tracing::enabled!(tracing::Level::TRACE) =>
             {
-                debug!(start, end, "matched date sequence");
+                trace!(
+                    start,
+                    end, width, "determine_token_span grouped date sequence"
+                );
+            }
+            Event::WhitespaceFootnoteCoupling {
+                kind,
+                token,
+                has_following_colon,
+                coupled,
+            } if tracing::enabled!(tracing::Level::DEBUG) => {
+                log_whitespace_footnote_coupling(kind, token, has_following_colon, coupled);
+            }
+            Event::FootnoteReferenceCoupling {
+                kind,
+                token,
+                follows_space_before_colon,
+                coupled,
+            } if tracing::enabled!(tracing::Level::DEBUG) => {
+                log_footnote_reference_coupling(kind, token, follows_space_before_colon, coupled);
             }
             Event::FragmentClassified { token, kind }
                 if tracing::enabled!(tracing::Level::DEBUG) =>
