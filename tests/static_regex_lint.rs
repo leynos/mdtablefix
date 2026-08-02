@@ -20,6 +20,7 @@ use std::{
     process::Command,
 };
 
+use proptest::prelude::*;
 use rstest::rstest;
 use tempfile::TempDir;
 
@@ -210,3 +211,149 @@ fn preserves_arguments_supplied_through_rg(#[case] dir_name: &str) {
         "the scan directory must remain the final argument, got: {argv:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Property-based coverage
+//
+// The fixtures above pin the specific spellings named in the issue. The guard's
+// real contract, though, is a syntax-matching invariant over a whole family of
+// declarations: either supported wrapper, any module qualification, any
+// `\s*`-legal whitespace (including newlines, since the scan runs with `-U`),
+// with or without `move`, and with or without a braced closure body. The
+// properties below generate across that space and assert rejection, and
+// generate across clearly-sanctioned forms and assert acceptance.
+//
+// Each case writes several generated declarations into one directory and runs
+// the guard once, then asserts every generated file is named in the output.
+// That keeps process spawns proportional to cases rather than declarations
+// while still checking each declaration individually.
+// ---------------------------------------------------------------------------
+
+/// Whitespace runs for positions where the guard's pattern allows `\s*`.
+fn optional_ws() -> impl Strategy<Value = String> {
+    prop::sample::select(vec!["", " ", "  ", "\t", "\n", "\n    "]).prop_map(str::to_owned)
+}
+
+/// Whitespace runs for positions requiring at least one space, such as the
+/// gap after a `move` keyword.
+fn required_ws() -> impl Strategy<Value = String> {
+    prop::sample::select(vec![" ", "  ", "\t", "\n", "\n    "]).prop_map(str::to_owned)
+}
+
+/// A possibly-empty module qualification such as `once_cell::sync::`.
+fn qualifier() -> impl Strategy<Value = String> {
+    prop::collection::vec("[a-z][a-z0-9_]{0,6}", 0..3).prop_map(|segments| {
+        segments.iter().fold(String::new(), |mut acc, segment| {
+            acc.push_str(segment);
+            acc.push_str("::");
+            acc
+        })
+    })
+}
+
+prop_compose! {
+    /// A static declaration that wraps `Regex::new` in a supported lazy
+    /// wrapper, and so must always be rejected.
+    fn prohibited_declaration()(
+        name in "[A-Z][A-Z0-9_]{0,7}",
+        wrapper in prop::sample::select(vec!["LazyLock", "Lazy"]),
+        wrapper_qualifier in qualifier(),
+        regex_qualifier in qualifier(),
+        pattern in "[a-z0-9]{1,8}",
+        after_eq in optional_ws(),
+        after_new in optional_ws(),
+        after_paren in optional_ws(),
+        after_closure in optional_ws(),
+        move_gap in prop::option::of(required_ws()),
+        braced in any::<bool>(),
+    ) -> String {
+        let move_kw = move_gap.map_or_else(String::new, |gap| format!("move{gap}"));
+        let (open, close) = if braced { ("{ ", " }") } else { ("", "") };
+        format!(
+            "static {name}: {wrapper}<Regex> ={after_eq}{wrapper_qualifier}{wrapper}::new\
+             {after_new}({after_paren}{move_kw}||{after_closure}{open}\
+             {regex_qualifier}Regex::new(\"{pattern}\").unwrap(){close});\n"
+        )
+    }
+}
+
+prop_compose! {
+    /// A declaration the guard must leave alone: the sanctioned macro, a
+    /// non-static binding, a supported wrapper around a non-regex value, an
+    /// unsupported wrapper, or a function reference rather than a closure.
+    fn clean_declaration()(
+        name in "[A-Z][A-Z0-9_]{0,7}",
+        pattern in "[a-z0-9]{1,8}",
+        form in 0_usize..5,
+    ) -> String {
+        match form {
+            0 => format!("static {name}: LazyLock<Regex> = lazy_regex!(\"{pattern}\");\n"),
+            1 => format!("fn build_{name}() {{ let re = Regex::new(\"{pattern}\").unwrap(); }}\n"),
+            2 => format!("static {name}: LazyLock<String> = LazyLock::new(|| String::new());\n"),
+            3 => format!("static {name}: OnceLock<Regex> = OnceLock::new();\n"),
+            _ => format!("static {name}: LazyLock<Regex> = LazyLock::new(make_{name});\n"),
+        }
+    }
+}
+
+/// Write each declaration to its own `.rs` file and scan the directory once.
+fn scan_generated(declarations: &[String]) -> (TempDir, std::process::Output) {
+    let dir = TempDir::new().expect("failed to create temp dir");
+    for (index, declaration) in declarations.iter().enumerate() {
+        std::fs::write(dir.path().join(format!("case{index}.rs")), declaration)
+            .expect("failed to write generated source");
+    }
+    let output = run_guard(dir.path(), None);
+    (dir, output)
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    /// Every declaration in the supported wrapper family is rejected, whatever
+    /// its qualification, whitespace, `move` keyword, or closure body shape.
+    #[test]
+    fn rejects_generated_prohibited_declarations(
+        declarations in prop::collection::vec(prohibited_declaration(), 1..5),
+    ) {
+        let (_dir, output) = scan_generated(&declarations);
+
+        prop_assert_eq!(
+            output.status.code(),
+            Some(1),
+            "generated declarations should be rejected: {:?}",
+            declarations
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        prop_assert!(stdout.contains(PROHIBITED_DIAGNOSTIC));
+        // Assert per declaration, so one matching file cannot mask the rest.
+        for (index, declaration) in declarations.iter().enumerate() {
+            prop_assert!(
+                stdout.contains(&format!("case{index}.rs")),
+                "declaration {} went undetected: {:?}\nguard output: {stdout}",
+                index,
+                declaration
+            );
+        }
+    }
+
+    /// Sanctioned and unrelated declarations never trip the guard.
+    #[test]
+    fn accepts_generated_clean_declarations(
+        declarations in prop::collection::vec(clean_declaration(), 1..5),
+    ) {
+        let (_dir, output) = scan_generated(&declarations);
+
+        prop_assert_eq!(
+            output.status.code(),
+            Some(0),
+            "clean declarations should pass: {:?}\nguard output: {}",
+            declarations,
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+}
+
+// Bounded model checking is unsuitable here because the guard is a ripgrep
+// pattern over unbounded Rust source text rather than a bounded state machine;
+// property testing exercises that input domain directly.
