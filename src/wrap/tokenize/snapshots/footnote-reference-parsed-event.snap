@@ -1,0 +1,5 @@
+---
+source: src/wrap/tokenize/parsing_tracing_snapshots.rs
+expression: event
+---
+DEBUG snapshots_footnote_reference_parsed_event:parse_link_or_image{idx=0}: mdtablefix::wrap::tokenize::parsing: footnote reference parsed token_length=4

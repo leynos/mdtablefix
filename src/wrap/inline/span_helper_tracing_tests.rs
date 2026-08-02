@@ -1,10 +1,12 @@
 //! Traced-event tests for inline span helper instrumentation.
 
+use std::cell::RefCell;
+
 use rstest::{fixture, rstest};
 use tracing_test::traced_test;
 
 use super::{date_token_span, try_match_date_sequence};
-use crate::wrap::inline::determine_token_span;
+use crate::wrap::{inline::determine_token_span, tracing_snapshot_support::normalise_event_lines};
 
 #[fixture]
 fn date_tokens() -> Vec<String> {
@@ -30,21 +32,24 @@ fn colon_footnote_tokens() -> Vec<String> {
 #[traced_test]
 #[rstest]
 fn try_match_date_sequence_emits_trace_event(date_tokens: Vec<String>) {
-    let _ = try_match_date_sequence(&date_tokens, 0);
+    // Observable result: all five date tokens form one sequence (exclusive end).
+    assert_eq!(try_match_date_sequence(&date_tokens, 0), Some(5));
     assert!(logs_contain("try_match_date_sequence"));
 }
 
 #[traced_test]
 #[rstest]
 fn try_match_date_sequence_logs_matched_pattern(date_tokens: Vec<String>) {
-    let _ = try_match_date_sequence(&date_tokens, 0);
+    assert_eq!(try_match_date_sequence(&date_tokens, 0), Some(5));
     assert!(logs_contain("ordinal_day_month_year"));
 }
 
 #[traced_test]
 #[rstest]
 fn date_token_span_emits_trace_event(date_tokens: Vec<String>) {
-    let _ = date_token_span(&date_tokens, 0);
+    // Observable result: the span covers all five tokens with display width 18
+    // ("25th December 2025"); no footnote coupling applies here.
+    assert_eq!(date_token_span(&date_tokens, 0), Some((5, 18)));
     assert!(logs_contain("date_token_span"));
 }
 
@@ -81,9 +86,68 @@ fn grouping_boundary_logs_declined_footnote_coupling(
         .iter()
         .map(|token| (*token).to_string())
         .collect::<Vec<_>>();
-    let _ = determine_token_span(&tokens, 0);
+    let (end, width) = determine_token_span(&tokens, 0);
+    // Observable edge-case result: a declined coupling groups only the leading
+    // "word" span (end == 1, never 0), leaving the footnote outside the span.
+    assert_eq!(
+        end, 1,
+        "declined coupling must retain the leading word span"
+    );
+    let grouped = tokens[..end].join("");
+    assert_eq!(grouped, "word");
+    assert_eq!(width, 4);
+    assert!(
+        !grouped.contains("[^note]"),
+        "declined coupling must not group the footnote reference",
+    );
     assert!(logs_contain(&format!(
         "error_category=\"{error_category}\""
     )));
     assert!(!logs_contain("[^note]"));
+}
+
+#[traced_test]
+#[rstest]
+fn snapshots_grouped_date_sequence_event(date_tokens: Vec<String>) {
+    let captured = RefCell::new(String::new());
+    // Observable grouping result: the date tokens form one atomic span of
+    // width 18. The snapshot below supplements this behavioural assertion.
+    let (end, width) = determine_token_span(&date_tokens, 0);
+    assert_eq!(date_tokens[..end].join(""), "25th December 2025");
+    assert_eq!(width, 18);
+    logs_assert(|lines| {
+        captured.replace(normalise_event_lines(
+            lines,
+            "determine_token_span grouped date sequence",
+        ));
+        (!captured.borrow().is_empty())
+            .then_some(())
+            .ok_or_else(|| "expected grouped date sequence event".to_string())
+    });
+    let event = captured.into_inner();
+
+    insta::with_settings!({prepend_module_to_snapshot => false}, {
+        insta::assert_snapshot!("determine-token-span-grouped-date-sequence-event", event);
+    });
+}
+
+#[traced_test]
+#[rstest]
+fn snapshots_matched_date_sequence_event(date_tokens: Vec<String>) {
+    let captured = RefCell::new(String::new());
+    // Observable grouping result backing the supplementary snapshot.
+    let (end, width) = determine_token_span(&date_tokens, 0);
+    assert_eq!(date_tokens[..end].join(""), "25th December 2025");
+    assert_eq!(width, 18);
+    logs_assert(|lines| {
+        captured.replace(normalise_event_lines(lines, "matched date sequence"));
+        (!captured.borrow().is_empty())
+            .then_some(())
+            .ok_or_else(|| "expected matched date sequence event".to_string())
+    });
+    let event = captured.into_inner();
+
+    insta::with_settings!({prepend_module_to_snapshot => false}, {
+        insta::assert_snapshot!("matched-date-sequence-event", event);
+    });
 }

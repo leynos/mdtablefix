@@ -20,6 +20,8 @@ mod inline;
 mod link_reference;
 mod paragraph;
 mod tokenize;
+#[cfg(test)]
+pub(crate) mod tracing_snapshot_support;
 use block::{BULLET_RE, FOOTNOTE_RE};
 pub(crate) use block::{BlockKind, classify_block, leading_indent};
 pub use blockquote::BlockquotePrefix;

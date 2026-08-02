@@ -395,3 +395,6 @@ mod proptests {
         }
     }
 }
+#[cfg(test)]
+#[path = "fragment_tracing_snapshots.rs"]
+mod fragment_tracing_snapshots;
