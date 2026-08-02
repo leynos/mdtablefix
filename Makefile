@@ -42,13 +42,7 @@ check-ripgrep: ## Verify ripgrep is available
 	}
 
 check-static-regexes: check-ripgrep ## Reject hand-rolled static regular expressions
-	@status=0; \
-	$(RG) -U --glob '*.rs' '\bstatic\b[^;=]*=\s*(?:[[:alnum:]_]+::)*LazyLock::new\s*\(\s*\|\|\s*(\{\s*)?(?:[[:alnum:]_]+::)*Regex::new' . || status=$$?; \
-	case $$status in \
-		0) echo "static regular expressions must use lazy_regex!"; exit 1 ;; \
-		1) ;; \
-		*) echo "failed to scan Rust sources (rg exit $$status)" >&2; exit $$status ;; \
-	esac
+	@RG='$(RG)' scripts/check-static-regexes.sh .
 
 markdownlint: ## Lint Markdown files
 	$(MDLINT) "**/*.md"

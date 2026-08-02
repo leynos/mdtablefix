@@ -1,11 +1,12 @@
 //! File-backed CLI regression tests for the parameterless wrapping flag.
 
-use std::fs;
-
 use assert_cmd::Command;
 use mdtablefix::process::WRAP_COLS;
-use tempfile::NamedTempFile;
 use unicode_width::UnicodeWidthStr;
+
+#[path = "../common/fs.rs"]
+mod test_fs;
+use test_fs::TestDir;
 
 /// Ensures a path after `--wrap` remains a positional input file.
 #[test]
@@ -17,13 +18,14 @@ fn cli_wrap_processes_positional_file() -> Result<(), Box<dyn std::error::Error>
         "漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 ",
         "漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂 漢字🙂.\n",
     );
-    let file = NamedTempFile::new()?;
-    fs::write(file.path(), input)?;
+    let dir = TestDir::new()?;
+    dir.directory().write("input.md", input)?;
+    let file_path = dir.path().join("input.md");
 
     let mut command = Command::cargo_bin("mdtablefix")?;
     let output = command
         .arg("--wrap")
-        .arg(file.path())
+        .arg(file_path.as_std_path())
         .assert()
         .success()
         .get_output()

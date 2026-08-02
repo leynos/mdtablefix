@@ -67,6 +67,11 @@ restores the separator row with widths derived from the final table body.
 
 - `check-static-regexes`: Runs before Clippy as part of `make lint` and uses
   ripgrep (`rg`) to reject hand-rolled static regular expression declarations.
+  The scan lives in `scripts/check-static-regexes.sh` and rejects any `static`
+  that wraps `Regex::new` directly in a supported lazy-wrapper constructor —
+  `std::sync::LazyLock::new` or `once_cell::sync::Lazy::new`, whether spelled
+  directly or fully qualified — so `lazy_regex!` remains the sole sanctioned
+  idiom. `tests/static_regex_lint.rs` exercises every supported form.
   Contributors must install ripgrep locally; Continuous Integration (CI)
   installs the pinned version before running the lint gate.
 
@@ -985,7 +990,43 @@ integration-test binary crates. The `#[expect(unused_macros)]` suppressions
 that previously guarded them were replaced by the export attribute when it
 became clear that multiple test binaries depend on them.
 
-### 2.3. `test-macros` crate
+### 2.3. Capability-scoped test filesystem access
+
+All integration tests under `tests/` use `camino::Utf8Path` and
+`camino::Utf8PathBuf` for runtime paths and perform filesystem operations
+through `cap_std::fs_utf8::Dir`. Absolute paths are retained only for process
+boundaries such as `std::process::Command`; reads, writes, metadata queries,
+copies, and permission changes use paths relative to an opened directory
+capability.
+
+The `camino` and `cap-std` crates are normal dependencies because the
+production CLI already uses them for file output. The integration suite shares
+those dependencies instead of declaring redundant dev-dependencies. This keeps
+production and test filesystem semantics aligned while avoiding two independent
+version declarations.
+
+`tests/common/fs.rs` owns `TestDir`, the reusable temporary-directory boundary.
+It converts `tempfile::TempDir`'s platform path to a UTF-8 path once, opens the
+directory capability, and retains the `TempDir` guard for the test's lifetime.
+Only integration tests may include this helper. Callers compose it by using
+relative paths with `TestDir::directory()` and by deriving an absolute
+`Utf8PathBuf` from `TestDir::path()` only when invoking a child process. It
+must not absorb fixture-specific logic or production filesystem behaviour.
+
+Repository fixture access remains an explicit ambient boundary. Focused modules
+such as `tests/cli_matrix/fixture_io.rs` open `CARGO_MANIFEST_DIR` once and
+expose only capability-scoped fixture queries. New tests must follow the same
+pattern instead of calling `std::fs`, storing `std::path::PathBuf`, or relying
+on `Utf8Path::exists`, which performs an ambient metadata query.
+
+Whitaker's `no_std_fs_operations` lint supports `excluded_paths` for genuinely
+unavoidable ambient boundaries. Prefer the capability pattern above; use a
+path-level exclusion only when the boundary cannot be expressed through
+`cap_std`, and record the reason beside the configuration. See the imported
+[Whitaker user's guide](whitaker-users-guide.md#no_std_fs_operations) for the
+configuration syntax and segment-matching rules.
+
+### 2.4. `test-macros` crate
 
 The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
 proc-macro attribute. It suppresses the `unused_braces` lint that `rstest`

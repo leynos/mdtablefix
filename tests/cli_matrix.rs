@@ -12,6 +12,7 @@ use support::{
     PhysicalCase,
     WrapVariant,
     assert_transform_invariants,
+    fixture_exists,
     fixture_path,
     has_flag,
     is_case_id,
@@ -39,11 +40,11 @@ fn matrix_case_ids_accept_documented_characters() {
 fn matrix_case_fixtures_are_dat_files() {
     for case in BASE_MATRIX_CASES {
         let fixture = fixture_path(case.fixture);
-        assert!(fixture.exists(), "missing fixture {}", fixture.display());
-        assert_eq!(
-            fixture.extension().and_then(|ext| ext.to_str()),
-            Some("dat")
+        assert!(
+            fixture_exists(case.fixture).expect("inspect matrix fixture"),
+            "missing fixture {fixture}"
         );
+        assert_eq!(fixture.extension(), Some("dat"));
     }
 }
 

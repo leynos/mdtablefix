@@ -18,6 +18,7 @@ pkg-fmt = "tgz"
 
 [dependencies]
 anyhow = "1"
+# Production file output and integration tests share UTF-8 capability paths.
 camino = "1.2.4"
 cap-std = { version = "4.0.2", features = ["fs_utf8"] }
 clap = { version = "4", features = ["derive"] }
