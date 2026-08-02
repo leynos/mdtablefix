@@ -27,21 +27,11 @@ use super::predicates::{
 
 use crate::wrap::observer::{Event, ObserverHandle};
 
+// `SpanKind` is domain vocabulary carried on `Event` values, so it lives in the
+// observer port beside `FragmentKind`. Re-exported here so the grouping helpers
+// and their callers keep using the familiar `span_helpers::SpanKind` path.
+pub(in crate::wrap::inline) use crate::wrap::observer::SpanKind;
 
-/// Marks how a grouped token span should behave during wrapping.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(in crate::wrap::inline) enum SpanKind {
-    /// Treat the span as ordinary prose.
-    General,
-    /// Treat the span as an inline code sequence.
-    Code,
-    /// Treat the span as a Markdown link or image link.
-    Link,
-    /// Treat the span as a GitHub Flavoured Markdown footnote reference.
-    FootnoteRef,
-    /// Treat the span as a bare numeric bracket reference, such as `[1]`.
-    BracketedRef,
-}
 
 /// Extends a grouped span over trailing punctuation tokens and updates `width`.
 pub(in crate::wrap::inline) fn extend_punctuation(
@@ -57,17 +47,34 @@ pub(in crate::wrap::inline) fn extend_punctuation(
 }
 
 /// Returns the exclusive end of a date-like token run beginning at `start`.
+///
+/// The matched pattern is reported through `observer` as a stable category
+/// name, so callers can tell which of the three shapes was recognised without
+/// the helper touching a logging vendor.
 pub(in crate::wrap::inline) fn try_match_date_sequence(
     tokens: &[String],
     start: usize,
+    observer: &mut ObserverHandle<'_>,
 ) -> Option<usize> {
-    if let Some(end) = match_ordinal_day_month_year(tokens, start) {
-        Some(end)
+    let (end, pattern) = if let Some(end) = match_ordinal_day_month_year(tokens, start) {
+        (end, "ordinal_day_month_year")
     } else if let Some(end) = match_numeric_day_month_year(tokens, start) {
-        Some(end)
+        (end, "numeric_day_month_year")
     } else {
-        match_month_numeric_day_year(tokens, start)
+        (
+            match_month_numeric_day_year(tokens, start)?,
+            "month_numeric_day_year",
+        )
+    };
+
+    if let Some(observer) = observer.as_deref_mut() {
+        observer.observe(Event::DateSequenceMatched {
+            start,
+            end,
+            pattern,
+        });
     }
+    Some(end)
 }
 
 /// Return the first token span representing a complete date, optionally
@@ -80,13 +87,7 @@ pub(in crate::wrap::inline) fn date_token_span(
     start: usize,
     observer: &mut ObserverHandle<'_>,
 ) -> Option<(usize, usize)> {
-    let date_end = try_match_date_sequence(tokens, start)?;
-    if let Some(observer) = observer.as_deref_mut() {
-        observer.observe(Event::DateSequenceMatched {
-            start,
-            end: date_end,
-        });
-    }
+    let date_end = try_match_date_sequence(tokens, start, observer)?;
     let mut date_width = tokens[start..date_end]
         .iter()
         .map(|token| UnicodeWidthStr::width(token.as_str()))
@@ -321,6 +322,9 @@ mod coupling_tests;
 #[path = "span_helper_props.rs"]
 mod span_helper_props;
 
+#[cfg(test)]
+#[path = "span_helper_tracing_tests.rs"]
+mod span_helper_tracing_tests;
 #[cfg(test)]
 mod tracing_tests {
     //! Traced-event test for date-sequence grouping.
