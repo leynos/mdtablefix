@@ -154,22 +154,34 @@ fn propagates_ripgrep_scan_failure() {
 /// still validates only `$(firstword $(RG))`. The guard must therefore split
 /// `RG` on whitespace and forward the extra arguments to ripgrep ahead of its
 /// own, rather than treating the whole value as one executable name.
-#[test]
-fn preserves_arguments_supplied_through_rg() {
-    let dir = TempDir::new().expect("failed to create temp dir");
-    let argv_log = dir.path().join("argv.txt");
-    // A stub that records its argv, then reports "no matches" so the guard
-    // takes its clean-scan path.
-    let stub = write_stub(
-        dir.path(),
-        "rg-stub.sh",
-        &format!(
-            "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > '{}'\nexit 1\n",
-            argv_log.display()
-        ),
-    );
+///
+/// The `single_quote` case pins the stub's own quoting: the log path is derived
+/// from `$0` inside the script rather than interpolated into its source, so a
+/// `TMPDIR` containing a single quote cannot break the recording. (The
+/// directory name deliberately omits whitespace, since `RG` is split on it.)
+#[rstest]
+#[case::plain("scan")]
+#[case::single_quote("scan's")]
+fn preserves_arguments_supplied_through_rg(#[case] dir_name: &str) {
+    let root = TempDir::new().expect("failed to create temp dir");
+    let dir = root.path().join(dir_name);
+    std::fs::create_dir(&dir).expect("failed to create scan dir");
 
-    let output = run_guard(dir.path(), Some(&format!("{} --pcre2", stub.display())));
+    // A stub that records its argv, then reports "no matches" so the guard
+    // takes its clean-scan path. It writes beside itself via `"$0.argv"`, so no
+    // path is interpolated into the script source.
+    let stub = write_stub(
+        &dir,
+        "rg-stub.sh",
+        "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > \"$0.argv\"\nexit 1\n",
+    );
+    let argv_log = {
+        let mut path = stub.clone().into_os_string();
+        path.push(".argv");
+        PathBuf::from(path)
+    };
+
+    let output = run_guard(&dir, Some(&format!("{} --pcre2", stub.display())));
 
     assert_eq!(
         output.status.code(),
@@ -194,7 +206,7 @@ fn preserves_arguments_supplied_through_rg() {
     );
     assert_eq!(
         argv.last().map(String::as_str),
-        Some(dir.path().to_str().expect("temp dir path should be UTF-8")),
+        Some(dir.to_str().expect("temp dir path should be UTF-8")),
         "the scan directory must remain the final argument, got: {argv:?}"
     );
 }
