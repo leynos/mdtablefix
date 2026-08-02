@@ -14,12 +14,18 @@
 //! so the guard (which scans `*.rs`) does not match the fixtures in place; the
 //! tests copy each fixture into a temporary directory as a `.rs` file before
 //! scanning.
+//!
+//! Paths are [`camino`] UTF-8 types and every filesystem operation goes
+//! through a [`cap_std::fs_utf8::Dir`] capability scoped to the directory it
+//! touches, so reads and writes cannot stray outside the manifest or the
+//! temporary directory they belong to. [`TempDir`] still provides the isolated
+//! directories and [`Command`] still runs the guard; only the path and
+//! filesystem layers change.
 
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::process::Command;
 
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use proptest::prelude::*;
 use rstest::rstest;
 use tempfile::TempDir;
@@ -46,20 +52,40 @@ const PROHIBITED_FORMS: &[&str] = &[
     "once_cell_lazy_move",
 ];
 
-fn manifest_dir() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
+/// Adapt an ambient [`std::path::Path`] — as produced by [`TempDir::path`] —
+/// into a UTF-8 path, failing loudly rather than lossily if it is not UTF-8.
+fn utf8(path: &std::path::Path) -> &Utf8Path {
+    Utf8Path::from_path(path).expect("temporary directory path should be UTF-8")
+}
 
-fn script_path() -> PathBuf { manifest_dir().join("scripts/check-static-regexes.sh") }
+/// Open a filesystem capability scoped to `dir`.
+///
+/// Every subsequent operation names a path relative to this handle, so it
+/// cannot reach outside `dir`.
+fn open_dir(dir: &Utf8Path) -> Dir {
+    Dir::open_ambient_dir(dir, ambient_authority())
+        .unwrap_or_else(|e| panic!("failed to open directory {dir}: {e}"))
+}
 
+/// The crate root, used as the capability root for reading fixtures.
+fn manifest_dir() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
+
+/// The guard script under test.
+fn script_path() -> Utf8PathBuf { manifest_dir().join("scripts/check-static-regexes.sh") }
+
+/// Read `label`'s fixture through a capability scoped to the crate root.
 fn fixture(label: &str) -> String {
-    let path = manifest_dir().join(format!("tests/data/static_regex/{label}.rs.txt"));
-    std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("failed to read fixture {}: {e}", path.display()))
+    let relative = format!("tests/data/static_regex/{label}.rs.txt");
+    open_dir(&manifest_dir())
+        .read_to_string(&relative)
+        .unwrap_or_else(|e| panic!("failed to read fixture {relative}: {e}"))
 }
 
 /// Materialize `label`'s fixture as a `.rs` file inside a fresh temp directory.
 fn scan_dir_with(label: &str) -> TempDir {
     let dir = TempDir::new().expect("failed to create temp dir");
-    std::fs::write(dir.path().join(format!("{label}.rs")), fixture(label))
+    open_dir(utf8(dir.path()))
+        .write(format!("{label}.rs"), fixture(label))
         .expect("failed to write fixture into temp dir");
     dir
 }
@@ -71,7 +97,7 @@ fn scan_dir_with(label: &str) -> TempDir {
 /// `rg --pcre2`); the guard splits it on whitespace. Passing `None` clears any
 /// ambient `RG` so default-path runs exercise the guard's own `rg` default
 /// deterministically.
-fn run_guard(scan_dir: &Path, rg: Option<&str>) -> std::process::Output {
+fn run_guard(scan_dir: &Utf8Path, rg: Option<&str>) -> std::process::Output {
     let mut cmd = Command::new(script_path());
     cmd.arg(scan_dir);
     match rg {
@@ -82,17 +108,21 @@ fn run_guard(scan_dir: &Path, rg: Option<&str>) -> std::process::Output {
         .expect("failed to execute check-static-regexes.sh")
 }
 
-/// Write `script` to `<dir>/<name>` and mark it executable.
-fn write_stub(dir: &Path, name: &str, script: &str) -> PathBuf {
-    let path = dir.join(name);
-    std::fs::write(&path, script).expect("failed to write stub");
+/// Write `script` to `<dir>/<name>`, mark it executable, and return its path.
+///
+/// Both operations go through a capability scoped to `dir`, so `name` is
+/// resolved relative to that directory rather than against ambient authority.
+fn write_stub(dir: &Utf8Path, name: &str, script: &str) -> Utf8PathBuf {
+    let handle = open_dir(dir);
+    handle.write(name, script).expect("failed to write stub");
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+        use cap_std::fs::{Permissions, PermissionsExt};
+        handle
+            .set_permissions(name, Permissions::from_mode(0o755))
             .expect("failed to chmod stub");
     }
-    path
+    dir.join(name)
 }
 
 #[rstest]
@@ -100,7 +130,7 @@ fn rejects_prohibited_lazy_wrapper_form(#[values(0, 1, 2, 3, 4, 5)] index: usize
     let label = PROHIBITED_FORMS[index];
     let dir = scan_dir_with(label);
 
-    let output = run_guard(dir.path(), None);
+    let output = run_guard(utf8(dir.path()), None);
 
     assert_eq!(
         output.status.code(),
@@ -120,7 +150,7 @@ fn accepts_clean_sources() {
     // `Regex::new` call that must not trip the guard.
     let dir = scan_dir_with("clean");
 
-    let output = run_guard(dir.path(), None);
+    let output = run_guard(utf8(dir.path()), None);
 
     assert_eq!(
         output.status.code(),
@@ -133,10 +163,11 @@ fn accepts_clean_sources() {
 #[test]
 fn propagates_ripgrep_scan_failure() {
     let dir = TempDir::new().expect("failed to create temp dir");
+    let scan_dir = utf8(dir.path());
     // A stub standing in for ripgrep that fails with a distinctive status.
-    let stub = write_stub(dir.path(), "rg-stub.sh", "#!/bin/sh\nexit 3\n");
+    let stub = write_stub(scan_dir, "rg-stub.sh", "#!/bin/sh\nexit 3\n");
 
-    let output = run_guard(dir.path(), Some(&stub.display().to_string()));
+    let output = run_guard(scan_dir, Some(stub.as_str()));
 
     assert_eq!(
         output.status.code(),
@@ -164,25 +195,25 @@ fn propagates_ripgrep_scan_failure() {
 #[case::plain("scan")]
 #[case::single_quote("scan's")]
 fn preserves_arguments_supplied_through_rg(#[case] dir_name: &str) {
+    const STUB_NAME: &str = "rg-stub.sh";
+
     let root = TempDir::new().expect("failed to create temp dir");
-    let dir = root.path().join(dir_name);
-    std::fs::create_dir(&dir).expect("failed to create scan dir");
+    let root_dir = utf8(root.path());
+    open_dir(root_dir)
+        .create_dir(dir_name)
+        .expect("failed to create scan dir");
+    let dir = root_dir.join(dir_name);
 
     // A stub that records its argv, then reports "no matches" so the guard
     // takes its clean-scan path. It writes beside itself via `"$0.argv"`, so no
     // path is interpolated into the script source.
     let stub = write_stub(
         &dir,
-        "rg-stub.sh",
+        STUB_NAME,
         "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > \"$0.argv\"\nexit 1\n",
     );
-    let argv_log = {
-        let mut path = stub.clone().into_os_string();
-        path.push(".argv");
-        PathBuf::from(path)
-    };
 
-    let output = run_guard(&dir, Some(&format!("{} --pcre2", stub.display())));
+    let output = run_guard(&dir, Some(&format!("{stub} --pcre2")));
 
     assert_eq!(
         output.status.code(),
@@ -191,7 +222,8 @@ fn preserves_arguments_supplied_through_rg(#[case] dir_name: &str) {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let argv: Vec<String> = std::fs::read_to_string(&argv_log)
+    let argv: Vec<String> = open_dir(&dir)
+        .read_to_string(format!("{STUB_NAME}.argv"))
         .expect("stub should have recorded its argv")
         .lines()
         .map(str::to_owned)
@@ -207,7 +239,7 @@ fn preserves_arguments_supplied_through_rg(#[case] dir_name: &str) {
     );
     assert_eq!(
         argv.last().map(String::as_str),
-        Some(dir.to_str().expect("temp dir path should be UTF-8")),
+        Some(dir.as_str()),
         "the scan directory must remain the final argument, got: {argv:?}"
     );
 }
@@ -299,11 +331,13 @@ prop_compose! {
 /// Write each declaration to its own `.rs` file and scan the directory once.
 fn scan_generated(declarations: &[String]) -> (TempDir, std::process::Output) {
     let dir = TempDir::new().expect("failed to create temp dir");
+    let handle = open_dir(utf8(dir.path()));
     for (index, declaration) in declarations.iter().enumerate() {
-        std::fs::write(dir.path().join(format!("case{index}.rs")), declaration)
+        handle
+            .write(format!("case{index}.rs"), declaration)
             .expect("failed to write generated source");
     }
-    let output = run_guard(dir.path(), None);
+    let output = run_guard(utf8(dir.path()), None);
     (dir, output)
 }
 
