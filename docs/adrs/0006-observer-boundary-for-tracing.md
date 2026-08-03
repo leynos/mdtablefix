@@ -36,15 +36,16 @@ points where they previously called `tracing` macros; they no longer import
 carries only cheap, borrowed data — indices, flags, and `&str` slices — so
 constructing an event costs no more than a few copies.
 
-`TracingObserver`, the crate's single `Observer` implementation, lives in
-`src/wrap/tracing_adapter.rs` and translates each `Event` into the crate's
-existing `tracing` records. It owns every vendor-specific concern: the
-`tracing::enabled!` level gate for each event and any derived value that
+`TracingObserver`, the crate's single production `Observer` implementation,
+lives in `src/wrap/tracing_adapter.rs` and translates each `Event` into the
+crate's existing `tracing` records. It owns every vendor-specific concern:
+the `tracing::enabled!` level gate for each event and any derived value that
 costs more than a copy, such as the `chars().count()` used to report
 `token_length`. Diagnostics are metadata-only: the adapter derives bounded
 values from the borrowed token text but never records the text itself, so no
 raw document content reaches a subscriber. A `#[cfg(test)]`-only
-`NoOpObserver` in `observer.rs` discards every event for tests that need an
+`NoOpObserver` in `observer.rs` is the crate's other `Observer`
+implementation; it discards every event for tests that need an
 `ObserverHandle` without a subscriber.
 
 New diagnostics needs are met by adding an `Event` variant and a matching arm

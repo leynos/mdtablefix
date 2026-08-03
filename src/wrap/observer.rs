@@ -1,4 +1,34 @@
-//! Domain events emitted while classifying inline Markdown.
+//! The observer port for inline-Markdown classification diagnostics.
+//!
+//! This module defines the boundary that keeps inline wrapping free of any
+//! logging vendor. It owns three things:
+//!
+//! - [`Event`], the closed set of observable outcomes the domain reports — tokens parsed,
+//!   predicates evaluated, spans grouped, fragments classified. [`FragmentKind`] and [`SpanKind`]
+//!   are the classification vocabulary those events carry.
+//! - [`Observer`], the port itself: a single `observe` method receiving one `Event`.
+//! - [`ObserverHandle`], the optional borrowed handle threaded through the wrapping pipeline so any
+//!   helper can report without owning an observer.
+//!
+//! # Flow
+//!
+//! Domain helpers in `crate::wrap::inline` and `crate::wrap::tokenize` take a
+//! `&mut ObserverHandle<'_>` and, when it is `Some`, hand over an `Event`. They
+//! never call `tracing`. The crate's production adapter,
+//! [`TracingObserver`](super::tracing_adapter::TracingObserver), implements
+//! `Observer` and turns each event into a level-gated `tracing` record; a
+//! test-only [`NoOpObserver`] discards everything. Passing `None` runs the pure
+//! domain path and emits nothing at all.
+//!
+//! # Cost and content rules
+//!
+//! Events carry only cheap borrowed data. Anything costlier than a copy — a
+//! Unicode scan, for instance — is the observer's job, so a disabled adapter
+//! pays only a branch. Observers must record content-free metadata: borrowed
+//! token text exists so an observer can derive a length, never so it can log
+//! the text. See `docs/developers-guide.md` and
+//! `docs/adrs/0006-observer-boundary-for-tracing.md` for the ownership and
+//! reuse policy governing this port.
 
 use std::fmt;
 

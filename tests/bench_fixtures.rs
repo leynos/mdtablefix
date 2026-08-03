@@ -13,6 +13,8 @@ use mdtablefix::{
         INLINE_CLAUSES,
         large_inline_paragraph,
         realistic_markdown_document,
+        wrap_with_tracing_observer,
+        wrap_without_observer,
     },
     wrap_text,
 };
@@ -95,4 +97,25 @@ fn large_inline_paragraph_fixture_covers_and_preserves_constructs() {
     let wrapped = wrap_text(&[paragraph], BENCH_WIDTH).join("\n");
     assert_covers_link_code_footnote(&wrapped, "the wrapped inline paragraph");
     assert_all_constructs_intact(&wrapped, &constructs, "the wrapped inline paragraph");
+}
+
+/// The benchmark shims must agree: the observer is a diagnostics channel, so
+/// attaching a `TracingObserver` cannot change wrapped output.
+///
+/// This runs as an ordinary test rather than inside the trybuild harness, which
+/// covers the API surface only.
+#[test]
+fn bench_shims_produce_identical_output() {
+    for (label, text) in [
+        ("inline paragraph", large_inline_paragraph()),
+        ("document", realistic_markdown_document().join("\n")),
+    ] {
+        let unobserved = wrap_without_observer(&text, BENCH_WIDTH);
+        let observed = wrap_with_tracing_observer(&text, BENCH_WIDTH);
+        assert!(!unobserved.is_empty(), "{label}: wrapped output was empty");
+        assert_eq!(
+            unobserved, observed,
+            "{label}: attaching an observer changed the wrapped output"
+        );
+    }
 }
