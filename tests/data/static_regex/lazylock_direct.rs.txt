@@ -1,0 +1,1 @@
+static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new("a").unwrap());
