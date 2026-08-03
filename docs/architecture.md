@@ -579,7 +579,7 @@ sequenceDiagram
     participant WT as wrap_text
     participant PW as ParagraphWriter
     participant WP as wrap_preserving_code
-    participant IH as inline.rs_helpers
+    participant IH as inline_wrapping_helpers
     participant TW as textwrap::wrap_first_fit
 
     CLI->>WT: wrap_text(lines, width)
@@ -608,9 +608,8 @@ paragraph handling to `ParagraphWriter`; wrappable paragraph content then flows
 through `wrap_preserving_code`, the span-grouping helpers in
 `src/wrap/inline/span_grouping.rs`, the fragment-building and line-fitting
 helpers in `src/wrap/inline/wrapping.rs`, and the underlying `textwrap` engine
-before
-wrapped lines return through the same stack to the CLI, while nonwrappable
-lines bypass the inline wrapping path and are emitted unchanged.
+before wrapped lines return through the same stack to the CLI, while
+nonwrappable lines bypass the inline wrapping path and are emitted unchanged.
 
 The helper `html_table_to_markdown` is retained for backward compatibility but
 is deprecated. New code should call `convert_html_tables` instead.

@@ -188,8 +188,9 @@ refactoring audit covering issues `#357`–`#367` in PR `#368`.
 - `has_inline_code_structure(text: &str) -> bool` returns `true` when `text`
   begins with a backtick fence (optionally preceded by an opening bracket or
   punctuation) and contains a corresponding closing fence, with or without a
-  trailing inflectional suffix. Used by `classify_fragment` and `inline.rs` to
-  identify combined code+suffix tokens as atomic inline code.
+  trailing inflectional suffix. Used by `classify_fragment` and
+  `src/wrap/inline/span_grouping.rs` to identify combined code+suffix tokens
+  as atomic inline code.
 
 ## HTML parser dependency coupling
 
@@ -495,8 +496,8 @@ opener-at-EOL tight joining, or original-line verbatim flushing for
 `trim_code_span_edge_spaces` for metadata-guided trimming of synthetic
 code-span boundary spaces.
 
-`SpanKind` in `src/wrap/inline/span_helpers.rs` records how a grouped token
-span behaves while `determine_token_span` walks the stream: `General` for
+`SpanKind` in `src/wrap/observer.rs` records how a grouped token span behaves
+while `determine_token_span` walks the stream: `General` for
 ordinary prose, `Code` and `Link` for atomic inline spans, and `FootnoteRef`
 when a footnote marker has been promoted or grouped with preceding punctuation.
 
@@ -802,9 +803,9 @@ module. `FootnoteRefChecked` is emitted from `looks_like_footnote_ref` and
 over-width date fallback remains behaviour-only and emits no event.
 `DateSequenceGrouped`, `WhitespaceFootnoteCoupling`, and
 `FootnoteReferenceCoupling` are emitted from `determine_token_span_observed` in
-`src/wrap/inline/wrapping.rs`, which is where those grouping decisions are
-made. The two coupling events report only when the token concerned really is a
-footnote reference, so they describe grouping decisions rather than every
+`src/wrap/inline/span_grouping.rs`, which is where those grouping decisions
+are made. The two coupling events report only when the token concerned really
+is a footnote reference, so they describe grouping decisions rather than every
 whitespace run. `FragmentClassified` is emitted from
 `InlineFragment::new_observed` in `src/wrap/inline/fragment.rs`.
 
