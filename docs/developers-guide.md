@@ -332,9 +332,10 @@ depth-aware tracking.
    non-obvious decision boundaries.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
-   `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
-   the tokens into `InlineFragment` values via `determine_token_span`, and calls
-    `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
+   `src/wrap/inline/wrapping.rs` tokenizes prose with
+   `tokenize::segment_inline`, groups the tokens into `InlineFragment` values
+   via `determine_token_span` in `src/wrap/inline/span_grouping.rs`, and calls
+   `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
    buffer. Token predicates in `src/wrap/inline/predicates.rs` classify
    punctuation, links, code spans, and footnote markers. Span grouping helpers
    in `src/wrap/inline/span_helpers.rs` extend grouped spans over trailing
@@ -373,11 +374,12 @@ depth-aware tracking.
    its configured wrap width into `merge_whitespace_only_lines`; that pass must
    compare any projected inline-code tail carry against the same width before
    moving an atomic code span onto a following content line. `render_line` in
-   `src/wrap/inline.rs` converts each finished fragment line into Markdown
-   text. Its `strip_leading_carry_whitespace` flag removes carry whitespace
-   that the fitter attaches to the start of wrapped continuation lines; it is
-   set only when `wrap_preserving_code` has already emitted at least one line,
-   so intentional leading whitespace on the first output line is preserved.
+   `src/wrap/inline/wrapping.rs` converts each finished fragment line into
+   Markdown text. Its `strip_leading_carry_whitespace` flag removes carry
+   whitespace that the fitter attaches to the start of wrapped continuation
+   lines; it is set only when `wrap_preserving_code` has already emitted at
+   least one line, so intentional leading whitespace on the first output line is
+   preserved.
    Non-final lines may also drop a single trailing space unless the line ends
    with a hard-break double space.
 
@@ -456,14 +458,15 @@ Table: Key types and functions.
 | `LinkReferenceMatcher`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/link_reference.rs`          |
 | `LinkTitleWindow`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `src/wrap/link_reference.rs`          |
 | `classify_block`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/block.rs`                   |
-| `FragmentKind`, `InlineFragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/fragment.rs`         |
+| `InlineFragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/fragment.rs`         |
+| `Event`, `Observer`, `ObserverHandle`, `FragmentKind`, `SpanKind`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `src/wrap/observer.rs`                |
 | `classify_fragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/wrap/inline/fragment.rs`         |
 | Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, `is_month_name`, `is_ordinal_day`, `is_numeric_day`, `is_year`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/inline/predicates.rs`       |
-| `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, `try_match_date_sequence`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `src/wrap/inline/span_helpers.rs`     |
+| Span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, `try_match_date_sequence`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline/span_helpers.rs`     |
 | `try_couple_inline_link_after_opener`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/inline/span_helpers.rs`     |
 | `normalize_footnote_ref_spacing`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/normalize.rs`        |
-| `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline.rs`                  |
-| `determine_token_span`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/inline.rs`                  |
+| `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline/wrapping.rs`         |
+| `determine_token_span`, `determine_token_span_observed`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `src/wrap/inline/span_grouping.rs`    |
 | `merge_whitespace_only_lines`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/inline/postprocess.rs`      |
 | `rebalance_atomic_tails`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline/postprocess.rs`      |
 | `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/paragraph.rs`               |
@@ -533,7 +536,8 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   at least one alphabetic character (for example `pre-`, `LLM-`, `(API-`) — are
   coupled forward to the next inline code span during span grouping by the
   `ends_with_hyphen_prefix` predicate in `src/wrap/inline/predicates.rs`,
-  applied in `determine_token_span` in `src/wrap/inline.rs`. The coupling
+  applied in `determine_token_span` in `src/wrap/inline/span_grouping.rs`. The
+  coupling
   mirrors the existing opening-punctuation pattern, so compounds such as
   `` pre-`LLMPort` `` and `` (API-`Foo`) `` remain atomic during wrapping.
   Internal hyphen chains (e.g. `state-of-the-art-`) are accepted by design;
@@ -597,10 +601,12 @@ emit a domain-level `Event` through a `&mut ObserverHandle<'_>` — an alias for
 variants carry only cheap, borrowed data: indices, flags, and `&str` slices.
 `TracingObserver` in
 [src/wrap/tracing_adapter.rs](../src/wrap/tracing_adapter.rs) is the only
-adapter and translates each `Event` into the crate's `tracing` records; it
-owns every vendor-specific concern, including the `tracing::enabled!` level
-gate and any derived value that costs more than a copy. `NoOpObserver`, also
-declared in `observer.rs`, is `#[cfg(test)]`-only and discards every event.
+production adapter and translates each `Event` into the crate's `tracing`
+records; it owns every vendor-specific concern, including the
+`tracing::enabled!` level gate and any derived value that costs more than a
+copy. `NoOpObserver`, also declared in `observer.rs`, is the crate's other
+`Observer` implementation; it is `#[cfg(test)]`-only and discards every
+event.
 
 This is the abstraction's ownership and reuse policy, per the
 abstraction/port/helper policy in `AGENTS.md`:
@@ -669,10 +675,16 @@ Table: Structured field names emitted by tracing instrumentation.
 | `transition`      | `&str`          | fence-state events                            | Stable fence-state transition category                      |
 
 For example, a domain helper emits a borrowed event without touching
-`tracing`:
+`tracing`, guarding the call so an event is emitted only when the handle is
+`Some`:
 
 ```rust
-observer.observe(Event::FragmentClassified { token, kind });
+if let Some(observer) = observer.as_deref_mut() {
+    observer.observe(Event::FragmentClassified {
+        token: text.as_str(),
+        kind,
+    });
+}
 ```
 
 `TracingObserver` then gates it and derives content-free metadata from the
@@ -728,9 +740,10 @@ under test is narrower: with tracing disabled, **no derived-payload work** runs
 `tracing::enabled!` gates), so the residual overhead stays small and roughly
 constant per event rather than scaling with token length.
 
-Read the pair as a bounded-overhead check, not an equality check. A small,
-stable gap is expected. A gap that grows with input size, or that widens
-markedly between runs on comparable hardware, indicates derived-payload work has
+Read the pair as a bounded-overhead check, not an equality check, and judge it
+per emitted event: the overhead per event should stay small and stable, or
+equivalently, total overhead should grow no faster than the event count. A gap
+that grows faster than the event count indicates derived-payload work has
 leaked back onto the hot path.
 
 ### Security considerations
@@ -774,6 +787,7 @@ message.
 | `WhitespaceFootnoteCoupling` | `coupled whitespace before colon-suffixed footnote reference` | debug | `span_kind`, `token_length`, `has_following_colon`                          |
 | `WhitespaceFootnoteCoupling` | `declined whitespace coupling before footnote reference`      | debug | `span_kind`, `token_length`, `has_following_colon`, `error_category`        |
 | `FootnoteReferenceCoupling`  | `coupled colon-suffixed footnote reference after whitespace`  | debug | `span_kind`, `token_length`, `has_following_colon`                          |
+| `FootnoteReferenceCoupling`  | `coupled footnote reference into current span`                | debug | `span_kind`, `token_length`, `has_following_colon`                          |
 | `FootnoteReferenceCoupling`  | `declined footnote reference coupling`                        | debug | `span_kind`, `token_length`, `follows_space_before_colon`, `error_category` |
 | `FragmentClassified`         | `fragment classified`                                         | debug | `token_length`, `kind`                                                      |
 

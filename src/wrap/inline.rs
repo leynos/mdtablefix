@@ -13,8 +13,11 @@ mod footnote_tests;
 mod fragment;
 mod month_names;
 mod normalize;
+#[cfg(test)]
+mod observer_props;
 mod postprocess;
 mod predicates;
+mod span_grouping;
 mod span_helpers;
 #[cfg(test)]
 mod test_support;
@@ -34,12 +37,12 @@ pub(in crate::wrap::inline) use predicates::{
     is_whitespace_token,
     looks_like_footnote_ref,
 };
+#[cfg(test)]
+pub(super) use span_grouping::determine_token_span;
 /// Re-exports the test-only helper that joins punctuation onto a prior code
 /// line when `current` is empty.
 #[cfg(test)]
 pub(super) use test_support::attach_punctuation_to_previous_line;
-#[cfg(test)]
-pub(super) use wrapping::determine_token_span;
 // Public wrapping entry points, defined in `wrapping` and surfaced here so
 // `paragraph` and the wrap test suites keep using `inline::…` paths.
 pub(super) use wrapping::wrap_preserving_code;

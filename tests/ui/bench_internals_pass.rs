@@ -2,9 +2,10 @@
 //! stays usable by a downstream crate that writes its own wrapping benchmarks
 //! when `bench-internals` is enabled.
 //!
-//! The fixture also pins the shims' behavioural contract: attaching a
-//! `TracingObserver` must not change wrapped output, so the observer boundary
-//! stays a pure diagnostics channel.
+//! This fixture covers the API surface only — that every item is reachable and
+//! callable with the expected signature. The shims' behavioural contract is
+//! asserted in `tests/bench_fixtures.rs`, which runs as an ordinary test rather
+//! than inside the compile harness.
 
 use mdtablefix::wrap::bench_internals::{
     BENCH_WIDTH,
@@ -32,10 +33,8 @@ fn main() {
     assert!(paragraph.contains('`'), "fixture covers inline code");
     assert!(paragraph.contains("[^"), "fixture covers footnote references");
 
-    // Both shims wrap the same input; the observer is diagnostics-only, so
-    // attaching one must leave the wrapped output byte-for-byte identical.
-    let unobserved = wrap_without_observer(&paragraph, BENCH_WIDTH);
-    let observed = wrap_with_tracing_observer(&paragraph, BENCH_WIDTH);
-    assert!(!unobserved.is_empty());
-    assert_eq!(unobserved, observed);
+    // Both shims are reachable and return wrapped lines. Their behavioural
+    // equivalence is asserted in `tests/bench_fixtures.rs`.
+    assert!(!wrap_without_observer(&paragraph, BENCH_WIDTH).is_empty());
+    assert!(!wrap_with_tracing_observer(&paragraph, BENCH_WIDTH).is_empty());
 }

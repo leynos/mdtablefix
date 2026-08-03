@@ -1,4 +1,35 @@
-//! `tracing` integration for inline-classification domain events.
+//! The `tracing` adapter for inline-classification domain events.
+//!
+//! This module is the only place in the wrapping pipeline that calls `tracing`.
+//! It implements the [`Observer`] port from [`super::observer`] with
+//! [`TracingObserver`], translating each domain [`Event`] into one structured
+//! `tracing` record.
+//!
+//! # Flow
+//!
+//! A domain helper reports an outcome by handing an `Event` to whatever
+//! observer is attached. When that observer is `TracingObserver`, `observe`
+//! matches the variant, checks the level gate for it, and emits a `debug!` or
+//! `trace!` record. Every arm is guarded by `tracing::enabled!`, so with no
+//! subscriber installed the whole translation costs one branch per event.
+//!
+//! # What the adapter owns
+//!
+//! Two vendor-specific concerns live here and nowhere else:
+//!
+//! - **Level gating.** Which events are DEBUG and which are TRACE.
+//! - **Derived values.** Anything costlier than a copy, such as the `chars().count()` behind
+//!   `token_length`, is computed inside the gated arm so a disabled subscriber never pays for it.
+//!
+//! Every emitted field is content-free metadata: counts, indices, flags,
+//! classification enums, and stable category strings. Borrowed token text is
+//! used only to derive those values and is never recorded, so raw document
+//! content cannot reach a subscriber. Adding a diagnostic means adding an
+//! `Event` variant and a matching arm here — not importing `tracing` into a
+//! domain module.
+//!
+//! [`Observer`]: super::observer::Observer
+//! [`Event`]: super::observer::Event
 
 use tracing::{debug, trace};
 
@@ -34,6 +65,11 @@ fn log_whitespace_footnote_coupling(
 }
 
 /// Records the outcome of weighing an adjacent footnote reference.
+///
+/// All four combinations of `coupled` and `follows_space_before_colon` produce
+/// a record. A reference can be coupled for reasons unrelated to the
+/// colon-after-whitespace context — absorbed into a code or link span, say — so
+/// that case gets its own message rather than passing silently.
 fn log_footnote_reference_coupling(
     kind: SpanKind,
     token: &str,
@@ -48,7 +84,14 @@ fn log_footnote_reference_coupling(
             has_following_colon = true,
             "coupled colon-suffixed footnote reference after whitespace"
         );
-    } else if !coupled {
+    } else if coupled {
+        debug!(
+            span_kind = ?kind,
+            token_length,
+            has_following_colon = false,
+            "coupled footnote reference into current span"
+        );
+    } else {
         debug!(
             span_kind = ?kind,
             token_length,

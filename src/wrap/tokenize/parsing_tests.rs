@@ -253,7 +253,20 @@ mod tracing_tests {
         assert!(logs_contain("link or image parsed"));
         assert!(logs_contain("token_length=11"));
         assert!(!logs_contain("[link](url)"));
-        assert!(logs_contain("is_image="));
+        assert!(logs_contain("is_image=false"));
+    }
+
+    #[traced_test]
+    #[test]
+    fn parse_link_or_image_logs_image_parsed() {
+        let mut observer = TracingObserver;
+        let (token, _) = parse_link_or_image("![alt](url)", 0, &mut Some(&mut observer));
+        // Observable parse result: the image literal is kept atomic.
+        assert_eq!(token, "![alt](url)");
+        assert!(logs_contain("link or image parsed"));
+        assert!(logs_contain("token_length=11"));
+        assert!(logs_contain("is_image=true"));
+        assert!(!logs_contain("![alt](url)"));
     }
 
     #[traced_test]

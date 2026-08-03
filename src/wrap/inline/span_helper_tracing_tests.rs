@@ -12,7 +12,7 @@ use tracing_test::traced_test;
 
 use super::{date_token_span, try_match_date_sequence};
 use crate::wrap::{
-    inline::wrapping::determine_token_span_observed,
+    inline::span_grouping::determine_token_span_observed,
     tracing_adapter::TracingObserver,
     tracing_snapshot_support::normalise_event_lines,
 };
