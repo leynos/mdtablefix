@@ -1,0 +1,8 @@
+---
+source: tests/html_snapshots.rs
+expression: output
+---
+| Name  | Value |
+| ----- | ----- |
+| Alpha | 1     |
+| Beta  | 22    |
