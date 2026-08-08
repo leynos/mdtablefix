@@ -131,6 +131,22 @@ pub(super) fn apply_continuation_chunk(
     }
 }
 
+/// Splits the pending buffer at a close-then-reopen boundary, emitting the
+/// resolved prefix and re-seeding `pending` with the freshly reopened span.
+///
+/// A single continuation chunk can close the currently open code span and open
+/// a new one; this helper exists for exactly that case. It flushes everything
+/// up to `split_at`, then rebuilds `pending.rest` so it holds only the reopened
+/// span, prefixed with its `new_len` backtick run. Two invariants must survive
+/// the rewrite: `synthetic_join_spaces` offsets are rebased onto the new,
+/// shorter `rest` (dropping any that fall before the split), and
+/// `open_fence_len` is re-derived from that `rest` so subsequent chunks scan
+/// against the correct fence width. When the reopened opener sits at end of
+/// line (`opener_at_eol`) the mode is forced to `TightCodeSpan`: `CommonMark`
+/// would turn the following soft break into a space inside the span, and
+/// preserving it would emit an MD038 (space-inside-code-span) violation.
+/// Returns `true` when the reopened span is already closed, signalling the
+/// caller to flush immediately.
 fn reopen_pending_span(
     writer: &mut ParagraphWriter<'_>,
     pending: &mut PendingPrefix,
@@ -298,6 +314,17 @@ fn leading_run_needs_space(
     }
 }
 
+/// Reports whether a join space must be suppressed because the open code span
+/// ends on a nested, still-unclosed `(`.
+///
+/// Normally a soft-wrapped continuation is joined with a single space, but that
+/// space is wrong when the pending text ends mid-token inside a code span — for
+/// example a Rust path such as `foo((bar` split after the inner `(`. The guard
+/// only fires when a span is actually open (`open_fence_len > 0`) and `existing`
+/// ends with `(`, and only when the parenthesis nesting inside the span is
+/// deeper than one: a single open paren is an ordinary word boundary that should
+/// still take the space, whereas depth `> 1` signals a nested construct whose
+/// halves must abut. See [`unclosed_parenthesis_depth`] for the depth count.
 fn suppresses_join_space_after_nested_open_paren(existing: &str, open_fence_len: usize) -> bool {
     if open_fence_len == 0 || !existing.ends_with('(') {
         return false;
@@ -310,6 +337,14 @@ fn suppresses_join_space_after_nested_open_paren(existing: &str, open_fence_len:
     unclosed_parenthesis_depth(code_tail) > 1
 }
 
+/// Counts the net depth of unclosed `(` runs left open by `text`.
+///
+/// The count saturates at zero on `)`, so a span containing more closers than
+/// openers (or a leading `)`) never underflows the `usize` and reports depth
+/// `0` rather than panicking. This tolerance is deliberate: the caller only
+/// cares whether nesting is deeper than one, and code spans may legitimately
+/// carry unbalanced parentheses that must not abort the join-space heuristic in
+/// [`suppresses_join_space_after_nested_open_paren`].
 fn unclosed_parenthesis_depth(text: &str) -> usize {
     text.chars().fold(0usize, |depth, ch| match ch {
         '(' => depth.saturating_add(1),
