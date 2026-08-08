@@ -28,7 +28,6 @@ pub(super) use pending::{
 #[cfg(test)]
 #[path = "paragraph_tests.rs"]
 mod tests;
-
 /// Carries the parsed prefix metadata for a line that should be wrapped.
 pub(super) struct PrefixLine<'a> {
     /// Stores the literal prefix emitted on the first wrapped line.

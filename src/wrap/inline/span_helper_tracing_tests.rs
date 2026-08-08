@@ -1,4 +1,9 @@
-//! Traced-event tests for inline span helper instrumentation.
+//! Traced-event tests for inline span-helper diagnostics.
+//!
+//! The grouping helpers no longer call `tracing` themselves; they emit domain
+//! `Event` values that `TracingObserver` translates. These tests therefore
+//! attach a `TracingObserver` and assert on the records it produces, keeping
+//! the diagnostics contract covered across the observer boundary.
 
 use std::cell::RefCell;
 
@@ -6,7 +11,11 @@ use rstest::{fixture, rstest};
 use tracing_test::traced_test;
 
 use super::{date_token_span, try_match_date_sequence};
-use crate::wrap::{inline::determine_token_span, tracing_snapshot_support::normalise_event_lines};
+use crate::wrap::{
+    inline::span_grouping::determine_token_span_observed,
+    tracing_adapter::TracingObserver,
+    tracing_snapshot_support::normalise_event_lines,
+};
 
 #[fixture]
 fn date_tokens() -> Vec<String> {
@@ -29,28 +38,38 @@ fn colon_footnote_tokens() -> Vec<String> {
     ]
 }
 
-#[traced_test]
-#[rstest]
-fn try_match_date_sequence_emits_trace_event(date_tokens: Vec<String>) {
-    // Observable result: all five date tokens form one sequence (exclusive end).
-    assert_eq!(try_match_date_sequence(&date_tokens, 0), Some(5));
-    assert!(logs_contain("try_match_date_sequence"));
+/// Groups `tokens` from index 0 with a `TracingObserver` attached.
+fn grouped_with_observer(tokens: &[String]) -> (usize, usize) {
+    let mut observer = TracingObserver;
+    determine_token_span_observed(tokens, 0, &mut Some(&mut observer))
 }
 
 #[traced_test]
 #[rstest]
-fn try_match_date_sequence_logs_matched_pattern(date_tokens: Vec<String>) {
-    assert_eq!(try_match_date_sequence(&date_tokens, 0), Some(5));
+fn try_match_date_sequence_reports_matched_pattern(date_tokens: Vec<String>) {
+    let mut observer = TracingObserver;
+    // Observable result: all five date tokens form one sequence (exclusive end).
+    assert_eq!(
+        try_match_date_sequence(&date_tokens, 0, &mut Some(&mut observer)),
+        Some(5)
+    );
+    assert!(logs_contain("matched date sequence"));
     assert!(logs_contain("ordinal_day_month_year"));
 }
 
 #[traced_test]
 #[rstest]
-fn date_token_span_emits_trace_event(date_tokens: Vec<String>) {
+fn date_token_span_reports_matched_sequence(date_tokens: Vec<String>) {
+    let mut observer = TracingObserver;
     // Observable result: the span covers all five tokens with display width 18
     // ("25th December 2025"); no footnote coupling applies here.
-    assert_eq!(date_token_span(&date_tokens, 0), Some((5, 18)));
-    assert!(logs_contain("date_token_span"));
+    assert_eq!(
+        date_token_span(&date_tokens, 0, &mut Some(&mut observer)),
+        Some((5, 18))
+    );
+    assert!(logs_contain("matched date sequence"));
+    assert!(logs_contain("start=0"));
+    assert!(logs_contain("end=5"));
 }
 
 #[traced_test]
@@ -61,7 +80,7 @@ fn grouping_boundary_logs_colon_footnote_coupling(
     colon_footnote_tokens: Vec<String>,
     #[case] expected_event: &str,
 ) {
-    let _ = determine_token_span(&colon_footnote_tokens, 0);
+    let _ = grouped_with_observer(&colon_footnote_tokens);
     assert!(logs_contain(expected_event));
     assert!(logs_contain("span_kind=General"));
     assert!(logs_contain("token_length=7"));
@@ -86,7 +105,7 @@ fn grouping_boundary_logs_declined_footnote_coupling(
         .iter()
         .map(|token| (*token).to_string())
         .collect::<Vec<_>>();
-    let (end, width) = determine_token_span(&tokens, 0);
+    let (end, width) = grouped_with_observer(&tokens);
     // Observable edge-case result: a declined coupling groups only the leading
     // "word" span (end == 1, never 0), leaving the footnote outside the span.
     assert_eq!(
@@ -112,7 +131,7 @@ fn snapshots_grouped_date_sequence_event(date_tokens: Vec<String>) {
     let captured = RefCell::new(String::new());
     // Observable grouping result: the date tokens form one atomic span of
     // width 18. The snapshot below supplements this behavioural assertion.
-    let (end, width) = determine_token_span(&date_tokens, 0);
+    let (end, width) = grouped_with_observer(&date_tokens);
     assert_eq!(date_tokens[..end].join(""), "25th December 2025");
     assert_eq!(width, 18);
     logs_assert(|lines| {
@@ -136,7 +155,7 @@ fn snapshots_grouped_date_sequence_event(date_tokens: Vec<String>) {
 fn snapshots_matched_date_sequence_event(date_tokens: Vec<String>) {
     let captured = RefCell::new(String::new());
     // Observable grouping result backing the supplementary snapshot.
-    let (end, width) = determine_token_span(&date_tokens, 0);
+    let (end, width) = grouped_with_observer(&date_tokens);
     assert_eq!(date_tokens[..end].join(""), "25th December 2025");
     assert_eq!(width, 18);
     logs_assert(|lines| {
