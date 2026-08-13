@@ -2,3 +2,10 @@ target/
 **/*.rs.bk
 .crush
 *.proptest-regressions
+.vtcode/
+.claude/
+.memdb/
+.grepai/
+*.swp
+*.swo
+*~
