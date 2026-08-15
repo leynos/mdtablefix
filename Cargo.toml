@@ -9,6 +9,11 @@ description = """
 `mdtablefix` unb0rks and reflows Markdown tables so that each column has a uniform width. When \
 the `--wrap` option is used, it also wraps paragraphs and list items to 80 columns."""
 
+[features]
+# Exposes internal inline-wrapping shims and fixtures used only by
+# `benches/wrap_observer.rs`. Never enable in production; it is not part of the
+# public API and only affects `#[doc(hidden)]` benchmark support code.
+bench-internals = []
 [package.metadata.binstall]
 
 [package.metadata.binstall.overrides.'cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"), target_env = "gnu"))']
@@ -44,6 +49,11 @@ predicates = "3"
 trybuild = "1"
 tracing-test = "0.2"
 test-macros = { path = "test-macros" }
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 
+[[bench]]
+name = "wrap_observer"
+harness = false
+required-features = ["bench-internals"]
 [lints.clippy]
 pedantic = "warn"

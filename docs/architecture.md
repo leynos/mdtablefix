@@ -579,7 +579,7 @@ sequenceDiagram
     participant WT as wrap_text
     participant PW as ParagraphWriter
     participant WP as wrap_preserving_code
-    participant IH as inline.rs_helpers
+    participant IH as inline_wrapping_helpers
     participant TW as textwrap::wrap_first_fit
 
     CLI->>WT: wrap_text(lines, width)
@@ -605,13 +605,37 @@ sequenceDiagram
 
 Figure: `wrap_text` sequence flow. The CLI calls `wrap_text`, which delegates
 paragraph handling to `ParagraphWriter`; wrappable paragraph content then flows
-through `wrap_preserving_code`, the fragment-building and post-processing
-helpers in `src/wrap/inline.rs`, and the underlying `textwrap` engine before
-wrapped lines return through the same stack to the CLI, while nonwrappable
-lines bypass the inline wrapping path and are emitted unchanged.
+through `wrap_preserving_code`, the span-grouping helpers in
+`src/wrap/inline/span_grouping.rs`, the fragment-building and line-fitting
+helpers in `src/wrap/inline/wrapping.rs`, and the underlying `textwrap` engine
+before wrapped lines return through the same stack to the CLI, while
+nonwrappable lines bypass the inline wrapping path and are emitted unchanged.
 
 The helper `html_table_to_markdown` is retained for backward compatibility but
 is deprecated. New code should call `convert_html_tables` instead.
+
+### Observer boundary for inline diagnostics
+
+The tokenizing and classification helpers in the wrap sequence above —
+`build_fragments`, `parse_link_or_image`, `find_footnote_end`,
+`looks_like_footnote_ref`, `ends_with_footnote_ref`, and `date_token_span` —
+do not call `tracing` directly. They emit borrowed `Event` values, defined in
+[src/wrap/observer.rs](../src/wrap/observer.rs), through a
+`&mut ObserverHandle<'_>` parameter threaded alongside the fragment-building
+call chain shown in the [wrap sequence](#wrap-sequence) diagram.
+[src/wrap/tracing_adapter.rs](../src/wrap/tracing_adapter.rs) provides the
+crate's single production `Observer` implementation, `TracingObserver`, which
+owns the `tracing::enabled!` level gates and any derived computation, such as
+Unicode length counts. A `#[cfg(test)]`-only `NoOpObserver` in
+`observer.rs` is the crate's other `Observer` implementation, discarding
+every event for tests that need an `ObserverHandle` without a subscriber.
+Recorded fields are content-free metadata: the adapter derives bounded values
+from borrowed token text but never logs the text itself. This keeps the
+tokenizer and fragment-classification logic free of vendor-specific logging
+concerns. See
+[ADR 0006](adrs/0006-observer-boundary-for-tracing.md) for the rationale and
+[the developer's guide](developers-guide.md#inline-classification-observer-boundary)
+for the ownership and reuse policy governing this port.
 
 ## Concurrency with `rayon`
 

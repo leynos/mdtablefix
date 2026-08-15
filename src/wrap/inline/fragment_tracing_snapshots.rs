@@ -5,13 +5,19 @@ use std::cell::RefCell;
 use tracing_test::traced_test;
 
 use super::InlineFragment;
-use crate::wrap::tracing_snapshot_support::normalise_event_lines;
+use crate::wrap::{
+    tracing_adapter::TracingObserver,
+    tracing_snapshot_support::normalise_event_lines,
+};
 
 #[traced_test]
 #[test]
 fn snapshots_fragment_classified_event() {
     let captured = RefCell::new(String::new());
-    let fragment = InlineFragment::new("plain".to_string());
+    // The event reaches `tracing` only through the adapter, so the fragment is
+    // built with a `TracingObserver` attached rather than the no-op observer.
+    let mut observer = TracingObserver;
+    let fragment = InlineFragment::new_observed("plain".to_string(), &mut Some(&mut observer));
     // Assert the observable classification the traced event mirrors; the
     // snapshot below is supplementary evidence of the emitted event shape.
     assert!(fragment.is_plain(), "a bare word must classify as Plain");
