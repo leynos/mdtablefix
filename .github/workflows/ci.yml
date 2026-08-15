@@ -16,13 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/setup-rust@7576833762e94de1cea606f88c10ae3cd665b5e6
       - name: Install ripgrep
         run: cargo binstall --no-confirm --locked ripgrep@15.2.0
       - name: Format
         run: make check-fmt
       - name: Markdown lint
-        uses: DavidAnson/markdownlint-cli2-action@6bf21b07787794f89a243495939cd651942aeabe  # v20
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff  # v20
         with:
           globs: |
             **/*.md
@@ -31,7 +31,7 @@ jobs:
       - name: Lint
         run: make lint
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/generate-coverage@7576833762e94de1cea606f88c10ae3cd665b5e6
         with:
           output-path: lcov.info
           format: lcov
@@ -39,7 +39,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: ${{ env.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@7576833762e94de1cea606f88c10ae3cd665b5e6
 
         with:
           format: lcov
