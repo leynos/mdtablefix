@@ -2,4 +2,4 @@
 source: src/wrap/inline/fragment_tracing_snapshots.rs
 expression: event
 ---
-DEBUG snapshots_fragment_classified_event: mdtablefix::wrap::inline::fragment: fragment classified token=plain truncated=false kind=Plain
+DEBUG snapshots_fragment_classified_event: mdtablefix::wrap::tracing_adapter: fragment classified token_length=5 kind=Plain

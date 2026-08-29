@@ -33,6 +33,9 @@
   Accepted
 - [Ellipsis literal-region protection](adrs/0005-ellipsis-literal-regions.md):
   Accepted decision covering links, URLs, and filesystem-like tokens.
+- [Observer boundary for tracing](adrs/0006-observer-boundary-for-tracing.md):
+  Accepted decision covering the `Observer` port and `TracingObserver`
+  adapter for inline-wrapping domain diagnostics.
 
 ## Reference material
 

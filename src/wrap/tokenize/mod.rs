@@ -75,7 +75,16 @@ pub enum Token<'a> {
 ///     vec!["foo", "  ", "bar", "\t", "baz", "   ", "`qux`"]
 /// );
 /// ```
+#[cfg(test)]
 pub(super) fn segment_inline(text: &str) -> Vec<String> {
+    let mut observer = crate::wrap::observer::NoOpObserver;
+    segment_inline_observed(text, &mut Some(&mut observer))
+}
+
+pub(super) fn segment_inline_observed(
+    text: &str,
+    observer: &mut crate::wrap::observer::ObserverHandle<'_>,
+) -> Vec<String> {
     let mut tokens = Vec::new();
     let bytes = text.as_bytes();
     let mut i = 0;
@@ -107,7 +116,7 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
         let looks_like_image = looks_like_image_start(text, i, ch);
         let is_escaped = has_odd_backslash_escape_bytes(bytes, i);
         if (ch == '[' || looks_like_image) && !is_escaped {
-            let (tok, mut new_i) = parse_link_or_image(text, i);
+            let (tok, mut new_i) = parse_link_or_image(text, i, observer);
             tokens.push(tok);
             let punct_start = new_i;
             new_i = scan_trailing_punctuation_end(text, new_i);

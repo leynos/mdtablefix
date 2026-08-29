@@ -8,7 +8,6 @@
 //! span before `determine_token_span` performs the standard punctuation and
 //! link grouping pass.
 
-use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
 use super::predicates::{
@@ -24,19 +23,11 @@ use super::predicates::{
     looks_like_footnote_ref,
     looks_like_link,
 };
-
-/// Marks how a grouped token span should behave during wrapping.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(in crate::wrap::inline) enum SpanKind {
-    /// Treat the span as ordinary prose.
-    General,
-    /// Treat the span as an inline code sequence.
-    Code,
-    /// Treat the span as a Markdown link or image link.
-    Link,
-    /// Treat the span as a GitHub Flavoured Markdown footnote reference.
-    FootnoteRef,
-}
+// `SpanKind` is domain vocabulary carried on `Event` values, so it lives in the
+// observer port beside `FragmentKind`. Re-exported here so the grouping helpers
+// and their callers keep using the familiar `span_helpers::SpanKind` path.
+pub(in crate::wrap::inline) use crate::wrap::observer::SpanKind;
+use crate::wrap::observer::{Event, ObserverHandle};
 
 /// Extends a grouped span over trailing punctuation tokens and updates `width`.
 pub(in crate::wrap::inline) fn extend_punctuation(
@@ -52,53 +43,53 @@ pub(in crate::wrap::inline) fn extend_punctuation(
 }
 
 /// Returns the exclusive end of a date-like token run beginning at `start`.
-#[tracing::instrument(level = "trace", skip(tokens), ret)]
+///
+/// The matched pattern is reported through `observer` as a stable category
+/// name, so callers can tell which of the three shapes was recognised without
+/// the helper touching a logging vendor.
 pub(in crate::wrap::inline) fn try_match_date_sequence(
     tokens: &[String],
     start: usize,
+    observer: &mut ObserverHandle<'_>,
 ) -> Option<usize> {
-    if let Some(end) = match_ordinal_day_month_year(tokens, start) {
-        debug!(
-            start,
-            end,
-            pattern = "ordinal_day_month_year",
-            "matched date sequence"
-        );
-        Some(end)
+    let (end, pattern) = if let Some(end) = match_ordinal_day_month_year(tokens, start) {
+        (end, "ordinal_day_month_year")
     } else if let Some(end) = match_numeric_day_month_year(tokens, start) {
-        debug!(
-            start,
-            end,
-            pattern = "numeric_day_month_year",
-            "matched date sequence"
-        );
-        Some(end)
-    } else if let Some(end) = match_month_numeric_day_year(tokens, start) {
-        debug!(
-            start,
-            end,
-            pattern = "month_numeric_day_year",
-            "matched date sequence"
-        );
-        Some(end)
+        (end, "numeric_day_month_year")
     } else {
-        None
+        (
+            match_month_numeric_day_year(tokens, start)?,
+            "month_numeric_day_year",
+        )
+    };
+
+    if let Some(observer) = observer.as_deref_mut() {
+        observer.observe(Event::DateSequenceMatched {
+            start,
+            end,
+            pattern,
+        });
     }
+    Some(end)
 }
 
-#[tracing::instrument(level = "trace", skip(tokens), ret)]
 pub(in crate::wrap::inline) fn date_token_span(
     tokens: &[String],
     start: usize,
+    observer: &mut ObserverHandle<'_>,
 ) -> Option<(usize, usize)> {
-    let date_end = try_match_date_sequence(tokens, start)?;
+    let date_end = try_match_date_sequence(tokens, start, observer)?;
     let mut date_width = tokens[start..date_end]
         .iter()
         .map(|token| UnicodeWidthStr::width(token.as_str()))
         .sum();
-    if let Some((_, footnote_end)) =
-        try_couple_footnote_reference(tokens, date_end, SpanKind::General, &mut date_width)
-    {
+    if let Some((_, footnote_end)) = try_couple_footnote_reference(
+        tokens,
+        date_end,
+        SpanKind::General,
+        &mut date_width,
+        observer,
+    ) {
         return Some((footnote_end, date_width));
     }
     Some((date_end, date_width))
@@ -161,6 +152,7 @@ pub(in crate::wrap::inline) fn should_couple_whitespace(
     kind: SpanKind,
     next_token: Option<&String>,
     following_token: Option<&String>,
+    observer: &mut ObserverHandle<'_>,
 ) -> bool {
     match (kind, next_token, following_token) {
         (SpanKind::Link, Some(next), _)
@@ -172,7 +164,7 @@ pub(in crate::wrap::inline) fn should_couple_whitespace(
         }
         (SpanKind::Code, Some(next), _) if is_trailing_punctuation_token(next) => true,
         (SpanKind::General, Some(next), Some(following))
-            if looks_like_footnote_ref(next) && following == ":" =>
+            if looks_like_footnote_ref(next, observer) && following == ":" =>
         {
             true
         }
@@ -239,9 +231,10 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
     end: usize,
     kind: SpanKind,
     width: &mut usize,
+    observer: &mut ObserverHandle<'_>,
 ) -> Option<(SpanKind, usize)> {
     let token = tokens.get(end)?;
-    if !looks_like_footnote_ref(token) {
+    if !looks_like_footnote_ref(token, observer) {
         return None;
     }
 
@@ -275,4 +268,33 @@ mod span_helper_props;
 
 #[cfg(test)]
 #[path = "span_helper_tracing_tests.rs"]
-mod tracing_tests;
+mod span_helper_tracing_tests;
+
+#[cfg(test)]
+mod tracing_tests {
+    //! Traced-event test for date-sequence grouping.
+    //!
+    //! Verifies that `date_token_span` emits the DEBUG `matched date sequence`
+    //! event with its `start` and `end` fields through the tracing adapter.
+
+    use tracing_test::traced_test;
+
+    use super::date_token_span;
+    use crate::wrap::tracing_adapter::TracingObserver;
+
+    #[traced_test]
+    #[test]
+    fn date_token_span_logs_matched_sequence() {
+        let tokens: Vec<String> = ["1st", " ", "January", " ", "2020"]
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        let mut observer = TracingObserver;
+        let span = date_token_span(&tokens, 0, &mut Some(&mut observer));
+
+        assert_eq!(span.map(|(end, _)| end), Some(5));
+        assert!(logs_contain("matched date sequence"));
+        assert!(logs_contain("start=0"));
+        assert!(logs_contain("end=5"));
+    }
+}

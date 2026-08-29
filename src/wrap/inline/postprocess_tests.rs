@@ -5,10 +5,8 @@
 
 use rstest::rstest;
 
-use super::{
-    super::fragment::{FragmentKind, InlineFragment},
-    *,
-};
+use super::{super::fragment::InlineFragment, *};
+use crate::wrap::observer::FragmentKind;
 
 fn fragment(text: &str) -> InlineFragment { InlineFragment::new(text.into()) }
 
