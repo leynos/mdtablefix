@@ -118,9 +118,15 @@ jobs:
           cross_dir="${HOME}/.local/share/mdtablefix-tools/cross-v${CROSS_VERSION}"
           cross_binary="${cross_dir}/cross"
           expected_version="cross ${CROSS_VERSION}"
+          probe_cross_version() {
+            (
+              cd "${RUNNER_TEMP}"
+              "${cross_binary}" --version
+            )
+          }
           installed_version=""
           if [[ -x "${cross_binary}" ]]; then
-            installed_version="$("${cross_binary}" --version 2>/dev/null || true)"
+            installed_version="$(probe_cross_version 2>/dev/null || true)"
           fi
           if [[ "${installed_version}" != "${expected_version}" ]]; then
             archive="${RUNNER_TEMP}/cross.tar.gz"
@@ -133,7 +139,8 @@ jobs:
               cross cross-util
             chmod 0755 "${cross_dir}/cross" "${cross_dir}/cross-util"
           fi
-          [[ "$("${cross_binary}" --version)" == "${expected_version}" ]]
+          installed_version="$(probe_cross_version)"
+          [[ "${installed_version}" == "${expected_version}" ]]
           echo "${cross_dir}" >> "${GITHUB_PATH}"
       - name: Cache cargo registry
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
@@ -146,7 +153,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.target }}-cargo-
       - name: Add release target
-        run: rustup target add ${{ matrix.target }}
+        run: rustup target add --toolchain stable ${{ matrix.target }}
       - name: Build release binary
         run: cross +stable build --release --target ${{ matrix.target }}
       - name: Prepare artifact
