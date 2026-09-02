@@ -126,13 +126,16 @@ fn cross_comes_from_a_verified_official_archive() -> Result<()> {
         install,
         &[
             "if [[ -x \"${cross_binary}\" ]]",
-            "installed_version=\"$(\"${cross_binary}\" --version",
+            "cd \"${RUNNER_TEMP}\"",
+            "\"${cross_binary}\" --version",
             "if [[ \"${installed_version}\" != \"${expected_version}\" ]]",
             "url=\"https://github.com/cross-rs/cross/releases/download/",
             "curl --fail --location --proto '=https' --tlsv1.2 \"${url}\" -o \"${archive}\"",
             "echo \"${CROSS_LINUX_X64_SHA256}  ${archive}\" | sha256sum --check --status",
             "tar --extract --gzip --file \"${archive}\" --directory \"${cross_dir}\"",
-            "[[ \"$(\"${cross_binary}\" --version)\" == \"${expected_version}\" ]]",
+            "cd \"${RUNNER_TEMP}\"",
+            "\"${cross_binary}\" --version",
+            "[[ \"${installed_version}\" == \"${expected_version}\" ]]",
         ],
     )?;
     ensure!(!install.contains("cargo install"));

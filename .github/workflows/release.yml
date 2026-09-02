@@ -120,7 +120,10 @@ jobs:
           expected_version="cross ${CROSS_VERSION}"
           installed_version=""
           if [[ -x "${cross_binary}" ]]; then
-            installed_version="$("${cross_binary}" --version 2>/dev/null || true)"
+            installed_version="$(
+              cd "${RUNNER_TEMP}"
+              "${cross_binary}" --version 2>/dev/null || true
+            )"
           fi
           if [[ "${installed_version}" != "${expected_version}" ]]; then
             archive="${RUNNER_TEMP}/cross.tar.gz"
@@ -133,7 +136,11 @@ jobs:
               cross cross-util
             chmod 0755 "${cross_dir}/cross" "${cross_dir}/cross-util"
           fi
-          [[ "$("${cross_binary}" --version)" == "${expected_version}" ]]
+          installed_version="$(
+            cd "${RUNNER_TEMP}"
+            "${cross_binary}" --version
+          )"
+          [[ "${installed_version}" == "${expected_version}" ]]
           echo "${cross_dir}" >> "${GITHUB_PATH}"
       - name: Cache cargo registry
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
