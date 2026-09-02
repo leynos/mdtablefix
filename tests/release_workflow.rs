@@ -8,6 +8,14 @@ const CHECKOUT_ACTION: &str = "actions/checkout@3d3c42e5aac5ba805825da76410c1812
 const CACHE_ACTION: &str = "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
 const UPLOAD_ACTION: &str = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const CROSS_SHA256: &str = "642375d1bcf3bd88272c32ba90e999f3d983050adf45e66bd2d3887e8e838bad";
+const CROSS_VERSION_PROBE: &str = concat!(
+    "probe_cross_version() {\n",
+    "  (\n",
+    "    cd \"${RUNNER_TEMP}\"\n",
+    "    \"${cross_binary}\" --version\n",
+    "  )\n",
+    "}",
+);
 
 fn parse_workflow() -> Result<Value> {
     serde_yaml::from_str(RELEASE_WORKFLOW).context("parse release workflow YAML")
@@ -122,19 +130,18 @@ fn cross_comes_from_a_verified_official_archive() -> Result<()> {
         build_steps,
         "Install cross from its official release",
     )?)?;
+    ensure!(install.contains(CROSS_VERSION_PROBE));
     assert_fragments_in_order(
         install,
         &[
             "if [[ -x \"${cross_binary}\" ]]",
-            "cd \"${RUNNER_TEMP}\"",
-            "\"${cross_binary}\" --version",
+            "installed_version=\"$(probe_cross_version 2>/dev/null || true)\"",
             "if [[ \"${installed_version}\" != \"${expected_version}\" ]]",
             "url=\"https://github.com/cross-rs/cross/releases/download/",
             "curl --fail --location --proto '=https' --tlsv1.2 \"${url}\" -o \"${archive}\"",
             "echo \"${CROSS_LINUX_X64_SHA256}  ${archive}\" | sha256sum --check --status",
             "tar --extract --gzip --file \"${archive}\" --directory \"${cross_dir}\"",
-            "cd \"${RUNNER_TEMP}\"",
-            "\"${cross_binary}\" --version",
+            "installed_version=\"$(probe_cross_version)\"",
             "[[ \"${installed_version}\" == \"${expected_version}\" ]]",
         ],
     )?;

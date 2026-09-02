@@ -55,7 +55,10 @@ directory. It never compiles `cross` from source. Each release target has a
 separate Cargo cache key so concurrent matrix jobs cannot stampede or overwrite
 one another's target artefacts. The version probe runs from the runner's
 temporary directory so the tagged source tree's `rust-toolchain.toml` cannot
-trigger an unrelated toolchain installation before the release build.
+trigger an unrelated toolchain installation before the release build. A local
+shell helper owns that rule within the installation step; both cache validation
+and post-installation validation use it so their working directories cannot
+diverge.
 
 Each binary is placed in an `artifacts/<os>-<arch>` directory using the naming
 pattern `mdtablefix-<os>-<arch>[.exe]`. An SHA-256 checksum is written
