@@ -12,8 +12,8 @@ const CROSS_VERSION_PROBE: &str = concat!(
     "probe_cross_version() {\n",
     "  (\n",
     "    cd \"${RUNNER_TEMP}\"\n",
-    "    \"${cross_binary}\" --version\n",
-    "  )\n",
+    "    \"${cross_binary}\" --version 2>/dev/null || true\n",
+    "  ) | sed -n '1p'\n",
     "}",
 );
 
@@ -135,7 +135,7 @@ fn cross_comes_from_a_verified_official_archive() -> Result<()> {
         install,
         &[
             "if [[ -x \"${cross_binary}\" ]]",
-            "installed_version=\"$(probe_cross_version 2>/dev/null || true)\"",
+            "installed_version=\"$(probe_cross_version)\"",
             "if [[ \"${installed_version}\" != \"${expected_version}\" ]]",
             "url=\"https://github.com/cross-rs/cross/releases/download/",
             "curl --fail --location --proto '=https' --tlsv1.2 \"${url}\" -o \"${archive}\"",
