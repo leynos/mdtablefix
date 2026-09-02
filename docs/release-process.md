@@ -65,4 +65,6 @@ Before the build matrix starts, a small job creates the GitHub release if it is
 absent. Every successful matrix job uploads its workflow artefact and publishes
 its files directly to the GitHub release. Matrix fail-fast is disabled, so one
 target's failure cannot cancel another target or suppress assets that were
-built successfully. Re-running a target safely replaces the same release files.
+built successfully. On a retry, an identical existing release asset is reused.
+Conflicting content fails the job without deleting or replacing the published
+asset.

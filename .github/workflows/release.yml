@@ -174,10 +174,33 @@ jobs:
         with:
           name: ${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}
           path: artifacts/${{ matrix.os }}-${{ matrix.arch }}
+          overwrite: true
       - name: Publish this target's release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "${RELEASE_TAG}" \
-            "artifacts/${{ matrix.os }}-${{ matrix.arch }}"/* \
-            --clobber --repo "${GITHUB_REPOSITORY}"
+          set -euo pipefail
+          artifact_dir="artifacts/${{ matrix.os }}-${{ matrix.arch }}"
+          existing_dir="${RUNNER_TEMP}/existing-release-assets/${{ matrix.target }}"
+          mkdir -p "${existing_dir}"
+
+          for file in "${artifact_dir}"/*; do
+            asset_name="$(basename "${file}")"
+            asset_id="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+              --jq ".assets[] | select(.name == \"${asset_name}\") | .id")"
+            if [[ -n "${asset_id}" ]]; then
+              existing_file="${existing_dir}/${asset_name}"
+              gh api --method GET -H "Accept: application/octet-stream" \
+                "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+                > "${existing_file}"
+              if ! cmp --silent "${file}" "${existing_file}"; then
+                echo "release asset ${asset_name} exists with different content" >&2
+                exit 1
+              fi
+              echo "release asset ${asset_name} already exists with identical content"
+              continue
+            fi
+            gh release upload "${RELEASE_TAG}" "${file}" \
+              --repo "${GITHUB_REPOSITORY}"
+          done

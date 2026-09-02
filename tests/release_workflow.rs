@@ -152,14 +152,12 @@ fn successful_targets_publish_without_waiting_for_the_matrix() -> Result<()> {
     let upload_index = named_step_index(build_steps, "Upload release artifact")?;
     let publish_index = named_step_index(build_steps, "Publish this target's release assets")?;
     ensure!(prepare_index < upload_index && upload_index < publish_index);
-    ensure!(
-        get_string(
-            build_steps[upload_index]
-                .as_mapping()
-                .context("upload step")?,
-            "uses"
-        ) == Some(UPLOAD_ACTION)
-    );
+    let upload = build_steps[upload_index]
+        .as_mapping()
+        .context("upload step")?;
+    ensure!(get_string(upload, "uses") == Some(UPLOAD_ACTION));
+    let upload_inputs = as_mapping(get(upload, "with")?, "artifact upload inputs")?;
+    ensure!(get(upload_inputs, "overwrite")?.as_bool() == Some(true));
     let publish = command(named_step(
         build_steps,
         "Publish this target's release assets",
@@ -167,11 +165,17 @@ fn successful_targets_publish_without_waiting_for_the_matrix() -> Result<()> {
     assert_fragments_in_order(
         publish,
         &[
-            "gh release upload \"${RELEASE_TAG}\"",
-            "artifacts/${{ matrix.os }}-${{ matrix.arch }}",
-            "--clobber --repo \"${GITHUB_REPOSITORY}\"",
+            "for file in \"${artifact_dir}\"/*",
+            "releases/tags/${RELEASE_TAG}",
+            "if [[ -n \"${asset_id}\" ]]",
+            "releases/assets/${asset_id}",
+            "cmp --silent \"${file}\" \"${existing_file}\"",
+            "continue",
+            "gh release upload \"${RELEASE_TAG}\" \"${file}\"",
+            "--repo \"${GITHUB_REPOSITORY}\"",
         ],
     )?;
+    ensure!(!publish.contains("--clobber"));
 
     let jobs = as_mapping(get(as_mapping(&workflow, "workflow")?, "jobs")?, "jobs")?;
     ensure!(!jobs.contains_key(Value::String("release".to_owned())));
