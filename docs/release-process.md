@@ -26,6 +26,10 @@ tag. This backfill path runs the current workflow definition but checks out and
 builds the tagged source. Use it when a historical release is missing an asset;
 it must not be used to rebuild a tag from different source.
 
+Runs for the same release tag are serialized without cancellation, while runs
+for different tags remain independent. Third-party actions in the release jobs
+use immutable commit pins because those jobs can write release assets.
+
 Each binary is named using the pattern `mdtablefix-<os>-<arch>` with an `.exe`
 suffix on Windows.
 

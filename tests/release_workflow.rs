@@ -1,39 +1,254 @@
 //! Protects the release workflow's binary provenance and publication contract.
 
+use anyhow::{Context, Result, ensure};
+use serde_yaml::{Mapping, Value};
+
 const RELEASE_WORKFLOW: &str = include_str!("../.github/workflows/release.yml");
+const CHECKOUT_ACTION: &str = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1";
+const CACHE_ACTION: &str = "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
+const UPLOAD_ACTION: &str = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+const CROSS_SHA256: &str = "642375d1bcf3bd88272c32ba90e999f3d983050adf45e66bd2d3887e8e838bad";
+
+fn parse_workflow() -> Result<Value> {
+    serde_yaml::from_str(RELEASE_WORKFLOW).context("parse release workflow YAML")
+}
+
+fn as_mapping<'a>(value: &'a Value, description: &str) -> Result<&'a Mapping> {
+    value
+        .as_mapping()
+        .with_context(|| format!("{description} should be a mapping"))
+}
+
+fn get<'a>(mapping: &'a Mapping, key: &str) -> Result<&'a Value> {
+    mapping
+        .get(Value::String(key.to_owned()))
+        .with_context(|| format!("mapping should define {key}"))
+}
+
+fn job<'a>(workflow: &'a Value, name: &str) -> Result<&'a Mapping> {
+    let root = as_mapping(workflow, "workflow")?;
+    let jobs = as_mapping(get(root, "jobs")?, "jobs")?;
+    as_mapping(get(jobs, name)?, name)
+}
+
+fn steps(job: &Mapping) -> Result<&[Value]> {
+    get(job, "steps")?
+        .as_sequence()
+        .map(Vec::as_slice)
+        .context("job steps should be a sequence")
+}
+
+fn step_mapping<'a>(step: &'a Value, description: &str) -> Result<&'a Mapping> {
+    as_mapping(step, description)
+}
+
+fn named_step<'a>(steps: &'a [Value], name: &str) -> Result<&'a Mapping> {
+    steps
+        .iter()
+        .find_map(|step| {
+            let mapping = step.as_mapping()?;
+            (get_string(mapping, "name") == Some(name)).then_some(mapping)
+        })
+        .with_context(|| format!("job should define the {name} step"))
+}
+
+fn named_step_index(steps: &[Value], name: &str) -> Result<usize> {
+    steps
+        .iter()
+        .position(|step| {
+            step.as_mapping()
+                .and_then(|mapping| get_string(mapping, "name"))
+                == Some(name)
+        })
+        .with_context(|| format!("job should define the {name} step"))
+}
+
+fn get_string<'a>(mapping: &'a Mapping, key: &str) -> Option<&'a str> {
+    mapping
+        .get(Value::String(key.to_owned()))
+        .and_then(Value::as_str)
+}
+
+fn nested_string<'a>(mapping: &'a Mapping, group: &str, key: &str) -> Option<&'a str> {
+    mapping
+        .get(Value::String(group.to_owned()))
+        .and_then(Value::as_mapping)
+        .and_then(|nested| get_string(nested, key))
+}
+
+fn command(step: &Mapping) -> Result<&str> {
+    get_string(step, "run").context("step should define a run command")
+}
+
+fn assert_fragments_in_order(command: &str, fragments: &[&str]) -> Result<()> {
+    let mut search_start = 0;
+    for fragment in fragments {
+        let relative_index = command[search_start..]
+            .find(fragment)
+            .with_context(|| format!("command should contain {fragment:?} in order"))?;
+        search_start += relative_index + fragment.len();
+    }
+    Ok(())
+}
+
+fn assert_checkout_ref(job: &Mapping) -> Result<()> {
+    let checkout = step_mapping(
+        steps(job)?
+            .first()
+            .context("job should start with checkout")?,
+        "checkout step",
+    )?;
+    ensure!(get_string(checkout, "uses") == Some(CHECKOUT_ACTION));
+    ensure!(nested_string(checkout, "with", "ref") == Some("${{ env.RELEASE_TAG }}"));
+    Ok(())
+}
 
 #[test]
-fn cross_comes_from_a_verified_official_archive() {
-    assert!(RELEASE_WORKFLOW.contains("cross-official-v${{ env.CROSS_VERSION }}"));
-    assert!(RELEASE_WORKFLOW.contains("cross-rs/cross/releases/download"));
-    assert!(
-        RELEASE_WORKFLOW
-            .contains("642375d1bcf3bd88272c32ba90e999f3d983050adf45e66bd2d3887e8e838bad")
+fn cross_comes_from_a_verified_official_archive() -> Result<()> {
+    let workflow = parse_workflow()?;
+    let root = as_mapping(&workflow, "workflow")?;
+    let env = as_mapping(get(root, "env")?, "workflow environment")?;
+    ensure!(get_string(env, "CROSS_LINUX_X64_SHA256") == Some(CROSS_SHA256));
+
+    let build_steps = steps(job(&workflow, "build")?)?;
+    let cache = named_step(build_steps, "Cache the official cross binaries")?;
+    ensure!(get_string(cache, "uses") == Some(CACHE_ACTION));
+    ensure!(
+        nested_string(cache, "with", "path")
+            == Some("~/.local/share/mdtablefix-tools/cross-v${{ env.CROSS_VERSION }}")
     );
-    assert!(RELEASE_WORKFLOW.contains("sha256sum --check --status"));
-    assert!(!RELEASE_WORKFLOW.contains("cargo install cross"));
+
+    let install = command(named_step(
+        build_steps,
+        "Install cross from its official release",
+    )?)?;
+    assert_fragments_in_order(
+        install,
+        &[
+            "if [[ -x \"${cross_binary}\" ]]",
+            "installed_version=\"$(\"${cross_binary}\" --version",
+            "if [[ \"${installed_version}\" != \"${expected_version}\" ]]",
+            "url=\"https://github.com/cross-rs/cross/releases/download/",
+            "curl --fail --location --proto '=https' --tlsv1.2 \"${url}\" -o \"${archive}\"",
+            "echo \"${CROSS_LINUX_X64_SHA256}  ${archive}\" | sha256sum --check --status",
+            "tar --extract --gzip --file \"${archive}\" --directory \"${cross_dir}\"",
+            "[[ \"$(\"${cross_binary}\" --version)\" == \"${expected_version}\" ]]",
+        ],
+    )?;
+    ensure!(!install.contains("cargo install"));
+    Ok(())
 }
 
 #[test]
-fn successful_targets_publish_without_waiting_for_the_matrix() {
-    assert!(RELEASE_WORKFLOW.contains("fail-fast: false"));
-    assert!(RELEASE_WORKFLOW.contains("Publish this target's release assets"));
-    assert!(RELEASE_WORKFLOW.contains("gh release upload"));
-    assert!(RELEASE_WORKFLOW.contains("--clobber --repo"));
-    assert!(!RELEASE_WORKFLOW.contains("actions/download-artifact"));
+fn successful_targets_publish_without_waiting_for_the_matrix() -> Result<()> {
+    let workflow = parse_workflow()?;
+    let build = job(&workflow, "build")?;
+    ensure!(get_string(build, "needs") == Some("prepare-release"));
+    let strategy = as_mapping(get(build, "strategy")?, "build strategy")?;
+    ensure!(get(strategy, "fail-fast")?.as_bool() == Some(false));
+
+    let build_steps = steps(build)?;
+    let prepare_index = named_step_index(build_steps, "Prepare artifact")?;
+    let upload_index = named_step_index(build_steps, "Upload release artifact")?;
+    let publish_index = named_step_index(build_steps, "Publish this target's release assets")?;
+    ensure!(prepare_index < upload_index && upload_index < publish_index);
+    ensure!(
+        get_string(
+            build_steps[upload_index]
+                .as_mapping()
+                .context("upload step")?,
+            "uses"
+        ) == Some(UPLOAD_ACTION)
+    );
+    let publish = command(named_step(
+        build_steps,
+        "Publish this target's release assets",
+    )?)?;
+    assert_fragments_in_order(
+        publish,
+        &[
+            "gh release upload \"${RELEASE_TAG}\"",
+            "artifacts/${{ matrix.os }}-${{ matrix.arch }}",
+            "--clobber --repo \"${GITHUB_REPOSITORY}\"",
+        ],
+    )?;
+
+    let jobs = as_mapping(get(as_mapping(&workflow, "workflow")?, "jobs")?, "jobs")?;
+    ensure!(!jobs.contains_key(Value::String("release".to_owned())));
+    Ok(())
 }
 
 #[test]
-fn manual_dispatch_builds_the_requested_release_tag() {
-    assert!(RELEASE_WORKFLOW.contains("workflow_dispatch:"));
-    assert!(RELEASE_WORKFLOW.contains("release_tag:"));
-    assert!(RELEASE_WORKFLOW.contains("RELEASE_TAG: ${{ inputs.release_tag"));
-    assert!(RELEASE_WORKFLOW.contains("ref: ${{ env.RELEASE_TAG }}"));
-    let verify_index = RELEASE_WORKFLOW
-        .find("Verify release tag matches Cargo.toml")
-        .expect("release-tag verification step must exist");
-    let create_index = RELEASE_WORKFLOW
-        .find("Create the GitHub release when absent")
-        .expect("release-creation step must exist");
-    assert!(verify_index < create_index);
+fn manual_dispatch_builds_the_requested_release_tag() -> Result<()> {
+    let workflow = parse_workflow()?;
+    let root = as_mapping(&workflow, "workflow")?;
+    let triggers = as_mapping(get(root, "on")?, "workflow triggers")?;
+    let dispatch = as_mapping(get(triggers, "workflow_dispatch")?, "manual trigger")?;
+    let inputs = as_mapping(get(dispatch, "inputs")?, "manual inputs")?;
+    let release_tag = as_mapping(get(inputs, "release_tag")?, "release_tag input")?;
+    ensure!(get(release_tag, "required")?.as_bool() == Some(true));
+
+    let env = as_mapping(get(root, "env")?, "workflow environment")?;
+    ensure!(get_string(env, "RELEASE_TAG") == Some("${{ inputs.release_tag || github.ref_name }}"));
+    let concurrency = as_mapping(get(root, "concurrency")?, "release concurrency")?;
+    ensure!(
+        get_string(concurrency, "group")
+            == Some(
+                "release-${{ github.repository }}-${{ inputs.release_tag || github.ref_name }}"
+            )
+    );
+    ensure!(get(concurrency, "cancel-in-progress")?.as_bool() == Some(false));
+
+    let prepare = job(&workflow, "prepare-release")?;
+    let build = job(&workflow, "build")?;
+    assert_checkout_ref(prepare)?;
+    assert_checkout_ref(build)?;
+    let prepare_steps = steps(prepare)?;
+    let verify_index = named_step_index(prepare_steps, "Verify release tag matches Cargo.toml")?;
+    let create_index = named_step_index(prepare_steps, "Create the GitHub release when absent")?;
+    ensure!(verify_index < create_index);
+    assert_fragments_in_order(
+        command(
+            prepare_steps[verify_index]
+                .as_mapping()
+                .context("verify step")?,
+        )?,
+        &[
+            "tag=\"${RELEASE_TAG#v}\"",
+            "Cargo.toml",
+            "if [[ \"${tag}\" != \"${cargo_version}\" ]]",
+        ],
+    )?;
+    let create = command(
+        prepare_steps[create_index]
+            .as_mapping()
+            .context("create step")?,
+    )?;
+    ensure!(create.contains("gh release view \"${RELEASE_TAG}\""));
+    ensure!(create.contains("gh release create \"${RELEASE_TAG}\""));
+    ensure!(create.contains("--generate-notes --verify-tag"));
+    Ok(())
+}
+
+#[test]
+fn release_actions_use_immutable_commit_pins() -> Result<()> {
+    let workflow = parse_workflow()?;
+    for job_name in ["prepare-release", "build"] {
+        for step in steps(job(&workflow, job_name)?)? {
+            let Some(reference) = step
+                .as_mapping()
+                .and_then(|mapping| get_string(mapping, "uses"))
+            else {
+                continue;
+            };
+            let (_, pin) = reference
+                .rsplit_once('@')
+                .with_context(|| format!("action reference {reference:?} should contain @"))?;
+            ensure!(
+                pin.len() == 40 && pin.bytes().all(|byte| byte.is_ascii_hexdigit()),
+                "action reference {reference:?} should use a full commit SHA"
+            );
+        }
+    }
+    Ok(())
 }
