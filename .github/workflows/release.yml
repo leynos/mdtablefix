@@ -14,6 +14,7 @@ on:
 env:
   REPO_NAME: ${{ github.event.repository.name }}
   RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+  RELEASE_RUST_VERSION: 1.89.0
   CROSS_VERSION: 0.2.5
   CROSS_LINUX_X64_SHA256: 642375d1bcf3bd88272c32ba90e999f3d983050adf45e66bd2d3887e8e838bad
 
@@ -105,8 +106,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.RELEASE_TAG }}
+      - name: Set reproducible release timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "${GITHUB_ENV}"
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
+        with:
+          toolchain: ${{ env.RELEASE_RUST_VERSION }}
+          install-binstall: false
+          use-sccache: false
       - name: Cache the official cross binaries
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -151,13 +158,13 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-rust-${{ env.RELEASE_RUST_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.target }}-cargo-
+            ${{ runner.os }}-${{ matrix.target }}-rust-${{ env.RELEASE_RUST_VERSION }}-cargo-
       - name: Add release target
-        run: rustup target add --toolchain stable ${{ matrix.target }}
+        run: rustup target add --toolchain "${RELEASE_RUST_VERSION}" ${{ matrix.target }}
       - name: Build release binary
-        run: cross +stable build --release --target ${{ matrix.target }}
+        run: cross +"${RELEASE_RUST_VERSION}" build --release --target ${{ matrix.target }}
       - name: Prepare artifact
         run: |
           set -euo pipefail
@@ -173,8 +180,11 @@ jobs:
 
           if [ "${{ matrix.cargo_binstall_archive }}" = "true" ]; then
             archive_name="${{ env.REPO_NAME }}-${version}-${{ matrix.target }}.tar.gz"
-            tar -C "target/${{ matrix.target }}/release" -czf \
-              "${artifact_dir}/${archive_name}" "${{ env.REPO_NAME }}${{ matrix.ext }}"
+            tar --sort=name --mtime="@${SOURCE_DATE_EPOCH}" \
+              --owner=0 --group=0 --numeric-owner --format=gnu \
+              -C "target/${{ matrix.target }}/release" -cf - \
+              "${{ env.REPO_NAME }}${{ matrix.ext }}" \
+              | gzip --no-name > "${artifact_dir}/${archive_name}"
             sha256sum "${artifact_dir}/${archive_name}" > \
               "${artifact_dir}/${archive_name}.sha256"
           fi
