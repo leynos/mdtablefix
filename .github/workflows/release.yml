@@ -121,12 +121,14 @@ jobs:
           probe_cross_version() {
             (
               cd "${RUNNER_TEMP}"
-              "${cross_binary}" --version
-            )
+              "${cross_binary}" --version 2>/dev/null
+            ) | sed -n '1p'
           }
           installed_version=""
           if [[ -x "${cross_binary}" ]]; then
-            installed_version="$(probe_cross_version 2>/dev/null || true)"
+            if ! installed_version="$(probe_cross_version)"; then
+              installed_version=""
+            fi
           fi
           if [[ "${installed_version}" != "${expected_version}" ]]; then
             archive="${RUNNER_TEMP}/cross.tar.gz"

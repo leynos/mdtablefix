@@ -1,6 +1,7 @@
 //! Protects the release workflow's binary provenance and publication contract.
 
 use anyhow::{Context, Result, ensure};
+use assert_cmd::Command;
 use serde_yaml::{Mapping, Value};
 
 const RELEASE_WORKFLOW: &str = include_str!("../.github/workflows/release.yml");
@@ -12,8 +13,8 @@ const CROSS_VERSION_PROBE: &str = concat!(
     "probe_cross_version() {\n",
     "  (\n",
     "    cd \"${RUNNER_TEMP}\"\n",
-    "    \"${cross_binary}\" --version\n",
-    "  )\n",
+    "    \"${cross_binary}\" --version 2>/dev/null\n",
+    "  ) | sed -n '1p'\n",
     "}",
 );
 
@@ -135,7 +136,8 @@ fn cross_comes_from_a_verified_official_archive() -> Result<()> {
         install,
         &[
             "if [[ -x \"${cross_binary}\" ]]",
-            "installed_version=\"$(probe_cross_version 2>/dev/null || true)\"",
+            "if ! installed_version=\"$(probe_cross_version)\"; then",
+            "installed_version=\"\"",
             "if [[ \"${installed_version}\" != \"${expected_version}\" ]]",
             "url=\"https://github.com/cross-rs/cross/releases/download/",
             "curl --fail --location --proto '=https' --tlsv1.2 \"${url}\" -o \"${archive}\"",
@@ -148,6 +150,34 @@ fn cross_comes_from_a_verified_official_archive() -> Result<()> {
     ensure!(!install.contains("cargo install"));
     let add_target = command(named_step(build_steps, "Add release target")?)?;
     ensure!(add_target == "rustup target add --toolchain stable ${{ matrix.target }}");
+    Ok(())
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn cross_version_probe_preserves_failure_after_banner() -> Result<()> {
+    let runner_temp = tempfile::tempdir().context("create probe working directory")?;
+    let script = [
+        "set -uo pipefail\n",
+        "fake_cross() {\n",
+        "  printf 'cross 0.2.5\\nhost cargo fallback\\n'\n",
+        "  return 17\n",
+        "}\n",
+        "cross_binary=fake_cross\n",
+        CROSS_VERSION_PROBE,
+        "\n",
+        "if installed_version=\"$(probe_cross_version)\"; then\n",
+        "  exit 1\n",
+        "fi\n",
+        "[[ \"${installed_version}\" == 'cross 0.2.5' ]]\n",
+    ]
+    .concat();
+    Command::new("bash")
+        .arg("-c")
+        .arg(script)
+        .env("RUNNER_TEMP", runner_temp.path())
+        .assert()
+        .success();
     Ok(())
 }
 
