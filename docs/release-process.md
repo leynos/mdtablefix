@@ -58,7 +58,8 @@ temporary directory so the tagged source tree's `rust-toolchain.toml` cannot
 trigger an unrelated toolchain installation before the release build. A local
 shell helper owns that rule within the installation step; both cache validation
 and post-installation validation use it so their working directories cannot
-diverge.
+diverge. Release targets are likewise installed explicitly for the stable
+toolchain used by `cross`, rather than inheriting the tagged tree's toolchain.
 
 Each binary is placed in an `artifacts/<os>-<arch>` directory using the naming
 pattern `mdtablefix-<os>-<arch>[.exe]`. An SHA-256 checksum is written

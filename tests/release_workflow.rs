@@ -146,6 +146,8 @@ fn cross_comes_from_a_verified_official_archive() -> Result<()> {
         ],
     )?;
     ensure!(!install.contains("cargo install"));
+    let add_target = command(named_step(build_steps, "Add release target")?)?;
+    ensure!(add_target == "rustup target add --toolchain stable ${{ matrix.target }}");
     Ok(())
 }
 
