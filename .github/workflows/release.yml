@@ -4,14 +4,58 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to build and backfill
+        required: true
+        type: string
 
 env:
   REPO_NAME: ${{ github.event.repository.name }}
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+  CROSS_VERSION: 0.2.5
+  CROSS_LINUX_X64_SHA256: 642375d1bcf3bd88272c32ba90e999f3d983050adf45e66bd2d3887e8e838bad
+
+concurrency:
+  group: release-${{ github.repository }}-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
-  build:
+  prepare-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Verify release tag matches Cargo.toml
+        run: |
+          set -euo pipefail
+          tag="${RELEASE_TAG#v}"
+          cargo_version="$(python3 -c \
+            'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("Cargo.toml").read_text(encoding="utf-8"))["package"]["version"])')"
+          if [[ "${tag}" != "${cargo_version}" ]]; then
+            echo "release tag ${tag} does not match Cargo.toml version ${cargo_version}" >&2
+            exit 1
+          fi
+      - name: Create the GitHub release when absent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --generate-notes --verify-tag
+          fi
+
+  build:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: linux
@@ -58,49 +102,49 @@ jobs:
 #            target: aarch64-unknown-openbsd
 #            ext: ""
     steps:
-      - uses: actions/checkout@v7
-      - name: Setup Python 3.11
-        id: setup-python
-        uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          python-version: '3.11'
-      - name: Verify tag matches Cargo.toml
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME#v}"
-          export CARGO_TOML_PATH="${CARGO_TOML_PATH:-Cargo.toml}"
-          python_script="import os, pathlib, tomllib; print(tomllib.loads(pathlib.Path(os.environ['CARGO_TOML_PATH']).read_text(encoding='utf-8'))['package']['version'])"
-          cargo_version="$(echo "${python_script}" | "${{ steps.setup-python.outputs.python-path }}")"
-          if [ -z "${cargo_version:-}" ]; then
-            echo "::error title=Cargo.toml parse failure::Could not read package.version from ${toml_path}. Ensure Python ≥3.11 (tomllib available) and that the manifest contains [package], or set CARGO_TOML_PATH to the crate's Cargo.toml."
-            exit 1
-          fi
-          if [ "$tag" != "$cargo_version" ]; then
-            echo "::error title=Tag/Cargo.toml mismatch::Tag version $tag does not match Cargo.toml version $cargo_version"
-            exit 1
-          fi
-          echo "Release tag $tag matches Cargo.toml version."
+          ref: ${{ env.RELEASE_TAG }}
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
-      - name: Cache cross binary
-        uses: actions/cache@v6
+      - name: Cache the official cross binaries
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          path: ~/.cargo/bin/cross
-          key: cross-v0.2.5-${{ runner.os }}
-      - name: Install cross
-        env:
-          RUSTFLAGS: ""
-        run: cargo install cross --git https://github.com/cross-rs/cross --tag v0.2.5
+          path: ~/.local/share/mdtablefix-tools/cross-v${{ env.CROSS_VERSION }}
+          key: cross-official-v${{ env.CROSS_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+      - name: Install cross from its official release
+        run: |
+          set -euo pipefail
+          cross_dir="${HOME}/.local/share/mdtablefix-tools/cross-v${CROSS_VERSION}"
+          cross_binary="${cross_dir}/cross"
+          expected_version="cross ${CROSS_VERSION}"
+          installed_version=""
+          if [[ -x "${cross_binary}" ]]; then
+            installed_version="$("${cross_binary}" --version 2>/dev/null || true)"
+          fi
+          if [[ "${installed_version}" != "${expected_version}" ]]; then
+            archive="${RUNNER_TEMP}/cross.tar.gz"
+            url="https://github.com/cross-rs/cross/releases/download/v${CROSS_VERSION}/cross-x86_64-unknown-linux-gnu.tar.gz"
+            curl --fail --location --proto '=https' --tlsv1.2 "${url}" -o "${archive}"
+            echo "${CROSS_LINUX_X64_SHA256}  ${archive}" | sha256sum --check --status
+            mkdir -p "${cross_dir}"
+            rm -f "${cross_dir}/cross" "${cross_dir}/cross-util"
+            tar --extract --gzip --file "${archive}" --directory "${cross_dir}" \
+              cross cross-util
+            chmod 0755 "${cross_dir}/cross" "${cross_dir}/cross-util"
+          fi
+          [[ "$("${cross_binary}" --version)" == "${expected_version}" ]]
+          echo "${cross_dir}" >> "${GITHUB_PATH}"
       - name: Cache cargo registry
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
       - name: Add release target
         run: rustup target add ${{ matrix.target }}
       - name: Build release binary
@@ -108,7 +152,7 @@ jobs:
       - name: Prepare artifact
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           artifact_dir="artifacts/${{ matrix.os }}-${{ matrix.arch }}"
           binary_path="target/${{ matrix.target }}/release/${{ env.REPO_NAME }}${{ matrix.ext }}"
           binary_name="${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
@@ -126,27 +170,37 @@ jobs:
               "${artifact_dir}/${archive_name}.sha256"
           fi
       - name: Upload release artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}
           path: artifacts/${{ matrix.os }}-${{ matrix.arch }}
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: softprops/action-gh-release@v3
-        with:
-          generate_release_notes: true
-      - uses: actions/download-artifact@v8
-        with:
-          path: artifacts
-      - run: |
-          for dir in artifacts/${{ env.REPO_NAME }}-*; do
-            for file in "$dir"/*; do
-              gh release upload "${{ github.ref_name }}" "$file"
-            done
-          done
+          overwrite: true
+      - name: Publish this target's release assets
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          artifact_dir="artifacts/${{ matrix.os }}-${{ matrix.arch }}"
+          existing_dir="${RUNNER_TEMP}/existing-release-assets/${{ matrix.target }}"
+          mkdir -p "${existing_dir}"
+
+          for file in "${artifact_dir}"/*; do
+            asset_name="$(basename "${file}")"
+            asset_id="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+              --jq ".assets[] | select(.name == \"${asset_name}\") | .id")"
+            if [[ -n "${asset_id}" ]]; then
+              existing_file="${existing_dir}/${asset_name}"
+              gh api --method GET -H "Accept: application/octet-stream" \
+                "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+                > "${existing_file}"
+              if ! cmp --silent "${file}" "${existing_file}"; then
+                echo "release asset ${asset_name} exists with different content" >&2
+                exit 1
+              fi
+              echo "release asset ${asset_name} already exists with identical content"
+              continue
+            fi
+            gh release upload "${RELEASE_TAG}" "${file}" \
+              --repo "${GITHUB_REPOSITORY}"
+          done
