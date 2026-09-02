@@ -69,7 +69,10 @@ Each binary is placed in an `artifacts/<os>-<arch>` directory using the naming
 pattern `mdtablefix-<os>-<arch>[.exe]`. An SHA-256 checksum is written
 alongside each binary for download verification. The Linux `cargo-binstall`
 targets also produce `mdtablefix-<version>-<target>.tar.gz` plus a matching
-SHA-256 checksum.
+SHA-256 checksum. These archives use the tagged commit timestamp, normalized
+ownership and ordering, and timestamp-free gzip metadata. Rebuilding the same
+tag therefore produces byte-identical archives instead of changing their
+compressed headers on every run.
 
 Before the build matrix starts, a small job creates the GitHub release if it is
 absent. Every successful matrix job uploads its workflow artefact and publishes

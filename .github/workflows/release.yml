@@ -105,6 +105,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.RELEASE_TAG }}
+      - name: Set reproducible release timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "${GITHUB_ENV}"
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
       - name: Cache the official cross binaries
@@ -173,8 +175,11 @@ jobs:
 
           if [ "${{ matrix.cargo_binstall_archive }}" = "true" ]; then
             archive_name="${{ env.REPO_NAME }}-${version}-${{ matrix.target }}.tar.gz"
-            tar -C "target/${{ matrix.target }}/release" -czf \
-              "${artifact_dir}/${archive_name}" "${{ env.REPO_NAME }}${{ matrix.ext }}"
+            tar --sort=name --mtime="@${SOURCE_DATE_EPOCH}" \
+              --owner=0 --group=0 --numeric-owner --format=gnu \
+              -C "target/${{ matrix.target }}/release" -cf - \
+              "${{ env.REPO_NAME }}${{ matrix.ext }}" \
+              | gzip --no-name > "${artifact_dir}/${archive_name}"
             sha256sum "${artifact_dir}/${archive_name}" > \
               "${artifact_dir}/${archive_name}.sha256"
           fi

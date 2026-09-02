@@ -225,6 +225,38 @@ fn successful_targets_publish_without_waiting_for_the_matrix() -> Result<()> {
 }
 
 #[test]
+fn cargo_binstall_archives_are_reproducible() -> Result<()> {
+    let workflow = parse_workflow()?;
+    let build_steps = steps(job(&workflow, "build")?)?;
+    let timestamp_index = named_step_index(build_steps, "Set reproducible release timestamp")?;
+    let build_index = named_step_index(build_steps, "Build release binary")?;
+    let prepare_index = named_step_index(build_steps, "Prepare artifact")?;
+    ensure!(timestamp_index < build_index && build_index < prepare_index);
+
+    let timestamp = command(named_step(
+        build_steps,
+        "Set reproducible release timestamp",
+    )?)?;
+    ensure!(
+        timestamp
+            == "echo \"SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)\" >> \"${GITHUB_ENV}\""
+    );
+
+    let prepare = command(named_step(build_steps, "Prepare artifact")?)?;
+    assert_fragments_in_order(
+        prepare,
+        &[
+            "tar --sort=name --mtime=\"@${SOURCE_DATE_EPOCH}\"",
+            "--owner=0 --group=0 --numeric-owner --format=gnu",
+            "-C \"target/${{ matrix.target }}/release\" -cf -",
+            "| gzip --no-name > \"${artifact_dir}/${archive_name}\"",
+        ],
+    )?;
+    ensure!(!prepare.contains("tar -C \"target/${{ matrix.target }}/release\" -czf"));
+    Ok(())
+}
+
+#[test]
 fn manual_dispatch_builds_the_requested_release_tag() -> Result<()> {
     let workflow = parse_workflow()?;
     let root = as_mapping(&workflow, "workflow")?;
