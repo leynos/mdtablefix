@@ -9,6 +9,7 @@ const CHECKOUT_ACTION: &str = "actions/checkout@3d3c42e5aac5ba805825da76410c1812
 const CACHE_ACTION: &str = "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
 const UPLOAD_ACTION: &str = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const CROSS_SHA256: &str = "642375d1bcf3bd88272c32ba90e999f3d983050adf45e66bd2d3887e8e838bad";
+const RELEASE_RUST_VERSION: &str = "1.89.0";
 const CROSS_VERSION_PROBE: &str = concat!(
     "probe_cross_version() {\n",
     "  (\n",
@@ -118,8 +119,14 @@ fn cross_comes_from_a_verified_official_archive() -> Result<()> {
     let root = as_mapping(&workflow, "workflow")?;
     let env = as_mapping(get(root, "env")?, "workflow environment")?;
     ensure!(get_string(env, "CROSS_LINUX_X64_SHA256") == Some(CROSS_SHA256));
+    ensure!(get_string(env, "RELEASE_RUST_VERSION") == Some(RELEASE_RUST_VERSION));
 
     let build_steps = steps(job(&workflow, "build")?)?;
+    let setup_rust = named_step(build_steps, "Setup Rust")?;
+    let setup_inputs = as_mapping(get(setup_rust, "with")?, "Setup Rust inputs")?;
+    ensure!(get_string(setup_inputs, "toolchain") == Some("${{ env.RELEASE_RUST_VERSION }}"));
+    ensure!(get(setup_inputs, "install-binstall")?.as_bool() == Some(false));
+    ensure!(get(setup_inputs, "use-sccache")?.as_bool() == Some(false));
     let cache = named_step(build_steps, "Cache the official cross binaries")?;
     ensure!(get_string(cache, "uses") == Some(CACHE_ACTION));
     ensure!(
@@ -149,7 +156,10 @@ fn cross_comes_from_a_verified_official_archive() -> Result<()> {
     )?;
     ensure!(!install.contains("cargo install"));
     let add_target = command(named_step(build_steps, "Add release target")?)?;
-    ensure!(add_target == "rustup target add --toolchain stable ${{ matrix.target }}");
+    ensure!(
+        add_target
+            == "rustup target add --toolchain \"${RELEASE_RUST_VERSION}\" ${{ matrix.target }}"
+    );
     Ok(())
 }
 
@@ -232,6 +242,10 @@ fn cargo_binstall_archives_are_reproducible() -> Result<()> {
     let build_index = named_step_index(build_steps, "Build release binary")?;
     let prepare_index = named_step_index(build_steps, "Prepare artifact")?;
     ensure!(timestamp_index < build_index && build_index < prepare_index);
+    ensure!(
+        command(named_step(build_steps, "Build release binary")?)?
+            == "cross +\"${RELEASE_RUST_VERSION}\" build --release --target ${{ matrix.target }}"
+    );
 
     let timestamp = command(named_step(
         build_steps,
