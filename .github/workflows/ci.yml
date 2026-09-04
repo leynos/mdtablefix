@@ -46,3 +46,89 @@ jobs:
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
 
+
+  binstall-packaging:
+    # Runner-backed dry run of the release packaging. It proves the crate
+    # builds on each release platform and that the staged assets match the
+    # cargo-binstall templates in Cargo.toml before a tag depends on it.
+    name: binstall packaging (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            os: linux
+            arch: x86_64
+            target: x86_64-unknown-linux-gnu
+          - runner: macos-15
+            os: macos
+            arch: aarch64
+            target: aarch64-apple-darwin
+          # macOS runners are Apple silicon, so this row is the only check
+          # that the Intel cross-compile the release publishes still links.
+          - runner: macos-15
+            os: macos
+            arch: x86_64
+            target: x86_64-apple-darwin
+            is-foreign: true
+          - runner: windows-latest
+            os: windows
+            arch: x86_64
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
+        with:
+          toolchain: 1.89.0
+          install-binstall: false
+          use-sccache: false
+      - name: Add release target
+        run: rustup target add --toolchain 1.89.0 ${{ matrix.target }}
+      - name: Build the release binary
+        run: cargo +1.89.0 build --release --bin mdtablefix --target ${{ matrix.target }}
+      - name: Stage the release assets
+        run: |
+          set -euo pipefail
+          binary_ext=""
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            binary_ext=".exe"
+          fi
+          python_bin=python3
+          command -v python3 >/dev/null 2>&1 || python_bin=python
+          version="$("${python_bin}" -c \
+            'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("Cargo.toml").read_text(encoding="utf-8"))["package"]["version"])')"
+          "${python_bin}" scripts/package_release_artifacts.py \
+            --binary "target/${{ matrix.target }}/release/mdtablefix${binary_ext}" \
+            --artifact-dir "dist/${{ matrix.os }}-${{ matrix.arch }}" \
+            --version "${version}" \
+            --target "${{ matrix.target }}" \
+            --os "${{ matrix.os }}" \
+            --arch "${{ matrix.arch }}"
+          "${python_bin}" scripts/verify_binstall_layout.py \
+            --artifact-dir "dist/${{ matrix.os }}-${{ matrix.arch }}" \
+            --target "${{ matrix.target }}"
+      - name: Run the packaged binary
+        # Skipped where the target is not the runner's own architecture.
+        if: ${{ !matrix.is-foreign }}
+        run: |
+          set -euo pipefail
+          binary_ext=""
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            binary_ext=".exe"
+          fi
+          python_bin=python3
+          command -v python3 >/dev/null 2>&1 || python_bin=python
+          staged="dist/${{ matrix.os }}-${{ matrix.arch }}"
+          # Extract through Python: the three runner images ship different tar
+          # implementations, and only the archive contents are under test here.
+          "${python_bin}" -c 'import pathlib, sys, tarfile; archive = next(pathlib.Path(sys.argv[1]).glob("*.tar.gz")); tarfile.open(archive).extractall(sys.argv[2], filter="data")' \
+            "${staged}" "${RUNNER_TEMP}"
+          chmod +x "${RUNNER_TEMP}/mdtablefix${binary_ext}"
+          "${RUNNER_TEMP}/mdtablefix${binary_ext}" --version

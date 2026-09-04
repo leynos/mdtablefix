@@ -242,10 +242,19 @@ fn cargo_binstall_archives_are_reproducible() -> Result<()> {
     let build_index = named_step_index(build_steps, "Build release binary")?;
     let prepare_index = named_step_index(build_steps, "Prepare artifact")?;
     ensure!(timestamp_index < build_index && build_index < prepare_index);
-    ensure!(
-        command(named_step(build_steps, "Build release binary")?)?
-            == "cross +\"${RELEASE_RUST_VERSION}\" build --release --target ${{ matrix.target }}"
-    );
+
+    // `cross` cannot emit Apple or MSVC binaries, so the native runners drive
+    // Cargo directly. Both arms pin the release toolchain.
+    let build = command(named_step(build_steps, "Build release binary")?)?;
+    assert_fragments_in_order(
+        build,
+        &[
+            "if [[ \"${{ matrix.builder }}\" == \"cross\" ]]",
+            "cross +\"${RELEASE_RUST_VERSION}\" build --release --target ${{ matrix.target }}",
+            "else",
+            "cargo +\"${RELEASE_RUST_VERSION}\" build --release --target ${{ matrix.target }}",
+        ],
+    )?;
 
     let timestamp = command(named_step(
         build_steps,
@@ -256,17 +265,43 @@ fn cargo_binstall_archives_are_reproducible() -> Result<()> {
             == "echo \"SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)\" >> \"${GITHUB_ENV}\""
     );
 
+    // The archive itself is written by the packaging script. Every runner
+    // image can execute that script, and its determinism is covered by
+    // tests/release_packaging.rs; the workflow's job is only to invoke it.
     let prepare = command(named_step(build_steps, "Prepare artifact")?)?;
     assert_fragments_in_order(
         prepare,
         &[
-            "tar --sort=name --mtime=\"@${SOURCE_DATE_EPOCH}\"",
-            "--owner=0 --group=0 --numeric-owner --format=gnu",
-            "-C \"target/${{ matrix.target }}/release\" -cf -",
-            "| gzip --no-name > \"${artifact_dir}/${archive_name}\"",
+            "scripts/package_release_artifacts.py",
+            "--binary \"target/${{ matrix.target }}/release/${REPO_NAME}${binary_ext}\"",
+            "--artifact-dir \"artifacts/${{ matrix.os }}-${{ matrix.arch }}\"",
+            "--version \"${RELEASE_TAG#v}\"",
+            "--target \"${{ matrix.target }}\"",
+            "--arch \"${{ matrix.arch }}\"",
         ],
     )?;
-    ensure!(!prepare.contains("tar -C \"target/${{ matrix.target }}/release\" -czf"));
+    ensure!(!prepare.contains("sha256sum"));
+    ensure!(!prepare.contains("tar -C"));
+    Ok(())
+}
+
+#[test]
+fn every_release_step_runs_under_bash() -> Result<()> {
+    // Windows runners default to PowerShell, so the job pins bash once rather
+    // than per step; a step that opted out would silently change semantics.
+    let workflow = parse_workflow()?;
+    let build = job(&workflow, "build")?;
+    ensure!(get_string(build, "runs-on") == Some("${{ matrix.runner }}"));
+    let defaults = as_mapping(get(build, "defaults")?, "build defaults")?;
+    let run_defaults = as_mapping(get(defaults, "run")?, "build run defaults")?;
+    ensure!(get_string(run_defaults, "shell") == Some("bash"));
+    for step in steps(build)? {
+        let mapping = step_mapping(step, "build step")?;
+        ensure!(
+            get_string(mapping, "shell").is_none(),
+            "steps should inherit the job's bash default"
+        );
+    }
     Ok(())
 }
 

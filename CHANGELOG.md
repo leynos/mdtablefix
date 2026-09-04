@@ -4,6 +4,21 @@
 
 ### Added
 
+- Release assets for `x86_64-apple-darwin`, `aarch64-apple-darwin` and
+  `x86_64-pc-windows-msvc`, so `cargo binstall` can install `mdtablefix` on
+  macOS and Windows without compiling it.
+  ([#459](https://github.com/leynos/mdtablefix/issues/459))
+- A `cargo-binstall` archive for `x86_64-unknown-freebsd`, which previously
+  published only a bare binary. Every target the ungated `pkg-url` template
+  resolves to now has an asset behind it.
+- `scripts/package_release_artifacts.py`, a standard-library packager that
+  stages the bare binary, the `cargo-binstall` archive and their `.sha256`
+  sidecars identically on Linux, macOS and Windows runners.
+- `scripts/verify_binstall_layout.py` and `tests/release_packaging.rs`, which
+  render `pkg-url` and `bin-dir` from `Cargo.toml` and fail unless the staged
+  archive matches, for every published target.
+- A `binstall-packaging` continuous-integration job that builds, stages,
+  extracts and runs the release binary on Ubuntu, macOS and Windows.
 - `--code-emphasis` flag to fix emphasis markers that adjoin inline code.
   Runs before wrapping and footnote conversion.
 - Treat common English date sequences as atomic inline fragments during
@@ -12,6 +27,12 @@
 
 ### Changed
 
+- Ungate the `[package.metadata.binstall]` configuration, which no longer
+  applies only to 64-bit Linux GNU targets. One `pkg-url` template now covers
+  Linux, macOS and Windows.
+  ([#459](https://github.com/leynos/mdtablefix/issues/459))
+- Checksum sidecars now name the asset alone rather than its staging path, so
+  `sha256sum --check` works beside the downloaded file.
 - Require callers of `FenceTracker::observe` and `FenceTracker::in_fence` to
   provide the current blockquote depth. This is a breaking API change for
   existing one-argument callers.
@@ -21,6 +42,10 @@
 
 ### Fixed
 
+- Set the `cargo-binstall` `bin-dir` to `{ bin }{ binary-ext }`. The previous
+  `.` rendered an empty source path, so `cargo binstall mdtablefix` failed
+  before downloading anything.
+  ([#458](https://github.com/leynos/mdtablefix/issues/458))
 - Stop appending a trailing `|` to lone pipe-prefixed lines in code blocks, so
   shell pipeline continuations such as `| tee /tmp/test.log` are no longer
   corrupted into unterminated pipelines. A same-marker line carrying an info
@@ -94,6 +119,3 @@
 - Convert `<table>...</table>` blocks that span multiple lines and carry
   leading indentation, leaving surrounding non-table lines at the same
   indentation level untouched.
-- Correct the `cargo-binstall` Linux GNU `bin-dir` override so binaries are
-  installed from the archive's current directory (`.`) rather than a derived
-  `{ bin }{ binary-ext }` path, restoring `cargo binstall` on Linux.

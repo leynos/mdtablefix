@@ -18,6 +18,9 @@ env:
   CROSS_VERSION: 0.2.5
   CROSS_LINUX_X64_SHA256: 642375d1bcf3bd88272c32ba90e999f3d983050adf45e66bd2d3887e8e838bad
 
+permissions:
+  contents: read
+
 concurrency:
   group: release-${{ github.repository }}-${{ inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
@@ -52,56 +55,54 @@ jobs:
 
   build:
     needs: prepare-release
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
+    defaults:
+      run:
+        # Windows runners default to PowerShell; every step here is written for
+        # bash, and Git Bash is present on all three runner images.
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Every row publishes a cargo-binstall archive; the contract test
+          # in tests/release_packaging.rs asserts that this set and the set of
+          # targets the binstall metadata promises are the same.
+          # `cross` covers the targets that need a foreign libc; the native
+          # runners build their own platform directly, because `cross` cannot
+          # produce Apple or MSVC binaries from Linux.
           - os: linux
             arch: x86_64
             target: x86_64-unknown-linux-gnu
-            ext: ""
-            cargo_binstall_archive: true
+            runner: ubuntu-latest
+            builder: cross
           - os: linux
             arch: aarch64
             target: aarch64-unknown-linux-gnu
-            ext: ""
-            cargo_binstall_archive: true
-#          - os: windows
-#            arch: x86_64
-#            target: x86_64-pc-windows-msvc
-#            ext: ".exe"
-#          - os: windows
-#            arch: aarch64
-#            target: aarch64-pc-windows-msvc
-#            ext: ".exe"
-#          - os: macos
-#            arch: x86_64
-#            target: x86_64-apple-darwin
-#            ext: ""
-#          - os: macos
-#            arch: aarch64
-#            target: aarch64-apple-darwin
-#            ext: ""
+            runner: ubuntu-latest
+            builder: cross
+          - os: macos
+            arch: x86_64
+            target: x86_64-apple-darwin
+            runner: macos-15
+            builder: cargo
+          - os: macos
+            arch: aarch64
+            target: aarch64-apple-darwin
+            runner: macos-15
+            builder: cargo
+          - os: windows
+            arch: x86_64
+            target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            builder: cargo
           - os: freebsd
             arch: x86_64
             target: x86_64-unknown-freebsd
-            ext: ""
-            cargo_binstall_archive: false
-#          - os: freebsd
-#            arch: aarch64
-#            target: aarch64-unknown-freebsd
-#            ext: ""
-#          - os: openbsd
-#            arch: x86_64
-#            target: x86_64-unknown-openbsd
-#            ext: ""
-#          - os: openbsd
-#            arch: aarch64
-#            target: aarch64-unknown-openbsd
-#            ext: ""
+            runner: ubuntu-latest
+            builder: cross
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -115,11 +116,13 @@ jobs:
           install-binstall: false
           use-sccache: false
       - name: Cache the official cross binaries
+        if: matrix.builder == 'cross'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.local/share/mdtablefix-tools/cross-v${{ env.CROSS_VERSION }}
           key: cross-official-v${{ env.CROSS_VERSION }}-${{ runner.os }}-${{ runner.arch }}
       - name: Install cross from its official release
+        if: matrix.builder == 'cross'
         run: |
           set -euo pipefail
           cross_dir="${HOME}/.local/share/mdtablefix-tools/cross-v${CROSS_VERSION}"
@@ -164,30 +167,32 @@ jobs:
       - name: Add release target
         run: rustup target add --toolchain "${RELEASE_RUST_VERSION}" ${{ matrix.target }}
       - name: Build release binary
-        run: cross +"${RELEASE_RUST_VERSION}" build --release --target ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.builder }}" == "cross" ]]; then
+            cross +"${RELEASE_RUST_VERSION}" build --release --target ${{ matrix.target }}
+          else
+            cargo +"${RELEASE_RUST_VERSION}" build --release --target ${{ matrix.target }}
+          fi
       - name: Prepare artifact
         run: |
           set -euo pipefail
-          version="${RELEASE_TAG#v}"
-          artifact_dir="artifacts/${{ matrix.os }}-${{ matrix.arch }}"
-          binary_path="target/${{ matrix.target }}/release/${{ env.REPO_NAME }}${{ matrix.ext }}"
-          binary_name="${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
-
-          mkdir -p "${artifact_dir}"
-          cp "${binary_path}" "${artifact_dir}/${binary_name}"
-          sha256sum "${artifact_dir}/${binary_name}" > \
-            "${artifact_dir}/${binary_name}.sha256"
-
-          if [ "${{ matrix.cargo_binstall_archive }}" = "true" ]; then
-            archive_name="${{ env.REPO_NAME }}-${version}-${{ matrix.target }}.tar.gz"
-            tar --sort=name --mtime="@${SOURCE_DATE_EPOCH}" \
-              --owner=0 --group=0 --numeric-owner --format=gnu \
-              -C "target/${{ matrix.target }}/release" -cf - \
-              "${{ env.REPO_NAME }}${{ matrix.ext }}" \
-              | gzip --no-name > "${artifact_dir}/${archive_name}"
-            sha256sum "${artifact_dir}/${archive_name}" > \
-              "${artifact_dir}/${archive_name}.sha256"
+          binary_ext=""
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            binary_ext=".exe"
           fi
+          # The Windows image exposes the interpreter as `python`; the Linux and
+          # macOS images expose `python3`.
+          python_bin=python3
+          command -v python3 >/dev/null 2>&1 || python_bin=python
+          "${python_bin}" scripts/package_release_artifacts.py \
+            --binary "target/${{ matrix.target }}/release/${REPO_NAME}${binary_ext}" \
+            --artifact-dir "artifacts/${{ matrix.os }}-${{ matrix.arch }}" \
+            --package-name "${REPO_NAME}" \
+            --version "${RELEASE_TAG#v}" \
+            --target "${{ matrix.target }}" \
+            --os "${{ matrix.os }}" \
+            --arch "${{ matrix.arch }}"
       - name: Upload release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

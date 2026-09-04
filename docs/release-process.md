@@ -1,8 +1,8 @@
 # Release Process
 
 This project publishes prebuilt binaries for multiple operating systems and
-architectures. It also publishes `cargo-binstall` archives for the supported
-Linux release targets.
+architectures. It also publishes a `cargo-binstall` archive for every release
+target.
 
 The project targets the stable Rust `1.89.0` toolchain, as specified in
 `rust-toolchain.toml`.
@@ -15,6 +15,8 @@ The GitHub Actions workflow `.github/workflows/release.yml` builds and uploads
 binaries for:
 
 - Linux (x86_64 and aarch64)
+- macOS (x86_64 and aarch64)
+- Windows (x86_64, MSVC)
 - FreeBSD (x86_64)
 
 Releases start from tags named `v<major>.<minor>.<patch>`. The workflow checks
@@ -33,11 +35,12 @@ use immutable commit pins because those jobs can write release assets.
 Each binary is named using the pattern `mdtablefix-<os>-<arch>` with an `.exe`
 suffix on Windows.
 
-For Linux `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, the
-workflow also produces `cargo-binstall` archives named
+Every target also produces a `cargo-binstall` archive named
 `mdtablefix-<version>-<target>.tar.gz`. Each archive contains the `mdtablefix`
-binary at the archive root, matching the `Cargo.toml`
-`[package.metadata.binstall]` configuration.
+binary (`mdtablefix.exe` on Windows) at the archive root, which is what the
+`bin-dir` template in the `Cargo.toml` `[package.metadata.binstall]` section
+resolves to. That section carries no per-target overrides, so one `pkg-url`
+covers Linux, macOS and Windows alike.
 
 Binaries are uploaded as soon as they are built, so they are available from the
 workflow run while other targets build.
@@ -45,9 +48,14 @@ workflow run while other targets build.
 ## Workflow details
 
 The `release.yml` workflow defines a matrix of operating system and
-architecture combinations. Each entry includes the target triple used by
-`cross` and whether the target also needs a `cargo-binstall` archive. During
-the build job, `cross` compiles a release binary for every matrix row.
+architecture combinations. Each entry names its runner, its builder and its
+target triple. Every entry publishes a `cargo-binstall` archive, and
+`tests/release_packaging.rs` fails if that set and the set of targets the
+binstall metadata promises ever diverge. Linux and FreeBSD targets build with
+`cross` on a GitHub-hosted Ubuntu runner. The macOS and Windows targets build
+with Cargo on their own runner images, because `cross` cannot produce Apple or
+MSVC binaries from Linux. Every step in the job runs under bash, which the job
+pins as a default so Windows runners do not fall back to PowerShell.
 
 The workflow downloads `cross` 0.2.5 from its official release, verifies the
 pinned archive SHA-256, and caches the extracted tools under a versioned
@@ -67,14 +75,47 @@ installed explicitly for the version-pinned Rust 1.89.0 toolchain used by
 channel. The Cargo cache key includes that compiler version so a toolchain
 change cannot silently reuse incompatible build state.
 
+`scripts/package_release_artifacts.py` stages the assets. It uses only the
+Python standard library, because the three runner images do not agree on GNU
+coreutils or GNU tar; `sha256sum` is absent on macOS, and `tar` is BSD tar on
+macOS and Windows.
+
 Each binary is placed in an `artifacts/<os>-<arch>` directory using the naming
 pattern `mdtablefix-<os>-<arch>[.exe]`. An SHA-256 checksum is written
-alongside each binary for download verification. The Linux `cargo-binstall`
-targets also produce `mdtablefix-<version>-<target>.tar.gz` plus a matching
-SHA-256 checksum. These archives use the tagged commit timestamp, normalized
-ownership and ordering, and timestamp-free gzip metadata. Rebuilding the same
-tag therefore produces byte-identical archives instead of changing their
-compressed headers on every run.
+alongside each binary for download verification. The sidecar names the asset
+alone, so `sha256sum --check` works in whatever directory the pair is
+downloaded to. The `cargo-binstall` targets also produce
+`mdtablefix-<version>-<target>.tar.gz` plus a matching SHA-256 checksum.
+Publishing an archive for every target keeps the ungated `pkg-url` template
+honest: there is no triple it resolves to that has no asset. These archives use
+the tagged commit timestamp, normalized ownership and mode, and timestamp-free
+gzip metadata. Rebuilding the same tag therefore produces byte-identical
+archives instead of changing their compressed headers on every run.
+
+## Guarding the cargo-binstall contract
+
+Two checks stand between a metadata regression and a broken release.
+
+`tests/release_packaging.rs` stages a stand-in binary for every published
+target, then runs `scripts/verify_binstall_layout.py` over the result. That
+script renders `pkg-url` and `bin-dir` from `Cargo.toml` and fails unless the
+staged archive carries exactly that name and exactly that member. It rejects
+`bin-dir = "."`, which renders an empty source path and makes `cargo binstall`
+refuse the package, and it rejects per-target overrides, which would mean the
+single checked contract no longer describes every platform. The same test
+asserts that the release matrix builds every advertised target on a runner of
+the matching family.
+
+The `binstall-packaging` job in `.github/workflows/ci.yml` is the runner-backed
+counterpart. On Ubuntu, macOS and Windows it builds a release target, stages
+the assets with the same script, verifies the layout, extracts the archive, and
+runs the extracted binary. It proves on every pull request that the crate
+compiles for each release platform and that the packaging works there.
+
+The job also builds `x86_64-apple-darwin` on the Apple silicon macOS runner.
+That row sets `is-foreign`, which skips the step that runs the extracted
+binary, because the runner cannot execute it. It is the only check that the
+Intel cross-compile the release publishes still links.
 
 Before the build matrix starts, a small job creates the GitHub release if it is
 absent. Every successful matrix job uploads its workflow artefact and publishes

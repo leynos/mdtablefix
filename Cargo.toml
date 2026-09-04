@@ -1,6 +1,6 @@
 [package]
 name = "mdtablefix"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 rust-version = "1.89"
 license = "ISC"
@@ -9,11 +9,13 @@ description = """
 `mdtablefix` unb0rks and reflows Markdown tables so that each column has a uniform width. When \
 the `--wrap` option is used, it also wraps paragraphs and list items to 80 columns."""
 
+# Applies to every target: the release workflow publishes one archive shape for
+# Linux, macOS and Windows alike, so no per-target override is needed. `bin-dir`
+# names the binary at the archive root; `.` resolves to an empty source path and
+# makes cargo-binstall refuse the package.
 [package.metadata.binstall]
-
-[package.metadata.binstall.overrides.'cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"), target_env = "gnu"))']
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }.tar.gz"
-bin-dir = "."
+bin-dir = "{ bin }{ binary-ext }"
 pkg-fmt = "tgz"
 
 [dependencies]
