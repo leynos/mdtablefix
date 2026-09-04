@@ -18,6 +18,9 @@ env:
   CROSS_VERSION: 0.2.5
   CROSS_LINUX_X64_SHA256: 642375d1bcf3bd88272c32ba90e999f3d983050adf45e66bd2d3887e8e838bad
 
+permissions:
+  contents: read
+
 concurrency:
   group: release-${{ github.repository }}-${{ inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
@@ -64,6 +67,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Every row publishes a cargo-binstall archive; the contract test
+          # in tests/release_packaging.rs asserts that this set and the set of
+          # targets the binstall metadata promises are the same.
           # `cross` covers the targets that need a foreign libc; the native
           # runners build their own platform directly, because `cross` cannot
           # produce Apple or MSVC binaries from Linux.
@@ -72,37 +78,31 @@ jobs:
             target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
             builder: cross
-            cargo_binstall_archive: true
           - os: linux
             arch: aarch64
             target: aarch64-unknown-linux-gnu
             runner: ubuntu-latest
             builder: cross
-            cargo_binstall_archive: true
           - os: macos
             arch: x86_64
             target: x86_64-apple-darwin
             runner: macos-15
             builder: cargo
-            cargo_binstall_archive: true
           - os: macos
             arch: aarch64
             target: aarch64-apple-darwin
             runner: macos-15
             builder: cargo
-            cargo_binstall_archive: true
           - os: windows
             arch: x86_64
             target: x86_64-pc-windows-msvc
             runner: windows-latest
             builder: cargo
-            cargo_binstall_archive: true
           - os: freebsd
             arch: x86_64
             target: x86_64-unknown-freebsd
             runner: ubuntu-latest
             builder: cross
-            cargo_binstall_archive: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -192,8 +192,7 @@ jobs:
             --version "${RELEASE_TAG#v}" \
             --target "${{ matrix.target }}" \
             --os "${{ matrix.os }}" \
-            --arch "${{ matrix.arch }}" \
-            --archive "${{ matrix.cargo_binstall_archive }}"
+            --arch "${{ matrix.arch }}"
       - name: Upload release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

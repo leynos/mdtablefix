@@ -5,67 +5,198 @@
 //! the archive is built by `scripts/package_release_artifacts.py`. Nothing in
 //! the build connects the two, so these tests stage real archives for every
 //! published target and check them against the rendered templates.
+//!
+//! Paths are [`camino`] UTF-8 types and every filesystem operation goes
+//! through a [`cap_std::fs_utf8::Dir`] capability scoped to the staging root,
+//! so nothing here can read or write outside the temporary directory it owns.
+//! [`TempDir`] still provides that directory and [`Command`] still runs the
+//! packaging scripts, which need real paths.
 
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::process::Command;
 
 use anyhow::{Context, Result, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde_yaml::{Mapping, Value};
+use tempfile::TempDir;
 
 const RELEASE_WORKFLOW: &str = include_str!("../.github/workflows/release.yml");
 const CI_WORKFLOW: &str = include_str!("../.github/workflows/ci.yml");
 const PACKAGE_SCRIPT: &str = "scripts/package_release_artifacts.py";
 const VERIFY_SCRIPT: &str = "scripts/verify_binstall_layout.py";
+const ARCHIVE_SUFFIX: &str = ".tar.gz";
 
 /// A target whose release assets `cargo binstall` is expected to resolve.
 struct ReleaseTarget {
     triple: &'static str,
     os: &'static str,
     arch: &'static str,
+    /// The runner image this target must be built on.
+    runner: &'static str,
+    /// `cross` for targets needing a foreign libc, `cargo` for native builds.
+    builder: &'static str,
     /// The archive member `bin-dir` must render to for this target.
     binary_name: &'static str,
 }
 
+/// Every target the release publishes an archive for.
+///
+/// `cross` cannot emit Apple or MSVC binaries from Linux, so those targets
+/// build on their own runner images. macOS runners are Apple silicon, which is
+/// why the Intel target is a cross-compile there rather than a native build.
 const RELEASE_TARGETS: &[ReleaseTarget] = &[
     ReleaseTarget {
         triple: "x86_64-unknown-linux-gnu",
         os: "linux",
         arch: "x86_64",
+        runner: "ubuntu-latest",
+        builder: "cross",
         binary_name: "mdtablefix",
     },
     ReleaseTarget {
         triple: "aarch64-unknown-linux-gnu",
         os: "linux",
         arch: "aarch64",
+        runner: "ubuntu-latest",
+        builder: "cross",
         binary_name: "mdtablefix",
     },
     ReleaseTarget {
         triple: "x86_64-apple-darwin",
         os: "macos",
         arch: "x86_64",
+        runner: "macos-15",
+        builder: "cargo",
         binary_name: "mdtablefix",
     },
     ReleaseTarget {
         triple: "aarch64-apple-darwin",
         os: "macos",
         arch: "aarch64",
+        runner: "macos-15",
+        builder: "cargo",
         binary_name: "mdtablefix",
     },
     ReleaseTarget {
         triple: "x86_64-pc-windows-msvc",
         os: "windows",
         arch: "x86_64",
+        runner: "windows-latest",
+        builder: "cargo",
         binary_name: "mdtablefix.exe",
+    },
+    ReleaseTarget {
+        triple: "x86_64-unknown-freebsd",
+        os: "freebsd",
+        arch: "x86_64",
+        runner: "ubuntu-latest",
+        builder: "cross",
+        binary_name: "mdtablefix",
     },
 ];
 
-fn repo_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
+/// A staging root with a capability scoped to it.
+///
+/// The scripts under test are external processes, so they need the ambient
+/// path; the test's own reads and writes go through the capability.
+struct Staging {
+    _root: TempDir,
+    path: Utf8PathBuf,
+    dir: Dir,
+}
+
+impl Staging {
+    fn new() -> Result<Self> {
+        let root = TempDir::new().context("create the staging root")?;
+        let path = Utf8Path::from_path(root.path())
+            .context("staging root path should be UTF-8")?
+            .to_owned();
+        let dir = Dir::open_ambient_dir(&path, ambient_authority())
+            .context("open the staging root capability")?;
+        Ok(Self {
+            _root: root,
+            path,
+            dir,
+        })
+    }
+
+    /// Stage a stand-in binary for `target` under `subdirectory`.
+    ///
+    /// The payload only has to be a file: the templates under test describe
+    /// names and archive layout, not machine code.
+    fn stage(
+        &self,
+        target: &ReleaseTarget,
+        subdirectory: &str,
+        source_date_epoch: &str,
+    ) -> Result<Utf8PathBuf> {
+        let stub = format!("{}.stub", target.triple);
+        self.dir
+            .write(&stub, b"stand-in release binary\n")
+            .context("write the stand-in binary")?;
+        run(
+            python()
+                .arg(PACKAGE_SCRIPT)
+                .arg("--binary")
+                .arg(self.path.join(&stub))
+                .arg("--artifact-dir")
+                .arg(self.path.join(subdirectory))
+                .arg("--target")
+                .arg(target.triple)
+                .arg("--os")
+                .arg(target.os)
+                .arg("--arch")
+                .arg(target.arch)
+                .arg("--source-date-epoch")
+                .arg(source_date_epoch),
+            "the packaging script",
+        )?;
+        Ok(self.path.join(subdirectory))
+    }
+
+    /// Return the sole archive name staged under `subdirectory`.
+    fn archive_name(&self, subdirectory: &str) -> Result<String> {
+        // Locate the archive by extension rather than by name: the name
+        // carries the manifest version, which changes on every release.
+        let mut names = Vec::new();
+        for entry in self
+            .dir
+            .read_dir(subdirectory)
+            .with_context(|| format!("list {subdirectory}"))?
+        {
+            let name = entry
+                .context("read a staged directory entry")?
+                .file_name()
+                .context("staged file name should be UTF-8")?;
+            if name.ends_with(ARCHIVE_SUFFIX) {
+                names.push(name);
+            }
+        }
+        ensure!(
+            names.len() == 1,
+            "{subdirectory} should hold exactly one archive, found {names:?}"
+        );
+        Ok(names.remove(0))
+    }
+
+    fn read(&self, relative: &str) -> Result<Vec<u8>> {
+        self.dir
+            .read(relative)
+            .with_context(|| format!("read {relative}"))
+    }
+
+    fn read_to_string(&self, relative: &str) -> Result<String> {
+        self.dir
+            .read_to_string(relative)
+            .with_context(|| format!("read {relative}"))
+    }
+
+    fn is_file(&self, relative: &str) -> bool { self.dir.is_file(relative) }
+}
 
 fn python() -> Command {
     let mut command = Command::new("python3");
-    command.current_dir(repo_root());
+    command.current_dir(env!("CARGO_MANIFEST_DIR"));
     command
 }
 
@@ -80,36 +211,6 @@ fn run(command: &mut Command, description: &str) -> Result<String> {
         String::from_utf8_lossy(&output.stderr),
     );
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-}
-
-/// Stage a stand-in binary for `target` into `artifact_dir`.
-///
-/// The payload only has to be a file: the templates under test describe names
-/// and archive layout, not machine code.
-fn stage(target: &ReleaseTarget, artifact_dir: &Path, source_date_epoch: &str) -> Result<()> {
-    let stub = artifact_dir
-        .parent()
-        .context("staging directory should have a parent")?
-        .join(format!("{}.stub", target.triple));
-    std::fs::write(&stub, b"stand-in release binary\n").context("write the stand-in binary")?;
-    run(
-        python()
-            .arg(PACKAGE_SCRIPT)
-            .arg("--binary")
-            .arg(&stub)
-            .arg("--artifact-dir")
-            .arg(artifact_dir)
-            .arg("--target")
-            .arg(target.triple)
-            .arg("--os")
-            .arg(target.os)
-            .arg("--arch")
-            .arg(target.arch)
-            .arg("--source-date-epoch")
-            .arg(source_date_epoch),
-        "the packaging script",
-    )?;
-    Ok(())
 }
 
 fn parse(workflow: &str) -> Result<Value> {
@@ -150,47 +251,46 @@ fn matrix_rows<'a>(workflow: &'a Value, job_name: &str) -> Result<Vec<&'a Mappin
 }
 
 #[test]
-fn every_binstall_target_is_built_by_the_release_matrix() -> Result<()> {
+fn the_release_matrix_and_the_published_targets_agree() -> Result<()> {
     let workflow = parse(RELEASE_WORKFLOW)?;
     let rows = matrix_rows(&workflow, "build")?;
+
+    // Every row publishes an archive, so a target present in one list and
+    // absent from the other is a packaging gap either way round.
+    let mut built: Vec<&str> = rows
+        .iter()
+        .filter_map(|row| get_string(row, "target"))
+        .collect();
+    built.sort_unstable();
+    let mut published: Vec<&str> = RELEASE_TARGETS.iter().map(|entry| entry.triple).collect();
+    published.sort_unstable();
+    ensure!(
+        built == published,
+        "the release matrix builds {built:?} but the published set is {published:?}"
+    );
+
     for target in RELEASE_TARGETS {
         let row = rows
             .iter()
             .find(|row| get_string(row, "target") == Some(target.triple))
             .with_context(|| format!("build matrix should cover {}", target.triple))?;
         ensure!(
-            get(row, "cargo_binstall_archive")?.as_bool() == Some(true),
-            "{} should publish a cargo-binstall archive",
-            target.triple
-        );
-        ensure!(
             get_string(row, "os") == Some(target.os)
                 && get_string(row, "arch") == Some(target.arch),
             "{} should keep its published asset naming",
             target.triple
         );
-        let runner = get_string(row, "runner")
-            .with_context(|| format!("{} should name a runner", target.triple))?;
-        let expected_runner_family = match target.os {
-            "linux" => "ubuntu",
-            "macos" => "macos",
-            _ => "windows",
-        };
         ensure!(
-            runner.starts_with(expected_runner_family),
-            "{} should build on a {expected_runner_family} runner, not {runner}",
-            target.triple
+            get_string(row, "runner") == Some(target.runner),
+            "{} should build on {}",
+            target.triple,
+            target.runner
         );
-        // Apple and MSVC binaries cannot come out of `cross` on Linux.
-        let expected_builder = if target.os == "linux" {
-            "cross"
-        } else {
-            "cargo"
-        };
         ensure!(
-            get_string(row, "builder") == Some(expected_builder),
-            "{} should build with {expected_builder}",
-            target.triple
+            get_string(row, "builder") == Some(target.builder),
+            "{} should build with {}",
+            target.triple,
+            target.builder
         );
     }
     Ok(())
@@ -198,10 +298,9 @@ fn every_binstall_target_is_built_by_the_release_matrix() -> Result<()> {
 
 #[test]
 fn staged_assets_match_the_binstall_templates() -> Result<()> {
-    let staging = tempfile::tempdir().context("create the staging root")?;
+    let staging = Staging::new()?;
     for target in RELEASE_TARGETS {
-        let artifact_dir = staging.path().join(target.triple);
-        stage(target, &artifact_dir, "1700000000")?;
+        let artifact_dir = staging.stage(target, target.triple, "1700000000")?;
         let reported = run(
             python()
                 .arg(VERIFY_SCRIPT)
@@ -225,65 +324,48 @@ fn staged_assets_match_the_binstall_templates() -> Result<()> {
 
 #[test]
 fn the_bare_binary_asset_keeps_its_published_name() -> Result<()> {
-    let staging = tempfile::tempdir().context("create the staging root")?;
+    let staging = Staging::new()?;
     for target in RELEASE_TARGETS {
-        let artifact_dir = staging.path().join(target.triple);
-        stage(target, &artifact_dir, "1700000000")?;
+        staging.stage(target, target.triple, "1700000000")?;
         let extension = if target.os == "windows" { ".exe" } else { "" };
-        let asset = artifact_dir.join(format!(
-            "mdtablefix-{}-{}{extension}",
-            target.os, target.arch
-        ));
-        ensure!(asset.is_file(), "{} should stage {asset:?}", target.triple);
-        let sidecar = artifact_dir.join(format!("{}.sha256", asset_name(&asset)?));
-        let recorded = std::fs::read_to_string(&sidecar).context("read the checksum sidecar")?;
+        let asset = format!("mdtablefix-{}-{}{extension}", target.os, target.arch);
+        let relative = format!("{}/{asset}", target.triple);
+        ensure!(
+            staging.is_file(&relative),
+            "{} should stage {asset}",
+            target.triple
+        );
+        let recorded = staging.read_to_string(&format!("{relative}.sha256"))?;
         let named = recorded
             .split_whitespace()
             .nth(1)
             .context("sidecar should name its asset")?;
         ensure!(
-            named == asset_name(&asset)?,
+            named == asset,
             "the sidecar should name the asset alone, got {named:?}"
         );
     }
     Ok(())
 }
 
-fn asset_name(path: &Path) -> Result<&str> {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .context("asset should have a UTF-8 file name")
-}
-
 #[test]
 fn archives_are_reproducible_for_a_fixed_timestamp() -> Result<()> {
-    let staging = tempfile::tempdir().context("create the staging root")?;
+    let staging = Staging::new()?;
     let target = &RELEASE_TARGETS[0];
+    staging.stage(target, "first", "1700000000")?;
+    staging.stage(target, "second", "1700000000")?;
+    staging.stage(target, "later", "1800000000")?;
 
-    let first = staging.path().join("first");
-    let second = staging.path().join("second");
-    let later = staging.path().join("later");
-    stage(target, &first, "1700000000")?;
-    stage(target, &second, "1700000000")?;
-    stage(target, &later, "1800000000")?;
-
-    // Locate the archive by extension rather than by name: the name carries
-    // the manifest version, which changes on every release.
-    let read = |dir: &Path| -> Result<Vec<u8>> {
-        let path = std::fs::read_dir(dir)
-            .with_context(|| format!("list {dir:?}"))?
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .find(|path| path.to_string_lossy().ends_with(".tar.gz"))
-            .with_context(|| format!("{dir:?} should hold one cargo-binstall archive"))?;
-        std::fs::read(&path).with_context(|| format!("read {path:?}"))
+    let read_archive = |subdirectory: &str| -> Result<Vec<u8>> {
+        let name = staging.archive_name(subdirectory)?;
+        staging.read(&format!("{subdirectory}/{name}"))
     };
     ensure!(
-        read(&first)? == read(&second)?,
+        read_archive("first")? == read_archive("second")?,
         "two runs at the same timestamp should produce identical archives"
     );
     ensure!(
-        read(&first)? != read(&later)?,
+        read_archive("first")? != read_archive("later")?,
         "the member timestamp should come from SOURCE_DATE_EPOCH"
     );
     Ok(())
@@ -301,5 +383,12 @@ fn continuous_integration_runs_the_packaging_dry_run_on_every_platform() -> Resu
             "the packaging dry run should cover a {family} runner"
         );
     }
+    // The Intel macOS target is a cross-compile on an Apple silicon runner, so
+    // nothing else would notice if it stopped linking.
+    ensure!(
+        rows.iter()
+            .any(|row| get_string(row, "target") == Some("x86_64-apple-darwin")),
+        "the packaging dry run should build the Intel macOS target"
+    );
     Ok(())
 }

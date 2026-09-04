@@ -8,6 +8,9 @@
   `x86_64-pc-windows-msvc`, so `cargo binstall` can install `mdtablefix` on
   macOS and Windows without compiling it.
   ([#459](https://github.com/leynos/mdtablefix/issues/459))
+- A `cargo-binstall` archive for `x86_64-unknown-freebsd`, which previously
+  published only a bare binary. Every target the ungated `pkg-url` template
+  resolves to now has an asset behind it.
 - `scripts/package_release_artifacts.py`, a standard-library packager that
   stages the bare binary, the `cargo-binstall` archive and their `.sha256`
   sidecars identically on Linux, macOS and Windows runners.

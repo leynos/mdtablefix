@@ -10,3 +10,4 @@ target/
 *.swo
 *~
 __pycache__/
+.ruff_cache/

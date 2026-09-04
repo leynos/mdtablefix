@@ -265,9 +265,9 @@ fn cargo_binstall_archives_are_reproducible() -> Result<()> {
             == "echo \"SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)\" >> \"${GITHUB_ENV}\""
     );
 
-    // The archive itself is written by the packaging script, which runners on
-    // all three platforms can execute and whose determinism is covered by
-    // tests/release_packaging.rs. The workflow's job is only to invoke it.
+    // The archive itself is written by the packaging script. Every runner
+    // image can execute that script, and its determinism is covered by
+    // tests/release_packaging.rs; the workflow's job is only to invoke it.
     let prepare = command(named_step(build_steps, "Prepare artifact")?)?;
     assert_fragments_in_order(
         prepare,
@@ -277,7 +277,7 @@ fn cargo_binstall_archives_are_reproducible() -> Result<()> {
             "--artifact-dir \"artifacts/${{ matrix.os }}-${{ matrix.arch }}\"",
             "--version \"${RELEASE_TAG#v}\"",
             "--target \"${{ matrix.target }}\"",
-            "--archive \"${{ matrix.cargo_binstall_archive }}\"",
+            "--arch \"${{ matrix.arch }}\"",
         ],
     )?;
     ensure!(!prepare.contains("sha256sum"));

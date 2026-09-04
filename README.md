@@ -39,6 +39,7 @@ Prebuilt archives are published for these targets:
 | Linux    | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` |
 | macOS    | `x86_64-apple-darwin`, `aarch64-apple-darwin`           |
 | Windows  | `x86_64-pc-windows-msvc`                                |
+| FreeBSD  | `x86_64-unknown-freebsd`                                |
 
 Every archive is accompanied by a `.sha256` sidecar in `sha256sum` format.
 
