@@ -115,7 +115,7 @@ def verify(artifact_dir: Path, manifest: Path, target: str) -> tuple[str, str]:
     values = template_values(package, target)
 
     if binstall.get("pkg-fmt") != "tgz":
-        raise LayoutError("this checker only understands pkg-fmt = \"tgz\"")
+        raise LayoutError('this checker only understands pkg-fmt = "tgz"')
 
     url = render(binstall["pkg-url"], values)
     archive_name = Path(urlsplit(url).path).name

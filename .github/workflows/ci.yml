@@ -70,6 +70,13 @@ jobs:
             os: macos
             arch: aarch64
             target: aarch64-apple-darwin
+          # macOS runners are Apple silicon, so this row is the only check
+          # that the Intel cross-compile the release publishes still links.
+          - runner: macos-15
+            os: macos
+            arch: x86_64
+            target: x86_64-apple-darwin
+            is-foreign: true
           - runner: windows-latest
             os: windows
             arch: x86_64
@@ -108,6 +115,8 @@ jobs:
             --artifact-dir "dist/${{ matrix.os }}-${{ matrix.arch }}" \
             --target "${{ matrix.target }}"
       - name: Run the packaged binary
+        # Skipped where the target is not the runner's own architecture.
+        if: ${{ !matrix.is-foreign }}
         run: |
           set -euo pipefail
           binary_ext=""

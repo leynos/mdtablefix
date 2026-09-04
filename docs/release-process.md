@@ -105,11 +105,15 @@ asserts that the release matrix builds every advertised target on a runner of
 the matching family.
 
 The `binstall-packaging` job in `.github/workflows/ci.yml` is the runner-backed
-counterpart. On Ubuntu, macOS and Windows it builds the release binary for that
-platform's target, stages the assets with the same script, verifies the layout,
-extracts the archive, and runs the extracted binary. It proves on every pull
-request that the crate compiles for each release platform and that the
-packaging works there.
+counterpart. On Ubuntu, macOS and Windows it builds a release target, stages the
+assets with the same script, verifies the layout, extracts the archive, and runs
+the extracted binary. It proves on every pull request that the crate compiles
+for each release platform and that the packaging works there.
+
+The job also builds `x86_64-apple-darwin` on the Apple silicon macOS runner.
+That row sets `is-foreign`, which skips the step that runs the extracted binary,
+because the runner cannot execute it. It is the only check that the Intel
+cross-compile the release publishes still links.
 
 Before the build matrix starts, a small job creates the GitHub release if it is
 absent. Every successful matrix job uploads its workflow artefact and publishes
