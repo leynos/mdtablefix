@@ -25,12 +25,12 @@ Example:
     $ python3 scripts/package_release_artifacts.py \\
         --binary target/x86_64-unknown-linux-gnu/release/mdtablefix \\
         --artifact-dir artifacts/linux-x86_64 \\
-        --version 0.6.0 --target x86_64-unknown-linux-gnu \\
+        --version 0.5.1 --target x86_64-unknown-linux-gnu \\
         --os linux --arch x86_64
     artifacts/linux-x86_64/mdtablefix-linux-x86_64
     artifacts/linux-x86_64/mdtablefix-linux-x86_64.sha256
-    artifacts/linux-x86_64/mdtablefix-0.6.0-x86_64-unknown-linux-gnu.tar.gz
-    artifacts/linux-x86_64/mdtablefix-0.6.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+    artifacts/linux-x86_64/mdtablefix-0.5.1-x86_64-unknown-linux-gnu.tar.gz
+    artifacts/linux-x86_64/mdtablefix-0.5.1-x86_64-unknown-linux-gnu.tar.gz.sha256
 """
 
 from __future__ import annotations

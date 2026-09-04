@@ -14,7 +14,7 @@ Example:
     $ python3 scripts/verify_binstall_layout.py \\
         --artifact-dir artifacts/linux-x86_64 \\
         --target x86_64-unknown-linux-gnu
-    mdtablefix-0.6.0-x86_64-unknown-linux-gnu.tar.gz -> mdtablefix
+    mdtablefix-0.5.1-x86_64-unknown-linux-gnu.tar.gz -> mdtablefix
 """
 
 from __future__ import annotations
