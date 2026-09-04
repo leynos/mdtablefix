@@ -45,7 +45,10 @@ tempfile = "3"
 libc = "0.2.174"
 predicates = "3"
 trybuild = "1"
-tracing-test = "0.2"
+# `no-env-filter` lets integration tests capture tracing events emitted from
+# the `mdtablefix` crate; the default filter only records the test crate's own
+# events, which would hide the library's instrumentation.
+tracing-test = { version = "0.2", features = ["no-env-filter"] }
 test-macros = { path = "test-macros" }
 
 [lints.clippy]
