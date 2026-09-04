@@ -27,6 +27,7 @@ output and most test fixtures.
 │   ├── documentation-style-guide.md
 │   ├── repository-layout.md
 │   └── users-guide.md
+├── scripts/
 ├── src/
 │   ├── fences/
 │   ├── footnotes/
@@ -75,6 +76,19 @@ _Figure 1: Simplified repository tree._
   implementation work. Keep these current while the related work is active.
 - `docs/*.md`: Long-lived reference notes and process guides. Link each stable
   document from `docs/contents.md`.
+
+## Script paths
+
+- `scripts/check-static-regexes.sh`: Lint gate rejecting hand-rolled static
+  regular expressions.
+- `scripts/package_release_artifacts.py`: Stages the release binary, the
+  `cargo-binstall` archive, and their SHA-256 sidecars. It uses only the Python
+  standard library so the same packaging runs on Linux, macOS, and Windows
+  runners.
+- `scripts/verify_binstall_layout.py`: Renders the `pkg-url` and `bin-dir`
+  templates from `Cargo.toml` and fails unless the staged assets match. Shared
+  by `tests/release_packaging.rs` and the packaging job in continuous
+  integration.
 
 ## Source paths
 

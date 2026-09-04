@@ -25,12 +25,22 @@ Install via Cargo:
 cargo install mdtablefix
 ```
 
-On Linux `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, install
-the prebuilt release archive via `cargo-binstall`:
+Install a prebuilt release archive with `cargo-binstall`, which never compiles
+the crate:
 
 ```bash
-cargo binstall mdtablefix
+cargo binstall --disable-strategies compile mdtablefix
 ```
+
+Prebuilt archives are published for these targets:
+
+| Platform | Targets                                                 |
+| -------- | ------------------------------------------------------- |
+| Linux    | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` |
+| macOS    | `x86_64-apple-darwin`, `aarch64-apple-darwin`           |
+| Windows  | `x86_64-pc-windows-msvc`                                |
+
+Every archive is accompanied by a `.sha256` sidecar in `sha256sum` format.
 
 Or clone the repository and build from source:
 
