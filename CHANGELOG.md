@@ -119,6 +119,3 @@
 - Convert `<table>...</table>` blocks that span multiple lines and carry
   leading indentation, leaving surrounding non-table lines at the same
   indentation level untouched.
-- Correct the `cargo-binstall` Linux GNU `bin-dir` override so binaries are
-  installed from the archive's current directory (`.`) rather than a derived
-  `{ bin }{ binary-ext }` path, restoring `cargo binstall` on Linux.
