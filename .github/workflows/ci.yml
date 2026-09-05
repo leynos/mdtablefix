@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
+        uses: leynos/shared-actions/.github/actions/setup-rust@77ea10341249024e22ec5d9069e3caa7596e0d4f
       - name: Install ripgrep
         run: cargo binstall --no-confirm --locked ripgrep@15.2.0
       - name: Format
@@ -31,7 +31,7 @@ jobs:
       - name: Lint
         run: make lint
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
+        uses: leynos/shared-actions/.github/actions/generate-coverage@77ea10341249024e22ec5d9069e3caa7596e0d4f
         with:
           output-path: lcov.info
           format: lcov
@@ -39,7 +39,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: ${{ env.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@77ea10341249024e22ec5d9069e3caa7596e0d4f
 
         with:
           format: lcov
@@ -84,7 +84,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
+        uses: leynos/shared-actions/.github/actions/setup-rust@77ea10341249024e22ec5d9069e3caa7596e0d4f
         with:
           toolchain: 1.89.0
           install-binstall: false
