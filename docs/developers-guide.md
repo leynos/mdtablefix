@@ -1593,6 +1593,7 @@ Table: Integration-test support modules and their purposes.
 | `idempotence_harness.rs`      | Shared vocabulary and CLI harness for the idempotence property suites            |
 | `idempotence_generators.rs`   | Document-level proptest strategies                                               |
 | `idempotence_reachability.rs` | Reachability sweeps and their helper predicates, used by the property suite only |
+| `lint_policy.rs`              | Readers for `clippy.toml`, manifests and Make recipes                            |
 
 Each integration-test file declares the modules it needs via explicit
 `#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
