@@ -41,6 +41,14 @@ raise `clippy::disallowed_methods` to `deny`. The Makefile's `lint` target runs
 Clippy over every target and every feature with warnings denied, so the
 prohibition covers test and build targets, not only the library.
 
+Both manifests also deny `clippy::allow_attributes` and
+`clippy::allow_attributes_without_reason`. Without them the ban has an obvious
+escape: a bare `#[allow(clippy::disallowed_methods)]` silences it wherever it is
+written, records no justification, and never warns once it stops applying. With
+them, the only available suppression is an `#[expect]` carrying a reason, which
+is exactly what the composition-root exception below requires. The rule is
+enforced rather than merely stated.
+
 The lint level is declared in each package's own `[lints.clippy]` table, and
 `lint` runs Clippy twice: once for the root package and once with
 `--manifest-path test-macros/Cargo.toml`. Both are interim measures forced by
@@ -103,8 +111,18 @@ reintroduces exactly the shared state the policy exists to prevent.
 - Contributors adding environment-dependent behaviour have a stated rule for
   choosing a seam, rather than three defensible shapes and no yardstick.
 - `tests/env_access_policy.rs` fails if any of the six entries leaves
-  `clippy.toml`, if either package stops denying the lint, or if the Makefile's
-  Clippy gate stops covering every target and feature with warnings denied.
+  `clippy.toml`, if either package stops denying one of the three policy lints,
+  or if the `lint` recipe stops running Clippy over both packages, every target,
+  and every feature with warnings denied.
+- `tests/env_access_enforcement.rs` fails if the lint stops firing. It runs
+  Clippy over a fixture package that calls all six methods, under this
+  repository's own configuration, and asserts one diagnostic per method carrying
+  that method's reason string. A configuration can keep its shape and still lint
+  nothing, so shape alone was not enough to rely on.
+- The only `#[allow]` in the repository, an unexplained
+  `clippy::unnecessary_map_or` suppression in `src/lists.rs`, went away with the
+  lint it silenced: the code now uses `is_none_or`, which is what the lint asked
+  for.
 - The compile-time `env!` macros are unaffected. They resolve during the build
   and read no process state.
 

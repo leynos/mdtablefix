@@ -878,6 +878,11 @@ and `make lint` keeps it that way. `clippy.toml` lists `std::env::var`,
 every target with a diagnostic naming the remedy. The compile-time `env!` macro
 is unaffected; it reads Cargo's build-time values, not the running process.
 
+Both manifests also deny `clippy::allow_attributes` and
+`clippy::allow_attributes_without_reason`, so the ban cannot be silenced with a
+bare `#[allow]`. Any suppression must be an `#[expect]` carrying a reason, which
+warns once it stops applying.
+
 `lint` runs Clippy twice, once for the root package and once with
 `--manifest-path test-macros/Cargo.toml`. `test-macros` is a path
 dev-dependency rather than a workspace member, so the root invocation does not
@@ -918,10 +923,14 @@ clears it with `Command::env_remove`; `tests/static_regex_lint.rs` does this for
 `RG`. Changing the test process's own environment so the child inherits it is
 not an alternative, and no test should be serialized to make such a change safe.
 
-`tests/env_access_policy.rs` guards the configuration: it fails if any of the
-six entries leaves `clippy.toml`, if either package stops denying the lint, or
-if the `lint` recipe stops running Clippy over both packages, every target, and
-every feature with warnings denied. The full rationale is in
+Two tests guard this. `tests/env_access_policy.rs` checks the policy's shape:
+it fails if any of the six entries leaves `clippy.toml`, if either package stops
+denying one of the three policy lints, or if the `lint` recipe stops running
+Clippy over both packages, every target, and every feature with warnings denied.
+`tests/env_access_enforcement.rs` checks that the policy fires, by running
+Clippy over a fixture package that calls all six methods and asserting one
+diagnostic per method with its reason string. A configuration can keep its shape
+and lint nothing, so the second test is not redundant. The full rationale is in
 [Environment seam taxonomy](adrs/0006-environment-seam-taxonomy.md).
 
 ## 1. Stateful pipeline helpers

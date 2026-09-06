@@ -125,8 +125,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut state = ListState::default();
     // Track fenced code blocks consistently across list processing.
     let mut fences = FenceTracker::default();
-    #[allow(clippy::unnecessary_map_or)]
-    let mut prev_blank = lines.first().map_or(true, |l| l.trim().is_empty());
+    let mut prev_blank = lines.first().is_none_or(|l| l.trim().is_empty());
 
     for line in lines {
         let fence = fences.observe_source_line(line);

@@ -1,0 +1,26 @@
+//! Fixture crate that calls every method the environment-access policy bans.
+//!
+//! It is stored with a `.rs.txt` extension so no repository-wide scan, gate or
+//! Cargo target picks it up in place. `tests/env_access_enforcement.rs` copies
+//! it into a temporary package and runs Clippy over that.
+
+use std::env;
+
+/// Read the process environment four ways.
+pub fn read_the_environment() -> usize {
+    let named = env::var("MDTABLEFIX_FIXTURE").is_ok();
+    let named_os = env::var_os("MDTABLEFIX_FIXTURE").is_some();
+    let all = env::vars().count();
+    let all_os = env::vars_os().count();
+    usize::from(named) + usize::from(named_os) + all + all_os
+}
+
+/// Mutate the process environment two ways.
+pub fn mutate_the_environment() {
+    // SAFETY: this fixture is never linked into a running program. It exists
+    // only to be linted, and Clippy rejects both calls before they could run.
+    unsafe {
+        env::set_var("MDTABLEFIX_FIXTURE", "1");
+        env::remove_var("MDTABLEFIX_FIXTURE");
+    }
+}

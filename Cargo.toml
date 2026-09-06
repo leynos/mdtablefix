@@ -56,3 +56,7 @@ pedantic = { level = "warn", priority = -1 }
 # Enforce the environment-access policy in every target of this package.
 # See `clippy.toml` and `docs/adrs/0006-environment-seam-taxonomy.md`.
 disallowed_methods = "deny"
+# Keep `#[allow]` from silently defeating the deny above: a suppression must
+# be an `#[expect]` carrying a reason, so it warns once it stops applying.
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
