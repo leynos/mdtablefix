@@ -13,3 +13,8 @@ proc-macro = true
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full"] }
+
+# Enforce the environment-access policy in every target of this package.
+# See `clippy.toml` and `docs/adrs/0006-environment-seam-taxonomy.md`.
+[lints.clippy]
+disallowed_methods = "deny"

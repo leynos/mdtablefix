@@ -597,6 +597,7 @@ dependencies = [
  "tempfile",
  "test-macros",
  "textwrap",
+ "toml",
  "tracing",
  "tracing-test",
  "trybuild",

@@ -868,6 +868,57 @@ committing. Snapshot churn across many cases usually means the fixture is too
 broad or a shared transform changed behaviour; inspect the labelled case, mode,
 and arguments before accepting the new output.
 
+## Environment access policy
+
+Nothing in this repository reads or writes the process environment at run time,
+and `make lint` keeps it that way. `clippy.toml` lists `std::env::var`,
+`var_os`, `vars`, `vars_os`, `set_var`, and `remove_var` under
+`disallowed-methods`, and both package manifests raise
+`clippy::disallowed_methods` to `deny`, so a new call fails the lint gate on
+every target with a diagnostic naming the remedy. The compile-time `env!` macro
+is unaffected; it reads Cargo's build-time values, not the running process.
+
+The reason is parallelism. A test that sets or removes a variable changes it for
+every other test sharing the process, which forces the suite to serialize around
+it and leaves cores idle. Keeping the environment out of the code keeps the
+suite parallel.
+
+### Choosing a seam
+
+When a change does need a value the environment supplies, inject it and choose
+the shape by how many call sites the boundary has:
+
+Table: Injection shapes and when to use each.
+
+| Shape                      | Use when                                                     |
+| -------------------------- | ------------------------------------------------------------ |
+| An explicit value argument | One-off configuration. This is the default.                  |
+| A narrow reader closure    | A small reusable boundary; tests pass a fixed-value closure. |
+| A shared environment trait | Several values and several tests justify it; use `mockable`. |
+
+Do not introduce a trait for one variable read by one caller. Each seam is owned
+by the module that needs its value and stays private to it.
+
+A direct read is permitted only at a genuine composition root, meaning `main` or
+a function it calls directly to assemble the application. Such a site carries
+`#[expect(clippy::disallowed_methods, reason = "…")]` on the item itself, never
+`allow` and never a module- or crate-wide suppression. The expectation warns
+once the site is migrated, so the exception removes itself.
+
+### Environment variables in subprocess tests
+
+Integration tests spawn the binary through `assert_cmd`. A test that needs a
+controlled variable in the child sets it on the command with `Command::env` or
+clears it with `Command::env_remove`; `tests/static_regex_lint.rs` does this for
+`RG`. Changing the test process's own environment so the child inherits it is
+not an alternative, and no test should be serialized to make such a change safe.
+
+`tests/env_access_policy.rs` guards the configuration: it fails if any of the
+six entries leaves `clippy.toml`, if either package stops denying the lint, or
+if the Makefile's Clippy gate stops covering every target and feature with
+warnings denied. The full rationale is in
+[Environment seam taxonomy](adrs/0006-environment-seam-taxonomy.md).
+
 ## 1. Stateful pipeline helpers
 
 Internal state carriers centralize the buffered state used by the conversion
