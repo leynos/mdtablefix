@@ -18,7 +18,10 @@
 //!
 //! Repository files are pulled in with `include_str!`, so deleting one is a
 //! compile error rather than a silent skip, and the tests need no filesystem
-//! access of their own.
+//! access of their own. The parsing lives in `tests/support/lint_policy.rs`;
+//! the readers there are also exercised against inline fixtures at the end of
+//! this file, so the spellings issues #438 and #439 introduce are covered
+//! before the repository uses them.
 //!
 //! Mutation proof (2026-09-06). Each mutation was applied alone, the suite run,
 //! and the mutation reverted. Every one failed, with the message shown:
@@ -49,7 +52,12 @@
 //! `test-macros/src/lib.rs`, each failed `make lint` with "use of a disallowed
 //! method" and the configured reason string. Both were reverted.
 use anyhow::{Context, Result, ensure};
-use toml::{Table, Value};
+use rstest::rstest;
+
+#[path = "support/lint_policy.rs"]
+mod lint_policy;
+
+use lint_policy::{clippy_lint_level, covers_package, disallowed_method_paths, recipe_commands};
 
 /// Every method the environment-access policy prohibits.
 ///
@@ -83,65 +91,6 @@ const CLIPPY_CONFIGURATION: &str = include_str!("../clippy.toml");
 const ROOT_MANIFEST: &str = include_str!("../Cargo.toml");
 const MAKEFILE: &str = include_str!("../Makefile");
 
-/// Return the `path` field of every `disallowed-methods` entry in `clippy.toml`.
-fn disallowed_method_paths(configuration: &str) -> Result<Vec<String>> {
-    let configuration: Table = configuration
-        .parse()
-        .context("parse the Clippy configuration")?;
-    let methods = configuration
-        .get("disallowed-methods")
-        .and_then(Value::as_array)
-        .context("clippy.toml should declare disallowed-methods")?;
-    Ok(methods
-        .iter()
-        .filter_map(|method| method.get("path").and_then(Value::as_str))
-        .map(str::to_owned)
-        .collect())
-}
-
-/// Return the level `manifest` gives a Clippy lint, following workspace
-/// inheritance into `workspace_manifest` when the package opts in with
-/// `[lints] workspace = true`.
-///
-/// A level may be spelled as a bare string or as a table with a `level` key,
-/// so both are read.
-fn clippy_lint_level(
-    manifest: &str,
-    workspace_manifest: &str,
-    lint: &str,
-) -> Result<Option<String>> {
-    let manifest: Table = manifest.parse().context("parse the package manifest")?;
-    let inherits = manifest
-        .get("lints")
-        .and_then(|lints| lints.get("workspace"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let table = if inherits {
-        let workspace: Table = workspace_manifest
-            .parse()
-            .context("parse the workspace manifest")?;
-        workspace
-            .get("workspace")
-            .and_then(|workspace| workspace.get("lints"))
-            .and_then(|lints| lints.get("clippy"))
-            .cloned()
-    } else {
-        manifest
-            .get("lints")
-            .and_then(|lints| lints.get("clippy"))
-            .cloned()
-    };
-    Ok(table
-        .as_ref()
-        .and_then(|table| table.get(lint))
-        .and_then(|entry| {
-            entry
-                .as_str()
-                .or_else(|| entry.get("level").and_then(Value::as_str))
-        })
-        .map(str::to_owned))
-}
-
 /// Scenario: the Clippy configuration is read for its prohibited methods.
 /// Invariant: every method the policy names is still listed, so removing one
 /// cannot silently reopen ambient access to the process environment.
@@ -172,97 +121,6 @@ fn every_package_denies_disallowed_methods() -> Result<()> {
         );
     }
     Ok(())
-}
-
-/// Return `name`'s value from a simple Make assignment (`=`, `?=`, or `:=`).
-///
-/// Recursive and conditional assignments differ in when Make expands them, not
-/// in the text they hold, so one reader covers all three.
-fn make_assignment<'a>(makefile: &'a str, name: &str) -> Option<&'a str> {
-    makefile.lines().find_map(|line| {
-        let rest = line.strip_prefix(name)?.trim_start();
-        for operator in ["?=", ":=", "="] {
-            if let Some(value) = rest.strip_prefix(operator) {
-                return Some(value.trim());
-            }
-        }
-        None
-    })
-}
-
-/// Expand `$(NAME)` references against the Makefile's own assignments.
-///
-/// Two passes cover a variable defined in terms of another, which is as deep as
-/// this Makefile goes. An unresolved reference is left intact so it shows up in
-/// a failure message rather than vanishing.
-fn expand_make_variables(makefile: &str, command: &str) -> String {
-    let mut expanded = command.to_owned();
-    for _ in 0..2 {
-        let mut next = String::with_capacity(expanded.len());
-        let mut rest = expanded.as_str();
-        while let Some(start) = rest.find("$(") {
-            let Some(end) = rest[start..].find(')').map(|offset| start + offset) else {
-                break;
-            };
-            next.push_str(&rest[..start]);
-            let name = &rest[start + 2..end];
-            match make_assignment(makefile, name) {
-                Some(value) => next.push_str(value),
-                None => next.push_str(&rest[start..=end]),
-            }
-            rest = &rest[end + 1..];
-        }
-        next.push_str(rest);
-        expanded = next;
-    }
-    expanded
-}
-
-/// Return the recipe lines of `target`, with Make variables expanded.
-///
-/// A recipe line is tab-indented; the recipe ends at the first line that is
-/// neither tab-indented nor blank. Comment lines are dropped, so a commented-out
-/// command cannot satisfy a coverage requirement.
-fn recipe_commands(makefile: &str, target: &str) -> Result<Vec<String>> {
-    let prefix = format!("{target}:");
-    let body = makefile
-        .lines()
-        .skip_while(|line| !line.starts_with(&prefix))
-        .skip(1);
-    let mut commands = Vec::new();
-    for line in body {
-        let Some(command) = line.strip_prefix('\t') else {
-            if line.trim().is_empty() {
-                continue;
-            }
-            break;
-        };
-        let command = command.trim_start_matches(['@', '-', '+']).trim();
-        if command.is_empty() || command.starts_with('#') {
-            continue;
-        }
-        commands.push(expand_make_variables(makefile, command));
-    }
-    ensure!(
-        !commands.is_empty(),
-        "the {target} target should have a recipe"
-    );
-    Ok(commands)
-}
-
-/// Return whether `command` lints `manifest`'s package.
-///
-/// A `--workspace` run covers every member, so it covers both packages once
-/// issue #439 lands. Until then the root package is the one a command with no
-/// `--manifest-path` selects, and `test-macros` needs its manifest named.
-fn covers_package(command: &str, manifest: &str) -> bool {
-    if command.contains("--workspace") {
-        return true;
-    }
-    match manifest {
-        "Cargo.toml" => !command.contains("--manifest-path"),
-        _ => command.contains(&format!("--manifest-path {manifest}")),
-    }
 }
 
 /// Scenario: the `lint` target's recipe is read and its Make variables expanded.
@@ -297,4 +155,132 @@ fn clippy_gate_denies_warnings_across_targets_and_features() -> Result<()> {
         );
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Coverage for the readers themselves.
+//
+// The tests above run the readers against this repository, which exercises
+// only the spellings it happens to use today. The readers also have to handle
+// the spellings the repository will use after issues #438 and #439 land:
+// `[lints] workspace = true` inheritance, a level given as a table rather than
+// a bare string, and a single `--workspace` Clippy command. Those branches are
+// checked here against inline fixtures, so a regression in them shows up now
+// rather than during that migration.
+// ---------------------------------------------------------------------------
+
+/// A workspace manifest whose shared lint table denies the lint.
+const WORKSPACE_MANIFEST: &str = concat!(
+    "[workspace]\nmembers = [\".\", \"test-macros\"]\n\n",
+    "[workspace.lints.clippy]\ndisallowed_methods = \"deny\"\n"
+);
+
+/// Scenario: a manifest declares the lint level in its own package table.
+/// Invariant: the level is read from the package, with the workspace manifest
+/// ignored, so a package that opts out of inheritance is judged on its own
+/// declaration.
+#[rstest]
+#[case::bare_string("[lints.clippy]\ndisallowed_methods = \"deny\"\n", Some("deny"))]
+#[case::level_table(
+    "[lints.clippy]\ndisallowed_methods = { level = \"deny\", priority = 1 }\n",
+    Some("deny")
+)]
+#[case::warned("[lints.clippy]\ndisallowed_methods = \"warn\"\n", Some("warn"))]
+#[case::absent("[lints.clippy]\npedantic = \"warn\"\n", None)]
+#[case::no_lint_table("[package]\nname = \"example\"\n", None)]
+fn reads_a_package_declared_lint_level(
+    #[case] manifest: &str,
+    #[case] expected: Option<&str>,
+) -> Result<()> {
+    let level = clippy_lint_level(manifest, WORKSPACE_MANIFEST, "disallowed_methods")?;
+    ensure!(
+        level.as_deref() == expected,
+        "expected {expected:?} from `{manifest}`, found {level:?}"
+    );
+    Ok(())
+}
+
+/// Scenario: a manifest opts into workspace lints with `[lints] workspace = true`,
+/// which is the spelling issue #439 introduces.
+/// Invariant: the level comes from the workspace manifest rather than the
+/// package, so the contract keeps enforcing the deny after that migration.
+#[test]
+fn follows_workspace_lint_inheritance() -> Result<()> {
+    let manifest = "[package]\nname = \"test-macros\"\n\n[lints]\nworkspace = true\n";
+    let level = clippy_lint_level(manifest, WORKSPACE_MANIFEST, "disallowed_methods")?;
+    ensure!(
+        level.as_deref() == Some("deny"),
+        "inherited level should be deny, found {level:?}"
+    );
+    Ok(())
+}
+
+/// Scenario: a manifest inherits workspace lints but the workspace table has
+/// dropped the lint.
+/// Invariant: no level is reported, so weakening the shared table after #439
+/// fails the contract instead of passing through the inheritance path.
+#[test]
+fn reports_no_level_when_the_workspace_table_drops_the_lint() -> Result<()> {
+    let manifest = "[package]\nname = \"test-macros\"\n\n[lints]\nworkspace = true\n";
+    let workspace =
+        "[workspace]\nmembers = [\".\"]\n\n[workspace.lints.clippy]\npedantic = \"warn\"\n";
+    let level = clippy_lint_level(manifest, workspace, "disallowed_methods")?;
+    ensure!(level.is_none(), "expected no level, found {level:?}");
+    Ok(())
+}
+
+/// Scenario: a `lint` recipe is read from a Makefile that also names Clippy in
+/// a comment, in a variable, and in another target.
+/// Invariant: only the recipe's own uncommented commands are returned, so none
+/// of those three can satisfy the coverage requirement.
+#[test]
+fn reads_only_the_targets_own_uncommented_commands() -> Result<()> {
+    let makefile = concat!(
+        "CLIPPY_FLAGS ?= --all-targets -- -D warnings\n",
+        "DECOY = $(CARGO) clippy --all-features\n",
+        "\n",
+        "lint: check-static-regexes ## Run Clippy\n",
+        "\t# $(CARGO) clippy --manifest-path test-macros/Cargo.toml $(CLIPPY_FLAGS)\n",
+        "\t@cargo clippy $(CLIPPY_FLAGS)\n",
+        "\n",
+        "typecheck:\n",
+        "\tcargo clippy --manifest-path test-macros/Cargo.toml\n",
+    );
+    let commands = recipe_commands(makefile, "lint")?;
+    ensure!(
+        commands == vec!["cargo clippy --all-targets -- -D warnings".to_owned()],
+        "expected the single uncommented lint command, found {commands:?}"
+    );
+    Ok(())
+}
+
+/// Scenario: package coverage is judged for each shape of Clippy command.
+/// Invariant: a bare command covers only the root package, a `--manifest-path`
+/// command covers only the package it names, and a `--workspace` command covers
+/// both, which is the shape issue #439 leaves behind.
+#[rstest]
+#[case::bare_covers_root("cargo clippy --all-targets", "Cargo.toml", true)]
+#[case::bare_misses_macros("cargo clippy --all-targets", "test-macros/Cargo.toml", false)]
+#[case::manifest_path_misses_root(
+    "cargo clippy --manifest-path test-macros/Cargo.toml",
+    "Cargo.toml",
+    false
+)]
+#[case::manifest_path_covers_macros(
+    "cargo clippy --manifest-path test-macros/Cargo.toml",
+    "test-macros/Cargo.toml",
+    true
+)]
+#[case::workspace_covers_root("cargo clippy --workspace", "Cargo.toml", true)]
+#[case::workspace_covers_macros("cargo clippy --workspace", "test-macros/Cargo.toml", true)]
+fn judges_package_coverage_by_command_shape(
+    #[case] command: &str,
+    #[case] manifest: &str,
+    #[case] expected: bool,
+) {
+    assert_eq!(
+        covers_package(command, manifest),
+        expected,
+        "`{command}` coverage of {manifest} should be {expected}"
+    );
 }
