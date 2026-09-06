@@ -47,7 +47,7 @@ predicates = "3"
 trybuild = "1"
 tracing-test = "0.2"
 test-macros = { path = "test-macros" }
-toml = "1"
+toml = "1.1.2"
 
 [lints.clippy]
 # `priority = -1` lets the individual lints below override the group; Cargo

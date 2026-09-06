@@ -41,12 +41,17 @@ raise `clippy::disallowed_methods` to `deny`. The Makefile's `lint` target runs
 Clippy over every target and every feature with warnings denied, so the
 prohibition covers test and build targets, not only the library.
 
-The lint level is currently declared in each package's own `[lints.clippy]`
-table because the repository is not yet a Cargo workspace. Issue #439 makes
-`mdtablefix` and `test-macros` one workspace and moves lint policy to
-`[workspace.lints.*]`, and issue #438 aligns the wider lint baseline with
-`netsuke`; after either lands, the declaration moves to the workspace table and
-each package inherits it with `[lints] workspace = true`.
+The lint level is declared in each package's own `[lints.clippy]` table, and
+`lint` runs Clippy twice: once for the root package and once with
+`--manifest-path test-macros/Cargo.toml`. Both are interim measures forced by
+the repository not yet being a Cargo workspace. `test-macros` is a path
+dev-dependency rather than a member, so the root invocation does not lint it and
+Cargo caps its `deny` while it compiles as a dependency; the second invocation
+lints it in its own right. Issue #439 makes the two packages one workspace and
+moves lint policy to `[workspace.lints.*]`, and issue #438 aligns the wider lint
+baseline with `netsuke`. Once #439 lands, each package inherits the level with
+`[lints] workspace = true` and a single `--workspace` run replaces both
+invocations.
 
 ### Choose a seam by call-site count
 

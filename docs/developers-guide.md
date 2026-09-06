@@ -878,6 +878,11 @@ and `make lint` keeps it that way. `clippy.toml` lists `std::env::var`,
 every target with a diagnostic naming the remedy. The compile-time `env!` macro
 is unaffected; it reads Cargo's build-time values, not the running process.
 
+`lint` runs Clippy twice, once for the root package and once with
+`--manifest-path test-macros/Cargo.toml`. `test-macros` is a path
+dev-dependency rather than a workspace member, so the root invocation does not
+lint it. Issue #439 replaces both invocations with a single `--workspace` run.
+
 The reason is parallelism. A test that sets or removes a variable changes it for
 every other test sharing the process, which forces the suite to serialize around
 it and leaves cores idle. Keeping the environment out of the code keeps the
@@ -915,8 +920,8 @@ not an alternative, and no test should be serialized to make such a change safe.
 
 `tests/env_access_policy.rs` guards the configuration: it fails if any of the
 six entries leaves `clippy.toml`, if either package stops denying the lint, or
-if the Makefile's Clippy gate stops covering every target and feature with
-warnings denied. The full rationale is in
+if the `lint` recipe stops running Clippy over both packages, every target, and
+every feature with warnings denied. The full rationale is in
 [Environment seam taxonomy](adrs/0006-environment-seam-taxonomy.md).
 
 ## 1. Stateful pipeline helpers
