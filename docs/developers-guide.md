@@ -1020,6 +1020,7 @@ Table: Integration-test support modules and their purposes.
 | `cli_stdin.rs`       | `run_cli_with_stdin` — invokes the binary feeding stdin           |
 | `fixtures.rs`        | Shared rstest fixtures (e.g. `broken_table`)                      |
 | `wrap_assertions.rs` | Higher-level assertions for wrapping output                       |
+| `lint_policy.rs`     | Readers for `clippy.toml`, manifests and Make recipes             |
 
 Each integration-test file declares the modules it needs via explicit
 `#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
