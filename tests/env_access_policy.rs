@@ -2,11 +2,17 @@
 //!
 //! The policy has three parts and no single file holds all of them, so nothing
 //! in the build connects them: `clippy.toml` names the prohibited methods, each
-//! package manifest raises `clippy::disallowed_methods` to `deny`, and the
-//! Makefile's `lint` recipe runs Clippy over both packages, every target, and
-//! every feature with warnings denied. Drop any one part and the other two
-//! still look correct while the policy stops being enforced. These tests tie
-//! the three together.
+//! package manifest raises `clippy::disallowed_methods` to `deny` and closes
+//! the `#[allow]` route around it, and the Makefile's `lint` recipe runs Clippy
+//! over both packages, every target, and every feature with warnings denied.
+//! Drop any one part and the other two still look correct while the policy
+//! stops being enforced. These tests tie the three together.
+//!
+//! They assert the policy's *shape*. `tests/env_access_enforcement.rs` asserts
+//! that it *fires*, by running Clippy over a fixture package that calls all six
+//! methods. Neither test subsumes the other: a configuration can have the right
+//! shape and lint nothing, and a lint can fire while the gate that runs it has
+//! stopped covering a package.
 //!
 //! The Makefile check parses the `lint` recipe and expands its Make variables
 //! rather than searching the file for a command string. A matching string in a
@@ -30,9 +36,13 @@
 //! delete the std::env::set_var entry from clippy.toml
 //!   -> clippy_configuration_disallows_every_environment_method
 //!      clippy.toml must disallow std::env::set_var, found [...]
-//! change the root manifest's lint level from "deny" to "warn"
-//!   -> every_package_denies_disallowed_methods
+//! change the root manifest's disallowed_methods level from "deny" to "warn"
+//!   -> every_package_denies_the_policy_lints
 //!      Cargo.toml must set clippy disallowed_methods to deny, found Some("warn")
+//! delete allow_attributes from the test-macros manifest
+//!   -> every_package_denies_the_policy_lints
+//!      test-macros/Cargo.toml must set clippy allow_attributes to deny,
+//!      found None
 //! delete -D warnings from CLIPPY_FLAGS
 //!   -> clippy_gate_denies_warnings_across_targets_and_features
 //!      the Clippy command [...] must contain -D warnings
@@ -50,7 +60,11 @@
 //! Enforcement itself was proven separately, in each package: a temporary
 //! `std::env::var` call in `src/lib.rs`, and another in
 //! `test-macros/src/lib.rs`, each failed `make lint` with "use of a disallowed
-//! method" and the configured reason string. Both were reverted.
+//! method" and the configured reason string. Adding a bare
+//! `#[allow(clippy::disallowed_methods)]` above the first, the obvious way to
+//! defeat the ban, failed `make lint` in its own right with "#[allow] attribute
+//! found" and "`allow` attribute without specifying a reason". All were
+//! reverted.
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 
@@ -106,19 +120,36 @@ fn clippy_configuration_disallows_every_environment_method() -> Result<()> {
     Ok(())
 }
 
-/// Scenario: each package manifest is read for its `disallowed_methods` level.
-/// Invariant: both packages deny the lint, whether declared in the package or
-/// inherited from the workspace, so a configured-but-warned method cannot pass
-/// the gate.
+/// The lints each package must deny for the policy to hold.
+///
+/// `disallowed_methods` is the ban itself. The other two close the obvious way
+/// around it: without them a bare `#[allow(clippy::disallowed_methods)]`
+/// silences the ban wherever it is written, with no reason recorded and no
+/// warning when it stops applying. Denying them forces every suppression to be
+/// an `#[expect]` carrying a reason, which is what the seam taxonomy requires
+/// of a composition root.
+const REQUIRED_DENIED_LINTS: [&str; 3] = [
+    "disallowed_methods",
+    "allow_attributes",
+    "allow_attributes_without_reason",
+];
+
+/// Scenario: each package manifest is read for the level it gives each lint the
+/// policy depends on.
+/// Invariant: both packages deny all three, whether declared in the package or
+/// inherited from the workspace, so neither a configured-but-warned method nor
+/// a bare `#[allow]` can pass the gate.
 #[test]
-fn every_package_denies_disallowed_methods() -> Result<()> {
+fn every_package_denies_the_policy_lints() -> Result<()> {
     for (name, manifest) in PACKAGE_MANIFESTS {
-        let level = clippy_lint_level(manifest, ROOT_MANIFEST, "disallowed_methods")
-            .with_context(|| format!("read the Clippy lint level from {name}"))?;
-        ensure!(
-            level.as_deref() == Some("deny"),
-            "{name} must set clippy disallowed_methods to deny, found {level:?}"
-        );
+        for lint in REQUIRED_DENIED_LINTS {
+            let level = clippy_lint_level(manifest, ROOT_MANIFEST, lint)
+                .with_context(|| format!("read the {lint} level from {name}"))?;
+            ensure!(
+                level.as_deref() == Some("deny"),
+                "{name} must set clippy {lint} to deny, found {level:?}"
+            );
+        }
     }
     Ok(())
 }
