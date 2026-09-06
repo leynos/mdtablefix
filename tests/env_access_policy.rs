@@ -3,9 +3,15 @@
 //! The policy has three parts and no single file holds all of them, so nothing
 //! in the build connects them: `clippy.toml` names the prohibited methods, each
 //! package manifest raises `clippy::disallowed_methods` to `deny`, and the
-//! Makefile's Clippy gate runs over every target and feature with warnings
-//! denied. Drop any one part and the other two still look correct while the
-//! policy stops being enforced. These tests tie the three together.
+//! Makefile's `lint` recipe runs Clippy over both packages, every target, and
+//! every feature with warnings denied. Drop any one part and the other two
+//! still look correct while the policy stops being enforced. These tests tie
+//! the three together.
+//!
+//! The Makefile check parses the `lint` recipe and expands its Make variables
+//! rather than searching the file for a command string. A matching string in a
+//! comment, in another target, or covering only the root package would satisfy
+//! a file-wide search while the gate no longer enforces the policy.
 //!
 //! The policy itself is recorded in
 //! `docs/adrs/0006-environment-seam-taxonomy.md`.
@@ -15,20 +21,33 @@
 //! access of their own.
 //!
 //! Mutation proof (2026-09-06). Each mutation was applied alone, the suite run,
-//! and the mutation reverted. Failures, in order:
+//! and the mutation reverted. Every one failed, with the message shown:
 //!
 //! ```text
-//! deleting the std::env::set_var entry from clippy.toml
+//! delete the std::env::set_var entry from clippy.toml
 //!   -> clippy_configuration_disallows_every_environment_method
 //!      clippy.toml must disallow std::env::set_var, found [...]
-//! changing the root manifest's lint level from "deny" to "warn"
+//! change the root manifest's lint level from "deny" to "warn"
 //!   -> every_package_denies_disallowed_methods
 //!      Cargo.toml must set clippy disallowed_methods to deny, found Some("warn")
-//! deleting -D warnings from CLIPPY_FLAGS
+//! delete -D warnings from CLIPPY_FLAGS
 //!   -> clippy_gate_denies_warnings_across_targets_and_features
-//!      CLIPPY_FLAGS must contain -D warnings, found [...]
+//!      the Clippy command [...] must contain -D warnings
+//! delete --all-targets from CLIPPY_FLAGS
+//!   -> clippy_gate_denies_warnings_across_targets_and_features
+//!      the Clippy command [...] must contain --all-targets
+//! delete the --manifest-path test-macros/Cargo.toml command from the recipe
+//!   -> clippy_gate_denies_warnings_across_targets_and_features
+//!      the lint target must run Clippy over test-macros/Cargo.toml, found [...]
+//! comment out both Clippy commands in the recipe
+//!   -> clippy_gate_denies_warnings_across_targets_and_features
+//!      the lint target should have a recipe
 //! ```
-
+//!
+//! Enforcement itself was proven separately, in each package: a temporary
+//! `std::env::var` call in `src/lib.rs`, and another in
+//! `test-macros/src/lib.rs`, each failed `make lint` with "use of a disallowed
+//! method" and the configured reason string. Both were reverted.
 use anyhow::{Context, Result, ensure};
 use toml::{Table, Value};
 
@@ -155,25 +174,127 @@ fn every_package_denies_disallowed_methods() -> Result<()> {
     Ok(())
 }
 
-/// Scenario: the Makefile's Clippy gate is read.
-/// Invariant: it compiles every target and feature with warnings denied, and
-/// `lint` actually invokes it, so the deny reaches test and benchmark targets
-/// rather than the library alone.
-#[test]
-fn clippy_gate_denies_warnings_across_targets_and_features() -> Result<()> {
-    let flags = MAKEFILE
+/// Return `name`'s value from a simple Make assignment (`=`, `?=`, or `:=`).
+///
+/// Recursive and conditional assignments differ in when Make expands them, not
+/// in the text they hold, so one reader covers all three.
+fn make_assignment<'a>(makefile: &'a str, name: &str) -> Option<&'a str> {
+    makefile.lines().find_map(|line| {
+        let rest = line.strip_prefix(name)?.trim_start();
+        for operator in ["?=", ":=", "="] {
+            if let Some(value) = rest.strip_prefix(operator) {
+                return Some(value.trim());
+            }
+        }
+        None
+    })
+}
+
+/// Expand `$(NAME)` references against the Makefile's own assignments.
+///
+/// Two passes cover a variable defined in terms of another, which is as deep as
+/// this Makefile goes. An unresolved reference is left intact so it shows up in
+/// a failure message rather than vanishing.
+fn expand_make_variables(makefile: &str, command: &str) -> String {
+    let mut expanded = command.to_owned();
+    for _ in 0..2 {
+        let mut next = String::with_capacity(expanded.len());
+        let mut rest = expanded.as_str();
+        while let Some(start) = rest.find("$(") {
+            let Some(end) = rest[start..].find(')').map(|offset| start + offset) else {
+                break;
+            };
+            next.push_str(&rest[..start]);
+            let name = &rest[start + 2..end];
+            match make_assignment(makefile, name) {
+                Some(value) => next.push_str(value),
+                None => next.push_str(&rest[start..=end]),
+            }
+            rest = &rest[end + 1..];
+        }
+        next.push_str(rest);
+        expanded = next;
+    }
+    expanded
+}
+
+/// Return the recipe lines of `target`, with Make variables expanded.
+///
+/// A recipe line is tab-indented; the recipe ends at the first line that is
+/// neither tab-indented nor blank. Comment lines are dropped, so a commented-out
+/// command cannot satisfy a coverage requirement.
+fn recipe_commands(makefile: &str, target: &str) -> Result<Vec<String>> {
+    let prefix = format!("{target}:");
+    let body = makefile
         .lines()
-        .find_map(|line| line.strip_prefix("CLIPPY_FLAGS ?="))
-        .context("Makefile should define CLIPPY_FLAGS")?;
-    for required in ["--all-targets", "--all-features", "-D warnings"] {
-        ensure!(
-            flags.contains(required),
-            "CLIPPY_FLAGS must contain {required}, found `{flags}`"
-        );
+        .skip_while(|line| !line.starts_with(&prefix))
+        .skip(1);
+    let mut commands = Vec::new();
+    for line in body {
+        let Some(command) = line.strip_prefix('\t') else {
+            if line.trim().is_empty() {
+                continue;
+            }
+            break;
+        };
+        let command = command.trim_start_matches(['@', '-', '+']).trim();
+        if command.is_empty() || command.starts_with('#') {
+            continue;
+        }
+        commands.push(expand_make_variables(makefile, command));
     }
     ensure!(
-        MAKEFILE.contains("$(CARGO) clippy $(CLIPPY_FLAGS)"),
-        "the lint target must invoke Cargo Clippy with CLIPPY_FLAGS"
+        !commands.is_empty(),
+        "the {target} target should have a recipe"
     );
+    Ok(commands)
+}
+
+/// Return whether `command` lints `manifest`'s package.
+///
+/// A `--workspace` run covers every member, so it covers both packages once
+/// issue #439 lands. Until then the root package is the one a command with no
+/// `--manifest-path` selects, and `test-macros` needs its manifest named.
+fn covers_package(command: &str, manifest: &str) -> bool {
+    if command.contains("--workspace") {
+        return true;
+    }
+    match manifest {
+        "Cargo.toml" => !command.contains("--manifest-path"),
+        _ => command.contains(&format!("--manifest-path {manifest}")),
+    }
+}
+
+/// Scenario: the `lint` target's recipe is read and its Make variables expanded.
+/// Invariant: every Clippy command it runs denies warnings across all targets
+/// and features, and between them they cover both packages, so neither a
+/// weakened flag set nor a dropped package can pass the gate. Text elsewhere in
+/// the Makefile, including a commented-out command, does not count.
+#[test]
+fn clippy_gate_denies_warnings_across_targets_and_features() -> Result<()> {
+    let commands: Vec<String> = recipe_commands(MAKEFILE, "lint")?
+        .into_iter()
+        .filter(|command| command.contains(" clippy "))
+        .collect();
+    ensure!(
+        !commands.is_empty(),
+        "the lint target must invoke Cargo Clippy"
+    );
+    for command in &commands {
+        for required in ["--all-targets", "--all-features", "-D warnings"] {
+            ensure!(
+                command.contains(required),
+                "the Clippy command `{command}` must contain {required}"
+            );
+        }
+    }
+    for (manifest, _) in PACKAGE_MANIFESTS {
+        ensure!(
+            commands
+                .iter()
+                .any(|command| covers_package(command, manifest)),
+            "the lint target must run Clippy over {manifest}, found {commands:?}"
+        );
+    }
     Ok(())
 }
