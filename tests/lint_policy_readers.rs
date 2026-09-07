@@ -230,3 +230,45 @@ fn expands_make_variable_references(#[case] command: &str, #[case] expected: &st
         "`{command}` should expand to `{expected}`"
     );
 }
+
+/// Scenario: a recipe wraps a Clippy invocation in a never-taken branch, split
+/// across backslash continuation lines.
+/// Invariant: the continued lines are returned as one command beginning with
+/// `if`, not as a bare invocation on a line of its own. Make passes a continued
+/// line to a single shell, so reading the physical lines separately would
+/// certify a recipe that runs no Clippy at all.
+#[test]
+fn joins_backslash_continuations_into_one_command() -> Result<()> {
+    let makefile = concat!(
+        "lint: ## Run Clippy\n",
+        "\tif false; then \\\n",
+        "\t\t$(CARGO) clippy $(CLIPPY_FLAGS) \\\n",
+        "\t; fi\n",
+    );
+    let commands = recipe_commands(makefile, "lint")?;
+    ensure!(
+        commands == vec!["if false; then $(CARGO) clippy $(CLIPPY_FLAGS) ; fi".to_owned()],
+        "expected one joined command, found {commands:?}"
+    );
+    ensure!(
+        !is_cargo_clippy_invocation(makefile, &commands[0]),
+        "a Clippy call inside a never-taken branch must not count as an invocation"
+    );
+    Ok(())
+}
+
+/// Scenario: a recipe's final line ends in a backslash, so its continuation is
+/// missing.
+/// Invariant: the command it began is still returned rather than dropped. A
+/// malformed recipe must not become an invisible one, since a dropped command
+/// is a command no assertion can judge.
+#[test]
+fn returns_a_command_whose_continuation_is_missing() -> Result<()> {
+    let makefile = "lint:\n\t$(CARGO) clippy $(CLIPPY_FLAGS) \\\n";
+    let commands = recipe_commands(makefile, "lint")?;
+    ensure!(
+        commands == vec!["$(CARGO) clippy $(CLIPPY_FLAGS)".to_owned()],
+        "expected the unterminated command, found {commands:?}"
+    );
+    Ok(())
+}

@@ -115,12 +115,20 @@ pub fn expand_make_variables(makefile: &str, command: &str) -> String {
     expanded
 }
 
-/// Return the recipe lines of `target`, exactly as written.
+/// Return the commands of `target`'s recipe, exactly as written.
 ///
 /// A recipe line is tab-indented; the recipe ends at the first line that is
-/// neither tab-indented nor blank. Comment lines are dropped, so a commented-out
-/// command cannot satisfy a coverage requirement. Leading recipe prefixes (`@`
-/// for silent, `-` for ignore-errors, `+` for always-run) are stripped.
+/// neither tab-indented nor blank. Leading recipe prefixes (`@` for silent, `-`
+/// for ignore-errors, `+` for always-run) are stripped, and comment lines are
+/// dropped, so a commented-out command cannot satisfy a coverage requirement.
+///
+/// A line ending in a backslash continues onto the next one and the pair is
+/// returned as a single command, because that is what Make does: it passes the
+/// whole continued line to one shell. Reading the physical lines separately
+/// would let a Clippy call wrapped in a never-taken branch, written as
+/// `if false; then` on the first line, the invocation on the second, and
+/// `; fi` on the third, look like a bare invocation on a line of its own, and
+/// so certify a recipe that lints nothing.
 ///
 /// Variables are left unexpanded so a caller can judge the executable and the
 /// argument order from what the recipe actually says. Expanding first would
@@ -134,18 +142,38 @@ pub fn recipe_commands(makefile: &str, target: &str) -> Result<Vec<String>> {
         .skip_while(|line| !line.starts_with(&prefix))
         .skip(1);
     let mut commands = Vec::new();
+    let mut pending: Option<String> = None;
     for line in body {
-        let Some(command) = line.strip_prefix('\t') else {
+        let Some(text) = line.strip_prefix('\t') else {
             if line.trim().is_empty() {
                 continue;
             }
             break;
         };
-        let command = command.trim_start_matches(['@', '-', '+']).trim();
-        if command.is_empty() || command.starts_with('#') {
-            continue;
+        let text = text.trim_end();
+        let continues = text.ends_with('\\');
+        let text = text.strip_suffix('\\').unwrap_or(text).trim();
+        match pending.as_mut() {
+            Some(started) => {
+                started.push(' ');
+                started.push_str(text);
+            }
+            None => pending = Some(text.trim_start_matches(['@', '-', '+']).trim().to_owned()),
         }
-        commands.push(command.to_owned());
+        if !continues && let Some(command) = pending.take() {
+            let command = command.trim();
+            if !command.is_empty() && !command.starts_with('#') {
+                commands.push(command.to_owned());
+            }
+        }
+    }
+    // A recipe whose last line ends in a backslash is malformed, but the
+    // command it began is still part of the recipe and must be judged.
+    if let Some(command) = pending {
+        let command = command.trim();
+        if !command.is_empty() && !command.starts_with('#') {
+            commands.push(command.to_owned());
+        }
     }
     ensure!(
         !commands.is_empty(),
