@@ -21,7 +21,10 @@
 //! enforces the policy; and a command such as `echo $(CARGO) clippy ...` would
 //! satisfy a substring search for `clippy` while running no Clippy at all. So
 //! the recipe is read as written, to judge the executable and the argument
-//! order, and expanded afterwards, to judge the flags.
+//! order, and expanded afterwards, to judge the flags. Backslash continuations
+//! are joined first, because Make passes a continued line to one shell: read as
+//! separate physical lines, a Clippy call wrapped in `if false; then ... ; fi`
+//! looks like a bare invocation on a line of its own.
 //!
 //! The policy itself is recorded in
 //! `docs/adrs/0006-environment-seam-taxonomy.md`.
@@ -72,6 +75,12 @@
 //! chain the two Clippy commands on one line with `;`
 //!   -> no_construct_can_mask_a_failing_clippy_command
 //!      the Clippy command [...] chains another with `;`
+//! wrap both invocations in `if false; then ... ; fi` across continuation lines
+//!   -> clippy_gate_denies_warnings_across_targets_and_features
+//!      the lint target must invoke Cargo Clippy
+//! wrap only the test-macros invocation the same way
+//!   -> clippy_gate_denies_warnings_across_targets_and_features
+//!      the lint target must run Clippy over test-macros/Cargo.toml, found [...]
 //! ```
 //!
 //! `.ONESHELL:` paired with `-e` in `.SHELLFLAGS` was also applied, and passes:
