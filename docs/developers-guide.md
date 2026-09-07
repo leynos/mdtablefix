@@ -890,10 +890,13 @@ lint it. Issue #439 replaces both invocations with a single `--workspace` run.
 
 The two commands are separate recipe lines, which is what makes a failure in
 either one fail the target: Make runs each line in its own shell and stops at
-the first non-zero status. Do not merge them onto one line with `;`, and do not
-enable `.ONESHELL` without `-e` in `.SHELLFLAGS`; under either, only the last
-command's status is reported and a failing first invocation passes the gate.
-`tests/env_access_policy.rs` fails if either construct appears.
+the first non-zero status. Nothing may stand between a Clippy command and that
+status. In particular, do not give one Make's `-` prefix, do not chain commands
+on one line with `;`, do not append a `||` fallback other than `|| exit 1`, do
+not pipe the output, and do not enable `.ONESHELL` without `-e` in
+`.SHELLFLAGS`. Under any of those, a failing Clippy run is reported as success
+and the gate passes with the policy broken.
+`tests/env_access_policy.rs` fails if any of them appears.
 
 The reason is parallelism. A test that sets or removes a variable changes it for
 every other test sharing the process, which forces the suite to serialize around

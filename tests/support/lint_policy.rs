@@ -115,12 +115,26 @@ pub fn expand_make_variables(makefile: &str, command: &str) -> String {
     expanded
 }
 
+/// One command from a Make recipe, with the prefixes that change its meaning.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecipeCommand {
+    /// The command text, with the `@` and `+` prefixes removed.
+    ///
+    /// Those two change when Make echoes or runs a command, not whether its
+    /// failure counts, so they are noise to every caller here.
+    pub text: String,
+    /// Whether Make was told to ignore this command's exit status.
+    ///
+    /// The `-` prefix is kept as a flag rather than stripped, because a gate
+    /// whose command cannot fail the target is a gate that does not gate.
+    pub ignores_errors: bool,
+}
+
 /// Return the commands of `target`'s recipe, exactly as written.
 ///
 /// A recipe line is tab-indented; the recipe ends at the first line that is
-/// neither tab-indented nor blank. Leading recipe prefixes (`@` for silent, `-`
-/// for ignore-errors, `+` for always-run) are stripped, and comment lines are
-/// dropped, so a commented-out command cannot satisfy a coverage requirement.
+/// neither tab-indented nor blank. Comment lines are dropped, so a
+/// commented-out command cannot satisfy a coverage requirement.
 ///
 /// A line ending in a backslash continues onto the next one and the pair is
 /// returned as a single command, because that is what Make does: it passes the
@@ -135,14 +149,14 @@ pub fn expand_make_variables(makefile: &str, command: &str) -> String {
 /// replace `$(CARGO)` with a shell fragment and lose the token boundary that
 /// makes the first word identifiable. Use [`expand_make_variables`] afterwards
 /// when the flags matter.
-pub fn recipe_commands(makefile: &str, target: &str) -> Result<Vec<String>> {
+pub fn recipe_commands(makefile: &str, target: &str) -> Result<Vec<RecipeCommand>> {
     let prefix = format!("{target}:");
     let body = makefile
         .lines()
         .skip_while(|line| !line.starts_with(&prefix))
         .skip(1);
     let mut commands = Vec::new();
-    let mut pending: Option<String> = None;
+    let mut pending: Option<RecipeCommand> = None;
     for line in body {
         let Some(text) = line.strip_prefix('\t') else {
             if line.trim().is_empty() {
@@ -153,33 +167,76 @@ pub fn recipe_commands(makefile: &str, target: &str) -> Result<Vec<String>> {
         let text = text.trim_end();
         let continues = text.ends_with('\\');
         let text = text.strip_suffix('\\').unwrap_or(text).trim();
-        match pending.as_mut() {
-            Some(started) => {
-                started.push(' ');
-                started.push_str(text);
-            }
-            None => pending = Some(text.trim_start_matches(['@', '-', '+']).trim().to_owned()),
+        if let Some(started) = pending.as_mut() {
+            started.text.push(' ');
+            started.text.push_str(text);
+        } else {
+            // Make accepts the prefixes in any order and any number.
+            let body = text.trim_start_matches(['@', '-', '+']);
+            let ignores_errors = text[..text.len() - body.len()].contains('-');
+            pending = Some(RecipeCommand {
+                text: body.trim().to_owned(),
+                ignores_errors,
+            });
         }
         if !continues && let Some(command) = pending.take() {
-            let command = command.trim();
-            if !command.is_empty() && !command.starts_with('#') {
-                commands.push(command.to_owned());
-            }
+            push_command(&mut commands, &command);
         }
     }
     // A recipe whose last line ends in a backslash is malformed, but the
     // command it began is still part of the recipe and must be judged.
     if let Some(command) = pending {
-        let command = command.trim();
-        if !command.is_empty() && !command.starts_with('#') {
-            commands.push(command.to_owned());
-        }
+        push_command(&mut commands, &command);
     }
     ensure!(
         !commands.is_empty(),
         "the {target} target should have a recipe"
     );
     Ok(commands)
+}
+
+/// Add `command` to `commands` unless it is blank or a shell comment.
+fn push_command(commands: &mut Vec<RecipeCommand>, command: &RecipeCommand) {
+    let text = command.text.trim();
+    if text.is_empty() || text.starts_with('#') {
+        return;
+    }
+    commands.push(RecipeCommand {
+        text: text.to_owned(),
+        ignores_errors: command.ignores_errors,
+    });
+}
+
+/// Return why `command`'s exit status would not reach Make, if it would not.
+///
+/// Make reports a recipe line's status only when nothing between the command
+/// and the shell's exit swallows it. Four constructs do, and each would let a
+/// failing gate pass:
+///
+/// * the `-` recipe prefix, which tells Make to ignore the status outright;
+/// * a `;` chain, where only the last command's status is reported;
+/// * a `||` fallback such as `|| true`, which substitutes a success. `|| exit 1` is the exception,
+///   since it re-raises the failure rather than hiding it;
+/// * a pipeline, whose status is the last stage's, not the command's.
+///
+/// Returns `None` when the status does reach Make.
+pub fn status_masking_construct(command: &RecipeCommand) -> Option<&'static str> {
+    if command.ignores_errors {
+        return Some("carries Make's `-` prefix, so its failure is ignored");
+    }
+    if command.text.contains(';') {
+        return Some("chains another command with `;`, so only the last status is reported");
+    }
+    if let Some((_, fallback)) = command.text.rsplit_once("||")
+        && fallback.trim() != "exit 1"
+    {
+        return Some("has a `||` fallback other than `exit 1`, which substitutes a success");
+    }
+    // A `|` that is not part of `||` opens a pipeline.
+    if command.text.replace("||", "").contains('|') {
+        return Some("is piped, so the reported status is the last stage's");
+    }
+    None
 }
 
 /// Return whether `command` lints `manifest`'s package.
