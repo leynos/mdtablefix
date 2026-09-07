@@ -940,7 +940,12 @@ Clippy over both packages, every target, and every feature with warnings denied.
 `tests/env_access_enforcement.rs` checks that the policy fires, by running
 Clippy over a fixture package that calls all six methods and asserting one
 diagnostic per method with its reason string. A configuration can keep its shape
-and lint nothing, so the second test is not redundant. The full rationale is in
+and lint nothing, so the second test is not redundant.
+`tests/env_access_workflow.rs` checks that CI still runs any of it: the
+`pull_request` trigger is present, and neither the job nor the steps that run
+the lint target and the test suite carry a condition. A step keeps its `run`
+value when it is skipped, so nothing else here would notice an `if: false`. The
+full rationale is in
 [Environment seam taxonomy](adrs/0006-environment-seam-taxonomy.md).
 
 ## 1. Stateful pipeline helpers
