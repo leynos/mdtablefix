@@ -115,11 +115,18 @@ pub fn expand_make_variables(makefile: &str, command: &str) -> String {
     expanded
 }
 
-/// Return the recipe lines of `target`, with Make variables expanded.
+/// Return the recipe lines of `target`, exactly as written.
 ///
 /// A recipe line is tab-indented; the recipe ends at the first line that is
 /// neither tab-indented nor blank. Comment lines are dropped, so a commented-out
-/// command cannot satisfy a coverage requirement.
+/// command cannot satisfy a coverage requirement. Leading recipe prefixes (`@`
+/// for silent, `-` for ignore-errors, `+` for always-run) are stripped.
+///
+/// Variables are left unexpanded so a caller can judge the executable and the
+/// argument order from what the recipe actually says. Expanding first would
+/// replace `$(CARGO)` with a shell fragment and lose the token boundary that
+/// makes the first word identifiable. Use [`expand_make_variables`] afterwards
+/// when the flags matter.
 pub fn recipe_commands(makefile: &str, target: &str) -> Result<Vec<String>> {
     let prefix = format!("{target}:");
     let body = makefile
@@ -138,7 +145,7 @@ pub fn recipe_commands(makefile: &str, target: &str) -> Result<Vec<String>> {
         if command.is_empty() || command.starts_with('#') {
             continue;
         }
-        commands.push(expand_make_variables(makefile, command));
+        commands.push(command.to_owned());
     }
     ensure!(
         !commands.is_empty(),
@@ -160,4 +167,45 @@ pub fn covers_package(command: &str, manifest: &str) -> bool {
         "Cargo.toml" => !command.contains("--manifest-path"),
         _ => command.contains(&format!("--manifest-path {manifest}")),
     }
+}
+
+/// Return whether `text` names the Cargo executable.
+///
+/// A bare `cargo` or any path ending in `/cargo` counts; nothing else does.
+fn is_cargo_path(text: &str) -> bool { text == "cargo" || text.ends_with("/cargo") }
+
+/// Return whether a Make variable's value resolves to the Cargo executable.
+///
+/// The value may be a shell fragment rather than a plain path. `$(CARGO)` in
+/// this repository expands to an `$(or $(shell command -v cargo ...),...)`
+/// lookup, so the value is split on the punctuation that separates its parts
+/// and each piece is judged on its own.
+fn value_names_cargo(value: &str) -> bool {
+    value
+        .split([' ', '\t', ',', '(', ')'])
+        .any(|piece| is_cargo_path(piece.trim()))
+}
+
+/// Return whether `command` executes Cargo's `clippy` subcommand.
+///
+/// Both the executable and the argument position are checked, because a
+/// substring search for `clippy` is satisfied by a command that never runs it:
+/// `echo $(CARGO) clippy ...` and `: $(CARGO) clippy ...` both carry every flag
+/// a recipe needs while linting nothing. So the first word must name Cargo,
+/// resolving a `$(VARIABLE)` reference through the Makefile's own assignments,
+/// and `clippy` must be the subcommand rather than a later argument. A leading
+/// `+toolchain` override is skipped, since Cargo accepts one there.
+pub fn is_cargo_clippy_invocation(makefile: &str, command: &str) -> bool {
+    let mut words = command.split_whitespace();
+    let Some(executable) = words.next() else {
+        return false;
+    };
+    let names_cargo = match executable
+        .strip_prefix("$(")
+        .and_then(|r| r.strip_suffix(')'))
+    {
+        Some(variable) => make_assignment(makefile, variable).is_some_and(value_names_cargo),
+        None => is_cargo_path(executable),
+    };
+    names_cargo && words.find(|word| !word.starts_with('+')) == Some("clippy")
 }

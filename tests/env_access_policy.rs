@@ -14,10 +14,14 @@
 //! shape and lint nothing, and a lint can fire while the gate that runs it has
 //! stopped covering a package.
 //!
-//! The Makefile check parses the `lint` recipe and expands its Make variables
-//! rather than searching the file for a command string. A matching string in a
-//! comment, in another target, or covering only the root package would satisfy
-//! a file-wide search while the gate no longer enforces the policy.
+//! The Makefile check parses the `lint` recipe rather than searching the file
+//! for a command string, and judges each command as an invocation rather than
+//! as text. A matching string in a comment, in another target, or covering only
+//! the root package would satisfy a file-wide search while the gate no longer
+//! enforces the policy; and a command such as `echo $(CARGO) clippy ...` would
+//! satisfy a substring search for `clippy` while running no Clippy at all. So
+//! the recipe is read as written, to judge the executable and the argument
+//! order, and expanded afterwards, to judge the flags.
 //!
 //! The policy itself is recorded in
 //! `docs/adrs/0006-environment-seam-taxonomy.md`.
@@ -55,6 +59,12 @@
 //! comment out both Clippy commands in the recipe
 //!   -> clippy_gate_denies_warnings_across_targets_and_features
 //!      the lint target should have a recipe
+//! prefix the test-macros command with `echo`, so it runs nothing
+//!   -> clippy_gate_denies_warnings_across_targets_and_features
+//!      the lint target must run Clippy over test-macros/Cargo.toml, found [...]
+//! prefix both commands with `echo`
+//!   -> clippy_gate_denies_warnings_across_targets_and_features
+//!      the lint target must invoke Cargo Clippy
 //! ```
 //!
 //! Enforcement itself was proven separately, in each package: a temporary
@@ -71,7 +81,14 @@ use rstest::rstest;
 #[path = "support/lint_policy.rs"]
 mod lint_policy;
 
-use lint_policy::{clippy_lint_level, covers_package, disallowed_method_paths, recipe_commands};
+use lint_policy::{
+    clippy_lint_level,
+    covers_package,
+    disallowed_method_paths,
+    expand_make_variables,
+    is_cargo_clippy_invocation,
+    recipe_commands,
+};
 
 /// Every method the environment-access policy prohibits.
 ///
@@ -161,9 +178,13 @@ fn every_package_denies_the_policy_lints() -> Result<()> {
 /// the Makefile, including a commented-out command, does not count.
 #[test]
 fn clippy_gate_denies_warnings_across_targets_and_features() -> Result<()> {
+    // The recipe is read as written so the executable and the argument order can
+    // be judged, then expanded so the flags can be. A command that only mentions
+    // Clippy, such as one prefixed with `echo`, is filtered out here.
     let commands: Vec<String> = recipe_commands(MAKEFILE, "lint")?
-        .into_iter()
-        .filter(|command| command.contains(" clippy "))
+        .iter()
+        .filter(|command| is_cargo_clippy_invocation(MAKEFILE, command))
+        .map(|command| expand_make_variables(MAKEFILE, command))
         .collect();
     ensure!(
         !commands.is_empty(),
@@ -262,8 +283,8 @@ fn reports_no_level_when_the_workspace_table_drops_the_lint() -> Result<()> {
 
 /// Scenario: a `lint` recipe is read from a Makefile that also names Clippy in
 /// a comment, in a variable, and in another target.
-/// Invariant: only the recipe's own uncommented commands are returned, so none
-/// of those three can satisfy the coverage requirement.
+/// Invariant: only the recipe's own uncommented commands are returned, as
+/// written, so none of those three can satisfy the coverage requirement.
 #[test]
 fn reads_only_the_targets_own_uncommented_commands() -> Result<()> {
     let makefile = concat!(
@@ -279,10 +300,42 @@ fn reads_only_the_targets_own_uncommented_commands() -> Result<()> {
     );
     let commands = recipe_commands(makefile, "lint")?;
     ensure!(
-        commands == vec!["cargo clippy --all-targets -- -D warnings".to_owned()],
+        commands == vec!["cargo clippy $(CLIPPY_FLAGS)".to_owned()],
         "expected the single uncommented lint command, found {commands:?}"
     );
     Ok(())
+}
+
+/// Scenario: each shape a recipe command can take is judged for whether it runs
+/// Clippy.
+/// Invariant: only a command whose first word names Cargo and whose subcommand
+/// is `clippy` counts. A command that merely mentions Clippy carries every flag
+/// and manifest path the contract looks for while linting nothing, so a
+/// substring search would accept a gate that has been switched off.
+#[rstest]
+#[case::variable_reference("$(CARGO) clippy $(CLIPPY_FLAGS)", true)]
+#[case::bare_cargo("cargo clippy --all-targets", true)]
+#[case::absolute_path("/usr/local/bin/cargo clippy --all-targets", true)]
+#[case::toolchain_override("$(CARGO) +nightly clippy --all-targets", true)]
+#[case::echoed("echo $(CARGO) clippy $(CLIPPY_FLAGS)", false)]
+#[case::no_op_builtin(": $(CARGO) clippy $(CLIPPY_FLAGS)", false)]
+#[case::echoed_subcommand("echo clippy --all-targets", false)]
+#[case::another_subcommand("$(CARGO) build --all-targets", false)]
+#[case::unrelated_executable("$(MDLINT) clippy", false)]
+#[case::unknown_variable("$(NOT_DEFINED) clippy", false)]
+#[case::empty("", false)]
+fn recognizes_only_executable_clippy_invocations(#[case] command: &str, #[case] expected: bool) {
+    let makefile = concat!(
+        "CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)\n",
+        "MDLINT ?= markdownlint-cli2\n",
+        "CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings\n",
+    );
+    assert_eq!(
+        is_cargo_clippy_invocation(makefile, command),
+        expected,
+        "`{command}` should {} count as a Clippy invocation",
+        if expected { "" } else { "not" }
+    );
 }
 
 /// Scenario: package coverage is judged for each shape of Clippy command.
