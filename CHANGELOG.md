@@ -8,8 +8,9 @@
   `std::env` read and mutation methods, both packages deny
   `clippy::disallowed_methods` along with `clippy::allow_attributes` and
   `clippy::allow_attributes_without_reason` so a bare `#[allow]` cannot silence
-  it, and two tests guard the result: one over the configuration's shape and one
-  that runs Clippy over a fixture calling all six methods. Recorded in
+  it, and three tests guard the result: one over the configuration's shape, one
+  that runs Clippy over a fixture calling all six methods, and one that keeps CI
+  running both. Recorded in
   `docs/adrs/0006-environment-seam-taxonomy.md`.
   ([#441](https://github.com/leynos/mdtablefix/issues/441))
 - Release assets for `x86_64-apple-darwin`, `aarch64-apple-darwin` and
