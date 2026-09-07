@@ -81,10 +81,25 @@
 //! wrap only the test-macros invocation the same way
 //!   -> clippy_gate_denies_warnings_across_targets_and_features
 //!      the lint target must run Clippy over test-macros/Cargo.toml, found [...]
+//! append `|| true` to the root invocation
+//!   -> no_construct_can_mask_a_failing_clippy_command
+//!      has a `||` fallback other than `exit 1`, which substitutes a success
+//! give the root invocation Make's `-` prefix
+//!   -> no_construct_can_mask_a_failing_clippy_command
+//!      carries Make's `-` prefix, so its failure is ignored
+//! pipe the root invocation into `tail -5`
+//!   -> no_construct_can_mask_a_failing_clippy_command
+//!      is piped, so the reported status is the last stage's
 //! ```
 //!
-//! `.ONESHELL:` paired with `-e` in `.SHELLFLAGS` was also applied, and passes:
-//! the rule is about the status reaching Make, not about the construct.
+//! Two forms that keep the status intact were also applied, and pass:
+//! `.ONESHELL:` paired with `-e` in `.SHELLFLAGS`, and an explicit
+//! `|| exit 1`. The rule is about the status reaching Make, not about the
+//! construct.
+//!
+//! Each of `|| true`, the `-` prefix and the pipe was confirmed to be a live
+//! hole before it was closed: with a `std::env::var` call in the root package,
+//! `make lint` exited 0 under all three while this file's tests passed.
 //!
 //! Enforcement itself was proven separately, in each package: a temporary
 //! `std::env::var` call in `src/lib.rs`, and another in
@@ -94,7 +109,7 @@
 //! defeat the ban, failed `make lint` in its own right with "#[allow] attribute
 //! found" and "`allow` attribute without specifying a reason". All were
 //! reverted.
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 
 #[path = "support/lint_policy.rs"]
 mod lint_policy;
@@ -106,6 +121,7 @@ use lint_policy::{
     expand_make_variables,
     is_cargo_clippy_invocation,
     recipe_commands,
+    status_masking_construct,
 };
 
 /// Every method the environment-access policy prohibits.
@@ -201,8 +217,8 @@ fn clippy_gate_denies_warnings_across_targets_and_features() -> Result<()> {
     // Clippy, such as one prefixed with `echo`, is filtered out here.
     let commands: Vec<String> = recipe_commands(MAKEFILE, "lint")?
         .iter()
-        .filter(|command| is_cargo_clippy_invocation(MAKEFILE, command))
-        .map(|command| expand_make_variables(MAKEFILE, command))
+        .filter(|command| is_cargo_clippy_invocation(MAKEFILE, &command.text))
+        .map(|command| expand_make_variables(MAKEFILE, &command.text))
         .collect();
     ensure!(
         !commands.is_empty(),
@@ -227,24 +243,24 @@ fn clippy_gate_denies_warnings_across_targets_and_features() -> Result<()> {
     Ok(())
 }
 
-/// Scenario: the `lint` recipe's shape is judged for whether a failing Clippy
-/// command can be reported as success.
-/// Invariant: no construct that would mask an exit status is present, so a
-/// failure in the first invocation still fails the target rather than being
-/// overwritten by the second one's success.
+/// Scenario: the `lint` recipe is judged for whether a failing Clippy command
+/// could be reported as success.
+/// Invariant: nothing between each Clippy command and Make swallows its exit
+/// status, and the recipe as a whole is not put in one shell without `-e`, so a
+/// failure in either invocation still fails the target.
 ///
 /// Make runs each recipe line in its own shell and stops at the first non-zero
-/// status, which is why the recipe needs no `|| exit 1`. Two constructs break
-/// that. `.ONESHELL` puts the whole recipe in one shell, where only the last
-/// command's status is reported unless `.SHELLFLAGS` carries `-e`; and a `;`
-/// chain does the same within one line. Either would let a broken policy pass
-/// the gate.
+/// status, which is why the recipe needs no `|| exit 1`. Several constructs
+/// break that, and each would let a broken policy pass a green gate:
+/// `.ONESHELL` without `-e` in `.SHELLFLAGS`, Make's `-` prefix, a `;` chain,
+/// a `|| true` fallback, and a pipeline.
 ///
 /// Verified by execution on 2026-09-07, not by reading the recipe. With a
 /// `std::env::var` call in the root package and the `test-macros` invocation
-/// last, `make lint` exited 2 and never reached the second command. Adding
-/// `.ONESHELL:` to the same Makefile made the identical tree exit 0, which is
-/// the regression this test exists to catch.
+/// last, `make lint` exited 2 and never reached the second command. The same
+/// tree exited 0 under each of `.ONESHELL:`, a `-` prefix, `|| true`, and a
+/// pipe into `tail`, which is the class of regression this test exists to
+/// catch.
 #[test]
 fn no_construct_can_mask_a_failing_clippy_command() -> Result<()> {
     let one_shell = MAKEFILE
@@ -261,11 +277,12 @@ fn no_construct_can_mask_a_failing_clippy_command() -> Result<()> {
          1`"
     );
     for command in recipe_commands(MAKEFILE, "lint")? {
-        ensure!(
-            !(is_cargo_clippy_invocation(MAKEFILE, &command) && command.contains(';')),
-            "the Clippy command `{command}` chains another with `;`, so a failure in the first \
-             would be reported as the second's success"
-        );
+        if !is_cargo_clippy_invocation(MAKEFILE, &command.text) {
+            continue;
+        }
+        if let Some(reason) = status_masking_construct(&command) {
+            bail!("the Clippy command `{}` {reason}", command.text);
+        }
     }
     Ok(())
 }

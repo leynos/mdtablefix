@@ -18,12 +18,14 @@ use rstest::rstest;
 mod lint_policy;
 
 use lint_policy::{
+    RecipeCommand,
     clippy_lint_level,
     covers_package,
     disallowed_method_paths,
     expand_make_variables,
     is_cargo_clippy_invocation,
     recipe_commands,
+    status_masking_construct,
 };
 
 /// A workspace manifest whose shared lint table denies the lint.
@@ -103,9 +105,10 @@ fn reads_only_the_targets_own_uncommented_commands() -> Result<()> {
         "typecheck:\n",
         "\tcargo clippy --manifest-path test-macros/Cargo.toml\n",
     );
-    let commands = recipe_commands(makefile, "lint")?;
+    let parsed = recipe_commands(makefile, "lint")?;
+    let commands = command_texts(&parsed);
     ensure!(
-        commands == vec!["cargo clippy $(CLIPPY_FLAGS)".to_owned()],
+        commands == ["cargo clippy $(CLIPPY_FLAGS)"],
         "expected the single uncommented lint command, found {commands:?}"
     );
     Ok(())
@@ -172,6 +175,14 @@ fn judges_package_coverage_by_command_shape(
         expected,
         "`{command}` coverage of {manifest} should be {expected}"
     );
+}
+
+/// Return just the command text of each recipe command, for comparison.
+fn command_texts(commands: &[RecipeCommand]) -> Vec<&str> {
+    commands
+        .iter()
+        .map(|command| command.text.as_str())
+        .collect()
 }
 
 /// Scenario: a Clippy configuration is read for its disallowed method paths.
@@ -246,12 +257,13 @@ fn joins_backslash_continuations_into_one_command() -> Result<()> {
         "\t; fi\n",
     );
     let commands = recipe_commands(makefile, "lint")?;
+    let texts = command_texts(&commands);
     ensure!(
-        commands == vec!["if false; then $(CARGO) clippy $(CLIPPY_FLAGS) ; fi".to_owned()],
-        "expected one joined command, found {commands:?}"
+        texts == ["if false; then $(CARGO) clippy $(CLIPPY_FLAGS) ; fi"],
+        "expected one joined command, found {texts:?}"
     );
     ensure!(
-        !is_cargo_clippy_invocation(makefile, &commands[0]),
+        !is_cargo_clippy_invocation(makefile, &commands[0].text),
         "a Clippy call inside a never-taken branch must not count as an invocation"
     );
     Ok(())
@@ -265,10 +277,74 @@ fn joins_backslash_continuations_into_one_command() -> Result<()> {
 #[test]
 fn returns_a_command_whose_continuation_is_missing() -> Result<()> {
     let makefile = "lint:\n\t$(CARGO) clippy $(CLIPPY_FLAGS) \\\n";
-    let commands = recipe_commands(makefile, "lint")?;
+    let parsed = recipe_commands(makefile, "lint")?;
+    let commands = command_texts(&parsed);
     ensure!(
-        commands == vec!["$(CARGO) clippy $(CLIPPY_FLAGS)".to_owned()],
+        commands == ["$(CARGO) clippy $(CLIPPY_FLAGS)"],
         "expected the unterminated command, found {commands:?}"
+    );
+    Ok(())
+}
+
+/// Scenario: each construct that can stand between a command and Make is
+/// judged for whether it swallows the exit status.
+/// Invariant: Make's `-` prefix, a `;` chain, a `||` fallback other than
+/// `exit 1`, and a pipeline are all reported; a plain command, an `&&` chain
+/// and an explicit `|| exit 1` are not. Each of the first four keeps a failing
+/// Clippy run out of Make's view, so a gate carrying one is green regardless of
+/// what it found.
+#[rstest]
+#[case::plain("cargo clippy --all-targets", false, false)]
+#[case::ignore_errors_prefix("cargo clippy --all-targets", true, true)]
+#[case::semicolon_chain("cargo clippy A; cargo clippy B", false, true)]
+#[case::or_true("cargo clippy --all-targets || true", false, true)]
+#[case::or_colon("cargo clippy --all-targets || :", false, true)]
+#[case::or_exit_one("cargo clippy --all-targets || exit 1", false, false)]
+#[case::and_chain("cargo clippy A && cargo clippy B", false, false)]
+#[case::piped("cargo clippy --all-targets | tail -5", false, true)]
+fn reports_every_construct_that_masks_an_exit_status(
+    #[case] text: &str,
+    #[case] ignores_errors: bool,
+    #[case] masked: bool,
+) {
+    let command = RecipeCommand {
+        text: text.to_owned(),
+        ignores_errors,
+    };
+    let reported = status_masking_construct(&command);
+    assert_eq!(
+        reported.is_some(),
+        masked,
+        "`{text}` (ignore-errors {ignores_errors}) should {} mask the status, got {reported:?}",
+        if masked { "" } else { "not" }
+    );
+}
+
+/// Scenario: a recipe line carries Make's prefixes in various combinations.
+/// Invariant: `@` and `+` are stripped as noise because they change echoing and
+/// dry-run behaviour, while `-` is reported, because only it changes whether a
+/// failure counts. Make accepts them in any order and any number.
+#[rstest]
+#[case::none("cargo clippy", false)]
+#[case::silent("@cargo clippy", false)]
+#[case::always_run("+cargo clippy", false)]
+#[case::ignore_errors("-cargo clippy", true)]
+#[case::silent_then_ignore("@-cargo clippy", true)]
+#[case::ignore_then_silent("-@cargo clippy", true)]
+fn separates_the_ignore_errors_prefix_from_the_rest(
+    #[case] line: &str,
+    #[case] ignores_errors: bool,
+) -> Result<()> {
+    let makefile = format!("lint:\n\t{line}\n");
+    let commands = recipe_commands(&makefile, "lint")?;
+    let expected = RecipeCommand {
+        text: "cargo clippy".to_owned(),
+        ignores_errors,
+    };
+    ensure!(
+        commands == [expected],
+        "`{line}` should read as `cargo clippy` with ignore-errors {ignores_errors}, found \
+         {commands:?}"
     );
     Ok(())
 }
