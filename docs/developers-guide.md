@@ -888,6 +888,13 @@ warns once it stops applying.
 dev-dependency rather than a workspace member, so the root invocation does not
 lint it. Issue #439 replaces both invocations with a single `--workspace` run.
 
+The two commands are separate recipe lines, which is what makes a failure in
+either one fail the target: Make runs each line in its own shell and stops at
+the first non-zero status. Do not merge them onto one line with `;`, and do not
+enable `.ONESHELL` without `-e` in `.SHELLFLAGS`; under either, only the last
+command's status is reported and a failing first invocation passes the gate.
+`tests/env_access_policy.rs` fails if either construct appears.
+
 The reason is parallelism. A test that sets or removes a variable changes it for
 every other test sharing the process, which forces the suite to serialize around
 it and leaves cores idle. Keeping the environment out of the code keeps the

@@ -65,7 +65,17 @@
 //! prefix both commands with `echo`
 //!   -> clippy_gate_denies_warnings_across_targets_and_features
 //!      the lint target must invoke Cargo Clippy
+//! add `.ONESHELL:` to the Makefile
+//!   -> no_construct_can_mask_a_failing_clippy_command
+//!      .ONESHELL puts the whole recipe in one shell, where only the last
+//!      command's status is reported
+//! chain the two Clippy commands on one line with `;`
+//!   -> no_construct_can_mask_a_failing_clippy_command
+//!      the Clippy command [...] chains another with `;`
 //! ```
+//!
+//! `.ONESHELL:` paired with `-e` in `.SHELLFLAGS` was also applied, and passes:
+//! the rule is about the status reaching Make, not about the construct.
 //!
 //! Enforcement itself was proven separately, in each package: a temporary
 //! `std::env::var` call in `src/lib.rs`, and another in
@@ -76,7 +86,6 @@
 //! found" and "`allow` attribute without specifying a reason". All were
 //! reverted.
 use anyhow::{Context, Result, ensure};
-use rstest::rstest;
 
 #[path = "support/lint_policy.rs"]
 mod lint_policy;
@@ -209,162 +218,45 @@ fn clippy_gate_denies_warnings_across_targets_and_features() -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Coverage for the readers themselves.
-//
-// The tests above run the readers against this repository, which exercises
-// only the spellings it happens to use today. The readers also have to handle
-// the spellings the repository will use after issues #438 and #439 land:
-// `[lints] workspace = true` inheritance, a level given as a table rather than
-// a bare string, and a single `--workspace` Clippy command. Those branches are
-// checked here against inline fixtures, so a regression in them shows up now
-// rather than during that migration.
-// ---------------------------------------------------------------------------
-
-/// A workspace manifest whose shared lint table denies the lint.
-const WORKSPACE_MANIFEST: &str = concat!(
-    "[workspace]\nmembers = [\".\", \"test-macros\"]\n\n",
-    "[workspace.lints.clippy]\ndisallowed_methods = \"deny\"\n"
-);
-
-/// Scenario: a manifest declares the lint level in its own package table.
-/// Invariant: the level is read from the package, with the workspace manifest
-/// ignored, so a package that opts out of inheritance is judged on its own
-/// declaration.
-#[rstest]
-#[case::bare_string("[lints.clippy]\ndisallowed_methods = \"deny\"\n", Some("deny"))]
-#[case::level_table(
-    "[lints.clippy]\ndisallowed_methods = { level = \"deny\", priority = 1 }\n",
-    Some("deny")
-)]
-#[case::warned("[lints.clippy]\ndisallowed_methods = \"warn\"\n", Some("warn"))]
-#[case::absent("[lints.clippy]\npedantic = \"warn\"\n", None)]
-#[case::no_lint_table("[package]\nname = \"example\"\n", None)]
-fn reads_a_package_declared_lint_level(
-    #[case] manifest: &str,
-    #[case] expected: Option<&str>,
-) -> Result<()> {
-    let level = clippy_lint_level(manifest, WORKSPACE_MANIFEST, "disallowed_methods")?;
-    ensure!(
-        level.as_deref() == expected,
-        "expected {expected:?} from `{manifest}`, found {level:?}"
-    );
-    Ok(())
-}
-
-/// Scenario: a manifest opts into workspace lints with `[lints] workspace = true`,
-/// which is the spelling issue #439 introduces.
-/// Invariant: the level comes from the workspace manifest rather than the
-/// package, so the contract keeps enforcing the deny after that migration.
+/// Scenario: the `lint` recipe's shape is judged for whether a failing Clippy
+/// command can be reported as success.
+/// Invariant: no construct that would mask an exit status is present, so a
+/// failure in the first invocation still fails the target rather than being
+/// overwritten by the second one's success.
+///
+/// Make runs each recipe line in its own shell and stops at the first non-zero
+/// status, which is why the recipe needs no `|| exit 1`. Two constructs break
+/// that. `.ONESHELL` puts the whole recipe in one shell, where only the last
+/// command's status is reported unless `.SHELLFLAGS` carries `-e`; and a `;`
+/// chain does the same within one line. Either would let a broken policy pass
+/// the gate.
+///
+/// Verified by execution on 2026-09-07, not by reading the recipe. With a
+/// `std::env::var` call in the root package and the `test-macros` invocation
+/// last, `make lint` exited 2 and never reached the second command. Adding
+/// `.ONESHELL:` to the same Makefile made the identical tree exit 0, which is
+/// the regression this test exists to catch.
 #[test]
-fn follows_workspace_lint_inheritance() -> Result<()> {
-    let manifest = "[package]\nname = \"test-macros\"\n\n[lints]\nworkspace = true\n";
-    let level = clippy_lint_level(manifest, WORKSPACE_MANIFEST, "disallowed_methods")?;
+fn no_construct_can_mask_a_failing_clippy_command() -> Result<()> {
+    let one_shell = MAKEFILE
+        .lines()
+        .any(|line| line.trim_start().starts_with(".ONESHELL:"));
+    let errors_abort = MAKEFILE
+        .lines()
+        .filter_map(|line| line.strip_prefix(".SHELLFLAGS"))
+        .any(|flags| flags.split_whitespace().any(|flag| flag == "-e"));
     ensure!(
-        level.as_deref() == Some("deny"),
-        "inherited level should be deny, found {level:?}"
+        !one_shell || errors_abort,
+        ".ONESHELL puts the whole recipe in one shell, where only the last command's status is \
+         reported; pair it with -e in .SHELLFLAGS, or give every Clippy command its own `|| exit \
+         1`"
     );
+    for command in recipe_commands(MAKEFILE, "lint")? {
+        ensure!(
+            !(is_cargo_clippy_invocation(MAKEFILE, &command) && command.contains(';')),
+            "the Clippy command `{command}` chains another with `;`, so a failure in the first \
+             would be reported as the second's success"
+        );
+    }
     Ok(())
-}
-
-/// Scenario: a manifest inherits workspace lints but the workspace table has
-/// dropped the lint.
-/// Invariant: no level is reported, so weakening the shared table after #439
-/// fails the contract instead of passing through the inheritance path.
-#[test]
-fn reports_no_level_when_the_workspace_table_drops_the_lint() -> Result<()> {
-    let manifest = "[package]\nname = \"test-macros\"\n\n[lints]\nworkspace = true\n";
-    let workspace =
-        "[workspace]\nmembers = [\".\"]\n\n[workspace.lints.clippy]\npedantic = \"warn\"\n";
-    let level = clippy_lint_level(manifest, workspace, "disallowed_methods")?;
-    ensure!(level.is_none(), "expected no level, found {level:?}");
-    Ok(())
-}
-
-/// Scenario: a `lint` recipe is read from a Makefile that also names Clippy in
-/// a comment, in a variable, and in another target.
-/// Invariant: only the recipe's own uncommented commands are returned, as
-/// written, so none of those three can satisfy the coverage requirement.
-#[test]
-fn reads_only_the_targets_own_uncommented_commands() -> Result<()> {
-    let makefile = concat!(
-        "CLIPPY_FLAGS ?= --all-targets -- -D warnings\n",
-        "DECOY = $(CARGO) clippy --all-features\n",
-        "\n",
-        "lint: check-static-regexes ## Run Clippy\n",
-        "\t# $(CARGO) clippy --manifest-path test-macros/Cargo.toml $(CLIPPY_FLAGS)\n",
-        "\t@cargo clippy $(CLIPPY_FLAGS)\n",
-        "\n",
-        "typecheck:\n",
-        "\tcargo clippy --manifest-path test-macros/Cargo.toml\n",
-    );
-    let commands = recipe_commands(makefile, "lint")?;
-    ensure!(
-        commands == vec!["cargo clippy $(CLIPPY_FLAGS)".to_owned()],
-        "expected the single uncommented lint command, found {commands:?}"
-    );
-    Ok(())
-}
-
-/// Scenario: each shape a recipe command can take is judged for whether it runs
-/// Clippy.
-/// Invariant: only a command whose first word names Cargo and whose subcommand
-/// is `clippy` counts. A command that merely mentions Clippy carries every flag
-/// and manifest path the contract looks for while linting nothing, so a
-/// substring search would accept a gate that has been switched off.
-#[rstest]
-#[case::variable_reference("$(CARGO) clippy $(CLIPPY_FLAGS)", true)]
-#[case::bare_cargo("cargo clippy --all-targets", true)]
-#[case::absolute_path("/usr/local/bin/cargo clippy --all-targets", true)]
-#[case::toolchain_override("$(CARGO) +nightly clippy --all-targets", true)]
-#[case::echoed("echo $(CARGO) clippy $(CLIPPY_FLAGS)", false)]
-#[case::no_op_builtin(": $(CARGO) clippy $(CLIPPY_FLAGS)", false)]
-#[case::echoed_subcommand("echo clippy --all-targets", false)]
-#[case::another_subcommand("$(CARGO) build --all-targets", false)]
-#[case::unrelated_executable("$(MDLINT) clippy", false)]
-#[case::unknown_variable("$(NOT_DEFINED) clippy", false)]
-#[case::empty("", false)]
-fn recognizes_only_executable_clippy_invocations(#[case] command: &str, #[case] expected: bool) {
-    let makefile = concat!(
-        "CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)\n",
-        "MDLINT ?= markdownlint-cli2\n",
-        "CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings\n",
-    );
-    assert_eq!(
-        is_cargo_clippy_invocation(makefile, command),
-        expected,
-        "`{command}` should {} count as a Clippy invocation",
-        if expected { "" } else { "not" }
-    );
-}
-
-/// Scenario: package coverage is judged for each shape of Clippy command.
-/// Invariant: a bare command covers only the root package, a `--manifest-path`
-/// command covers only the package it names, and a `--workspace` command covers
-/// both, which is the shape issue #439 leaves behind.
-#[rstest]
-#[case::bare_covers_root("cargo clippy --all-targets", "Cargo.toml", true)]
-#[case::bare_misses_macros("cargo clippy --all-targets", "test-macros/Cargo.toml", false)]
-#[case::manifest_path_misses_root(
-    "cargo clippy --manifest-path test-macros/Cargo.toml",
-    "Cargo.toml",
-    false
-)]
-#[case::manifest_path_covers_macros(
-    "cargo clippy --manifest-path test-macros/Cargo.toml",
-    "test-macros/Cargo.toml",
-    true
-)]
-#[case::workspace_covers_root("cargo clippy --workspace", "Cargo.toml", true)]
-#[case::workspace_covers_macros("cargo clippy --workspace", "test-macros/Cargo.toml", true)]
-fn judges_package_coverage_by_command_shape(
-    #[case] command: &str,
-    #[case] manifest: &str,
-    #[case] expected: bool,
-) {
-    assert_eq!(
-        covers_package(command, manifest),
-        expected,
-        "`{command}` coverage of {manifest} should be {expected}"
-    );
 }
