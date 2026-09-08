@@ -13,13 +13,17 @@
 //! `pull_request` trigger exists, the job exists and carries no condition, and
 //! the steps that run the lint target and the test suite carry none either.
 //!
-//! Two details matter. The lint step's *whole* `run` value must be the command,
-//! not merely contain it, because `if false; then make lint; fi` contains it
-//! while running nothing. And conditions are judged by presence rather than by
-//! value: enumerating the spellings of a false condition is the same losing
-//! game as enumerating the spellings of a disabled command, and a condition
-//! that looks true can still be false on a pull request. Any condition on these
-//! steps is a decision that deserves a fresh look at this contract.
+//! Three details matter. The lint step's *whole* `run` value must be the
+//! command, not merely contain it, because `if false; then make lint; fi`
+//! contains it while running nothing. The command and the condition are checked
+//! on the *same* step: looked up separately, an unconditional step named `Lint`
+//! that runs something else would vouch for a second step carrying the real
+//! command behind `if: false`. And conditions are judged by presence rather
+//! than by value: enumerating the spellings of a false condition is the same
+//! losing game as enumerating the spellings of a disabled command, and a
+//! condition that looks true can still be false on a pull request. Any
+//! condition on these steps is a decision that deserves a fresh look at this
+//! contract.
 //!
 //! Mutation proof (2026-09-07). Each mutation was applied to
 //! `.github/workflows/ci.yml` alone, the suite run, and the mutation reverted:
@@ -40,7 +44,17 @@
 //!   -> no step runs `make lint` as its whole command
 //! delete the pull_request trigger
 //!   -> the workflow must run on pull_request, found ["workflow_dispatch"]
+//! keep an unconditional step named Lint running something else, and put
+//! `make lint` in a second step behind `if: false`
+//!   -> every step that runs `make lint` as its whole command carries a
+//!      condition, found [Bool(false)]
+//! do the same for the coverage action
+//!   -> every step that uses [the coverage action] carries a condition,
+//!      found [Bool(false)]
 //! ```
+//!
+//! Adding a second, skipped step running `make lint` alongside the real one was
+//! also applied, and passes: the gate still runs, so there is nothing to fail.
 
 use anyhow::{Context, Result, ensure};
 use serde_yaml::{Mapping, Value};
@@ -50,17 +64,14 @@ const WORKFLOW: &str = include_str!("../.github/workflows/ci.yml");
 /// The job whose steps carry the policy into CI.
 const GATE_JOB: &str = "build-test";
 
-/// The step that runs the lint target, and the command it must run.
-const LINT_STEP: (&str, &str) = ("Lint", "make lint");
+/// The command the lint step must run.
+const LINT_COMMAND: &str = "make lint";
 
 /// The action that runs the test suite, which includes the policy contracts.
 ///
 /// Matched on the part before the `@`, so a pin bump does not fail the
 /// contract while a different action does.
 const COVERAGE_ACTION: &str = "leynos/shared-actions/.github/actions/generate-coverage";
-
-/// The step that runs the test suite.
-const COVERAGE_STEP: &str = "Test and Measure Coverage";
 
 /// Parse the workflow into its top-level mapping.
 fn workflow() -> Result<Mapping> { serde_yaml::from_str(WORKFLOW).context("parse the CI workflow") }
@@ -94,22 +105,13 @@ fn steps<'a>(job: &'a Mapping, name: &str) -> Result<&'a Vec<Value>> {
         .with_context(|| format!("the {name} job should declare steps"))
 }
 
-/// Return the step with the given `name`.
-fn step<'a>(steps: &'a [Value], name: &str) -> Result<&'a Mapping> {
-    steps
-        .iter()
-        .filter_map(Value::as_mapping)
-        .find(|step| step.get(Value::from("name")).and_then(Value::as_str) == Some(name))
-        .with_context(|| format!("the {GATE_JOB} job should have a {name} step"))
-}
-
 /// Fail if `entry` carries an `if` condition.
 ///
 /// Presence is what is judged, not truth. A condition's value can be a template
 /// that is false only on a pull request, and enumerating the ways to write one
 /// is the same losing game as enumerating the ways to disable a command.
 fn ensure_unconditional(entry: &Mapping, description: &str) -> Result<()> {
-    let condition = entry.get(Value::from("if"));
+    let condition = condition(entry);
     ensure!(
         condition.is_none(),
         "the {description} must carry no condition, found {condition:?}"
@@ -143,47 +145,82 @@ fn the_gate_job_runs_unconditionally() -> Result<()> {
     ensure_unconditional(job, &format!("{GATE_JOB} job"))
 }
 
-/// Scenario: the step that runs the lint target is read.
-/// Invariant: its whole `run` value is the command, and it carries no
-/// condition. Matching a substring would accept `if false; then make lint; fi`,
-/// which runs nothing while reading correctly.
+/// Return the condition on `step`, if it carries one.
+fn condition(step: &Mapping) -> Option<&Value> { step.get(Value::from("if")) }
+
+/// Fail unless some step matching `selects` carries no condition.
+///
+/// The match and the condition check are deliberately the same step. Looking
+/// the command up across every step and then the condition up on a step chosen
+/// by name lets a workflow keep an unconditional step with the expected name
+/// while a second step carries the real command behind `if: false`, at which
+/// point both halves pass and the gate never runs.
+///
+/// One unconditional match is enough. A second, skipped step running the same
+/// command changes nothing: the gate still runs.
+fn ensure_some_step_runs_unconditionally(
+    steps: &[Value],
+    description: &str,
+    selects: impl Fn(&Mapping) -> bool,
+) -> Result<()> {
+    let matching: Vec<&Mapping> = steps
+        .iter()
+        .filter_map(Value::as_mapping)
+        .filter(|step| selects(step))
+        .collect();
+    ensure!(!matching.is_empty(), "no step {description}");
+    let conditions: Vec<&Value> = matching.iter().filter_map(|step| condition(step)).collect();
+    ensure!(
+        matching.len() > conditions.len(),
+        "every step that {description} carries a condition, found {conditions:?}"
+    );
+    Ok(())
+}
+
+/// Return whether `step`'s whole `run` value is `command`.
+fn runs_command(step: &Mapping, command: &str) -> bool {
+    step.get(Value::from("run"))
+        .and_then(Value::as_str)
+        .is_some_and(|run| run.trim() == command)
+}
+
+/// Return whether `step` uses `action`, whatever it is pinned to.
+fn uses_action(step: &Mapping, action: &str) -> bool {
+    step.get(Value::from("uses"))
+        .and_then(Value::as_str)
+        .is_some_and(|uses| uses.split('@').next() == Some(action))
+}
+
+/// Scenario: the steps are searched for one that runs the lint target.
+/// Invariant: at least one step both runs the command as its whole `run` value
+/// and carries no condition. Binding the two to the same step is the point:
+/// checked separately, an unconditional step named `Lint` that runs something
+/// else would vouch for a second step carrying `make lint` behind `if: false`.
+/// Matching a substring rather than the whole value would accept
+/// `if false; then make lint; fi`, which runs nothing while reading correctly.
 #[test]
 fn a_step_runs_the_lint_target_unconditionally() -> Result<()> {
-    let (name, command) = LINT_STEP;
     let workflow = workflow()?;
     let job = job(&workflow, GATE_JOB)?;
     let steps = steps(job, GATE_JOB)?;
-    let runs_command = steps
-        .iter()
-        .filter_map(Value::as_mapping)
-        .filter_map(|step| step.get(Value::from("run")))
-        .filter_map(Value::as_str)
-        .any(|run| run.trim() == command);
-    ensure!(
-        runs_command,
-        "no step runs `{command}` as its whole command"
-    );
-    ensure_unconditional(step(steps, name)?, &format!("{name} step"))
+    ensure_some_step_runs_unconditionally(
+        steps,
+        &format!("runs `{LINT_COMMAND}` as its whole command"),
+        |step| runs_command(step, LINT_COMMAND),
+    )
 }
 
-/// Scenario: the step that runs the test suite is read.
-/// Invariant: it uses the coverage action and carries no condition. The policy
-/// contracts are tests, so a skipped test step is a skipped contract, and every
-/// other assertion in this file would still pass.
+/// Scenario: the steps are searched for one that runs the test suite.
+/// Invariant: at least one step both uses the coverage action and carries no
+/// condition, bound to the same step for the same reason. The policy contracts
+/// are tests, so a skipped test step is a skipped contract, and every other
+/// assertion in this file would still pass.
 #[test]
 fn a_step_runs_the_test_suite_unconditionally() -> Result<()> {
     let workflow = workflow()?;
     let job = job(&workflow, GATE_JOB)?;
     let steps = steps(job, GATE_JOB)?;
-    let runs_tests = steps
-        .iter()
-        .filter_map(Value::as_mapping)
-        .filter_map(|step| step.get(Value::from("uses")))
-        .filter_map(Value::as_str)
-        .any(|uses| uses.split('@').next() == Some(COVERAGE_ACTION));
-    ensure!(runs_tests, "no step uses {COVERAGE_ACTION}");
-    ensure_unconditional(
-        step(steps, COVERAGE_STEP)?,
-        &format!("{COVERAGE_STEP} step"),
-    )
+    ensure_some_step_runs_unconditionally(steps, &format!("uses {COVERAGE_ACTION}"), |step| {
+        uses_action(step, COVERAGE_ACTION)
+    })
 }
