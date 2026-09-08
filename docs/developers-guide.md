@@ -892,8 +892,11 @@ wrapper. `tests/env_access_suppressions.rs` parses every compiled source with
 `syn` and rejects all of them, following `cfg_attr`, reaching attributes inside
 function bodies, and walking macro token streams, since an attribute written in
 a `macro_rules!` arm is honoured on expansion while never being parsed as an
-attribute. An item-scoped `#[expect]` carrying a reason is left
-alone, since that is the sanctioned form. A crate-scoped `#![expect(...)]` is
+attribute. The walk starts at the repository root rather than at a list of
+source directories, so a build script, bench, example or second binary added
+outside `src`, `tests` and `test-macros/src` is scanned like anything else. An
+item-scoped `#[expect]` carrying a reason is left alone, since that is the
+sanctioned form. A crate-scoped `#![expect(...)]` is
 not: one call anywhere in the crate fulfils it, so it reports nothing and never
 warns, which is `allow` by another name. Raw identifiers are normalized before
 comparison, because `r#allow` and `clippy::r#style` are the plain identifiers to
