@@ -49,6 +49,7 @@ tracing-test = "0.2"
 test-macros = { path = "test-macros" }
 toml = "1.1.2"
 syn = { version = "3.0.3", features = ["full", "visit", "extra-traits"] }
+proc-macro2 = "1"
 
 [lints.clippy]
 # `priority = -1` lets the individual lints below override the group; Cargo

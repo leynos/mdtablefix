@@ -589,6 +589,7 @@ dependencies = [
  "markup5ever_rcdom",
  "once_cell",
  "predicates",
+ "proc-macro2",
  "proptest",
  "rayon",
  "regex",
