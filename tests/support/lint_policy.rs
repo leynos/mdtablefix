@@ -9,6 +9,12 @@
 //! surfaces as a test failure with context rather than as a panic in a
 //! helper.
 
+#![allow(
+    dead_code,
+    reason = "this module is shared by four test binaries through #[path]; each uses a different \
+              subset of the readers, so `unused here` is not a defect"
+)]
+
 use anyhow::{Context, Result, ensure};
 use toml::{Table, Value};
 
