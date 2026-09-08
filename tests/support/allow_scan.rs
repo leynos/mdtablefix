@@ -18,9 +18,11 @@ use cap_std::{
     ambient_authority,
     fs_utf8::{Dir, DirEntry},
 };
+use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use syn::{
     AttrStyle,
     Attribute,
+    Macro,
     Meta,
     MetaList,
     Path,
@@ -110,6 +112,14 @@ pub fn rust_sources(root: &Utf8Path, relative: &str) -> Result<Vec<(Utf8PathBuf,
     Ok(sources)
 }
 
+/// One suppression found in a source, as it was written.
+struct Suppression {
+    /// Whether it was an inner attribute, for rendering it back.
+    inner: bool,
+    /// Its parsed contents.
+    meta: Meta,
+}
+
 /// Collect every attribute in a parsed file, wherever it sits.
 ///
 /// A visitor is used rather than a walk over top-level items so that
@@ -117,14 +127,79 @@ pub fn rust_sources(root: &Utf8Path, relative: &str) -> Result<Vec<(Utf8PathBuf,
 /// on expressions are all reached. A suppression hidden in a private helper
 /// disarms the policy for that helper just as effectively as one at the crate
 /// root.
+///
+/// Macro token streams are walked as well. `syn` keeps a `macro_rules!` arm's
+/// body as an opaque `TokenStream`, so an attribute written there is never
+/// parsed into one and never reaches `visit_attribute`; Clippy, which sees the
+/// expansion, honours it. Every group is descended into, so a suppression
+/// nested through more than one macro is still found.
 #[derive(Default)]
 struct AttributeCollector {
-    attributes: Vec<Attribute>,
+    found: Vec<Suppression>,
+}
+
+/// Return the attribute beginning at `index`, with the index just past it.
+///
+/// An attribute is `#`, optionally `!`, then a bracketed group. The group's
+/// contents are parsed as a `Meta`, so a recovered attribute is judged by the
+/// same function as a real one rather than by a second, weaker test. `None`
+/// covers everything else, including a group that does not parse: a macro body
+/// may hold token sequences that are not Rust until they are expanded.
+fn attribute_at(trees: &[TokenTree], index: usize) -> Option<(Suppression, usize)> {
+    let Some(TokenTree::Punct(hash)) = trees.get(index) else {
+        return None;
+    };
+    if hash.as_char() != '#' {
+        return None;
+    }
+    let mut next = index + 1;
+    let inner = matches!(trees.get(next), Some(TokenTree::Punct(bang)) if bang.as_char() == '!');
+    if inner {
+        next += 1;
+    }
+    let Some(TokenTree::Group(group)) = trees.get(next) else {
+        return None;
+    };
+    if group.delimiter() != Delimiter::Bracket {
+        return None;
+    }
+    let meta = syn::parse2::<Meta>(group.stream()).ok()?;
+    Some((Suppression { inner, meta }, next + 1))
+}
+
+impl AttributeCollector {
+    /// Record any attribute-shaped token sequence in `tokens`.
+    ///
+    /// Every group is descended into, so a suppression nested through more than
+    /// one macro is still found.
+    fn collect_from_tokens(&mut self, tokens: TokenStream) {
+        let trees: Vec<TokenTree> = tokens.into_iter().collect();
+        let mut index = 0;
+        while index < trees.len() {
+            if let Some((suppression, after)) = attribute_at(&trees, index) {
+                self.found.push(suppression);
+                index = after;
+                continue;
+            }
+            if let TokenTree::Group(group) = &trees[index] {
+                self.collect_from_tokens(group.stream());
+            }
+            index += 1;
+        }
+    }
 }
 
 impl<'ast> Visit<'ast> for AttributeCollector {
     fn visit_attribute(&mut self, attribute: &'ast Attribute) {
-        self.attributes.push(attribute.clone());
+        self.found.push(Suppression {
+            inner: matches!(attribute.style, AttrStyle::Inner(_)),
+            meta: attribute.meta.clone(),
+        });
+    }
+
+    fn visit_macro(&mut self, mac: &'ast Macro) {
+        self.collect_from_tokens(mac.tokens.clone());
+        syn::visit::visit_macro(self, mac);
     }
 }
 
@@ -179,28 +254,29 @@ fn suppressed_by_cfg_attr(list: &MetaList) -> Vec<String> {
         .collect()
 }
 
-/// Return the lint names one attribute suppresses, following `cfg_attr`.
+/// Return the lint names one attribute's contents suppress, following
+/// `cfg_attr`.
 ///
-/// `expect` yields nothing: it is the sanctioned form.
-fn suppressed_by(attribute: &Attribute) -> Vec<String> {
-    let Ok(list) = attribute.meta.require_list() else {
+/// `expect` yields nothing: it is the sanctioned form. Taking a `Meta` rather
+/// than an `Attribute` is what lets an attribute recovered from a macro token
+/// stream be judged by exactly this function, rather than by a second and
+/// weaker test written for tokens.
+fn suppressed_by(meta: &Meta) -> Vec<String> {
+    let Ok(list) = meta.require_list() else {
         return Vec::new();
     };
-    match render_path(attribute.path()).as_str() {
+    match render_path(meta.path()).as_str() {
         "allow" => allowed_lints(list),
         "cfg_attr" => suppressed_by_cfg_attr(list),
         _ => Vec::new(),
     }
 }
 
-/// Render an attribute roughly as written, for a failure message.
-fn render_attribute(attribute: &Attribute) -> String {
-    let bang = match attribute.style {
-        AttrStyle::Inner(_) => "!",
-        AttrStyle::Outer => "",
-    };
-    let path = render_path(attribute.path());
-    attribute.meta.require_list().map_or_else(
+/// Render a suppression roughly as written, for a failure message.
+fn render_attribute(suppression: &Suppression) -> String {
+    let bang = if suppression.inner { "!" } else { "" };
+    let path = render_path(suppression.meta.path());
+    suppression.meta.require_list().map_or_else(
         |_| format!("#{bang}[{path}]"),
         |list| format!("#{bang}[{path}({})]", list.tokens),
     )
@@ -214,10 +290,10 @@ pub fn suppressed_lints(contents: &str) -> Result<Vec<(String, String)>> {
     collector.visit_file(&parsed);
 
     let mut found = Vec::new();
-    for attribute in &collector.attributes {
-        for lint in suppressed_by(attribute) {
+    for suppression in &collector.found {
+        for lint in suppressed_by(&suppression.meta) {
             if PROTECTED_LINTS.contains(&lint.as_str()) {
-                found.push((lint, render_attribute(attribute)));
+                found.push((lint, render_attribute(suppression)));
             }
         }
     }

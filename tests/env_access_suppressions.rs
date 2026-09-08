@@ -73,7 +73,16 @@
 //! #![allow(clippy::all)] wrapped across several lines        -> offence
 //! #[allow(warnings, reason = "...")] on an item              -> offence
 //! #[allow(clippy::alloc_instead_of_core)] on an item         -> still passes
+//! an allow emitted from a macro_rules! arm                  -> offence
+//! the same, nested through a second macro                   -> offence
 //! ```
+//!
+//! The two macro cases are the reason the collector walks token streams as
+//! well as parsed attributes. `syn` keeps a `macro_rules!` arm's body opaque,
+//! so an attribute written there never becomes one and never reaches
+//! `visit_attribute`. Clippy sees the expansion and honours it: measured at
+//! both depths, a macro emitting `#[allow(clippy::disallowed_methods)]` over a
+//! live `std::env::var` call produced zero diagnostics.
 //!
 //! The last is the control that keeps this contract honest: that name begins
 //! with `clippy::all`, so a substring comparison reports it and a contributor
@@ -153,7 +162,10 @@ fn a_sanctioned_expect_is_not_an_offence() -> Result<()> {
 /// Invariant: each is an offence. The group form never names the lint, the
 /// `cfg_attr` form hides it from any line-start scan, and the function-local
 /// form disarms the policy for that helper alone, which is harder to spot in
-/// review than a crate-level one.
+/// review than a crate-level one. The macro forms are the reason the collector
+/// walks token streams: `syn` keeps a `macro_rules!` arm's body opaque, so an
+/// attribute written there is never parsed into one, while Clippy sees the
+/// expansion and honours it.
 #[rstest::rstest]
 #[case::names_the_lint("#![allow(clippy::disallowed_methods)]\n")]
 #[case::names_the_group("#![allow(clippy::style)]\n")]
@@ -166,6 +178,14 @@ fn a_sanctioned_expect_is_not_an_offence() -> Result<()> {
 #[case::wrapped_across_lines("#![allow(\n    clippy::all,\n    reason = \"wrapped\"\n)]\n")]
 #[case::on_an_item("#[allow(warnings, reason = \"x\")]\nfn item() {}\n")]
 #[case::inside_a_function("fn outer() {\n    #[allow(clippy::style)]\n    fn inner() {}\n}\n")]
+#[case::emitted_by_a_macro(
+    "macro_rules! silence {\n    () => {\n        #[allow(clippy::disallowed_methods)]\nfn \
+     probe() {}\n    };\n}\n"
+)]
+#[case::emitted_two_macros_deep(
+    "macro_rules! outer {\n    () => {\n        macro_rules! inner {\n            () => \
+     {\n#![allow(clippy::all)]\n            };\n        }\n    };\n}\n"
+)]
 fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Result<()> {
     let found = suppressed_lints(source)?;
     ensure!(found.len() == 1, "expected one offence, found {found:?}");
