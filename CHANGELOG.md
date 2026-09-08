@@ -4,6 +4,16 @@
 
 ### Added
 
+- An enforced environment-access policy. `clippy.toml` prohibits the six
+  `std::env` read and mutation methods, both packages deny
+  `clippy::disallowed_methods` along with `clippy::allow_attributes` and
+  `clippy::allow_attributes_without_reason` so a bare `#[allow]` cannot silence
+  it, and four tests guard the result: one over the configuration's shape, one
+  that runs Clippy over a fixture calling all six methods, one that rejects the
+  module-level `allow` that Clippy's own check misses, and one that keeps CI
+  running them. Recorded in
+  `docs/adrs/0006-environment-seam-taxonomy.md`.
+  ([#441](https://github.com/leynos/mdtablefix/issues/441))
 - Release assets for `x86_64-apple-darwin`, `aarch64-apple-darwin` and
   `x86_64-pc-windows-msvc`, so `cargo binstall` can install `mdtablefix` on
   macOS and Windows without compiling it.

@@ -33,6 +33,9 @@
   Accepted
 - [Ellipsis literal-region protection](adrs/0005-ellipsis-literal-regions.md):
   Accepted decision covering links, URLs, and filesystem-like tokens.
+- [Environment seam taxonomy](adrs/0006-environment-seam-taxonomy.md): Accepted
+  decision prohibiting ambient process-environment access and naming the
+  injection shapes that replace it.
 
 ## Reference material
 

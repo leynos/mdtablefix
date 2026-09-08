@@ -868,6 +868,105 @@ committing. Snapshot churn across many cases usually means the fixture is too
 broad or a shared transform changed behaviour; inspect the labelled case, mode,
 and arguments before accepting the new output.
 
+## Environment access policy
+
+Nothing in this repository reads or writes the process environment at run time,
+and `make lint` keeps it that way. `clippy.toml` lists `std::env::var`,
+`var_os`, `vars`, `vars_os`, `set_var`, and `remove_var` under
+`disallowed-methods`, and both package manifests raise
+`clippy::disallowed_methods` to `deny`, so a new call fails the lint gate on
+every target with a diagnostic naming the remedy. The compile-time `env!` macro
+is unaffected; it reads Cargo's build-time values, not the running process.
+
+Both manifests also deny `clippy::allow_attributes` and
+`clippy::allow_attributes_without_reason`, so the ban cannot be silenced with a
+bare `#[allow]`. Any suppression must be an `#[expect]` carrying a reason, which
+warns once it stops applying.
+
+Clippy's own check does not cover an inner attribute, so
+`#![allow(clippy::disallowed_methods, reason = "...")]` at the top of a module
+would switch the ban off and still pass `make lint`. Nor does the suppression
+have to name the lint: `disallowed_methods` sits in the `style` group, so
+`clippy::style` and `clippy::all` each do the same, as does a `cfg_attr`
+wrapper. `tests/env_access_suppressions.rs` parses every compiled source with
+`syn` and rejects all of them, following `cfg_attr`, reaching attributes inside
+function bodies, and walking macro token streams, since an attribute written in
+a `macro_rules!` arm is honoured on expansion while never being parsed as an
+attribute. The walk starts at the repository root rather than at a list of
+source directories, so a build script, bench, example or second binary added
+outside `src`, `tests` and `test-macros/src` is scanned like anything else. An
+item-scoped `#[expect]` carrying a reason is left alone, since that is the
+sanctioned form. A crate-scoped `#![expect(...)]` is
+not: one call anywhere in the crate fulfils it, so it reports nothing and never
+warns, which is `allow` by another name. Raw identifiers are normalized before
+comparison, because `r#allow` and `clippy::r#style` are the plain identifiers to
+the compiler.
+
+`lint` runs Clippy twice, once for the root package and once with
+`--manifest-path test-macros/Cargo.toml`. `test-macros` is a path
+dev-dependency rather than a workspace member, so the root invocation does not
+lint it. Issue #439 replaces both invocations with a single `--workspace` run.
+
+The two commands are separate recipe lines, which is what makes a failure in
+either one fail the target: Make runs each line in its own shell and stops at
+the first non-zero status. Nothing may stand between a Clippy command and that
+status. In particular, do not give one Make's `-` prefix, do not chain commands
+on one line with `;`, do not append a `||` fallback other than `|| exit 1`, do
+not pipe the output, and do not enable `.ONESHELL` without `-e` in
+`.SHELLFLAGS`. Under any of those, a failing Clippy run is reported as success
+and the gate passes with the policy broken.
+`tests/env_access_policy.rs` fails if any of them appears.
+
+The reason is parallelism. A test that sets or removes a variable changes it for
+every other test sharing the process, which forces the suite to serialize around
+it and leaves cores idle. Keeping the environment out of the code keeps the
+suite parallel.
+
+### Choosing a seam
+
+When a change does need a value the environment supplies, inject it and choose
+the shape by how many call sites the boundary has:
+
+Table: Injection shapes and when to use each.
+
+| Shape                      | Use when                                                     |
+| -------------------------- | ------------------------------------------------------------ |
+| An explicit value argument | One-off configuration. This is the default.                  |
+| A narrow reader closure    | A small reusable boundary; tests pass a fixed-value closure. |
+| A shared environment trait | Several values and several tests justify it; use `mockable`. |
+
+Do not introduce a trait for one variable read by one caller. Each seam is owned
+by the module that needs its value and stays private to it.
+
+A direct read is permitted only at a genuine composition root, meaning `main` or
+a function it calls directly to assemble the application. Such a site carries
+`#[expect(clippy::disallowed_methods, reason = "…")]` on the item itself, never
+`allow` and never a module- or crate-wide suppression. The expectation warns
+once the site is migrated, so the exception removes itself.
+
+### Environment variables in subprocess tests
+
+Integration tests spawn the binary through `assert_cmd`. A test that needs a
+controlled variable in the child sets it on the command with `Command::env` or
+clears it with `Command::env_remove`; `tests/static_regex_lint.rs` does this for
+`RG`. Changing the test process's own environment so the child inherits it is
+not an alternative, and no test should be serialized to make such a change safe.
+
+Two tests guard this. `tests/env_access_policy.rs` checks the policy's shape:
+it fails if any of the six entries leaves `clippy.toml`, if either package stops
+denying one of the three policy lints, or if the `lint` recipe stops running
+Clippy over both packages, every target, and every feature with warnings denied.
+`tests/env_access_enforcement.rs` checks that the policy fires, by running
+Clippy over a fixture package that calls all six methods and asserting one
+diagnostic per method with its reason string. A configuration can keep its shape
+and lint nothing, so the second test is not redundant.
+`tests/env_access_workflow.rs` checks that CI still runs any of it: the
+`pull_request` trigger is present, and neither the job nor the steps that run
+the lint target and the test suite carry a condition. A step keeps its `run`
+value when it is skipped, so nothing else here would notice an `if: false`. The
+full rationale is in
+[Environment seam taxonomy](adrs/0006-environment-seam-taxonomy.md).
+
 ## 1. Stateful pipeline helpers
 
 Internal state carriers centralize the buffered state used by the conversion
@@ -964,6 +1063,7 @@ Table: Integration-test support modules and their purposes.
 | `cli_stdin.rs`       | `run_cli_with_stdin` — invokes the binary feeding stdin           |
 | `fixtures.rs`        | Shared rstest fixtures (e.g. `broken_table`)                      |
 | `wrap_assertions.rs` | Higher-level assertions for wrapping output                       |
+| `lint_policy.rs`     | Readers for `clippy.toml`, manifests and Make recipes             |
 
 Each integration-test file declares the modules it needs via explicit
 `#[path = "support/…"]` attributes, keeping inter-test coupling minimal.

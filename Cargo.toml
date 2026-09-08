@@ -47,6 +47,18 @@ predicates = "3"
 trybuild = "1"
 tracing-test = "0.2"
 test-macros = { path = "test-macros" }
+toml = "1.1.2"
+syn = { version = "3.0.3", features = ["full", "visit", "extra-traits"] }
+proc-macro2 = "1.0.106"
 
 [lints.clippy]
-pedantic = "warn"
+# `priority = -1` lets the individual lints below override the group; Cargo
+# ignores table order and rejects a group sharing a lint's priority.
+pedantic = { level = "warn", priority = -1 }
+# Enforce the environment-access policy in every target of this package.
+# See `clippy.toml` and `docs/adrs/0006-environment-seam-taxonomy.md`.
+disallowed_methods = "deny"
+# Keep `#[allow]` from silently defeating the deny above: a suppression must
+# be an `#[expect]` carrying a reason, so it warns once it stops applying.
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"

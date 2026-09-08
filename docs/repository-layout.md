@@ -17,6 +17,7 @@ output and most test fixtures.
 ├── Cargo.lock
 ├── Cargo.toml
 ├── Makefile
+├── clippy.toml
 ├── README.md
 ├── docs/
 │   ├── adrs/
@@ -55,6 +56,9 @@ _Figure 1: Simplified repository tree._
 - `Cargo.lock`: Locked dependency graph for reproducible application builds.
 - `Makefile`: Canonical command gateway for build, test, lint, formatting,
   Markdown linting, and Mermaid validation.
+- `clippy.toml`: Clippy configuration. It lists the process-environment
+  methods the repository prohibits; see
+  [Environment seam taxonomy](adrs/0006-environment-seam-taxonomy.md).
 - `README.md`: Public project overview and quick-start material.
 - `CHANGELOG.md`: User-facing release history.
 
