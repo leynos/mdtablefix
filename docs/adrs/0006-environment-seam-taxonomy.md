@@ -59,9 +59,10 @@ honoured too. All three were measured against this repository.
 
 Clippy cannot close that itself, so `tests/env_access_suppressions.rs` parses
 every compiled Rust source with `syn` and fails if any attribute allows a
-protected lint. It follows `cfg_attr`, reaches attributes on nested and
-function-local items, walks macro token streams, and compares lint paths rather
-than substrings. Parsing
+protected lint. It walks the whole repository rather than a list of source
+directories, so a target added outside the usual ones is covered. It follows
+`cfg_attr`, reaches attributes on nested and function-local items, walks macro
+token streams, and compares lint paths rather than substrings. Parsing
 rather than searching is deliberate: a text scan cannot follow `cfg_attr`, and
 cannot tell an attribute from attribute-shaped text in a string literal or a
 doc comment, which is how its first draft reported this repository's own

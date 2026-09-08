@@ -118,49 +118,63 @@ mod allow_scan;
 
 use allow_scan::{rust_sources, suppressed_lints};
 
-/// Directories holding Rust sources the policy governs.
+/// Directories that must be represented in the scan.
+///
+/// These are not a filter. The scan walks the whole repository, so a source
+/// added outside them is still read; they are a tripwire, so that a walk which
+/// silently returned nothing, or stopped at the first directory, reports a
+/// failure rather than a clean repository.
 ///
 /// Fixture sources under `tests/data` keep a `.rs.txt` extension and nothing
 /// compiles them, so they are out of scope by construction.
-const SOURCE_ROOTS: [&str; 3] = ["src", "tests", "test-macros/src"];
+const REQUIRED_ROOTS: [&str; 3] = ["src/", "tests/", "test-macros/src/"];
 
 /// The crate root, used as the capability root for the scan.
 fn manifest_dir() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
 
-/// Scenario: every compiled Rust source is parsed and its attributes examined.
+/// Scenario: every Rust source in the repository is parsed and its attributes
+/// examined.
 /// Invariant: none allows a protected lint. The inner form is the case that
 /// matters, because Clippy's own `allow_attributes` cannot see one, so nothing
 /// else in this repository would notice the policy had been switched off.
+///
+/// The walk starts at the repository root rather than at a list of source
+/// directories. A list is a filter, and a filter is another thing the
+/// mechanism cannot see past: a build script, a bench, an example or a second
+/// binary declared outside it would be compiled, would carry any suppression
+/// it liked, and would leave this test green. Mutation: `benches/probe.rs`
+/// holding `#![allow(clippy::disallowed_methods)]`, with the bench declared in
+/// `Cargo.toml`, fails here with `benches/probe.rs allows
+/// clippy::disallowed_methods`; under the previous root list it passed.
 #[test]
 fn no_source_allows_a_policy_lint() -> Result<()> {
     let root = manifest_dir();
-    let mut offences = Vec::new();
-    let mut scanned = 0_usize;
-
-    for source_root in SOURCE_ROOTS {
-        let sources = rust_sources(&root, source_root)?;
+    let sources = rust_sources(&root, ".")?;
+    for required in REQUIRED_ROOTS {
         ensure!(
-            !sources.is_empty(),
-            "{source_root} should contain Rust sources to scan"
+            sources
+                .iter()
+                .any(|(path, _)| path.as_str().starts_with(required)),
+            "the scan should reach {required}, saw {} sources",
+            sources.len()
         );
-        scanned += sources.len();
-        for (path, contents) in sources {
-            for (lint, attribute) in
-                suppressed_lints(&contents).with_context(|| format!("scan {path}"))?
-            {
-                offences.push(format!("{path} allows {lint} via {attribute}"));
-            }
+    }
+
+    let mut offences = Vec::new();
+    for (path, contents) in &sources {
+        for (lint, attribute) in
+            suppressed_lints(contents).with_context(|| format!("scan {path}"))?
+        {
+            offences.push(format!("{path} allows {lint} via {attribute}"));
         }
     }
 
     ensure!(
-        scanned > 20,
-        "the scan should cover the sources, saw {scanned}"
-    );
-    ensure!(
         offences.is_empty(),
-        "no source may allow a protected lint; use an item-scoped `#[expect(..., reason = \
-         \"...\")]` at a composition root instead:\n{}",
+        concat!(
+            "no source may allow a protected lint; use an item-scoped ",
+            "`#[expect(..., reason = \"...\")]` at a composition root instead:\n{}"
+        ),
         offences.join("\n")
     );
     Ok(())
@@ -208,8 +222,10 @@ fn a_sanctioned_expect_is_not_an_offence() -> Result<()> {
 #[case::on_an_item("#[allow(warnings, reason = \"x\")]\nfn item() {}\n")]
 #[case::inside_a_function("fn outer() {\n    #[allow(clippy::style)]\n    fn inner() {}\n}\n")]
 #[case::emitted_by_a_macro(
-    "macro_rules! silence {\n    () => {\n        #[allow(clippy::disallowed_methods)]\nfn \
-     probe() {}\n    };\n}\n"
+    concat!(
+        "macro_rules! silence {\n    () => {\n        ",
+        "#[allow(clippy::disallowed_methods)]\nfn probe() {}\n    };\n}\n"
+    )
 )]
 #[case::crate_scoped_expect("#![expect(clippy::disallowed_methods, reason = \"x\")]\n")]
 #[case::crate_scoped_expect_in_cfg_attr(
@@ -219,8 +235,10 @@ fn a_sanctioned_expect_is_not_an_offence() -> Result<()> {
 #[case::raw_lint_name("#![allow(clippy::r#style)]\n")]
 #[case::raw_both("#![r#allow(clippy::r#all)]\n")]
 #[case::emitted_two_macros_deep(
-    "macro_rules! outer {\n    () => {\n        macro_rules! inner {\n            () => \
-     {\n#![allow(clippy::all)]\n            };\n        }\n    };\n}\n"
+    concat!(
+        "macro_rules! outer {\n    () => {\n        macro_rules! inner {\n            ",
+        "() => {\n#![allow(clippy::all)]\n            };\n        }\n    };\n}\n"
+    )
 )]
 fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Result<()> {
     let found = suppressed_lints(source)?;
