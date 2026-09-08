@@ -7,10 +7,18 @@
 //! enforceable, does not fire on an inner attribute, so a crate-level
 //! suppression disarms the policy with every gate still green.
 //!
-//! `expect` is untouched. It is the sanctioned form at a composition root
-//! precisely because it warns once the site grows a seam; `allow` is silent
-//! forever. A scan that rejected `expect` would push contributors toward the
-//! attribute that never warns.
+//! An *item-scoped* `expect` is untouched. It is the sanctioned form at a
+//! composition root precisely because it warns once the site grows a seam;
+//! `allow` is silent forever, and a scan that rejected `expect` outright would
+//! push contributors toward the attribute that never warns.
+//!
+//! A *crate-scoped* `expect` earns no such exemption. One call anywhere in the
+//! crate fulfils it, so it reports nothing and raises no unfulfilled-
+//! expectation warning either. Measured with a live `std::env::var` call,
+//! `#![expect(clippy::disallowed_methods)]` gave zero diagnostics and zero
+//! unfulfilled warnings: silence indistinguishable from `allow`. So `expect` is
+//! judged by scope, and the scope that counts is the outermost attribute's,
+//! carried down through any `cfg_attr` nesting.
 //!
 //! # What Clippy actually honours
 //!
@@ -25,8 +33,16 @@
 //! #![allow(clippy::style)]                              0   <- the lint's group
 //! #![allow(clippy::all)]                                0
 //! #![cfg_attr(all(), allow(clippy::disallowed_methods))] 0
+//! #![expect(clippy::disallowed_methods)]                0   <- and 0 unfulfilled
+//! #![r#allow(clippy::disallowed_methods)]               0   <- raw identifier
+//! #![allow(clippy::r#style)]                            0   <- raw identifier
 //! #![allow(warnings)]                                   1   <- see below
 //! ```
+//!
+//! The raw spellings are the compiler's own: `r#allow` and `allow` are one
+//! identifier, as are `clippy::r#style` and `clippy::style`. Comparing the
+//! written form would let either through, so every path segment is unrawed
+//! before it is compared.
 //!
 //! Naming the lint is therefore not enough: Clippy places
 //! `disallowed_methods` in `style`, so the group and the wider `clippy::all`
@@ -75,6 +91,12 @@
 //! #[allow(clippy::alloc_instead_of_core)] on an item         -> still passes
 //! an allow emitted from a macro_rules! arm                  -> offence
 //! the same, nested through a second macro                   -> offence
+//! #![expect(clippy::disallowed_methods, reason = "...")]     -> offence
+//! #![cfg_attr(all(), expect(clippy::disallowed_methods, ..))] -> offence
+//! #![r#allow(clippy::disallowed_methods)]                    -> offence
+//! #![allow(clippy::r#style)]                                 -> offence
+//! #[expect(clippy::disallowed_methods, reason = "...")]      -> still passes
+//!   on a function, which is the sanctioned composition root
 //! ```
 //!
 //! The two macro cases are the reason the collector walks token streams as
@@ -166,6 +188,13 @@ fn a_sanctioned_expect_is_not_an_offence() -> Result<()> {
 /// walks token streams: `syn` keeps a `macro_rules!` arm's body opaque, so an
 /// attribute written there is never parsed into one, while Clippy sees the
 /// expansion and honours it.
+///
+/// A crate-scoped `expect` is here rather than among the sanctioned forms. One
+/// call anywhere in the crate fulfils it, so it reports nothing and never
+/// warns, which is `allow` by another name. Only an item-scoped outer `expect`
+/// earns its exemption, and the raw spellings are included because Clippy reads
+/// `r#allow` and `clippy::r#style` as the plain identifiers while a written
+/// comparison would not.
 #[rstest::rstest]
 #[case::names_the_lint("#![allow(clippy::disallowed_methods)]\n")]
 #[case::names_the_group("#![allow(clippy::style)]\n")]
@@ -182,6 +211,13 @@ fn a_sanctioned_expect_is_not_an_offence() -> Result<()> {
     "macro_rules! silence {\n    () => {\n        #[allow(clippy::disallowed_methods)]\nfn \
      probe() {}\n    };\n}\n"
 )]
+#[case::crate_scoped_expect("#![expect(clippy::disallowed_methods, reason = \"x\")]\n")]
+#[case::crate_scoped_expect_in_cfg_attr(
+    "#![cfg_attr(all(), expect(clippy::disallowed_methods, reason = \"x\"))]\n"
+)]
+#[case::raw_attribute_name("#![r#allow(clippy::disallowed_methods)]\n")]
+#[case::raw_lint_name("#![allow(clippy::r#style)]\n")]
+#[case::raw_both("#![r#allow(clippy::r#all)]\n")]
 #[case::emitted_two_macros_deep(
     "macro_rules! outer {\n    () => {\n        macro_rules! inner {\n            () => \
      {\n#![allow(clippy::all)]\n            };\n        }\n    };\n}\n"
@@ -194,9 +230,9 @@ fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Resu
 
 /// Scenario: text that resembles a suppression but is not one.
 /// Invariant: none is an offence. A doc comment describing the policy, a string
-/// literal quoting it, and a lint whose name merely contains a protected one
-/// must all pass. This file and its siblings quote the attribute they prohibit,
-/// and `clippy::alloc_instead_of_core` begins with `clippy::all`, so a
+/// literal quoting it, an item-scoped `expect`, and a lint whose name merely
+/// contains a protected one must all pass. This file and its siblings quote the attribute they
+/// prohibit, and `clippy::alloc_instead_of_core` begins with `clippy::all`, so a
 /// substring comparison would report both.
 #[rstest::rstest]
 #[case::prose(
@@ -205,7 +241,9 @@ fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Resu
 #[case::string_literal("const EXAMPLE: &str = \"#![allow(warnings)]\";\n")]
 #[case::longer_name("#[allow(clippy::alloc_instead_of_core)]\nfn f() {}\n")]
 #[case::unrelated_lint("#![allow(dead_code, reason = \"shared module\")]\n")]
-#[case::expect_form("#![expect(clippy::all, reason = \"x\")]\n")]
+#[case::item_scoped_expect(
+    "#[expect(clippy::disallowed_methods, reason = \"composition root\")]\nfn f() {}\n"
+)]
 fn text_resembling_a_suppression_is_not_an_offence(#[case] source: &str) -> Result<()> {
     let found = suppressed_lints(source)?;
     ensure!(found.is_empty(), "expected no offence, found {found:?}");

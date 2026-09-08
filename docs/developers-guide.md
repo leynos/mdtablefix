@@ -892,8 +892,12 @@ wrapper. `tests/env_access_suppressions.rs` parses every compiled source with
 `syn` and rejects all of them, following `cfg_attr`, reaching attributes inside
 function bodies, and walking macro token streams, since an attribute written in
 a `macro_rules!` arm is honoured on expansion while never being parsed as an
-attribute. An `#[expect]` carrying a reason is left alone, since
-that is the sanctioned form.
+attribute. An item-scoped `#[expect]` carrying a reason is left
+alone, since that is the sanctioned form. A crate-scoped `#![expect(...)]` is
+not: one call anywhere in the crate fulfils it, so it reports nothing and never
+warns, which is `allow` by another name. Raw identifiers are normalized before
+comparison, because `r#allow` and `clippy::r#style` are the plain identifiers to
+the compiler.
 
 `lint` runs Clippy twice, once for the root package and once with
 `--manifest-path test-macros/Cargo.toml`. `test-macros` is a path
