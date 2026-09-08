@@ -93,7 +93,14 @@
 //! append `|| true || exit 1` to the root invocation
 //!   -> no_construct_can_mask_a_failing_clippy_command
 //!      has a `||` fallback other than `exit 1`, which substitutes a success
+//! add a second `lint:` target further down the Makefile
+//!   -> the lint target should be declared once, found 2 declarations
 //! ```
+//!
+//! That last one is a live hole, not a hypothetical: GNU Make keeps the later
+//! recipe for a target, warning that it overrides the earlier, so the added
+//! `lint:` ran and the real one did not. Reading the first declaration would
+//! have judged a recipe Make never runs.
 //!
 //! Two forms that keep the status intact were also applied, and pass:
 //! `.ONESHELL:` paired with `-e` in `.SHELLFLAGS`, and an explicit
@@ -117,16 +124,18 @@
 //! reverted.
 use anyhow::{Context, Result, bail, ensure};
 
-#[path = "support/lint_policy.rs"]
-mod lint_policy;
+#[path = "support/make_reader.rs"]
+mod make_reader;
 
-use lint_policy::{
+#[path = "support/policy_reader.rs"]
+mod policy_reader;
+
+use make_reader::{expand_make_variables, recipe_commands};
+use policy_reader::{
     clippy_lint_level,
     covers_package,
     disallowed_method_paths,
-    expand_make_variables,
     is_cargo_clippy_invocation,
-    recipe_commands,
     status_masking_construct,
 };
 

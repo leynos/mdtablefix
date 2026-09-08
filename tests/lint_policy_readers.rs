@@ -14,17 +14,18 @@
 use anyhow::{Result, ensure};
 use rstest::rstest;
 
-#[path = "support/lint_policy.rs"]
-mod lint_policy;
+#[path = "support/make_reader.rs"]
+mod make_reader;
 
-use lint_policy::{
-    RecipeCommand,
+#[path = "support/policy_reader.rs"]
+mod policy_reader;
+
+use make_reader::{RecipeCommand, expand_make_variables, recipe_commands};
+use policy_reader::{
     clippy_lint_level,
     covers_package,
     disallowed_method_paths,
-    expand_make_variables,
     is_cargo_clippy_invocation,
-    recipe_commands,
     status_masking_construct,
 };
 

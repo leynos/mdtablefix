@@ -22,10 +22,10 @@
 
 use proptest::prelude::*;
 
-#[path = "support/lint_policy.rs"]
-mod lint_policy;
+#[path = "support/make_reader.rs"]
+mod make_reader;
 
-use lint_policy::{expand_make_variables, recipe_commands};
+use make_reader::{expand_make_variables, recipe_commands};
 
 /// The command every generated recipe line carries.
 ///

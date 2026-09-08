@@ -147,5 +147,11 @@ reintroduces exactly the shared state the policy exists to prevent.
 
 - [Netsuke seam taxonomy](https://github.com/leynos/netsuke/blob/main/docs/adr-008-environment-seam-taxonomy.md),
   the record this one mirrors.
-- Issue #441, which requested this policy; issues #438 and #439, which move the
-  lint declaration to the workspace.
+- [Issue #441](https://github.com/leynos/mdtablefix/issues/441):
+  requested this policy.
+- [Issue #438](https://github.com/leynos/mdtablefix/issues/438):
+  aligns the wider lint baseline with netsuke's.
+- [Issue #439](https://github.com/leynos/mdtablefix/issues/439):
+  makes the two packages one workspace, moving the lint declaration there.
+- [Clippy's `allow_attributes`](https://rust-lang.github.io/rust-clippy/master/index.html#allow_attributes):
+  the check that does not fire on inner attributes.
