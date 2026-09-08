@@ -215,8 +215,9 @@ fn push_command(commands: &mut Vec<RecipeCommand>, command: &RecipeCommand) {
 ///
 /// * the `-` recipe prefix, which tells Make to ignore the status outright;
 /// * a `;` chain, where only the last command's status is reported;
-/// * a `||` fallback such as `|| true`, which substitutes a success. `|| exit 1` is the exception,
-///   since it re-raises the failure rather than hiding it;
+/// * a `||` fallback such as `|| true`, which substitutes a success. `|| exit 1` is the only
+///   exception, since it re-raises the failure rather than hiding it, and every fallback in a chain
+///   must be that one: in `cmd || true || exit 1` the shell never reaches the `exit 1`;
 /// * a pipeline, whose status is the last stage's, not the command's.
 ///
 /// Returns `None` when the status does reach Make.
@@ -227,8 +228,14 @@ pub fn status_masking_construct(command: &RecipeCommand) -> Option<&'static str>
     if command.text.contains(';') {
         return Some("chains another command with `;`, so only the last status is reported");
     }
-    if let Some((_, fallback)) = command.text.rsplit_once("||")
-        && fallback.trim() != "exit 1"
+    // Every fallback is judged, not just the last. In `cmd || true || exit 1`
+    // the last one is `exit 1`, but `true` succeeds first, so the shell never
+    // reaches it and the line exits 0 with `cmd` having failed.
+    if command
+        .text
+        .split("||")
+        .skip(1)
+        .any(|fallback| fallback.trim() != "exit 1")
     {
         return Some("has a `||` fallback other than `exit 1`, which substitutes a success");
     }

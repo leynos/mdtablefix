@@ -90,6 +90,9 @@
 //! pipe the root invocation into `tail -5`
 //!   -> no_construct_can_mask_a_failing_clippy_command
 //!      is piped, so the reported status is the last stage's
+//! append `|| true || exit 1` to the root invocation
+//!   -> no_construct_can_mask_a_failing_clippy_command
+//!      has a `||` fallback other than `exit 1`, which substitutes a success
 //! ```
 //!
 //! Two forms that keep the status intact were also applied, and pass:
@@ -97,9 +100,12 @@
 //! `|| exit 1`. The rule is about the status reaching Make, not about the
 //! construct.
 //!
-//! Each of `|| true`, the `-` prefix and the pipe was confirmed to be a live
-//! hole before it was closed: with a `std::env::var` call in the root package,
-//! `make lint` exited 0 under all three while this file's tests passed.
+//! Each of `|| true`, `|| true || exit 1`, the `-` prefix and the pipe was
+//! confirmed to be a live hole before it was closed: with a `std::env::var`
+//! call in the root package, `make lint` exited 0 under all four while this
+//! file's tests passed. The chained form matters because the last fallback is
+//! `exit 1`, so judging only the final one clears it while `true` has already
+//! swallowed the failure.
 //!
 //! Enforcement itself was proven separately, in each package: a temporary
 //! `std::env::var` call in `src/lib.rs`, and another in

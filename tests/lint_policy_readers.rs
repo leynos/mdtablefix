@@ -300,6 +300,8 @@ fn returns_a_command_whose_continuation_is_missing() -> Result<()> {
 #[case::or_true("cargo clippy --all-targets || true", false, true)]
 #[case::or_colon("cargo clippy --all-targets || :", false, true)]
 #[case::or_exit_one("cargo clippy --all-targets || exit 1", false, false)]
+#[case::chained_fallback("cargo clippy --all-targets || true || exit 1", false, true)]
+#[case::two_exits("cargo clippy A || exit 1 || exit 1", false, false)]
 #[case::and_chain("cargo clippy A && cargo clippy B", false, false)]
 #[case::piped("cargo clippy --all-targets | tail -5", false, true)]
 fn reports_every_construct_that_masks_an_exit_status(
