@@ -885,9 +885,13 @@ warns once it stops applying.
 
 Clippy's own check does not cover an inner attribute, so
 `#![allow(clippy::disallowed_methods, reason = "...")]` at the top of a module
-would switch the ban off and still pass `make lint`.
-`tests/env_access_suppressions.rs` reads the sources and rejects that, along
-with an allow of `warnings` or `clippy::all`.
+would switch the ban off and still pass `make lint`. Nor does the suppression
+have to name the lint: `disallowed_methods` sits in the `style` group, so
+`clippy::style` and `clippy::all` each do the same, as does a `cfg_attr`
+wrapper. `tests/env_access_suppressions.rs` parses every compiled source with
+`syn` and rejects all of them, following `cfg_attr` and reaching attributes
+inside function bodies. An `#[expect]` carrying a reason is left alone, since
+that is the sanctioned form.
 
 `lint` runs Clippy twice, once for the root package and once with
 `--manifest-path test-macros/Cargo.toml`. `test-macros` is a path
