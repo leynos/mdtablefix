@@ -10,8 +10,13 @@
 //! nothing.
 //!
 //! So this file asserts the path from the trigger to the command: the
-//! `pull_request` trigger exists, the job exists and carries no condition, and
-//! the steps that run the lint target and the test suite carry none either.
+//! `pull_request` trigger exists, and the job and the steps that run the lint
+//! target and the test suite are each reachable and blocking.
+//!
+//! Two keys make a step non-blocking and they are not interchangeable. `if`
+//! decides whether it runs at all; `continue-on-error` lets it run, fail, and
+//! report success anyway. A contract that rejected only the first would accept
+//! a gate that runs, finds the policy broken, and goes green.
 //!
 //! Three details matter. The lint step's *whole* `run` value must be the
 //! command, not merely contain it, because `if false; then make lint; fi`
@@ -51,12 +56,18 @@
 //! do the same for the coverage action
 //!   -> every step that uses [the coverage action] carries a condition,
 //!      found [Bool(false)]
+//! continue-on-error: true on the Lint step
+//!   -> every step that runs `make lint` as its whole command is non-blocking:
+//!      sets continue-on-error to Bool(true), so its failure is ignored
+//! continue-on-error: true on the build-test job
+//!   -> the build-test job sets continue-on-error to Bool(true), so its
+//!      failure is ignored
 //! ```
 //!
 //! Adding a second, skipped step running `make lint` alongside the real one was
 //! also applied, and passes: the gate still runs, so there is nothing to fail.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use serde_yaml::{Mapping, Value};
 
 const WORKFLOW: &str = include_str!("../.github/workflows/ci.yml");
@@ -111,11 +122,9 @@ fn steps<'a>(job: &'a Mapping, name: &str) -> Result<&'a Vec<Value>> {
 /// that is false only on a pull request, and enumerating the ways to write one
 /// is the same losing game as enumerating the ways to disable a command.
 fn ensure_unconditional(entry: &Mapping, description: &str) -> Result<()> {
-    let condition = condition(entry);
-    ensure!(
-        condition.is_none(),
-        "the {description} must carry no condition, found {condition:?}"
-    );
+    if let Some(reason) = non_blocking(entry) {
+        bail!("the {description} {reason}");
+    }
     Ok(())
 }
 
@@ -145,8 +154,20 @@ fn the_gate_job_runs_unconditionally() -> Result<()> {
     ensure_unconditional(job, &format!("{GATE_JOB} job"))
 }
 
-/// Return the condition on `step`, if it carries one.
-fn condition(step: &Mapping) -> Option<&Value> { step.get(Value::from("if")) }
+/// Return why `entry` would not block a merge on failure, if it would not.
+///
+/// Two keys do it, and they are not interchangeable. `if` decides whether the
+/// step or job runs at all; `continue-on-error` lets it run, fail, and report
+/// success anyway. A contract that rejected only the first would accept a gate
+/// that runs, finds the policy broken, and goes green.
+fn non_blocking(entry: &Mapping) -> Option<String> {
+    if let Some(condition) = entry.get(Value::from("if")) {
+        return Some(format!("carries the condition {condition:?}"));
+    }
+    entry
+        .get(Value::from("continue-on-error"))
+        .map(|value| format!("sets continue-on-error to {value:?}, so its failure is ignored"))
+}
 
 /// Fail unless some step matching `selects` carries no condition.
 ///
@@ -169,10 +190,14 @@ fn ensure_some_step_runs_unconditionally(
         .filter(|step| selects(step))
         .collect();
     ensure!(!matching.is_empty(), "no step {description}");
-    let conditions: Vec<&Value> = matching.iter().filter_map(|step| condition(step)).collect();
+    let excuses: Vec<String> = matching
+        .iter()
+        .filter_map(|step| non_blocking(step))
+        .collect();
     ensure!(
-        matching.len() > conditions.len(),
-        "every step that {description} carries a condition, found {conditions:?}"
+        matching.len() > excuses.len(),
+        "every step that {description} is non-blocking: {}",
+        excuses.join("; ")
     );
     Ok(())
 }
