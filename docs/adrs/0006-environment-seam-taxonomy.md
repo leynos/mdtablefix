@@ -51,10 +51,20 @@ enforced rather than merely stated.
 
 `clippy::allow_attributes` does not fire on an *inner* attribute, so
 `#![allow(clippy::disallowed_methods, reason = "...")]` at the top of a module
-switches the ban off for everything in it and passes `make lint`. Clippy cannot
-close that itself, so `tests/env_access_suppressions.rs` reads the sources and
-fails if any compiled Rust file allows a policy lint, or allows `warnings` or
-`clippy::all`, which would cover them without naming them.
+switches the ban off for everything in it and passes `make lint`. Naming the
+lint is not even necessary: Clippy places `disallowed_methods` in the `style`
+group, so `clippy::style` and the wider `clippy::all` each switch it off without
+mentioning it, and `#![cfg_attr(all(), allow(clippy::disallowed_methods))]` is
+honoured too. All three were measured against this repository.
+
+Clippy cannot close that itself, so `tests/env_access_suppressions.rs` parses
+every compiled Rust source with `syn` and fails if any attribute allows a
+protected lint. It follows `cfg_attr`, reaches attributes on nested and
+function-local items, and compares lint paths rather than substrings. Parsing
+rather than searching is deliberate: a text scan cannot follow `cfg_attr`, and
+cannot tell an attribute from attribute-shaped text in a string literal or a
+doc comment, which is how its first draft reported this repository's own
+mutation records as violations.
 
 The lint level is declared in each package's own `[lints.clippy]` table, and
 `lint` runs Clippy twice: once for the root package and once with

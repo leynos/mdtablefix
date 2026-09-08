@@ -1,0 +1,225 @@
+//! Readers behind the environment-access suppression scan.
+//!
+//! `tests/env_access_suppressions.rs` states the contract; this module
+//! holds the walk and the parsing it needs. The two are separated so
+//! neither file outgrows the repository's 400-line limit, and so the
+//! readers can be exercised against inline fixtures as well as against the
+//! repository's own sources.
+//!
+//! Every reader returns a `Result`. None panics, so a source that does not
+//! parse surfaces as a test failure naming the file rather than as a panic
+//! in a helper.
+
+use std::collections::VecDeque;
+
+use anyhow::{Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, DirEntry},
+};
+use syn::{
+    AttrStyle,
+    Attribute,
+    Meta,
+    MetaList,
+    Path,
+    Token,
+    punctuated::Punctuated,
+    visit::Visit,
+};
+
+/// Lint names whose suppression disarms the environment-access policy.
+///
+/// Each is either a policy lint, a group containing one, or a blanket that
+/// covers them. See the module documentation for the measurement behind each.
+const PROTECTED_LINTS: [&str; 7] = [
+    // The policy itself, and the groups that contain it.
+    "clippy::disallowed_methods",
+    "clippy::style",
+    "clippy::all",
+    "warnings",
+    // The guard that keeps a suppression to an `expect`, and its group.
+    "clippy::allow_attributes",
+    "clippy::allow_attributes_without_reason",
+    "clippy::restriction",
+];
+
+/// What one directory entry contributes to the walk.
+enum Found {
+    /// A subdirectory, with the capability to read it and its path.
+    Directory(Dir, Utf8PathBuf),
+    /// A Rust source, with its path and contents.
+    Source(Utf8PathBuf, String),
+    /// Anything else, which the scan does not govern.
+    Ignored,
+}
+
+/// Classify one directory entry, reading it if it is a Rust source.
+///
+/// Split out from [`rust_sources`] so the walk reads as a walk: the name, type,
+/// open and read steps are four more fallible operations that otherwise sit
+/// between the loop and the one decision it makes.
+fn classify_entry(current: &Dir, prefix: &Utf8Path, entry: &DirEntry) -> Result<Found> {
+    let name = entry
+        .file_name()
+        .with_context(|| format!("read a file name in {prefix}"))?;
+    let path = prefix.join(&name);
+    if entry
+        .file_type()
+        .with_context(|| format!("stat {path}"))?
+        .is_dir()
+    {
+        let child = current
+            .open_dir(&name)
+            .with_context(|| format!("open {path}"))?;
+        return Ok(Found::Directory(child, path));
+    }
+    if path.extension() != Some("rs") {
+        return Ok(Found::Ignored);
+    }
+    let contents = current
+        .read_to_string(&name)
+        .with_context(|| format!("read {path}"))?;
+    Ok(Found::Source(path, contents))
+}
+
+/// Read every `.rs` file under `relative`, breadth first, with its contents.
+///
+/// Each directory is opened through its parent's capability rather than by
+/// absolute path, so the walk cannot leave the tree it was handed.
+pub fn rust_sources(root: &Utf8Path, relative: &str) -> Result<Vec<(Utf8PathBuf, String)>> {
+    let directory = Dir::open_ambient_dir(root.join(relative), ambient_authority())
+        .with_context(|| format!("open {relative}"))?;
+    let mut pending = VecDeque::from([(directory, Utf8PathBuf::from(relative))]);
+    let mut sources = Vec::new();
+
+    while let Some((current, prefix)) = pending.pop_front() {
+        let entries = current
+            .entries()
+            .with_context(|| format!("read {prefix}"))?;
+        for candidate in entries {
+            let entry = candidate.with_context(|| format!("read an entry of {prefix}"))?;
+            match classify_entry(&current, &prefix, &entry)? {
+                Found::Directory(child, path) => pending.push_back((child, path)),
+                Found::Source(path, contents) => sources.push((path, contents)),
+                Found::Ignored => {}
+            }
+        }
+    }
+    Ok(sources)
+}
+
+/// Collect every attribute in a parsed file, wherever it sits.
+///
+/// A visitor is used rather than a walk over top-level items so that
+/// attributes on nested items, on items declared inside a function body, and
+/// on expressions are all reached. A suppression hidden in a private helper
+/// disarms the policy for that helper just as effectively as one at the crate
+/// root.
+#[derive(Default)]
+struct AttributeCollector {
+    attributes: Vec<Attribute>,
+}
+
+impl<'ast> Visit<'ast> for AttributeCollector {
+    fn visit_attribute(&mut self, attribute: &'ast Attribute) {
+        self.attributes.push(attribute.clone());
+    }
+}
+
+/// Render a lint path as it is written in an attribute.
+fn render_path(path: &Path) -> String {
+    path.segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>()
+        .join("::")
+}
+
+/// Return the lint names an `allow` list suppresses.
+///
+/// A key-value argument such as `reason = "..."` is not a lint name and is
+/// skipped, as is a nested list.
+fn allowed_lints(list: &MetaList) -> Vec<String> {
+    let Ok(nested) = list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated) else {
+        return Vec::new();
+    };
+    nested
+        .iter()
+        .filter_map(|meta| match meta {
+            Meta::Path(path) => Some(render_path(path)),
+            Meta::List(_) | Meta::NameValue(_) => None,
+        })
+        .collect()
+}
+
+/// Return the lint names nested inside a `cfg_attr`.
+///
+/// The first element is the condition and is skipped. The condition is never
+/// evaluated: a suppression that applies under some configuration is still a
+/// suppression, and deciding which configurations are reachable is not this
+/// contract's job. A nested `cfg_attr` is followed in turn.
+fn suppressed_by_cfg_attr(list: &MetaList) -> Vec<String> {
+    let Ok(nested) = list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated) else {
+        return Vec::new();
+    };
+    nested
+        .iter()
+        .skip(1)
+        .filter_map(|meta| match meta {
+            Meta::List(inner) => Some(match render_path(&inner.path).as_str() {
+                "allow" => allowed_lints(inner),
+                "cfg_attr" => suppressed_by_cfg_attr(inner),
+                _ => Vec::new(),
+            }),
+            Meta::Path(_) | Meta::NameValue(_) => None,
+        })
+        .flatten()
+        .collect()
+}
+
+/// Return the lint names one attribute suppresses, following `cfg_attr`.
+///
+/// `expect` yields nothing: it is the sanctioned form.
+fn suppressed_by(attribute: &Attribute) -> Vec<String> {
+    let Ok(list) = attribute.meta.require_list() else {
+        return Vec::new();
+    };
+    match render_path(attribute.path()).as_str() {
+        "allow" => allowed_lints(list),
+        "cfg_attr" => suppressed_by_cfg_attr(list),
+        _ => Vec::new(),
+    }
+}
+
+/// Render an attribute roughly as written, for a failure message.
+fn render_attribute(attribute: &Attribute) -> String {
+    let bang = match attribute.style {
+        AttrStyle::Inner(_) => "!",
+        AttrStyle::Outer => "",
+    };
+    let path = render_path(attribute.path());
+    attribute.meta.require_list().map_or_else(
+        |_| format!("#{bang}[{path}]"),
+        |list| format!("#{bang}[{path}({})]", list.tokens),
+    )
+}
+
+/// Return every protected lint suppressed in one source file, with the
+/// attribute that suppressed it.
+pub fn suppressed_lints(contents: &str) -> Result<Vec<(String, String)>> {
+    let parsed = syn::parse_file(contents).context("parse the source as Rust")?;
+    let mut collector = AttributeCollector::default();
+    collector.visit_file(&parsed);
+
+    let mut found = Vec::new();
+    for attribute in &collector.attributes {
+        for lint in suppressed_by(attribute) {
+            if PROTECTED_LINTS.contains(&lint.as_str()) {
+                found.push((lint, render_attribute(attribute)));
+            }
+        }
+    }
+    Ok(found)
+}
