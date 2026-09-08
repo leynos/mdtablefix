@@ -27,6 +27,7 @@ use syn::{
     MetaList,
     Path,
     Token,
+    ext::IdentExt,
     punctuated::Punctuated,
     visit::Visit,
 };
@@ -203,11 +204,16 @@ impl<'ast> Visit<'ast> for AttributeCollector {
     }
 }
 
-/// Render a lint path as it is written in an attribute.
+/// Render a lint path with raw identifiers normalized.
+///
+/// `r#allow` and `allow` are the same identifier to the compiler, as are
+/// `clippy::r#style` and `clippy::style`, and Clippy honours the raw spelling.
+/// Comparing the written form would let either escape the contract, so every
+/// segment is unrawed before it is joined.
 fn render_path(path: &Path) -> String {
     path.segments
         .iter()
-        .map(|segment| segment.ident.to_string())
+        .map(|segment| segment.ident.unraw().to_string())
         .collect::<Vec<_>>()
         .join("::")
 }
@@ -234,40 +240,46 @@ fn allowed_lints(list: &MetaList) -> Vec<String> {
 /// The first element is the condition and is skipped. The condition is never
 /// evaluated: a suppression that applies under some configuration is still a
 /// suppression, and deciding which configurations are reachable is not this
-/// contract's job. A nested `cfg_attr` is followed in turn.
-fn suppressed_by_cfg_attr(list: &MetaList) -> Vec<String> {
+/// contract's job.
+///
+/// `inner` is the scope of the *outermost* attribute and is carried down
+/// unchanged, because that is what decides the scope a nested suppression
+/// actually takes effect at: `#![cfg_attr(all(), expect(..))]` expects at crate
+/// scope however deeply the `expect` is wrapped.
+fn suppressed_by_cfg_attr(list: &MetaList, inner: bool) -> Vec<String> {
     let Ok(nested) = list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated) else {
         return Vec::new();
     };
     nested
         .iter()
         .skip(1)
-        .filter_map(|meta| match meta {
-            Meta::List(inner) => Some(match render_path(&inner.path).as_str() {
-                "allow" => allowed_lints(inner),
-                "cfg_attr" => suppressed_by_cfg_attr(inner),
-                _ => Vec::new(),
-            }),
-            Meta::Path(_) | Meta::NameValue(_) => None,
-        })
-        .flatten()
+        .flat_map(|meta| suppressed_by(meta, inner))
         .collect()
 }
 
 /// Return the lint names one attribute's contents suppress, following
 /// `cfg_attr`.
 ///
-/// `expect` yields nothing: it is the sanctioned form. Taking a `Meta` rather
-/// than an `Attribute` is what lets an attribute recovered from a macro token
-/// stream be judged by exactly this function, rather than by a second and
-/// weaker test written for tokens.
-fn suppressed_by(meta: &Meta) -> Vec<String> {
+/// `expect` is judged by scope rather than waved through. An item-scoped outer
+/// `#[expect(..., reason = "...")]` is the sanctioned form: it covers one site
+/// and warns once that site grows a seam. An *inner* `#![expect(..)]` is not,
+/// because a single call anywhere in the crate fulfils it, so it reports
+/// nothing and never warns. Measured: with a live `std::env::var` call,
+/// `#![expect(clippy::disallowed_methods)]` produced no diagnostic and no
+/// unfulfilled-expectation warning, which is silence indistinguishable from
+/// `allow`.
+///
+/// Taking a `Meta` rather than an `Attribute` is what lets an attribute
+/// recovered from a macro token stream be judged by exactly this function,
+/// rather than by a second and weaker test written for tokens.
+fn suppressed_by(meta: &Meta, inner: bool) -> Vec<String> {
     let Ok(list) = meta.require_list() else {
         return Vec::new();
     };
     match render_path(meta.path()).as_str() {
         "allow" => allowed_lints(list),
-        "cfg_attr" => suppressed_by_cfg_attr(list),
+        "expect" if inner => allowed_lints(list),
+        "cfg_attr" => suppressed_by_cfg_attr(list, inner),
         _ => Vec::new(),
     }
 }
@@ -291,7 +303,7 @@ pub fn suppressed_lints(contents: &str) -> Result<Vec<(String, String)>> {
 
     let mut found = Vec::new();
     for suppression in &collector.found {
-        for lint in suppressed_by(&suppression.meta) {
+        for lint in suppressed_by(&suppression.meta, suppression.inner) {
             if PROTECTED_LINTS.contains(&lint.as_str()) {
                 found.push((lint, render_attribute(suppression)));
             }
