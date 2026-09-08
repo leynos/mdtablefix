@@ -346,8 +346,13 @@ fn separates_the_ignore_errors_prefix_from_the_rest(
     };
     ensure!(
         commands == [expected],
-        "`{line}` should read as `cargo clippy` with ignore-errors {ignores_errors}, found \
-         {commands:?}"
+        concat!(
+            "`{line}` should read as `cargo clippy` with ignore-errors {ignores_errors}, ",
+            "found {commands:?}"
+        ),
+        line = line,
+        ignores_errors = ignores_errors,
+        commands = commands
     );
     Ok(())
 }
