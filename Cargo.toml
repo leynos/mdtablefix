@@ -65,6 +65,7 @@ pretty_assertions = "1"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.5.0", features = ["strict-compile-time-validation"] }
 toml = "1.1.2"
+syn = { version = "3.0.3", features = ["full", "visit", "extra-traits"] }
 
 [workspace.lints.clippy]
 # A lower group priority lets the explicit contract deny override its warning

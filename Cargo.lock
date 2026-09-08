@@ -953,6 +953,7 @@ dependencies = [
  "rstest-bdd-macros",
  "serde_yaml",
  "similar 3.2.0",
+ "syn 3.0.3",
  "tempfile",
  "test-macros",
  "textwrap",
