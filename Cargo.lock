@@ -945,6 +945,7 @@ dependencies = [
  "once_cell",
  "predicates",
  "pretty_assertions",
+ "proc-macro2",
  "proptest",
  "rayon",
  "regex",
