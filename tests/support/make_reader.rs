@@ -107,8 +107,12 @@ pub fn recipe_commands(makefile: &str, target: &str) -> Result<Vec<RecipeCommand
     // its own right.
     ensure!(
         declarations == 1,
-        "the {target} target should be declared once, found {declarations} declarations; GNU Make \
-         would run the last and this contract would judge the first"
+        concat!(
+            "the {target} target should be declared once, found {declarations} declarations; ",
+            "GNU Make would run the last and this contract would judge the first"
+        ),
+        target = target,
+        declarations = declarations
     );
     let body = makefile
         .lines()
