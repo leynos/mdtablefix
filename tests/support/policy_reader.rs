@@ -1,22 +1,14 @@
-//! Readers for the repository's environment-access lint policy.
+//! Readers that judge a Clippy configuration, a package manifest and a
+//! Make recipe against the environment-access policy.
 //!
-//! `tests/env_access_policy.rs` asserts the policy; this module holds the
-//! parsing it needs. The two are separated so neither file outgrows the
-//! repository's 400-line limit, and so the readers can be exercised against
-//! inline fixtures as well as against the repository's own files.
-//!
-//! Every reader returns a `Result`. None panics, so a malformed fixture
-//! surfaces as a test failure with context rather than as a panic in a
-//! helper.
+//! The Makefile parsing these build on lives in `make_reader.rs`; see that
+//! module for why the two are separate. A consumer of this module declares
+//! both.
 
-#![allow(
-    dead_code,
-    reason = "this module is shared by four test binaries through #[path]; each uses a different \
-              subset of the readers, so `unused here` is not a defect"
-)]
-
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use toml::{Table, Value};
+
+use crate::make_reader::{RecipeCommand, make_assignment};
 
 /// Return the `path` field of every `disallowed-methods` entry in `clippy.toml`.
 pub fn disallowed_method_paths(configuration: &str) -> Result<Vec<String>> {
@@ -75,142 +67,6 @@ pub fn clippy_lint_level(
                 .or_else(|| entry.get("level").and_then(Value::as_str))
         })
         .map(str::to_owned))
-}
-
-/// Return `name`'s value from a simple Make assignment (`=`, `?=`, or `:=`).
-///
-/// Recursive and conditional assignments differ in when Make expands them, not
-/// in the text they hold, so one reader covers all three.
-pub fn make_assignment<'a>(makefile: &'a str, name: &str) -> Option<&'a str> {
-    makefile.lines().find_map(|line| {
-        let rest = line.strip_prefix(name)?.trim_start();
-        for operator in ["?=", ":=", "="] {
-            if let Some(value) = rest.strip_prefix(operator) {
-                return Some(value.trim());
-            }
-        }
-        None
-    })
-}
-
-/// Expand `$(NAME)` references against the Makefile's own assignments.
-///
-/// Two passes cover a variable defined in terms of another, which is as deep as
-/// this Makefile goes. An unresolved reference is left intact so it shows up in
-/// a failure message rather than vanishing.
-pub fn expand_make_variables(makefile: &str, command: &str) -> String {
-    let mut expanded = command.to_owned();
-    for _ in 0..2 {
-        let mut next = String::with_capacity(expanded.len());
-        let mut rest = expanded.as_str();
-        while let Some(start) = rest.find("$(") {
-            let Some(end) = rest[start..].find(')').map(|offset| start + offset) else {
-                break;
-            };
-            next.push_str(&rest[..start]);
-            let name = &rest[start + 2..end];
-            match make_assignment(makefile, name) {
-                Some(value) => next.push_str(value),
-                None => next.push_str(&rest[start..=end]),
-            }
-            rest = &rest[end + 1..];
-        }
-        next.push_str(rest);
-        expanded = next;
-    }
-    expanded
-}
-
-/// One command from a Make recipe, with the prefixes that change its meaning.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RecipeCommand {
-    /// The command text, with the `@` and `+` prefixes removed.
-    ///
-    /// Those two change when Make echoes or runs a command, not whether its
-    /// failure counts, so they are noise to every caller here.
-    pub text: String,
-    /// Whether Make was told to ignore this command's exit status.
-    ///
-    /// The `-` prefix is kept as a flag rather than stripped, because a gate
-    /// whose command cannot fail the target is a gate that does not gate.
-    pub ignores_errors: bool,
-}
-
-/// Return the commands of `target`'s recipe, exactly as written.
-///
-/// A recipe line is tab-indented; the recipe ends at the first line that is
-/// neither tab-indented nor blank. Comment lines are dropped, so a
-/// commented-out command cannot satisfy a coverage requirement.
-///
-/// A line ending in a backslash continues onto the next one and the pair is
-/// returned as a single command, because that is what Make does: it passes the
-/// whole continued line to one shell. Reading the physical lines separately
-/// would let a Clippy call wrapped in a never-taken branch, written as
-/// `if false; then` on the first line, the invocation on the second, and
-/// `; fi` on the third, look like a bare invocation on a line of its own, and
-/// so certify a recipe that lints nothing.
-///
-/// Variables are left unexpanded so a caller can judge the executable and the
-/// argument order from what the recipe actually says. Expanding first would
-/// replace `$(CARGO)` with a shell fragment and lose the token boundary that
-/// makes the first word identifiable. Use [`expand_make_variables`] afterwards
-/// when the flags matter.
-pub fn recipe_commands(makefile: &str, target: &str) -> Result<Vec<RecipeCommand>> {
-    let prefix = format!("{target}:");
-    let body = makefile
-        .lines()
-        .skip_while(|line| !line.starts_with(&prefix))
-        .skip(1);
-    let mut commands = Vec::new();
-    let mut pending: Option<RecipeCommand> = None;
-    for line in body {
-        let Some(text) = line.strip_prefix('\t') else {
-            if line.trim().is_empty() {
-                continue;
-            }
-            break;
-        };
-        let text = text.trim_end();
-        let continues = text.ends_with('\\');
-        let text = text.strip_suffix('\\').unwrap_or(text).trim();
-        if let Some(started) = pending.as_mut() {
-            started.text.push(' ');
-            started.text.push_str(text);
-        } else {
-            // Make accepts the prefixes in any order and any number.
-            let body = text.trim_start_matches(['@', '-', '+']);
-            let ignores_errors = text[..text.len() - body.len()].contains('-');
-            pending = Some(RecipeCommand {
-                text: body.trim().to_owned(),
-                ignores_errors,
-            });
-        }
-        if !continues && let Some(command) = pending.take() {
-            push_command(&mut commands, &command);
-        }
-    }
-    // A recipe whose last line ends in a backslash is malformed, but the
-    // command it began is still part of the recipe and must be judged.
-    if let Some(command) = pending {
-        push_command(&mut commands, &command);
-    }
-    ensure!(
-        !commands.is_empty(),
-        "the {target} target should have a recipe"
-    );
-    Ok(commands)
-}
-
-/// Add `command` to `commands` unless it is blank or a shell comment.
-fn push_command(commands: &mut Vec<RecipeCommand>, command: &RecipeCommand) {
-    let text = command.text.trim();
-    if text.is_empty() || text.starts_with('#') {
-        return;
-    }
-    commands.push(RecipeCommand {
-        text: text.to_owned(),
-        ignores_errors: command.ignores_errors,
-    });
 }
 
 /// Return why `command`'s exit status would not reach Make, if it would not.
