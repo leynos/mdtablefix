@@ -287,9 +287,11 @@ fn no_construct_can_mask_a_failing_clippy_command() -> Result<()> {
         .any(|flags| flags.split_whitespace().any(|flag| flag == "-e"));
     ensure!(
         !one_shell || errors_abort,
-        ".ONESHELL puts the whole recipe in one shell, where only the last command's status is \
-         reported; pair it with -e in .SHELLFLAGS, or give every Clippy command its own `|| exit \
-         1`"
+        concat!(
+            ".ONESHELL puts the whole recipe in one shell, where only the last command's ",
+            "status is reported; pair it with -e in .SHELLFLAGS, or give every Clippy command ",
+            "its own `|| exit 1`"
+        )
     );
     for command in recipe_commands(MAKEFILE, "lint")? {
         if !is_cargo_clippy_invocation(MAKEFILE, &command.text) {
