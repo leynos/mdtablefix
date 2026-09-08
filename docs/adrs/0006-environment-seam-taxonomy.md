@@ -49,6 +49,13 @@ them, the only available suppression is an `#[expect]` carrying a reason, which
 is exactly what the composition-root exception below requires. The rule is
 enforced rather than merely stated.
 
+`clippy::allow_attributes` does not fire on an *inner* attribute, so
+`#![allow(clippy::disallowed_methods, reason = "...")]` at the top of a module
+switches the ban off for everything in it and passes `make lint`. Clippy cannot
+close that itself, so `tests/env_access_suppressions.rs` reads the sources and
+fails if any compiled Rust file allows a policy lint, or allows `warnings` or
+`clippy::all`, which would cover them without naming them.
+
 The lint level is declared in each package's own `[lints.clippy]` table, and
 `lint` runs Clippy twice: once for the root package and once with
 `--manifest-path test-macros/Cargo.toml`. Both are interim measures forced by
