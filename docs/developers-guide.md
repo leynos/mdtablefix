@@ -883,6 +883,12 @@ Both manifests also deny `clippy::allow_attributes` and
 bare `#[allow]`. Any suppression must be an `#[expect]` carrying a reason, which
 warns once it stops applying.
 
+Clippy's own check does not cover an inner attribute, so
+`#![allow(clippy::disallowed_methods, reason = "...")]` at the top of a module
+would switch the ban off and still pass `make lint`.
+`tests/env_access_suppressions.rs` reads the sources and rejects that, along
+with an allow of `warnings` or `clippy::all`.
+
 `lint` runs Clippy twice, once for the root package and once with
 `--manifest-path test-macros/Cargo.toml`. `test-macros` is a path
 dev-dependency rather than a workspace member, so the root invocation does not
