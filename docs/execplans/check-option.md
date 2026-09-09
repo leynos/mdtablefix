@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -251,7 +251,13 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 ## Progress
 
-- [ ] EP-M0 Prototyping spike: `similar` output shape, `rstest-bdd` wiring.
+- [x] EP-M0 Prototyping spike: `similar` output shape, `rstest-bdd` wiring.
+      Complete. `similar = "2.7"` resolves to a single copy in the graph; the
+      unified-diff transcript matches the plan's expected console output
+      byte-for-byte; the `rstest-bdd` canary passes and deleting a step
+      definition is a compile error, so strict validation is active. The
+      version bump to `0.6.0` landed with the manifest change, as
+      `Concrete steps` directs. Spike and canary deleted.
 - [ ] EP-M1 Document boundary: byte-order-mark and line-ending preservation,
       closing issue #451. Fixtures land before the refactor.
 - [ ] EP-M2 Pure reporting domain (`src/report/`), including the idempotence
@@ -1901,6 +1907,78 @@ Populate during implementation with the `EP-M0` spike transcript, the red and
 green transcripts per milestone, and the observed failure message from each
 negative control. Keep each excerpt short and focused on what proves success.
 
+### EP-M0 spike transcript
+
+`cargo test --test spike -- --nocapture`, temporary `tests/spike.rs`:
+
+```plaintext
+=== two-line ragged table, trailing newline ===
+--- ragged.md
++++ ragged.md
+@@ -1,3 +1,3 @@
+-|A|B|
+-|---|---|
+-|1|2|
++| A | B |
++| --- | --- |
++| 1 | 2 |
+=== unterminated original ===
+--- ragged.md
++++ ragged.md
+@@ -1,3 +1,3 @@
+-|A|B|
+-|---|---|
+-|1|2|
+\ No newline at end of file
++| A | B |
++| --- | --- |
++| 1 | 2 |
+=== patience algorithm, one changed line in twenty ===
+insertions=1 deletions=1
+@@ -7,7 +7,7 @@
+ line 7
+ line 8
+ line 9
+-line 10
++line ten
+ line 11
+ line 12
+ line 13
+```
+
+Findings: the default (`Myers`) and `Algorithm::Patience` renderings are
+identical in shape; the missing-newline marker appears once, after the final
+`-` line and before the first `+` line, confirming it can only ever appear on
+the `-` side; `context_radius(3)` is the default. A lone `\r` tokenizes as a
+separator — `TextDiff::from_lines("a\rb\n", …).old_slices()` is
+`["a\r", "b\n"]` while `str::lines()` yields `["a\rb"]` — which confirms `AX-1`
+and the `AX-5` divergence empirically.
+
+### EP-M0 canary transcript
+
+`cargo test --test bdd_reporting`, temporary canary scenario:
+
+```plaintext
+running 1 test
+test canary ... ok
+```
+
+Deleting the `#[then]` step definition produced, from the same command:
+
+```plaintext
+error: No matching step definition found for 'Then the canary sings'
+ --> tests/bdd_reporting.rs:9:1
+  |
+9 | #[scenario(path = "tests/features/canary.feature")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `scenario`
+```
+
+so `strict-compile-time-validation` is active. No fallback to plain `rstest`
+is needed. `cargo tree --duplicates | grep similar` prints nothing, so
+`similar` is a single copy in the graph.
+
 ## Documentation and skills to consult
 
 Repository documents:
@@ -2051,3 +2129,10 @@ behaviour is pinned by test, and `EP-M7` documents it in the user's guide.
 The five proposed dependencies are accepted.
 
 No implementation has begun; the plan awaits approval.
+
+### Revision 4, 2026-09-09
+
+Approved. `@leynos` directed implementation to proceed, with the standing
+instruction that every applicable deterministic gate must pass before each
+CodeRabbit review, and that the ExecPlan is to be kept current as work
+proceeds. Status moved from `DRAFT` to `IN PROGRESS`.
