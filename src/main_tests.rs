@@ -173,6 +173,10 @@ fn capability_scoped_failure_removes_temporary_file() {
     let result = replace_file(&directory, &name, "replacement");
 
     assert!(result.is_err(), "renaming over a directory must fail");
+    assert!(
+        target.is_dir(),
+        "the failed replacement must leave the target alone"
+    );
     assert_eq!(
         entry_names(dir.path()),
         vec!["target.md"],
