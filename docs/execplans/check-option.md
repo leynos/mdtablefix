@@ -268,7 +268,14 @@ Hard invariants. Violating one requires escalation, not a workaround.
       an already-rewritten file cannot be un-rewritten by reverting. The
       lone-`\r` limitation remains and stays on `EP-M7`'s documentation list.
 - [ ] EP-M2 Pure reporting domain (`src/report/`), including the idempotence
-      result.
+      result. **Halted at step 3: `INV-IDEMPOTENT` fails.** The red state was
+      built and observed (`cargo test --test check_properties count` panics on
+      the `todo!()` bodies; `cargo test --lib report` reports 1 passed,
+      33 failed), the deterministic corpus cases pass, and the generated
+      document found two pre-existing non-idempotent transforms. Per
+      `Tolerances`, work stopped and the finding was escalated rather than
+      worked around. See `Surprises & discoveries` and
+      `Artefacts and notes → EP-M2 idempotence failure`.
 - [ ] EP-M3 Driver, read-only capability, `--check`, exit-status contract,
       version bump to `0.6.0`.
 - [ ] EP-M4 `--diff`, sharing `--check`'s exit semantics.
@@ -361,6 +368,44 @@ Hard invariants. Violating one requires escalation, not a workaround.
   command, and `make test` reports `28 passed; 0 failed; 20 ignored` for the
   doctest section. The pre-existing doctest suite passed before the change, so
   widening the gate could not break unrelated work.
+
+- Observation: `INV-IDEMPOTENT` **fails**. Two independent, pre-existing
+  defects make `format(format(x)) != format(x)` for reachable inputs. This is
+  the `Tolerances` stop condition, so `EP-M2` halted at its first property run
+  and the finding is escalated rather than worked around.
+  Evidence, class A — normalised thematic breaks stop being breaks. `--breaks`
+  rewrites every thematic break to 70 underscores, but `wrap` recognises a
+  break only through the table-separator pattern `^[\s|:-]+$`
+  (`src/table.rs:117-120`, reached via `is_table_or_separator`,
+  `src/wrap.rs:67-69`), which matches hyphens and colons only. A normalised
+  break is therefore folded into the adjacent paragraph on the next pass.
+  Minimal synthetic input: `alpha\n` + 70 underscores + `\nbeta\n` under
+  `--wrap` becomes `alpha ____…____` on one line. Minimal original input:
+  `---\nprose words here` under `--wrap --breaks` →
+  `____…____\nprose words here\n` → `____…____ prose\nwords here\n`. The same
+  predicate means `--wrap` alone already folds `***` and `___` breaks into
+  paragraphs on the first pass. Existing fixture affected:
+  `tests/data/cli-matrix/frontmatter-breaks.dat` (1 of 123 under the full flag
+  set; 0 of 123 under `--wrap` alone).
+  Evidence, class B — wrap tail reflow depends on the source line's trailing
+  token. A list item whose first line ends with an inline code span re-wraps
+  differently on the second pass. Minimal input (83 chars, `--wrap` alone,
+  found by character-level delta debugging):
+  ``- *Ownership.** Owned by the wrap module (`src/wrap/tracing_snapshot_support.rs`)\nn``
+  → pass 1 breaks after `module`, pass 2 joins the code span to the following
+  line. Affected in-repo: `docs/developers-guide.md` (1 of 28 Markdown files,
+  under `--wrap` alone and under the full `mdformat-all` flag set).
+  Both classes converge after two passes and neither can loop, but both are
+  reachable with flags `make fmt` already uses: `mdformat-all` runs
+  `--wrap --renumber --breaks --ellipsis --fences --in-place`.
+  Pre-existence: this branch modifies only `src/lib.rs` and adds `src/report*`,
+  so `src/wrap*`, `src/breaks.rs`, and `src/table.rs` are untouched; both
+  defects are present at `HEAD` and in released versions.
+  Impact: `--check` cannot be a one-pass gate for the affected classes. A
+  single `--in-place` pass leaves the file still drifting, so check → fix →
+  check does not go green without a second fix. `Tolerances` forbids narrowing
+  the property as a workaround, so the decision is the user's: fix both
+  defects on this branch, or halt.
 
 ## Decision log
 
@@ -2114,6 +2159,78 @@ reports 12 passed, and `cargo test --lib -- document:: io::` reports 28 passed.
 Gates: `check-fmt`, `typecheck`, `lint`, `test`, `markdownlint`, and `nixie`
 all pass. `make test` reports 1470 passed, 0 failed, 20 ignored across 34
 suites, including the 28 doctests the widened recipe now gates.
+
+EP-M1 CodeRabbit review: `coderabbit review --agent --committed` completed in
+166s with exit code 0 and zero findings across 21 files. Log:
+`/tmp/coderabbit-m1-mdtablefix-check-option.out`.
+
+### EP-M2 idempotence failure
+
+Red state observed before any green work, exactly as step 1 requires.
+`cargo test --test check_properties count` fails with
+`not yet implemented: EP-M2 green step` from `src/report/delta.rs:40`;
+`cargo test --lib report` reports 1 passed, 33 failed. The deterministic
+`formatting_is_idempotent` cases (10 flag combinations × 14 corpus documents)
+pass, so the failure came from the generated-document property, which is the
+point of having a generator.
+
+Class A transcript, minimal original input `---\nprose words here`:
+
+```text
+$ printf -- '---\nprose words here' | mdtablefix --wrap --breaks
+______________________________________________________________________
+prose words here
+$ printf -- '---\nprose words here' | mdtablefix --wrap --breaks | mdtablefix --wrap --breaks
+______________________________________________________________________ prose
+words here
+```
+
+Class A root cause probe, `--wrap` alone:
+
+```text
+alpha ______________________________________________________________________  <- 70 underscores folded
+alpha|---|beta                                                               <- `---` untouched
+alpha *** beta                                                               <- `***` folded
+alpha ___ beta                                                               <- `___` folded
+```
+
+Class B transcript, minimal input (83 chars) under `--wrap` alone:
+
+```text
+input:  - *Ownership.** Owned by the wrap module (`src/wrap/tracing_snapshot_support.rs`)\nn
+pass 1: - *Ownership.** Owned by the wrap module\n  (`src/wrap/tracing_snapshot_support.rs`)\nn\n
+pass 2: - *Ownership.** Owned by the wrap module\n  (`src/wrap/tracing_snapshot_support.rs`) n\n
+```
+
+Repository-wide scan, two in-place passes per file, comparing bytes between
+pass 1 and pass 2:
+
+| Corpus | `--wrap` alone | `mdformat-all` flag set |
+| --- | --- | --- |
+| `tests/data/` (123 files) | 0 not fixed points | 1 (`cli-matrix/frontmatter-breaks.dat`) |
+| `*.md` in `HEAD` (28 files) | 1 (`docs/developers-guide.md`) | 1 (`docs/developers-guide.md`) |
+
+`frontmatter-breaks.dat` pass 1 → pass 2, showing the Setext underline
+normalised by `--breaks` then absorbed by the next wrap:
+
+```diff
+-Heading
+-______________________________________________________________________
++Heading ______________________________________________________________________
+```
+
+Convergence: every case above reaches a fixed point on pass 3. The defects
+cost an extra pass, they do not loop.
+
+Escalated rather than worked around, per `Tolerances`. Work on `EP-M2` green
+steps is suspended pending the decision recorded in `Decision log`.
+
+Red state preserved on the scratch branch `wip/ep-m2-red-state` (commit
+`51f6701`), which carries `src/report*`, `tests/check_properties.rs`, and the
+eight `tests/data/numstat/` fixtures with their `todo!()` bodies intact. That
+branch is a red-state checkpoint and must not be merged as-is; resume by
+continuing from it or by re-creating the files, which `Concrete steps →
+EP-M2` fully specifies.
 
 ## Documentation and skills to consult
 
