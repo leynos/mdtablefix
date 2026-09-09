@@ -6,7 +6,8 @@ This ExecPlan (execution plan) is a living document. The sections
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: BLOCKED — awaiting the sequencing decision recorded under
+`Conformance basis`, "Related work in flight".
 
 ## Purpose / big picture
 
@@ -281,22 +282,23 @@ Stop and escalate when any of these is reached.
   change, so a whole-repository run produces a diff of pure churn in which a
   genuine corruption would be invisible.
   Severity: medium. Likelihood: medium on Windows, low elsewhere.
-  Mitigation: this is pre-existing behaviour and out of scope to change here.
-  INV-NOWRITE-UNCHANGED limits the damage by skipping files whose output is
-  byte-identical, which makes the churn visible as "changed everything" rather
-  than hiding it. Document the CRLF behaviour in the users' guide under
-  `--git`, and record it as follow-up work.
+  Mitigation: **resolved elsewhere, not by this plan.** Pull request #464
+  introduces `src/document.rs` with `SourceDocument` and
+  `LineEnding::detect`, which preserves each document's majority line-ending
+  style and its byte-order mark across a rewrite. This plan must not
+  reimplement line-ending handling; it consumes that boundary. Retained here
+  only so the dependency is visible.
 
 - Risk: `--in-place` writes are truncate-then-write with no signal handling, so
   interrupting a large run can leave a file truncated. `--git` makes long runs
   routine and therefore makes interruption routine.
   Severity: medium. Likelihood: low.
-  Mitigation: INV-NOWRITE-UNCHANGED removes the write entirely for unchanged
-  files, which is most of them on a healthy repository, shrinking the window
-  proportionally. Making writes atomic (temporary file plus rename) would fix
-  it completely but changes `--in-place` for **all** modes, not just `--git`,
-  and is therefore out of scope. Record it as recommended follow-up work in
-  Outcomes, with the caveat that rename breaks hard links to the target.
+  Mitigation: **tracked separately as issue #465**, "Write files atomically in
+  `--in-place` mode", which specifies temporary-file-plus-rename with mode
+  preservation and is sequenced with pull request #464 because both rewrite the
+  same serialization path. This plan must not implement it. Skipping the write
+  when output is byte-identical still shrinks the window in the meantime, and
+  that check comes from #464's `Assessment::is_changed` rather than from here.
 
 - Risk: the extension filter is the only thing between `--git` and rewriting
   source files, so a defect there is destructive.
@@ -312,6 +314,53 @@ artefacts that exist are `AGENTS.md` (at commit `c792270`),
 `docs/developers-guide.md`, `docs/documentation-style-guide.md`, and ADRs 0001
 to 0005 (none of which constrains file selection). This plan creates the
 missing design record as **ADR 0006**.
+
+### Related work in flight, and an unresolved sequencing decision
+
+**Status: this plan is BLOCKED on the decision recorded below.** Do not begin
+implementation until it is settled.
+
+Pull request #464, "Plan: add `--check` and `--diff` reporting modes" (branch
+`check-option`), is an unapproved draft plan that restructures the exact code
+this plan modifies. Issue #465, "Write files atomically in `--in-place` mode",
+is sequenced with it. The overlap is not incidental:
+
+| This plan | Pull request #464 | Nature of the overlap |
+| --- | --- | --- |
+| `ArgGroup "inputs"` over `files` and `git`; `--in-place` requires it | `ArgGroup "mode"` over `--in-place`, `--check`, `--diff`, requiring `files` | **Hard conflict.** Their group requires positional `files`, so `--git --in-place` would be rejected outright. One of the two must give. |
+| INV-NOWRITE-UNCHANGED, skip the write when output matches input | `Assessment::is_changed`, "a direct byte comparison, and the authoritative answer" | **Duplicate.** This plan should consume theirs. |
+| `--list-files` as a boolean flag | `Mode { Print, InPlace, Check, Diff }` | **Shape.** Selection listing belongs as a `Mode` variant, not a parallel flag. |
+| `resolve_inputs` in `src/main.rs` | `src/driver.rs`, binary-private, with `main.rs` reduced to an adapter | **Placement.** The composition root moves. |
+| CON-CAP-001 discharged by code review only | `ReadOnlyDir`, making read-only-ness a property of the type | **Theirs is stronger.** `--list-files` should be unable to write by construction. |
+| Exit 1 when `git` fails | `ExitStatus { Success, Drift, Error }`, with `Error` mapping to 2 | **Contract conflict.** A `git` failure is an `Error`, so 2, not 1. |
+| Transcript rendering `Error: … Caused by:` via `Termination` | `fn main` returns `ExitCode`; crate bumps to `0.6.0` | **This plan's transcript is wrong** if #464 lands first. |
+| CRLF churn recorded as an accepted risk | `SourceDocument` and `LineEnding::detect` | **Resolved by theirs.** |
+
+*Table 1: overlap between this plan and pull request #464.*
+
+Beyond the conflicts, the two features compose into the combination most worth
+having: `mdtablefix --git --check` is a continuous-integration gate answering
+"is every Markdown file in this repository formatted?" with a non-zero exit on
+drift. Neither plan currently delivers it, and #464's `mode` group forbids it
+by construction.
+
+The decision to be taken, and its consequence for this document:
+
+1. **Sequence this plan after #464.** Rewrite the interfaces here to consume
+   `SourceDocument`, `Assessment`, `driver.rs`, `Mode`, `ReadOnlyDir`, and the
+   exit-status contract, and change #464's `mode` group to require the
+   `inputs` group rather than `files`. Cleanest result; this plan stays blocked
+   until #464 merges.
+2. **Sequence this plan before #464.** Keep it self-contained and let #464
+   absorb `--git` while it rewrites `main.rs` anyway. Cost: this plan builds a
+   changed-file comparison and an ordering scheme that #464 then deletes.
+3. **Proceed independently.** Not recommended: both modify the same `Cli`
+   struct, the same `main`, and the same write path, so whichever merges second
+   faces a non-trivial rebase in the code carrying the highest destructive
+   risk.
+
+Whichever is chosen, record it in the Decision log, update this section, and
+set Status accordingly before Stage A begins.
 
 **Roadmap**: this repository has no general-purpose roadmap. The two roadmap
 documents that exist are feature-scoped and neither mentions `--git`,
@@ -430,8 +479,16 @@ repository's logic against the real interface at the boundary.
   relay git's stderr without depending on it.
 - **AX-CAPSTD** — `cap_std::fs_utf8::Dir` behaves as documented. Already
   relied upon.
-- **AX-RAYON-ORDER** — `par_iter().map(...).collect::<Vec<_>>()` preserves
-  input order. Already relied upon.
+- **AX-RAYON-ORDER** — **withdrawn; this is not an axiom.** An earlier draft
+  asserted that `par_iter().map(...).collect::<Vec<_>>()` preserves input
+  order, on the grounds that the existing code already relies on it. The
+  concurrent plan for `--check` and `--diff` (pull request #464) researched the
+  same question and refuted it: `rayon` does not document order preservation
+  for `collect`, and `rayon-1.12.0/src/iter/from_par_iter.rs:24-34` routes
+  through `par_extend` with no ordering statement. The existing reliance is
+  therefore a latent defect, not a contract. Selection must not depend on it:
+  each unit of work carries its index and results are ordered on that index.
+  See the note on ordering under EP-M2.
 - **AX-CLAP-GRAMMAR** — a `clap::ArgGroup` with `multiple(false)` permits at
   most one member; `requires = "<group>"` demands at least one member; and an
   argument carrying `default_values` counts as present, so `requires` on such
@@ -683,8 +740,12 @@ selection module is a real, revert-safe state.
   `BufWriter` over a single `stdout().lock()` before the next. Peak drops to a
   constant ~4.5 MB, and the `BufWriter` also collapses the current one
   `write(2)` per output line — `Stdout` is `LineWriter`-backed unconditionally,
-  which at 20,000 files is roughly 8.6 million syscalls. `AX-RAYON-ORDER` still
-  holds within each chunk, so ordering and snapshots are unaffected.
+  which at 20,000 files is roughly 8.6 million syscalls. Because
+  `AX-RAYON-ORDER` is withdrawn, ordering within a chunk must be
+  re-established explicitly from each unit's
+  index rather than inherited from `collect`; pull request #464 introduces
+  `driver::in_argument_order` for exactly this, and this plan uses it rather
+  than reimplementing it.
 - Acceptance evidence: `EV-M2-CLI` — `cargo test --test cli_git --test
   git_file_selection` passes, the `--help` snapshot is accepted, and the
   transcripts under "Validation and acceptance" reproduce.
@@ -1566,17 +1627,11 @@ To be completed at EP-M3. Before setting Status to COMPLETE, reconcile every
 Surprise and Decision against ADR 0006 and the component documents. Do not mark
 COMPLETE while any deviation remains unrecorded.
 
-Two items are already known to be follow-up work rather than part of this
-change, and should be carried out of the retrospective into whatever tracking
-exists:
-
-1. Atomic `--in-place` writes (temporary file plus rename), which would remove
-   the truncation window for changed files as well as unchanged ones. It
-   affects all modes, not only `--git`, and rename breaks hard links to the
-   target, so it needs its own decision.
-2. CRLF handling. `format_to_string` normalizes line endings as a side effect
-   of `content.lines()`, so `--git --in-place` on a CRLF checkout rewrites
-   every selected file. Document it here; decide it separately.
+Two items an earlier draft listed as follow-up work are already owned
+elsewhere, and must **not** be reopened here: atomic `--in-place` writes are
+issue #465, and CRLF and byte-order-mark preservation is part of pull
+request #464. Confirm at closure that neither was reimplemented in
+`src/select/`.
 
 ## Artefacts and notes
 
@@ -1588,7 +1643,22 @@ short.
 
 ## Revision note
 
-Revised 2026-09-09 after a six-lens design review, before any implementation.
+Revised 2026-09-09, second pass, after the requester identified two in-flight
+pieces of work. Atomic `--in-place` writes are issue #465 and CRLF handling is
+part of pull request #464, so both were removed from this plan's follow-up list
+and repointed at their owners. Reading #464's plan then surfaced a substantial
+two-way collision, now recorded as Table 1 under `Conformance basis` with an
+unresolved sequencing decision; the plan's status is **BLOCKED** on it.
+
+One correction is independent of that decision and has been made regardless:
+`AX-RAYON-ORDER` is **withdrawn**. This plan asserted that
+`par_iter().collect()` preserves input order because existing code relies on
+it; #464 refuted that with a source citation showing `rayon` documents no such
+guarantee. The existing reliance is a latent defect, so ordering must be
+carried explicitly by index rather than inherited.
+
+Revised 2026-09-09, first pass, after a six-lens design review, before any
+implementation.
 
 What changed. `--git` now selects tracked files only, with
 `--include-untracked` restoring full reference-command equivalence, because
