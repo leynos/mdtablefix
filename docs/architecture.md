@@ -694,11 +694,12 @@ no step falls back to ambient access. Within the library, `open_parent` is the
 only ambient filesystem entry point. The CLI opens the target's parent
 directory once in `open_file_parent` and passes that capability into the
 replacement path. The temporary file is created with `create_new`, so it never
-clobbers an existing file, and its name carries the process id and a per-process
-counter to keep concurrent writers apart. A freshly created file does not
-inherit the target mode, so the mode is copied across before the swap. A target
-that is a symbolic link is declined, because the rename would swap the link
-entry for a regular file and leave the real file untouched.
+clobbers an existing file, and its name carries the process id and the attempt
+number, so a stale name left by a killed run costs only one retry. A freshly
+created file does not inherit the target mode, so the mode is copied across
+before the swap. A target that is a symbolic link is declined, because the
+rename would swap the link entry for a regular file and leave the real file
+untouched.
 
 For screen readers: The following sequence diagram traces one atomic in-place
 rewrite from the caller through the rewriter, the containing directory, the

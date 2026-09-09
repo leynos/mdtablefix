@@ -9,7 +9,6 @@
 use std::{
     io::{self, Write},
     path::Path,
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -20,9 +19,6 @@ use cap_std::{
 use tracing::{debug, trace};
 
 use crate::process::{process_stream, process_stream_no_wrap};
-
-/// Counter that keeps temporary file names unique within a process.
-static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Candidate temporary names to try before conceding that a stale temporary
 /// file from an earlier killed run is in the way.
@@ -114,8 +110,14 @@ pub fn replace_file(directory: &Dir, path: &Utf8Path, contents: &str) -> io::Res
         debug!(error_category = ?error.kind(), "replacement failed");
         // Best effort: failing to clean up must not mask the original error,
         // and the next run retries past any stale name it finds.
-        if directory.remove_file(&temp_path).is_ok() {
-            trace!("temporary file removed after failure");
+        match directory.remove_file(&temp_path) {
+            Ok(()) => trace!("temporary file removed after failure"),
+            Err(cleanup_error) => {
+                debug!(
+                    error_category = ?cleanup_error.kind(),
+                    "temporary file cleanup failed"
+                );
+            }
         }
     }
     outcome
@@ -148,15 +150,14 @@ fn write_and_swap(
 
 /// Creates a new temporary file beside `path` inside `directory`.
 ///
-/// The name carries the process id and a per-process counter, so concurrent
-/// writers in the same directory never collide. A temporary file left behind by
-/// a killed run can still occupy a candidate name, so the counter advances and
-/// the attempt is retried.
+/// The name carries the process id and the attempt number, and the file is
+/// created exclusively, so a temporary file left behind by a killed run only
+/// costs one retry: the attempt advances and the next candidate is tried.
 fn create_temporary_file(directory: &Dir, path: &Utf8Path) -> io::Result<(Utf8PathBuf, File)> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     for attempt in 0..TEMP_FILE_ATTEMPTS {
-        let temp_path = temporary_path(path);
+        let temp_path = temporary_path(path, attempt);
         match directory.open_with(&temp_path, &options) {
             Ok(file) => {
                 debug!(attempt, "temporary file created");
@@ -178,14 +179,16 @@ fn create_temporary_file(directory: &Dir, path: &Utf8Path) -> io::Result<(Utf8Pa
     ))
 }
 
-/// Builds a candidate temporary path beside `path`.
+/// Builds candidate temporary path `attempt` beside `path`.
 ///
-/// Any parent components are preserved, so the temporary file always lands in
-/// the target's own directory and the rename never crosses a directory.
-fn temporary_path(path: &Utf8Path) -> Utf8PathBuf {
-    let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+/// The name is a pure function of the target, the process id, and the attempt,
+/// so a caller can predict and occupy a candidate without reaching into the
+/// process. Any parent components are preserved, so the temporary file always
+/// lands in the target's own directory and the rename never crosses a
+/// directory.
+fn temporary_path(path: &Utf8Path, attempt: u32) -> Utf8PathBuf {
     let name = format!(
-        "{}.mdtablefix-{}-{counter}.tmp",
+        "{}.mdtablefix-{}-{attempt}.tmp",
         path.file_name().unwrap_or_default(),
         std::process::id()
     );

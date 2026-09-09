@@ -152,16 +152,70 @@ fn write_failure_leaves_original_intact(#[case] rewrite_fn: fn(&Path) -> std::io
 }
 
 #[rstest]
-#[case("sample.md")]
-#[case("sub/dir/sample.md")]
-#[case("/tmp/dir/sample.md")]
-fn temporary_path_is_a_sibling(#[case] path: &str) {
+#[case("sample.md", 0)]
+#[case("sub/dir/sample.md", 1)]
+#[case("/tmp/dir/sample.md", 15)]
+fn temporary_path_is_a_sibling(#[case] path: &str, #[case] attempt: u32) {
     let target = Utf8Path::new(path);
-    let temp = temporary_path(target);
+    let temp = temporary_path(target, attempt);
     assert_eq!(temp.parent(), target.parent());
+    let name = temp.file_name().unwrap();
     assert!(
-        temp.file_name().unwrap().starts_with("sample.md"),
+        name.starts_with("sample.md"),
         "temporary name should extend the target name"
+    );
+    assert!(
+        name.ends_with(&format!("-{attempt}.tmp")),
+        "the attempt should be visible in the candidate name: {name}"
+    );
+}
+
+#[test]
+fn create_temporary_file_retries_past_an_occupied_candidate() {
+    let dir = tempdir().unwrap();
+    let root = Utf8Path::from_path(dir.path()).unwrap();
+    let directory = Dir::open_ambient_dir(root, ambient_authority()).unwrap();
+    let name = Utf8Path::new("sample.md");
+    // Candidate names are a pure function of the target, the process id and
+    // the attempt, so the test can occupy the first candidate exactly.
+    let occupied = temporary_path(name, 0);
+    fs::write(dir.path().join(occupied.file_name().unwrap()), "").unwrap();
+
+    let (temp, _file) =
+        create_temporary_file(&directory, name).expect("retry past the occupied name");
+
+    assert_eq!(
+        temp,
+        temporary_path(name, 1),
+        "the next candidate must be tried"
+    );
+    assert_eq!(
+        entry_names(dir.path()),
+        vec![
+            occupied.file_name().unwrap().to_string(),
+            temp.file_name().unwrap().to_string(),
+        ],
+        "the occupied candidate must survive untouched"
+    );
+}
+
+#[test]
+fn create_temporary_file_reports_an_exhausted_name_space() {
+    let dir = tempdir().unwrap();
+    let root = Utf8Path::from_path(dir.path()).unwrap();
+    let directory = Dir::open_ambient_dir(root, ambient_authority()).unwrap();
+    let name = Utf8Path::new("sample.md");
+    for attempt in 0..TEMP_FILE_ATTEMPTS {
+        let candidate = temporary_path(name, attempt);
+        fs::write(dir.path().join(candidate.file_name().unwrap()), "").unwrap();
+    }
+
+    let error = create_temporary_file(&directory, name).expect_err("every candidate is occupied");
+
+    assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+    assert!(
+        error.to_string().contains("sample.md"),
+        "the error must name the target: {error}"
     );
 }
 

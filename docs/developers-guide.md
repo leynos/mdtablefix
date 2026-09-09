@@ -657,12 +657,14 @@ metric cardinality, and the crate installs no metrics recorder. Inside it,
 `attempt`), `temporary file written` (debug, with `bytes`),
 `temporary file synced` (debug), `target mode applied` (debug), and
 `target replaced` (debug) mark the success path; `temporary name rejected`
-(trace, with `attempt` and `reason = "already_exists"`) and
-`temporary file removed after failure` (trace) mark the retry and cleanup paths;
-and `rewrite declined` (debug, with `error_category = "symlink_target"`) marks a
-symbolic-link target. `replacement failed` (debug, with `error_category` from
-`io::ErrorKind`) marks a failed metadata read, temporary-file creation, or
-write/swap. None of these events carry file content.
+(trace, with `attempt` and `reason = "already_exists"`) marks the retry path;
+`temporary file removed after failure` (trace) and
+`temporary file cleanup failed` (debug, with `error_category` from
+`io::ErrorKind`) mark the cleanup path; and `rewrite declined` (debug, with
+`error_category = "symlink_target"`) marks a symbolic-link target.
+`replacement failed` (debug, with `error_category` from `io::ErrorKind`) marks a
+failed metadata read, temporary-file creation, or write/swap. None of these
+events carry file content.
 
 Table: Structured field names emitted by tracing instrumentation.
 
