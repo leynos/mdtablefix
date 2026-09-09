@@ -8,6 +8,7 @@
 - [HTML table support](#html-table-support-in-mdtablefix)
 - [Module relationships](#module-relationships)
 - [Concurrency with `rayon`](#concurrency-with-rayon)
+- [Atomic in-place writes](#atomic-in-place-writes)
 - [Unicode width handling](#unicode-width-handling)
 
 ## Markdown stream processor
@@ -679,6 +680,53 @@ sequenceDiagram
 _Figure 4: The CLI processes file inputs in parallel, then reports results in
 their original order: formatted text goes to stdout, while in-place processing
 replaces each file atomically and both modes report errors on stderr._
+
+
+## Atomic in-place writes
+
+Both the CLI's `rewrite_in_place` and the library's `rewrite_with` replace a
+file by writing the formatted output to a temporary file in the same directory
+and renaming it over the target. The temporary file is created with
+`create_new`, so it never clobbers an existing file, and its name carries the
+process id and a per-process counter to keep concurrent writers apart. A
+freshly created file does not inherit the target mode, so the mode is copied
+across before the swap. The CLI creates and renames both files through the
+`cap_std` directory capability opened for the target's parent, so the write
+stays inside the same filesystem boundary as the rest of the run.
+
+For screen readers: The following sequence diagram traces one atomic in-place
+rewrite from the caller through the rewriter, the containing directory, the
+temporary file, and the target, including the failure path.
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant Rewriter
+    participant Directory
+    participant TempFile
+    participant Target
+
+    Caller->>Rewriter: rewrite_in_place / rewrite
+    Rewriter->>Directory: metadata(target)
+    Rewriter->>Directory: create_temporary_file(target)
+    Directory-->>TempFile: create_new(same directory)
+    Rewriter->>TempFile: write_all(contents)
+    Rewriter->>TempFile: flush()
+    Rewriter->>TempFile: sync_all()
+    Rewriter->>Directory: set_permissions(temp, target mode)
+    Rewriter->>Directory: rename(temp, target)
+    Directory-->>Target: atomic replacement
+    alt write or rename fails
+        Rewriter->>Directory: remove_file(temp)
+        Directory-->>Target: original remains intact
+    end
+```
+
+_Figure 5: Atomic in-place rewrite. The rewriter reads the target metadata,
+creates a temporary file in the same directory, writes, flushes and syncs the
+formatted contents, copies the target mode onto the temporary file, and renames
+it over the target. If the write or the rename fails, the temporary file is
+removed and the original file is left intact._
 
 ## Unicode Width Handling
 
