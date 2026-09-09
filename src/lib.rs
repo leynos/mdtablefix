@@ -13,7 +13,8 @@
 //! - `code_emphasis` for fixing emphasis adjoining inline code.
 //! - `textproc` for token-based transformations.
 //! - `process` for stream processing.
-//! - `io` for file helpers and line-ending preservation.
+//! - `io` for file helpers, the document boundary, and line-ending
+//!   preservation.
 
 #[macro_export]
 macro_rules! lazy_regex {
@@ -24,7 +25,6 @@ macro_rules! lazy_regex {
 
 pub mod breaks;
 pub mod code_emphasis;
-pub mod document;
 pub mod ellipsis;
 pub mod fences;
 pub mod footnotes;

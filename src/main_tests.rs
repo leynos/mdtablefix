@@ -6,7 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use mdtablefix::{LineEnding, io::replace_file};
+use mdtablefix::io::{SourceDocument, replace_file};
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
@@ -193,12 +193,15 @@ fn capability_scoped_failure_removes_temporary_file() {
 
 #[test]
 fn stdin_output_keeps_its_terminator_contract() {
-    assert_eq!(render_stdin_output(&[], LineEnding::Lf), "\n");
-    assert_eq!(render_stdin_output(&[], LineEnding::Crlf), "\r\n");
+    let unix = SourceDocument::parse("");
+    let windows = SourceDocument::parse("a\r\nb\r\n");
+    assert_eq!(render_stdin_output(&unix, &[]), "\n");
+    assert_eq!(render_stdin_output(&windows, &[]), "\r\n");
     let lines = vec!["| A | B |".to_string()];
     assert_eq!(
-        render_stdin_output(&lines, LineEnding::Crlf),
-        "| A | B |\r\n"
+        render_stdin_output(&windows, &lines),
+        "| A | B |\r\n",
+        "non-empty stdin output takes the document's ending"
     );
 }
 

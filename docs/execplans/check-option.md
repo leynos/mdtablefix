@@ -259,10 +259,14 @@ Hard invariants. Violating one requires escalation, not a workaround.
       version bump to `0.6.0` landed with the manifest change, as
       `Concrete steps` directs. Spike and canary deleted. CodeRabbit review
       (post-gates) returned `review_completed` with zero findings.
-- [ ] EP-M1 Document boundary: byte-order-mark and line-ending preservation,
-      closing issue #451. Step 1 complete: eleven `.dat` fixtures and
-      `tests/document_properties.rs` pin the pre-refactor bytes; all 12 cases
-      pass and the transcript is in `Artefacts and notes`.
+- [x] EP-M1 Document boundary: byte-order-mark and line-ending preservation,
+      closing issue #451. Eleven `.dat` fixtures and
+      `tests/document_properties.rs` pinned the pre-refactor bytes first, then
+      `src/document.rs` landed red-to-green, then `src/main.rs` and `src/io.rs`
+      were routed through `SourceDocument` and the six affected expectations
+      flipped. All gates pass; `CHANGELOG.md` records the byte change and that
+      an already-rewritten file cannot be un-rewritten by reverting. The
+      lone-`\r` limitation remains and stays on `EP-M7`'s documentation list.
 - [ ] EP-M2 Pure reporting domain (`src/report/`), including the idempotence
       result.
 - [ ] EP-M3 Driver, read-only capability, `--check`, exit-status contract,
@@ -2038,12 +2042,14 @@ Escapes are Rust string escapes; `\u{FEFF}` is the byte-order mark.
 | `no_trailing_newline` | table plus a trailing line feed | no |
 | stdin, CRLF ragged | same as `crlf_ragged` | yes, endings become CRLF |
 
-Two pre-refactor oddities are pinned deliberately and disappear in step 4.
-The byte-order mark defeats table detection, so the first line survives
-verbatim while the separator and data lines are reflowed — and the data line
-is emitted *before* the separator. A lone `\r` is not a line ending to
-`str::lines`, so `alpha\rbeta` stays a single line and the `\r` survives
-inside it. Both are exactly the defects `ISSUE-451` reports.
+Two pre-refactor oddities are pinned deliberately. The first disappears in
+step 4: the byte-order mark defeats table detection, so the first line
+survives verbatim while the separator and data lines are reflowed — and the
+data line is emitted *before* the separator. The second remains: a lone `\r`
+is not a line ending to `str::lines`, so `alpha\rbeta` stays a single line and
+the `\r` survives inside it. Only the byte-order-mark defect is in `EP-M1`'s
+scope; the lone-`\r` limitation is the remaining gap recorded in
+`Rigour and residual gaps` and must be documented in `EP-M7`.
 
 ### EP-M1 red and green transcripts
 
@@ -2074,6 +2080,40 @@ of `document::tests::` cases). `src/document.rs` is 242 lines.
 `const fn`, and the function is a two-arm match with no logic worth red-ing.
 `cargo test --doc document` runs the four new doctests, all passing — but
 `make test` does not run them, as `Surprises and discoveries` records.
+
+### EP-M1 step 4: post-refactor oracle
+
+`src/main.rs` gained `format_content`, which parses through
+`SourceDocument`, formats `document.lines()`, and renders through
+`render_lines`; both `format_to_string` and the stdin branch call it. The
+stdin branch prints a bare newline for empty output, keeping
+`tests/parallel.rs::test_cli_parallel_empty_file_list`'s `stdout("\n")`
+contract. `src/io.rs`'s `rewrite_with` performs the same three steps over
+`fs::read_to_string` and `fs::write`. No public signature changed.
+
+Six expectations flipped, each because an ending or the mark is now preserved,
+never because a content transform changed:
+
+| Case | New expectation | Why |
+| --- | --- | --- |
+| `crlf_ragged` | `TABLE` with CRLF | CRLF majority |
+| `crlf_clean` | `TABLE` with CRLF | CRLF majority |
+| `mixed_crlf_majority` | `TABLE` with CRLF | CRLF majority |
+| `mixed_in_fence` | table, blank line, `sh` fence, all CRLF | CRLF majority |
+| `bom_ragged` | `TABLE` with LF, mark restored | mark split off, table now detected |
+| `bom_crlf_clean` | `TABLE` with CRLF, mark restored | mark split off, ending kept |
+
+The stdin case was renamed `stdin_preserves_line_endings` and now expects
+CRLF. `mixed_lf_majority`, `mixed_tie`, and `no_trailing_newline` keep LF;
+`empty` still yields nothing; `lone_cr` still yields `alpha\rbeta\n`, because
+a lone `\r` is not a line ending to `str::lines()`.
+
+Focused runs after the refactor: `cargo test --test document_properties`
+reports 12 passed, and `cargo test --lib -- document:: io::` reports 28 passed.
+
+Gates: `check-fmt`, `typecheck`, `lint`, `test`, `markdownlint`, and `nixie`
+all pass. `make test` reports 1470 passed, 0 failed, 20 ignored across 34
+suites, including the 28 doctests the widened recipe now gates.
 
 ## Documentation and skills to consult
 

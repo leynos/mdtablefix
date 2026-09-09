@@ -16,15 +16,12 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use clap::Parser;
 use mdtablefix::{
-    LineEnding,
     LineEndingCounts,
     Options,
-    count_line_endings,
     format_breaks,
-    io::replace_file,
+    io::{SourceDocument, replace_file},
     process::{process_stream_inner, process_with_frontmatter},
     renumber_lists,
-    serialize_lines,
 };
 use rayon::prelude::*;
 use tracing::debug;
@@ -129,11 +126,15 @@ fn open_file_parent(path: &Path) -> anyhow::Result<(Dir, Utf8PathBuf)> {
 /// Standard input keeps its historical contract of printing one terminator
 /// even when it produces no lines, whereas an empty file produces empty
 /// output. `tests/parallel.rs` pins that difference.
-fn render_stdin_output(fixed: &[String], ending: LineEnding) -> String {
+///
+/// An input that produces no lines prints the bare terminator and nothing
+/// else, so a byte-order mark on a mark-only input is not echoed. Nothing is
+/// written back to a file on this path, so the mark cannot be lost.
+fn render_stdin_output(document: &SourceDocument<'_>, fixed: &[String]) -> String {
     if fixed.is_empty() {
-        ending.as_str().to_string()
+        document.ending().as_str().to_string()
     } else {
-        serialize_lines(fixed, ending)
+        document.render(fixed)
     }
 }
 
@@ -164,7 +165,7 @@ fn report_line_endings(counts: LineEndingCounts, operation: &str, path: Option<&
 /// Formats `content` into output lines, leaving the terminator to the caller.
 ///
 /// This is the pure half of both command boundaries: it neither reads an input
-/// nor selects a line ending, so each boundary counts the endings, reports its
+/// nor selects a line ending, so each boundary parses its document, reports the
 /// decision, and only then renders these lines with the style it chose.
 fn format_lines(content: &str, opts: FormatOpts) -> Vec<String> {
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
@@ -173,29 +174,28 @@ fn format_lines(content: &str, opts: FormatOpts) -> Vec<String> {
 
 /// Reads and formats a capability-scoped file without modifying it.
 ///
-/// The majority line-ending style of the file is detected before formatting
-/// and used to terminate the returned lines, so a CRLF file is not reported as
-/// wholly changed.
+/// The document boundary is taken before formatting: the body carries no
+/// byte-order mark, and the returned bytes are rendered with the mark and the
+/// majority line-ending style of the file, so a CRLF file is not reported as
+/// wholly changed and a marked file is not reported as clean.
 fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
     let content = directory.read_to_string(path)?;
-    let counts = count_line_endings(&content);
-    report_line_endings(counts, "file", Some(path.as_str()));
+    let document = SourceDocument::parse(&content);
+    report_line_endings(document.counts(), "file", Some(path.as_str()));
     // Keep file output newline-terminated, matching the CLI stdout contract.
-    Ok(serialize_lines(
-        &format_lines(&content, opts),
-        counts.ending,
-    ))
+    Ok(document.render(&format_lines(document.body(), opts)))
 }
 
 /// Formats standard input and renders it for standard output.
 ///
 /// Standard input is the boundary with no path to name, so its report says so
-/// rather than omitting the field. The majority style of the input otherwise
-/// decides the terminators exactly as it does for a file.
+/// rather than omitting the field. The document boundary is otherwise taken
+/// exactly as it is for a file: the body carries no byte-order mark, and the
+/// majority style of the input decides the terminators.
 fn format_stdin(input: &str, opts: FormatOpts) -> String {
-    let counts = count_line_endings(input);
-    report_line_endings(counts, "stdin", None);
-    render_stdin_output(&format_lines(input, opts), counts.ending)
+    let document = SourceDocument::parse(input);
+    report_line_endings(document.counts(), "stdin", None);
+    render_stdin_output(&document, &format_lines(document.body(), opts))
 }
 
 /// Reads, formats, and atomically replaces a capability-scoped file in place.

@@ -186,3 +186,10 @@
 - Convert `<table>...</table>` blocks that span multiple lines and carry
   leading indentation, leaving surrounding non-table lines at the same
   indentation level untouched.
+- Preserve a document's line-ending style and byte-order mark when rewriting
+  files. A CRLF file keeps CRLF instead of being converted to line feeds, and a
+  byte-order-marked table is now detected and reflowed rather than leaving its
+  header verbatim with the data row before the separator. The bytes written
+  change, so a file already processed by an earlier version is rewritten once
+  more, and that rewrite cannot be undone by reverting this change.
+  ([#451](https://github.com/leynos/mdtablefix/issues/451))

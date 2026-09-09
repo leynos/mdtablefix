@@ -49,30 +49,30 @@ fn rewrite_in_place(input: &[u8]) -> Vec<u8> {
 }
 
 #[rstest]
-#[case::crlf_ragged(include_bytes!("data/document/crlf_ragged.dat"), document(&TABLE, "\n", false))]
-#[case::crlf_clean(include_bytes!("data/document/crlf_clean.dat"), document(&TABLE, "\n", false))]
+#[case::crlf_ragged(include_bytes!("data/document/crlf_ragged.dat"), document(&TABLE, "\r\n", false))]
+#[case::crlf_clean(include_bytes!("data/document/crlf_clean.dat"), document(&TABLE, "\r\n", false))]
 #[case::mixed_lf_majority(
     include_bytes!("data/document/mixed_lf_majority.dat"),
     document(&TABLE, "\n", false)
 )]
 #[case::mixed_crlf_majority(
     include_bytes!("data/document/mixed_crlf_majority.dat"),
-    document(&TABLE, "\n", false)
+    document(&TABLE, "\r\n", false)
 )]
 #[case::mixed_tie(include_bytes!("data/document/mixed_tie.dat"), document(&["alpha", "beta"], "\n", false))]
 #[case::mixed_in_fence(
     include_bytes!("data/document/mixed_in_fence.dat"),
-    document(&["| A   | B   |", "| --- | --- |", "| 1   | 2   |", "", "```sh", "echo hi", "```"], "\n", false)
+    document(&["| A   | B   |", "| --- | --- |", "| 1   | 2   |", "", "```sh", "echo hi", "```"], "\r\n", false)
 )]
-// The byte-order mark defeats table detection, so the header line survives
-// verbatim and the separator/data pair is reflowed with the data row first.
+// The byte-order mark is split off before formatting, so the table is
+// detected and reflowed as usual and the mark is restored on output.
 #[case::bom_ragged(
     include_bytes!("data/document/bom_ragged.dat"),
-    document(&["\u{FEFF}|A|B|", "| 1   | 2   |", "| --- | --- |"], "\n", false)
+    document(&TABLE, "\n", true)
 )]
 #[case::bom_crlf_clean(
     include_bytes!("data/document/bom_crlf_clean.dat"),
-    document(&["\u{FEFF}| A | B |", "| 1   | 2   |", "| --- | --- |"], "\n", false)
+    document(&TABLE, "\r\n", true)
 )]
 #[case::lone_cr(include_bytes!("data/document/lone_cr.dat"), b"alpha\rbeta\n".to_vec())]
 #[case::empty(include_bytes!("data/document/empty.dat"), Vec::new())]
@@ -86,7 +86,7 @@ fn in_place_document_boundary(#[case] input: &[u8], #[case] expected: Vec<u8>) {
 }
 
 #[test]
-fn stdin_is_normalized_to_line_feed() {
+fn stdin_preserves_line_endings() {
     let stdout = Command::cargo_bin("mdtablefix")
         .expect("cargo binary")
         .write_stdin(b"|A|B|\r\n|---|---|\r\n|1|2|\r\n".to_vec())
@@ -97,7 +97,7 @@ fn stdin_is_normalized_to_line_feed() {
         .clone();
     assert_eq!(
         escaped(&stdout),
-        escaped(&document(&TABLE, "\n", false)),
-        "stdin should be reflowed and newline-normalized"
+        escaped(&document(&TABLE, "\r\n", false)),
+        "stdin should be reflowed and keep its line-ending style"
     );
 }

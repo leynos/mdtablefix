@@ -18,16 +18,18 @@ use metrics::{Unit, counter, describe_counter, describe_histogram, histogram};
 use tracing::{debug, trace};
 
 use super::{
-    line_endings::{LineEndingCounts, count_line_endings, serialize_lines},
+    document::SourceDocument,
+    line_endings::LineEndingCounts,
     swap::{create_temporary_file, remove_temporary_file, write_and_swap},
 };
 use crate::process::{process_stream, process_stream_no_wrap};
 
 /// Read `path`, process the contents with `f`, and write the result back.
 ///
-/// The line-ending style holding the majority of the file's line endings is
-/// preserved in the rewritten file, and the decision is reported at `debug`
-/// level under `operation`'s name.
+/// The document boundary is taken here: the body handed to `f` carries no
+/// byte-order mark, and the result is written back with the mark and the
+/// line-ending style holding the majority of the file's line endings. The
+/// decision is reported at `debug` level under `operation`'s name.
 ///
 /// This helper encapsulates the common pattern used by [`rewrite`] and
 /// [`rewrite_no_wrap`].
@@ -40,12 +42,12 @@ where
 {
     let (directory, name) = open_parent(path)?;
     let text = directory.read_to_string(&name)?;
-    let counts = count_line_endings(&text);
+    let document = SourceDocument::parse(&text);
     let path_text = path.to_string_lossy();
-    report_line_endings(counts, operation, path_text.as_ref());
-    let lines: Vec<String> = text.lines().map(str::to_string).collect();
+    report_line_endings(document.counts(), operation, path_text.as_ref());
+    let lines: Vec<String> = document.body().lines().map(str::to_string).collect();
     let fixed = f(&lines);
-    replace_file(&directory, &name, &serialize_lines(&fixed, counts.ending))
+    replace_file(&directory, &name, &document.render(&fixed))
 }
 
 /// Reports the line-ending decision at the boundary that made it.
