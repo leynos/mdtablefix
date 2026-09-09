@@ -362,7 +362,7 @@ target and then renamed over it, so the replacement is atomic on POSIX
 filesystems: a reader sees either the whole original file or the whole
 replacement, never a partial write. When the run fails before the rename — a
 full disk, a permission error, or a declined target — the original file is left
-byte-identical and the temporary file is removed, so a failed run can be retried
+byte-identical and any temporary file is cleaned up, so the run can be retried
 safely. A run killed abruptly, by `SIGKILL` or a power loss, can leave a stale
 temporary file beside the target; the original is still intact, and the next run
 retries past the stale name rather than reusing it. Stale files are named

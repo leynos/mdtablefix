@@ -117,11 +117,11 @@ rather than performing ambient filesystem access themselves.
 `src/io.rs`:
 
 - `replace_file(directory, path, contents) -> std::io::Result<()>` performs the
-  shared atomic replacement. It declines a symlinked target, copies the target
-  mode onto a `create_new` temporary file in the same directory, writes, flushes
-  and syncs the contents, renames the temporary file over the target, and
-  removes the temporary file when any later step fails. The CLI and
-  `rewrite`/`rewrite_no_wrap` all call it, so the sequence has one
+  shared atomic replacement. It declines a symlinked target, creates a
+  `create_new` temporary file in the same directory, writes, flushes and syncs
+  the contents, copies the target mode onto the temporary file, renames it over
+  the target, and removes the temporary file when any later step fails. The CLI
+  and `rewrite`/`rewrite_no_wrap` all call it, so the sequence has one
   implementation.
 - `open_parent(path) -> std::io::Result<(Dir, Utf8PathBuf)>` is the library's
   only ambient filesystem boundary. It opens a directory capability for the
