@@ -27,6 +27,10 @@
 
 ### Changed
 
+- `--in-place`, `rewrite` and `rewrite_no_wrap` replace a read-only file in a
+  writable directory instead of failing, because the atomic swap needs write
+  permission on the containing directory rather than on the file itself.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - Ungate the `[package.metadata.binstall]` configuration, which no longer
   applies only to 64-bit Linux GNU targets. One `pkg-url` template now covers
   Linux, macOS and Windows.
@@ -42,6 +46,11 @@
 
 ### Fixed
 
+- Write in-place output through a temporary file in the same directory and
+  rename it over the target, so an interrupted run or a full disk can no longer
+  leave a Markdown file truncated with no way to recover it. The original file
+  mode is preserved.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - Set the `cargo-binstall` `bin-dir` to `{ bin }{ binary-ext }`. The previous
   `.` rendered an empty source path, so `cargo binstall mdtablefix` failed
   before downloading anything.

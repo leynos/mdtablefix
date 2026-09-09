@@ -281,17 +281,15 @@ Text.
 
 ## Footnotes
 
- 1. First note
+ [^1]: First note
 
- 2. Second note
+ [^2]: Second note
 
-10. Final note
+[^10]: Final note
 ```
 
-After:
-
-```markdown
-Text.
+`convert_footnotes` only processes the final contiguous numeric list that
+immediately follows an H2 heading when these conditions are met.
 
 ## Footnotes
 
@@ -641,6 +639,10 @@ provided on the command line. Each worker gathers its output before printing,
 so results appear in the original order. This buffering increases memory usage
 and may reduce performance if many tiny files are processed.
 
+In-place rewrites replace each file through a temporary file in the same
+directory and a rename, so one worker failing cannot leave its target truncated
+and the other files in the batch are unaffected.
+
 ```mermaid
 sequenceDiagram
     participant User as actor User
@@ -676,7 +678,7 @@ sequenceDiagram
 
 _Figure 4: The CLI processes file inputs in parallel, then reports results in
 their original order: formatted text goes to stdout, while in-place processing
-writes files directly and both modes report errors on stderr._
+replaces each file atomically and both modes report errors on stderr._
 
 ## Unicode Width Handling
 

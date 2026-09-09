@@ -353,6 +353,32 @@ fn main() {}
 ```
 ````
 
+
+## In-place editing
+
+Pass `--in-place` to rewrite each named file with the formatted result. The
+formatted output is written to a temporary file in the same directory as the
+target and then renamed over it, so the replacement is atomic on POSIX
+filesystems: a reader sees either the whole original file or the whole
+replacement, never a partial write. If the run fails before the rename — an
+interrupted process, a full disk, or an out-of-memory kill — the original file
+is left byte-identical and the temporary file is removed, so a failed run can
+be retried safely.
+
+The original file mode is preserved. A freshly created temporary file does not
+inherit the target's permissions, so `mdtablefix` copies them across before the
+rename: a file with mode `0640` still has mode `0640` afterwards. Because the
+replacement is a rename, it needs write permission on the containing directory
+rather than on the file itself, so a read-only file in a writable directory is
+replaced successfully.
+
+Two limitations apply. On Windows the replacement can fail if another process
+holds the destination open without delete sharing, because the rename cannot
+displace an open handle. Atomicity is also not durability: the new contents are
+flushed to storage before the rename, but the rename itself is not, so a power
+loss immediately afterwards can revert the directory entry to the original
+file.
+
 ## Library API notes
 
 ### `format_breaks` return type

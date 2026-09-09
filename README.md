@@ -257,7 +257,14 @@ assert_eq!(out[2], "[^1]: First note");
   by default.
 
 - `rewrite(path: &Path) -> std::io::Result<()>` modifies a Markdown file on
-  disk in-place.
+  disk in-place, wrapping paragraphs and list items as it reflows.
+- `rewrite_no_wrap(path: &Path) -> std::io::Result<()>` does the same without
+  wrapping text.
+
+Both helpers write the replacement to a temporary file in the same directory
+and rename it over the target, so the swap is atomic on POSIX filesystems and a
+failure before the rename leaves the original file intact. The original file
+mode is preserved.
 
 > **Breaking change:** `format_breaks` now returns
 > `Vec<Cow<'_, str>>` instead of `Vec<String>` so unchanged lines stay
