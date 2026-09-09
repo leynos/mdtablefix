@@ -275,7 +275,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
       document found two pre-existing non-idempotent transforms. Per
       `Tolerances`, work stopped and the finding was escalated rather than
       worked around. See `Surprises & discoveries` and
-      `Artefacts and notes → EP-M2 idempotence failure`.
+      `Artefacts and notes → EP-M2 idempotence failure`. Raised as GitHub
+      issue #468 with the reproduction corpus and its acceptance criteria;
+      green work stays suspended pending the scope decision.
 - [ ] EP-M3 Driver, read-only capability, `--check`, exit-status contract,
       version bump to `0.6.0`.
 - [ ] EP-M4 `--diff`, sharing `--check`'s exit semantics.
@@ -658,6 +660,19 @@ Hard invariants. Violating one requires escalation, not a workaround.
   repository parses arguments with plain `clap`, not `ortho-config`, and
   adopting the Netsuke lint baseline is tracked separately as issue #441.
   Date/Author: 2026-09-09.
+
+- Decision: raise the two idempotence defects as GitHub issue #468, with the
+  reproduction corpus attached and an acceptance bar of corpus **and**
+  property test, and leave `EP-M2` green work suspended until the scope
+  decision is made.
+  Rationale: the defects are pre-existing in `--wrap` and `--breaks`, outside
+  the reporting feature this plan was scoped to build, so fixing them here
+  would silently widen the change under review; leaving them undocumented
+  would let `--check` ship against a guarantee it cannot meet. An issue with a
+  failing corpus is the artefact that keeps the finding actionable without
+  binding this plan to a fix whose blast radius is not yet agreed. Raised on
+  explicit instruction from `@leynos`, who set the two-part acceptance bar.
+  Date/Author: 2026-09-09, on explicit instruction from `@leynos`.
 
 ## Outcomes & retrospective
 
@@ -2231,6 +2246,16 @@ eight `tests/data/numstat/` fixtures with their `todo!()` bodies intact. That
 branch is a red-state checkpoint and must not be merged as-is; resume by
 continuing from it or by re-creating the files, which `Concrete steps →
 EP-M2` fully specifies.
+
+Raised as GitHub issue #468 on explicit instruction from `@leynos`. The issue
+carries the self-checking corpus script verbatim, the observed pass-1 and
+pass-2 bytes for all eight cases, the blast-radius table, and the root-cause
+analysis above. Its acceptance criteria require both halves of the evidence
+`@leynos` asked for: the corpus landed as `tests/data/idempotence/*.dat` with a
+test that formats each fixture twice through the real binary, **and** a
+generated-document property test over the sampled eight-flag powerset with
+non-vacuity. Satisfying the eight cases alone does not close the issue, and
+neither does a property test that never reaches the failing shapes.
 
 ## Documentation and skills to consult
 
