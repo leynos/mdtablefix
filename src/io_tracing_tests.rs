@@ -53,6 +53,29 @@ fn snapshots_successful_replacement_events() {
     });
 }
 
+#[traced_test]
+#[test]
+fn reports_replacement_failure_event() {
+    let dir = tempdir().expect("create temporary directory");
+    let directory = open_dir(dir.path());
+    let path = Utf8Path::new("target.md");
+    directory
+        .create_dir(path)
+        .expect("create a directory target that cannot be replaced");
+
+    replace_file(&directory, path, "replacement").expect_err("renaming over a directory must fail");
+
+    // The failing stage and the platform-specific error kind are deliberately
+    // not pinned; the event's presence and its stable category field are.
+    logs_assert(|lines| {
+        lines
+            .iter()
+            .any(|line| line.contains("replacement failed") && line.contains("error_category="))
+            .then_some(())
+            .ok_or_else(|| "expected replacement failed event".to_string())
+    });
+}
+
 #[cfg(unix)]
 #[traced_test]
 #[test]

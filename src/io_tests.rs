@@ -4,8 +4,6 @@ use std::{fs, path::Path};
 #[cfg(unix)]
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
-#[cfg(unix)]
-use libc;
 use rstest::rstest;
 use tempfile::tempdir;
 

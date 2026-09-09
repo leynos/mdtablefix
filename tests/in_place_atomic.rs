@@ -8,6 +8,8 @@
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 
 use assert_cmd::Command;
 use predicates::str::contains;
@@ -128,6 +130,85 @@ fn in_place_failure_leaves_original_byte_identical() {
         entry_names(&root),
         vec!["sample.md"],
         "a failed rewrite must leave no temporary file behind"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn in_place_write_failure_leaves_original_byte_identical() {
+    let dir = tempdir().expect("create temporary directory");
+    let target = dir.path().join("sample.md");
+    fs::write(&target, BROKEN).expect("write fixture");
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_mdtablefix"));
+    command.arg("--in-place").arg(&target);
+    // A file-size limit fails the temporary-file write part-way through, so
+    // the failure lands after creation but before the swap. `SIGXFSZ` must be
+    // ignored for the write to report `EFBIG` instead of killing the process.
+    unsafe {
+        command.pre_exec(|| {
+            libc::signal(libc::SIGXFSZ, libc::SIG_IGN);
+            let limit = libc::rlimit {
+                rlim_cur: 8,
+                rlim_max: 8,
+            };
+            if libc::setrlimit(libc::RLIMIT_FSIZE, &raw const limit) == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
+            }
+        });
+    }
+
+    let output = command.output().expect("run mdtablefix");
+
+    assert!(
+        !output.status.success(),
+        "a failed write must exit non-zero: {output:?}"
+    );
+    assert_eq!(
+        fs::read_to_string(&target).expect("read target"),
+        BROKEN,
+        "a failed write must leave the original byte-identical"
+    );
+    assert_eq!(
+        entry_names(dir.path()),
+        vec!["sample.md"],
+        "a failed write must leave no temporary file behind"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn in_place_retries_past_a_stale_temporary_file() {
+    let dir = tempdir().expect("create temporary directory");
+    let target = dir.path().join("sample.md");
+    fs::write(&target, BROKEN).expect("write fixture");
+    // The shell occupies the first candidate name using the process id that
+    // `exec` hands to the binary, so the run must retry rather than reuse it.
+    let status = std::process::Command::new("sh")
+        .arg("-c")
+        .arg("touch sample.md.mdtablefix-$$-0.tmp; exec \"$1\" --in-place sample.md")
+        .arg("sh")
+        .arg(env!("CARGO_BIN_EXE_mdtablefix"))
+        .current_dir(dir.path())
+        .status()
+        .expect("run mdtablefix through sh");
+
+    assert!(
+        status.success(),
+        "a stale temporary name must not fail the run"
+    );
+    assert_eq!(fs::read_to_string(&target).expect("read target"), FIXED);
+    let names = entry_names(dir.path());
+    assert_eq!(
+        names.len(),
+        2,
+        "only the target and the stale file may remain: {names:?}"
+    );
+    assert_eq!(names[0], "sample.md", "unexpected entries: {names:?}");
+    assert!(
+        names[1].starts_with("sample.md.mdtablefix-") && names[1].ends_with("-0.tmp"),
+        "the stale file must survive untouched: {names:?}"
     );
 }
 

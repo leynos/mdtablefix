@@ -94,7 +94,9 @@ fn open_parent(path: &Path) -> io::Result<(Dir, Utf8PathBuf)> {
 /// cannot be written, or if the rename fails.
 #[tracing::instrument(level = "debug", skip(directory, contents), fields(path = %path))]
 pub fn replace_file(directory: &Dir, path: &Utf8Path, contents: &str) -> io::Result<()> {
-    let metadata = directory.symlink_metadata(path)?;
+    let metadata = directory.symlink_metadata(path).inspect_err(|error| {
+        debug!(error_category = ?error.kind(), "replacement failed");
+    })?;
     if metadata.file_type().is_symlink() {
         debug!(error_category = "symlink_target", "rewrite declined");
         return Err(io::Error::new(
@@ -104,9 +106,12 @@ pub fn replace_file(directory: &Dir, path: &Utf8Path, contents: &str) -> io::Res
     }
     trace!("target metadata read");
     let permissions = metadata.permissions();
-    let (temp_path, file) = create_temporary_file(directory, path)?;
+    let (temp_path, file) = create_temporary_file(directory, path).inspect_err(|error| {
+        debug!(error_category = ?error.kind(), "replacement failed");
+    })?;
     let outcome = write_and_swap(directory, &temp_path, path, contents, permissions, file);
-    if outcome.is_err() {
+    if let Err(error) = &outcome {
+        debug!(error_category = ?error.kind(), "replacement failed");
         // Best effort: failing to clean up must not mask the original error,
         // and the next run retries past any stale name it finds.
         if directory.remove_file(&temp_path).is_ok() {

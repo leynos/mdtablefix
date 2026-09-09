@@ -690,13 +690,15 @@ and renaming it over the target. Both call the single implementation in
 `mdtablefix::io::replace_file`, which takes a `cap_std::fs_utf8::Dir`
 capability and a path relative to it, so every create, write, permission change
 and rename runs through the same directory capability as the rest of the run and
-no step falls back to ambient access. The temporary file is created with
-`create_new`, so it never clobbers an existing file, and its name carries the
-process id and a per-process counter to keep concurrent writers apart. A
-freshly created file does not inherit the target mode, so the mode is copied
-across before the swap. A target that is a symbolic link is declined, because
-the rename would swap the link entry for a regular file and leave the real file
-untouched.
+no step falls back to ambient access. Within the library, `open_parent` is the
+only ambient filesystem entry point. The CLI opens the target's parent
+directory once in `open_file_parent` and passes that capability into the
+replacement path. The temporary file is created with `create_new`, so it never
+clobbers an existing file, and its name carries the process id and a per-process
+counter to keep concurrent writers apart. A freshly created file does not
+inherit the target mode, so the mode is copied across before the swap. A target
+that is a symbolic link is declined, because the rename would swap the link
+entry for a regular file and leave the real file untouched.
 
 For screen readers: The following sequence diagram traces one atomic in-place
 rewrite from the caller through the rewriter, the containing directory, the

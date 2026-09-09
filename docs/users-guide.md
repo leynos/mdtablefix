@@ -362,12 +362,12 @@ target and then renamed over it, so the replacement is atomic on POSIX
 filesystems: a reader sees either the whole original file or the whole
 replacement, never a partial write. When the run fails before the rename — a
 full disk, a permission error, or a declined target — the original file is left
-byte-identical and any temporary file is cleaned up, so the run can be retried
-safely. A run killed abruptly, by `SIGKILL` or a power loss, can leave a stale
-temporary file beside the target; the original is still intact, and the next run
-retries past the stale name rather than reusing it. Stale files are named
-`<target>.mdtablefix-<pid>-<n>.tmp`, and you can delete them once no run is in
-progress.
+byte-identical and any temporary file is removed on a best-effort basis, so the
+run can be retried safely. A run killed abruptly, by `SIGKILL` or a power loss,
+can leave a stale temporary file beside the target; the original is still
+intact, and the next run retries past the stale name rather than reusing it.
+Stale files are named `<target>.mdtablefix-<pid>-<n>.tmp`. Delete them once no
+run is in progress.
 
 The original file mode is preserved. A freshly created temporary file does not
 inherit the target's permissions, so `mdtablefix` copies them across before the

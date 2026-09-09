@@ -650,15 +650,19 @@ corresponding `reason` values are `no_blockquote_prefix`,
 `blockquote_depth_decreased`, and `incompatible_active_opener`.
 
 The in-place rewrite in `src/io.rs` follows the same discipline. `replace_file`
-carries a `debug` span whose only field is the target `path`. Inside it,
-`target metadata read` (trace), `temporary file created` (debug, with `attempt`),
-`temporary file written` (debug, with `bytes`), `temporary file synced` (debug),
-`target mode applied` (debug), and `target replaced` (debug) mark the success
-path; `temporary name rejected` (trace, with `attempt` and
-`reason = "already_exists"`) and `temporary file removed after failure` (trace)
-mark the retry and cleanup paths; and `rewrite declined` (debug, with
-`error_category = "symlink_target"`) marks a symbolic-link target. None of these
-events carry file content.
+carries a `debug` span whose only field is the target `path`. The `path` field
+is span metadata, not a metric label, so target paths cannot create unbounded
+metric cardinality, and the crate installs no metrics recorder. Inside it,
+`target metadata read` (trace), `temporary file created` (debug, with
+`attempt`), `temporary file written` (debug, with `bytes`),
+`temporary file synced` (debug), `target mode applied` (debug), and
+`target replaced` (debug) mark the success path; `temporary name rejected`
+(trace, with `attempt` and `reason = "already_exists"`) and
+`temporary file removed after failure` (trace) mark the retry and cleanup paths;
+and `rewrite declined` (debug, with `error_category = "symlink_target"`) marks a
+symbolic-link target. `replacement failed` (debug, with `error_category` from
+`io::ErrorKind`) marks a failed metadata read, temporary-file creation, or
+write/swap. None of these events carry file content.
 
 Table: Structured field names emitted by tracing instrumentation.
 
@@ -673,7 +677,7 @@ Table: Structured field names emitted by tracing instrumentation.
 | `is_image`        | `bool`          | `link or image parsed`                        | `true` when the link token is an image literal (`![]()`)    |
 | `row_index`       | `usize`         | table-row events                              | Zero-based index of the parsed logical row                  |
 | `cell_count`      | `usize`         | table-row events                              | Number of cells in the parsed logical row                   |
-| `error_category`  | `&str`          | declined or discarded events                  | Stable category for a non-successful classification outcome |
+| `error_category`  | `&str`, Debug   | declined, discarded, and replacement failures | Stable category or I/O error kind for a failure             |
 | `attempt`         | `u32`           | `replace_file` events                         | Zero-based index of the temporary-file creation attempt     |
 | `bytes`           | `usize`         | `replace_file` events                         | Byte length of the formatted replacement that was written   |
 | `line_len`        | `usize`         | blockquote-prefix events                      | Byte length of the examined source line                     |
@@ -739,7 +743,8 @@ are caught in review. These tests live next to the instrumented code:
 - `src/wrap/tokenize/parsing_tracing_snapshots.rs` – link, image, and footnote
   events.
 - `src/io_tracing_tests.rs` – in-place rewrite events: `temporary file written`,
-  `target replaced`, and `rewrite declined`.
+  `target replaced`, and `rewrite declined`; `replacement failed` is covered by
+  a presence assertion rather than a snapshot.
 
 Each is wired into its owning module as a `#[cfg(test)]` `#[path = "…"]`
 submodule so the snapshot test sits beside the code it pins while keeping the

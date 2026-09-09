@@ -23,3 +23,9 @@ fn blockquote_and_fence_public_api_compiles() {
     let cases = trybuild::TestCases::new();
     cases.pass("tests/ui/blockquote_fence_api_pass.rs");
 }
+
+#[test]
+fn replace_file_public_api_compiles() {
+    let cases = trybuild::TestCases::new();
+    cases.pass("tests/ui/replace_file_api_pass.rs");
+}
