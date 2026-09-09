@@ -1,6 +1,6 @@
 [package]
 name = "mdtablefix"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.89"
 license = "ISC"
@@ -26,6 +26,7 @@ clap = { version = "4", features = ["derive"] }
 regex = "1"
 once_cell = "1"
 rayon = "1.11"
+similar = "2.7"
 html5ever = "0.39.0"
 # `markup5ever_rcdom` must stay on the same parser stack as `html5ever`
 # because `RcDom` implements `TreeSink` from that shared `markup5ever` line.
@@ -51,6 +52,10 @@ predicates = "3"
 trybuild = "1"
 tracing-test = "0.2"
 test-macros = { path = "test-macros" }
+googletest = "0.14"
+pretty_assertions = "1"
+rstest-bdd = "0.5.0"
+rstest-bdd-macros = { version = "0.5.0", features = ["strict-compile-time-validation"] }
 
 [lints.clippy]
 pedantic = "warn"
