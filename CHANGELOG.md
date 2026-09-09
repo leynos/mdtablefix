@@ -31,6 +31,13 @@
   writable directory instead of failing, because the atomic swap needs write
   permission on the containing directory rather than on the file itself.
   ([#465](https://github.com/leynos/mdtablefix/issues/465))
+- `--in-place`, `rewrite` and `rewrite_no_wrap` decline a symbolic link instead
+  of replacing the link entry with a regular file, which previously left the
+  real file untouched while destroying the link. Rewrite the link's target
+  directly.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
+- A failed file reports the full error chain, so a declined rewrite states its
+  reason rather than only the file being written.
 - Ungate the `[package.metadata.binstall]` configuration, which no longer
   applies only to 64-bit Linux GNU targets. One `pkg-url` template now covers
   Linux, macOS and Windows.
@@ -49,7 +56,8 @@
 - Write in-place output through a temporary file in the same directory and
   rename it over the target, so an interrupted run or a full disk can no longer
   leave a Markdown file truncated with no way to recover it. The original file
-  mode is preserved.
+  mode is preserved, and a stale temporary file left by an abruptly killed run
+  is retried past rather than reused.
   ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - Set the `cargo-binstall` `bin-dir` to `{ bin }{ binary-ext }`. The previous
   `.` rendered an empty source path, so `cargo binstall mdtablefix` failed

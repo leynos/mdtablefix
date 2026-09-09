@@ -264,7 +264,10 @@ assert_eq!(out[2], "[^1]: First note");
 Both helpers write the replacement to a temporary file in the same directory
 and rename it over the target, so the swap is atomic on POSIX filesystems and a
 failure before the rename leaves the original file intact. The original file
-mode is preserved.
+mode is preserved, and a symbolic link is declined rather than replaced.
+Callers that already hold a `cap_std::fs_utf8::Dir` capability can call
+`mdtablefix::io::replace_file(directory, path, contents)` for the same behaviour
+without ambient filesystem access.
 
 > **Breaking change:** `format_breaks` now returns
 > `Vec<Cow<'_, str>>` instead of `Vec<String>` so unchanged lines stay

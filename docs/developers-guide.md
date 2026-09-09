@@ -105,14 +105,28 @@ restores the separator row with widths derived from the final table body.
   formats a file through `cap_std::fs_utf8::Dir` without modifying it. Its
   returned text uses the same trailing-newline convention as a rewritten file.
 - `rewrite_in_place(directory, path, opts) -> anyhow::Result<()>` reads and
-  formats a capability-scoped file, then writes the formatted text back through
-  the same directory capability.
+  formats a capability-scoped file, then replaces it through the same directory
+  capability with `mdtablefix::io::replace_file`.
 
 Callers select the function that matches their intent rather than passing a
 Boolean mode flag. This keeps stdout and in-place contracts explicit while
 allowing both paths to share the exact formatting result. New file-output call
 sites must receive a directory capability and relative `camino::Utf8Path`
 rather than performing ambient filesystem access themselves.
+
+`src/io.rs`:
+
+- `replace_file(directory, path, contents) -> std::io::Result<()>` performs the
+  shared atomic replacement. It declines a symlinked target, copies the target
+  mode onto a `create_new` temporary file in the same directory, writes, flushes
+  and syncs the contents, renames the temporary file over the target, and
+  removes the temporary file when any later step fails. The CLI and
+  `rewrite`/`rewrite_no_wrap` all call it, so the sequence has one
+  implementation.
+- `open_parent(path) -> std::io::Result<(Dir, Utf8PathBuf)>` is the library's
+  only ambient filesystem boundary. It opens a directory capability for the
+  target's parent and returns the target's file name relative to that
+  capability.
 
 `src/reflow.rs`:
 
@@ -635,6 +649,17 @@ the `open`, `matching_close`, or `implicit_close` transition, and
 corresponding `reason` values are `no_blockquote_prefix`,
 `blockquote_depth_decreased`, and `incompatible_active_opener`.
 
+The in-place rewrite in `src/io.rs` follows the same discipline. `replace_file`
+carries a `debug` span whose only field is the target `path`. Inside it,
+`target metadata read` (trace), `temporary file created` (debug, with `attempt`),
+`temporary file written` (debug, with `bytes`), `temporary file synced` (debug),
+`target mode applied` (debug), and `target replaced` (debug) mark the success
+path; `temporary name rejected` (trace, with `attempt` and
+`reason = "already_exists"`) and `temporary file removed after failure` (trace)
+mark the retry and cleanup paths; and `rewrite declined` (debug, with
+`error_category = "symlink_target"`) marks a symbolic-link target. None of these
+events carry file content.
+
 Table: Structured field names emitted by tracing instrumentation.
 
 | Field             | Type            | Used in                                       | Meaning                                                     |
@@ -649,6 +674,8 @@ Table: Structured field names emitted by tracing instrumentation.
 | `row_index`       | `usize`         | table-row events                              | Zero-based index of the parsed logical row                  |
 | `cell_count`      | `usize`         | table-row events                              | Number of cells in the parsed logical row                   |
 | `error_category`  | `&str`          | declined or discarded events                  | Stable category for a non-successful classification outcome |
+| `attempt`         | `u32`           | `replace_file` events                         | Zero-based index of the temporary-file creation attempt     |
+| `bytes`           | `usize`         | `replace_file` events                         | Byte length of the formatted replacement that was written   |
 | `line_len`        | `usize`         | blockquote-prefix events                      | Byte length of the examined source line                     |
 | `prefix_len`      | `usize`         | blockquote-prefix events                      | Byte length of the recognized blockquote prefix             |
 | `depth`           | `usize`         | blockquote and fence events                   | Current blockquote nesting depth                            |
@@ -699,6 +726,7 @@ Table: Instrumented functions and their logging levels and fields.
 | `parse_link_or_image`     | debug        | `idx` (in), `skip(text)`; `token_length` and `is_image` events                                    |
 | `find_footnote_end`       | trace        | `idx` (in), `skip(text)`, return value (out)                                                      |
 | `parse_rows`              | trace, debug | `skip(trimmed)`; `row_index`, `cell_count`, and `error_category` events                           |
+| `replace_file`            | debug        | `path` (in); emits the in-place rewrite events                                                    |
 
 ### Tracing-event snapshot tests
 
@@ -710,6 +738,8 @@ are caught in review. These tests live next to the instrumented code:
 - `src/wrap/inline/span_helper_tracing_tests.rs` – date-span events.
 - `src/wrap/tokenize/parsing_tracing_snapshots.rs` – link, image, and footnote
   events.
+- `src/io_tracing_tests.rs` – in-place rewrite events: `temporary file written`,
+  `target replaced`, and `rewrite declined`.
 
 Each is wired into its owning module as a `#[cfg(test)]` `#[path = "…"]`
 submodule so the snapshot test sits beside the code it pins while keeping the
@@ -1036,6 +1066,24 @@ Apply it to any fixture function whose single-expression body triggers the lint:
 #[rstest::fixture]
 pub fn broken_table() -> Vec<String> { … }
 ```
+
+
+### 2.4. Inline unit-test modules
+
+AGENTS.md caps a source file at 400 lines, so a `#[cfg(test)] mod tests` block
+that pushes its production module over the limit moves into a sibling file
+wired back in with `#[path]`:
+
+```rust
+#[cfg(test)]
+#[path = "io_tests.rs"]
+mod tests;
+```
+
+`src/io.rs` and `src/main.rs` use this shape, as do the tracing-snapshot modules
+listed under [Tracing-event snapshot tests](#tracing-event-snapshot-tests). The
+moved tests keep their original paths (`io::tests::…`), and `super` still
+resolves to the owning module, so unqualified access to its items is unchanged.
 
 ## 3. Breaks module – Cow allocation strategy
 

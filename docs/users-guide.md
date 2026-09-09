@@ -360,10 +360,14 @@ Pass `--in-place` to rewrite each named file with the formatted result. The
 formatted output is written to a temporary file in the same directory as the
 target and then renamed over it, so the replacement is atomic on POSIX
 filesystems: a reader sees either the whole original file or the whole
-replacement, never a partial write. If the run fails before the rename — an
-interrupted process, a full disk, or an out-of-memory kill — the original file
-is left byte-identical and the temporary file is removed, so a failed run can
-be retried safely.
+replacement, never a partial write. When the run fails before the rename — a
+full disk, a permission error, or a declined target — the original file is left
+byte-identical and the temporary file is removed, so a failed run can be retried
+safely. A run killed abruptly, by `SIGKILL` or a power loss, can leave a stale
+temporary file beside the target; the original is still intact, and the next run
+retries past the stale name rather than reusing it. Stale files are named
+`<target>.mdtablefix-<pid>-<n>.tmp`, and you can delete them once no run is in
+progress.
 
 The original file mode is preserved. A freshly created temporary file does not
 inherit the target's permissions, so `mdtablefix` copies them across before the
@@ -371,6 +375,13 @@ rename: a file with mode `0640` still has mode `0640` afterwards. Because the
 replacement is a rename, it needs write permission on the containing directory
 rather than on the file itself, so a read-only file in a writable directory is
 replaced successfully.
+
+Symbolic links are declined rather than replaced. The read follows the link, but
+the rename swaps the link entry itself, which would turn the symlink into a
+regular file while leaving the real file untouched. The run reports the declined
+link on standard error; rewrite the link's target directly instead. A link whose
+target resolves outside the file's directory is refused by the directory
+capability before the rewrite begins.
 
 Two limitations apply. On Windows the replacement can fail if another process
 holds the destination open without delete sharing, because the rename cannot
@@ -380,6 +391,21 @@ loss immediately afterwards can revert the directory entry to the original
 file.
 
 ## Library API notes
+
+
+### Atomic in-place rewrites
+
+`rewrite(path)` and `rewrite_no_wrap(path)` give library callers the same
+guarantee as `--in-place`: the replacement is written to a temporary file beside
+the target, flushed, and renamed over it, with the original file mode preserved.
+Symbolic links are declined, as described in
+[In-place editing](#in-place-editing).
+
+Callers that already hold a `cap_std::fs_utf8::Dir` capability can use
+`mdtablefix::io::replace_file(directory, path, contents)` instead. It performs
+the same temporary-file-and-rename sequence relative to the supplied directory,
+so no ambient filesystem access is needed. The CLI and the two path helpers all
+call it, so the sequence has one implementation.
 
 ### `format_breaks` return type
 
