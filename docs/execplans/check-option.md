@@ -344,6 +344,20 @@ Hard invariants. Violating one requires escalation, not a workaround.
   Impact: noted so the plan does not claim a CI cost it has not measured. No
   CI change is required.
 
+- Observation: `make test` does not run doctests, because its recipe passes
+  `--all-targets`, which cargo documents as excluding them. `AGENTS.md:154`
+  claims the gate runs `cargo test --workspace`, which would include them, so
+  the Makefile diverges from its own documentation.
+  Evidence: `grep -niE 'doc-?test'
+  /tmp/test-mdtablefix-check-option.out` returns nothing, while
+  `cargo test --doc --all-features` reports `28 passed; 0 failed; 20 ignored`.
+  Impact: this plan adds doctests to every new public item, so their contract
+  would otherwise be unverifiable by the deterministic gates. Mitigation: the
+  Makefile's `test` recipe gains a second `cargo test --doc` invocation in the
+  commit following this one, and each milestone runs the doctests explicitly
+  until then. The pre-existing doctest suite passes, so widening the gate
+  cannot break unrelated work.
+
 ## Decision log
 
 - Decision: `--check` reports concisely as `<path> +<ins> -<del>` and `--diff`
@@ -2030,6 +2044,36 @@ verbatim while the separator and data lines are reflowed — and the data line
 is emitted *before* the separator. A lone `\r` is not a line ending to
 `str::lines`, so `alpha\rbeta` stays a single line and the `\r` survives
 inside it. Both are exactly the defects `ISSUE-451` reports.
+
+### EP-M1 red and green transcripts
+
+Red, from `cargo test --lib document` with `detect`, `parse`, and
+`render_lines` stubbed as `todo!()` (full log:
+`/tmp/red-document-mdtablefix-check-option.out`):
+
+```plaintext
+thread 'document::tests::render_lines_uses_the_document_ending' panicked at
+src/document.rs:91:9:
+not yet implemented: EP-M1 green step
+
+test result: FAILED. 3 passed; 20 failed; 0 ignored; 0 measured; 720 filtered out
+```
+
+Green, from the same command after implementing the three bodies:
+
+```plaintext
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 720 filtered out
+```
+
+Those 23 are not all `document` cases: the filter also matches two `ellipsis`
+tests whose names contain "document"
+(`grep -cE '^test document::tests::'` on the log gives 21, which is the count
+of `document::tests::` cases). `src/document.rs` is 242 lines.
+
+`as_str` stays implemented in the red state: `todo!()` is not callable in a
+`const fn`, and the function is a two-arm match with no logic worth red-ing.
+`cargo test --doc document` runs the four new doctests, all passing — but
+`make test` does not run them, as `Surprises and discoveries` records.
 
 ## Documentation and skills to consult
 
