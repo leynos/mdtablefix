@@ -11,9 +11,9 @@ Status: DRAFT
 ## Purpose / big picture
 
 Today `mdtablefix` only formats the files a user names on the command line, so
-tidying a whole repository means writing a shell pipeline and remembering to
-exclude `target/`, `node_modules/`, and anything else `.gitignore` covers. Get
-that pipeline wrong and the tool rewrites build output or, worse, source code.
+tidying a repository means writing a shell pipeline and remembering to exclude
+`target/`, `node_modules/`, and anything else `.gitignore` covers. Get that
+pipeline wrong and the tool rewrites build output or, worse, source code.
 
 After this change a user standing anywhere inside a Git working tree can run:
 
@@ -21,57 +21,61 @@ After this change a user standing anywhere inside a Git working tree can run:
 mdtablefix --git --in-place --wrap
 ```
 
-and every Markdown file that Git tracks, plus every untracked Markdown file
-Git does not ignore, is reflowed in place. Nothing ignored is touched, nothing
-non-Markdown is touched, and the selection is exactly the set that
-`git ls-files --cached --others --exclude-standard` reports.
+and every Markdown file Git tracks beneath the current directory is reflowed
+in place. Adding `--include-untracked` extends the selection to untracked files
+Git does not ignore, making the pair exactly equivalent to
+`git ls-files --cached --others --exclude-standard`.
 
 Success is observable without reading any code:
 
-- `mdtablefix --git --in-place` inside a repository reformats the tracked and
-  untracked Markdown files and leaves `.gitignore`d Markdown and `.rs` sources
-  byte-identical.
-- `mdtablefix --git --md-exts mdc,markdown --in-place` reformats only files
-  with those extensions.
-- `mdtablefix --git` outside a Git repository exits non-zero and prints a
-  diagnostic naming the problem, without modifying anything.
-- `mdtablefix --git some-file.md` is rejected by argument parsing, because the
+- `mdtablefix --git --list-files` prints the paths that would be acted on, one
+  per line, and touches nothing.
+- `mdtablefix --git --in-place` reformats tracked Markdown and leaves ignored
+  Markdown, untracked Markdown, and `.rs` sources byte-identical.
+- `mdtablefix --git --include-untracked --in-place` also reformats untracked
+  Markdown, still leaving ignored files alone.
+- `mdtablefix --git --md-exts mdc,markdown --in-place` acts only on files with
+  those extensions.
+- `mdtablefix --git` outside a Git repository exits non-zero with a diagnostic
+  and modifies nothing.
+- `mdtablefix --git some-file.md` is rejected at argument parsing, because the
   two ways of choosing files are mutually exclusive.
 
 ## Context and orientation
 
-`mdtablefix` is a single Rust workspace: a library crate rooted at
-`src/lib.rs` and a binary crate rooted at `src/main.rs`, plus a small
-proc-macro helper crate at `test-macros/`. The package version is `0.5.1`, so
-it is pre-1.0 and carries no source-compatibility obligations.
+`mdtablefix` is one Rust package: a library crate rooted at `src/lib.rs`, a
+binary crate rooted at `src/main.rs`, and a proc-macro helper at
+`test-macros/`. The package version is `0.5.1`, so it is pre-1.0 and carries no
+source-compatibility obligations.
 
 Read these before starting, in this order:
 
-- `AGENTS.md` — the repository's binding style, testing, and commit rules.
-- `docs/contents.md` — the documentation index; it names every document below.
+- `AGENTS.md` — binding style, error-handling, testing, and commit rules. In
+  particular lines 232 (use `cap_std`/`camino` in place of `std::fs`/
+  `std::path`) and 264 to 269 (prefer `thiserror` domain enums; never export an
+  opaque error type from a library).
+- `docs/contents.md` — the documentation index.
 - `docs/architecture.md` — the processing pipeline and the `rayon` concurrency
   model.
-- `docs/developers-guide.md` — internal conventions, in particular the
-  capability-scoped filesystem boundary and the observability rules.
+- `docs/developers-guide.md` — the capability-scoped filesystem boundary and
+  the observability rules.
 - `docs/documentation-style-guide.md` — British English with Oxford spelling,
-  prose wrapped at 80 columns, language identifiers on every fenced block,
-  captioned figures and tables.
-- `docs/rust-testing-with-rstest-fixtures.md` — the fixture-first testing
-  style this repository follows.
-- `docs/rust-doctest-dry-guide.md` — how to write the `# Examples` blocks the
-  new public API needs.
+  prose at 80 columns, a language identifier on every fenced block, captioned
+  figures.
+- `docs/rust-testing-with-rstest-fixtures.md` — the fixture-first `rstest`
+  style. Note it says nothing about `googletest` or `pretty_assertions`; the
+  guidance for those is in the `rust-unit-testing` agent skill.
 
-Load these agent skills while working: `rust-router` (then `rust-unit-testing`
-for the test shapes, `rust-errors` for the error type, and `arch-crate-design`
-for the module boundary), `hexagonal-architecture` for the port and adapter
-split, `proptest` for the property tests, `arch-decision-records` for the new
-ADR, and `en-gb-oxendict` for prose.
+Load these agent skills: `rust-router`, then `rust-unit-testing` for test
+shapes, `rust-errors` for the error enums, and `arch-crate-design` for the
+module boundary; `hexagonal-architecture` for the port split; `proptest` for
+the property tests; `arch-decision-records` for the ADR; `en-gb-oxendict` for
+prose.
 
 ### How file selection works today
 
-`src/main.rs` is 303 lines. Its `Cli` struct (lines 26 to 36) has one
-positional field, `files: Vec<PathBuf>`, and one flag with a cross-field
-constraint:
+`src/main.rs` is 303 lines. Its `Cli` struct has one positional field and one
+cross-field constraint:
 
 ```rust
 #[derive(Parser)]
@@ -87,42 +91,39 @@ struct Cli {
 }
 ```
 
-`main` branches on whether `cli.files` is empty. If it is, the tool reads
-standard input. Otherwise it maps `cli.files.par_iter()` through
-`open_file_parent`, which `src/main.rs` documents as "the only ambient
-filesystem boundary for CLI file processing": it opens the file's parent
-directory as a `cap_std::fs_utf8::Dir` capability and returns a relative
-`camino::Utf8PathBuf`. Every later read and write goes through that
-capability. `report_results` then prints per-file errors to stderr and returns
+`main` branches on `cli.files.is_empty()`. If empty, it reads standard input.
+Otherwise it maps `cli.files.par_iter()` through `open_file_parent`, which
+`src/main.rs` documents as "the only ambient filesystem boundary for CLI file
+processing": it opens the file's parent directory as a `cap_std::fs_utf8::Dir`
+and returns a relative `camino::Utf8PathBuf`. Every read and write goes through
+that capability. `report_results` prints per-file errors to stderr and returns
 the first error, so one bad file does not abort the others.
 
 There is no glob expansion, no directory walking, and no extension filtering
 anywhere in the crate. `walkdir`, `glob`, `ignore`, `git2`, and `gix` are all
-absent from `Cargo.toml`. Nothing in the repository shells out to `git`.
+absent. Nothing in the repository shells out to `git`.
 
 ### Terms used in this plan
 
-- **Tracked file** — a path recorded in Git's index. `git ls-files --cached`
-  lists these, including paths whose working-tree copy has been deleted.
-- **Untracked file** — a path present in the working tree but absent from the
-  index. `git ls-files --others` lists these.
+- **Tracked file** — a path in Git's index. `git ls-files --cached` lists
+  these, including paths whose working-tree copy has been deleted.
+- **Untracked file** — present in the working tree, absent from the index.
+  `git ls-files --others` lists these.
 - **Standard exclusions** — `--exclude-standard` adds `.git/info/exclude`,
-  every directory's `.gitignore`, and the user's global excludes file, which is
-  what porcelain commands such as `git status` apply.
+  every directory's `.gitignore`, and the user's global excludes file.
 - **Gitlink** — an index entry of mode `160000` recording a submodule commit.
-  It appears in `ls-files` output as a directory path, not a file.
-- **Candidate** — a path emitted by the file source before this tool applies
-  any policy.
+  It appears in `ls-files` output as a directory path.
+- **Candidate** — a path emitted by the file source before policy is applied.
 - **Port** — a trait the domain defines and depends on. **Adapter** — an
-  implementation of a port that touches the outside world.
+  implementation that touches the outside world.
 
 ### Measured behaviour of the reference command
 
-These transcripts were captured on Git 2.x while drafting this plan. Treat
-them as the specification of what "semantically equivalent" means; the
-end-to-end tests re-establish them against the real `git` on the machine.
+These transcripts were captured on Git 2.52.0 while drafting. Treat them as the
+specification of "semantically equivalent"; the end-to-end tests re-establish
+them against the `git` on the machine.
 
-Given a repository containing a committed `tracked.md`, `sub/subtracked.md`,
+Given a repository containing committed `tracked.md`, `sub/subtracked.md`,
 `sub/deep/deeptracked.md` and `.gitignore`; untracked `untracked.md` and
 `sub/subuntracked.md`; an ignored `ignoredfile`; and with `sub/subtracked.md`
 deleted from the working tree:
@@ -137,22 +138,21 @@ sub/subtracked.md
 tracked.md
 ```
 
-Four facts follow, each of which drives a design decision.
+Four facts follow, each driving a design decision.
 
-1. Output is **not globally sorted**. The untracked pass runs first and the
-   cached pass second, each sorted within itself. Selection must impose its own
-   order to be reproducible.
-2. `sub/subtracked.md` is listed even though it no longer exists on disk,
-   because it is still in the index. Selection must tolerate candidates that
-   are absent from the working tree.
+1. Output is **not globally sorted**. The untracked pass runs first, the cached
+   pass second, each sorted within itself. Selection must impose its own order
+   to be reproducible.
+2. `sub/subtracked.md` is listed although it no longer exists on disk, because
+   it is still in the index. Selection must tolerate absent candidates.
 3. Run from `sub/`, the command scopes to that subtree and prints paths
-   relative to the current directory (`subuntracked.md`, `deep/deeptracked.md`,
-   `subtracked.md`). `--full-name` would print repository-root-relative paths
-   instead. This plan does **not** pass `--full-name`, so `--git` scopes to the
-   current directory exactly as the reference command does.
+   relative to the current directory. `--full-name` would print
+   repository-root-relative paths instead. This plan does **not** pass
+   `--full-name`, so `--git` is subtree-scoped exactly as the reference command
+   is.
 4. Without `-z`, a path containing a space, a quote, or a non-ASCII byte is
-   printed C-quoted, for example `"we ird\303\251\"q.md"`. With `-z` the bytes
-   are emitted verbatim and NUL-terminated. `-z` is therefore mandatory, not an
+   C-quoted, for example `"we ird\303\251\"q.md"`. With `-z` the bytes are
+   emitted verbatim and NUL-terminated. `-z` is mandatory, not an
    optimization.
 
 During an unresolved merge the same path is emitted once per index stage:
@@ -164,624 +164,672 @@ c.md
 c.md
 ```
 
-Selection must therefore deduplicate.
+`--deduplicate` collapses that to one line. This plan passes it, and also
+deduplicates in the domain, for the reason given under INV-DEDUP.
 
 Outside a repository the command fails loudly:
 
 ```console
-$ git ls-files -z --cached --others --exclude-standard
+$ git ls-files -z --cached
 fatal: not a git repository (or any of the parent directories): .git
 exit=128
 ```
 
+`git ls-files -t` is **not** a usable substitute for a filesystem check: a
+tracked file deleted from the working tree reported `H`, not `R`, because the
+`R` tag requires `--deleted`. See Surprises & discoveries.
+
 ## Constraints
 
-These are hard invariants. If satisfying the objective would violate one, stop
-and escalate rather than working around it.
+Hard invariants. If satisfying the objective would violate one, stop and
+escalate rather than working around it.
 
-- **CON-CAP-001** — All file reads and writes continue to flow through the
-  capability-scoped boundary that `docs/developers-guide.md` mandates:
+- **CON-SAFE-001** — `--git` must never cause bytes to be written to any inode
+  other than a regular file that the configured `git ls-files` invocation
+  reported and whose extension is in the configured set. This is stated in
+  terms of **inodes written**, not paths selected, because a symlink is a
+  reported path that writes to a different inode. Rewriting a `.rs` file, an
+  ignored file, or a file outside the selection is a defect of the highest
+  severity.
+- **CON-CAP-001** — All file **content** reads and writes continue to flow
+  through the capability boundary that `docs/developers-guide.md` mandates:
   `open_file_parent` returns a `cap_std::fs_utf8::Dir` and a relative
-  `camino::Utf8Path`, and handlers must not perform ambient filesystem access
-  of their own. New selection code may stat candidate paths to classify them,
-  but must not read or write file contents outside that boundary.
-- **CON-DEP-001** — No new runtime dependency. The selected mechanism spawns
-  the `git` binary through `std::process::Command`, which is already in the
-  standard library. Adding `git2`, `gix`, `ignore`, `walkdir`, or `glob` is a
-  tolerance breach, not a design choice available to the implementor.
-- **CON-SIZE-001** — No source file may exceed 400 lines (`AGENTS.md`).
-  `src/main.rs` is already 303 lines and `src/process.rs` is 376.
+  `camino::Utf8Path`. Selection code may call `std::fs::symlink_metadata` to
+  classify a candidate; that is a deliberate, narrow carve-out from
+  `AGENTS.md:232`, recorded in the Decision log, and it must not extend to
+  reading or writing contents.
+- **CON-DEP-001** — No new dependency that performs Git operations or
+  filesystem walking. `git2`, `gix`, `ignore`, `walkdir`, and `glob` are all
+  excluded; the selected mechanism spawns `git` through `std::process::Command`
+  from the standard library. `thiserror` is permitted and expected, because
+  `AGENTS.md:264` mandates it for domain error enums.
+- **CON-API-001** — This change adds **no** public library API. The selection
+  module tree is private to the binary crate. `src/lib.rs` is not modified.
+  This satisfies `AGENTS.md:268` ("never export the opaque type from a
+  library") without argument, and avoids a permanent semver commitment for a
+  single in-package consumer.
+- **CON-SIZE-001** — No source file may exceed 400 lines. `src/main.rs` is
+  already 303 lines and `src/process.rs` is 376.
 - **CON-LINT-001** — `cargo clippy --workspace --all-targets --all-features
-  -- -D warnings` must pass. Lints may not be silenced except as a last
-  resort, and any `#[expect]` must carry a `reason`.
-- **CON-OBS-001** — Library code emits `debug!` and `trace!` only, never
-  `info!` or above, and tracing fields must never contain document or path
-  content (`docs/developers-guide.md`, Observability).
-- **CON-SAFE-001** — `--git` must never widen the set of files written beyond
-  what the reference command reports intersected with the configured Markdown
-  extensions. Rewriting a `.rs` file or an ignored file is a defect of the
-  highest severity.
-- **CON-DOC-001** — Documentation follows `docs/documentation-style-guide.md`:
-  British English with Oxford spelling, prose at 80 columns, a language
-  identifier on every fenced block, and a captioned figure with a
-  screen-reader description preceding any Mermaid diagram.
+  -- -D warnings` must pass. Any `#[expect]` must carry a `reason`.
+- **CON-OBS-001** — Selection code emits `debug!` and `trace!` only, and
+  tracing fields must never contain document or path content. Note the
+  corollary: tracing structurally cannot answer "why did it pick *that* file";
+  that is what `--list-files` is for. Do not try to satisfy it with `trace!`.
+- **CON-DOC-001** — Documentation follows `docs/documentation-style-guide.md`.
 
 ## Tolerances (exception triggers)
 
-Stop and escalate when any of these is reached. Do not work around them.
+Stop and escalate when any of these is reached.
 
-- **Scope** — more than 14 files touched, or more than 900 net added lines
-  across the whole plan.
-- **Dependencies** — any new entry under `[dependencies]`. The three planned
-  `[dev-dependencies]` additions (`rstest-bdd`, `googletest`,
-  `pretty_assertions`) are pre-authorized; a fourth is not.
-- **Interface** — any change to an existing public library item's signature,
-  or any change to the meaning of an existing CLI flag other than the
-  documented `--in-place` relaxation in REQ-GIT-005.
-- **File size** — `src/main.rs` reaching 380 lines. The contingency is
-  recorded under Risks; take it, then continue.
+- **Scope** — more than 24 files touched, or more than 1600 net added lines
+  across the whole plan. (These numbers are counted against the file list in
+  "Interfaces and dependencies" plus five documentation files, an ADR, and this
+  plan. An earlier draft set 14 and 900, which was arithmetically
+  unsatisfiable.)
+- **Dependencies** — any dependency beyond the five named in "Interfaces and
+  dependencies". Anything matching CON-DEP-001's exclusion list is a hard stop,
+  not a tolerance.
+- **Interface** — any change to an existing public library item, or to the
+  meaning of an existing CLI flag other than the documented `--in-place`
+  relaxation in REQ-GIT-005.
+- **File size** — `src/main.rs` reaching 380 lines. Contingency under Risks;
+  take it and continue.
 - **Iterations** — a gate still failing after four fix attempts.
 - **Ambiguity** — any point where two readings of this plan would produce
   materially different user-visible behaviour.
-- **Semantics** — any discovered divergence between the implemented selection
-  and the reference command that this plan does not already record as
-  deliberate.
+- **Semantics** — any divergence between the implemented selection and the
+  reference command that this plan does not record as deliberate.
 
 ## Risks
 
-- Risk: `git` is absent from `PATH` on a user's machine, so `--git` fails at
-  runtime even though `mdtablefix` installed cleanly.
+- Risk: `git` is absent from `PATH`, so `--git` fails at runtime even though
+  `mdtablefix` installed cleanly.
   Severity: medium. Likelihood: low.
-  Mitigation: map `io::ErrorKind::NotFound` from the spawn to a dedicated,
-  actionable message naming `git` and `PATH`. Cover it with a test that
-  injects a non-existent program name through the adapter's program seam.
-  Accepted trade-off: `--git` is opt-in, and a user asking for Git-based
-  selection has a Git working tree, so requiring the client is reasonable.
+  Mitigation: map `io::ErrorKind::NotFound` to a dedicated message naming
+  `git` and `PATH`, covered by a test injecting a non-existent program through
+  `GitLsFiles::with_program`. `--git` is opt-in and its premise is a Git
+  working tree, so the requirement is reasonable.
 
 - Risk: a repository contains a path that is not valid UTF-8, which
   `cap_std::fs_utf8` cannot represent.
   Severity: low. Likelihood: low.
-  Mitigation: the adapter counts and drops such candidates rather than
-  aborting, and the composition root prints one content-free stderr warning
-  giving the count. This matches the existing partial-failure posture of
-  `report_results`.
+  Mitigation: count and drop such candidates rather than aborting; the
+  composition root prints one content-free stderr warning giving the count.
 
-- Risk: `src/main.rs` exceeds the 400-line cap once the new flags and wiring
-  land, breaching CON-SIZE-001.
+- Risk: `src/main.rs` exceeds 400 lines once the new flags and wiring land.
   Severity: medium. Likelihood: medium.
-  Mitigation: keep all policy and adapter code in `src/select/`, so `main.rs`
-  gains only field declarations and roughly 40 lines of wiring. Contingency, to
-  be taken at the 380-line tolerance: extract the composition root into
-  `src/bin_support/inputs.rs` and include it from `main.rs` with
-  `#[path = "bin_support/inputs.rs"] mod inputs;`, following the precedent of
-  `src/process/buffer.rs`, which `src/process.rs` split out for this reason.
+  Mitigation: all policy and adapter code lives in `src/select/`, so `main.rs`
+  gains field declarations plus roughly 60 lines of wiring. Contingency at the
+  380-line tolerance: move the composition root into `src/select/compose.rs`,
+  following the precedent of `src/process/buffer.rs`.
 
-- Risk: `rstest-bdd` is new to this repository, so its integration may not be
-  smooth on the pinned `nightly-2026-03-26` toolchain.
+- Risk: `rstest-bdd` is new to this repository, on a pinned
+  `nightly-2026-03-26` toolchain, and pulls in `gherkin`, `fluent`,
+  `i18n-embed`, `rust-embed`, and `inventory` — a large increase over the
+  current ten lean dev-dependencies. Version `0.6.0-beta3` already exists with
+  a reorganized harness, so this adopts an API one minor version before it
+  moves.
   Severity: medium. Likelihood: medium.
   Mitigation: EP-M0 proves one trivial scenario compiles and runs before any
   real scenario is written. If it cannot be made to work within the iteration
-  tolerance, escalate; do not silently downgrade the behavioural coverage to
-  plain `assert_cmd` tests.
+  tolerance, escalate; do not silently downgrade behavioural coverage to plain
+  `assert_cmd`.
 
-- Risk: integration tests in `tests/` cannot observe library `tracing` events,
-  because `tracing-test` is declared without the `no-env-filter` feature and
-  every existing `#[traced_test]` usage lives inside `src/`.
-  Severity: low. Likelihood: medium.
-  Mitigation: assert tracing behaviour from `src/select/` unit tests, where the
-  existing pattern already works. Only if an integration-level tracing
-  assertion proves necessary, add
-  `tracing-test = { version = "0.2", features = ["no-env-filter"] }` and record
-  it in the Decision log.
+- Risk: `format_to_string` splits with `content.lines()`, which strips `\r`,
+  then rejoins with `\n`. On a CRLF checkout every selected file's line endings
+  change, so a whole-repository run produces a diff of pure churn in which a
+  genuine corruption would be invisible.
+  Severity: medium. Likelihood: medium on Windows, low elsewhere.
+  Mitigation: this is pre-existing behaviour and out of scope to change here.
+  INV-NOWRITE-UNCHANGED limits the damage by skipping files whose output is
+  byte-identical, which makes the churn visible as "changed everything" rather
+  than hiding it. Document the CRLF behaviour in the users' guide under
+  `--git`, and record it as follow-up work.
 
-- Risk: the extension filter is the only thing standing between `--git` and
-  rewriting source files, so a defect there is destructive.
+- Risk: `--in-place` writes are truncate-then-write with no signal handling, so
+  interrupting a large run can leave a file truncated. `--git` makes long runs
+  routine and therefore makes interruption routine.
+  Severity: medium. Likelihood: low.
+  Mitigation: INV-NOWRITE-UNCHANGED removes the write entirely for unchanged
+  files, which is most of them on a healthy repository, shrinking the window
+  proportionally. Making writes atomic (temporary file plus rename) would fix
+  it completely but changes `--in-place` for **all** modes, not just `--git`,
+  and is therefore out of scope. Record it as recommended follow-up work in
+  Outcomes, with the caveat that rename breaks hard links to the target.
+
+- Risk: the extension filter is the only thing between `--git` and rewriting
+  source files, so a defect there is destructive.
   Severity: high. Likelihood: low.
-  Mitigation: verify the filter in both directions (soundness and
-  completeness) rather than only checking that selected paths look right, and
-  include a negative control that a one-sided or always-empty filter fails.
-  See INV-EXT-SOUND and INV-EXT-COMPLETE.
+  Mitigation: verify the filter in both directions rather than only checking
+  that selected paths look right. See INV-EXT-SOUND and INV-EXT-COMPLETE.
 
 ## Conformance basis
 
 There is **no Terms of Reference document and no separate technical design
 document** for this feature. Do not invent one. The governing upstream
-artefacts that do exist are:
-
-- `AGENTS.md` (repository root, at commit `c792270`) — style, testing, and
-  commit-gate rules.
-- `docs/developers-guide.md` — the capability-scoped filesystem boundary and
-  the observability rules, which supply CON-CAP-001 and CON-OBS-001.
-- `docs/documentation-style-guide.md` — CON-DOC-001.
-- `docs/adrs/0001` through `0005` — existing accepted decisions; none of them
-  constrains file selection.
-- `docs/execplans/parallel-processing-roadmap.md` — the delivered work that
-  established the `rayon` file-level concurrency this plan reuses.
-
-This plan creates the missing design record as **ADR 0006**, which becomes the
-upstream artefact that later work traces to.
+artefacts that exist are `AGENTS.md` (at commit `c792270`),
+`docs/developers-guide.md`, `docs/documentation-style-guide.md`, and ADRs 0001
+to 0005 (none of which constrains file selection). This plan creates the
+missing design record as **ADR 0006**.
 
 **Roadmap**: this repository has no general-purpose roadmap. The two roadmap
-documents that exist (`docs/state-machine-abstractions-roadmap.md` and
-`docs/execplans/parallel-processing-roadmap.md`) are feature-scoped and neither
-mentions `--git`, `git ls-files`, or file selection. The instruction to mark a
-roadmap entry as done on completion is therefore **not applicable**; see the
-Decision log. Do not create a roadmap entry to satisfy it.
+documents that exist are feature-scoped and neither mentions `--git`,
+`git ls-files`, or file selection. The instruction to mark a roadmap entry as
+done is therefore **not applicable**; do not create a roadmap entry to satisfy
+it. ADR 0006 is the durable record.
 
-Requirements introduced by this plan, and their trace to milestones and
-evidence:
+Requirements, traced through milestones to evidence:
 
 ```plaintext
-REQ-GIT-001 -> ADR-0006 -> EP-M2 -> tests/git_ls_files.rs::lists_tracked_and_untracked_but_not_ignored
-REQ-GIT-002 -> ADR-0006 -> EP-M1 -> src/select/policy.rs::tests::selects_only_markdown_extensions
-REQ-GIT-003 -> ADR-0006 -> EP-M1 -> src/select/extensions.rs::tests::parses_extension_spec
-REQ-GIT-004 -> ADR-0006 -> EP-M3 -> tests/cli_git.rs::rejects_git_with_explicit_files
-REQ-GIT-005 -> ADR-0006 -> EP-M3 -> tests/cli_git.rs::in_place_is_satisfied_by_git
-REQ-GIT-006 -> ADR-0006 -> EP-M1 -> src/select/policy.rs::tests::skips_missing_and_non_regular
-REQ-GIT-007 -> ADR-0006 -> EP-M2 -> tests/git_ls_files.rs::reports_missing_git_and_missing_repository
-CON-CAP-001 -> EP-M3 -> tests/cli_git.rs::writes_only_through_capability_boundary
-CON-SAFE-001 -> EP-M3 -> git_file_selection.feature::"Reformat every ... in place"
+REQ-GIT-001 -> ADR-0006 -> EP-M1 -> select::git_ls_files::tests::lists_tracked_only
+REQ-GIT-002 -> ADR-0006 -> EP-M1 -> select::policy::tests::selects_only_configured_extensions
+REQ-GIT-003 -> ADR-0006 -> EP-M2 -> cli_git.rs::md_exts_replaces_the_default_set
+REQ-GIT-004 -> ADR-0006 -> EP-M2 -> cli_git.rs::rejects_git_with_explicit_files
+REQ-GIT-005 -> ADR-0006 -> EP-M2 -> cli_git.rs::in_place_is_satisfied_by_git
+REQ-GIT-006 -> ADR-0006 -> EP-M1 -> select::policy::tests::excludes_missing_other_symlink
+REQ-GIT-007 -> ADR-0006 -> EP-M1 -> select::git_ls_files::tests::maps_spawn_and_exit_failures
+REQ-GIT-008 -> ADR-0006 -> EP-M2 -> feature::"Exit successfully when nothing is selected"
+REQ-GIT-009 -> ADR-0006 -> EP-M2 -> feature::"Refuse to rewrite a conflicted file"
+REQ-GIT-010 -> ADR-0006 -> EP-M2 -> feature::"List the selection without acting"
+CON-SAFE-001 -> EP-M2 -> feature::"Never write through a symlink"
 ```
 
-The requirements themselves:
-
-- **REQ-GIT-001** — With `--git`, the candidate set is exactly the set of paths
-  that `git ls-files --cached --others --exclude-standard`, run in the current
-  working directory, reports.
+- **REQ-GIT-001** — With `--git`, the candidate set is exactly what
+  `git ls-files --cached`, run in the current working directory, reports. With
+  `--git --include-untracked` it is exactly what
+  `git ls-files --cached --others --exclude-standard` reports.
 - **REQ-GIT-002** — Candidates are narrowed to Markdown files. The default
-  extension set is `md`, `mdc`, and `markdown`, matched case-insensitively.
-- **REQ-GIT-003** — `--md-exts` replaces the default extension set with a
-  comma-separated list. A leading dot is optional, surrounding whitespace is
-  ignored, and matching stays case-insensitive.
+  extension set is `md`, `mdc`, and `markdown`, matched ASCII
+  case-insensitively.
+- **REQ-GIT-003** — `--md-exts` replaces the default set. A leading dot is
+  optional and surrounding whitespace is ignored.
 - **REQ-GIT-004** — `--git` and positional file arguments are mutually
-  exclusive; supplying both is an argument-parsing error.
+  exclusive.
 - **REQ-GIT-005** — `--in-place` is satisfied by either positional files or
   `--git`. `--in-place` alone remains an error.
-- **REQ-GIT-006** — A candidate that is absent from the working tree, or that
-  is not a regular file, is skipped silently rather than reported as an error.
+- **REQ-GIT-006** — A candidate that is absent, is not a regular file, or is a
+  symlink is skipped silently rather than reported as an error.
 - **REQ-GIT-007** — When `git` cannot be spawned, or exits non-zero, the tool
-  exits non-zero with a diagnostic that names the cause and, where `git`
-  supplied one, includes `git`'s own stderr.
+  exits non-zero with a diagnostic naming the cause and relaying `git`'s
+  stderr.
+- **REQ-GIT-008** — Selecting zero files is success: exit 0, no output, and
+  **standard input is not read**.
+- **REQ-GIT-009** — When the repository is mid-merge, mid-rebase, or
+  mid-cherry-pick, any selected file containing conflict markers is excluded
+  from rewriting and named on stderr. `--allow-conflicted` overrides.
+- **REQ-GIT-010** — `--list-files` prints the resolved selection, one path per
+  line, to stdout and exits 0 without reading or writing any file content.
 
 ## Architectural boundaries
 
-Apply `hexagonal-architecture` here to protect one genuine boundary, not to
-restructure the crate. The rest of `mdtablefix` is a pure text pipeline with no
-infrastructure to isolate, and it stays exactly as it is.
+Apply `hexagonal-architecture` to protect one boundary, not to restructure the
+crate. The rest of `mdtablefix` is a pure text pipeline with no infrastructure
+to isolate and stays exactly as it is.
 
-The boundary worth protecting is between **what to select** (policy: which
-extensions count, how duplicates collapse, what order results come back in,
-what to do about a candidate that is not there) and **how candidates are
-discovered** (infrastructure: spawning a subprocess, decoding a NUL-delimited
-byte stream, stat-ing paths). Without the split, every policy rule can only be
-tested by building a real Git repository on disk, which is slow and makes the
-awkward cases — an unresolved merge, a non-UTF-8 path, a staged deletion —
-tedious to reach.
+The boundary worth protecting is between **what to select** — which extensions
+count, how aliases collapse, what order results come back in, what to do about
+a candidate that is not a regular file — and **how candidates are discovered**:
+spawning a subprocess, decoding a NUL-delimited byte stream, stat-ing paths.
+Without the split, every policy rule can only be tested by building a real Git
+repository on disk, which makes the awkward cases (an unresolved merge, a
+non-UTF-8 path, a staged deletion, a symlink) tedious to reach.
 
-Two driven ports, no more. A third would be a pattern transplant.
+**One driven port, not two.** An earlier draft also defined a
+`RepositoryFileSource` trait. It had one implementor, one call site, and no
+test fake anywhere in the verification plan, so it inverted no dependency — it
+was the pattern transplant this section exists to avoid. `GitLsFiles` now
+exposes `list_candidates` as an inherent method, with `with_program` as the
+test seam. The surviving port is:
 
 ```rust
-/// Supplies candidate paths for selection, relative to the working directory.
-pub trait RepositoryFileSource {
-    fn list_candidates(&self) -> anyhow::Result<GitFileListing>;
-}
-
 /// Reports what a candidate path actually is in the working tree.
 pub trait PathProbe {
-    fn probe(&self, path: &Utf8Path) -> PathKind;
+    fn probe(&self, root: &Utf8Path, path: &Utf8Path) -> PathKind;
 }
 ```
 
-The domain — `MarkdownExtensions` and `select_markdown_files` — depends on
-`PathProbe` and on nothing else. It performs no I/O, so its tests need no
-filesystem and no repository. The adapters `GitLsFiles` and `AmbientPathProbe`
-implement the ports and are the only code that touches a process or the
-filesystem. `src/main.rs` remains the composition root: it constructs the
-adapters, hands them to the domain, and feeds the result into the existing
-`rayon` pipeline.
+`PathProbe` earns its place: it makes INV-PROBE-EXCLUSIONS testable across all
+four `PathKind` variants without a filesystem, and it carries the file identity
+that INV-DEDUP needs.
+
+The dependency direction is one sentence: **policy depends on `PathProbe` and
+on nothing else; the adapters and `main` depend on policy.**
+
+Every module's `//!` header must state its side of that sentence explicitly —
+for example, "This module is the selection domain. It depends on `PathProbe`
+and performs no I/O." A maintainer must be able to derive the direction from
+the modules alone, without reading ADR 0006.
+
+**Directories are parameters, never ambient state.** Both `list_candidates` and
+`probe` take the working-tree root explicitly. Nothing in the selection code
+calls `std::env::set_current_dir`, and no test may either: Cargo runs
+integration tests as threads in one process, so a chdir is a data race — in the
+very suite whose job is proving CON-SAFE-001 does not rewrite the wrong files.
+The composition root resolves the current directory once, at the boundary,
+exactly as `open_file_parent` does today.
 
 ## Verification plan
 
-Verification is designed alongside the implementation, not bolted on. The
-decomposition above exists partly because it makes each obligation below
-dischargeable without a repository on disk.
-
 ### Non-trivial axioms
 
-These are assumed, not verified. Do not write tests that attempt to verify
-third-party internals; instead, exercise this repository's logic against the
-real interface at the boundary.
+Assumed, not verified. Do not test third-party internals; exercise this
+repository's logic against the real interface at the boundary.
 
-- **AX-GIT-LSFILES** — `git ls-files -z --cached --others --exclude-standard`
-  writes to stdout exactly the union of index paths and non-ignored untracked
-  paths, each terminated by a NUL byte, unquoted, verbatim, and relative to the
-  process working directory. Basis: the `git-ls-files` manual page and the
-  transcripts captured under "Measured behaviour of the reference command".
-  Boundary evidence: `tests/git_ls_files.rs` runs the real `git`.
-- **AX-GIT-EXIT** — `git` exits `0` on success, including when the selection is
-  empty, and non-zero with a diagnostic on stderr otherwise (`128` outside a
-  repository). Boundary evidence: as above.
-- **AX-CAPSTD** — `cap_std::fs_utf8::Dir::open_ambient_dir`, `read_to_string`,
-  and `write` behave as documented. Already relied upon by existing code.
+- **AX-GIT-LSFILES** — `git ls-files -z --deduplicate --cached
+  [--others --exclude-standard]` writes to stdout exactly the index paths
+  (optionally unioned with non-ignored untracked paths), each NUL-terminated,
+  unquoted, verbatim, relative to the process working directory. Basis: the
+  `git-ls-files` manual page and the transcripts above. Boundary evidence: a
+  real-`git` test in `src/select/git_ls_files.rs`.
+- **AX-GIT-EXIT** — `git` exits 0 on success, including on an empty selection,
+  and non-zero with a stderr diagnostic otherwise (128 outside a repository).
+- **AX-GIT-NLS** — `git`'s diagnostics are **localised** when built with NLS
+  and vary across versions. Therefore no test and no document may assert on
+  git's own message text. Assert on our wrapper's wording and the exit status;
+  relay git's stderr without depending on it.
+- **AX-CAPSTD** — `cap_std::fs_utf8::Dir` behaves as documented. Already
+  relied upon.
 - **AX-RAYON-ORDER** — `par_iter().map(...).collect::<Vec<_>>()` preserves
-  input order. Already relied upon by existing code and by
-  `docs/architecture.md`.
-- **AX-CLAP-GROUP** — a `clap::ArgGroup` with `multiple(false)` permits at most
-  one member, and `requires = "<group>"` on an argument demands that at least
-  one member be present. EP-M0 confirms this empirically before the design
-  depends on it, because REQ-GIT-004 and REQ-GIT-005 both rest on it.
+  input order. Already relied upon.
+- **AX-CLAP-GRAMMAR** — a `clap::ArgGroup` with `multiple(false)` permits at
+  most one member; `requires = "<group>"` demands at least one member; and an
+  argument carrying `default_values` counts as present, so `requires` on such
+  an argument needs `ArgMatches::value_source` rather than a plain relation.
+  EP-M0 confirms all three empirically **and captures clap's exact diagnostic
+  text**, because three behavioural scenarios assert on strings clap owns
+  rather than strings we own. An earlier draft asserted `stderr contains
+  "requires"`; clap 4.6.6 renders `the following required arguments were not
+  provided:` and never emits "requires" for that error kind.
 
 ### Obligations
 
-**INV-EXTSPEC-NORM** — parsing an extension specification is normalizing and
-idempotent: `parse(s)` ignores a single leading dot, ignores surrounding
-whitespace, and folds ASCII case, so `parse("md")`, `parse(".MD")` and
-`parse("  .Md  ")` are all equal; and an empty segment, a segment that is only
-a dot, or a segment containing a path separator or a NUL is rejected.
+Full detail is given only where the obligation is subtle. The rest are
+one-liners on purpose.
 
-- Method: `rstest` parameterized tests for the accept/reject partitions and
-  boundaries, plus a `proptest` for the normalization idempotence.
-- Rationale: the accepting cases form a small, enumerable partition; the
-  idempotence claim spans generated input and warrants a property.
-- Domain: specifications built from arbitrary alphanumeric segments with
-  randomized dot prefixes, case, and surrounding whitespace; plus the explicit
-  rejection cases `""`, `","`, `"md,,markdown"`, `"."`, `"a/b"`.
-- Artefact: `src/select/extensions.rs` `mod tests`.
-- Evidence: `cargo test --lib select::extensions`. Red before the parser
-  exists; green after.
-- Non-vacuity: the generator must produce at least one specification per class
-  — dotted, undotted, mixed case, padded — and the test asserts the classes
-  were reached. Negative control: a `parse` that returns `Default::default()`
-  regardless of input must fail the rejection cases and the multi-extension
-  case.
+**INV-NUL-SPLIT** — splitting the adapter's output is a faithful inverse of
+Git's framing: for any list of non-empty byte strings containing no NUL,
+splitting their NUL-terminated concatenation returns that list; splitting empty
+input returns an **empty list**, not a list holding one empty path.
 
-**INV-EXT-SOUND** — every selected path's extension, lowercased, is a member of
-the configured set.
-
-**INV-EXT-COMPLETE** — every candidate whose lowercased extension is a member
-of the configured set and which probes as `PathKind::RegularFile` appears in
-the output.
-
-- Method: one `proptest` asserting both directions over generated candidate
-  lists, with a fake `PathProbe`.
-- Rationale: these are the two halves of the selection contract, and stating
-  only the first admits the catastrophically wrong implementation that selects
-  nothing. Stating only the second admits the catastrophically dangerous
-  implementation that selects everything. CON-SAFE-001 depends on both.
-- Domain: candidate lists of 0 to 30 paths drawn from a pool mixing matching
-  extensions, non-matching extensions (`rs`, `toml`, `png`), extensionless
-  names, dotfiles, and nested directories; probe verdicts drawn from all three
-  `PathKind` variants.
-- Artefact: `src/select/policy.rs` `mod tests`.
-- Evidence: `cargo test --lib select::policy`.
-- Non-vacuity: the property classifies each generated case and the run must
-  observe non-empty selections, empty selections, and at least one case where a
-  matching extension is excluded solely because the probe said `Missing`.
-  Negative controls, applied as deliberate mutations during EP-M1 and then
-  reverted: returning `Vec::new()` must fail INV-EXT-COMPLETE, and returning
-  the candidates unfiltered must fail INV-EXT-SOUND.
-
-**INV-DEDUP** — the selected list contains no duplicate path.
-
-- Method: `proptest` over candidate lists that are explicitly permitted to
-  repeat entries, plus one `rstest` case reproducing the three-stage
-  merge-conflict listing measured above.
-- Rationale: duplication is not hypothetical; it is what `git ls-files`
-  actually emits during an unresolved merge, and a duplicate under
-  `--in-place` means formatting the same file twice concurrently.
-- Domain: as INV-EXT-SOUND, with a generator biased to repeat paths.
-- Artefact: `src/select/policy.rs` `mod tests`.
-- Evidence: `cargo test --lib select::policy`.
-- Non-vacuity: the property asserts that at least one generated case actually
-  contained a duplicate candidate that survived the extension filter, so the
-  check is not passing merely because duplicates never arose. Negative control:
-  collecting into a `Vec` instead of a `BTreeSet` must fail this property.
-
-**INV-ORDER-DET** — the selection is a deterministic function of the candidate
-multiset: permuting the candidate list does not change the output, and the
-output is sorted.
-
-- Method: `proptest` comparing the selection of a generated list against the
-  selection of a shuffled copy.
-- Rationale: `git ls-files` output is not globally sorted, so without an
-  imposed order the stdout concatenation and the snapshot tests would be
-  unstable. This is an invariant over orderings, which is exactly what a
-  property test is for.
-- Domain: as INV-EXT-SOUND, with a permutation applied.
-- Artefact: `src/select/policy.rs` `mod tests`.
-- Evidence: `cargo test --lib select::policy`.
-- Non-vacuity: the property asserts the generated permutation actually differed
-  from the original in at least some cases, and that at least one output had
-  two or more entries, so sortedness is a real claim. Negative control:
-  preserving first-seen insertion order must fail this property.
-
-**INV-PROBE-REGULAR** — a candidate is selected only if the probe reports
-`PathKind::RegularFile`; `Missing` and `Other` are both excluded.
-
-- Method: `rstest` parameterized over the three `PathKind` variants.
-- Rationale: a finite, three-valued partition; exhaustive enumeration is
-  practical and a property adds nothing.
-- Domain: all three variants, each against a path with a matching extension.
-- Artefact: `src/select/policy.rs` `mod tests`.
-- Evidence: `cargo test --lib select::policy`.
-- Non-vacuity: the matching-extension precondition is satisfied in all three
-  cases, so a failure to exclude is attributable to the probe verdict alone.
-  This covers REQ-GIT-006, that is, the tracked-but-deleted file and the
-  submodule gitlink.
-
-**INV-NUL-SPLIT** — splitting the adapter's NUL-delimited output is a faithful
-inverse of Git's framing: for any list of non-empty byte strings none of which
-contains a NUL, splitting their NUL-terminated concatenation returns that list;
-and splitting an empty input returns an empty list rather than a list holding
-one empty path.
-
-- Method: `proptest` round-trip, plus `rstest` cases for the empty input, a
-  single entry, a missing trailing NUL, and a non-UTF-8 entry.
-- Rationale: this is the one place where a byte-level framing mistake would
-  silently produce a wrong file set, and the empty-input case is the classic
-  off-by-one that a naive `split(b'\0')` gets wrong by yielding `[""]`.
-  CON-SAFE-001 depends on it.
-- Domain: 0 to 20 byte strings of length 1 to 40 drawn from bytes excluding
-  NUL, including bytes outside ASCII.
+- Method: `proptest` round-trip, plus `rstest` cases for empty input, a single
+  entry, a missing trailing NUL, and a non-UTF-8 entry.
+- Rationale: the one place a byte-level framing mistake silently produces a
+  wrong file set. The empty-input case is the classic off-by-one that a naive
+  `split(b'\0')` gets wrong by yielding `[""]`. CON-SAFE-001 depends on it.
+- Domain: 0 to 20 byte strings of length 1 to 40 excluding NUL, including
+  non-ASCII bytes.
 - Artefact: `src/select/git_ls_files.rs` `mod tests`.
-- Evidence: `cargo test --lib select::git_ls_files`.
 - Non-vacuity: the empty-list case is generated and asserted explicitly, and
   the generator produces non-UTF-8 sequences so the drop-and-count path is
   reached. Negative control: a plain `bytes.split(|b| *b == 0)` without the
   trailing-empty guard must fail the empty-input case.
 
-**LEM-SELECT-SETEQ** — the set of files `--git` acts on equals
-`{ p : p reported by the reference command, lowercased extension of p is in
-the configured set, and p is a regular file in the working tree }`.
+**INV-EXT-SOUND** — every selected path's ASCII-lowercased extension is in the
+configured set. **INV-EXT-COMPLETE** — every candidate whose lowercased
+extension is in the set and which probes as `RegularFile` appears in the
+output.
 
-- Method: composition of INV-DEDUP, INV-EXT-SOUND, INV-EXT-COMPLETE, and
-  INV-PROBE-REGULAR over the domain, discharged against the real interface by
-  the behavioural scenarios and end-to-end tests in EP-M2 and EP-M3.
-- Rationale: this lemma is what connects the unit-level invariants to the
-  user-visible promise. Its left-hand side is only observable end to end, so it
-  needs both halves: the properties fix the policy, and the repository-backed
-  tests fix the axioms.
-- Artefact: `tests/features/git_file_selection.feature` and
-  `tests/git_ls_files.rs`.
-- Evidence: `cargo test --test git_file_selection --test git_ls_files`.
-- Non-vacuity: the scenario fixture deliberately contains a file in each
-  equivalence class — tracked Markdown, untracked Markdown, ignored Markdown,
-  tracked non-Markdown, and tracked-but-deleted Markdown — and asserts both
-  that the first two changed and that the last three did not. A selection that
-  is too narrow fails the first assertions; one that is too wide fails the
-  second.
+- Method: one `proptest` asserting both directions, with a fake `PathProbe`.
+- Rationale: these are the two halves of the selection contract. Stating only
+  the first admits an implementation that selects nothing; stating only the
+  second admits one that selects everything. CON-SAFE-001 needs both.
+- Domain: 0 to 30 candidates drawn from a pool mixing matching extensions,
+  non-matching extensions (`rs`, `toml`, `png`), extensionless names, dotfiles,
+  and nested directories; probe verdicts drawn from all four `PathKind`
+  variants.
+- Artefact: `src/select/policy.rs` `mod tests`.
+- Non-vacuity: the property classifies each case and the run must observe
+  non-empty selections, empty selections, and at least one case where a
+  matching extension is excluded solely because of the probe verdict.
+
+**INV-DEDUP** — no two selected paths denote the same file.
+
+- Method: `rstest` cases over a fake probe returning colliding
+  `FileIdentity` values, covering (a) the three-stage merge listing, (b) two
+  paths differing only in ASCII case, and (c) a hard link.
+- Rationale: **this is a claim about inodes, not strings.** An earlier draft
+  deduplicated a `BTreeSet<Utf8PathBuf>` and asserted the result contained no
+  duplicate path string — which is a property of `BTreeSet`, not of this
+  design, and which cannot see the failure it was named for. On a
+  case-insensitive filesystem (macOS APFS and Windows NTFS are both release
+  targets, added at commit `1f64236`) `README.md` and `Readme.md` are distinct
+  index entries naming one file. Both survive string dedup, both probe as
+  `RegularFile`, and `rayon` then runs `format_to_string` and `rewrite_in_place`
+  on them concurrently: one thread truncates while the other reads, the reader
+  gets `""`, `format_to_string` returns `String::new()` for empty input, and
+  the file ends up zero bytes with both threads returning `Ok(())` and the run
+  exiting 0. Deduplicating on the `FileIdentity` the probe already fetched
+  closes it for nothing.
+- Artefact: `src/select/policy.rs` `mod tests`.
+- Non-vacuity: each case asserts the collision was actually present in the
+  input and that exactly one representative survives. Negative control:
+  deduplicating on the path string must fail cases (b) and (c).
+
+**INV-ORDER-DET** — selection is a deterministic function of the candidate
+multiset: permuting the input does not change the output, and the output is
+sorted byte-wise on the UTF-8 path.
+
+- Method: `proptest` comparing a generated list against a shuffled copy.
+- Rationale: `git ls-files` output is not globally sorted, and the order is
+  user-visible because `--list-files` and stdout concatenation both follow it.
+  Only the permutation-invariance half carries information; "sorted" checked
+  with the same `Ord` the implementation sorts by proves nothing, so the
+  ordering is stated explicitly instead.
+- Artefact: `src/select/policy.rs` `mod tests`.
+- Non-vacuity: the property asserts the permutation actually differed and that
+  at least one output had two or more entries.
+
+**INV-PROBE-EXCLUSIONS** — a candidate is selected only if the probe reports
+`RegularFile`; `Missing`, `Other`, and `Symlink` are excluded.
+
+- Method: `rstest` parameterized over all four variants, each with a matching
+  extension so exclusion is attributable to the verdict alone.
+- Rationale: a finite four-valued partition. `Symlink` is the variant that
+  matters and the one an earlier draft omitted: `std::fs::metadata` **follows**
+  symlinks, so a tracked `src/notes.md -> lib.rs` would probe as `RegularFile`,
+  pass the extension filter on the *link* name, and `open_file_parent("src")`
+  plus `Dir::write("notes.md")` would resolve **within** the cap-std sandbox
+  and write Markdown output over `src/lib.rs`. The capability boundary does not
+  help, because its root is the file's parent directory, not the repository.
+  `symlink_metadata` plus an explicit variant is the whole fix.
+- Artefact: `src/select/policy.rs` `mod tests`, plus an end-to-end scenario.
+
+**INV-NOWRITE-UNCHANGED** — `--in-place` writes a file only when the formatted
+output differs from the bytes read.
+
+- Method: `rstest` on the rewrite helper, plus an end-to-end assertion that an
+  already-formatted file's modification time is unchanged after a run.
+- Rationale: correctness, not politeness. It removes the truncate-then-write
+  window for every unchanged file, which on a healthy repository is most of
+  them; it converts the CRLF churn risk from silent to visible; and it makes
+  the changed-file summary meaningful.
+- Artefact: `src/main.rs` `mod tests` and `tests/cli_git.rs`.
+- Non-vacuity: one case must have differing content and assert the write
+  happened, so the check cannot pass by never writing.
+
+**INV-CONFLICT-GUARD** — when the repository is mid-merge, mid-rebase, or
+mid-cherry-pick, a selected file containing all three conflict-marker forms is
+excluded from rewriting unless `--allow-conflicted` is given.
+
+- Method: `rstest` over the marker-detection predicate, plus a scenario
+  asserting a conflicted file is **byte-identical** after `--git --in-place`.
+- Rationale: reflowing across the `<<<<<<< HEAD`, `=======`, and `>>>>>>>`
+  markers restructures text on both sides of the boundary. The user then
+  resolves against corrupted content and commits it into a rewritten history,
+  where `git rebase --abort` is gone. Requiring all three marker forms, each at
+  line start with the exact seven-character run, keeps the false-positive rate
+  low for documents that discuss conflict markers; gating the scan on repository
+  state narrows it further; `--allow-conflicted` is the escape.
+- Artefact: `src/select/conflict.rs` `mod tests` and the feature file.
+- Non-vacuity: include a document that mentions `<<<<<<< HEAD` inside a fenced
+  block but has no `=======` or `>>>>>>>`, and assert it is **not** excluded.
+
+**LEM-SELECT-SETEQ** — the set of inodes `--git` writes equals
+`{ inode(p) : p reported by the configured ls-files invocation, lowercased
+extension of p is in the configured set, p is a regular file, and the formatted
+output of p differs from its contents }`.
+
+- Method: composition of the invariants above, discharged against the real
+  interface by the behavioural scenarios in EP-M2.
+- Rationale: this connects the unit-level invariants to the user-visible
+  promise. Its left-hand side is only observable end to end.
+- Non-vacuity: the scenario fixture contains a file in each equivalence class —
+  tracked Markdown, untracked Markdown, ignored Markdown, tracked
+  non-Markdown, tracked-but-deleted Markdown, and a Markdown symlink — and
+  asserts both that the right ones changed and that the rest did not. A
+  selection that is too narrow fails the first assertions; one that is too wide
+  fails the second.
+
+**Not verified by test: CON-CAP-001.** Whether writes flow through a
+`cap_std::Dir` cannot be observed by a black-box `assert_cmd` test. It is
+discharged by code review at the EP-M2 conformance check. An earlier draft
+traced it to a test name that could not have delivered it.
 
 ### Rigour not used, and why
 
-**Bounded model checking (Kani)** is not used. The only obligation with a
-plausible Kani shape is INV-NUL-SPLIT over small byte arrays, and a `proptest`
-over bytes covers the same failure modes at a fraction of the cost. This
-repository has no Kani harness infrastructure, and `src/fences_properties.rs`
-already records that judgement for an analogous parsing obligation: "Kani is
-deliberately not used: the project has no Kani dev-dependency or harness
-infrastructure." Introducing it here would breach the dependency tolerance for
-no additional assurance.
+`proptest` is proportionate for every obligation here. Kani is not: the only
+plausible candidate is INV-NUL-SPLIT over small byte arrays, which a byte-level
+property covers at a fraction of the cost, and `src/fences_properties.rs`
+already records the same judgement for an analogous parsing obligation. Verus
+is not: LEM-SELECT-SETEQ is a set comprehension over a finite filter with no
+recursion, no unbounded arithmetic, and no inductive structure; it is
+discharged by the bidirectional properties, whose negative controls demonstrate
+they can fail; and Verus needs its own toolchain, conflicting with this
+repository's `rust-toolchain.toml` pin of `nightly-2026-03-26`. Revisit if
+selection later becomes recursive. Full reasoning belongs in ADR 0006, not
+repeated here.
 
-**Deductive proof (Verus)** is not used. LEM-SELECT-SETEQ is the one lemma this
-change introduces, and it is a set comprehension over a finite filter with no
-recursion, no unbounded arithmetic, and no inductive data structure — the
-bidirectional properties INV-EXT-SOUND and INV-EXT-COMPLETE discharge it over
-generated input, and the negative controls show they can fail. Against that,
-Verus requires its own pinned toolchain, which would conflict with this
-repository's `rust-toolchain.toml` pin of `nightly-2026-03-26`, and would
-require rewriting the selection functions in Verus's `spec`/`exec` subset. A
-proof of this lemma would also be close to a restatement of the filter
-predicate, which the ExecPlan skill explicitly disallows as vacuous. If a later
-change makes selection recursive or introduces ordering arithmetic, revisit
-this judgement and record the change here.
+### Mutation testing replaces hand-applied negative controls
+
+Each obligation above names a negative control. Do **not** discharge them by
+hand-editing the source, observing a failure, and reverting: that leaves no
+diff, no CI signal, and nothing a reviewer can re-run, and under context
+pressure it will be recorded rather than performed.
+
+Use `cargo-mutants`, which is a cargo subcommand binary and therefore not a
+manifest entry, so CON-DEP-001 is untouched. Add a `make mutants` target scoped
+to `--file 'src/select/**'`, commit a `mutants.toml`, and make "zero surviving
+mutants in `src/select/policy.rs` and `src/select/git_ls_files.rs`" an EP-M1
+acceptance criterion. Keep the named controls in this document as a
+specification of what must die; let the tool prove it.
 
 ## Milestones and plateaus
 
-Each milestone ends in a coherent, validated repository state. There is no
-compatibility machinery anywhere in this plan: the package is pre-1.0, `--git`
-is a new flag with no existing consumers, and the one change to an existing
-interface (the `--in-place` requirement, REQ-GIT-005) strictly widens what is
-accepted, so no caller breaks and no shim is needed.
+No compatibility machinery appears anywhere in this plan: the package is
+pre-1.0, `--git` is new, CON-API-001 keeps the module tree private to the
+binary, and the one existing-interface change (REQ-GIT-005) strictly widens
+what is accepted.
 
 ### EP-M0 — prototyping spike, argument grammar and BDD viability
 
-- Outcome: throwaway evidence that `clap::ArgGroup` behaves as AX-CLAP-GROUP
-  assumes and that `rstest-bdd` compiles and runs one trivial scenario on the
-  pinned toolchain.
-- Requirements: de-risks REQ-GIT-004, REQ-GIT-005, and the behavioural
-  coverage that LEM-SELECT-SETEQ depends on.
-- Acceptance evidence: `EV-M0-GRAMMAR`, a transcript showing
-  `mdtablefix --git file.md` rejected, `mdtablefix --in-place` rejected, and
-  `mdtablefix --git --in-place` accepted at parse time; and `EV-M0-BDD`, a
-  passing one-scenario `rstest-bdd` run.
-- Go/no-go: if `ArgGroup` does not give the required grammar, escalate with the
-  alternative (a manual post-parse check in `main`, with hand-written
-  diagnostics and their own snapshot test) rather than choosing it unilaterally
-  — the diagnostics are user-visible. If `rstest-bdd` cannot be made to run,
-  escalate under the iteration tolerance.
-- Conformance check: no requirement is discharged here; nothing is promised to
-  a user yet.
+- Outcome: throwaway evidence for AX-CLAP-GRAMMAR and that `rstest-bdd` plus
+  `rstest-bdd-macros` compile and run one trivial scenario on the pinned
+  toolchain.
+- Acceptance evidence: `EV-M0-GRAMMAR`, a transcript covering `mdtablefix --git
+  file.md` (rejected), `mdtablefix --in-place` (rejected), `mdtablefix --git
+  --in-place` (accepted), `mdtablefix a.md b.md` (**still accepted** — the
+  regression case, since `files` is a `Vec` positional entering an `ArgGroup`),
+  `mdtablefix --md-exts md a.md` (rejected), and the **verbatim diagnostic
+  text** for each rejection; and `EV-M0-BDD`, a passing one-scenario run.
+- Go/no-go: if `ArgGroup` cannot express the grammar, escalate with the
+  alternative (a post-parse check with hand-written diagnostics and its own
+  snapshot) rather than choosing unilaterally — the diagnostics are
+  user-visible. If `rstest-bdd` cannot be made to run, escalate under the
+  iteration tolerance.
 - Recovery: `git checkout -- .`; the spike is additive and discardable.
-- Remaining gaps: everything.
 - Compatibility decision: none required.
 
-### EP-M1 — selection policy in the library
+### EP-M1 — selection module, private to the binary
 
-- Outcome: `mdtablefix::select` exposes `MarkdownExtensions`, `PathKind`,
-  `PathProbe`, and `select_markdown_files`, fully tested with no filesystem and
-  no repository. The CLI is unchanged and the tool behaves exactly as before.
-- Requirements: REQ-GIT-002, REQ-GIT-003, REQ-GIT-006.
-- Acceptance evidence: `EV-M1-POLICY` — `cargo test --lib select` passes,
-  including INV-EXTSPEC-NORM, INV-EXT-SOUND, INV-EXT-COMPLETE, INV-DEDUP,
-  INV-ORDER-DET, and INV-PROBE-REGULAR, each having been observed red first.
-- Conformance check: the domain module imports nothing from `std::process`,
-  `std::fs`, or `cap_std`; `select_markdown_files` takes its probe as a
-  parameter; no public item outside `select` changed; trace links current.
-- Recovery: the module is additive and unreferenced by the binary; revert the
-  commit to return to the previous plateau.
-- Remaining gaps: no candidate source, no CLI flag.
-- Compatibility decision: none required (pre-1.0, new module).
-
-### EP-M2 — adapters
-
-- Outcome: `GitLsFiles` and `AmbientPathProbe` implement the ports.
-  `GitLsFiles` spawns `git ls-files -z --cached --others --exclude-standard`,
-  splits the NUL-delimited output, drops and counts non-UTF-8 paths, and maps
-  spawn and exit failures to actionable errors. The CLI is still unchanged.
-- Requirements: REQ-GIT-001, REQ-GIT-007.
-- Acceptance evidence: `EV-M2-ADAPTER` — `cargo test --lib select::git_ls_files
-  --test git_ls_files` passes, including INV-NUL-SPLIT and a test that builds a
-  real repository in a `tempfile::TempDir` containing one tracked, one
-  untracked, one ignored, and one deleted-but-tracked file and asserts the
-  candidate set.
-- Conformance check: CON-CAP-001 holds, because the adapter stats but never
-  reads or writes file contents; CON-DEP-001 holds, because `Cargo.toml`
-  `[dependencies]` is unchanged; error messages match the strings the
-  documentation will quote.
-- Recovery: revert the commit; EP-M1's plateau is intact.
+- Outcome: `src/select/` implements extension filtering, identity-based
+  deduplication, probing, conflict detection, and the `git ls-files` adapter,
+  fully tested without a repository except for one real-`git` boundary test.
+  The CLI is unchanged.
+- Requirements: REQ-GIT-001, REQ-GIT-002, REQ-GIT-006, REQ-GIT-007.
+- Acceptance evidence: `EV-M1-SELECT` — `cargo test --bin mdtablefix select`
+  passes with every obligation above discharged and observed red first, and
+  `make mutants` reports zero survivors in the two named files.
+- Conformance check: `src/lib.rs` is unmodified (CON-API-001); `policy.rs`
+  imports nothing from `std::process`, `std::fs`, or `cap_std`; `probe` and
+  `list_candidates` both take a root parameter and no test calls
+  `set_current_dir`; every module `//!` states its dependency direction.
+- Recovery: revert the commit.
 - Remaining gaps: no CLI flag.
 - Compatibility decision: none required.
 
-### EP-M3 — command-line surface and end-to-end behaviour
+Merging what an earlier draft split into two milestones is deliberate: a
+milestone whose outcome is "an additive module the binary does not reference"
+is dead code with a checkbox, and two of them in a row is bookkeeping rather
+than two plateaus. One milestone that ends with a fully tested, reviewable
+selection module is a real, revert-safe state.
 
-- Outcome: `--git` and `--md-exts` exist, are documented in `--help`, are
-  mutually exclusive with positional files, satisfy `--in-place`, and drive the
-  existing `rayon` pipeline. The feature is fully usable.
-- Requirements: REQ-GIT-004, REQ-GIT-005, and end-to-end discharge of
-  LEM-SELECT-SETEQ and CON-SAFE-001.
-- Acceptance evidence: `EV-M3-CLI` — `cargo test --test cli_git --test
-  git_file_selection` passes and the `--help` snapshot is accepted;
-  `EV-M3-DEMO`, the transcript under "Validation and acceptance".
-- Conformance check: `src/main.rs` is under 400 lines; `open_file_parent`
-  remains the only ambient read/write boundary; no runtime dependency added;
-  every requirement above is now discharged with named evidence.
-- Recovery: revert the commit; EP-M2's plateau is intact and the binary loses
-  only the new flags.
+### EP-M2 — command-line surface and end-to-end behaviour
+
+- Outcome: `--git`, `--include-untracked`, `--md-exts`, `--list-files`, and
+  `--allow-conflicted` exist, appear in `--help`, obey the grammar, and drive
+  the existing pipeline. The feature is fully usable.
+- Requirements: REQ-GIT-003, REQ-GIT-004, REQ-GIT-005, REQ-GIT-008,
+  REQ-GIT-009, REQ-GIT-010, and end-to-end discharge of LEM-SELECT-SETEQ,
+  INV-NOWRITE-UNCHANGED, and CON-SAFE-001.
+- Additional obligation, from the memory profile: **stdout mode must not retain
+  the whole formatted corpus.** Today `cli.files.par_iter().map(...).collect()`
+  is a hard barrier that holds every file's complete formatted output before
+  printing anything. Measured on this repository, 28 Markdown files average
+  17.7 KB, so a 20,000-file documentation monorepo would hold roughly 354 MB —
+  fine on a workstation, fatal in a 2 GB CI container, and previously bounded
+  only by `ARG_MAX`. `--git` removes that bound. Iterate `chunks(256)`
+  sequentially, `par_iter()` within each chunk, and drain each chunk to a
+  `BufWriter` over a single `stdout().lock()` before the next. Peak drops to a
+  constant ~4.5 MB, and the `BufWriter` also collapses the current one
+  `write(2)` per output line — `Stdout` is `LineWriter`-backed unconditionally,
+  which at 20,000 files is roughly 8.6 million syscalls. `AX-RAYON-ORDER` still
+  holds within each chunk, so ordering and snapshots are unaffected.
+- Acceptance evidence: `EV-M2-CLI` — `cargo test --test cli_git --test
+  git_file_selection` passes, the `--help` snapshot is accepted, and the
+  transcripts under "Validation and acceptance" reproduce.
+- Conformance check: `src/main.rs` under 400 lines; `open_file_parent` remains
+  the only ambient content boundary (**by review**, per the note above); no
+  dependency added beyond the five named; every requirement discharged with
+  named evidence.
+- Recovery: revert the commit; EP-M1's plateau is intact.
 - Remaining gaps: documentation.
-- Compatibility decision: none required. REQ-GIT-005 widens an existing
-  constraint, so no previously valid invocation becomes invalid.
+- Compatibility decision: none required.
 
-### EP-M4 — documentation and decision record
+### EP-M3 — documentation and decision record
 
 - Outcome: `README.md`, `docs/users-guide.md`, `docs/architecture.md`,
-  `docs/developers-guide.md`, `docs/contents.md`, and the new
+  `docs/developers-guide.md`, `docs/contents.md`, and
   `docs/adrs/0006-git-file-selection.md` describe the feature, the boundary,
-  and the rejected alternatives.
-- Requirements: closes the documentation obligations in `AGENTS.md` and
-  CON-DOC-001; publishes ADR 0006 as the upstream artefact this plan promised.
-- Acceptance evidence: `EV-M4-DOCS` — `make markdownlint` and, if a Mermaid
+  the CRLF caveat, and the rejected alternatives.
+- Acceptance evidence: `EV-M3-DOCS` — `make markdownlint` and, if a Mermaid
   diagram was added, `make nixie` both pass.
-- Conformance check: every design decision in the Decision log appears either
-  in ADR 0006 or in a component document; `docs/contents.md` indexes the new
-  ADR.
-- Recovery: documentation-only; revert freely.
-- Remaining gaps: none. Set Status to COMPLETE only after reconciling the
-  Decision log and Surprises with ADR 0006.
+- Conformance check: every Decision log entry appears in ADR 0006 or a
+  component document; `docs/contents.md` indexes the new ADR.
+- Recovery: documentation-only.
+- Remaining gaps: none. Set Status to COMPLETE only after reconciling.
 - Compatibility decision: none required.
 
 ## Interfaces and dependencies
 
-New library module tree, all under `src/select/`, with `src/select.rs` as the
-module root. Every module opens with a `//!` comment, as `AGENTS.md` requires,
-and every public item carries Rustdoc with an `# Examples` block written per
-`docs/rust-doctest-dry-guide.md`.
+`src/main.rs` declares `mod select;`, which resolves to `src/select.rs` and
+`src/select/`. `src/lib.rs` does **not** declare it, so the tree compiles only
+into the binary and adds no public API (CON-API-001). Each module's `//!`
+header must say so, and must state its dependency direction. Unit and property
+tests live in `#[cfg(test)] mod tests` within each module, following the
+precedent of the existing `#[cfg(test)] mod tests` in `src/main.rs`.
 
 In `src/select/extensions.rs`:
 
 ```rust
-/// A case-insensitive set of Markdown file extensions, stored without dots.
+/// A case-insensitive set of file extensions, stored without dots.
+///
+/// Named for what it does rather than for Markdown: `--md-exts` accepts any
+/// extension, so a `MarkdownExtensions` type would be a false promise.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MarkdownExtensions(std::collections::BTreeSet<String>);
+pub struct ExtensionFilter(std::collections::BTreeSet<String>);
 
-impl Default for MarkdownExtensions {
-    /// Returns the default set: `md`, `mdc`, and `markdown`.
+impl Default for ExtensionFilter {
+    /// Returns `md`, `mdc`, and `markdown`.
     fn default() -> Self;
 }
 
-impl MarkdownExtensions {
-    /// Parses a comma-separated specification such as `"md, .mdown"`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ExtensionSpecError`] when the specification is empty, holds an
-    /// empty or dot-only segment, or holds a segment containing a path
-    /// separator or a NUL byte.
-    pub fn parse(spec: &str) -> Result<Self, ExtensionSpecError>;
-
+impl ExtensionFilter {
     /// Reports whether `path` ends in one of these extensions.
     #[must_use]
     pub fn matches(&self, path: &camino::Utf8Path) -> bool;
+
+    /// Iterates the extensions in sorted order, without dots.
+    pub fn iter(&self) -> impl Iterator<Item = &str>;
 }
 
-/// The reason an extension specification was rejected.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Renders as `md, mdc, markdown`, for `--help` and diagnostics.
+impl std::fmt::Display for ExtensionFilter { /* ... */ }
+
+/// Parses one extension, for use as a clap `value_parser`.
+///
+/// Strips one optional leading dot, trims surrounding whitespace, and folds
+/// ASCII case.
+///
+/// # Errors
+///
+/// Returns [`ExtensionSpecError`] for an empty or dot-only value, or one
+/// containing a path separator or a NUL byte.
+pub fn parse_extension(value: &str) -> Result<String, ExtensionSpecError>;
+
+/// The reason an extension value was rejected.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum ExtensionSpecError {
+    #[error("extension is empty")]
     Empty,
-    EmptySegment { position: usize },
-    InvalidSegment { segment: String },
+    #[error("extension {value:?} is only a dot")]
+    DotOnly { value: String },
+    #[error("extension {value:?} contains {kind}")]
+    InvalidCharacter { value: String, kind: InvalidCharacterKind },
 }
 ```
 
-`ExtensionSpecError` implements `std::fmt::Display` and `std::error::Error` by
-hand. Do not add `thiserror`; CON-DEP-001 forbids it and the enum has three
-variants.
+Note what changed and why. The `EmptySegment { position: usize }` variant of an
+earlier draft is gone: `position` had no stated units — for `"md,,markdown"` it
+could defensibly be the byte offset `3`, the segment index `1`, or the ordinal
+`2` — and an unspecified public field is exactly how an off-by-one becomes
+permanent. Per-value parsing removes the question entirely. `InvalidSegment`
+likewise discarded *why* the value was rejected and interpolated unbounded user
+input into one vague message; `InvalidCharacterKind` (itself
+`#[non_exhaustive]`) names the reason. Both enums are `#[non_exhaustive]`
+because error enums grow and a struct variant cannot gain a field additively.
 
 In `src/select/policy.rs`:
 
 ```rust
+/// Identifies a file independently of the path used to reach it.
+///
+/// On Unix this is `(st_dev, st_ino)`; elsewhere it is the canonicalized path.
+/// Deduplication keys on this, not on the path string.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FileIdentity(/* platform-specific */);
+
 /// What a candidate path turned out to be in the working tree.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PathKind {
-    /// A regular file that can be read and rewritten.
-    RegularFile,
+    /// A regular file that may be read and rewritten.
+    RegularFile(FileIdentity),
     /// Absent from the working tree, for example a staged deletion.
     Missing,
-    /// Present but not a regular file, for example a submodule gitlink.
+    /// A symbolic link. Never followed: the link's extension says nothing
+    /// about the target's type, and writing through it escapes the selection.
+    Symlink,
+    /// Present but neither a regular file nor a symlink, for example a
+    /// submodule gitlink.
     Other,
 }
 
 /// Reports what a candidate path actually is. Implemented by adapters.
 pub trait PathProbe {
-    fn probe(&self, path: &camino::Utf8Path) -> PathKind;
+    fn probe(&self, root: &camino::Utf8Path, path: &camino::Utf8Path) -> PathKind;
 }
 
-/// Narrows candidates to the deduplicated, sorted set of Markdown files that
-/// exist in the working tree.
+/// Narrows candidates to the sorted, alias-free set of files that exist as
+/// regular files and carry a configured extension.
 #[must_use]
-pub fn select_markdown_files<P>(
+pub fn select_files<P>(
     candidates: &[camino::Utf8PathBuf],
-    extensions: &MarkdownExtensions,
+    root: &camino::Utf8Path,
+    extensions: &ExtensionFilter,
     probe: &P,
 ) -> Vec<camino::Utf8PathBuf>
 where
     P: PathProbe + ?Sized;
 ```
 
-`select_markdown_files` filters by extension first, inserts survivors into a
-`std::collections::BTreeSet` — which discharges INV-DEDUP and INV-ORDER-DET
-structurally rather than by a separate sort-and-dedup step — and only then
-probes, so the filesystem is touched once per distinct Markdown candidate and
-never for a `.rs` file.
-
-In `src/select/source.rs`:
-
-```rust
-/// Candidate paths from a repository, with a count of paths that could not be
-/// represented as UTF-8.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct GitFileListing {
-    pub paths: Vec<camino::Utf8PathBuf>,
-    pub skipped_non_utf8: usize,
-}
-
-/// Supplies candidate paths, relative to the working directory.
-pub trait RepositoryFileSource {
-    /// # Errors
-    ///
-    /// Returns an error when the underlying source cannot be consulted.
-    fn list_candidates(&self) -> anyhow::Result<GitFileListing>;
-}
-```
+`select_files` filters by extension first, so the filesystem is touched once
+per distinct Markdown candidate and never for a `.rs` file. Keep that ordering
+and comment it: reversing it multiplies the probe count by roughly fifteen on a
+typical repository (28 Markdown files out of 416 paths here). It then probes,
+keeps `RegularFile`, deduplicates on `FileIdentity` retaining the
+lexicographically first path, and sorts.
 
 In `src/select/git_ls_files.rs`:
 
@@ -790,51 +838,102 @@ In `src/select/git_ls_files.rs`:
 #[derive(Debug, Clone)]
 pub struct GitLsFiles {
     program: std::ffi::OsString,
+    include_untracked: bool,
 }
 
 impl GitLsFiles {
-    /// Uses `git` from `PATH`.
     #[must_use]
-    pub fn new() -> Self;
+    pub fn new(include_untracked: bool) -> Self;
 
-    /// Uses a specific program. This is the seam that lets tests drive the
-    /// failure paths without a real Git installation.
+    /// Uses a specific program. The seam that lets tests drive the failure
+    /// paths without a real Git installation, and that makes failure-message
+    /// snapshots a function of our code rather than of the machine's `git`.
     #[must_use]
-    pub fn with_program(program: impl Into<std::ffi::OsString>) -> Self;
+    pub fn with_program(program: impl Into<std::ffi::OsString>, include_untracked: bool) -> Self;
+
+    /// # Errors
+    ///
+    /// See [`GitListError`].
+    pub fn list_candidates(&self, dir: &camino::Utf8Path)
+        -> Result<CandidateListing, GitListError>;
 }
 
-impl RepositoryFileSource for GitLsFiles { /* ... */ }
+/// Candidate paths, with a count of paths that were not valid UTF-8.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CandidateListing {
+    pub paths: Vec<camino::Utf8PathBuf>,
+    pub skipped_non_utf8: usize,
+}
 
-/// Splits a NUL-terminated byte stream into UTF-8 paths, counting those that
-/// are not valid UTF-8 rather than failing.
-pub(crate) fn split_nul_delimited(bytes: &[u8]) -> GitFileListing;
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum GitListError {
+    #[error("`{program}` is not installed or not on PATH")]
+    ProgramNotFound { program: String },
+    #[error("running `{program} ls-files`")]
+    Spawn { program: String, #[source] source: std::io::Error },
+    #[error("`git ls-files` failed with exit status {status}")]
+    Failed { status: std::process::ExitStatus, stderr: String },
+}
+
+/// Splits a NUL-terminated byte stream, counting entries that are not UTF-8.
+pub(crate) fn split_nul_delimited(bytes: &[u8]) -> CandidateListing;
 ```
 
-The adapter runs exactly:
+A concrete `GitListError` rather than `anyhow::Result` is required by
+`AGENTS.md:264` and is what lets the composition root distinguish "install git"
+from "here is git's complaint" without `downcast_ref`. It also puts the wording
+in one `Display` impl we own and can snapshot without a subprocess.
+
+The adapter runs exactly one of:
 
 ```plaintext
-git ls-files -z --cached --others --exclude-standard
+git ls-files -z --deduplicate --cached
+git ls-files -z --deduplicate --cached --others --exclude-standard
 ```
 
-with the process's own working directory inherited, which is what makes
-`--git` subtree-scoped per fact 3 above. It does not pass `--full-name`, does
-not pass `--deduplicate` (the domain deduplicates, and relying on Git for it
-would leave INV-DEDUP untested), and passes no pathspec.
+with `Command::current_dir(dir)`. It does not pass `--full-name`, so `--git` is
+subtree-scoped per fact 3. It **does** pass `--deduplicate`, because refusing a
+correct upstream flag so that a domain invariant has something to test would be
+the test wagging the design; INV-DEDUP survives because it is now a claim about
+inodes that `--deduplicate` cannot make.
+
+Use `Command::output()`, not `spawn()` plus a manual read. `output()` drains
+both pipes concurrently and cannot deadlock. A hand-rolled "streaming" variant
+deadlocks once git's output exceeds the 64 KiB pipe capacity — about 1,700
+paths at the 39.2 bytes per path measured here — which is small enough that
+this repository's 416 paths would pass every test while a user's repository
+hung forever. The whole-output buffer is ~3 MB even for the Linux kernel's
+80,000 paths, so there is nothing to gain.
 
 In `src/select/fs_probe.rs`:
 
 ```rust
-/// Probes the real working tree.
+/// Probes the real working tree using `std::fs::symlink_metadata`.
+///
+/// `symlink_metadata`, not `metadata`: see `PathKind::Symlink`.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AmbientPathProbe;
 
-impl PathProbe for AmbientPathProbe { /* std::fs::metadata */ }
+impl PathProbe for AmbientPathProbe { /* ... */ }
 ```
 
-`src/lib.rs` gains `pub mod select;` and re-exports nothing at the crate root,
-keeping the new surface namespaced.
+In `src/select/conflict.rs`:
 
-`src/main.rs` gains, in `Cli`:
+```rust
+/// Reports whether the repository is mid-merge, mid-rebase, or
+/// mid-cherry-pick, by testing for `MERGE_HEAD`, `rebase-merge`,
+/// `rebase-apply`, and `CHERRY_PICK_HEAD` under the Git directory.
+pub fn operation_in_progress(git_dir: &camino::Utf8Path) -> bool;
+
+/// Reports whether `content` carries all three conflict-marker forms, each at
+/// the start of a line with an exact seven-character run.
+#[must_use]
+pub fn has_conflict_markers(content: &str) -> bool;
+```
+
+In `src/main.rs`, the `Cli` struct gains:
 
 ```rust
 #[derive(Parser)]
@@ -846,13 +945,27 @@ struct Cli {
     /// Rewrite files in place
     #[arg(long = "in-place", requires = "inputs")]
     in_place: bool,
-    /// Select every Markdown file Git tracks, plus untracked files Git does
-    /// not ignore, beneath the current directory
+    /// Select Markdown files tracked by Git beneath the current directory
     #[arg(long = "git")]
     git: bool,
-    /// Comma-separated file extensions to select under `--git`
-    #[arg(long = "md-exts", value_name = "EXTS", requires = "git")]
-    md_exts: Option<String>,
+    /// Also select untracked files that Git does not ignore
+    #[arg(long = "include-untracked", requires = "git")]
+    include_untracked: bool,
+    /// File extensions to select under `--git`
+    #[arg(
+        long = "md-exts",
+        value_name = "EXT",
+        value_delimiter = ',',
+        default_values = ["md", "mdc", "markdown"],
+        value_parser = select::extensions::parse_extension,
+    )]
+    md_exts: Vec<String>,
+    /// Print the selected paths and exit without reading or writing them
+    #[arg(long = "list-files", requires = "git")]
+    list_files: bool,
+    /// Rewrite files containing conflict markers during a merge or rebase
+    #[arg(long = "allow-conflicted", requires = "git")]
+    allow_conflicted: bool,
     #[command(flatten)]
     opts: FormatOpts,
     /// Markdown files to fix
@@ -860,46 +973,100 @@ struct Cli {
 }
 ```
 
-and one composition-root function that resolves the input list before the
-existing `par_iter()` branches:
+`value_delimiter` plus `value_parser` rather than a hand-parsed
+`Option<String>`: clap drops `default_values` entirely when any occurrence is
+supplied, giving replacement semantics for free; both `--md-exts md,mdc` and
+`--md-exts md --md-exts mdc` work; an invalid extension becomes a clap error
+with exit status 2 and a usage footer, matching every other argument mistake
+rather than exiting 1 through `anyhow`; and `--help` renders the default set
+automatically. The wrinkle is that `requires = "git"` cannot be used on an
+argument carrying `default_values`, because a defaulted argument always counts
+as present — hence the post-parse `ArgMatches::value_source` check named in
+AX-CLAP-GRAMMAR, which EP-M0 must confirm.
+
+The composition root returns a type, not an overloaded emptiness sentinel:
 
 ```rust
-/// Resolves the files to act on: the positional list, or the Git selection.
-fn resolve_input_files(cli: &Cli) -> anyhow::Result<Vec<PathBuf>>;
+/// What `main` should act on.
+enum Inputs {
+    /// Read standard input. Only when no positional files and no `--git`.
+    Stdin,
+    /// Act on these paths. May be empty, which is success and not stdin.
+    Files(Vec<camino::Utf8PathBuf>),
+}
+
+fn resolve_inputs(cli: &Cli) -> anyhow::Result<Inputs>;
 ```
 
-New `[dev-dependencies]` only, with explicit version ranges as `AGENTS.md`
-requires:
+An earlier draft returned `Vec<PathBuf>` and left `main` branching on
+`is_empty()`. That conflates "the user named no files, so read stdin" with
+"`--git` legitimately matched nothing", so `mdtablefix --git --in-place` in a
+repository with no Markdown would block on a TTY forever — and under
+`--in-place` would then print formatted stdin, silently the wrong mode.
+REQ-GIT-008 exists because of this. Carrying `Utf8PathBuf` rather than
+`PathBuf` also avoids round-tripping through a lossy type only for
+`open_file_parent` to re-validate it.
+
+`anyhow` remains correct in `main.rs`, which is the application boundary
+`AGENTS.md:266` describes.
+
+New `[dependencies]`:
+
+```toml
+thiserror = "2"
+```
+
+New `[dev-dependencies]`:
 
 ```toml
 rstest-bdd = "0.5"
+rstest-bdd-macros = "0.5"
 googletest = "0.14"
 pretty_assertions = "1.4"
 ```
 
-`[dependencies]` is unchanged. That is the point of the chosen mechanism.
+`rstest-bdd-macros` is listed explicitly and deliberately. `rstest-bdd` 0.5.0
+does **not** re-export the macros — verified against the vendored source, whose
+`lib.rs` re-exports `context`, `registry`, `pattern` and others but no
+`rstest_bdd_macros` — so every consumer writes
+`use rstest_bdd_macros::{given, scenario, then, when};`. The upstream README's
+two-line install block is incomplete.
 
-Assertion style, per `docs/rust-testing-with-rstest-fixtures.md` and the
-`rust-unit-testing` skill: use `pretty_assertions::assert_eq` for structural
-comparisons of path vectors, and `googletest` matchers (`assert_that!`,
-`expect_that!`) where a matcher reads better than an equality — for example
-`expect_that!(selected, unordered_elements_are![...])` and
-`expect_that!(message, contains_substring("not a git repository"))`. Put
-`#[googletest::gtest]` **before** `#[rstest]` on any test that uses
-`expect_that!`.
+Assertion style, per the `rust-unit-testing` skill: use
+`pretty_assertions::assert_eq` for structural comparisons of path vectors, and
+`googletest` matchers where a matcher reads better than an equality, e.g.
+`expect_that!(selected, unordered_elements_are![...])`. Put
+`#[googletest::gtest]` **before** `#[rstest]`.
+
+### Test environment hardening
+
+Every test that builds a real repository must neutralize ambient Git
+configuration, or the developer's own `core.excludesFile` leaks into the
+AX-GIT-LSFILES boundary test — which is precisely the ambient input
+CON-SAFE-001 exists to control. Set, on the child process:
+
+```plaintext
+GIT_CONFIG_NOSYSTEM=1
+GIT_CONFIG_GLOBAL=/dev/null
+HOME=<the temporary directory>
+LC_ALL=C
+LANGUAGE=
+```
+
+`LC_ALL` and `LANGUAGE` are belt and braces only. Per AX-GIT-NLS, no assertion
+may depend on git's message text regardless.
 
 ## Behavioural specification
 
-Create `tests/features/git_file_selection.feature` with exactly this content,
-and bind it from `tests/git_file_selection.rs`. Keep the two synchronized: if
-a scenario changes, change this plan too.
+Create `tests/features/git_file_selection.feature` and bind it from
+`tests/git_file_selection.rs`. Keep the two synchronized with this plan.
 
 ```gherkin
 Feature: Select files from a Git repository
 
   As a maintainer of a Markdown-heavy repository
   I want mdtablefix to act on the repository's own Markdown files
-  So that I do not have to enumerate them by hand or risk touching ignored files
+  So that I need not enumerate them by hand or risk touching ignored files
 
   Background:
     Given a Git repository containing a committed file "docs/guide.md" with a broken table
@@ -907,13 +1074,33 @@ Feature: Select files from a Git repository
     And an untracked file "notes.md" with a broken table
     And an ignored file "build/out.md" with a broken table
 
-  Scenario: Reformat every tracked and untracked Markdown file in place
+  Scenario: Reformat tracked Markdown in place and nothing else
     When I run mdtablefix with "--git --in-place"
+    Then the command succeeds
+    And the file "docs/guide.md" has a reflowed table
+    And the file "notes.md" is unchanged
+    And the file "build/out.md" is unchanged
+    And the file "src/lib.rs" is unchanged
+
+  Scenario: Extend the selection to untracked files on request
+    When I run mdtablefix with "--git --include-untracked --in-place"
     Then the command succeeds
     And the file "docs/guide.md" has a reflowed table
     And the file "notes.md" has a reflowed table
     And the file "build/out.md" is unchanged
+
+  Scenario: List the selection without acting
+    When I run mdtablefix with "--git --list-files"
+    Then the command succeeds
+    And stdout is exactly "docs/guide.md"
+    And the file "docs/guide.md" is unchanged
+
+  Scenario: Never write through a symlink
+    Given a committed symlink "docs/alias.md" pointing at "../src/lib.rs"
+    When I run mdtablefix with "--git --in-place"
+    Then the command succeeds
     And the file "src/lib.rs" is unchanged
+    And the file "docs/alias.md" is still a symlink
 
   Scenario: Restrict the selection to chosen extensions
     Given a committed file "rules.mdc" with a broken table
@@ -927,94 +1114,106 @@ Feature: Select files from a Git repository
     Then the command succeeds
     And the file "docs/guide.md" has a reflowed table
 
-  Scenario: Skip a tracked file that was deleted from the working tree
+  Scenario: Skip a tracked file deleted from the working tree
     Given the file "docs/guide.md" is deleted from the working tree
+    And a committed file "other.md" with a broken table
     When I run mdtablefix with "--git --in-place"
     Then the command succeeds
-    And the file "notes.md" has a reflowed table
+    And the file "other.md" has a reflowed table
 
-  Scenario: List a conflicted file exactly once
+  Scenario: Refuse to rewrite a conflicted file mid-merge
     Given an unresolved merge conflict in the tracked file "docs/guide.md"
-    When I run mdtablefix with "--git"
+    When I run mdtablefix with "--git --in-place"
+    Then the command fails
+    And the file "docs/guide.md" is unchanged
+    And stderr contains "conflict markers"
+
+  Scenario: Rewrite a conflicted file when explicitly allowed
+    Given an unresolved merge conflict in the tracked file "docs/guide.md"
+    When I run mdtablefix with "--git --in-place --allow-conflicted"
     Then the command succeeds
-    And stdout contains the line "<<<<<<< HEAD" exactly once
+
+  Scenario: Exit successfully when nothing is selected
+    Given a Git repository containing only the committed file "src/lib.rs"
+    When I run mdtablefix with "--git --in-place"
+    Then the command succeeds
+    And stdout is empty
+    And standard input was not read
 
   Scenario: Scope the selection to the current directory
-    When I run mdtablefix from "docs" with "--git --in-place"
+    When I run mdtablefix from "docs" with "--git --list-files"
     Then the command succeeds
-    And the file "docs/guide.md" has a reflowed table
-    And the file "notes.md" is unchanged
+    And stdout is exactly "guide.md"
 
   Scenario: Report a clear error outside a Git repository
     Given the working directory is not inside a Git repository
     When I run mdtablefix with "--git"
     Then the command fails
-    And stderr contains "not a git repository"
+    And stderr contains "git ls-files"
 
-  Scenario: Reject an unusable extension specification
+  Scenario: Reject an unusable extension
     When I run mdtablefix with "--git --md-exts md,,markdown"
-    Then the command fails
-    And stderr contains "empty extension"
+    Then the command exits with status 2
 
   Scenario: Reject combining --git with explicit file arguments
     When I run mdtablefix with "--git notes.md"
-    Then the command fails
-    And stderr contains "cannot be used with"
+    Then the command exits with status 2
 
-  Scenario: Reject --md-exts without --git
-    When I run mdtablefix with "--md-exts md notes.md"
-    Then the command fails
-    And stderr contains "requires"
+  Scenario: Reject --list-files without --git
+    When I run mdtablefix with "--list-files notes.md"
+    Then the command exits with status 2
 ```
 
-The step definitions share state through an `rstest` fixture that builds the
-repository in a `tempfile::TempDir` and returns a handle carrying the temporary
-directory and the last command's output. Do not use a global or a `static`;
-`docs/rust-testing-with-rstest-fixtures.md` mandates fixture-based injection,
-and a shared mutable global would make the scenarios order-dependent.
+Three assertion choices are deliberate. `stderr contains "git ls-files"` names
+**our** wrapper's wording, never git's, per AX-GIT-NLS. The clap rejections
+assert on the **exit status** rather than on message text, because an earlier
+draft asserted `stderr contains "requires"` and clap 4.6.6 renders `the
+following required arguments were not provided:` for that error kind — the
+scenario would have failed on day one. `--list-files` gives the selection an
+honest oracle; an earlier draft asserted dedup by grepping a conflict marker
+out of a concatenated content dump, which was a symptom of the missing
+affordance.
+
+Step definitions share state through an `rstest` fixture that builds the
+repository in a `tempfile::TempDir` and returns a handle carrying the directory
+and the last command's output. No globals and no `static`: they would make the
+scenarios order-dependent. `standard input was not read` is asserted by running
+the command with a closed or empty stdin and a timeout.
 
 ## Plan of work
 
 ### Stage A — understand and propose, no code changes
 
-Read the documents and load the skills listed under "Context and orientation".
-Re-run the reference-command transcripts under "Measured behaviour" against
-the `git` on this machine and confirm they still hold. If any differs, stop:
-the axioms have changed and the plan needs revising before code is written.
-
-Validation: the transcripts match. Proceed.
+Read the documents and load the skills. Re-run the reference-command
+transcripts under "Measured behaviour" against the `git` on this machine. If
+any differs, stop: the axioms have changed and the plan needs revising.
 
 ### Stage B — red tests and the behavioural specification
 
-Add the three `[dev-dependencies]`. Write the feature file
-`tests/features/git_file_selection.feature` exactly as specified above, plus
-the `tests/git_file_selection.rs` bindings. Then write the failing unit and
-property tests for EP-M1 and EP-M2 before any production code exists. Confirm
-each fails for the intended reason, which for the property tests means a
-compilation failure naming the missing item, not a spurious pass.
+Add the one runtime and four development dependencies. Write the feature file
+and its bindings, then the failing unit and property tests for EP-M1, before
+any production code. Confirm each fails for the intended reason — for the
+property tests, a compilation failure naming the missing item, not a spurious
+pass. Do not park a red test with `#[ignore]`.
 
-Do not use `#[ignore]` to park a red test. Nothing in this plan is delivered
-with an expected-failure marker still in place.
+### Stage C — implementation
 
-Validation: `make test` fails, and every failure names a missing item or a
-missing behaviour from this plan. No unrelated test regresses.
-
-### Stage C — implementation, milestone by milestone
-
-Build EP-M1, then EP-M2, then EP-M3, each in its own commit, each turning its
-own red tests green with the smallest change that does so. Run the negative
-controls named in the Verification plan as deliberate temporary mutations, in a
-scratch working copy, confirm the properties reject them, then discard the
-mutation. Record in Progress that each control was exercised.
+Build EP-M1, then EP-M2, each in its own commit, each turning its own red tests
+green with the smallest change that does so. Run `make mutants` at the end of
+EP-M1 and record the survivor count.
 
 Validation: at each milestone boundary, `make check-fmt`, `make typecheck`,
-`make lint`, and `make test` all pass, run sequentially, never in parallel.
+`make lint`, and `make test` all pass, run **sequentially**, never in parallel.
 
-### Stage D — refactor, documentation, and wider validation
+Note that `make test` runs `cargo test --all-targets`, which **does not run
+doctests**. Add `cargo test --doc` to the `test` target as part of EP-M1, or
+any `# Examples` block written here is never compiled by any gate.
 
-Deliver EP-M4. Re-read `src/select/` against the refactoring heuristics in
-`AGENTS.md`, splitting any function that has grown long or any file that has
-approached the 400-line cap, as a separate commit after the functional one.
+### Stage D — documentation and wider validation
+
+Deliver EP-M3. Re-read `src/select/` against the refactoring heuristics in
+`AGENTS.md`, splitting any file approaching the 400-line cap as a separate
+commit after the functional one.
 
 Validation: the full gate set plus `make markdownlint`, and `make nixie` if a
 Mermaid diagram was added.
@@ -1022,7 +1221,7 @@ Mermaid diagram was added.
 ## Concrete steps
 
 Run everything from the repository root. Per `AGENTS.md`, capture long output
-through `tee` and read the log afterwards rather than relying on the terminal.
+through `tee` and read the log afterwards.
 
 Confirm the starting state:
 
@@ -1032,52 +1231,47 @@ git-option
 $ git status --short
 ```
 
-Expected: no output from `git status --short`.
-
-Re-establish the axioms (Stage A):
+Re-establish the axioms:
 
 ```console
-$ git ls-files -z --cached --others --exclude-standard | tr '\0' '\n' | head -3
+$ git ls-files -z --deduplicate --cached | tr '\0' '\n' | head -3
 .github/dependabot.yml
 .github/workflows/ci.yml
 .gitignore
 ```
 
-Expected: NUL-delimited paths, exit status 0.
-
-Run a single gate and keep the log:
+Run a gate and keep the log:
 
 ```console
 make test 2>&1 | tee "/tmp/test-mdtablefix-$(git branch --show-current).out"
 ```
 
-Expected on success, at the tail of the log: `test result: ok.` for every test
-binary and no `warning:` lines, because `make test` sets
-`RUSTFLAGS="-D warnings"`.
+Expected at the tail: `test result: ok.` for every test binary and no
+`warning:` lines, because `make test` sets `RUSTFLAGS="-D warnings"`.
 
-Run the focused suites during Stage C:
+Focused suites during Stage C:
 
 ```console
-cargo test --lib select 2>&1 \
+cargo test --bin mdtablefix select 2>&1 \
   | tee "/tmp/unit-select-$(git branch --show-current).out"
-cargo test --test git_ls_files --test cli_git --test git_file_selection 2>&1 \
+cargo test --test cli_git --test git_file_selection 2>&1 \
   | tee "/tmp/integration-git-$(git branch --show-current).out"
+make mutants 2>&1 | tee "/tmp/mutants-$(git branch --show-current).out"
 ```
 
-Review a `--help` snapshot change deliberately rather than accepting it
-blindly:
+Review a `--help` snapshot deliberately:
 
 ```console
 cargo insta review
 ```
 
 Prefer delegating full gate runs to the `scrutineer` subagent, which runs them
-sequentially, writes each log under `/tmp`, and returns a bounded report. When
-it reports a failure, read the log it cites rather than re-running the gate.
+sequentially, logs each under `/tmp`, and returns a bounded report. When it
+reports a failure, read the log it cites rather than re-running the gate.
 
 ## Validation and acceptance
 
-Acceptance is behavioural. Build a scratch repository and observe the tool.
+Build a scratch repository and observe the tool.
 
 ```console
 $ cd "$(mktemp -d)" && git init -q . && git config user.email t@t \
@@ -1089,6 +1283,8 @@ $ cp docs/guide.md build/out.md
 $ cp docs/guide.md notes.md
 $ cp docs/guide.md keep.rs
 $ git add docs/guide.md keep.rs .gitignore && git commit -qm init
+$ mdtablefix --git --list-files
+docs/guide.md
 $ mdtablefix --git --in-place
 $ cat docs/guide.md
 | A | B |   |
@@ -1096,19 +1292,35 @@ $ cat docs/guide.md
 | 3 | 4 |   |
 ```
 
-Expected: `docs/guide.md` and `notes.md` are reflowed; `build/out.md` and
-`keep.rs` are byte-identical to the input; exit status 0.
+Expected: `--list-files` names one path and changes nothing; `--in-place`
+reflows `docs/guide.md` and leaves `notes.md`, `build/out.md`, and `keep.rs`
+byte-identical; exit status 0.
+
+```console
+$ mdtablefix --git --include-untracked --list-files
+docs/guide.md
+notes.md
+```
+
+Expected: the untracked file joins the selection; the ignored one does not.
 
 ```console
 $ cd / && mdtablefix --git ; echo "exit=$?"
-error: running `git ls-files`: fatal: not a git repository (or any of the
-parent directories): .git
+Error: running `git ls-files`
+
+Caused by:
+    fatal: not a git repository (or any of the parent directories): .git
 exit=1
 ```
 
-Expected: a non-zero exit and a diagnostic naming the cause. The exact wording
-is pinned by an `insta` snapshot; if it differs from the above, update both the
-snapshot and this transcript in the same commit.
+Expected: a non-zero exit and a diagnostic naming the cause. Note the shape:
+`fn main() -> anyhow::Result<()>` prints through `Termination`, which renders
+`Error: {e:?}` — capital `E`, with an indented `Caused by:` chain. An earlier
+draft's transcript showed a lowercase colon-joined `error:` line, which nothing
+in the binary can produce. The **second** line comes from git and is
+version- and locale-dependent, so no test asserts on it; snapshots of failure
+messages are driven through `GitLsFiles::with_program` against a fixture
+program emitting fixed bytes, so they are a function of our code.
 
 ```console
 $ mdtablefix --git notes.md ; echo "exit=$?"
@@ -1116,204 +1328,288 @@ error: the argument '--git' cannot be used with '[FILES]...'
 exit=2
 ```
 
-Expected: `clap` rejects the combination before any file is touched.
+Expected: clap rejects the combination before any file is touched. This wording
+is clap's, so the test asserts the exit status; EP-M0 records the verbatim text
+for the documentation.
 
-Red-Green-Refactor evidence to record in Progress as work proceeds:
+Red-Green-Refactor evidence to record in Progress:
 
-- Red: `cargo test --lib select` fails with `cannot find function
-  \`select_markdown_files\`` before EP-M1's production code exists.
+- Red: `cargo test --bin mdtablefix select` fails with `cannot find function
+  \`select_files\`` before EP-M1's production code exists.
 - Green: the same command reports `test result: ok.` after the minimal
   implementation.
-- Refactor: the same command still reports `test result: ok.` after cleanup,
-  followed by a clean run of the four gates.
+- Refactor: still `ok.` after cleanup, followed by a clean run of the gates.
 
 Quality criteria — what "done" means:
 
-- Tests: `make test` passes with no warnings, and the new suites
-  `cargo test --lib select`, `--test git_ls_files`, `--test cli_git`, and
-  `--test git_file_selection` all pass.
-- Verification: INV-EXTSPEC-NORM, INV-EXT-SOUND, INV-EXT-COMPLETE, INV-DEDUP,
-  INV-ORDER-DET, INV-PROBE-REGULAR, and INV-NUL-SPLIT are discharged by the
-  named artefacts, each having been observed red first and each having rejected
-  its negative control. LEM-SELECT-SETEQ is discharged end to end by the
-  behavioural scenarios.
-- Lint and typecheck: `make check-fmt`, `make typecheck`, and `make lint` all
-  pass. Run them sequentially.
-- Documentation: `make markdownlint` passes, and `make nixie` passes if a
-  Mermaid diagram was added.
-- Performance: no threshold. Selection adds one process spawn and one `stat`
-  per distinct Markdown candidate, both negligible beside the existing per-file
-  read and parse.
-- Security: the tool now spawns a subprocess. It passes a fixed argument
-  vector with no shell interpretation and no user-controlled arguments, so
-  there is no injection surface. State this explicitly in ADR 0006.
+- Tests: `make test` passes with no warnings; `cargo test --bin mdtablefix
+  select`, `--test cli_git`, and `--test git_file_selection` all pass;
+  `cargo test --doc` passes.
+- Verification: every obligation in the Verification plan is discharged by its
+  named artefact, observed red first, and `make mutants` reports zero survivors
+  in `src/select/policy.rs` and `src/select/git_ls_files.rs`.
+  LEM-SELECT-SETEQ is discharged end to end by the scenarios.
+- Lint and typecheck: `make check-fmt`, `make typecheck`, `make lint`, run
+  sequentially.
+- Documentation: `make markdownlint`; `make nixie` if a diagram was added.
+- Performance: no threshold, but two shapes are required rather than optional —
+  the chunked stdout drain in EP-M2, and extension-filtering before probing in
+  `select_files`. Note for anyone measuring later that the dominant fixed cost
+  of `--include-untracked` is git's own working-tree walk, not our spawn or our
+  stats.
+- Security: the tool now spawns a subprocess. It passes a fixed argument vector
+  with no shell interpretation and no user-controlled arguments, so there is no
+  injection surface on the **input** side. On the **output** side, git's stderr
+  is untrusted, unbounded, and may contain paths and ANSI escapes, so cap it
+  and strip control characters before printing. State both halves in ADR 0006.
 
 ## Idempotence and recovery
 
 Every step is re-runnable. `mdtablefix --git --in-place` is idempotent on its
-own output, which the existing `run_in_place` pattern in `tests/cli.rs` already
-asserts for the positional path and which the new suite asserts for `--git`.
-The gates are read-only apart from `cargo` build artefacts. `cargo insta
-review` is the only interactive step; `cargo insta reject` undoes it.
+own output, which INV-NOWRITE-UNCHANGED strengthens into "a second run performs
+no writes at all". The gates are read-only apart from build artefacts.
+`cargo insta reject` undoes a snapshot review.
 
-The one destructive operation this feature can perform is rewriting files in
-place, which is exactly what `--in-place` has always done. The acceptance
-transcripts above use a throwaway repository under `mktemp -d`, so no working
-repository is at risk. Never run `mdtablefix --git --in-place` against this
-repository while validating; the resulting diff would be indistinguishable from
-intended work.
+The destructive operation is rewriting files in place. The acceptance
+transcripts use a throwaway repository under `mktemp -d`. Never run
+`mdtablefix --git --in-place` against this repository while validating; the
+resulting diff would be indistinguishable from intended work. That warning
+applies to **every user with a dirty working tree**, not only to the
+implementor — once a run has interleaved its changes with uncommitted work,
+`git restore .` reverts both. Two mitigations are in scope and should both
+ship: `--list-files` lets a user see the selection first, and the stderr
+summary of changed paths makes `git restore -- <paths>` selective afterwards.
+Say so in the users' guide.
 
 Each milestone is a single commit, so `git revert` returns to the previous
-plateau without touching later work.
+plateau.
 
 ## Progress
 
 - [ ] Stage A: re-establish the reference-command transcripts on this machine.
-- [ ] EP-M0: prototype the `clap::ArgGroup` grammar and confirm AX-CLAP-GROUP.
-- [ ] EP-M0: prove one trivial `rstest-bdd` scenario runs on the pinned
-      toolchain.
-- [ ] Stage B: add the three dev-dependencies and write the feature file.
-- [ ] Stage B: write the red unit and property tests for EP-M1 and EP-M2.
-- [ ] EP-M1: implement `MarkdownExtensions`, `PathKind`, `PathProbe`, and
-      `select_markdown_files`; discharge INV-EXTSPEC-NORM, INV-EXT-SOUND,
-      INV-EXT-COMPLETE, INV-DEDUP, INV-ORDER-DET, INV-PROBE-REGULAR.
-- [ ] EP-M1: exercise and revert the two negative controls.
-- [ ] EP-M2: implement `GitLsFiles` and `AmbientPathProbe`; discharge
-      INV-NUL-SPLIT and the repository-backed candidate test.
-- [ ] EP-M2: exercise and revert the INV-NUL-SPLIT negative control.
-- [ ] EP-M3: wire `--git` and `--md-exts` into `Cli` and the composition root.
-- [ ] EP-M3: land the behavioural scenarios and the `--help` snapshot.
-- [ ] EP-M4: write ADR 0006 and update `README.md`, `docs/users-guide.md`,
+- [ ] EP-M0: confirm AX-CLAP-GRAMMAR, including the `a.md b.md` regression case
+      and the `default_values` plus `requires` wrinkle; capture verbatim clap
+      diagnostics.
+- [ ] EP-M0: prove one `rstest-bdd` scenario runs on the pinned toolchain.
+- [ ] Stage B: add the five dependencies and write the feature file.
+- [ ] Stage B: write the red unit and property tests for EP-M1.
+- [ ] EP-M1: implement `extensions`, `policy`, `conflict`, `git_ls_files`, and
+      `fs_probe`; discharge INV-NUL-SPLIT, INV-EXT-SOUND, INV-EXT-COMPLETE,
+      INV-DEDUP, INV-ORDER-DET, INV-PROBE-EXCLUSIONS, INV-CONFLICT-GUARD.
+- [ ] EP-M1: add `cargo test --doc` to the `test` target; add `make mutants`
+      and `mutants.toml`; reach zero survivors in the two named files.
+- [ ] EP-M2: wire the five new flags and `resolve_inputs` into `main`.
+- [ ] EP-M2: implement the chunked stdout drain and INV-NOWRITE-UNCHANGED.
+- [ ] EP-M2: land the scenarios and the `--help` snapshot.
+- [ ] EP-M3: write ADR 0006 and update `README.md`, `docs/users-guide.md`,
       `docs/architecture.md`, `docs/developers-guide.md`, `docs/contents.md`.
 - [ ] Reconcile Decision log and Surprises with ADR 0006, then set Status.
 
 ## Surprises & discoveries
 
-- Observation: `git ls-files -t` does not reliably flag a tracked file that has
-  been deleted from the working tree; it reported `H` rather than `R` for such
-  a file when `--deleted` was not also passed.
+- Observation: `git ls-files -t` does not reliably flag a tracked file deleted
+  from the working tree; it reported `H`, not `R`, because the `R` tag requires
+  `--deleted`.
   Evidence: probing a repository with a committed then deleted `a.md` produced
-  `H a.md`, not `R a.md`.
+  `H a.md`.
   Impact: status tags cannot substitute for a filesystem probe. This is why the
-  design uses `PathProbe` rather than parsing `-t` output, and why
-  INV-PROBE-REGULAR exists.
+  design uses `PathProbe` rather than parsing `-t` output.
 
-- Observation: `tests/table/` is not compiled by any Cargo target. No
-  top-level `tests/*.rs` declares `mod table` or a `#[path]` to it, so roughly
-  ninety tests in that directory are dead from Cargo's perspective.
-  Evidence: an exhaustive grep of `tests/` for `mod table` and
-  `#[path = "table/` returned no match; the only `mod table` in the repository
-  is `src/lib.rs`'s unrelated production module.
+- Observation: `rstest-bdd` 0.5.0 does not re-export its procedural macros.
+  Evidence: its `lib.rs` re-exports `context`, `registry`, `pattern`,
+  `localization` and others, but nothing from `rstest_bdd_macros`.
+  Impact: `rstest-bdd-macros` is a required second dev-dependency. The upstream
+  README's install block is incomplete.
+
+- Observation: `tests/table/` is not compiled by any Cargo target. No top-level
+  `tests/*.rs` declares `mod table` or a `#[path]` to it.
+  Evidence: an exhaustive grep of `tests/` returned no match; the only
+  `mod table` in the repository is `src/lib.rs`'s unrelated production module.
   Impact: do not add tests to `tests/table/`; they would never run. Do not fix
-  this as part of this plan either — it is out of scope. Note it and move on.
+  it here either — out of scope.
+
+- Observation: `make test` runs `cargo test --all-targets`, which excludes
+  doctests.
+  Evidence: the `test` target in `Makefile`.
+  Impact: any `# Examples` block is unverified by every current gate. Stage C
+  adds `cargo test --doc`.
 
 ## Decision log
 
-- Decision: obtain the file list by spawning `git ls-files -z --cached --others
-  --exclude-standard` rather than using `git2` or `gix`.
-  Rationale: the requirement is semantic equivalence with that exact command,
-  and spawning it achieves equivalence by construction rather than by
-  reimplementation. It adds no runtime dependency, inherits every Git
-  configuration input (`core.excludesFile`, `.git/info/exclude`, per-directory
-  `.gitignore`, sparse checkout) for free, and avoids a C toolchain. libgit2
-  currently diverges from Git on nested `.gitignore` negation — a negation in a
-  child directory fails to re-include a directory excluded by a parent — so
-  `git2` would make "semantically equivalent" merely approximate. The cost is
-  requiring `git` on `PATH`, which is acceptable for a flag whose entire
-  premise is a Git working tree, and which REQ-GIT-007 turns into an actionable
-  message.
+Entries are pointers; the reasoning lives in the body sections named. ADR 0006
+is the durable record, and EP-M3 reconciles this log into it.
+
+- Decision: spawn `git ls-files -z` rather than link `git2` or `gix`.
+  Rationale: equivalence by construction rather than by reimplementation; no
+  Git-operating dependency; inherits every Git configuration input for free.
+  libgit2 diverges from Git on nested `.gitignore` negation, so `git2` would
+  make equivalence approximate. The stronger argument, which ADR 0006 should
+  lead with, is that a walker-based approach such as the `ignore` crate
+  **structurally cannot see force-added ignored files**, whereas `--cached`
+  gets them right by construction. Cost: `git` on `PATH`, turned into an
+  actionable message by REQ-GIT-007.
   Date/Author: 2026-09-09, planning agent, confirmed by the requester.
 
-- Decision: narrow the candidate set to Markdown extensions, defaulting to
-  `md`, `mdc`, and `markdown`, with `--md-exts` to override.
-  Rationale: `git ls-files` reports every file in the repository. `mdtablefix`
-  has never filtered by extension, so an unfiltered `--git --in-place` would
-  rewrite `.rs`, `.toml`, and binary files. A filter is a safety requirement,
-  not a convenience, which is why CON-SAFE-001 is a constraint and why
-  INV-EXT-SOUND and INV-EXT-COMPLETE are verified in both directions.
+- Decision: `--git` selects tracked files only; untracked selection is opt-in
+  behind `--include-untracked`.
+  Rationale: `--others` is exactly the set of files Git cannot restore. A user
+  with `$HOME` under version control who runs `--git --in-place --wrap` would
+  otherwise reformat every Markdown file in their home directory with no undo.
+  Making the recoverable set the default bounds the blast radius; the full
+  reference-command equivalence remains available in one extra flag.
+  Date/Author: 2026-09-09, requester, on a reviewer pre-mortem.
+
+- Decision: narrow to Markdown extensions, defaulting to `md`, `mdc`,
+  `markdown`, with `--md-exts` to override by replacement, and no effect on
+  positional paths.
+  Rationale: `git ls-files` reports every file in the repository, and
+  `mdtablefix` has never filtered by extension, so an unfiltered run would
+  rewrite `.rs` and `.toml` files. This is a safety requirement, hence
+  CON-SAFE-001 and the bidirectional INV-EXT-SOUND/COMPLETE. Requiring `--git`
+  is deliberate: silently discarding a file the user named would be wrong.
+  Date/Author: 2026-09-09, requester and planning agent.
+
+- Decision: deduplicate on file identity, not on the path string; sort the
+  result.
+  Rationale: see INV-DEDUP. The identity is free because the probe already
+  fetches the metadata.
+  Date/Author: 2026-09-09, planning agent, on a reviewer finding.
+
+- Decision: `symlink_metadata` and an explicit `PathKind::Symlink`, excluded.
+  Rationale: see INV-PROBE-EXCLUSIONS. CON-SAFE-001 is stated in terms of
+  inodes written rather than paths selected for the same reason.
+  Date/Author: 2026-09-09, planning agent, on a reviewer finding.
+
+- Decision: do not pass `--full-name`; `--git` is subtree-scoped, and the tool
+  does not announce the scope.
+  Rationale: this is the reference command's own behaviour, so preserving it is
+  what equivalence means, and it lets a user format one subtree without extra
+  arguments. Three reviewers argued for announcing the resolved scope on
+  stderr, on the grounds that a flag named `--git` reads as "the repository";
+  the requester chose silence. Document the scoping prominently in the users'
+  guide, since it is the behaviour most likely to surprise. Adding a
+  `--repo-root` flag later is additive; changing the default would not be.
   Date/Author: 2026-09-09, requester.
 
-- Decision: `--md-exts` replaces the default set rather than adding to it, and
-  requires `--git`.
-  Rationale: replacement is the predictable reading of "alternative
-  extensions", and a separate add-versus-replace mechanism would be
-  unjustified for the size of the set. Requiring `--git` is deliberate:
-  positional paths are an explicit instruction from the user, and silently
-  discarding a file the user named would be wrong.
+- Decision: refuse to rewrite conflict-marked files during an in-progress Git
+  operation, with `--allow-conflicted` to override.
+  Rationale: see INV-CONFLICT-GUARD. Two-layer detection — repository state
+  first, then file content — keeps false positives away from documents that
+  merely discuss conflict markers.
+  Date/Author: 2026-09-09, requester, on a reviewer pre-mortem.
+
+- Decision: add `--list-files`.
+  Rationale: two independent needs converge on it. Without `--in-place`,
+  `--git` otherwise concatenates every selected file to stdout, which is an
+  unlabelled blob nobody wants and the cause of the memory profile EP-M2 has to
+  fix; and the behavioural scenarios need an honest oracle for "which files
+  were selected", which an earlier draft faked by grepping a conflict marker
+  out of that blob. It costs about ten lines. If scope must be cut, this is the
+  first candidate — but the scenarios would need reworking.
+  Date/Author: 2026-09-09, planning agent, on reviewer findings.
+
+- Decision: keep the selection module tree private to the binary crate; add no
+  public library API.
+  Rationale: one in-package consumer, and `AGENTS.md:268` forbids exporting an
+  opaque error type from a library. Publishing nine items on a crates.io crate
+  to serve one caller is how a crate arrives at 1.0 with a surface nobody
+  chose. Testability is unaffected: unit and property tests live in
+  `#[cfg(test)] mod tests` inside the binary, exactly as `src/main.rs` already
+  does. Cost: evidence commands read `cargo test --bin mdtablefix` rather than
+  `--lib`.
+  Date/Author: 2026-09-09, planning agent, on reviewer findings.
+
+- Decision: use `thiserror` domain enums, not `anyhow`, inside `src/select/`.
+  Rationale: `AGENTS.md:264` mandates it and `AGENTS.md:268` forbids the
+  alternative. An earlier draft banned `thiserror` under a self-issued
+  constraint, which is a plan overriding a binding repository rule — and it was
+  vendoring `thiserror` transitively through `rstest-bdd` anyway. `anyhow`
+  remains correct in `main.rs`, the application boundary.
+  Date/Author: 2026-09-09, planning agent, on a reviewer finding.
+
+- Decision: delete the `RepositoryFileSource` port; keep only `PathProbe`.
+  Rationale: see Architectural boundaries.
+  Date/Author: 2026-09-09, planning agent, on three concurring reviewers.
+
+- Decision: replace hand-applied negative controls with `cargo-mutants`.
+  Rationale: see the note under the Verification plan.
+  Date/Author: 2026-09-09, planning agent, on a reviewer finding.
+
+- Decision: `std::fs::symlink_metadata` in `AmbientPathProbe` is a deliberate,
+  narrow exception to `AGENTS.md:232`.
+  Rationale: classification needs the real path, and `cap_std` offers no
+  ambient stat. The exception covers metadata only; contents still flow through
+  the capability boundary, which is why CON-CAP-001 is worded as it is.
   Date/Author: 2026-09-09, planning agent.
 
-- Decision: sort the selection and deduplicate it, diverging from the raw
-  output order of the reference command.
-  Rationale: `git ls-files` emits the untracked pass before the cached pass, so
-  its output is not globally sorted; and during an unresolved merge it emits a
-  conflicted path once per index stage. Semantic equivalence is a claim about
-  the set, not the sequence. A sorted, duplicate-free order makes stdout
-  concatenation reproducible, makes snapshot tests stable, and prevents
-  `--in-place` from formatting the same file twice concurrently. Implemented
-  structurally with a `BTreeSet` rather than as a separate sort-and-dedup pass.
-  Date/Author: 2026-09-09, planning agent.
+- Decision: consider and reject the broader redesign in which positional
+  arguments accept directories and git-awareness becomes a property of path
+  expansion rather than a mode flag.
+  Rationale: a reviewer showed this is what comparable tools do — `ruff`,
+  `dprint`, `prettier`, `markdownlint-cli2` and `typos` all take positional
+  paths and consult `.gitignore` — and it would remove the `--git`-versus-files
+  exclusion, the `ArgGroup`, and AX-CLAP-GRAMMAR entirely. It is a genuinely
+  better long-term shape. It is also a behaviour change to an existing
+  argument: `mdtablefix somedir/` is an error today and would become a
+  recursive rewrite. That is a different feature from the one requested, and
+  bundling it would widen the blast radius of a change whose whole risk profile
+  is unintended writes. Record it in ADR 0006 as the recommended successor.
+  Date/Author: 2026-09-09, planning agent, on a reviewer alternative.
 
-- Decision: do not pass `--full-name`, so `--git` scopes to the current
-  directory and its subtree.
-  Rationale: this is the reference command's own behaviour, so preserving it is
-  what equivalence means. It is also the more useful default, letting a user
-  format one subtree without extra arguments. Documented explicitly in the
-  users' guide, because it is the behaviour most likely to surprise.
-  Date/Author: 2026-09-09, planning agent.
-
-- Decision: drop and count paths that are not valid UTF-8, warning once on
-  stderr, rather than failing the run.
-  Rationale: `cap_std::fs_utf8` cannot represent them and the existing CLI
-  already errors per-file on non-UTF-8 paths. Aborting a whole-repository
-  operation because one stray filename exists elsewhere in the tree would be
-  disproportionate, and matches neither the partial-failure posture of
-  `report_results` nor the user's intent. The warning carries only a count, per
-  CON-OBS-001.
-  Date/Author: 2026-09-09, planning agent.
-
-- Decision: model the boundary with two driven ports and one pure policy
-  function, and change nothing else in the crate.
-  Rationale: the boundary worth protecting is selection policy against process
-  and filesystem access; splitting it makes the awkward cases — a merge
-  conflict, a staged deletion, a non-UTF-8 path — reachable in unit tests
-  without building repositories on disk. The rest of `mdtablefix` is a pure
-  text pipeline with no infrastructure to isolate, so applying the pattern
-  further would be a transplant rather than a boundary.
-  Date/Author: 2026-09-09, planning agent.
-
-- Decision: use `proptest` rather than Kani, and no Verus proof.
-  Rationale: recorded in full under "Rigour not used, and why". Revisit if
-  selection later becomes recursive or acquires ordering arithmetic.
-  Date/Author: 2026-09-09, planning agent.
-
-- Decision: the instruction to mark a roadmap entry as done on completion is
-  recorded as **not applicable**.
-  Rationale: this repository has no general-purpose roadmap. The two roadmap
-  documents that exist are feature-scoped — one for ADR 0004's state-machine
-  abstractions, one for the delivered parallel-processing work — and neither
-  contains an entry for `--git`, `git ls-files`, or file selection. Creating a
-  roadmap solely to tick it off would be ceremony. The implementor should not
-  search for an entry to mark; ADR 0006 is the durable record instead.
+- Decision: the roadmap instruction is **not applicable**.
+  Rationale: see Conformance basis. Do not create a roadmap entry to tick off.
   Date/Author: 2026-09-09, requester.
 
 ## Outcomes & retrospective
 
-To be completed at EP-M4. Before setting Status to COMPLETE, reconcile every
-entry in Surprises & discoveries and Decision log against ADR 0006 and the
-component documents: a discovery that changes the design must appear in the
-ADR; a purely mechanical difference may stay here with its rationale. Do not
-mark this plan COMPLETE while any deviation from it remains unrecorded.
+To be completed at EP-M3. Before setting Status to COMPLETE, reconcile every
+Surprise and Decision against ADR 0006 and the component documents. Do not mark
+COMPLETE while any deviation remains unrecorded.
+
+Two items are already known to be follow-up work rather than part of this
+change, and should be carried out of the retrospective into whatever tracking
+exists:
+
+1. Atomic `--in-place` writes (temporary file plus rename), which would remove
+   the truncation window for changed files as well as unchanged ones. It
+   affects all modes, not only `--git`, and rename breaks hard links to the
+   target, so it needs its own decision.
+2. CRLF handling. `format_to_string` normalizes line endings as a side effect
+   of `content.lines()`, so `--git --in-place` on a CRLF checkout rewrites
+   every selected file. Document it here; decide it separately.
 
 ## Artefacts and notes
 
-The reference-command transcripts under "Measured behaviour of the reference
-command" and the acceptance transcripts under "Validation and acceptance" are
-the primary artefacts. Add to this section, as work proceeds:
+The reference-command transcripts and the acceptance transcripts are the
+primary artefacts. Add, as work proceeds: EP-M0's verbatim clap diagnostics;
+the red and green output for each milestone; the `make mutants` survivor
+report; the accepted `--help` snapshot; and the final gate run. Keep them
+short.
 
-- the red and green output for each milestone's focused test command;
-- the negative-control transcripts showing each property rejecting its seeded
-  fault;
-- the accepted `--help` snapshot;
-- the final four-gate run.
+## Revision note
 
-Keep them short. Include only what proves success.
+Revised 2026-09-09 after a six-lens design review, before any implementation.
+
+What changed. `--git` now selects tracked files only, with
+`--include-untracked` restoring full reference-command equivalence, because
+untracked files are unrecoverable if damaged. `PathKind` gained a `Symlink`
+variant and the probe moved to `symlink_metadata`, closing a path by which
+Markdown output could be written over a same-directory source file inside the
+capability sandbox. Deduplication moved from path strings to file identity,
+closing a concurrent truncate-and-read race that produced a zero-byte file and
+exit 0 on case-insensitive filesystems. The composition root returns an
+`Inputs` enum rather than a `Vec`, because the previous shape made
+`--git` with an empty selection block on standard input. The
+`RepositoryFileSource` port was deleted as a pattern transplant, leaving one
+port. The module tree moved out of the public library API, and errors moved
+from `anyhow` to `thiserror` enums, both to comply with `AGENTS.md`.
+`--list-files` and `--allow-conflicted` were added. Assertions on git's and
+clap's message text were removed — one scenario asserted a string clap does not
+emit. Hand-applied negative controls were replaced with `cargo-mutants`.
+EP-M1 and EP-M2 were merged, the scope tolerances were corrected from
+arithmetically unsatisfiable values, `rstest-bdd-macros` and `thiserror` were
+added to the dependency list, and duplicated rationale was cut.
+
+How it affects the remaining work. Nothing has been implemented, so there is no
+rework. The plan is longer in the areas that carry risk and shorter in the
+areas that carried ceremony.
