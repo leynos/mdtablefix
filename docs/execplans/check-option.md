@@ -353,10 +353,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `cargo test --doc --all-features` reports `28 passed; 0 failed; 20 ignored`.
   Impact: this plan adds doctests to every new public item, so their contract
   would otherwise be unverifiable by the deterministic gates. Mitigation: the
-  Makefile's `test` recipe gains a second `cargo test --doc` invocation in the
-  commit following this one, and each milestone runs the doctests explicitly
-  until then. The pre-existing doctest suite passes, so widening the gate
-  cannot break unrelated work.
+  `test` recipe now runs `cargo test --doc --all-features` as a second
+  command, and `make test` reports `28 passed; 0 failed; 20 ignored` for the
+  doctest section. The pre-existing doctest suite passed before the change, so
+  widening the gate could not break unrelated work.
 
 ## Decision log
 
