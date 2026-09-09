@@ -257,9 +257,12 @@ Hard invariants. Violating one requires escalation, not a workaround.
       byte-for-byte; the `rstest-bdd` canary passes and deleting a step
       definition is a compile error, so strict validation is active. The
       version bump to `0.6.0` landed with the manifest change, as
-      `Concrete steps` directs. Spike and canary deleted.
+      `Concrete steps` directs. Spike and canary deleted. CodeRabbit review
+      (post-gates) returned `review_completed` with zero findings.
 - [ ] EP-M1 Document boundary: byte-order-mark and line-ending preservation,
-      closing issue #451. Fixtures land before the refactor.
+      closing issue #451. Step 1 complete: eleven `.dat` fixtures and
+      `tests/document_properties.rs` pin the pre-refactor bytes; all 12 cases
+      pass and the transcript is in `Artefacts and notes`.
 - [ ] EP-M2 Pure reporting domain (`src/report/`), including the idempotence
       result.
 - [ ] EP-M3 Driver, read-only capability, `--check`, exit-status contract,
@@ -1978,6 +1981,55 @@ error: No matching step definition found for 'Then the canary sings'
 so `strict-compile-time-validation` is active. No fallback to plain `rstest`
 is needed. `cargo tree --duplicates | grep similar` prints nothing, so
 `similar` is a single copy in the graph.
+
+### CodeRabbit review after `EP-M0`
+
+Run by `scrutineer` as `coderabbit review --agent --committed`, after all six
+deterministic gates passed. Full log:
+`/tmp/coderabbit-mdtablefix-check-option.out`.
+
+```json
+{"type":"complete","status":"review_completed","findings":0,
+ "reviewedFiles":["Cargo.lock","Cargo.toml","docs/execplans/check-option.md"]}
+```
+
+Zero findings, no rate limit, no seat-hour exhaustion. `--committed` was used
+so that in-flight `EP-M1` edits stayed out of the review. Nothing to clear;
+`EP-M1` may proceed.
+
+### EP-M1 pre-refactor oracle
+
+Eleven fixtures under `tests/data/document/`, driven by
+`tests/document_properties.rs`: twelve `--in-place` cases plus one stdin case.
+Every case asserts the exact bytes left on disk, captured from the
+pre-refactor binary, so the serialization rewrite has a byte-exact oracle
+rather than a hand-written expectation. `.dat` is deliberate: `make fmt`
+formats only `.md`, `.markdown`, and `.mdx`, so these bytes survive the
+formatter. `cargo test --test document_properties` reports 12 passed.
+
+Escapes are Rust string escapes; `\u{FEFF}` is the byte-order mark.
+
+| Fixture | Pre-refactor output | Flips in step 4 |
+| --- | --- | --- |
+| `crlf_ragged` | `\| A   \| B   \|\n\| --- \| --- \|\n\| 1   \| 2   \|\n` | yes, endings become CRLF |
+| `crlf_clean` | same as `crlf_ragged` | yes, endings become CRLF |
+| `mixed_lf_majority` | same as `crlf_ragged` | no |
+| `mixed_crlf_majority` | same as `crlf_ragged` | yes, endings become CRLF |
+| `mixed_tie` | `alpha\nbeta\n` | no |
+| `mixed_in_fence` | table, blank line, then a `sh` fence holding `echo hi`, all LF | yes, every line becomes CRLF |
+| `bom_ragged` | `\u{FEFF}\|A\|B\|\n\| 1   \| 2   \|\n\| --- \| --- \|\n` | yes, mark kept, table reflowed |
+| `bom_crlf_clean` | `\u{FEFF}\| A \| B \|\n\| 1   \| 2   \|\n\| --- \| --- \|\n` | yes, mark kept, endings CRLF |
+| `lone_cr` | `alpha\rbeta\n` | no |
+| `empty` | empty | no |
+| `no_trailing_newline` | table plus a trailing line feed | no |
+| stdin, CRLF ragged | same as `crlf_ragged` | yes, endings become CRLF |
+
+Two pre-refactor oddities are pinned deliberately and disappear in step 4.
+The byte-order mark defeats table detection, so the first line survives
+verbatim while the separator and data lines are reflowed — and the data line
+is emitted *before* the separator. A lone `\r` is not a line ending to
+`str::lines`, so `alpha\rbeta` stays a single line and the `\r` survives
+inside it. Both are exactly the defects `ISSUE-451` reports.
 
 ## Documentation and skills to consult
 
