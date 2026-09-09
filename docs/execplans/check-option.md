@@ -23,9 +23,9 @@ disk. It exits `1` when at least one file would change and `0` when none
 would.
 
 `mdtablefix --diff FILE...` performs the same analysis but prints a unified
-diff for each file that would change. It also writes nothing, and exits `0`
-whether or not anything would change, matching a bare invocation and
-`--in-place`.
+diff for each file that would change. It also writes nothing, and it exits `1`
+when at least one file would change, so a single `--diff` run both shows the
+drift and fails the build.
 
 Observable success looks like this, given a ragged `broken.md` and an
 already-formatted `clean.md`:
@@ -47,6 +47,8 @@ $ mdtablefix --diff broken.md
 +| --- | --- |
 +| 1 | 2 |
 $ echo $?
+1
+$ mdtablefix --diff clean.md; echo $?
 0
 $ cmp --silent broken.md broken.md.orig && echo unmodified
 unmodified
@@ -81,13 +83,15 @@ Hard invariants. Violating one requires escalation, not a workaround.
   alter that file's bytes, for the same transform flags. Both must derive
   their answer from one `Assessment` value produced by one function, and the
   transform closure must be constructed once and shared, not per mode.
-- Drift must never produce a non-zero exit outside `--check`. In particular a
-  successful `mdtablefix --in-place` over drifting files exits `0`. Exit
-  status is therefore a function of mode and observation, never of
-  observation alone.
+- Drift produces exit `1` under the two read-only reporting modes, `--check`
+  and `--diff`, and never outside them. In particular a successful
+  `mdtablefix --in-place` over drifting files exits `0`, as does a bare
+  invocation. Exit status is therefore a function of mode and observation,
+  never of observation alone.
 - `--check`, `--diff`, and `--in-place` are mutually exclusive, rejected by
-  argument parsing before any file is read. See `Decision log` for the
-  prior-art divergence this creates and the evidence for it.
+  argument parsing before any file is read. `--check` and `--diff` are two
+  renderings of one analysis with identical exit semantics, so combining them
+  would be redundant rather than useful; see `Decision log`.
 - Report output must be deterministic: no timestamps, no colour under any
   circumstances, no wall-clock-dependent diff configuration, no
   locale-dependent formatting. `similar`'s `TextDiffConfig::timeout` and
@@ -216,9 +220,11 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 - Risk: `--in-place` uses create-truncate-write with no atomic rename and no
   backup, so a kill or a full disk leaves files truncated. Severity: high.
-  Likelihood: low. Mitigation: `EP-M1b` proposes write-then-rename at the seam
-  this plan is already rewriting. This is **beyond the requested scope** and
-  is marked for explicit approve-or-drop at the gate rather than assumed.
+  Likelihood: low. Mitigation: **out of scope for this plan**, raised as
+  GitHub issue #465 and to be fixed separately. `EP-M1` touches the same seam,
+  so sequencing #465 immediately after this work avoids editing the code
+  twice. Recorded here because this plan rewrites the serialization path and a
+  reader must not conclude the hazard was overlooked.
 
 - Risk: `rstest-bdd` has never been used here, and its user's guide does not
   cover subprocess testing, so the harness is a repository-local convention
@@ -248,12 +254,11 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [ ] EP-M0 Prototyping spike: `similar` output shape, `rstest-bdd` wiring.
 - [ ] EP-M1 Document boundary: byte-order-mark and line-ending preservation,
       closing issue #451. Fixtures land before the refactor.
-- [ ] EP-M1b (optional, approve or drop) Atomic write-then-rename.
 - [ ] EP-M2 Pure reporting domain (`src/report/`), including the idempotence
       result.
 - [ ] EP-M3 Driver, read-only capability, `--check`, exit-status contract,
       version bump to `0.6.0`.
-- [ ] EP-M4 `--diff`.
+- [ ] EP-M4 `--diff`, sharing `--check`'s exit semantics.
 - [ ] EP-M5 Curated CLI matrix coverage for the two new modes.
 - [ ] EP-M6 Targeted mutation testing of the counting and aggregation
       functions.
@@ -341,30 +346,40 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `@leynos`.
   Date/Author: 2026-09-09.
 
-- Decision: implement `--diff` exiting `0` on drift and mutually exclusive
-  with `--check`, exactly as specified, while recording that this diverges
-  from the ecosystem.
-  Rationale: the requirement is explicit on both points. The design review
-  established that `ruff format --diff`, `rustfmt --check`, `dprint check` and
-  modern `gofmt -d` all exit non-zero when a diff exists, and that Black,
-  ruff, and `terraform fmt` all permit combining check with diff so a single
-  run can both show the drift and fail the build. Under this plan a CI job
-  wanting both must invoke the tool twice, reading every file twice. The
-  requester is the authority; this is recorded so the trade-off is visible at
-  the approval gate and can be reversed there at no cost, whereas reversing it
-  after release would be a breaking change.
-  Date/Author: 2026-09-09, planning agent, on explicit instruction from
-  `@leynos`. Evidence added after design review.
+- Decision: `--diff` exits `1` on drift, exactly as `--check` does. The two
+  remain mutually exclusive.
+  Rationale: the original requirement had `--diff` exit `0` regardless of
+  drift. Design review established that `ruff format --diff`, `rustfmt
+  --check`, `dprint check` and modern `gofmt -d` all exit non-zero when a diff
+  exists, and `@leynos` adopted that behaviour on the principle of least
+  surprise. `ruff format --diff` is documented as "exit with a non-zero status
+  code **and** the difference between the current file and how the formatted
+  file would look"; `gofmt -d` was changed to exit non-zero in golang/go#46289
+  for the same reason.
+  This also dissolves the second half of the original concern. The reason
+  Black, ruff, and `terraform fmt` permit combining check with diff is so that
+  one run can both show the drift and fail the build. Now that `--diff` does
+  both by itself, combining the flags would be redundant, so `--check` and
+  `--diff` stay mutually exclusive and a CI job needs only one invocation,
+  reading every file once. That preserves the `Quality criteria` requirement
+  that no file is read more than once, which the earlier design would have
+  violated for any job wanting both outputs.
+  `--check` and `--diff` are therefore two renderings of one analysis with
+  identical exit semantics: `--check` is the concise rendering for logs,
+  `--diff` the verbose rendering for diagnosis.
+  Date/Author: 2026-09-09, planning agent; revised 2026-09-09 on explicit
+  instruction from `@leynos` after design review.
 
-- Decision: exit `0` clean, `1` drift under `--check` only, `2` operational
-  error, computed as `exit_status(mode, any_drift, any_error)`. `fn main`
-  returns `std::process::ExitCode`. Bump the crate to `0.6.0`.
+- Decision: exit `0` clean, `1` drift under `--check` or `--diff`, `2`
+  operational error, computed as `exit_status(mode, any_drift, any_error)`.
+  `fn main` returns `std::process::ExitCode`. Bump the crate to `0.6.0`.
   Rationale: a gate must distinguish "needs formatting" from "could not run";
   today both exit `1`. Making the status a function of mode is what prevents
-  `--in-place` from exiting `1` on a successful run. An operational error
-  dominates drift, because an incomplete analysis must not be reported as a
-  merely drifted result. Confirmed by `@leynos`; the version bump was added
-  after design review as the migration signal.
+  `--in-place` and a bare invocation from exiting `1` on a successful run. An
+  operational error dominates drift, because an incomplete analysis must not
+  be reported as a merely drifted result. Confirmed by `@leynos`; the version
+  bump was added after design review as the migration signal, and `--diff` was
+  brought under the drift status in the same revision.
   Date/Author: 2026-09-09.
 
 - Decision: `--check` reports drift if and only if the formatted bytes differ
@@ -463,6 +478,35 @@ Hard invariants. Violating one requires escalation, not a workaround.
   value type also makes a future `--format=json` a leaf addition rather than a
   re-plumb. Added after design review.
   Date/Author: 2026-09-09.
+
+- Decision: defer atomic write-then-rename for `--in-place` to GitHub issue
+  #465 rather than including it here.
+  Rationale: design review identified that `--in-place` truncates before
+  writing, so a kill or a full disk leaves files empty, and that this plan
+  already rewrites the seam where the fix belongs. `@leynos` directed that it
+  be raised separately, keeping this plan scoped to the reporting modes and
+  the two document-boundary fixes that `--check` correctness depends upon.
+  Sequence #465 immediately after this work so the serialization path is
+  edited once.
+  Date/Author: 2026-09-09, on explicit instruction from `@leynos`.
+
+- Decision: accept whole-file majority line-ending detection, including its
+  effect on fenced code blocks.
+  Rationale: design review noted that a mostly-CRLF document containing an
+  LF-authored snippet inside a fence has that snippet rewritten to CRLF, which
+  is a content change rather than a formatting one. Issue #451 specifies
+  majority detection, and `@leynos` accepted the consequence. The obligation
+  `INV-DOCUMENT` therefore carries a mixed-endings-inside-a-fence case so the
+  behaviour is pinned rather than incidental, and `EP-M7` documents it
+  explicitly in the user's guide.
+  Date/Author: 2026-09-09, on explicit instruction from `@leynos`.
+
+- Decision: accept the five proposed dependencies.
+  Rationale: `similar` at runtime, and `rstest-bdd`, `rstest-bdd-macros`,
+  `googletest`, and `pretty_assertions` for tests. Approved by `@leynos`. The
+  design review's cost objection to the assertion libraries is recorded above
+  and is mitigated by scope rather than removal.
+  Date/Author: 2026-09-09, on explicit instruction from `@leynos`.
 
 - Decision: `--check`, `--diff`, and `--in-place` all require file arguments.
   Rationale: consistency with `--in-place`'s existing `requires = "files"`,
@@ -839,7 +883,7 @@ interface.
 
 - **INV-EXIT**: exit status equals `exit_status(mode, any_drift, any_error)`,
   where any error yields `2` in every mode, drift yields `1` under `--check`
-  only, and everything else yields `0`.
+  and `--diff`, and everything else yields `0`.
   Method: exhaustive parameterized unit test plus end-to-end assertions.
   Domain: the full cross product of {all clean, some drift, all drift} with
   {no error, some error} for each of the four modes. The "no files" cell is
@@ -848,11 +892,15 @@ interface.
   Artefact: `src/driver.rs` unit tests, `tests/cli_check.rs`,
   `tests/cli_diff.rs`.
   Evidence: `cargo test --bin mdtablefix exit_status_matrix`.
-  Non-vacuity: two cells carry the real risk and both must be asserted
-  explicitly — `--in-place` with drift and no error must be `0`, and `--check`
-  with both drift and an error must be `2`. Negative controls: drop `mode`
-  from the mapping, which the first cell must reject; and swap the
-  error-over-drift precedence, which the second must reject.
+  Non-vacuity: three cells carry the real risk and all must be asserted
+  explicitly — `--in-place` with drift and no error must be `0`, `--diff` with
+  drift and no error must be `1`, and `--check` with both drift and an error
+  must be `2`. Negative controls: drop `mode` from the mapping, which the
+  first cell must reject; treat `--diff` like `--in-place`, which the second
+  must reject; and swap the error-over-drift precedence, which the third must
+  reject. The first two controls are distinct: a mapping that suppresses drift
+  for every mode except `--check` passes the `--in-place` cell while failing
+  `--diff`, so testing only one would leave the other undetected.
 
 - **INV-DETERMINISTIC**: for a fixed input and flag set, standard output is
   byte-identical across repeated runs and independent of file ordering within
@@ -1167,8 +1215,9 @@ pub enum ExitStatus { Success, Drift, Error }
 ///
 /// An error yields [`ExitStatus::Error`] in every mode, because an incomplete
 /// analysis must not be reported as merely drifted. Drift yields
-/// [`ExitStatus::Drift`] only under [`Mode::Check`]; in particular a
-/// successful `--in-place` over drifting files yields [`ExitStatus::Success`].
+/// [`ExitStatus::Drift`] under the read-only reporting modes [`Mode::Check`]
+/// and [`Mode::Diff`]; in particular a successful `--in-place` over drifting
+/// files yields [`ExitStatus::Success`], as does a bare invocation.
 pub fn exit_status(mode: Mode, any_drift: bool, any_error: bool) -> ExitStatus;
 
 /// Reads a file and pairs its text with the formatted result.
@@ -1298,24 +1347,6 @@ Remaining gaps: no reporting modes.
 Compatibility decision: none required; signatures are stable and the
 behaviour change is the requested fix.
 
-### EP-M1b: atomic write (optional — approve or drop at the gate)
-
-**This is beyond the requested scope.** It is proposed because `--in-place`
-currently uses create-truncate-write with no rename and no backup, so a kill
-or a full disk leaves files truncated or empty, and under `rayon` that hits an
-arbitrary concurrent subset. `EP-M1` is already rewriting exactly this seam,
-so doing it now avoids touching the same code twice.
-
-Outcome: `write_back` writes to a temporary file in the same directory and
-renames over the target, preserving the original file mode explicitly, since a
-freshly created temporary does not inherit it.
-
-Acceptance: a test that a simulated mid-write failure leaves the original file
-intact.
-
-Decision required: approve or drop. If dropped, record the residual data-loss
-risk in `Outcomes & retrospective`.
-
 ### EP-M2: pure reporting domain
 
 Outcome: `src/report.rs`, `src/report/delta.rs`, `src/report/render.rs` exist
@@ -1367,15 +1398,18 @@ version bump rather than shimmed.
 
 ### EP-M4: `--diff`
 
-Outcome: `--diff` is implemented, exits `0` regardless of drift, and streams a
-deterministic unified diff per changed file.
+Outcome: `--diff` is implemented, streams a deterministic unified diff per
+changed file, and exits `1` on drift exactly as `--check` does, so one run
+both shows the drift and fails the build.
 
-Requirements: `ISSUE-452-diff`, `INV-DETERMINISTIC`.
+Requirements: `ISSUE-452-diff`, `INV-DETERMINISTIC`, and the `--diff` cells of
+`INV-EXIT`.
 
 Acceptance: `tests/cli_diff.rs` and `tests/features/diff_mode.feature` pass;
-the determinism test passes over ten runs. The first draft's criterion that
-`patch` reproduce the file is dropped, per `Decision log`, which also removes
-an undeclared external tool dependency from the suite.
+the determinism test passes over ten runs; `--diff` over a drifting file exits
+`1` and over a clean file exits `0`. The first draft's criterion that `patch`
+reproduce the file is dropped, per `Decision log`, which also removes an
+undeclared external tool dependency from the suite.
 
 Recovery: revert; `--check` remains functional.
 
@@ -1509,10 +1543,10 @@ Feature: Report which Markdown files would be reformatted
 ```gherkin
 Feature: Show what would change in Markdown files
 
-  Scenario: A drifting file produces a unified diff and still succeeds
+  Scenario: A drifting file produces a unified diff and fails
     Given a Markdown file "ragged.md" with an unaligned table
     When mdtablefix runs with "--diff" against those files
-    Then the exit status is 0
+    Then the exit status is 1
     And the diff header names "ragged.md" on both sides
     And the diff contains a hunk header
     And the working directory is byte-identical
@@ -1522,6 +1556,11 @@ Feature: Show what would change in Markdown files
     When mdtablefix runs with "--diff" against those files
     Then the exit status is 0
     And standard output is empty
+
+  Scenario: A drifting file under in-place formatting still succeeds
+    Given a Markdown file "ragged.md" with an unaligned table
+    When mdtablefix runs with "--in-place" against those files
+    Then the exit status is 0
 
   Scenario: Diff output is byte-identical across repeated runs
     Given a Markdown file "ragged.md" with an unaligned table
@@ -1614,12 +1653,6 @@ re-running a gate to diagnose a failure.
    trips a tolerance.
 5. Run all gates and commit.
 
-### EP-M1b (only if approved)
-
-1. Change `write_back` to write a temporary file in the same directory,
-   `set_permissions` from the original's mode, then rename over the target.
-2. Add the mid-write-failure test. Run all gates and commit.
-
 ### EP-M2
 
 1. Red: create `src/report.rs`, `src/report/delta.rs`, `src/report/render.rs`
@@ -1655,7 +1688,9 @@ re-running a gate to diagnose a failure.
 
 1. Red: write `tests/features/diff_mode.feature` and `tests/cli_diff.rs`.
 2. Green: add `--diff` and the `Mode::Diff` arm, including the
-   `patience_threshold` switch.
+   `patience_threshold` switch, and extend `exit_status` so `Mode::Diff`
+   reports drift. Confirm the `--in-place` cell of `INV-EXIT` still yields
+   `0`; that pair of assertions is what stops the two modes being conflated.
 3. Run all gates and commit.
 
 ### EP-M5
@@ -1759,7 +1794,8 @@ $ $MDT --in-place ragged.md; echo "status=$?"
 status=0
 ```
 
-`--diff` prints a diff and succeeds:
+`--diff` prints a diff and fails on drift, matching `--check`, so one run
+both shows the change and gates the build:
 
 ```console
 $ cp ragged.md.orig ragged.md
@@ -1773,7 +1809,11 @@ $ $MDT --diff ragged.md; echo "status=$?"
 +| A | B |
 +| --- | --- |
 +| 1 | 2 |
+status=1
+$ $MDT --diff clean.md; echo "status=$?"
 status=0
+$ cmp ragged.md ragged.md.orig && echo unmodified
+unmodified
 ```
 
 Modes are mutually exclusive:
@@ -1826,6 +1866,8 @@ returns to `Verification plan` before continuing.
 - Documentation: `make markdownlint` and `make nixie` pass.
 - Performance: `--check` over this repository's `docs/` tree completes in
   under two seconds on a warm cache, and computes no diff for unchanged files.
+  No mode reads any file more than once; because `--diff` now gates on drift
+  by itself, no continuous-integration usage requires a second invocation.
 - Security: no widening of the filesystem capability; all access continues
   through `open_file_parent`, and the read-only path holds a capability with
   no write method.
@@ -1933,13 +1975,23 @@ Skills to load:
   <https://docs.rs/similar/2.7.0/similar/>.
 - Black's `--check` and `--diff` semantics:
   <https://black.readthedocs.io/en/stable/usage_and_configuration/the_basics.html>.
-- Ruff's formatter documentation, whose `--diff` exits non-zero:
+- Ruff's formatter documentation, whose `--diff` is specified to "exit with a
+  non-zero status code and the difference between the current file and how the
+  formatted file would look":
   <https://docs.astral.sh/ruff/formatter/>.
+- `dprint check`, which prints diffs and exits non-zero:
+  <https://dprint.dev/ci/>.
+- golang/go#46289, which changed `gofmt -d` to exit non-zero when diffs exist:
+  <https://github.com/golang/go/issues/46289>.
+- GitHub issue #465, atomic in-place writes, split out of this plan:
+  <https://github.com/leynos/mdtablefix/issues/465>.
 - `rstest-bdd`: <https://github.com/leynos/rstest-bdd>.
 
 ## Revision note
 
-Revision 2, 2026-09-09, after a six-lens design review. The first draft's
+### Revision 2, 2026-09-09
+
+After a six-lens design review. The first draft's
 architecture was substantially wrong in four ways, all now corrected. The
 application service moved from the library to the binary, because the argument
 for library placement was factually wrong and the placement would have forced
@@ -1964,10 +2016,38 @@ order turned out not to be a documented guarantee. The Verus milestone was
 cut, because its stated goal reduces to an arithmetic identity and proving it
 would restate an assumed property.
 
-Two requirements were reaffirmed against contrary evidence and are flagged for
-the approval gate rather than silently changed: `--diff` exiting `0`, and
-`--check` and `--diff` being mutually exclusive. See `Decision log`. One
-addition, `EP-M1b` atomic writes, is marked as beyond the requested scope and
-needs an explicit approve-or-drop.
+Two requirements were reaffirmed against contrary evidence and flagged for the
+approval gate rather than silently changed, along with one out-of-scope
+addition. Revision 3 resolves all three.
+
+### Revision 3, 2026-09-09
+
+Resolving the three items revision 2 raised at the approval gate, on explicit
+direction from `@leynos`.
+
+`--diff` now exits `1` on drift rather than `0`, adopting the behaviour of
+`ruff format --diff`, `dprint check`, and modern `gofmt -d` on the principle
+of least surprise. This also dissolves the mutual-exclusion concern rather
+than requiring a second change: the reason Black, ruff, and `terraform fmt`
+permit combining check with diff is so that one run can both display the drift
+and fail the build, and `--diff` now does both by itself. `--check` and
+`--diff` therefore remain mutually exclusive as two renderings of one analysis
+with identical exit semantics, and no continuous-integration usage needs a
+second invocation, which preserves the requirement that no file is read more
+than once. `INV-EXIT` gained a third high-risk cell and a matching negative
+control, because a mapping that suppresses drift for every mode except
+`--check` would pass the `--in-place` assertion while failing `--diff`.
+
+`EP-M1b`, atomic write-then-rename, is removed from this plan and raised as
+GitHub issue #465. The hazard remains recorded in `Risks` with a pointer to
+that issue, and the recommendation stands to sequence #465 immediately after
+this work so the serialization path is edited once rather than twice.
+
+Whole-file majority line-ending detection is accepted, including its rewriting
+of LF-authored snippets inside fenced code blocks in a mostly-CRLF document.
+`INV-DOCUMENT` already carries the mixed-endings-inside-a-fence case so the
+behaviour is pinned by test, and `EP-M7` documents it in the user's guide.
+
+The five proposed dependencies are accepted.
 
 No implementation has begun; the plan awaits approval.
