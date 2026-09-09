@@ -489,7 +489,17 @@ repository's logic against the real interface at the boundary.
   therefore a latent defect, not a contract. Selection must not depend on it:
   each unit of work carries its index and results are ordered on that index.
   See the note on ordering under EP-M2.
-- **AX-CLAP-GRAMMAR** — a `clap::ArgGroup` with `multiple(false)` permits at
+- **AX-CLAP-GRAMMAR** — partially **falsified during planning**; see the note
+  under `src/main.rs` in "Interfaces and dependencies". What was verified on
+  clap 4.6.6: an `ArgGroup` with `multiple(false)` over `files` and `git`
+  rejects `--git a.md` while still accepting `mdtablefix a.md b.md` and
+  `--in-place a.md b.md`, so a multi-value positional in an exclusive group is
+  safe; and `mode` requiring the `inputs` group rejects `--in-place` alone
+  while accepting `--git --in-place`, `--git --check`, and `--git --diff`. What
+  was **disproved**: `requires = "git"` on a bool flag, which admits
+  `--list-files a.md`. The plan now uses a post-parse check for every such
+  dependency. Retained below for the parts that still stand: a `clap::ArgGroup`
+  with `multiple(false)` permits at
   most one member; `requires = "<group>"` demands at least one member; and an
   argument carrying `default_values` counts as present, so `requires` on such
   an argument needs `ArgMatches::value_source` rather than a plain relation.
@@ -1010,7 +1020,7 @@ struct Cli {
     #[arg(long = "git")]
     git: bool,
     /// Also select untracked files that Git does not ignore
-    #[arg(long = "include-untracked", requires = "git")]
+    #[arg(long = "include-untracked")] // see the note on `requires` below
     include_untracked: bool,
     /// File extensions to select under `--git`
     #[arg(
@@ -1022,10 +1032,10 @@ struct Cli {
     )]
     md_exts: Vec<String>,
     /// Print the selected paths and exit without reading or writing them
-    #[arg(long = "list-files", requires = "git")]
+    #[arg(long = "list-files")] // see the note on `requires` below
     list_files: bool,
     /// Rewrite files containing conflict markers during a merge or rebase
-    #[arg(long = "allow-conflicted", requires = "git")]
+    #[arg(long = "allow-conflicted")] // see the note on `requires` below
     allow_conflicted: bool,
     #[command(flatten)]
     opts: FormatOpts,
@@ -1040,10 +1050,50 @@ supplied, giving replacement semantics for free; both `--md-exts md,mdc` and
 `--md-exts md --md-exts mdc` work; an invalid extension becomes a clap error
 with exit status 2 and a usage footer, matching every other argument mistake
 rather than exiting 1 through `anyhow`; and `--help` renders the default set
-automatically. The wrinkle is that `requires = "git"` cannot be used on an
-argument carrying `default_values`, because a defaulted argument always counts
-as present — hence the post-parse `ArgMatches::value_source` check named in
-AX-CLAP-GRAMMAR, which EP-M0 must confirm.
+automatically.
+
+**`requires = "git"` does not work here and must not be used.** Empirical
+result on clap 4.6.6, with `git` a member of the `inputs` group and `files` a
+`Vec` positional: `--list-files` alone is correctly rejected, but
+`--list-files a.md` is **accepted**, silently running a `--git`-only flag with
+no `--git`. The same holds when exclusivity is expressed with
+`conflicts_with = "files"` instead of a group, so group membership is not the
+cause; a bool flag's `requires` on another bool flag is simply not dependable
+once a positional is present. The `default_values` on `--md-exts` are a second
+instance of the same class of problem, since a defaulted argument always counts
+as present.
+
+Express all four dependencies as an explicit post-parse check instead, emitting
+a real clap error so the exit status stays 2 and the usage footer is preserved:
+
+```rust
+impl Cli {
+    /// Parses and enforces the dependencies `clap` cannot express here.
+    fn parse_validated() -> Self {
+        let cli = Self::parse();
+        for (name, present) in [
+            ("--include-untracked", cli.include_untracked),
+            ("--list-files", cli.list_files),
+            ("--allow-conflicted", cli.allow_conflicted),
+        ] {
+            if present && !cli.git {
+                Self::command()
+                    .error(
+                        clap::error::ErrorKind::MissingRequiredArgument,
+                        format!("{name} requires --git"),
+                    )
+                    .exit();
+            }
+        }
+        cli
+    }
+}
+```
+
+`--md-exts` needs the same treatment, keyed on
+`ArgMatches::value_source(..) != Some(ValueSource::DefaultValue)` rather than
+on a bool. EP-M0 must confirm all of this, including that the resulting exit
+status is 2.
 
 The composition root returns a type, not an overloaded emptiness sentinel:
 
