@@ -1169,8 +1169,8 @@ Compatibility decision: none required.
 
 Identifier and outcome: all user-facing, architectural, and developer-facing
 documentation is current; both ADRs are written; `CHANGELOG.md` records the
-two behaviour changes; `docs/contents.md` indexes every new document; issues
-#451 and #452 are closed with an explanatory comment.
+two behaviour changes; `docs/contents.md` indexes every new document; and
+issues #451 and #452 are closed with an explanatory comment.
 
 Requirements and gaps: `AGENTS.md`'s documentation-maintenance duties, and the
 roadmap-closure requirement.
@@ -1669,7 +1669,8 @@ Skills to load:
 
 ## Revision note
 
-Initial draft, 2026-09-09. Establishes the two reporting modes, brings line-
-ending preservation into scope because byte-exact comparison makes it a
-prerequisite rather than an enhancement, and records the supersession of issue
-#452's `--concise` flag. No implementation has begun; the plan awaits approval.
+Initial draft, 2026-09-09. Establishes the two reporting modes, brings
+line-ending preservation into scope because byte-exact comparison makes it a
+prerequisite rather than an enhancement, and records the supersession of the
+`--concise` flag proposed in issue #452. No implementation has begun; the plan
+awaits approval.
