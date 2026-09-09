@@ -729,8 +729,8 @@ sequenceDiagram
 _Figure 5: Atomic in-place rewrite. The rewriter reads the target metadata,
 creates a temporary file in the same directory, writes, flushes and syncs the
 formatted contents, copies the target mode onto the temporary file, and renames
-it over the target. If the write or the rename fails, the temporary file is
-removed and the original file is left intact._
+it over the target. If a step fails after the temporary file is created, it is
+cleaned up where possible and the original file is left intact._
 
 ## Unicode Width Handling
 

@@ -84,7 +84,7 @@ fn open_parent(path: &Path) -> io::Result<(Dir, Utf8PathBuf)> {
 /// before the rename leaves the original file untouched. A freshly created
 /// temporary file does not inherit the target's permissions, so they are
 /// copied across before the swap. Any failure after the temporary file exists
-/// removes it again.
+/// triggers a best-effort attempt to remove it.
 ///
 /// Symbolic links are declined rather than replaced: the rename would swap the
 /// link entry itself for a regular file and leave the real file untouched.
