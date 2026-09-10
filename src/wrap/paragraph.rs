@@ -370,6 +370,11 @@ impl<'a> ParagraphWriter<'a> {
         }
 
         if self.prefix_line_needs_tail_deferral(prefix_line) {
+            trace!(
+                prefix_len = prefix_line.prefix.len(),
+                rest_len = prefix_line.rest.len(),
+                "deferring a prefixed line so its tail reflows with the lines below"
+            );
             self.defer_prefix_line(state, prefix_line, None, ContinuationMode::Normalize);
             return;
         }

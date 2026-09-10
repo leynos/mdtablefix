@@ -1,5 +1,7 @@
 //! Orphan fence specifier attachment helpers.
 
+use tracing::trace;
+
 use super::{FENCE_RE, is_null_lang};
 use crate::wrap::FenceTracker;
 
@@ -97,6 +99,10 @@ fn is_thematic_break(line: &str) -> bool {
 /// attachment for it.
 pub(super) fn preserve_thematic_break(line: &str, out: &mut Vec<String>) -> bool {
     if is_thematic_break(line) {
+        trace!(
+            line_len = line.len(),
+            "refusing to attach a thematic break to the fence below"
+        );
         out.push(line.to_owned());
         return true;
     }

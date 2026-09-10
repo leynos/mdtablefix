@@ -9,6 +9,8 @@
 //! is itself a block start keeps its underline instead of swallowing it. See
 //! [`is_setext_text`].
 
+use tracing::trace;
+
 use crate::wrap::{
     BlockKind,
     FenceTracker,
@@ -80,7 +82,12 @@ fn detect_setext_heading(
     // the second line is code rather than an underline. The width is measured
     // on the whole line, before `prefix_len` is removed: the shared prefix
     // swallows the very columns that mark the code block.
-    if content_indent_width(line) >= 4 {
+    let indent_width = content_indent_width(line);
+    if indent_width >= 4 {
+        trace!(
+            indent_width,
+            "refusing a Setext candidate indented as an indented code block"
+        );
         return None;
     }
 
@@ -134,20 +141,30 @@ fn detect_setext_heading(
 /// recognizes.
 fn is_setext_text(text: &str, link_matcher: LinkReferenceMatcher) -> bool {
     if is_fence(text).is_some() {
+        trace!(
+            payload_len = text.len(),
+            "refusing a Setext candidate that is a fence marker"
+        );
         return false;
     }
 
     match classify_block(text, link_matcher) {
         None | Some(BlockKind::DigitPrefix) => true,
         Some(
-            BlockKind::Heading
+            kind @ (BlockKind::Heading
             | BlockKind::ThematicBreak
             | BlockKind::Bullet
             | BlockKind::Blockquote
             | BlockKind::FootnoteDefinition
             | BlockKind::LinkReferenceDefinition
-            | BlockKind::MarkdownlintDirective,
-        ) => false,
+            | BlockKind::MarkdownlintDirective),
+        ) => {
+            trace!(
+                ?kind,
+                "refusing a Setext candidate that is itself a block start"
+            );
+            false
+        }
     }
 }
 

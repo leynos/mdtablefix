@@ -5,6 +5,7 @@
 //! stay in sync.
 
 use regex::Regex;
+use tracing::trace;
 
 /// Returns the indentation width (treating tabs as four columns) and the byte
 /// offset of the first non-space or tab character.
@@ -108,6 +109,11 @@ pub(crate) fn classify_block(
         return Some(BlockKind::Heading);
     }
     if indent_width < 4 && crate::breaks::THEMATIC_BREAK_RE.is_match(trimmed) {
+        trace!(
+            indent_width,
+            line_len = line.len(),
+            "classifying a line as a thematic break"
+        );
         return Some(BlockKind::ThematicBreak);
     }
     if indent_width < 4 && BULLET_RE.is_match(line) {

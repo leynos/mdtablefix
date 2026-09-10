@@ -220,6 +220,12 @@ fn try_passthrough_block(
         return false;
     }
 
+    trace!(
+        ?line.block_kind,
+        line_len = line.original.len(),
+        "passing a block boundary through unchanged"
+    );
+
     if matches!(line.block_kind, Some(BlockKind::LinkReferenceDefinition)) {
         link_title_window.observe_definition(line.inner, link_matcher);
     }
