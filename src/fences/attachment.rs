@@ -1,5 +1,7 @@
 //! Orphan fence specifier attachment helpers.
 
+use tracing::trace;
+
 use super::{FENCE_RE, is_null_lang};
 use crate::wrap::FenceTracker;
 
@@ -73,6 +75,38 @@ where
     }
 
     NextFence::NotAttachable { blank_count }
+}
+
+/// Determine whether a line is a thematic break rather than a language specifier.
+///
+/// `--breaks` normalises every thematic break to a run of
+/// [`crate::breaks::THEMATIC_BREAK_LEN`] underscores, and an underscore run
+/// matches [`super::ORPHAN_LANG_RE`]. Attaching one to the fence below deletes
+/// the break, so a document whose break precedes a code block would never reach
+/// a fixed point under `--breaks --fences`.
+///
+/// The check is the one [`crate::breaks::format_breaks`] applies, so a line this
+/// module refuses to attach is exactly a line that pass rewrites. Lines indented
+/// by four columns or more are indented code, not breaks, and keep their
+/// specifier behaviour.
+fn is_thematic_break(line: &str) -> bool {
+    crate::breaks::THEMATIC_BREAK_RE.is_match(line.trim_end())
+}
+
+/// Emit `line` verbatim when it is a thematic break rather than a specifier.
+///
+/// Returns `true` when the line was emitted, so the caller skips specifier
+/// attachment for it.
+pub(super) fn preserve_thematic_break(line: &str, out: &mut Vec<String>) -> bool {
+    if is_thematic_break(line) {
+        trace!(
+            line_len = line.len(),
+            "refusing to attach a thematic break to the fence below"
+        );
+        out.push(line.to_owned());
+        return true;
+    }
+    false
 }
 
 /// Attach an orphan specifier to the next attachable fence.

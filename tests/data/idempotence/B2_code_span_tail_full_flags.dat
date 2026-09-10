@@ -1,0 +1,2 @@
+- **Ownership.** Owned by the wrap module (`src/wrap/tracing_snapshot_support.rs`)
+  and gated behind `#[cfg(test)]`; it is `pub(crate)` test-support code, not part of any public or runtime API.

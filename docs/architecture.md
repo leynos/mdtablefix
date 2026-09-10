@@ -53,7 +53,17 @@ The function combines several helpers documented in `docs/`:
   underline must contain at least three identical `=` or `-` characters, so the
   converter can distinguish headings from thematic breaks or list markers. The
   helper only rewrites lines whose shared prefix is whitespace or `>` so nested
-  lists continue to behave normally.
+  lists continue to behave normally. A candidate is converted only when it is
+  paragraph text: a line that is itself a block start under the wrapper's
+  classification — an ATX heading, thematic break, list item, blockquote,
+  definition, directive, or fence marker — keeps its underline, so the line
+  below it survives as a block of its own. The predicate is measured after the
+  shared prefix is removed, so quoted headings still convert. A candidate
+  indented by four or more columns is refused as an indented code
+  block. The indentation width is measured on the whole line before the shared
+  prefix is removed, so the prefix cannot hide the indentation; blockquote
+  markers and their optional single space are consumed first, and tabs count
+  as four columns.
 
 Heading conversion runs after fence/table processing and before wrapping, so
 the wrapping stage observes ATX headings and leaves them untouched.
@@ -118,8 +128,11 @@ Code fences are passed through verbatim:
 | not | a | table |
 ```
 
-After scanning all lines, the processor performs optional post-processing steps
-such as ellipsis replacement and footnote conversion. See \
+After scanning all lines, the processor performs its optional post-processing
+steps in a fixed order: Setext heading conversion, code-emphasis repair,
+ellipsis replacement, paragraph wrapping, and finally footnote conversion.
+Ellipsis replacement runs before wrapping, so line breaking is computed from
+the glyphs the reader will see. See \
 [footnote conversion](#footnote-conversion) for details. The function then
 returns the updated stream for writing to disk or further manipulation.
 
@@ -152,7 +165,9 @@ column delimiter and split the row incorrectly.
 When `process_stream_inner` flushes a buffered table with `Options::ellipsis`
 enabled, it applies ellipsis replacement before calling `reflow_table`. This
 ordering ensures the width calculation sees the final glyphs, rather than
-aligning for `...` and shrinking the rendered column after the fact.
+aligning for `...` and shrinking the rendered column after the fact. The same
+ordering rule governs prose: `replace_ellipsis` runs before `--wrap` measures
+paragraph text.
 
 Outside table buffering, `replace_ellipsis` maintains fence and indented-code
 state while it walks the original lines. Its private indented-code tracker is
@@ -534,7 +549,7 @@ flowchart TD
     R -->|No| B{Classify stripped inner content}
 
     B -->|Indented code block| C
-    B -->|Table or heading or directive| C
+    B -->|Table, heading, directive, or thematic break| C
     B -->|Blank line| D[Flush active paragraph and emit blank]
     B -->|Paragraph or prefixed line| E[Send to ParagraphWriter]
 
@@ -561,11 +576,11 @@ flowchart TD
 _Figure 2: `wrap_text` control flow. The wrapper first extracts blockquote
 depth and inner content, then applies depth-aware fence handling before
 classifying that inner content. It passes fenced blocks, tables, headings,
-directives, and indented code through unchanged, flushes paragraphs on blanks,
-routes prose and prefixed lines through `ParagraphWriter`, computes visible
-widths with `unicode-width`, and delegates inline line fitting to `textwrap`
-before reconstructing the emitted Markdown lines with their original blockquote
-container._
+directives, thematic breaks, and indented code through unchanged, flushes
+paragraphs on blanks, routes prose and prefixed lines through
+`ParagraphWriter`, computes visible widths with `unicode-width`, and
+delegates inline line fitting to `textwrap` before reconstructing the emitted
+Markdown lines with their original blockquote container._
 
 ### Wrap sequence
 

@@ -33,6 +33,8 @@
   Accepted
 - [Ellipsis literal-region protection](adrs/0005-ellipsis-literal-regions.md):
   Accepted decision covering links, URLs, and filesystem-like tokens.
+- [Single-pass idempotence](adrs/0006-single-pass-idempotence.md): Accepted
+  decision covering the fixed-point guarantee for the formatting pipeline.
 
 ## Reference material
 

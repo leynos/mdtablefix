@@ -132,6 +132,31 @@ fn replaces_long_sequence() {
         .stdout("wait….\n");
 }
 
+/// Tests that `--ellipsis` runs before `--wrap` measures the line.
+///
+/// Replacing `...` with `…` saves two columns, and those columns decide whether
+/// the last word still fits on the first eighty-column line. Wrapping first
+/// emits a break before `converted` that the shorter text does not need, and
+/// that a second pass over the same flags would join again.
+#[test]
+fn replaces_before_wrapping() {
+    let input = concat!(
+        "the quick brown fox jumps over the lazy dog while reading outside a ",
+        "... converted\n",
+    );
+
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .args(["--wrap", "--ellipsis"])
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(concat!(
+            "the quick brown fox jumps over the lazy dog while reading outside a ",
+            "… converted\n",
+        ));
+}
+
 /// Tests that `--ellipsis` handles multiple sequences in one line.
 #[test]
 fn replaces_multiple_sequences() {

@@ -5,6 +5,7 @@
 //! stay in sync.
 
 use regex::Regex;
+use tracing::trace;
 
 /// Returns the indentation width (treating tabs as four columns) and the byte
 /// offset of the first non-space or tab character.
@@ -64,6 +65,12 @@ pub(super) static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = lazy_r
 pub(crate) enum BlockKind {
     /// Lines that begin with `#`, `##`, and similar heading prefixes.
     Heading,
+    /// Thematic breaks recognised by [`crate::breaks::THEMATIC_BREAK_RE`].
+    ///
+    /// This covers `***`, `___`, `---`, spaced runs such as `- - -`, and the
+    /// underscore run emitted by `--breaks`, none of which are table
+    /// separators.
+    ThematicBreak,
     /// Bullet or ordered list markers matched by [`BULLET_RE`].
     Bullet,
     /// Lines that begin with one or more `>` markers.
@@ -81,11 +88,14 @@ pub(crate) enum BlockKind {
 /// Classifies block-level Markdown prefixes shared by wrapping and table detection.
 ///
 /// Detection order determines precedence when a line could match multiple prefixes.
-/// The current precedence is: heading, bullet, blockquote, footnote definition,
-/// link reference definition, markdownlint directive, digit prefix. Headings
-/// outrank bullets and blockquotes,
+/// The current precedence is: heading, thematic break, bullet, blockquote,
+/// footnote definition, link reference definition, markdownlint directive,
+/// digit prefix. Headings outrank bullets and blockquotes,
 /// so inputs such as "# 1" remain headings rather than list items. Headings ignore
 /// indentation of four or more spaces so indented code remains untouched.
+/// Thematic breaks outrank bullets because [`BULLET_RE`] also matches spaced
+/// runs such as `- - -`; classifying those as breaks keeps them on their own
+/// line instead of absorbing them into a paragraph.
 /// For example, passing "> quote" returns `Some(BlockKind::Blockquote)` while
 /// "| cell |" yields `None` because the line is part of a table.
 pub(crate) fn classify_block(
@@ -97,6 +107,14 @@ pub(crate) fn classify_block(
 
     if indent_width < 4 && trimmed.starts_with('#') {
         return Some(BlockKind::Heading);
+    }
+    if indent_width < 4 && crate::breaks::THEMATIC_BREAK_RE.is_match(trimmed) {
+        trace!(
+            indent_width,
+            line_len = line.len(),
+            "classifying a line as a thematic break"
+        );
+        return Some(BlockKind::ThematicBreak);
     }
     if indent_width < 4 && BULLET_RE.is_match(line) {
         return Some(BlockKind::Bullet);
@@ -141,6 +159,14 @@ mod tests {
         case("   # Heading", Some(BlockKind::Heading)),
         case("    # Code block", None),
         case("	# Heading", None),
+        case("---", Some(BlockKind::ThematicBreak)),
+        case("***", Some(BlockKind::ThematicBreak)),
+        case("___", Some(BlockKind::ThematicBreak)),
+        case("   ---", Some(BlockKind::ThematicBreak)),
+        case("- - -", Some(BlockKind::ThematicBreak)),
+        case("* * *", Some(BlockKind::ThematicBreak)),
+        case("    ---", None),
+        case("--", None),
         case("- item", Some(BlockKind::Bullet)),
         case("1. item", Some(BlockKind::Bullet)),
         case("> quote", Some(BlockKind::Blockquote)),

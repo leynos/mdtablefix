@@ -54,6 +54,10 @@ ellipsis character `…` before the table is reflowed. This ensures column width
 are computed from the final emitted glyph rather than from the three-dot source
 sequence.
 
+Replacement also runs before paragraph wrapping, so `--wrap` measures the
+emitted `…` glyph rather than the three-dot source sequence. A paragraph near
+the wrap boundary therefore breaks in the same place on every run.
+
 Literal dot sequences in inline code, fenced code blocks, and four-space or
 tab-indented code blocks remain unchanged. An indented code block must start at
 the document boundary or after a blank line, heading, closed fenced block, link
@@ -110,6 +114,23 @@ the line-length limit. When the joined span fits, the remainder of the
 paragraph is greedily reflowed during the same pass, including later
 continuation lines in a list item. Running `--wrap` again therefore produces no
 further changes.
+
+Thematic breaks act as block boundaries. A line of three or more `-`, `*`, or
+`_` characters is passed through on its own line and never absorbed into the
+surrounding paragraph, with or without `--breaks`. This includes spaced runs
+such as `- - -` and the seventy-underscore line that `--breaks` writes. A
+table separator row such as `| --- | --- |` still contains pipes and is
+reflowed with its table rather than treated as a break.
+
+When the first line of a prefixed block spills past the target width, the
+wrapper keeps that block open so its continuation and lazy continuation lines
+reflow with the tail in the same pass rather than being joined to it on a later
+run. The prefixed forms are list items, task items, ordered items, blockquotes,
+and footnote definitions. Folding only happens when the tail would reparse as
+paragraph text, so a tail indented by four or more columns (indented code), a
+tail that repeats its blockquote marker, and a footnote definition tail stay
+separate blocks. The formatter therefore reaches its final form in one pass, so
+a second run makes no further changes.
 
 The wrapper never introduces a new line break inside an inline-code span. When
 joining the span would exceed the configured width and each authored line
@@ -230,6 +251,28 @@ byte or character count. Continuation lines therefore stay correctly aligned
 when the prefix contains full-width characters such as ideographic spaces or
 CJK punctuation.
 
+## Heading conversion
+
+Pass `--headings` to convert Setext headings into ATX headings. A Setext
+heading is a paragraph line followed by an underline of three or more identical
+`=` or `-` characters; the pair becomes one ATX line, `#` for an `=` underline
+and `##` for a `-` underline. The flag is off unless it is passed and is not
+part of the `make fmt` flag set.
+
+A candidate line is converted only when it is paragraph text. A line that is
+already a Markdown block start keeps its underline, so the line below it
+survives: an ATX heading, a thematic break, a list item, a blockquote, a
+footnote or link reference definition, a markdownlint directive, or a
+fenced-code marker.
+
+Indentation and blockquote markers shared by the heading and its underline are
+preserved, so `> Title` above `> -----` becomes `> ## Title`.
+
+A candidate indented by four or more columns, or one inside a blockquote and
+indented four or more columns after the marker, is an indented code block: it
+is left untouched, as is the line beneath it. Three columns or fewer still
+convert. Tabs count as four columns.
+
 ## HTML table conversion
 
 `mdtablefix` converts `<table>…</table>` blocks that span multiple lines and
@@ -268,6 +311,11 @@ follows, the specifier line and any intervening blank lines are left unchanged,
 preserving document spacing. Orphan-specifier attachment only happens when the
 identifier line starts a block and both the identifier line and the target
 fence are outside any already-open fenced block.
+
+A thematic break is never attached as a specifier, even though a run of
+underscores or hyphens matches the specifier pattern. The break line and the
+blank lines after it are preserved, so a break directly above a code fence is
+not merged into that fence on a later pass.
 
 Before:
 

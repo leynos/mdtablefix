@@ -266,8 +266,8 @@ depth-aware tracking.
    each stripped inner line and decides whether it should pass through verbatim
    or enter the paragraph wrapper. `wrap_text` injects a shared
    [`LinkReferenceMatcher`] into each call. Fenced code blocks, indented code
-   blocks, headings, tables, directives, link reference definitions, and blank
-   lines stop paragraph accumulation.
+   blocks, headings, tables, directives, thematic breaks, link reference
+   definitions, and blank lines stop paragraph accumulation.
 
 2. **Prefix-aware paragraph handling.** `ParagraphWriter` in
    `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.
@@ -286,7 +286,7 @@ depth-aware tracking.
    lines for ambiguity-preserving passthrough, and `synthetic_join_spaces`
    stores byte offsets for spaces inserted by continuation joining so only
    formatter-created code-span edge spaces are trimmed later. Subsequent source
-   lines are routed through `handle_pending_continuation` (in `src/wrap.rs`)
+   lines are routed via `handle_pending_continuation` (in `src/wrap/pending.rs`)
    instead of the normal wrapping path. `handle_pending_continuation`
    classifies the line and delegates each soft-wrapped continuation chunk to
    `apply_continuation_chunk` in `src/wrap/continuation.rs`, the module that
@@ -388,6 +388,16 @@ depth-aware tracking.
 
 ### Block classification
 
+**`BlockKind::ThematicBreak`**
+
+Classified by `classify_block` when the stripped line matches
+`crate::breaks::THEMATIC_BREAK_RE`: three or more `-`, `*`, or `_` characters,
+including spaced runs such as `- - -`. The check outranks bullet
+classification because `BULLET_RE` also matches spaced runs. A thematic break
+passes through wrapping on its own line and never enters paragraph
+accumulation. Table separator rows such as `|---|` contain pipes and remain
+table rows.
+
 **`BlockKind::LinkReferenceDefinition`**
 
 Classified when indentation is fewer than four columns and
@@ -486,7 +496,7 @@ Table: Key types and functions.
 | `position_after_close(text, search_start, fence_len)` — Walks `text` from absolute byte offset `search_start` to find the first closing backtick fence of exactly `fence_len` characters. Escaped closing candidates (backtick runs preceded by an odd number of backslashes) are recorded but skipped; a literal (unescaped) closing fence is returned unless an iterative forward look-ahead confirms that fence is itself the opener of a subsequent balanced span, in which case the earlier escaped candidate is returned instead. Returns `None` when no matching close exists or `fence_len` is zero. | `src/wrap/tokenize/scanning.rs`       |
 | `scan_continuation_span_state` — Incrementally scans a continuation string given a known open fence length, returning the remaining open fence length or `None` when all spans are balanced; used to avoid O(N²) rescanning of the accumulated pending text.                                                                                                                                                                                                                                                                                                                                                 | `src/wrap/tokenize/scanning.rs`       |
 | `handle_backtick_fence` — Tokenizes an inline code span from the opening fence byte offset and delegates closing-fence detection to `position_after_close`.                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/tokenize/parsing.rs`        |
-| `handle_pending_continuation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap.rs`                         |
+| `handle_pending_continuation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/pending.rs`                 |
 | `scan_code_suffix_end`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/tokenize/scanning.rs`       |
 | `has_inline_code_structure`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/inline/fragment.rs`         |
 <!-- markdownlint-enable MD013 MD055 MD056 MD060 -->
@@ -558,6 +568,16 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   span exceeds the width, it may preserve conforming authored boundaries inside
   the span, including the correct repeated or indented continuation prefix,
   while prose outside the span remains eligible for ordinary greedy reflow.
+- **Prefixed tail deferral.** When the first line of a prefixed block exceeds
+  the available width, `ParagraphWriter` defers it through `PendingPrefix` so
+  the continuation and lazy continuation lines below it are folded into the
+  same wrapped output. `wraps_to_tail` and `continuation_folds_tail` in
+  `src/wrap/paragraph.rs` decide whether folding is safe: a tail that would
+  re-parse as a different block stays separate, which covers a tail indented by
+  four or more columns (indented code), a tail that repeats its blockquote
+  marker, and a footnote definition tail. Emitting a bare tail instead would
+  let the next pass fold the lines below into it, so the formatter would never
+  converge.
 - **Closing fence detection.** Backslash escape checks apply only while
   detecting opening backtick fences in ordinary Markdown text. Once a code span
   is open, backslashes in the span content are literal bytes and must not make
@@ -791,6 +811,12 @@ It follows these rules:
 3. If the next non-blank line is not an attachable fence, stop scanning, push
    the original specifier line to the output, then extend the output with the
    buffered blank lines verbatim.
+4. A thematic-break line is never treated as an attachable specifier, even
+   though a run of underscores or hyphens matches the specifier pattern. The
+   guard is `is_thematic_break`, whose predicate is deliberately identical to
+   the one `format_breaks` uses, so a line the fences pass declines to attach
+   is exactly a line `format_breaks` rewrites. The break line and any
+   buffered blank lines are emitted unchanged.
 
 This structure keeps the one non-trivial lookahead path local to the helper
 instead of spreading it between the main loop and several index-based search

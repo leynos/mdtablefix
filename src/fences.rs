@@ -381,6 +381,10 @@ pub fn attach_orphan_specifiers(lines: &[String]) -> Vec<String> {
             continue;
         }
 
+        if attachment::preserve_thematic_break(line, &mut out) {
+            continue;
+        }
+
         let (spec, indent) = normalize_specifier(line);
         if ORPHAN_LANG_RE.is_match(&spec) && out.last().is_none_or(|l: &String| l.trim().is_empty())
         {
