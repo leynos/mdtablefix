@@ -471,3 +471,36 @@ let owned: Vec<String> = format_breaks(&lines)
     .map(|c| c.into_owned())
     .collect();
 ```
+
+
+### Line-ending helpers
+
+`LineEnding` is the closed set of terminators the formatter emits.
+`LineEnding::Lf` is `\n` and `LineEnding::Crlf` is `\r\n`. The `const fn`
+`LineEnding::as_str` returns the characters written between lines.
+
+`detect_line_ending(text) -> LineEnding` selects the style holding the strict
+majority of the text's line endings. CRLF pairs are counted first and
+subtracted from the line-feed count to obtain the lone line feeds; CRLF wins
+only when it strictly outnumbers lone line feeds. An exact tie, and a non-empty
+input with no line endings at all, select `LineEnding::Lf`. Only CRLF and lone
+LF are recognised: a lone carriage return is content, matching the `str::lines`
+split.
+
+`serialize_lines(lines, ending) -> String` joins the processed lines with the
+selected terminator and appends one further terminator, so a non-empty result
+always ends with a line ending; an empty slice yields an empty string.
+
+See [Line endings](#line-endings) for the user-facing behaviour.
+
+<!-- markdownlint-disable-next-line MD046 -->
+```rust
+use mdtablefix::{LineEnding, detect_line_ending, serialize_lines};
+
+let ending = detect_line_ending("alpha\r\nbeta\r\n");
+assert_eq!(ending, LineEnding::Crlf);
+
+let lines = vec!["| A |".to_string(), "| 1 |".to_string()];
+assert_eq!(serialize_lines(&lines, ending), "| A |\r\n| 1 |\r\n");
+assert!(serialize_lines(&[], ending).is_empty());
+```
