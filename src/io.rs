@@ -15,6 +15,11 @@
 //! every reformatted line with that style. Detection is per document, so no
 //! transform module needs to know which terminator the source file uses.
 //!
+//! [`detect_line_ending`] is a pure query and emits nothing. The rewrite
+//! helpers below report the decision, with the counts behind it, at `debug`
+//! level, so a caller can trace why a file was rewritten with the endings it
+//! has without the query itself becoming side-effecting.
+//!
 //! The rationale, the rejected alternatives and the known limitations are
 //! recorded in `docs/adrs/0006-line-ending-detection.md`.
 
@@ -96,7 +101,14 @@ impl LineEnding {
 /// assert_eq!(detect_line_ending("alpha"), LineEnding::Lf);
 /// ```
 #[must_use]
-pub fn detect_line_ending(text: &str) -> LineEnding {
+pub fn detect_line_ending(text: &str) -> LineEnding { detect_with_counts(text).0 }
+
+/// Counts the line endings in `text` and selects the majority style.
+///
+/// Returns the selected ending together with the CRLF pair count and the lone
+/// line-feed count, so an input/output boundary can report the decision
+/// without recomputing the counts or restating the counting rule.
+fn detect_with_counts(text: &str) -> (LineEnding, usize, usize) {
     let crlf_count = text.matches("\r\n").count();
     let lone_lf_count = text.matches('\n').count() - crlf_count;
     let ending = if crlf_count > lone_lf_count {
@@ -104,13 +116,7 @@ pub fn detect_line_ending(text: &str) -> LineEnding {
     } else {
         LineEnding::Lf
     };
-    debug!(
-        crlf_count,
-        lone_lf_count,
-        selected_ending = ending.as_str(),
-        "selected the majority line ending"
-    );
-    ending
+    (ending, crlf_count, lone_lf_count)
 }
 
 /// Renders `lines` as one document whose lines end with `ending`.
@@ -167,7 +173,13 @@ where
 {
     let (directory, name) = open_parent(path)?;
     let text = directory.read_to_string(&name)?;
-    let ending = detect_line_ending(&text);
+    let (ending, crlf_count, lone_lf_count) = detect_with_counts(&text);
+    debug!(
+        crlf_count,
+        lone_lf_count,
+        selected_ending = ending.as_str(),
+        "selected the majority line ending"
+    );
     let lines: Vec<String> = text.lines().map(str::to_string).collect();
     let fixed = f(&lines);
     replace_file(&directory, &name, &serialize_lines(&fixed, ending))

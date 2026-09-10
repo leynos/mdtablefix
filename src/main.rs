@@ -26,6 +26,7 @@ use mdtablefix::{
     serialize_lines,
 };
 use rayon::prelude::*;
+use tracing::debug;
 
 #[derive(Parser)]
 #[command(version, about = "Reflow broken markdown tables")]
@@ -143,6 +144,12 @@ fn render_stdin_output(fixed: &[String], ending: LineEnding) -> String {
 fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
     let content = directory.read_to_string(path)?;
     let ending = detect_line_ending(&content);
+    debug!(
+        operation = "file",
+        path = %path,
+        selected_ending = ending.as_str(),
+        "selected the majority line ending"
+    );
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
     let fixed = process_lines(&lines, opts);
     // Keep file output newline-terminated, matching the CLI stdout contract.
@@ -216,6 +223,11 @@ fn main() -> anyhow::Result<()> {
         let mut input = String::new();
         io::stdin().read_to_string(&mut input)?;
         let ending = detect_line_ending(&input);
+        debug!(
+            operation = "stdin",
+            selected_ending = ending.as_str(),
+            "selected the majority line ending"
+        );
         let lines: Vec<String> = input.lines().map(str::to_string).collect();
         let fixed = process_lines(&lines, cli.opts);
         print!("{}", render_stdin_output(&fixed, ending));

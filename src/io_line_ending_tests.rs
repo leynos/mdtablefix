@@ -1,4 +1,5 @@
-//! Unit tests for line-ending detection and serialization.
+//! Unit tests for line-ending detection, serialization, and the event the
+//! rewrite boundary emits.
 //!
 //! These moved out of `io.rs` so that adding them did not push the production
 //! module past the 400-line limit AGENTS.md sets.
@@ -8,6 +9,7 @@ use std::{fs, path::Path};
 use proptest::prelude::*;
 use rstest::rstest;
 use tempfile::tempdir;
+use tracing_test::traced_test;
 
 use super::*;
 
@@ -124,4 +126,42 @@ proptest! {
             prop_assert_eq!(crlf_pairs, 0, "LF output contains CRLF pairs: {:?}", output);
         }
     }
+}
+
+/// The majority rule stays a pure query: callers can ask which ending a
+/// document would select without emitting diagnostics.
+#[test]
+#[traced_test]
+fn detect_line_ending_emits_nothing() {
+    assert_eq!(detect_line_ending("alpha\r\nbeta\r\n"), LineEnding::Crlf);
+    assert!(
+        !logs_contain("selected the majority line ending"),
+        "the pure query emitted a diagnostic event"
+    );
+}
+
+/// The rewrite boundary reports the decision, with the counts behind it, so
+/// a rewritten file's endings are traceable.
+#[test]
+#[traced_test]
+fn rewrite_reports_the_selected_ending() {
+    let dir = tempdir().unwrap();
+    let file = dir.path().join("reported.md");
+    fs::write(&file, "|A|B|\r\n|---|---|\r\n|1|2|\r\n").unwrap();
+    rewrite(&file).unwrap();
+    logs_assert(|lines| {
+        let reported = lines
+            .iter()
+            .find(|line| line.contains("selected the majority line ending"));
+        match reported {
+            Some(line)
+                if line.contains("crlf_count=3")
+                    && line.contains("lone_lf_count=0")
+                    && line.contains(r#"selected_ending="\r\n""#) =>
+            {
+                Ok(())
+            }
+            _ => Err(format!("unexpected line-ending report: {lines:?}")),
+        }
+    });
 }
