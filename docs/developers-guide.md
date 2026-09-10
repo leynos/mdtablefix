@@ -103,10 +103,32 @@ restores the separator row with widths derived from the final table body.
   directory and returns a relative UTF-8 path for capability-scoped handling.
 - `format_to_string(directory, path, opts) -> anyhow::Result<String>` reads and
   formats a file through `cap_std::fs_utf8::Dir` without modifying it. Its
-  returned text uses the same trailing-newline convention as a rewritten file.
+  returned text uses the same trailing-newline convention as a rewritten file,
+  and it terminates every line with the majority line-ending style detected in
+  that file, so standard output and `--in-place` agree byte-for-byte.
 - `rewrite_in_place(directory, path, opts) -> anyhow::Result<()>` reads and
   formats a capability-scoped file, then replaces it through the same directory
   capability with `mdtablefix::io::replace_file`.
+
+`src/io.rs` line-ending policy:
+
+- `LineEnding` is the closed set of terminators the formatter can emit;
+  `as_str` returns the characters written between lines.
+- `detect_line_ending(text) -> LineEnding` counts CRLF pairs, subtracts them
+  from the total line feed count to obtain the lone line feeds, and selects
+  CRLF only when it strictly outnumbers them. An exact tie, and a document with
+  no line endings at all, select LF, so the result is deterministic.
+- `serialize_lines(lines, ending) -> String` joins lines with the selected
+  terminator and appends one further terminator, yielding an empty string for
+  no lines.
+
+Detection runs on the raw document at each input boundary: `rewrite_with` in
+`src/io.rs`, `format_to_string` in `src/main.rs`, and the standard-input branch
+of `main` in `src/main.rs`. The internal pipeline stays LF-only — `str::lines`
+strips each line's terminator before a transform sees it — and only the
+serializer re-applies the detected style. Standard input keeps its historical
+contract of printing one terminator even when it produces no lines, which
+`tests/parallel.rs` pins.
 
 Callers select the function that matches their intent rather than passing a
 Boolean mode flag. This keeps stdout and in-place contracts explicit while

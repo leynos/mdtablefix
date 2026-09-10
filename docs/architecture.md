@@ -282,17 +282,15 @@ Text.
 
 ## Footnotes
 
- 1. First note
+ [^1]: First note
 
- 2. Second note
+ [^2]: Second note
 
-10. Final note
+[^10]: Final note
 ```
 
-After:
-
-```markdown
-Text.
+`convert_footnotes` only processes the final contiguous numeric list that
+immediately follows an H2 heading when these conditions are met.
 
 ## Footnotes
 
@@ -408,6 +406,9 @@ classDiagram
         <<module>>
         +rewrite()
         +rewrite_no_wrap()
+        +detect_line_ending()
+        +serialize_lines()
+        +LineEnding
     }
     lib --> html
     lib --> table
@@ -447,7 +448,11 @@ Tokenization is handled by `wrap::tokenize_markdown`, replacing the small state
 machine that previously resided in `process_tokens`. The `process` module
 provides streaming helpers that combine the lower-level functions. The `io`
 module handles filesystem operations, delegating the text processing to
-`process`.
+`process`, and owns the line-ending policy. It detects the terminator style
+holding the majority of a document's line endings and re-emits the formatted
+lines with that style, so a CRLF document stays CRLF while the transform
+pipeline itself remains line-ending agnostic. The rationale is recorded in
+[ADR 0007](adrs/0007-line-ending-detection.md).
 
 ### Stateful helpers
 

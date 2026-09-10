@@ -81,6 +81,11 @@
 
 ### Fixed
 
+- Emit formatted output with the line-ending style that holds the majority of
+  the input's line endings, so a CRLF document is no longer rewritten as LF and
+  formatting never produces a line-ending-only diff. An exact tie, and input
+  with no line endings at all, select LF.
+  ([#451](https://github.com/leynos/mdtablefix/issues/451))
 - Format text adjoining an inline code span when it ends with a non-ASCII
   character, such as the ellipsis `--ellipsis` produces, instead of aborting on
   a character boundary. The emphasis split stepped one byte past the last

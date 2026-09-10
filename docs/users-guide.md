@@ -251,6 +251,29 @@ byte or character count. Continuation lines therefore stay correctly aligned
 when the prefix contains full-width characters such as ideographic spaces or
 CJK punctuation.
 
+
+## Line endings
+
+`mdtablefix` preserves the line-ending style of the document it formats. It
+counts the CRLF (`\r\n`) and lone line feed (`\n`) endings in the input and
+terminates every output line with whichever style holds the strict majority. A
+file authored with Windows line endings therefore stays CRLF, and a file
+authored with Unix line endings stays LF, so formatting a file does not create
+a line-ending-only diff.
+
+When the two styles occur equally often, and when the input contains no line
+ending at all, `mdtablefix` emits LF. That tie-break is deterministic: it does
+not depend on which style appears first.
+
+Detection covers the whole document, including fenced code blocks. A document
+whose endings are predominantly CRLF is emitted entirely as CRLF, so a code
+sample authored with LF endings inside such a document is rewritten to CRLF.
+
+Standard input is treated the same way: the style detected on standard input
+selects the endings written to standard output. Empty standard input still
+prints a single line ending, as it always has, while an empty file still
+produces empty output.
+
 ## Heading conversion
 
 Pass `--headings` to convert Setext headings into ATX headings. A Setext
