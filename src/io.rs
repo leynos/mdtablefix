@@ -5,6 +5,18 @@
 //! rather than truncated. Every filesystem operation runs through a `cap_std`
 //! directory capability: [`rewrite`] and [`rewrite_no_wrap`] open one for the
 //! target's parent, and the CLI passes the capability it already holds.
+//!
+//! [`rewrite`] and [`rewrite_no_wrap`] read a file, hand its lines to
+//! [`crate::process`] for transformation, and write the result back. The
+//! transformation stays line-ending agnostic; this module owns the
+//! line-ending policy instead. [`detect_line_ending`] counts the document's
+//! line feed and carriage return and line feed (CRLF) endings and selects the
+//! style holding the strict majority, and [`serialize_lines`] re-terminates
+//! every reformatted line with that style. Detection is per document, so no
+//! transform module needs to know which terminator the source file uses.
+//!
+//! The rationale, the rejected alternatives and the known limitations are
+//! recorded in `docs/adrs/0006-line-ending-detection.md`.
 
 use std::{
     io::{self, Write},
@@ -87,11 +99,18 @@ impl LineEnding {
 pub fn detect_line_ending(text: &str) -> LineEnding {
     let crlf_count = text.matches("\r\n").count();
     let lone_lf_count = text.matches('\n').count() - crlf_count;
-    if crlf_count > lone_lf_count {
+    let ending = if crlf_count > lone_lf_count {
         LineEnding::Crlf
     } else {
         LineEnding::Lf
-    }
+    };
+    debug!(
+        crlf_count,
+        lone_lf_count,
+        selected_ending = ending.as_str(),
+        "selected the majority line ending"
+    );
+    ending
 }
 
 /// Renders `lines` as one document whose lines end with `ending`.

@@ -29,3 +29,9 @@ fn replace_file_public_api_compiles() {
     let cases = trybuild::TestCases::new();
     cases.pass("tests/ui/replace_file_api_pass.rs");
 }
+
+#[test]
+fn line_ending_const_api_compiles() {
+    let cases = trybuild::TestCases::new();
+    cases.pass("tests/ui/line_ending_const_pass.rs");
+}

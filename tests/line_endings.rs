@@ -162,6 +162,90 @@ fn wrapped_prose_keeps_its_carriage_return_endings() -> Result<(), Box<dyn std::
 }
 
 #[rstest]
+fn fenced_code_block_endings_decide_the_majority() -> Result<(), Box<dyn std::error::Error>> {
+    // Detection is per document, so endings inside a fence count too: the five
+    // CRLF endings (four code lines and the closing fence) outnumber the four
+    // LF endings outside the fence. The surrounding LF lines are therefore
+    // re-terminated as CRLF along with the code sample.
+    const INPUT: &str = "Before.\n\n```\na\r\nb\r\nc\r\nd\r\n```\r\nAfter.\n";
+    const EXPECTED: &str = "Before.\r\n\r\n```\r\na\r\nb\r\nc\r\nd\r\n```\r\nAfter.\r\n";
+
+    let dir = tempdir().expect("failed to create temporary directory");
+    let path = dir.path().join("fenced.md");
+    fs::write(&path, INPUT).expect("failed to write fixture");
+    let path = path.to_str().expect("fixture path is not valid UTF-8");
+
+    let output = run_cli_with_args(&[path])?
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert_case_output(
+        &LineEndingCase {
+            name: "fenced_code_block_stdout",
+            input: INPUT,
+            expected: EXPECTED,
+        },
+        &output,
+    );
+
+    run_cli_with_args(&["--in-place", path])?.success();
+    let actual = fs::read(path).expect("failed to read rewritten fixture");
+    assert_case_output(
+        &LineEndingCase {
+            name: "fenced_code_block_in_place",
+            input: INPUT,
+            expected: EXPECTED,
+        },
+        &actual,
+    );
+    Ok(())
+}
+
+#[rstest]
+fn multiple_files_each_keep_their_own_line_endings() -> Result<(), Box<dyn std::error::Error>> {
+    const LF_INPUT: &str = "|A|B|\n|---|---|\n|1|2|\n";
+    const LF_EXPECTED: &str = "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n";
+    const CRLF_INPUT: &str = "|A|B|\r\n|---|---|\r\n|1|2|\r\n";
+    const CRLF_EXPECTED: &str = "| A   | B   |\r\n| --- | --- |\r\n| 1   | 2   |\r\n";
+
+    let dir = tempdir().expect("failed to create temporary directory");
+    let lf_path = dir.path().join("lf.md");
+    let crlf_path = dir.path().join("crlf.md");
+    fs::write(&lf_path, LF_INPUT).expect("failed to write fixture");
+    fs::write(&crlf_path, CRLF_INPUT).expect("failed to write fixture");
+    let lf = lf_path.to_str().expect("fixture path is not valid UTF-8");
+    let crlf = crlf_path.to_str().expect("fixture path is not valid UTF-8");
+
+    // Standard output concatenates each file's formatted text in argument
+    // order, so a style detected once per invocation rather than once per file
+    // would show up as one file adopting the other's endings.
+    let output = run_cli_with_args(&[crlf, lf])?
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert_eq!(
+        String::from_utf8(output)?,
+        format!("{CRLF_EXPECTED}{LF_EXPECTED}"),
+        "multi-file standard output mixed the detected styles"
+    );
+
+    run_cli_with_args(&["--in-place", lf, crlf])?.success();
+    assert_eq!(
+        fs::read(&lf_path).expect("failed to read rewritten fixture"),
+        LF_EXPECTED.as_bytes(),
+        "in-place rewriting converted the LF file"
+    );
+    assert_eq!(
+        fs::read(&crlf_path).expect("failed to read rewritten fixture"),
+        CRLF_EXPECTED.as_bytes(),
+        "in-place rewriting converted the CRLF file"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn empty_file_produces_empty_output() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir().expect("failed to create temporary directory");
     let path = dir.path().join("empty.md");
