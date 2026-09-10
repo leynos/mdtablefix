@@ -669,11 +669,11 @@ Use the stable structured field names `token_length`, `kind`, `start`, `end`,
 `width`, `reason`, `is_image`, `row_index`, `cell_count`, and `error_category`.
 Blockquote and fence events additionally use `line_len`, `prefix_len`, `depth`,
 `inner_len`, `open_depth`, `marker_len`, `open_marker_len`, and `transition`.
-Line-ending events use `crlf_count`, `lone_lf_count`, and `selected_ending`, and
-the executable's input/output boundaries add `operation` and, for files, `path`.
-These events are content-free: never include raw Markdown, blockquote prefixes,
-fence info strings, or other document content. Executables remain responsible
-for installing subscribers.
+Line-ending events use `crlf_count`, `lone_lf_count`, and `selected_ending`,
+and the executable's input/output boundaries add `operation` and, for files,
+`path`. These events are content-free: never include raw Markdown, blockquote
+prefixes, fence info strings, or other document content. Executables remain
+responsible for installing subscribers.
 
 Blockquote parsing emits `blockquote prefix parsed` or
 `blockquote prefix rejected`. Fence tracking emits `fence state changed` with
