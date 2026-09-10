@@ -101,14 +101,42 @@ impl LineEnding {
 /// assert_eq!(detect_line_ending("alpha"), LineEnding::Lf);
 /// ```
 #[must_use]
-pub fn detect_line_ending(text: &str) -> LineEnding { detect_with_counts(text).0 }
+pub fn detect_line_ending(text: &str) -> LineEnding { count_line_endings(text).ending }
 
-/// Counts the line endings in `text` and selects the majority style.
+/// The line-ending counts of a document, and the style they select.
 ///
-/// Returns the selected ending together with the CRLF pair count and the lone
-/// line-feed count, so an input/output boundary can report the decision
-/// without recomputing the counts or restating the counting rule.
-fn detect_with_counts(text: &str) -> (LineEnding, usize, usize) {
+/// [`count_line_endings`] returns this so a caller can report or act on how
+/// one-sided the majority vote was, rather than only on its outcome.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LineEndingCounts {
+    /// The style the counts select.
+    pub ending: LineEnding,
+    /// The number of carriage return and line feed (CRLF) pairs.
+    pub crlf_count: usize,
+    /// The number of lone line feeds, which no carriage return precedes.
+    pub lone_lf_count: usize,
+}
+
+/// Counts `text`'s line endings and selects the majority style.
+///
+/// This is [`detect_line_ending`] with the counts that decided it, so a caller
+/// that reports or acts on the vote does not have to restate the counting
+/// rule. CRLF pairs are counted first and subtracted from the total line-feed
+/// count to obtain the lone line feeds.
+///
+/// # Examples
+///
+/// ```rust
+/// use mdtablefix::{LineEnding, count_line_endings};
+///
+/// let counts = count_line_endings("alpha\r\nbeta\r\ngamma\n");
+///
+/// assert_eq!(counts.ending, LineEnding::Crlf);
+/// assert_eq!(counts.crlf_count, 2);
+/// assert_eq!(counts.lone_lf_count, 1);
+/// ```
+#[must_use]
+pub fn count_line_endings(text: &str) -> LineEndingCounts {
     let crlf_count = text.matches("\r\n").count();
     let lone_lf_count = text.matches('\n').count() - crlf_count;
     let ending = if crlf_count > lone_lf_count {
@@ -116,7 +144,11 @@ fn detect_with_counts(text: &str) -> (LineEnding, usize, usize) {
     } else {
         LineEnding::Lf
     };
-    (ending, crlf_count, lone_lf_count)
+    LineEndingCounts {
+        ending,
+        crlf_count,
+        lone_lf_count,
+    }
 }
 
 /// Renders `lines` as one document whose lines end with `ending`.
@@ -173,7 +205,11 @@ where
 {
     let (directory, name) = open_parent(path)?;
     let text = directory.read_to_string(&name)?;
-    let (ending, crlf_count, lone_lf_count) = detect_with_counts(&text);
+    let LineEndingCounts {
+        ending,
+        crlf_count,
+        lone_lf_count,
+    } = count_line_endings(&text);
     debug!(
         crlf_count,
         lone_lf_count,

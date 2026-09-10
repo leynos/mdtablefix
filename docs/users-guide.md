@@ -487,6 +487,12 @@ input with no line endings at all, select `LineEnding::Lf`. Only CRLF and lone
 LF are recognized: a lone carriage return is content, matching the `str::lines`
 split.
 
+`count_line_endings(text) -> LineEndingCounts` returns the selection together
+with the counts that decided it. `LineEndingCounts::ending` is the selected
+style, `crlf_count` counts CRLF pairs, and `lone_lf_count` counts lone line
+feeds, so a caller that reports or acts on the vote does not restate the
+counting rule.
+
 `serialize_lines(lines, ending) -> String` joins the processed lines with the
 selected terminator and appends one further terminator, so a non-empty result
 always ends with a line ending; an empty slice yields an empty string.
@@ -495,7 +501,12 @@ See [Line endings](#line-endings) for the user-facing behaviour.
 
 <!-- markdownlint-disable-next-line MD046 -->
 ```rust
-use mdtablefix::{LineEnding, detect_line_ending, serialize_lines};
+use mdtablefix::{LineEnding, count_line_endings, detect_line_ending, serialize_lines};
+
+let counts = count_line_endings("alpha\r\nbeta\r\ngamma\n");
+assert_eq!(counts.ending, LineEnding::Crlf);
+assert_eq!(counts.crlf_count, 2);
+assert_eq!(counts.lone_lf_count, 1);
 
 let ending = detect_line_ending("alpha\r\nbeta\r\n");
 assert_eq!(ending, LineEnding::Crlf);

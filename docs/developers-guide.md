@@ -119,6 +119,11 @@ restores the separator row with widths derived from the final table body.
   lone line feeds, and selects CRLF only when it strictly outnumbers them. An
   exact tie, and a document with no line endings at all, select LF, so the
   result is deterministic.
+- `count_line_endings(text) -> LineEndingCounts` returns the selection together
+  with the `crlf_count` and `lone_lf_count` that decided it.
+  `LineEndingCounts::ending` is the selected style, and `detect_line_ending` is
+  the selection-only form of the same query, so the command boundaries can
+  report the vote without restating the counting rule.
 - `serialize_lines(lines, ending) -> String` joins lines with the selected
   terminator and appends one further terminator, yielding an empty string for
   no lines.

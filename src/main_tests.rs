@@ -201,6 +201,31 @@ fn stdin_output_keeps_its_terminator_contract() {
     );
 }
 
+/// A file boundary reports the selected ending together with the counts
+/// that decided it, so a reformatted file's endings are traceable.
+#[rstest]
+#[tracing_test::traced_test]
+fn file_boundary_reports_the_line_ending_counts(no_opts: FormatOpts) {
+    let dir = tempdir().expect("create temporary directory");
+    let directory = open_dir(dir.path()).expect("open directory capability");
+    let path = Utf8Path::new("crlf.md");
+    directory
+        .write(path, "|A|B|\r\n|---|---|\r\n|1|2|\r\n")
+        .expect("write fixture");
+
+    let output = format_to_string(&directory, path, no_opts).expect("format fixture");
+
+    assert_eq!(
+        output, "| A   | B   |\r\n| --- | --- |\r\n| 1   | 2   |\r\n",
+        "the CRLF file was not re-emitted with carriage returns"
+    );
+    assert!(logs_contain("selected the majority line ending"));
+    assert!(logs_contain("operation=\"file\""));
+    assert!(logs_contain("crlf_count=3"));
+    assert!(logs_contain("lone_lf_count=0"));
+    assert!(logs_contain(r#"selected_ending="\r\n""#));
+}
+
 fn prose_word_strategy() -> impl Strategy<Value = String> {
     prop::collection::vec(
         prop_oneof![

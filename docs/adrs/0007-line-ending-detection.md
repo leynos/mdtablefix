@@ -70,7 +70,7 @@ _Table 1: Comparison of line-ending options._
 
 ## Decision outcome
 
-Option A. The `io` module owns the policy through three public items:
+Option A. The `io` module owns the policy through the following public items:
 
 - `LineEnding`, a closed set of the terminators the formatter can emit, with
   `LineEnding::as_str` returning the characters written between lines.
@@ -79,6 +79,9 @@ Option A. The `io` module owns the policy through three public items:
   lone line feeds; counting line feeds directly would count every CRLF twice
   and leave CRLF unable to win. CRLF is selected only when it strictly
   outnumbers lone line feeds.
+- `count_line_endings(text) -> LineEndingCounts`, the same query returned
+  together with the `crlf_count` and `lone_lf_count` that decided it, so a
+  reporting boundary can state the vote without restating the counting rule.
 - `serialize_lines(lines, ending) -> String`, which joins the processed lines
   with the selected terminator and appends one further terminator so a
   non-empty result always ends with a line ending.

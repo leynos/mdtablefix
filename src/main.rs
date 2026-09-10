@@ -17,8 +17,9 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use clap::Parser;
 use mdtablefix::{
     LineEnding,
+    LineEndingCounts,
     Options,
-    detect_line_ending,
+    count_line_endings,
     format_breaks,
     io::replace_file,
     process::{process_stream_inner, process_with_frontmatter},
@@ -143,10 +144,16 @@ fn render_stdin_output(fixed: &[String], ending: LineEnding) -> String {
 /// wholly changed.
 fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
     let content = directory.read_to_string(path)?;
-    let ending = detect_line_ending(&content);
+    let LineEndingCounts {
+        ending,
+        crlf_count,
+        lone_lf_count,
+    } = count_line_endings(&content);
     debug!(
         operation = "file",
         path = %path,
+        crlf_count,
+        lone_lf_count,
         selected_ending = ending.as_str(),
         "selected the majority line ending"
     );
@@ -222,9 +229,15 @@ fn main() -> anyhow::Result<()> {
     if cli.files.is_empty() {
         let mut input = String::new();
         io::stdin().read_to_string(&mut input)?;
-        let ending = detect_line_ending(&input);
+        let LineEndingCounts {
+            ending,
+            crlf_count,
+            lone_lf_count,
+        } = count_line_endings(&input);
         debug!(
             operation = "stdin",
+            crlf_count,
+            lone_lf_count,
             selected_ending = ending.as_str(),
             "selected the majority line ending"
         );

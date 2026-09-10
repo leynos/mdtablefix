@@ -34,6 +34,10 @@
   that installs a recorder can watch replacements, their outcomes, and how long
   they take. The crate installs no recorder itself.
   ([#465](https://github.com/leynos/mdtablefix/issues/465))
+- Add the line-ending helpers `LineEnding`, `LineEndingCounts`,
+  `count_line_endings`, `detect_line_ending`, and `serialize_lines`, so a caller
+  can select and apply the majority line-ending style of an input document.
+  ([#451](https://github.com/leynos/mdtablefix/issues/451))
 
 ### Changed
 

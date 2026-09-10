@@ -51,7 +51,15 @@ pub use fences::{attach_orphan_specifiers, compress_fences};
 pub use footnotes::convert_footnotes;
 pub use headings::convert_setext_headings;
 pub use html::convert_html_tables;
-pub use io::{LineEnding, detect_line_ending, rewrite, rewrite_no_wrap, serialize_lines};
+pub use io::{
+    LineEnding,
+    LineEndingCounts,
+    count_line_endings,
+    detect_line_ending,
+    rewrite,
+    rewrite_no_wrap,
+    serialize_lines,
+};
 pub use lists::renumber_lists;
 pub use process::{Options, process_stream, process_stream_no_wrap, process_stream_opts};
 pub use table::{reflow_table, split_cells};

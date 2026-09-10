@@ -48,6 +48,31 @@ fn serialize_lines_uses_the_chosen_ending() {
     assert!(serialize_lines(&[], LineEnding::Crlf).is_empty());
 }
 
+/// The counts behind a decision are available without restating the rule.
+#[rstest]
+#[case::no_line_endings("alpha", LineEnding::Lf, 0, 0)]
+#[case::line_feeds_only("alpha\nbeta\n", LineEnding::Lf, 0, 2)]
+#[case::carriage_returns_only("alpha\r\nbeta\r\n", LineEnding::Crlf, 2, 0)]
+#[case::carriage_return_majority("alpha\r\nbeta\r\ngamma\n", LineEnding::Crlf, 2, 1)]
+#[case::line_feed_majority("alpha\nbeta\ngamma\r\n", LineEnding::Lf, 1, 2)]
+#[case::exact_tie("alpha\r\nbeta\n", LineEnding::Lf, 1, 1)]
+fn count_line_endings_reports_the_vote(
+    #[case] text: &str,
+    #[case] ending: LineEnding,
+    #[case] crlf_count: usize,
+    #[case] lone_lf_count: usize,
+) {
+    assert_eq!(
+        count_line_endings(text),
+        LineEndingCounts {
+            ending,
+            crlf_count,
+            lone_lf_count
+        },
+        "unexpected counts for {text:?}"
+    );
+}
+
 /// Byte-exact rewrite cases: input text and the expected file bytes.
 ///
 /// Each case reflows a ragged table, so a passing case proves the output
@@ -145,10 +170,10 @@ fn detect_line_ending_emits_nothing() {
 #[test]
 #[traced_test]
 fn rewrite_reports_the_selected_ending() {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let file = dir.path().join("reported.md");
-    fs::write(&file, "|A|B|\r\n|---|---|\r\n|1|2|\r\n").unwrap();
-    rewrite(&file).unwrap();
+    fs::write(&file, "|A|B|\r\n|---|---|\r\n|1|2|\r\n").expect("write fixture");
+    rewrite(&file).expect("rewrite fixture");
     logs_assert(|lines| {
         let reported = lines
             .iter()
