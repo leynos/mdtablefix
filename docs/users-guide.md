@@ -484,7 +484,7 @@ majority of the text's line endings. CRLF pairs are counted first and
 subtracted from the line-feed count to obtain the lone line feeds; CRLF wins
 only when it strictly outnumbers lone line feeds. An exact tie, and a non-empty
 input with no line endings at all, select `LineEnding::Lf`. Only CRLF and lone
-LF are recognised: a lone carriage return is content, matching the `str::lines`
+LF are recognized: a lone carriage return is content, matching the `str::lines`
 split.
 
 `serialize_lines(lines, ending) -> String` joins the processed lines with the
