@@ -17,7 +17,9 @@ use super::{
     PendingPrefix,
     PrefixLine,
     TailReflow,
+    continuation_folds_tail,
     pending_prefix_for_next_segment,
+    wraps_to_tail,
 };
 
 #[test]
@@ -67,6 +69,11 @@ fn handle_prefix_line_can_repeat_or_change_the_continuation_prefix(
             outer_prefix: outer_prefix.map(Cow::Borrowed),
         },
     );
+    // The list cases spill onto a continuation line, so their emission is
+    // deferred until the paragraph flushes; the continuation prefix under test
+    // is chosen during the flush. The repeated-quote case emits immediately and
+    // is unaffected by the flush.
+    writer.flush_paragraph(&mut state);
     assert_eq!(out.join("\n"), expected);
 }
 
@@ -109,6 +116,35 @@ fn pending_prefix_repeat_prefix_returns_original_prefix_every_time() {
     assert_eq!(first, "> ");
     assert_eq!(second, "> ");
     assert!(pending.used_prefix);
+}
+
+#[rstest]
+#[case::empty("", true)]
+#[case::one_space(" ", true)]
+#[case::three_spaces("   ", true)]
+#[case::list_indent("  ", true)]
+#[case::code_threshold("    ", false)]
+#[case::tab("\t", false)]
+#[case::blockquote("> ", false)]
+#[case::nested_blockquote(">   ", false)]
+#[case::footnote_indent("      ", false)]
+fn continuation_prefix_folds_its_tail_only_when_it_is_narrow_space(
+    #[case] prefix: &str,
+    #[case] expected: bool,
+) {
+    assert_eq!(continuation_folds_tail(prefix), expected);
+}
+
+#[rstest]
+#[case::fits("alpha beta", 80, false)]
+#[case::spills("alpha beta gamma delta", 10, true)]
+#[case::empty("", 10, false)]
+fn text_spills_onto_a_tail_only_when_it_wraps(
+    #[case] text: &str,
+    #[case] available: usize,
+    #[case] expected: bool,
+) {
+    assert_eq!(wraps_to_tail(text, available), expected);
 }
 
 proptest! {

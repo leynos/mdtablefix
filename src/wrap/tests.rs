@@ -15,6 +15,7 @@ mod link_reference_state_unit;
 mod prefix;
 mod span_grouping_props;
 mod span_state;
+mod tail_deferral;
 mod thematic_break;
 mod token_grouping;
 

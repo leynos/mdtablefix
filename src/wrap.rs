@@ -35,7 +35,15 @@ pub(crate) use fence::{FenceObservation, ObservedFence};
 /// info string) when the line opens a fenced code block, or `None` otherwise.
 pub use fence::{FenceTracker, is_fence};
 pub(crate) use link_reference::{LinkReferenceMatcher, LinkTitleWindow, LinkTitleWindowOutcome};
-use paragraph::{ParagraphState, ParagraphWriter, PrefixLine, continuation_prefix_for};
+use paragraph::{
+    ParagraphState,
+    ParagraphWriter,
+    PendingPrefix,
+    PrefixLine,
+    continuation_folds_tail,
+    continuation_prefix_for,
+    wraps_to_tail,
+};
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
 ///
@@ -226,37 +234,67 @@ fn try_passthrough_block(
     true
 }
 
+/// Returns the source text that continues the pending prefix from `line`.
+///
+/// A line carrying the block's continuation prefix continues it directly. A
+/// line without that prefix is a lazy continuation, which Markdown folds into
+/// the open block; it is folded here when the block emits a tail line that
+/// absorbs the lines below it, matching how the block's own output re-parses on
+/// the next pass. Otherwise the source line stays a separate paragraph on both
+/// passes and `None` is returned so the caller flushes the block first.
+fn pending_continuation_text<'a>(
+    pending: &PendingPrefix,
+    line: LineContext<'a>,
+) -> Option<&'a str> {
+    if pending.open_fence_len.is_some() {
+        return Some(line.inner);
+    }
+
+    let prefix = continuation_prefix_for(
+        pending.prefix.as_str(),
+        pending.repeat_prefix,
+        pending.outer_prefix.as_deref(),
+    );
+    if let Some(continuation) = line.original.strip_prefix(prefix.as_str()) {
+        return Some(continuation);
+    }
+
+    let absorbs_following_lines = continuation_folds_tail(prefix.as_str())
+        && wraps_to_tail(pending.rest.as_str(), pending.rest_width);
+    if absorbs_following_lines {
+        trace!(
+            mode = "pending_prefix",
+            boundary = "prefix_mismatch",
+            line_len = line.original.len(),
+            "joining a lazy continuation after its prefix changed"
+        );
+        return Some(line.inner);
+    }
+
+    trace!(
+        mode = "pending_prefix",
+        boundary = "prefix_mismatch",
+        line_len = line.original.len(),
+        "flushing a pending continuation after its prefix changed"
+    );
+    None
+}
+
 fn resolve_or_fallback_continuation(
     line: LineContext<'_>,
     writer: &mut ParagraphWriter<'_>,
     state: &mut ParagraphState,
 ) -> bool {
-    let resolved_continuation_prefix = state.pending_prefix.as_ref().and_then(|pending| {
-        pending.open_fence_len.is_none().then(|| {
-            continuation_prefix_for(
-                pending.prefix.as_str(),
-                pending.repeat_prefix,
-                pending.outer_prefix.as_deref(),
-            )
-        })
-    });
-    if let Some(prefix) = resolved_continuation_prefix {
-        let Some(continuation) = line.original.strip_prefix(prefix.as_str()) else {
-            trace!(
-                mode = "pending_prefix",
-                boundary = "prefix_mismatch",
-                line_len = line.original.len(),
-                "flushing a pending continuation after its prefix changed"
-            );
-            writer.flush_paragraph(state);
-            return false;
-        };
-        let (text, hard_break) = line_break_parts(continuation);
-        apply_continuation_chunk(&text, line.original, hard_break, writer, state);
-        return true;
-    }
+    let continuation = state
+        .pending_prefix
+        .as_ref()
+        .and_then(|pending| pending_continuation_text(pending, line));
+    let Some(continuation) = continuation else {
+        writer.flush_paragraph(state);
+        return false;
+    };
 
-    let (text, hard_break) = line_break_parts(line.inner);
+    let (text, hard_break) = line_break_parts(continuation);
     apply_continuation_chunk(&text, line.original, hard_break, writer, state);
     true
 }

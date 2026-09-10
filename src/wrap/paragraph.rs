@@ -29,6 +29,32 @@ pub(super) use pending::{
 #[path = "paragraph_tests.rs"]
 mod tests;
 
+/// Returns whether `text` spills past the first wrapped line.
+///
+/// A block that wraps onto a tail line is reflowed with the lines below it on
+/// the next pass, because its tail re-parses as indented paragraph content. A
+/// block that fits on one line emits no tail and leaves the following lines as
+/// a separate paragraph. Callers use this to make the first pass agree with
+/// that re-parse.
+pub(super) fn wraps_to_tail(text: &str, available: usize) -> bool {
+    wrap_preserving_code(text, available).len() > 1
+}
+
+/// Returns whether a block's tail line absorbs the lines below it when re-read.
+///
+/// A tail indented by one to three spaces re-parses as paragraph text, so the
+/// source lines below it fold into the same paragraph. A marker prefix such as
+/// `> ` instead opens a block of its own, and four columns of indentation or
+/// more become an indented code block; both leave the following lines alone.
+/// Callers use this to decide whether a block must fold or defer those lines
+/// during the first pass.
+pub(super) fn continuation_folds_tail(continuation_prefix: &str) -> bool {
+    UnicodeWidthStr::width(continuation_prefix) < 4
+        && continuation_prefix
+            .chars()
+            .all(|character| character == ' ')
+}
+
 /// Carries the parsed prefix metadata for a line that should be wrapped.
 pub(super) struct PrefixLine<'a> {
     /// Stores the literal prefix emitted on the first wrapped line.
@@ -329,8 +355,6 @@ impl<'a> ParagraphWriter<'a> {
         state.continuation_indent = None;
 
         if let Some((fence_len, open_tail)) = parse_open_code_span(prefix_line.rest) {
-            let prefix = prefix_line.prefix.as_ref().to_string();
-            let prefix_width = UnicodeWidthStr::width(prefix.as_str());
             let opener_at_eol = open_tail.trim().is_empty();
             let continuation_mode = if opener_at_eol {
                 ContinuationMode::TightCodeSpan
@@ -341,27 +365,75 @@ impl<'a> ParagraphWriter<'a> {
                 ?continuation_mode,
                 opener_at_eol, fence_len, "selected pending-prefix continuation mode"
             );
-            state.pending_prefix = Some(PendingPrefix {
-                prefix,
-                rest: prefix_line.rest.to_string(),
-                original_lines: vec![format!(
-                    "{prefix}{rest}",
-                    prefix = prefix_line.prefix.as_ref(),
-                    rest = prefix_line.rest,
-                )],
-                synthetic_join_spaces: Vec::new(),
-                rest_width: self.width.saturating_sub(prefix_width).max(1),
-                repeat_prefix: prefix_line.repeat_prefix,
-                outer_prefix: prefix_line.outer_prefix.as_deref().map(ToOwned::to_owned),
-                hard_break: false,
-                open_fence_len: Some(fence_len),
-                continuation_mode,
-                used_prefix: false,
-                tail_reflow: TailReflow::Allowed,
-            });
+            self.defer_prefix_line(state, prefix_line, Some(fence_len), continuation_mode);
+            return;
+        }
+
+        if self.prefix_line_needs_tail_deferral(prefix_line) {
+            self.defer_prefix_line(state, prefix_line, None, ContinuationMode::Normalize);
             return;
         }
 
         self.append_wrapped_with_prefix(prefix_line);
+    }
+
+    /// Returns whether `line` must be deferred so its tail cannot absorb later lines.
+    ///
+    /// A prefixed source line that fits on a single output line emits no tail,
+    /// so the following source lines are re-wrapped as a fresh paragraph on
+    /// both this pass and the next: the result is already a fixed point. The
+    /// same holds when the tail does not re-parse as paragraph text; see
+    /// [`continuation_folds_tail`].
+    ///
+    /// Once a line that folds its tail spills onto one, the next pass joins the
+    /// following source lines into that tail, so the first pass must join them
+    /// too. Deferring the line lets the buffered continuation lines be reflowed
+    /// with it, emitting what the next pass would.
+    fn prefix_line_needs_tail_deferral(&self, line: &PrefixLine<'_>) -> bool {
+        let continuation_prefix = continuation_prefix_for(
+            line.prefix.as_ref(),
+            line.repeat_prefix,
+            line.outer_prefix.as_deref(),
+        );
+        if !continuation_folds_tail(continuation_prefix.as_str()) {
+            return false;
+        }
+        let prefix_width = UnicodeWidthStr::width(line.prefix.as_ref());
+        let available = self.width.saturating_sub(prefix_width).max(1);
+        wraps_to_tail(line.rest, available)
+    }
+
+    /// Buffers a prefixed line so later continuation lines are reflowed with it.
+    ///
+    /// The buffered line is emitted by `flush_paragraph` through
+    /// `append_stable_pending_prefix`, whose two-stage reflow is deterministic
+    /// for the same prefix, rest, and available width.
+    fn defer_prefix_line(
+        &mut self,
+        state: &mut ParagraphState,
+        prefix_line: &PrefixLine<'_>,
+        open_fence_len: Option<usize>,
+        continuation_mode: ContinuationMode,
+    ) {
+        let prefix = prefix_line.prefix.as_ref().to_string();
+        let prefix_width = UnicodeWidthStr::width(prefix.as_str());
+        state.pending_prefix = Some(PendingPrefix {
+            prefix,
+            rest: prefix_line.rest.to_string(),
+            original_lines: vec![format!(
+                "{prefix}{rest}",
+                prefix = prefix_line.prefix.as_ref(),
+                rest = prefix_line.rest,
+            )],
+            synthetic_join_spaces: Vec::new(),
+            rest_width: self.width.saturating_sub(prefix_width).max(1),
+            repeat_prefix: prefix_line.repeat_prefix,
+            outer_prefix: prefix_line.outer_prefix.as_deref().map(ToOwned::to_owned),
+            hard_break: false,
+            open_fence_len,
+            continuation_mode,
+            used_prefix: false,
+            tail_reflow: TailReflow::Allowed,
+        });
     }
 }
