@@ -415,6 +415,67 @@ fn compresses_top_level_fence_after_quoted_block() {
     );
 }
 
+#[rstest]
+#[case::hyphen_run("---")]
+#[case::asterisk_run("***")]
+#[case::underscore_run("___")]
+#[case::spaced_hyphen_run("- - -")]
+#[case::indented_hyphen_run("   ---")]
+#[case::normalised_break(&"_".repeat(mdtablefix::THEMATIC_BREAK_LEN))]
+fn does_not_attach_a_thematic_break_as_a_specifier(#[case] break_line: &str) {
+    // `--breaks` writes a seventy-underscore line for every thematic break, and
+    // an underscore run is shaped like a language specifier. Attaching it would
+    // delete the break, so the break line survives and the fence stays unlabelled.
+    let input = lines_vec![break_line, "```", "aa", "```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+
+    assert_eq!(out, input);
+}
+
+#[test]
+fn does_not_attach_a_thematic_break_through_blank_lines() {
+    let break_line = "_".repeat(mdtablefix::THEMATIC_BREAK_LEN);
+    let input = lines_vec![
+        break_line.as_str(),
+        "",
+        "```",
+        "aa",
+        "```",
+        "",
+        "Rust",
+        "```",
+        "bb",
+        "```",
+    ];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+
+    // The break survives, and the ordinary specifier below it still attaches.
+    assert_eq!(
+        out,
+        lines_vec![
+            break_line.as_str(),
+            "",
+            "```",
+            "aa",
+            "```",
+            "",
+            "```rust",
+            "bb",
+            "```",
+        ]
+    );
+}
+
+#[test]
+fn attaches_a_tab_indented_specifier_that_is_not_a_break() {
+    // A tab indent is indented code, not a thematic break, so the line remains
+    // eligible for attachment exactly as before.
+    let input = lines_vec!["\tRust", "", "\t```", "\tfn main() {}", "\t```"];
+    let out = attach_orphan_specifiers(&compress_fences(&input));
+
+    assert_eq!(out, lines_vec!["\t```rust", "\tfn main() {}", "\t```"]);
+}
+
 #[test]
 fn keeps_info_string_marker_as_literal_content() {
     // A same-marker line carrying an info string is not a closing fence
