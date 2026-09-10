@@ -14,9 +14,12 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   original file byte-identical rather than truncated.
 - **Who is affected:** Anyone who rewrites files in place, whether through the
   CLI or the library.
-- **Migration action:** No action is required for normal use. The target's
-  inode changes on every rewrite, so tooling that pins the inode (file
-  watchers, hard links, and open handles) does not follow the replacement.
+- **Migration action:** No action is required for normal use. A successful
+  rewrite of a regular file creates a new file that takes over the target's
+  name, so handles, hard links, and watches tied to the previous file keep the
+  old contents and do not follow the replacement. A failed rewrite, or a
+  target declined for being a symbolic link, leaves the original file
+  untouched.
 
 ## Preserved file mode
 

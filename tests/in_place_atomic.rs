@@ -213,9 +213,18 @@ fn in_place_fails_when_every_candidate_name_is_occupied() {
         !output.status.success(),
         "an occupied candidate name must not divert the temporary file: {output:?}"
     );
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("sample.md"),
-        "the error must name the target: {output:?}"
+        stderr.contains("writing sub/sample.md"),
+        "the file context must name the path as the user wrote it: {output:?}"
+    );
+    assert!(
+        stderr.contains("Caused by:"),
+        "the whole error chain must be reported, not only the file context: {output:?}"
+    );
+    assert!(
+        stderr.contains("no free temporary file name beside sample.md"),
+        "the underlying cause must reach the user: {output:?}"
     );
     assert_eq!(
         fs::read_to_string(&target).expect("read target"),

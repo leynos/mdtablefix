@@ -7,8 +7,8 @@
 
 - [User's guide](users-guide.md): Command-line usage, formatting behaviour,
   options, and examples for people using `mdtablefix`.
-- [Migrating to 0.6.0](migration-0.6.md): Behaviour changes in the 0.6.0
-  release and the actions they require.
+- [Migrating to 0.6.0](v0-6-0-migration-guide.md): Behaviour changes in the
+  0.6.0 release and the actions they require.
 - [Developer's guide](developers-guide.md): Build, test, release,
   contribution, and maintainer workflows for the project.
 - [Repository layout](repository-layout.md): Ownership boundaries and

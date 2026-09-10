@@ -369,6 +369,13 @@ intact, and the next run retries past the stale name rather than reusing it.
 Stale files are named `<target>.mdtablefix-<pid>-<n>.tmp`. Delete them once no
 run is in progress.
 
+When an in-place rewrite fails, `mdtablefix` reports the full error chain on
+standard error: first the file context, naming the path exactly as given on the
+command line, then the underlying cause beneath a `Caused by:` heading. Every
+failing file is reported this way, and the run then exits with a non-zero
+status. Scripts that match exact standard-error text should expect the chain
+and its multi-line form; matching the file name or the cause is more robust.
+
 The original file mode is preserved. A freshly created temporary file does not
 inherit the target's permissions, so `mdtablefix` copies them across before the
 rename: a file with mode `0640` still has mode `0640` afterwards. Because the

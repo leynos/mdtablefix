@@ -172,14 +172,16 @@ fn temporary_path_is_a_sibling(#[case] path: &str, #[case] attempt: u32) {
 
 #[test]
 fn create_temporary_file_retries_past_an_occupied_candidate() {
-    let dir = tempdir().unwrap();
-    let root = Utf8Path::from_path(dir.path()).unwrap();
-    let directory = Dir::open_ambient_dir(root, ambient_authority()).unwrap();
+    let dir = tempdir().expect("create temporary directory");
+    let root = Utf8Path::from_path(dir.path()).expect("convert the temporary directory to UTF-8");
+    let directory =
+        Dir::open_ambient_dir(root, ambient_authority()).expect("open the directory capability");
     let name = Utf8Path::new("sample.md");
     // Candidate names are a pure function of the target, the process id and
     // the attempt, so the test can occupy the first candidate exactly.
     let occupied = temporary_path(name, 0);
-    fs::write(dir.path().join(occupied.file_name().unwrap()), "").unwrap();
+    let occupied_name = occupied.file_name().expect("occupied candidate file name");
+    fs::write(dir.path().join(occupied_name), "").expect("occupy the first candidate name");
 
     let (temp, _file) =
         create_temporary_file(&directory, name).expect("retry past the occupied name");
@@ -192,8 +194,10 @@ fn create_temporary_file_retries_past_an_occupied_candidate() {
     assert_eq!(
         entry_names(dir.path()),
         vec![
-            occupied.file_name().unwrap().to_string(),
-            temp.file_name().unwrap().to_string(),
+            occupied_name.to_string(),
+            temp.file_name()
+                .expect("chosen candidate file name")
+                .to_string(),
         ],
         "the occupied candidate must survive untouched"
     );
@@ -201,13 +205,15 @@ fn create_temporary_file_retries_past_an_occupied_candidate() {
 
 #[test]
 fn create_temporary_file_reports_an_exhausted_name_space() {
-    let dir = tempdir().unwrap();
-    let root = Utf8Path::from_path(dir.path()).unwrap();
-    let directory = Dir::open_ambient_dir(root, ambient_authority()).unwrap();
+    let dir = tempdir().expect("create temporary directory");
+    let root = Utf8Path::from_path(dir.path()).expect("convert the temporary directory to UTF-8");
+    let directory =
+        Dir::open_ambient_dir(root, ambient_authority()).expect("open the directory capability");
     let name = Utf8Path::new("sample.md");
     for attempt in 0..TEMP_FILE_ATTEMPTS {
         let candidate = temporary_path(name, attempt);
-        fs::write(dir.path().join(candidate.file_name().unwrap()), "").unwrap();
+        let candidate_name = candidate.file_name().expect("candidate file name");
+        fs::write(dir.path().join(candidate_name), "").expect("occupy the candidate name");
     }
 
     let error = create_temporary_file(&directory, name).expect_err("every candidate is occupied");

@@ -121,9 +121,7 @@ fn open_file_parent(path: &Path) -> anyhow::Result<(Dir, Utf8PathBuf)> {
 
 /// Reads and formats a capability-scoped file without modifying it.
 fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
-    let content = directory
-        .read_to_string(path)
-        .with_context(|| format!("reading {path}"))?;
+    let content = directory.read_to_string(path)?;
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
     let fixed = process_lines(&lines, opts);
     // Keep file output newline-terminated, matching the CLI stdout contract.
@@ -142,7 +140,8 @@ fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyho
 /// directory capability as the read, so the filesystem boundary is unchanged.
 fn rewrite_in_place(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<()> {
     let output = format_to_string(directory, path, opts)?;
-    replace_file(directory, path, &output).with_context(|| format!("writing {path}"))
+    replace_file(directory, path, &output)?;
+    Ok(())
 }
 
 fn report_results<T, F>(results: Vec<anyhow::Result<T>>, mut on_ok: F) -> anyhow::Result<()>
@@ -212,6 +211,7 @@ fn main() -> anyhow::Result<()> {
             .map(|path| {
                 let (directory, file_name) = open_file_parent(path)?;
                 rewrite_in_place(&directory, &file_name, cli.opts)
+                    .with_context(|| format!("writing {}", path.display()))
             })
             .collect();
         report_results(results, |()| {})?;
@@ -222,6 +222,7 @@ fn main() -> anyhow::Result<()> {
             .map(|path| {
                 let (directory, file_name) = open_file_parent(path)?;
                 format_to_string(&directory, &file_name, cli.opts)
+                    .with_context(|| format!("reading {}", path.display()))
             })
             .collect();
         report_results(results, |out| print!("{out}"))?;

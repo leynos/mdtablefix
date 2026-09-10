@@ -38,8 +38,8 @@
   ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - A failed file reports the full error chain, so a declined rewrite states its
   reason rather than only the file being written. See
-  [Migrating to 0.6.0](docs/migration-0.6.md) for the actions these changes
-  require.
+  [Migrating to 0.6.0](docs/v0-6-0-migration-guide.md) for the actions these
+  changes require.
 - Ungate the `[package.metadata.binstall]` configuration, which no longer
   applies only to 64-bit Linux GNU targets. One `pkg-url` template now covers
   Linux, macOS and Windows.
