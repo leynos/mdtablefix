@@ -6,12 +6,18 @@ use std::os::unix::fs::PermissionsExt;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use mdtablefix::io::replace_file;
+use mdtablefix::{LineEnding, io::replace_file};
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
-use super::{FormatOpts, format_to_string, open_file_parent, rewrite_in_place};
+use super::{
+    FormatOpts,
+    format_to_string,
+    open_file_parent,
+    render_stdin_output,
+    rewrite_in_place,
+};
 
 /// Format options with every transformation disabled.
 #[fixture]
@@ -181,6 +187,17 @@ fn capability_scoped_failure_removes_temporary_file() {
         entry_names(dir.path()),
         vec!["target.md"],
         "a failure after the temporary file exists must remove it"
+    );
+}
+
+#[test]
+fn stdin_output_keeps_its_terminator_contract() {
+    assert_eq!(render_stdin_output(&[], LineEnding::Lf), "\n");
+    assert_eq!(render_stdin_output(&[], LineEnding::Crlf), "\r\n");
+    let lines = vec!["| A | B |".to_string()];
+    assert_eq!(
+        render_stdin_output(&lines, LineEnding::Crlf),
+        "| A | B |\r\n"
     );
 }
 

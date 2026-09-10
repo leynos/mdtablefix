@@ -16,11 +16,14 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use clap::Parser;
 use mdtablefix::{
+    LineEnding,
     Options,
+    detect_line_ending,
     format_breaks,
     io::replace_file,
     process::{process_stream_inner, process_with_frontmatter},
     renumber_lists,
+    serialize_lines,
 };
 use rayon::prelude::*;
 
@@ -119,17 +122,31 @@ fn open_file_parent(path: &Path) -> anyhow::Result<(Dir, Utf8PathBuf)> {
     Ok((directory, Utf8PathBuf::from(file_name)))
 }
 
+/// Renders standard-input output.
+///
+/// Standard input keeps its historical contract of printing one terminator
+/// even when it produces no lines, whereas an empty file produces empty
+/// output. `tests/parallel.rs` pins that difference.
+fn render_stdin_output(fixed: &[String], ending: LineEnding) -> String {
+    if fixed.is_empty() {
+        ending.as_str().to_string()
+    } else {
+        serialize_lines(fixed, ending)
+    }
+}
+
 /// Reads and formats a capability-scoped file without modifying it.
+///
+/// The majority line-ending style of the file is detected before formatting
+/// and used to terminate the returned lines, so a CRLF file is not reported as
+/// wholly changed.
 fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
     let content = directory.read_to_string(path)?;
+    let ending = detect_line_ending(&content);
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
     let fixed = process_lines(&lines, opts);
     // Keep file output newline-terminated, matching the CLI stdout contract.
-    Ok(if fixed.is_empty() {
-        String::new()
-    } else {
-        fixed.join("\n") + "\n"
-    })
+    Ok(serialize_lines(&fixed, ending))
 }
 
 /// Reads, formats, and atomically replaces a capability-scoped file in place.
@@ -198,9 +215,10 @@ fn main() -> anyhow::Result<()> {
     if cli.files.is_empty() {
         let mut input = String::new();
         io::stdin().read_to_string(&mut input)?;
+        let ending = detect_line_ending(&input);
         let lines: Vec<String> = input.lines().map(str::to_string).collect();
         let fixed = process_lines(&lines, cli.opts);
-        println!("{}", fixed.join("\n"));
+        print!("{}", render_stdin_output(&fixed, ending));
         return Ok(());
     }
 
