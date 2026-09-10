@@ -156,10 +156,11 @@ pub fn count_line_endings(text: &str) -> LineEndingCounts {
 /// This is [`count_line_endings`] with the reporting boundary attached, so
 /// every site that selects an output style emits the same message with the
 /// same `crlf_count`, `lone_lf_count`, and `selected_ending` fields.
-/// `operation` names the boundary, such as `"file"` or `"stdin"`, and `path`
-/// names the file where one exists; both are omitted from the event when they
-/// are not supplied, so the library's own rewrite boundary reports the vote
-/// without either field.
+/// `operation` names the boundary: `"rewrite"` and `"rewrite_no_wrap"` for the
+/// library entry points, and `"file"` or `"stdin"` for the executable's
+/// input/output boundaries. `path` names the file where one exists, so a
+/// rewritten file's event says which file it came from. Both are omitted from
+/// the event when a caller does not supply them.
 ///
 /// # Examples
 ///
@@ -245,20 +246,22 @@ const TEMP_FILE_ATTEMPTS: u32 = 16;
 /// Read `path`, process the contents with `f`, and write the result back.
 ///
 /// The line-ending style holding the majority of the file's line endings is
-/// preserved in the rewritten file.
+/// preserved in the rewritten file, and the decision is reported at `debug`
+/// level under `operation`'s name.
 ///
 /// This helper encapsulates the common pattern used by [`rewrite`] and
 /// [`rewrite_no_wrap`].
 ///
 /// # Errors
 /// Returns an error if reading or writing the file fails.
-fn rewrite_with<F>(path: &Path, f: F) -> std::io::Result<()>
+fn rewrite_with<F>(path: &Path, operation: &str, f: F) -> std::io::Result<()>
 where
     F: Fn(&[String]) -> Vec<String>,
 {
     let (directory, name) = open_parent(path)?;
     let text = directory.read_to_string(&name)?;
-    let counts = count_line_endings_reported(&text, None, None);
+    let path_text = path.to_string_lossy();
+    let counts = count_line_endings_reported(&text, Some(operation), Some(path_text.as_ref()));
     let lines: Vec<String> = text.lines().map(str::to_string).collect();
     let fixed = f(&lines);
     replace_file(&directory, &name, &serialize_lines(&fixed, counts.ending))
@@ -619,7 +622,7 @@ fn temporary_path(path: &Utf8Path, attempt: u32) -> Utf8PathBuf {
 ///
 /// # Errors
 /// Returns an error if reading or writing the file fails.
-pub fn rewrite(path: &Path) -> std::io::Result<()> { rewrite_with(path, process_stream) }
+pub fn rewrite(path: &Path) -> std::io::Result<()> { rewrite_with(path, "rewrite", process_stream) }
 
 /// Rewrite a file in place without wrapping text.
 ///
@@ -633,7 +636,7 @@ pub fn rewrite(path: &Path) -> std::io::Result<()> { rewrite_with(path, process_
 /// # Errors
 /// Returns an error if reading or writing the file fails.
 pub fn rewrite_no_wrap(path: &Path) -> std::io::Result<()> {
-    rewrite_with(path, process_stream_no_wrap)
+    rewrite_with(path, "rewrite_no_wrap", process_stream_no_wrap)
 }
 
 /// A test-only seam that fails the rename half of the swap.

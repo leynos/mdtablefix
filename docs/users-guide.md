@@ -496,8 +496,9 @@ counting rule.
 counts and additionally emits one `debug` event, `selected the majority line
 ending`, whose fields are `crlf_count`, `lone_lf_count` and `selected_ending`,
 plus `operation` (for example `"file"` or `"stdin"`) and `path` where the
-calling boundary has them. The library's own rewrite boundary passes `None` for
-both.
+calling boundary has them. The library's `rewrite` and `rewrite_no_wrap`
+report an `operation` of `"rewrite"` or `"rewrite_no_wrap"` together with the
+path of the rewritten file.
 
 `serialize_lines(lines, ending) -> String` joins the processed lines with the
 selected terminator and appends one further terminator, so a non-empty result

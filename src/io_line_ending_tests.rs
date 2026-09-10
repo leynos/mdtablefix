@@ -139,9 +139,9 @@ fn rewrite_preserves_the_majority_line_ending(
     );
 }
 
-/// The shared helper reports the vote at every boundary: the library
-/// rewrite, which adds no boundary fields, and the executable's standard
-/// input and file boundaries, which add `operation` and, for files, `path`.
+/// The shared helper reports the vote for each boundary shape: a caller
+/// that supplies no boundary context at all, the executable's standard
+/// input (`operation` alone), and a file (`operation` and `path`).
 #[test]
 #[traced_test]
 fn count_line_endings_reported_covers_every_boundary() {
@@ -230,8 +230,8 @@ fn detect_line_ending_emits_nothing() {
     );
 }
 
-/// The rewrite boundary reports the decision, with the counts behind it, so
-/// a rewritten file's endings are traceable.
+/// The rewrite boundary reports the decision, with the counts behind it and
+/// the file it rewrote, so a rewritten file's endings are traceable.
 #[test]
 #[traced_test]
 fn rewrite_reports_the_selected_ending() {
@@ -245,7 +245,9 @@ fn rewrite_reports_the_selected_ending() {
             .find(|line| line.contains("selected the majority line ending"));
         match reported {
             Some(line)
-                if line.contains("crlf_count=3")
+                if line.contains(r#"operation="rewrite""#)
+                    && line.contains("reported.md")
+                    && line.contains("crlf_count=3")
                     && line.contains("lone_lf_count=0")
                     && line.contains(r#"selected_ending="\r\n""#) =>
             {
