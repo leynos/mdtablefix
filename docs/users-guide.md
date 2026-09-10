@@ -251,7 +251,6 @@ byte or character count. Continuation lines therefore stay correctly aligned
 when the prefix contains full-width characters such as ideographic spaces or
 CJK punctuation.
 
-
 ## Line endings
 
 `mdtablefix` preserves the line-ending style of the document it formats. It
@@ -471,7 +470,6 @@ let owned: Vec<String> = format_breaks(&lines)
     .map(|c| c.into_owned())
     .collect();
 ```
-
 
 ### Line-ending helpers
 
