@@ -114,10 +114,11 @@ restores the separator row with widths derived from the final table body.
 
 - `LineEnding` is the closed set of terminators the formatter can emit;
   `as_str` returns the characters written between lines.
-- `detect_line_ending(text) -> LineEnding` counts CRLF pairs, subtracts them
-  from the total line feed count to obtain the lone line feeds, and selects
-  CRLF only when it strictly outnumbers them. An exact tie, and a document with
-  no line endings at all, select LF, so the result is deterministic.
+- `detect_line_ending(text) -> LineEnding` counts carriage return and line feed
+  (CRLF) pairs, subtracts them from the total line feed count to obtain the
+  lone line feeds, and selects CRLF only when it strictly outnumbers them. An
+  exact tie, and a document with no line endings at all, select LF, so the
+  result is deterministic.
 - `serialize_lines(lines, ending) -> String` joins lines with the selected
   terminator and appends one further terminator, yielding an empty string for
   no lines.

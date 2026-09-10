@@ -450,9 +450,9 @@ provides streaming helpers that combine the lower-level functions. The `io`
 module handles filesystem operations, delegating the text processing to
 `process`, and owns the line-ending policy. It detects the terminator style
 holding the majority of a document's line endings and re-emits the formatted
-lines with that style, so a CRLF document stays CRLF while the transform
-pipeline itself remains line-ending agnostic. The rationale is recorded in
-[ADR 0007](adrs/0007-line-ending-detection.md).
+lines with that style, so a carriage return and line feed (CRLF) document stays
+CRLF while the transform pipeline itself remains line-ending agnostic. The
+rationale is recorded in [ADR 0007](adrs/0007-line-ending-detection.md).
 
 ### Stateful helpers
 

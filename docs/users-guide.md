@@ -255,11 +255,11 @@ CJK punctuation.
 ## Line endings
 
 `mdtablefix` preserves the line-ending style of the document it formats. It
-counts the CRLF (`\r\n`) and lone line feed (`\n`) endings in the input and
-terminates every output line with whichever style holds the strict majority. A
-file authored with Windows line endings therefore stays CRLF, and a file
-authored with Unix line endings stays LF, so formatting a file does not create
-a line-ending-only diff.
+counts carriage return and line feed (CRLF) (`\r\n`) and lone line feed (`\n`)
+endings in the input and terminates every output line with whichever style
+holds the strict majority. A file authored with Windows line endings therefore
+stays CRLF, and a file authored with Unix line endings stays LF; formatting
+never converts a consistently ended file to the other style.
 
 When the two styles occur equally often, and when the input contains no line
 ending at all, `mdtablefix` emits LF. That tie-break is deterministic: it does

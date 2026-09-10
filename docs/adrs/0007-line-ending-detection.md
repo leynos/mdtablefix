@@ -12,18 +12,19 @@ Accepted.
 
 `mdtablefix` read a document with `str::lines()` and rejoined the formatted
 lines with a literal `"\n"`, so every rewritten file gained Unix line feed
-endings even when the input used Windows CRLF endings. Reformatting a CRLF
-document therefore produced a whole-file diff whose only change was the
-terminator of each line. That buries the Markdown changes a reviewer needs to
-see, and it stops a check-only formatting gate from comparing formatter output
-with valid CRLF source files.
+endings even when the input used Windows carriage return and line feed (CRLF)
+endings. Reformatting a CRLF document therefore produced a whole-file diff
+whose only change was the terminator of each line. That buries the Markdown
+changes a reviewer needs to see, and it stops a check-only formatting gate from
+comparing formatter output with valid CRLF source files.
 
-A formatter must not create a diff that changes nothing but line endings.
+A formatter must not create a diff that changes nothing but line endings in a
+document whose endings are consistent.
 
-## Decision Drivers
+## Decision drivers
 
-- Reformatting must be a no-op for a document that is already formatted,
-  whatever line-ending style that document uses.
+- Reformatting must be a no-op for an already-formatted document whose line
+  endings are consistent, whatever line-ending style that document uses.
 - The selected style must be deterministic: the same input always produces the
   same output, with no dependence on platform, locale, or read order.
 - The transform pipeline must stay line-ending agnostic, so no Markdown
@@ -37,9 +38,9 @@ Count the CRLF pairs and the lone line feed endings in the raw input, and
 terminate every output line with whichever style occurs more often.
 
 Advantages: a consistently authored file is preserved exactly, so an
-already-formatted document is rewritten byte-for-byte. Disadvantages: a
-mixed-style document is homogenised, so an LF-authored snippet inside a
-mostly-CRLF document is rewritten to CRLF.
+already-formatted document that ends with a terminator is rewritten
+byte-for-byte. Disadvantages: a mixed-style document is homogenised, so an
+LF-authored snippet inside a mostly-CRLF document is rewritten to CRLF.
 
 ### Option B: Preserve the first ending seen
 
@@ -95,16 +96,21 @@ No transform module is aware of line endings.
 
 - A file whose endings are mostly CRLF is emitted entirely as CRLF, and a file
   whose endings are mostly LF is emitted entirely as LF.
-- An already-formatted document is rewritten with identical bytes, so a
-  check-only gate can compare formatter output with the source file directly.
+- An already-formatted document whose endings are consistent, and which already
+  ends with a terminator, is rewritten with identical bytes, so a check-only
+  gate can compare formatter output with the source file directly. An
+  unterminated non-empty file gains one terminator, and a mixed-ending file is
+  homogenised to the majority style.
 - The library functions `rewrite` and `rewrite_no_wrap` change their observable
   output for CRLF input. That byte change is the point of the decision.
 - Endings inside fenced code blocks are homogenised too, because detection is
   per document rather than per region.
-- An empty document still produces empty output, while a non-empty document
-  always ends with one terminator.
-- Standard input is treated the same way as a file: the style detected on
-  standard input selects the terminators written to standard output.
+- An empty file still produces empty output, while a non-empty file always
+  ends with one terminator.
+- Standard input differs only when empty: the style detected on non-empty
+  standard input selects the terminators written to standard output, while
+  empty standard input still prints one terminator, which is LF because there
+  is no ending to detect.
 
 ## Known risks and limitations
 
