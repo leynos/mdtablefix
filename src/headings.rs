@@ -170,18 +170,33 @@ fn is_setext_text(text: &str, link_matcher: LinkReferenceMatcher) -> bool {
 
 /// Returns the indentation width of a line's content, in columns.
 ///
-/// Blockquote markers and the single space that may follow each one are
-/// consumed before the width is measured, so `>     code` counts as four
-/// columns inside the quote. Tabs count as four columns, matching
-/// [`crate::wrap::leading_indent`].
+/// Blockquote markers are consumed before the width is measured, so
+/// `>     code` counts as four columns inside the quote. A marker may itself be
+/// reached through one to three leading spaces, and those spaces belong to the
+/// marker rather than to the content: `   >     code` is four columns too,
+/// which is what makes it an indented code block. Tabs count as four columns,
+/// matching [`crate::wrap::leading_indent`].
 fn content_indent_width(line: &str) -> usize {
     let mut rest = line;
 
-    while let Some(tail) = rest.strip_prefix('>') {
-        rest = tail.strip_prefix(' ').unwrap_or(tail);
+    while let Some(tail) = strip_blockquote_marker(rest) {
+        rest = tail;
     }
 
     leading_indent(rest).0
+}
+
+/// Strips one blockquote marker, returning the content that follows it.
+///
+/// A marker is up to three leading spaces, a `>`, and the single space that may
+/// follow it. The wrapper's blockquote prefix accepts the same shape, so both
+/// passes measure the quoted content from the same point. Four or more leading
+/// spaces are an indented code block rather than a marker, and are left in
+/// place for the caller to measure.
+fn strip_blockquote_marker(line: &str) -> Option<&str> {
+    let indent = line.bytes().take_while(|byte| *byte == b' ').count().min(3);
+    let marker = line.get(indent..)?.strip_prefix('>')?;
+    Some(marker.strip_prefix(' ').unwrap_or(marker))
 }
 
 fn shared_prefix_len(a: &str, b: &str) -> usize {
@@ -264,6 +279,10 @@ mod tests {
         vec![">> Title".into(), ">> ----".into()],
         vec![">> ## Title".into()]
     )]
+    #[case(
+        vec!["   > Title".into(), "   > -----".into()],
+        vec!["   > ## Title".into()]
+    )]
     fn converts_setext_headings(#[case] input: Vec<String>, #[case] expected: Vec<String>) {
         assert_eq!(convert_setext_headings(&input), expected);
     }
@@ -323,6 +342,11 @@ mod tests {
     #[case(vec!["\tcode".into(), "\t---".into()])]
     #[case(vec![">     code".into(), ">     ---".into()])]
     #[case(vec![">>     code".into(), ">>     ===".into()])]
+    // The same pairs behind one, two, and three spaces before the marker, which
+    // CommonMark still reads as a blockquote holding indented code.
+    #[case(vec![" >     code".into(), " >     ---".into()])]
+    #[case(vec!["  >     code".into(), "  >     ---".into()])]
+    #[case(vec!["   >     code".into(), "   >     ---".into()])]
     fn refuses_underlines_below_a_block_start(#[case] lines: Vec<String>) {
         assert_eq!(convert_setext_headings(&lines), lines);
     }
@@ -340,6 +364,12 @@ mod tests {
     #[case("> code", 0)]
     #[case(">   code", 2)]
     #[case(">     code", 4)]
+    #[case(" > code", 0)]
+    #[case(" >     code", 4)]
+    #[case("  >     code", 4)]
+    #[case("   >     code", 4)]
+    // Four leading spaces are indented code, so no marker is consumed.
+    #[case("    >     code", 4)]
     #[case(">> # aa", 0)]
     #[case(">>     code", 4)]
     fn measures_content_indentation(#[case] line: &str, #[case] expected: usize) {
