@@ -73,7 +73,9 @@ jobs:
           install-binstall: false
           use-sccache: false
       - name: Test the atomic write contract
-        run: cargo test --all-features --test rewrite_atomic --test in_place_atomic
+        # Both suites report: a failure in one must not hide the other, which
+        # is what `cargo test`'s default fail-fast behaviour would do.
+        run: cargo test --all-features --no-fail-fast --test rewrite_atomic --test in_place_atomic
 
   binstall-packaging:
     # Runner-backed dry run of the release packaging. It proves the crate

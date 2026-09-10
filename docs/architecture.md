@@ -696,8 +696,11 @@ directory once in `open_file_parent` and passes that capability into the
 replacement path. The temporary file is created with `create_new`, so it never
 clobbers an existing file, and its name carries the process id and the attempt
 number, so a stale name left by a killed run costs only one retry. A freshly
-created file does not inherit the target mode, so the mode is copied across
-before the swap. A target that is a symbolic link is declined, because the
+created file does not inherit the target mode, so `swap_into_place` preserves
+it around the swap: on non-Windows platforms the mode is applied to the
+temporary file before the rename, while a read-only Windows destination has
+its read-only attribute cleared before the rename and the mode reapplied to the
+result afterwards. A target that is a symbolic link is declined, because the
 rename would swap the link entry for a regular file and leave the real file
 untouched.
 
@@ -720,9 +723,20 @@ sequenceDiagram
     Rewriter->>TempFile: write_all(contents)
     Rewriter->>TempFile: flush()
     Rewriter->>TempFile: sync_all()
-    Rewriter->>Directory: set_permissions(temp, target mode)
-    Rewriter->>Directory: rename(temp, target)
-    Directory-->>Target: atomic replacement
+    alt Not Windows
+        Rewriter->>Directory: set_permissions(temp, target mode)
+        Rewriter->>Directory: rename(temp, target)
+        Directory-->>Target: atomic replacement
+    else Windows
+        opt target is read-only
+            Rewriter->>Directory: clear target read-only attribute
+        end
+        Rewriter->>Directory: rename(temp, target)
+        Directory-->>Target: atomic replacement
+        opt target is read-only
+            Rewriter->>Directory: set_permissions(target, target mode)
+        end
+    end
     alt write or rename fails
         Rewriter->>Directory: remove_file(temp)
         Directory-->>Target: original remains intact
@@ -731,9 +745,12 @@ sequenceDiagram
 
 _Figure 5: Atomic in-place rewrite. The rewriter reads the target metadata,
 creates a temporary file in the same directory, writes, flushes and syncs the
-formatted contents, copies the target mode onto the temporary file, and renames
-it over the target. If a step fails after the temporary file is created, it is
-cleaned up where possible and the original file is left intact._
+formatted contents, then preserves the target mode around the swap in a
+platform-specific way: on non-Windows platforms the mode is applied to the
+temporary file before the rename, while on Windows a read-only destination has
+its read-only attribute cleared before the rename and the mode reapplied to the
+result. If a step fails after the temporary file is created, it is cleaned up
+where possible and the original file is left intact._
 
 ## Unicode Width Handling
 

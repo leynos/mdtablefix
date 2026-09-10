@@ -34,7 +34,9 @@
 
 - `--in-place`, `rewrite` and `rewrite_no_wrap` replace a read-only file in a
   writable directory instead of failing, because the atomic swap needs write
-  permission on the containing directory rather than on the file itself.
+  permission on the containing directory rather than on the file itself. On
+  Windows the rename cannot replace a read-only destination, so its read-only
+  attribute is cleared for the duration of the rename and reapplied afterwards.
   ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - `--in-place`, `rewrite` and `rewrite_no_wrap` decline a symbolic link instead
   of replacing the link entry with a regular file, which previously left the
@@ -65,6 +67,11 @@
   leave a Markdown file truncated with no way to recover it. The original file
   mode is preserved, and a stale temporary file left by an abruptly killed run
   is retried past rather than reused.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
+- Replace a read-only destination on Windows too, by clearing its read-only
+  attribute for the duration of the rename and reapplying the target's
+  permissions afterwards, so a read-only file in a writable directory is
+  replaced instead of failing.
   ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - Set the `cargo-binstall` `bin-dir` to `{ bin }{ binary-ext }`. The previous
   `.` rendered an empty source path, so `cargo binstall mdtablefix` failed

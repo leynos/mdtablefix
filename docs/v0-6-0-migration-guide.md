@@ -9,8 +9,8 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 
 - **What changed:** `--in-place`, `mdtablefix::io::rewrite`, and
   `mdtablefix::io::rewrite_no_wrap` now write the new content to a temporary
-  file beside the target, flush and sync it, copy the target's permissions
-  across, and rename it over the target. A failure before the rename leaves the
+  file beside the target, flush and sync it, and rename it over the target with
+  the target's permissions preserved. A failure before the rename leaves the
   original file byte-identical rather than truncated.
 - **Who is affected:** Anyone who rewrites files in place, whether through the
   CLI or the library.
@@ -24,7 +24,11 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 ## Preserved file mode
 
 - **What changed:** The target's permissions are copied to the temporary file
-  before the swap, so the rewritten file keeps its mode.
+  before the swap on POSIX systems, so the rewritten file keeps its mode. On
+  Windows a read-only target has its read-only attribute cleared for the
+  duration of the rename and the target's permissions reapplied afterwards, so
+  a read-only file is still replaced and is still read-only once the run
+  finishes.
 - **Who is affected:** Anyone who rewrites files in place.
 - **Migration action:** No action is required.
 
@@ -32,7 +36,10 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 
 - **What changed:** A read-only target in a writable directory is now rewritten
   successfully, because the swap needs write permission on the containing
-  directory rather than on the file itself.
+  directory rather than on the file itself. On Windows the rename cannot
+  replace a read-only destination, so its read-only attribute is cleared for
+  the duration of the rename and reapplied afterwards; a read-only file is
+  still replaced and is still read-only once the run finishes.
 - **Who is affected:** Workflows that relied on `--in-place` failing for
   read-only files as a guard.
 - **Migration action:** Check the file mode before invoking `mdtablefix` where

@@ -119,9 +119,10 @@ rather than performing ambient filesystem access themselves.
 - `replace_file(directory, path, contents) -> std::io::Result<()>` performs the
   shared atomic replacement. It declines a symlinked target, creates a
   `create_new` temporary file in the same directory, writes, flushes and syncs
-  the contents, copies the target mode onto the temporary file, renames it over
-  the target, and attempts to remove the temporary file when a later step fails.
-  The CLI and `rewrite`/`rewrite_no_wrap` all call it, so the sequence has one
+  the contents, then calls `swap_into_place`, which preserves the target's
+  permissions across the rename in a platform-specific way. It attempts to
+  remove the temporary file when a later step fails. The CLI and
+  `rewrite`/`rewrite_no_wrap` all call it, so the sequence has one
   implementation.
 - `open_parent(path) -> std::io::Result<(Dir, Utf8PathBuf)>` is the library's
   only ambient filesystem boundary. It opens a directory capability for the
@@ -657,7 +658,9 @@ use only fixed label values, so target paths cannot create unbounded metric
 cardinality; the crate installs no recorder. Inside it,
 `target metadata read` (trace), `temporary file created` (debug, with
 `attempt`), `temporary file written` (debug, with `bytes`),
-`temporary file synced` (debug), `target mode applied` (debug), and
+`temporary file synced` (debug), `destination read-only attribute cleared`
+(debug, on a read-only Windows destination), `target mode applied` (debug;
+before the rename on non-Windows platforms, after it on Windows), and
 `target replaced` (debug) mark the success path; `temporary name rejected`
 (trace, with `attempt` and `reason = "already_exists"`) marks the retry path;
 `temporary file removed after failure` (trace) and
@@ -665,8 +668,10 @@ cardinality; the crate installs no recorder. Inside it,
 `io::ErrorKind`) mark the cleanup path; and `rewrite declined` (debug, with
 `error_category = "symlink_target"`) marks a symbolic-link target.
 `replacement failed` (debug, with `error_category` from `io::ErrorKind`) marks a
-failed metadata read, temporary-file creation, or write/swap. None of these
-events carry file content.
+failed metadata read, temporary-file creation, or write/swap, and
+`destination mode restore failed` (debug, with `error_category` from
+`io::ErrorKind`) marks a failed rename whose read-only target could not have
+its permissions restored. None of these events carry file content.
 
 Table: Structured field names emitted by tracing instrumentation.
 
@@ -698,7 +703,6 @@ For example:
 ```rust
 debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified");
 ```
-
 
 ### Metrics
 

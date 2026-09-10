@@ -119,9 +119,10 @@ fn register_metrics() {
 /// The replacement is written to a temporary file beside the target and
 /// renamed over it, so the swap is atomic on POSIX filesystems and a failure
 /// before the rename leaves the original file untouched. A freshly created
-/// temporary file does not inherit the target's permissions, so they are
-/// copied across before the swap. Any failure after the temporary file exists
-/// triggers a best-effort attempt to remove it.
+/// temporary file does not inherit the target's permissions, so the target's
+/// permissions are preserved across the swap; [`swap_into_place`] holds the
+/// per-platform step. Any failure after the temporary file exists triggers a
+/// best-effort attempt to remove it.
 ///
 /// Symbolic links are declined rather than replaced: the rename would swap the
 /// link entry itself for a regular file and leave the real file untouched.
@@ -185,8 +186,8 @@ fn replace_file_inner(directory: &Dir, path: &Utf8Path, contents: &str) -> io::R
     outcome
 }
 
-/// Writes `contents` to `temp_path`, copies `permissions` across, and renames
-/// the result over `path`.
+/// Writes `contents` to `temp_path`, applies `permissions`, and renames the
+/// result over `path`.
 fn write_and_swap(
     directory: &Dir,
     temp_path: &Utf8Path,
@@ -203,11 +204,77 @@ fn write_and_swap(
     // Close the handle before renaming: Windows refuses to replace a
     // destination that another handle holds open without delete sharing.
     drop(file);
+    swap_into_place(directory, temp_path, path, permissions)
+}
+
+/// Applies `permissions` and renames `temp_path` over `path`.
+///
+/// The mode is set on the temporary file before the rename, so the file never
+/// exists under its final name with permissions the target never had.
+#[cfg(not(windows))]
+fn swap_into_place(
+    directory: &Dir,
+    temp_path: &Utf8Path,
+    path: &Utf8Path,
+    permissions: Permissions,
+) -> io::Result<()> {
     directory.set_permissions(temp_path, permissions)?;
     debug!("target mode applied");
     directory.rename(temp_path, directory, path)?;
     debug!("target replaced");
     Ok(())
+}
+
+/// Applies `permissions` around the rename that puts `temp_path` in place.
+///
+/// Windows needs the mode on either side of the rename rather than on the
+/// temporary file. A destination carrying `FILE_ATTRIBUTE_READONLY` cannot be
+/// replaced: the rename fails with `ERROR_ACCESS_DENIED`, and `std`'s retry
+/// through `FileRenameInfoEx` does not lift the attribute, because its flags
+/// have no counterpart to the
+/// `FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE` that the delete path
+/// relies on. The attribute is cleared on the destination before the rename and
+/// reapplied to the result afterwards, while the temporary file stays writable
+/// until the rename has moved it. A failed rename has the attribute restored on
+/// a best-effort basis, so the target is left writable only when the mode cannot
+/// be put back at all, which is reported as a failure.
+#[cfg(windows)]
+fn swap_into_place(
+    directory: &Dir,
+    temp_path: &Utf8Path,
+    path: &Utf8Path,
+    permissions: Permissions,
+) -> io::Result<()> {
+    let read_only = permissions.readonly();
+    if read_only {
+        let mut writable = permissions.clone();
+        writable.set_readonly(false);
+        directory.set_permissions(path, writable)?;
+        debug!("destination read-only attribute cleared");
+    }
+    match directory.rename(temp_path, directory, path) {
+        Ok(()) => {
+            debug!("target replaced");
+            if read_only {
+                directory.set_permissions(path, permissions)?;
+                debug!("target mode applied");
+            }
+            Ok(())
+        }
+        Err(error) => {
+            if read_only {
+                // Best effort: a replacement that failed must not leave the
+                // target writable as its only lasting effect.
+                if let Err(restore) = directory.set_permissions(path, permissions) {
+                    debug!(
+                        error_category = ?restore.kind(),
+                        "destination mode restore failed"
+                    );
+                }
+            }
+            Err(error)
+        }
+    }
 }
 
 /// Creates a new temporary file beside `path` inside `directory`.

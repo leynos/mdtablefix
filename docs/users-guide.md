@@ -376,12 +376,15 @@ failing file is reported this way, and the run then exits with a non-zero
 status. Scripts that match exact standard-error text should expect the chain
 and its multi-line form; matching the file name or the cause is more robust.
 
-The original file mode is preserved. A freshly created temporary file does not
-inherit the target's permissions, so `mdtablefix` copies them across before the
-rename: a file with mode `0640` still has mode `0640` afterwards. Because the
-replacement is a rename, it needs write permission on the containing directory
-rather than on the file itself, so a read-only file in a writable directory is
-replaced successfully.
+The original file mode is preserved. On POSIX systems, a freshly created
+temporary file does not inherit the target's permissions, so `mdtablefix` copies
+them across before the rename: a file with mode `0640` still has mode `0640`
+afterwards. Windows needs different handling when the target is read-only: the
+read-only attribute is cleared for the duration of the rename and the target's
+permissions are reapplied afterwards, so a read-only file is still replaced and
+is still read-only once the run finishes. Because the replacement is a rename,
+it needs write permission on the containing directory rather than on the file
+itself, so a read-only file in a writable directory is replaced successfully.
 
 Symbolic links are declined rather than replaced. The read follows the link, but
 the rename swaps the link entry itself, which would turn the symlink into a
@@ -405,7 +408,10 @@ file.
 `rewrite(path)` and `rewrite_no_wrap(path)` give library callers the same
 guarantee as `--in-place`: the replacement is written to a temporary file beside
 the target, flushed, and renamed over it, with the original file mode preserved.
-Symbolic links are declined, as described in
+On Windows a read-only target has its read-only attribute cleared for the
+duration of the rename and its permissions reapplied afterwards, so a read-only
+file is still replaced and is still read-only once the run finishes. Symbolic
+links are declined, as described in
 [In-place editing](#in-place-editing).
 
 Callers that already hold a `cap_std::fs_utf8::Dir` capability can use
