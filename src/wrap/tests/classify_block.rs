@@ -9,10 +9,7 @@ use crate::wrap::{BlockKind, LinkReferenceMatcher, classify_block};
 #[case("   # Heading", Some(BlockKind::Heading))]
 #[case("    # Heading", None)]
 #[case("	# Heading", None)]
-#[case("---", Some(BlockKind::ThematicBreak))]
-#[case("***", Some(BlockKind::ThematicBreak))]
-#[case("___", Some(BlockKind::ThematicBreak))]
-#[case("- - -", Some(BlockKind::ThematicBreak))]
+// Thematic-break cases, with their boundary forms, live in `crate::wrap::block`.
 #[case("byline", None)]
 #[case("- item", Some(BlockKind::Bullet))]
 #[case("1. item", Some(BlockKind::Bullet))]
