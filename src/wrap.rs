@@ -68,6 +68,14 @@ fn is_table_or_separator(line: &str) -> bool {
     line.trim_start().starts_with('|') || crate::table::SEP_RE.is_match(line.trim())
 }
 
+/// Returns whether `line` must be emitted verbatim rather than wrapped.
+///
+/// Thematic breaks are included even though [`is_table_or_separator`] already
+/// passes `---` through: that accidental match relies on the table-separator
+/// pattern, which rejects `***`, `___`, `- - -`, and the underscore run
+/// emitted by `--breaks`. Recognising the break directly keeps all of those on
+/// their own line, so a second `--wrap` pass cannot absorb a normalised break
+/// into the surrounding paragraph.
 fn is_passthrough_block(block_kind: Option<BlockKind>, line: &str) -> bool {
     is_table_or_separator(line)
         || matches!(
@@ -75,7 +83,8 @@ fn is_passthrough_block(block_kind: Option<BlockKind>, line: &str) -> bool {
             Some(
                 BlockKind::Heading
                     | BlockKind::MarkdownlintDirective
-                    | BlockKind::LinkReferenceDefinition,
+                    | BlockKind::LinkReferenceDefinition
+                    | BlockKind::ThematicBreak,
             )
         )
         || line.trim().is_empty()
@@ -261,6 +270,13 @@ fn handle_pending_continuation(
 ) -> bool {
     if try_blockquote_fast_path(line, writer, state) {
         return true;
+    }
+
+    // A thematic break never continues an open prefixed span. Without this
+    // guard a spaced run such as `- - -` would fall through to the bullet
+    // branch below, which matches it as a list item and absorbs the break.
+    if line.block_kind == Some(BlockKind::ThematicBreak) {
+        return try_passthrough_block(line, writer, state, link_matcher, link_title_window);
     }
 
     if let Some(prefix_line) = prefix_line(line.inner, line.blockquote) {
