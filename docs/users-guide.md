@@ -261,9 +261,9 @@ holds the strict majority. A file authored with Windows line endings therefore
 stays CRLF, and a file authored with Unix line endings stays LF; formatting
 never converts a consistently ended file to the other style.
 
-When the two styles occur equally often, and when the input contains no line
-ending at all, `mdtablefix` emits LF. That tie-break is deterministic: it does
-not depend on which style appears first.
+When the two styles occur equally often, and when a non-empty input contains no
+line ending at all, `mdtablefix` emits LF. That tie-break is deterministic: it
+does not depend on which style appears first.
 
 Detection covers the whole document, including fenced code blocks. A document
 whose endings are predominantly CRLF is emitted entirely as CRLF, so a code
