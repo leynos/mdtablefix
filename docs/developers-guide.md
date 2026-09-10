@@ -122,6 +122,10 @@ restores the separator row with widths derived from the final table body.
 - `serialize_lines(lines, ending) -> String` joins lines with the selected
   terminator and appends one further terminator, yielding an empty string for
   no lines.
+- `detect_line_ending` is a pure query and emits no events. The rewrite
+  helpers report the selected ending at `debug` level, with the `crlf_count`,
+  `lone_lf_count`, and `selected_ending` fields, so the decision is traceable
+  without the query becoming side-effecting.
 
 Detection runs on the raw document at each input boundary: `rewrite_with` in
 `src/io.rs`, `format_to_string` in `src/main.rs`, and the standard-input branch
@@ -665,6 +669,8 @@ Use the stable structured field names `token_length`, `kind`, `start`, `end`,
 `width`, `reason`, `is_image`, `row_index`, `cell_count`, and `error_category`.
 Blockquote and fence events additionally use `line_len`, `prefix_len`, `depth`,
 `inner_len`, `open_depth`, `marker_len`, `open_marker_len`, and `transition`.
+Line-ending events use `crlf_count`, `lone_lf_count`, and `selected_ending`, and
+the executable's input/output boundaries add `operation` and, for files, `path`.
 These events are content-free: never include raw Markdown, blockquote prefixes,
 fence info strings, or other document content. Executables remain responsible
 for installing subscribers.
