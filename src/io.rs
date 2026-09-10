@@ -23,11 +23,119 @@ use tracing::{debug, trace};
 
 use crate::process::{process_stream, process_stream_no_wrap};
 
+/// The line-ending style of a document.
+///
+/// Rewriting preserves the style that dominates the input so that a file
+/// authored on Windows is not silently rewritten to line feeds, which would
+/// otherwise show up as a whole-file diff that changes no Markdown content.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LineEnding {
+    /// A single line feed, `\n`.
+    Lf,
+    /// A carriage return followed by a line feed, `\r\n`.
+    Crlf,
+}
+
+impl LineEnding {
+    /// Returns the characters written between lines.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use mdtablefix::LineEnding;
+    ///
+    /// assert_eq!(LineEnding::Lf.as_str(), "\n");
+    /// assert_eq!(LineEnding::Crlf.as_str(), "\r\n");
+    /// ```
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Lf => "\n",
+            Self::Crlf => "\r\n",
+        }
+    }
+}
+
+/// Selects the line-ending style holding a strict majority of `text`'s line
+/// endings.
+///
+/// CRLF pairs are counted first and then subtracted from the total line-feed
+/// count to obtain the lone line feeds. Counting line feeds directly would
+/// count every CRLF twice and leave CRLF unable to win.
+/// [`LineEnding::Crlf`] is selected only when CRLF pairs strictly outnumber
+/// lone line feeds.
+///
+/// Text with an exact tie and text with no line endings at all both select
+/// [`LineEnding::Lf`], so the result is deterministic and never depends on
+/// which style happens to appear first.
+///
+/// Only CRLF and LF are recognised. A lone carriage return is content rather
+/// than a line ending, matching the `str::lines` split used to read the
+/// document.
+///
+/// # Examples
+///
+/// ```rust
+/// use mdtablefix::{LineEnding, detect_line_ending};
+///
+/// assert_eq!(detect_line_ending("alpha\nbeta\n"), LineEnding::Lf);
+/// assert_eq!(detect_line_ending("alpha\r\nbeta\r\n"), LineEnding::Crlf);
+/// assert_eq!(detect_line_ending("alpha\r\nbeta\n"), LineEnding::Lf);
+/// assert_eq!(detect_line_ending("alpha"), LineEnding::Lf);
+/// ```
+#[must_use]
+pub fn detect_line_ending(text: &str) -> LineEnding {
+    let crlf_count = text.matches("\r\n").count();
+    let lone_lf_count = text.matches('\n').count() - crlf_count;
+    if crlf_count > lone_lf_count {
+        LineEnding::Crlf
+    } else {
+        LineEnding::Lf
+    }
+}
+
+/// Renders `lines` as one document whose lines end with `ending`.
+///
+/// An empty slice yields an empty string. Otherwise every line is followed by
+/// `ending`, so a non-empty result always carries one trailing terminator.
+///
+/// # Examples
+///
+/// ```rust
+/// use mdtablefix::{LineEnding, serialize_lines};
+///
+/// let lines = vec!["| A |".to_string(), "| 1 |".to_string()];
+///
+/// assert_eq!(serialize_lines(&lines, LineEnding::Lf), "| A |\n| 1 |\n");
+/// assert_eq!(
+///     serialize_lines(&lines, LineEnding::Crlf),
+///     "| A |\r\n| 1 |\r\n"
+/// );
+/// assert_eq!(serialize_lines(&[], LineEnding::Crlf), "");
+/// ```
+#[must_use]
+pub fn serialize_lines(lines: &[String], ending: LineEnding) -> String {
+    if lines.is_empty() {
+        return String::new();
+    }
+    let terminator = ending.as_str();
+    let capacity: usize = lines.iter().map(|line| line.len() + terminator.len()).sum();
+    let mut output = String::with_capacity(capacity);
+    for line in lines {
+        output.push_str(line);
+        output.push_str(terminator);
+    }
+    output
+}
+
 /// Candidate temporary names to try before conceding that a stale temporary
 /// file from an earlier killed run is in the way.
 const TEMP_FILE_ATTEMPTS: u32 = 16;
 
 /// Read `path`, process the contents with `f`, and write the result back.
+///
+/// The line-ending style holding the majority of the file's line endings is
+/// preserved in the rewritten file.
 ///
 /// This helper encapsulates the common pattern used by [`rewrite`] and
 /// [`rewrite_no_wrap`].
@@ -40,14 +148,10 @@ where
 {
     let (directory, name) = open_parent(path)?;
     let text = directory.read_to_string(&name)?;
+    let ending = detect_line_ending(&text);
     let lines: Vec<String> = text.lines().map(str::to_string).collect();
     let fixed = f(&lines);
-    let output = if fixed.is_empty() {
-        String::new()
-    } else {
-        fixed.join("\n") + "\n"
-    };
-    replace_file(&directory, &name, &output)
+    replace_file(&directory, &name, &serialize_lines(&fixed, ending))
 }
 
 /// Opens a directory capability for the parent of `path`.
@@ -396,6 +500,9 @@ fn temporary_path(path: &Utf8Path, attempt: u32) -> Utf8PathBuf {
 
 /// Rewrite a file in place with wrapped tables.
 ///
+/// The line-ending style holding the majority of the file's line endings is
+/// preserved, so a CRLF file stays CRLF.
+///
 /// The replacement is written to a temporary file beside `path` and renamed
 /// over it, so a failure before the rename leaves the original file intact. The
 /// original file mode is preserved. Symbolic links are declined.
@@ -405,6 +512,9 @@ fn temporary_path(path: &Utf8Path, attempt: u32) -> Utf8PathBuf {
 pub fn rewrite(path: &Path) -> std::io::Result<()> { rewrite_with(path, process_stream) }
 
 /// Rewrite a file in place without wrapping text.
+///
+/// The line-ending style holding the majority of the file's line endings is
+/// preserved, so a CRLF file stays CRLF.
 ///
 /// The replacement is written to a temporary file beside `path` and renamed
 /// over it, so a failure before the rename leaves the original file intact. The
@@ -464,3 +574,7 @@ mod tracing_tests;
 #[cfg(test)]
 #[path = "io_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "io_line_ending_tests.rs"]
+mod line_ending_tests;
