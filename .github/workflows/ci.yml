@@ -81,10 +81,10 @@ jobs:
         run: cargo test --all-features --no-fail-fast --lib --test rewrite_atomic --test in_place_atomic
       - name: Test the whole suite
         # Every target reports, rather than stopping at the first one that
-        # fails. The suites that shell out to `python3` and `bash` run here
-        # too; where a Windows runner does not provide a tool on the same terms
-        # as the Unix runners, the failure names the tool rather than the
-        # change, and the step above has already reported the atomic contract.
+        # fails. The checkout keeps the repository's LF line endings — see
+        # `.gitattributes`, without which Git for Windows hands the suites
+        # CRLF fixtures — so the byte-for-byte fixture and snapshot
+        # comparisons match the output this tool writes here too.
         run: cargo test --all-features --no-fail-fast
 
   binstall-packaging:

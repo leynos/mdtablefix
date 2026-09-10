@@ -19,6 +19,11 @@
   archive matches, for every published target.
 - A `binstall-packaging` continuous-integration job that builds, stages,
   extracts and runs the release binary on Ubuntu, macOS and Windows.
+- A `windows-atomic-contract` continuous-integration job that runs the atomic
+  replacement suites, and then the whole test suite, on a Windows runner, so a
+  change that is correct only on Unix is caught by the pull request rather than
+  by the release that follows it.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - `--code-emphasis` flag to fix emphasis markers that adjoin inline code.
   Runs before wrapping and footnote conversion.
 - Treat common English date sequences as atomic inline fragments during
@@ -58,6 +63,12 @@
 - Require callers of `FenceTracker::observe` and `FenceTracker::in_fence` to
   provide the current blockquote depth. This is a breaking API change for
   existing one-argument callers.
+- Declare LF line endings for every tracked file in `.gitattributes`, so a
+  Windows checkout hands the suites the fixture and snapshot bytes a Unix
+  checkout sees rather than the CRLF that Git for Windows writes by default.
+  The `check-static-regexes` regression tests are gated to Unix with the same
+  change, because the guard they drive is a `bash` script; the Linux lint job
+  still runs that guard.
   ([#347](https://github.com/leynos/mdtablefix/issues/347))
 - `format_breaks` now returns `Vec<Cow<'_, str>>` rather than `Vec<String>`,
   so unchanged lines stay borrowed instead of forcing heap allocations.

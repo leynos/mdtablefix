@@ -1145,6 +1145,21 @@ listed under [Tracing-event snapshot tests](#tracing-event-snapshot-tests). The
 moved tests keep their original paths (`io::tests::…`), and `super` still
 resolves to the owning module, so unqualified access to its items is unchanged.
 
+### 2.5. Line endings and platform-gated tests
+
+Every tracked file is LF in the repository and checks out as LF on every
+platform, because `.gitattributes` pins `* text=auto eol=lf`. The CLI suites
+compare fixture and snapshot bytes against output the tool writes with `\n`, so
+a CRLF checkout — the default for Git for Windows — would fail those
+comparisons for reasons unrelated to the change under test.
+
+`tests/static_regex_lint.rs` is gated whole-file with `#![cfg(unix)]`. The guard
+it drives is a `bash` script that shells out to ripgrep, and the tests stand in
+for ripgrep with stub scripts that have to carry the executable bit; on Windows
+the target compiles to an empty binary rather than failing. Nothing goes
+unguarded on that account: the Linux lint job runs the same script over the same
+sources through the `check-static-regexes` Makefile target.
+
 ## 3. Breaks module – Cow allocation strategy
 
 `format_breaks` in [src/breaks.rs](../src/breaks.rs) returns

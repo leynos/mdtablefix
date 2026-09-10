@@ -1,0 +1,9 @@
+# Line endings are LF in the repository and must stay LF in every checkout.
+# The suite compares fixture bytes, `include_str!` contents, and insta
+# snapshots against output this tool writes with `\n`, so a checkout that
+# rewrites them to CRLF — the default for Git for Windows — fails comparisons
+# that have nothing to do with the change under test.
+#
+# `text=auto` keeps the detection Git already applies at commit time, so a
+# binary file is left alone rather than normalized.
+* text=auto eol=lf
