@@ -375,15 +375,24 @@ failing file is reported this way, and the run then exits with a non-zero
 status. Scripts that match exact standard-error text should expect the chain
 and its multi-line form; matching the file name or the cause is more robust.
 
-The original file mode is preserved. On POSIX systems, a freshly created
-temporary file does not inherit the target's permissions, so `mdtablefix` copies
-them across before the rename: a file with mode `0640` still has mode `0640`
-afterwards. Windows needs different handling when the target is read-only: the
-read-only attribute is cleared for the duration of the rename and the target's
-permissions are reapplied afterwards, so a read-only file is still replaced and
-is still read-only once the run finishes. Because the replacement is a rename,
-it needs write permission on the containing directory rather than on the file
-itself, so a read-only file in a writable directory is replaced successfully.
+The original file mode is preserved. A freshly created temporary file does not
+inherit the target's permissions, so `mdtablefix` copies them to the temporary
+file before the rename: a file with mode `0640` still has mode `0640`
+afterwards. Because the replacement is a rename, it needs write permission on
+the containing directory rather than on the file itself, so a read-only file in
+a writable directory is replaced successfully, and the replacement takes over
+the read-only state rather than losing it.
+
+Windows needs one step more than that. There, read-only is a file attribute,
+`FILE_ATTRIBUTE_READONLY`, and the rename cannot replace a destination that
+carries it. `mdtablefix` therefore clears that attribute on the destination
+through its directory capability immediately before the rename. The temporary
+file still carries the original read-only attribute, so the file that takes over
+the target's name is read-only as soon as the rename lands. If the swap does not
+complete, the original attribute is put back on a best-effort basis: a run
+interrupted between those two steps, or a restoration that itself fails, can
+leave the target's read-only attribute cleared. The contents are unaffected,
+because a swap that does not complete leaves the original file byte-identical.
 
 Symbolic links are declined rather than replaced. The read follows the link, but
 the rename swaps the link entry itself, which would turn the symlink into a
@@ -406,10 +415,11 @@ file.
 `rewrite(path)` and `rewrite_no_wrap(path)` give library callers the same
 guarantee as `--in-place`: the replacement is written to a temporary file beside
 the target, flushed, and renamed over it, with the original file mode preserved.
-On Windows a read-only target has its read-only attribute cleared for the
-duration of the rename and its permissions reapplied afterwards, so a read-only
-file is still replaced and is still read-only once the run finishes. Symbolic
-links are declined, as described in
+The temporary file receives the target's permissions before the rename, so a
+read-only target is replaced by a read-only file rather than by a writable one.
+On Windows, where the destination's `FILE_ATTRIBUTE_READONLY` blocks the rename
+outright, that attribute is cleared immediately before the rename and put back
+if the swap does not complete. Symbolic links are declined, as described in
 [In-place editing](#in-place-editing).
 
 Callers that already hold a `cap_std::fs_utf8::Dir` capability can use

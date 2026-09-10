@@ -697,13 +697,14 @@ directory once in `open_file_parent` and passes that capability into the
 replacement path. The temporary file is created with `create_new`, so it never
 clobbers an existing file, and its name carries the process id and the attempt
 number, so a stale name left by a killed run costs only one retry. A freshly
-created file does not inherit the target mode, so `swap_into_place` preserves
-it around the swap: on non-Windows platforms the mode is applied to the
-temporary file before the rename, while a read-only Windows destination has
-its read-only attribute cleared before the rename and the mode reapplied to the
-result afterwards. A target that is a symbolic link is declined, because the
-rename would swap the link entry for a regular file and leave the real file
-untouched.
+created file does not inherit the target mode, so `swap_into_place` applies the
+target's permissions to the temporary file before the rename, which carries
+them into the file that takes over the target's name. Windows needs one step
+more: a destination carrying `FILE_ATTRIBUTE_READONLY` cannot be renamed over at
+all, so that attribute is cleared on the destination immediately before the
+rename and put back if the swap does not complete. A target that is a symbolic
+link is declined, because the rename would swap the link entry for a regular
+file and leave the real file untouched.
 
 For screen readers: The following sequence diagram traces one atomic in-place
 rewrite from the caller through the rewriter, the containing directory, the
@@ -724,33 +725,28 @@ sequenceDiagram
     Rewriter->>TempFile: write_all(contents)
     Rewriter->>TempFile: flush()
     Rewriter->>TempFile: sync_all()
-    alt Not Windows
-        Rewriter->>Directory: set_permissions(temp, target mode)
-        Rewriter->>Directory: rename(temp, target)
-        Directory-->>Target: atomic replacement
-    else Windows
-        opt target is read-only
-            Rewriter->>Directory: clear target read-only attribute
-        end
-        Rewriter->>Directory: rename(temp, target)
-        Directory-->>Target: atomic replacement
-        opt target is read-only
-            Rewriter->>Directory: set_permissions(target, target mode)
-        end
+    Rewriter->>Directory: set_permissions(temp, target mode)
+    opt Windows and target is read-only
+        Rewriter->>Directory: clear target read-only attribute
     end
+    Rewriter->>Directory: rename(temp, target)
+    Directory-->>Target: atomic replacement
     alt write or rename fails
         Rewriter->>Directory: remove_file(temp)
         Directory-->>Target: original remains intact
+        opt Windows and the target attribute was cleared
+            Rewriter->>Directory: restore target read-only attribute
+        end
     end
 ```
 
 _Figure 5: Atomic in-place rewrite. The rewriter reads the target metadata,
 creates a temporary file in the same directory, writes, flushes and syncs the
-formatted contents, then preserves the target mode around the swap in a
-platform-specific way: on non-Windows platforms the mode is applied to the
-temporary file before the rename, while on Windows a read-only destination has
-its read-only attribute cleared before the rename and the mode reapplied to the
-result. If a step fails after the temporary file is created, it is cleaned up
+formatted contents, applies the target's permissions to the temporary file, and
+renames it over the target. Windows records read-only as an attribute that
+blocks the rename, so a read-only destination has it cleared immediately before
+the rename, and the swap puts the original attribute back if it does not
+complete. If a step fails after the temporary file is created, it is cleaned up
 where possible and the original file is left intact._
 
 ## Unicode Width Handling

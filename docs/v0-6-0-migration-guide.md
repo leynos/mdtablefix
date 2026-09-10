@@ -24,11 +24,11 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 ## Preserved file mode
 
 - **What changed:** The target's permissions are copied to the temporary file
-  before the swap on POSIX systems, so the rewritten file keeps its mode. On
-  Windows a read-only target has its read-only attribute cleared for the
-  duration of the rename and the target's permissions reapplied afterwards, so
-  a read-only file is still replaced and is still read-only once the run
-  finishes.
+  before the swap, so the rewritten file keeps its mode and a read-only target
+  is replaced by a read-only file rather than by a writable one. On Windows the
+  destination's `FILE_ATTRIBUTE_READONLY` is cleared immediately before the
+  rename, because it otherwise blocks the swap; a swap that does not complete
+  puts the original attribute back.
 - **Who is affected:** Anyone who rewrites files in place.
 - **Migration action:** No action is required.
 
@@ -36,10 +36,14 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 
 - **What changed:** A read-only target in a writable directory is now rewritten
   successfully, because the swap needs write permission on the containing
-  directory rather than on the file itself. On Windows the rename cannot
-  replace a read-only destination, so its read-only attribute is cleared for
-  the duration of the rename and reapplied afterwards; a read-only file is
-  still replaced and is still read-only once the run finishes.
+  directory rather than on the file itself, and because the replacement takes
+  over the read-only state instead of losing it. Windows records read-only as
+  `FILE_ATTRIBUTE_READONLY`, which blocks the rename, so `mdtablefix` clears the
+  destination's attribute immediately before the swap and puts the original
+  attribute back if the swap does not complete. A run interrupted between those
+  two steps, or a restoration that itself fails, can leave the target's
+  read-only attribute cleared; the contents are unchanged either way, because a
+  swap that does not complete leaves the original file byte-identical.
 - **Who is affected:** Workflows that relied on `--in-place` failing for
   read-only files as a guard.
 - **Migration action:** Check the file mode before invoking `mdtablefix` where

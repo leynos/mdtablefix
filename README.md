@@ -99,7 +99,12 @@ mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
   `=` or `-` characters, so the converter can distinguish headings from
   thematic breaks and list markers.
 
-- Use `--in-place` to modify files in-place.
+- Use `--in-place` to modify files in-place. The replacement is written beside
+  the target and renamed over it, so an interrupted run leaves the original
+  intact, the original file mode is preserved, and a read-only target is
+  replaced and stays read-only. Windows blocks such a rename, so the
+  destination's read-only attribute is cleared immediately beforehand; see
+  [Library usage](#library-usage) for the full sequence.
 
 - If no files are specified, input is read from stdin and output is written to
   stdout.
@@ -263,11 +268,15 @@ assert_eq!(out[2], "[^1]: First note");
 
 Both helpers write the replacement to a temporary file in the same directory
 and rename it over the target, so the swap is atomic on POSIX filesystems and a
-failure before the rename leaves the original file intact. The original file
-mode is preserved, and a symbolic link is declined rather than replaced.
-Callers that already hold a `cap_std::fs_utf8::Dir` capability can call
-`mdtablefix::io::replace_file(directory, path, contents)` for the same behaviour
-without ambient filesystem access.
+failure before the rename leaves the original file intact. The target's
+permissions are copied to the temporary file before the rename, so the original
+file mode is preserved and a read-only target is replaced by a read-only file.
+On Windows, where a destination carrying `FILE_ATTRIBUTE_READONLY` cannot be
+renamed over at all, that attribute is cleared immediately before the rename and
+put back if the swap does not complete. A symbolic link is declined rather than
+replaced. Callers that already hold a `cap_std::fs_utf8::Dir` capability can
+call `mdtablefix::io::replace_file(directory, path, contents)` for the same
+behaviour without ambient filesystem access.
 
 > **Breaking change:** `format_breaks` now returns
 > `Vec<Cow<'_, str>>` instead of `Vec<String>` so unchanged lines stay

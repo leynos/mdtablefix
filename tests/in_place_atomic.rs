@@ -126,6 +126,11 @@ fn in_place_replaces_read_only_file() {
 
     assert_eq!(fs::read_to_string(&target).expect("read target"), FIXED);
     assert_read_only(&target);
+    assert_eq!(
+        entry_names(dir.path()),
+        vec!["sample.md"],
+        "replacing a read-only target must leave no temporary file behind"
+    );
 }
 
 #[cfg(unix)]

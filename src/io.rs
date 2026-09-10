@@ -120,9 +120,10 @@ fn register_metrics() {
 /// renamed over it, so the swap is atomic on POSIX filesystems and a failure
 /// before the rename leaves the original file untouched. A freshly created
 /// temporary file does not inherit the target's permissions, so the target's
-/// permissions are preserved across the swap; [`swap_into_place`] holds the
-/// per-platform step. Any failure after the temporary file exists triggers a
-/// best-effort attempt to remove it.
+/// permissions are applied to it before the rename; [`prepare_destination`]
+/// holds the step that only Windows needs before that rename can be attempted.
+/// Any failure after the temporary file exists triggers a best-effort attempt
+/// to remove it.
 ///
 /// Symbolic links are declined rather than replaced: the rename would swap the
 /// link entry itself for a regular file and leave the real file untouched.
@@ -168,12 +169,12 @@ fn replace_file_inner(directory: &Dir, path: &Utf8Path, contents: &str) -> io::R
     let (temp_path, file) = create_temporary_file(directory, path).inspect_err(|error| {
         debug!(error_category = ?error.kind(), "replacement failed");
     })?;
-    let outcome = write_and_swap(directory, &temp_path, path, contents, permissions, file);
+    let outcome = write_and_swap(directory, &temp_path, path, contents, &permissions, file);
     if let Err(error) = &outcome {
         debug!(error_category = ?error.kind(), "replacement failed");
         // Best effort: failing to clean up must not mask the original error,
         // and the next run retries past any stale name it finds.
-        match directory.remove_file(&temp_path) {
+        match remove_temporary_file(directory, &temp_path) {
             Ok(()) => trace!("temporary file removed after failure"),
             Err(cleanup_error) => {
                 debug!(
@@ -193,7 +194,7 @@ fn write_and_swap(
     temp_path: &Utf8Path,
     path: &Utf8Path,
     contents: &str,
-    permissions: Permissions,
+    permissions: &Permissions,
     mut file: File,
 ) -> io::Result<()> {
     file.write_all(contents.as_bytes())?;
@@ -209,72 +210,139 @@ fn write_and_swap(
 
 /// Applies `permissions` and renames `temp_path` over `path`.
 ///
-/// The mode is set on the temporary file before the rename, so the file never
-/// exists under its final name with permissions the target never had.
-#[cfg(not(windows))]
+/// The permissions go on the temporary file first, so the file never exists
+/// under its final name with permissions the target never had, and a successful
+/// rename leaves the new file with the target's permissions — read-only
+/// included — without a second step that could fail after the swap. Only then
+/// is the destination prepared, so the window in which it is writable is as
+/// short as the platform allows; [`prepare_destination`] holds what only
+/// Windows needs before the rename can be attempted at all, and
+/// [`restore_destination`] undoes it when the swap does not complete.
 fn swap_into_place(
     directory: &Dir,
     temp_path: &Utf8Path,
     path: &Utf8Path,
-    permissions: Permissions,
+    permissions: &Permissions,
 ) -> io::Result<()> {
-    directory.set_permissions(temp_path, permissions)?;
-    debug!("target mode applied");
-    directory.rename(temp_path, directory, path)?;
+    directory
+        .set_permissions(temp_path, permissions.clone())
+        .inspect(|()| debug!("target mode applied"))?;
+    let prepared = prepare_destination(directory, path, permissions)?;
+    if let Err(error) = rename_over_target(directory, temp_path, path) {
+        if let Some(original) = prepared {
+            restore_destination(directory, path, &original);
+        }
+        return Err(error);
+    }
     debug!("target replaced");
     Ok(())
 }
 
-/// Applies `permissions` around the rename that puts `temp_path` in place.
+/// Prepares `path` for the rename that will replace it.
 ///
-/// Windows needs the mode on either side of the rename rather than on the
-/// temporary file. A destination carrying `FILE_ATTRIBUTE_READONLY` cannot be
-/// replaced: the rename fails with `ERROR_ACCESS_DENIED`, and `std`'s retry
-/// through `FileRenameInfoEx` does not lift the attribute, because its flags
-/// have no counterpart to the
-/// `FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE` that the delete path
-/// relies on. The attribute is cleared on the destination before the rename and
-/// reapplied to the result afterwards, while the temporary file stays writable
-/// until the rename has moved it. A failed rename has the attribute restored on
-/// a best-effort basis, so the target is left writable only when the mode cannot
-/// be put back at all, which is reported as a failure.
+/// Returns the permissions to put back if the swap does not complete, or `None`
+/// when the platform needs no preparation. Windows is the platform that does: a
+/// destination carrying `FILE_ATTRIBUTE_READONLY` cannot be replaced. The
+/// rename fails with `ERROR_ACCESS_DENIED`, and the flags that
+/// `SetFileInformationByHandle` accepts for a rename have no counterpart to the
+/// `FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE` that the delete path relies
+/// on, so the attribute itself has to be cleared for the duration of the swap,
+/// through the same directory capability as every other operation here.
 #[cfg(windows)]
-fn swap_into_place(
+fn prepare_destination(
     directory: &Dir,
-    temp_path: &Utf8Path,
     path: &Utf8Path,
-    permissions: Permissions,
-) -> io::Result<()> {
-    let read_only = permissions.readonly();
-    if read_only {
-        let mut writable = permissions.clone();
-        writable.set_readonly(false);
-        directory.set_permissions(path, writable)?;
-        debug!("destination read-only attribute cleared");
+    permissions: &Permissions,
+) -> io::Result<Option<Permissions>> {
+    if !permissions.readonly() {
+        return Ok(None);
     }
-    match directory.rename(temp_path, directory, path) {
-        Ok(()) => {
-            debug!("target replaced");
-            if read_only {
-                directory.set_permissions(path, permissions)?;
-                debug!("target mode applied");
-            }
-            Ok(())
-        }
-        Err(error) => {
-            if read_only {
-                // Best effort: a replacement that failed must not leave the
-                // target writable as its only lasting effect.
-                if let Err(restore) = directory.set_permissions(path, permissions) {
+    let mut writable = permissions.clone();
+    writable.set_readonly(false);
+    directory.set_permissions(path, writable)?;
+    debug!("destination read-only attribute cleared");
+    Ok(Some(permissions.clone()))
+}
+
+/// The preparation a platform whose rename needs none performs.
+///
+/// The signature matches the Windows implementation so that the swap has one
+/// body. Clearing the read-only flag here would not serve the rename, and on
+/// Unix it would rewrite the target's mode for the duration of the swap:
+/// `set_readonly(false)` clears all three write bits, so a `0o444` file would
+/// briefly become `0o666`.
+#[cfg(not(windows))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the signature must match the Windows preparation, which can fail"
+)]
+fn prepare_destination(
+    _directory: &Dir,
+    _path: &Utf8Path,
+    _permissions: &Permissions,
+) -> io::Result<Option<Permissions>> {
+    Ok(None)
+}
+
+/// Puts the destination's original permissions back after a failed swap.
+///
+/// Best effort by design: a replacement that failed must not leave the target
+/// writable as its only lasting effect, and the failure to restore must not
+/// mask the reason the swap failed, so it is traced rather than returned. The
+/// category is the `io::ErrorKind`, which is bounded, rather than an error
+/// string or a path.
+#[cfg(windows)]
+fn restore_destination(directory: &Dir, path: &Utf8Path, original: &Permissions) {
+    if let Err(error) = directory.set_permissions(path, original.clone()) {
+        debug!(
+            error_category = ?error.kind(),
+            "destination mode restore failed"
+        );
+    }
+}
+
+/// The rollback of a preparation that no platform other than Windows makes.
+#[cfg(not(windows))]
+fn restore_destination(_directory: &Dir, _path: &Utf8Path, _original: &Permissions) {}
+
+/// Renames `temp_path` over `path`.
+///
+/// A test can arm [`rename_failure_seam`] to make this fail deterministically.
+/// That seam is the only way to reach the rollback in [`swap_into_place`]: a
+/// rename that a test can make fail for real fails before the destination is
+/// ever prepared, so the rollback would never have anything to put back.
+fn rename_over_target(directory: &Dir, temp_path: &Utf8Path, path: &Utf8Path) -> io::Result<()> {
+    #[cfg(test)]
+    if rename_failure_seam::take() {
+        return Err(io::Error::other("the rename failure seam is armed"));
+    }
+    directory.rename(temp_path, directory, path)
+}
+
+/// Removes the temporary file left behind by a failed replacement.
+///
+/// Windows refuses to delete a file carrying `FILE_ATTRIBUTE_READONLY`, and by
+/// the time the swap runs the temporary file already carries the target's
+/// permissions, so the attribute is cleared first. Clearing it is best effort:
+/// the removal below reports its own failure, and a name that survives is
+/// retried past by the next run.
+fn remove_temporary_file(directory: &Dir, temp_path: &Utf8Path) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        if let Ok(metadata) = directory.metadata(temp_path) {
+            let mut permissions = metadata.permissions();
+            if permissions.readonly() {
+                permissions.set_readonly(false);
+                if let Err(error) = directory.set_permissions(temp_path, permissions) {
                     debug!(
-                        error_category = ?restore.kind(),
-                        "destination mode restore failed"
+                        error_category = ?error.kind(),
+                        "temporary file mode could not be cleared"
                     );
                 }
             }
-            Err(error)
         }
     }
+    directory.remove_file(temp_path)
 }
 
 /// Creates a new temporary file beside `path` inside `directory`.
@@ -346,6 +414,43 @@ pub fn rewrite(path: &Path) -> std::io::Result<()> { rewrite_with(path, process_
 /// Returns an error if reading or writing the file fails.
 pub fn rewrite_no_wrap(path: &Path) -> std::io::Result<()> {
     rewrite_with(path, process_stream_no_wrap)
+}
+
+/// A test-only seam that fails the rename half of the swap.
+///
+/// Every rename a test can be made to fail for real fails before the
+/// destination is prepared, so the rollback in [`super::swap_into_place`] is
+/// otherwise unreachable. The arming is per-thread, because the tests that use
+/// it drive the swap on the thread that armed it, and it is undone when the
+/// value [`arm`] returns is dropped, so a failing assertion cannot leave the
+/// failure armed for whatever runs next on that thread.
+#[cfg(test)]
+mod rename_failure_seam {
+    use std::cell::Cell;
+
+    thread_local! {
+        /// Whether this thread's next rename must fail.
+        static ARMED: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// Arms the seam until the returned value is dropped.
+    pub(super) fn arm() -> Armed {
+        ARMED.with(|armed| armed.set(true));
+        Armed
+    }
+
+    /// Disarms the seam when dropped.
+    pub(super) struct Armed;
+
+    impl Drop for Armed {
+        fn drop(&mut self) { ARMED.with(|armed| armed.set(false)); }
+    }
+
+    /// Consumes the arming, reporting whether this rename must fail.
+    ///
+    /// One-shot by design: arming fails exactly one swap, so a test that
+    /// triggers more than one rename cannot have the seam fire twice.
+    pub(super) fn take() -> bool { ARMED.with(|armed| armed.replace(false)) }
 }
 
 #[cfg(test)]

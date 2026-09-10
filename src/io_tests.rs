@@ -280,6 +280,80 @@ fn failure_after_temporary_file_creation_removes_it() {
     );
 }
 
+/// Marks `path` read-only the way its platform records it.
+#[cfg(unix)]
+fn set_read_only(path: &Path) {
+    // Set exactly, so the umask cannot weaken the assertion.
+    set_mode(path, 0o444);
+}
+
+#[cfg(not(unix))]
+fn set_read_only(path: &Path) {
+    let mut permissions = fs::metadata(path).expect("read metadata").permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(path, permissions).expect("make the target read-only");
+}
+
+/// Asserts that `path` is read-only.
+#[cfg(unix)]
+fn assert_read_only(path: &Path) {
+    let mode = fs::metadata(path)
+        .expect("read metadata")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o444, "the read-only mode must survive the failure");
+}
+
+#[cfg(not(unix))]
+fn assert_read_only(path: &Path) {
+    let permissions = fs::metadata(path).expect("read metadata").permissions();
+    assert!(
+        permissions.readonly(),
+        "a failed swap must leave the read-only attribute restored"
+    );
+}
+
+/// A swap that fails after the destination was prepared puts back what the
+/// preparation changed.
+///
+/// The seam is the only way to reach the rollback: a rename that fails for a
+/// reason a test can construct fails before the destination is prepared. Both
+/// platforms assert the same outcome, but only Windows clears the destination's
+/// read-only attribute before the rename, so only there does the rollback have
+/// something to restore.
+#[rstest]
+#[case(rewrite)]
+#[case(rewrite_no_wrap)]
+fn failed_swap_restores_the_prepared_destination(
+    #[case] rewrite_fn: fn(&Path) -> std::io::Result<()>,
+) {
+    let dir = tempdir().unwrap();
+    let file = dir.path().join("sample.md");
+    let original = "|A|B|\n|1|2|";
+    fs::write(&file, original).unwrap();
+    set_read_only(&file);
+
+    let _armed = rename_failure_seam::arm();
+    let error = rewrite_fn(&file).expect_err("the armed seam must fail the swap");
+
+    assert!(
+        error.to_string().contains("seam"),
+        "the failure must be the armed seam rather than an unrelated one: {error}"
+    );
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        original,
+        "a failed swap must leave the original byte-identical"
+    );
+    assert_read_only(&file);
+    assert_eq!(
+        entry_names(dir.path()),
+        vec!["sample.md"],
+        "a failed swap must leave no temporary file behind"
+    );
+}
+
 #[test]
 fn rewrite_empty_file_no_extra_newline() {
     let dir = tempdir().unwrap();

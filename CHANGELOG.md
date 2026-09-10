@@ -34,9 +34,11 @@
 
 - `--in-place`, `rewrite` and `rewrite_no_wrap` replace a read-only file in a
   writable directory instead of failing, because the atomic swap needs write
-  permission on the containing directory rather than on the file itself. On
-  Windows the rename cannot replace a read-only destination, so its read-only
-  attribute is cleared for the duration of the rename and reapplied afterwards.
+  permission on the containing directory rather than on the file itself, and the
+  replacement inherits the target's permissions, read-only included. On Windows
+  the destination's `FILE_ATTRIBUTE_READONLY` blocks the rename, so it is
+  cleared immediately before the swap and put back if the swap does not
+  complete.
   ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - `--in-place`, `rewrite` and `rewrite_no_wrap` decline a symbolic link instead
   of replacing the link entry with a regular file, which previously left the
@@ -72,10 +74,12 @@
   mode is preserved, and a stale temporary file left by an abruptly killed run
   is retried past rather than reused.
   ([#465](https://github.com/leynos/mdtablefix/issues/465))
-- Replace a read-only destination on Windows too, by clearing its read-only
-  attribute for the duration of the rename and reapplying the target's
-  permissions afterwards, so a read-only file in a writable directory is
-  replaced instead of failing.
+- Replace a read-only destination on Windows too, by clearing
+  `FILE_ATTRIBUTE_READONLY` on the target immediately before the rename and
+  putting the original attribute back if the swap does not complete, so a
+  read-only file in a writable directory is replaced instead of failing. The
+  temporary file carries the target's permissions into the rename, so the
+  replacement is read-only as well.
   ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - Set the `cargo-binstall` `bin-dir` to `{ bin }{ binary-ext }`. The previous
   `.` rendered an empty source path, so `cargo binstall mdtablefix` failed
