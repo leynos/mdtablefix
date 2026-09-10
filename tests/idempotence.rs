@@ -12,6 +12,11 @@
 //! span. `R1` and `R2` were already fixed points; they are here because a fix
 //! that absorbed breaks on the first pass instead of the second would satisfy
 //! the idempotence cases for the wrong reason.
+//!
+//! Case `H1` reaches the same invariant through `--headings`, which the
+//! `make fmt` flag set does not enable: a candidate line that is itself a block
+//! start must not swallow the underline below it. It is recorded separately
+//! because the first defect classes were all reachable without `--headings`.
 
 use std::{
     fs,
@@ -28,6 +33,8 @@ const WRAP: &[&str] = &["--wrap"];
 const WRAP_BREAKS: &[&str] = &["--wrap", "--breaks"];
 /// Flag set `make fmt` runs through `mdformat-all`.
 const FULL: &[&str] = &["--wrap", "--renumber", "--breaks", "--ellipsis", "--fences"];
+/// Flag set recorded for the heading cases, which `make fmt` does not enable.
+const HEADINGS: &[&str] = &["--footnotes", "--code-emphasis", "--headings"];
 
 /// Line that a case must keep standalone in the formatted output.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -109,6 +116,12 @@ const CASES: &[IdempotenceCase] = &[
         fixture: "R2_underscore_break_absorbed.dat",
         flags: WRAP,
         standalone: Some(Standalone::Literal("___")),
+    },
+    IdempotenceCase {
+        id: "H1_atx_heading_above_break",
+        fixture: "H1_atx_heading_above_break.dat",
+        flags: HEADINGS,
+        standalone: Some(Standalone::Literal("---")),
     },
 ];
 

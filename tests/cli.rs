@@ -198,6 +198,35 @@ fn test_cli_headings_blockquote_conversion() {
         .stdout("> ## Quote\n");
 }
 
+/// Ensures a candidate that is itself a block start does not become a heading.
+///
+/// `--headings` consumes the following `---`/`===` line as an underline, so a
+/// candidate that is already a block would swallow the line below it: `## aa`
+/// above `---` produced the single line `## ## aa`, and the break was lost.
+/// Every case must therefore survive unchanged.
+#[rstest]
+#[case("## aa\n---\n")]
+#[case("# aa\n===\n")]
+#[case("###### aa ######\n---\n")]
+#[case("> ## aa\n> ---\n")]
+#[case("---\n---\n")]
+#[case("***\n---\n")]
+#[case("- item\n---\n")]
+#[case("1. item\n---\n")]
+#[case("  - item\n  ---\n")]
+#[case("[^1]: note\n---\n")]
+#[case("[label]: https://example.com\n---\n")]
+#[case("<!-- markdownlint-disable MD013 -->\n---\n")]
+fn test_cli_headings_preserves_block_starts(#[case] input: &'static str) {
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--headings")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(input);
+}
+
 #[test]
 fn test_cli_fences_option_tilde() {
     Command::cargo_bin("mdtablefix")
@@ -370,6 +399,11 @@ fn capability_directory(tempdir: &TempDir) -> (Dir, Utf8PathBuf) {
 #[case(&["--wrap", "--footnotes"], include_str!("data/footnotes_input.txt"), include_str!("data/footnotes_wrap_expected.txt"))]
 #[case(&["--wrap", "--ellipsis"], include_str!("data/ellipsis_wrap_input.txt"), include_str!("data/ellipsis_wrap_expected.txt"))]
 #[case(&["--headings"], "Title\n=====\n", "# Title\n")]
+#[case(
+    &["--footnotes", "--code-emphasis", "--headings"],
+    "aa\n-----\n---\n",
+    "## aa\n---\n"
+)]
 fn test_cli_in_place_variants(#[case] flags: &[&str], #[case] input: &str, #[case] expected: &str) {
     run_in_place(flags, input, expected);
 }
