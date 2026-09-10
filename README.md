@@ -273,7 +273,8 @@ permissions are copied to the temporary file before the rename, so the original
 file mode is preserved and a read-only target is replaced by a read-only file.
 On Windows, where a destination carrying `FILE_ATTRIBUTE_READONLY` cannot be
 renamed over at all, that attribute is cleared immediately before the rename and
-put back if the swap does not complete. A symbolic link is declined rather than
+put back if the swap does not complete, though an abrupt interruption or a
+failed restore can leave it cleared. A symbolic link is declined rather than
 replaced. Callers that already hold a `cap_std::fs_utf8::Dir` capability can
 call `mdtablefix::io::replace_file(directory, path, contents)` for the same
 behaviour without ambient filesystem access.
