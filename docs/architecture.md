@@ -58,7 +58,12 @@ The function combines several helpers documented in `docs/`:
   classification — an ATX heading, thematic break, list item, blockquote,
   definition, directive, or fence marker — keeps its underline, so the line
   below it survives as a block of its own. The predicate is measured after the
-  shared prefix is removed, so quoted headings still convert.
+  shared prefix is removed, so quoted headings still convert. A candidate
+  indented by four or more columns is refused as an indented code
+  block. The indentation width is measured on the whole line before the shared
+  prefix is removed, so the prefix cannot hide the indentation; blockquote
+  markers and their optional single space are consumed first, and tabs count
+  as four columns.
 
 Heading conversion runs after fence/table processing and before wrapping, so
 the wrapping stage observes ATX headings and leaves them untouched.

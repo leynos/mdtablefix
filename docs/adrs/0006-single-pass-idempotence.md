@@ -49,7 +49,7 @@ set the CLI exposes. Five rules enforce the invariant:
   same wrapped output; `wraps_to_tail(text, available)` and
   `continuation_folds_tail(continuation_prefix)` in `src/wrap/paragraph.rs`
   decide whether folding is safe. Folding is skipped when the tail would
-  re-parse as a different block: a tail indented by four or more columns
+  reparse as a different block: a tail indented by four or more columns
   (indented code), a tail that repeats its blockquote marker, and a footnote
   definition tail stay separate.
 - `--ellipsis` runs before the wrap. `process_stream_inner` performs, in
@@ -60,16 +60,23 @@ set the CLI exposes. Five rules enforce the invariant:
 - Setext conversion accepts only paragraph candidates. `is_setext_text` in
   `src/headings.rs` measures the candidate after the indentation or blockquote
   prefix it shares with the underline has been removed, so a quoted heading
-  such as `> Title` above `> -----` still converts. A candidate that is itself
-  a block start keeps its underline: an ATX heading, a thematic break, a list
-  item, a blockquote, a footnote definition, a link reference definition, a
-  markdownlint directive, or a fence marker. The kinds are the ones
-  `wrap::classify_block` already reports, so the heading pass and the wrapper
-  agree on what a block start is. A digit-prefixed candidate stays eligible,
-  because `BlockKind::DigitPrefix` marks a line the wrapper measures specially
-  rather than a block. The check is limited to the grammar this formatter
-  supports and is not a CommonMark block parser: HTML blocks other than the
-  `<table>` conversion in `src/html.rs` remain outside it.
+  such as `> Title` above `> -----` still converts. A candidate indented by
+  four or more columns is also refused, because the pair is then an indented
+  code block rather than a heading. The indentation width is measured on the
+  whole line before the shared prefix is removed: the prefix would otherwise
+  swallow the very columns that mark the code block. Blockquote markers and
+  their optional single space are consumed before measuring, and tabs count as
+  four columns.
+  A candidate that is itself a block start keeps its underline: an ATX
+  heading, a thematic break, a list item, a blockquote, a footnote definition,
+  a link reference definition, a markdownlint directive, or a fence marker.
+  The kinds are the ones `wrap::classify_block` already reports, so the heading
+  pass and the wrapper agree on what a block start is. A digit-prefixed
+  candidate stays eligible, because `BlockKind::DigitPrefix` marks a line the
+  wrapper measures specially rather than a block. The check is limited to
+  the grammar this formatter supports and is not a CommonMark block parser:
+  HTML blocks other than the `<table>` conversion in `src/html.rs` remain
+  outside it.
 
 ## Consequences
 

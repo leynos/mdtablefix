@@ -126,7 +126,7 @@ When the first line of a prefixed block spills past the target width, the
 wrapper keeps that block open so its continuation and lazy continuation lines
 reflow with the tail in the same pass rather than being joined to it on a later
 run. The prefixed forms are list items, task items, ordered items, blockquotes,
-and footnote definitions. Folding only happens when the tail would re-parse as
+and footnote definitions. Folding only happens when the tail would reparse as
 paragraph text, so a tail indented by four or more columns (indented code), a
 tail that repeats its blockquote marker, and a footnote definition tail stay
 separate blocks. The formatter therefore reaches its final form in one pass, so
@@ -250,6 +250,28 @@ the prefix using Unicode display width (`UnicodeWidthStr::width`) rather than
 byte or character count. Continuation lines therefore stay correctly aligned
 when the prefix contains full-width characters such as ideographic spaces or
 CJK punctuation.
+
+## Heading conversion
+
+Pass `--headings` to convert Setext headings into ATX headings. A Setext
+heading is a paragraph line followed by an underline of three or more identical
+`=` or `-` characters; the pair becomes one ATX line, `#` for an `=` underline
+and `##` for a `-` underline. The flag is off unless it is passed and is not
+part of the `make fmt` flag set.
+
+A candidate line is converted only when it is paragraph text. A line that is
+already a Markdown block start keeps its underline, so the line below it
+survives: an ATX heading, a thematic break, a list item, a blockquote, a
+footnote or link reference definition, a markdownlint directive, or a
+fenced-code marker.
+
+Indentation and blockquote markers shared by the heading and its underline are
+preserved, so `> Title` above `> -----` becomes `> ## Title`.
+
+A candidate indented by four or more columns, or one inside a blockquote and
+indented four or more columns after the marker, is an indented code block: it
+is left untouched, as is the line beneath it. Three columns or fewer still
+convert. Tabs count as four columns.
 
 ## HTML table conversion
 
