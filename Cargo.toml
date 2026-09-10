@@ -31,6 +31,7 @@ html5ever = "0.39.0"
 # because `RcDom` implements `TreeSink` from that shared `markup5ever` line.
 markup5ever_rcdom = "0.39.0"
 textwrap = "0.16.2"
+metrics = "0.24"
 tracing = "0.1"
 unicode-width = "0.2"
 
@@ -39,6 +40,9 @@ unicode-width = "0.2"
 rstest = "0.26"
 assert_cmd = "2"
 insta = "1.47"
+# Only the debugging recorder is wanted, so the default `recency` feature (and
+# its clock dependency) stays out of the test build.
+metrics-util = { version = "0.20", default-features = false, features = ["debugging"] }
 proptest = "1.11.0"
 serde_yaml = "0.9"
 tempfile = "3"

@@ -209,8 +209,13 @@ fn main() -> anyhow::Result<()> {
             .files
             .par_iter()
             .map(|path| {
-                let (directory, file_name) = open_file_parent(path)?;
-                rewrite_in_place(&directory, &file_name, cli.opts)
+                // The context encloses opening the parent as well as the
+                // rewrite, so an error from either operation names the file as
+                // the user wrote it rather than only its parent directory.
+                open_file_parent(path)
+                    .and_then(|(directory, file_name)| {
+                        rewrite_in_place(&directory, &file_name, cli.opts)
+                    })
                     .with_context(|| format!("writing {}", path.display()))
             })
             .collect();
@@ -220,8 +225,12 @@ fn main() -> anyhow::Result<()> {
             .files
             .par_iter()
             .map(|path| {
-                let (directory, file_name) = open_file_parent(path)?;
-                format_to_string(&directory, &file_name, cli.opts)
+                // As above: the read context names the file even when opening
+                // its parent directory is what fails.
+                open_file_parent(path)
+                    .and_then(|(directory, file_name)| {
+                        format_to_string(&directory, &file_name, cli.opts)
+                    })
                     .with_context(|| format!("reading {}", path.display()))
             })
             .collect();

@@ -82,3 +82,16 @@ pub fn replace_file(
     contents: &str,
 ) -> std::io::Result<()>
 ```
+
+## Replacement metrics
+
+- **What changed:** `mdtablefix::io::replace_file`, and therefore `rewrite`,
+  `rewrite_no_wrap`, and `--in-place`, now emit three bounded counters through
+  the `metrics` façade. The crate installs no recorder.
+- **Who is affected:** Library consumers and host applications that install a
+  metrics recorder.
+- **Migration action:** No action is required for normal use. A host that wants
+  the counters installs a recorder once at startup with
+  `metrics::set_global_recorder(...)`. The
+  [Metrics](developers-guide.md#metrics) section of the developer's guide
+  lists the metric names and labels.

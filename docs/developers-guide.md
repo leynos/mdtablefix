@@ -617,11 +617,12 @@ replacing `LineBuffer` with `textwrap`.
 
 ### Dependency
 
-`tracing = "0.1"` is the runtime observability dependency, used by both the
-library and executables. `tracing-test = "0.2"` is a test-only dev-dependency;
-use it only in tests (e.g. `#[traced_test]`). The crate does not install a
-global subscriber or metrics recorder. Executables and test harnesses that want
-log output must install their own subscriber (e.g.
+`tracing = "0.1"` and `metrics = "0.24"` are the runtime observability
+dependencies, used by the library and the executables. `tracing-test = "0.2"`
+and `metrics-util = "0.20"` are test-only dev-dependencies; use them only in
+tests (e.g. `#[traced_test]` or `DebuggingRecorder`). The crate does not
+install a global subscriber or metrics recorder. Executables and test harnesses
+that want log output must install their own subscriber (e.g.
 `tracing_subscriber::fmt::init()` in `main`).
 
 ### Log levels
@@ -651,8 +652,9 @@ corresponding `reason` values are `no_blockquote_prefix`,
 
 The in-place rewrite in `src/io.rs` follows the same discipline. `replace_file`
 carries a `debug` span whose only field is the target `path`. The `path` field
-is span metadata, not a metric label, so target paths cannot create unbounded
-metric cardinality, and the crate installs no metrics recorder. Inside it,
+is span metadata rather than a metric label, and the replacement path's metrics
+use only fixed label values, so target paths cannot create unbounded metric
+cardinality; the crate installs no recorder. Inside it,
 `target metadata read` (trace), `temporary file created` (debug, with
 `attempt`), `temporary file written` (debug, with `bytes`),
 `temporary file synced` (debug), `target mode applied` (debug), and
@@ -696,6 +698,37 @@ For example:
 ```rust
 debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified");
 ```
+
+
+### Metrics
+
+The in-place replacement in `src/io.rs` emits three counters through the
+`metrics` façade. `describe_metrics` registers their descriptions exactly once
+per process behind a `std::sync::OnceLock`.
+
+- `mdtablefix_io_replace_total` increments once per `replace_file` call and
+  carries one label, `outcome`, with the value `success` or `failure`.
+- `mdtablefix_io_temporary_name_collisions_total` counts each candidate
+  temporary name rejected because it was already taken. It carries no labels.
+- `mdtablefix_io_temporary_name_exhausted_total` counts each replacement
+  abandoned when all 16 candidate names are taken. It carries no labels.
+
+Metric cardinality is bounded by construction: every metric name and every
+label value is a compile-time constant. Target paths, file names, and error
+text are never labels. The target `path` appears only as a tracing span field.
+
+The library emits metrics but never installs a recorder, in line with
+`AGENTS.md`. A host application installs one once, as early as practical in
+startup, for example `metrics::set_global_recorder(...)` or an exporter such as
+`metrics_exporter_prometheus::PrometheusBuilder::install()`. With no recorder
+installed the emission macros are no-ops, so the `mdtablefix` CLI stays silent
+unless a host wires one in.
+
+`src/io_metrics_tests.rs` uses `metrics_util::debugging::DebuggingRecorder`
+through `metrics::with_local_recorder` on the test thread and asserts the
+emitted metric names, the counts for a success, for an occupied candidate
+name, and for an exhausted name space, plus the bounded label set: only the
+`outcome` key, with only the values `success` and `failure`.
 
 ### Performance discipline
 

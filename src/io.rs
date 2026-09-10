@@ -9,6 +9,7 @@
 use std::{
     io::{self, Write},
     path::Path,
+    sync::OnceLock,
 };
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -16,6 +17,7 @@ use cap_std::{
     ambient_authority,
     fs_utf8::{Dir, File, OpenOptions, Permissions},
 };
+use metrics::{counter, describe_counter};
 use tracing::{debug, trace};
 
 use crate::process::{process_stream, process_stream_no_wrap};
@@ -73,6 +75,30 @@ fn open_parent(path: &Path) -> io::Result<(Dir, Utf8PathBuf)> {
     Ok((directory, Utf8PathBuf::from(name)))
 }
 
+/// Declares the metrics emitted by the replacement path.
+///
+/// Every metric name and label value is fixed, so a recorder's cardinality
+/// stays bounded: no path, file name, or error text is used as a label. The
+/// library emits these metrics but never installs a recorder; a host
+/// application installs one, as documented in the developers' guide.
+fn describe_metrics() {
+    static DESCRIPTION: OnceLock<()> = OnceLock::new();
+    DESCRIPTION.get_or_init(|| {
+        describe_counter!(
+            "mdtablefix_io_replace_total",
+            "Atomic file replacements attempted, by outcome"
+        );
+        describe_counter!(
+            "mdtablefix_io_temporary_name_collisions_total",
+            "Temporary names rejected because they were already taken"
+        );
+        describe_counter!(
+            "mdtablefix_io_temporary_name_exhausted_total",
+            "Replacements abandoned because every candidate temporary name was taken"
+        );
+    });
+}
+
 /// Atomically replaces `path` inside `directory` with `contents`.
 ///
 /// The replacement is written to a temporary file beside the target and
@@ -90,6 +116,18 @@ fn open_parent(path: &Path) -> io::Result<(Dir, Utf8PathBuf)> {
 /// cannot be written, or if the rename fails.
 #[tracing::instrument(level = "debug", skip(directory, contents), fields(path = %path))]
 pub fn replace_file(directory: &Dir, path: &Utf8Path, contents: &str) -> io::Result<()> {
+    describe_metrics();
+    let outcome = replace_file_inner(directory, path, contents);
+    counter!(
+        "mdtablefix_io_replace_total",
+        "outcome" => if outcome.is_ok() { "success" } else { "failure" }
+    )
+    .increment(1);
+    outcome
+}
+
+/// Performs the replacement that [`replace_file`] reports the outcome of.
+fn replace_file_inner(directory: &Dir, path: &Utf8Path, contents: &str) -> io::Result<()> {
     let metadata = directory.symlink_metadata(path).inspect_err(|error| {
         debug!(error_category = ?error.kind(), "replacement failed");
     })?;
@@ -169,10 +207,12 @@ fn create_temporary_file(directory: &Dir, path: &Utf8Path) -> io::Result<(Utf8Pa
                     reason = "already_exists",
                     "temporary name rejected"
                 );
+                counter!("mdtablefix_io_temporary_name_collisions_total").increment(1);
             }
             Err(error) => return Err(error),
         }
     }
+    counter!("mdtablefix_io_temporary_name_exhausted_total").increment(1);
     Err(io::Error::new(
         io::ErrorKind::AlreadyExists,
         format!("no free temporary file name beside {path} after {TEMP_FILE_ATTEMPTS} attempts"),
@@ -216,6 +256,10 @@ pub fn rewrite(path: &Path) -> std::io::Result<()> { rewrite_with(path, process_
 pub fn rewrite_no_wrap(path: &Path) -> std::io::Result<()> {
     rewrite_with(path, process_stream_no_wrap)
 }
+
+#[cfg(test)]
+#[path = "io_metrics_tests.rs"]
+mod metrics_tests;
 
 #[cfg(test)]
 #[path = "io_tracing_tests.rs"]
