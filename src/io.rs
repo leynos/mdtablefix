@@ -86,7 +86,7 @@ impl LineEnding {
 /// [`LineEnding::Lf`], so the result is deterministic and never depends on
 /// which style happens to appear first.
 ///
-/// Only CRLF and LF are recognised. A lone carriage return is content rather
+/// Only CRLF and LF are recognized. A lone carriage return is content rather
 /// than a line ending, matching the `str::lines` split used to read the
 /// document.
 ///

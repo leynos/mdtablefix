@@ -124,6 +124,11 @@ restores the separator row with widths derived from the final table body.
   `LineEndingCounts::ending` is the selected style, and `detect_line_ending` is
   the selection-only form of the same query, so the command boundaries can
   report the vote without restating the counting rule.
+- `count_line_endings_reported(text, operation, path) -> LineEndingCounts` is
+  the counting query with the `debug` event attached, so the rewrite helpers
+  and the executable's boundaries cannot drift on the event message or field
+  names. `operation` names the boundary and `path` the file; a boundary without
+  them omits the fields.
 - `serialize_lines(lines, ending) -> String` joins lines with the selected
   terminator and appends one further terminator, yielding an empty string for
   no lines.
@@ -134,11 +139,12 @@ restores the separator row with widths derived from the final table body.
 
 Detection runs on the raw document at each input boundary: `rewrite_with` in
 `src/io.rs`, `format_to_string` in `src/main.rs`, and the standard-input branch
-of `main` in `src/main.rs`. The internal pipeline stays LF-only — `str::lines`
-strips each line's terminator before a transform sees it — and only the
-serializer re-applies the detected style. Standard input keeps its historical
-contract of printing one terminator even when it produces no lines, which
-`tests/parallel.rs` pins.
+of `main` in `src/main.rs`, with each boundary reporting through
+`count_line_endings_reported`. The internal pipeline stays LF-only —
+`str::lines` strips each line's terminator before a transform sees it — and
+only the serializer re-applies the detected style. Standard input keeps its
+historical contract of printing one terminator even when it produces no lines,
+which `tests/parallel.rs` pins.
 
 Callers select the function that matches their intent rather than passing a
 Boolean mode flag. This keeps stdout and in-place contracts explicit while

@@ -19,7 +19,7 @@ changes a reviewer needs to see, and it stops a check-only formatting gate from
 comparing formatter output with valid CRLF source files.
 
 A formatter must not create a diff that changes nothing but line endings in a
-document whose endings are consistent.
+document whose endings are consistent and which already ends with a terminator.
 
 ## Decision drivers
 
@@ -39,7 +39,7 @@ terminate every output line with whichever style occurs more often.
 
 Advantages: a consistently authored file is preserved exactly, so an
 already-formatted document that ends with a terminator is rewritten
-byte-for-byte. Disadvantages: a mixed-style document is homogenised, so an
+byte-for-byte. Disadvantages: a mixed-style document is homogenized, so an
 LF-authored snippet inside a mostly-CRLF document is rewritten to CRLF.
 
 ### Option B: Preserve the first ending seen
@@ -82,6 +82,10 @@ Option A. The `io` module owns the policy through the following public items:
 - `count_line_endings(text) -> LineEndingCounts`, the same query returned
   together with the `crlf_count` and `lone_lf_count` that decided it, so a
   reporting boundary can state the vote without restating the counting rule.
+- `count_line_endings_reported(text, operation, path)`, the same query with the
+  reporting boundary attached: it returns identical counts and emits one
+  `debug` event with the `crlf_count`, `lone_lf_count`, and `selected_ending`
+  fields, plus `operation` and `path` where the boundary has them.
 - `serialize_lines(lines, ending) -> String`, which joins the processed lines
   with the selected terminator and appends one further terminator so a
   non-empty result always ends with a line ending.
@@ -103,10 +107,10 @@ No transform module is aware of line endings.
   ends with a terminator, is rewritten with identical bytes, so a check-only
   gate can compare formatter output with the source file directly. An
   unterminated non-empty file gains one terminator, and a mixed-ending file is
-  homogenised to the majority style.
+  homogenized to the majority style.
 - The library functions `rewrite` and `rewrite_no_wrap` change their observable
   output for CRLF input. That byte change is the point of the decision.
-- Endings inside fenced code blocks are homogenised too, because detection is
+- Endings inside fenced code blocks are homogenized too, because detection is
   per document rather than per region.
 - An empty file still produces empty output, while a non-empty file always
   ends with one terminator.
