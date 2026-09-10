@@ -62,6 +62,10 @@
 
 ### Fixed
 
+- Format text adjoining an inline code span when it ends with a non-ASCII
+  character, such as the ellipsis `--ellipsis` produces, instead of aborting on
+  a character boundary. The emphasis split stepped one byte past the last
+  character rather than one character past it.
 - Write in-place output through a temporary file in the same directory and
   rename it over the target, so an interrupted run or a full disk can no longer
   leave a Markdown file truncated with no way to recover it. The original file
