@@ -17,9 +17,8 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use clap::Parser;
 use mdtablefix::{
     LineEnding,
-    LineEndingCounts,
     Options,
-    count_line_endings,
+    count_line_endings_reported,
     format_breaks,
     io::replace_file,
     process::{process_stream_inner, process_with_frontmatter},
@@ -27,7 +26,6 @@ use mdtablefix::{
     serialize_lines,
 };
 use rayon::prelude::*;
-use tracing::debug;
 
 #[derive(Parser)]
 #[command(version, about = "Reflow broken markdown tables")]
@@ -144,23 +142,11 @@ fn render_stdin_output(fixed: &[String], ending: LineEnding) -> String {
 /// wholly changed.
 fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
     let content = directory.read_to_string(path)?;
-    let LineEndingCounts {
-        ending,
-        crlf_count,
-        lone_lf_count,
-    } = count_line_endings(&content);
-    debug!(
-        operation = "file",
-        path = %path,
-        crlf_count,
-        lone_lf_count,
-        selected_ending = ending.as_str(),
-        "selected the majority line ending"
-    );
+    let counts = count_line_endings_reported(&content, Some("file"), Some(path.as_str()));
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
     let fixed = process_lines(&lines, opts);
     // Keep file output newline-terminated, matching the CLI stdout contract.
-    Ok(serialize_lines(&fixed, ending))
+    Ok(serialize_lines(&fixed, counts.ending))
 }
 
 /// Reads, formats, and atomically replaces a capability-scoped file in place.
@@ -229,21 +215,10 @@ fn main() -> anyhow::Result<()> {
     if cli.files.is_empty() {
         let mut input = String::new();
         io::stdin().read_to_string(&mut input)?;
-        let LineEndingCounts {
-            ending,
-            crlf_count,
-            lone_lf_count,
-        } = count_line_endings(&input);
-        debug!(
-            operation = "stdin",
-            crlf_count,
-            lone_lf_count,
-            selected_ending = ending.as_str(),
-            "selected the majority line ending"
-        );
+        let counts = count_line_endings_reported(&input, Some("stdin"), None);
         let lines: Vec<String> = input.lines().map(str::to_string).collect();
         let fixed = process_lines(&lines, cli.opts);
-        print!("{}", render_stdin_output(&fixed, ending));
+        print!("{}", render_stdin_output(&fixed, counts.ending));
         return Ok(());
     }
 

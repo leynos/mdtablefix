@@ -73,44 +73,109 @@ fn count_line_endings_reports_the_vote(
     );
 }
 
-/// Byte-exact rewrite cases: input text and the expected file bytes.
+/// Byte-exact rewrite cases: the input text, and the file bytes expected
+/// after the rewrite.
 ///
 /// Each case reflows a ragged table, so a passing case proves the output
 /// was reformatted and not merely copied.
-const REWRITE_LINE_ENDING_CASES: &[(&str, &str)] = &[
-    (
-        "|A|B|\n|---|---|\n|1|2|\n",
-        "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n",
-    ),
-    (
-        "|A|B|\r\n|---|---|\r\n|1|2|\r\n",
-        "| A   | B   |\r\n| --- | --- |\r\n| 1   | 2   |\r\n",
-    ),
-    (
-        "|A|B|\r\n|---|---|\r\n|1|2|\n",
-        "| A   | B   |\r\n| --- | --- |\r\n| 1   | 2   |\r\n",
-    ),
-    (
-        "|A|B|\n|---|---|\n|1|2|\r\n",
-        "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n",
-    ),
-    ("|A|B|\r\n|---|---|\n", "| A   | B   |\n| --- | --- |\n"),
-    ("Only prose", "Only prose\n"),
-];
-
 #[rstest]
-#[case(rewrite)]
-#[case(rewrite_no_wrap)]
+#[case::rewrite_line_feeds(
+    rewrite,
+    "|A|B|\n|---|---|\n|1|2|\n",
+    "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n"
+)]
+#[case::rewrite_carriage_returns(
+    rewrite,
+    "|A|B|\r\n|---|---|\r\n|1|2|\r\n",
+    "| A   | B   |\r\n| --- | --- |\r\n| 1   | 2   |\r\n"
+)]
+#[case::rewrite_carriage_return_majority(
+    rewrite,
+    "|A|B|\r\n|---|---|\r\n|1|2|\n",
+    "| A   | B   |\r\n| --- | --- |\r\n| 1   | 2   |\r\n"
+)]
+#[case::rewrite_line_feed_majority(
+    rewrite,
+    "|A|B|\n|---|---|\n|1|2|\r\n",
+    "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n"
+)]
+#[case::rewrite_exact_tie(rewrite, "|A|B|\r\n|---|---|\n", "| A   | B   |\n| --- | --- |\n")]
+#[case::rewrite_no_line_endings(rewrite, "Only prose", "Only prose\n")]
+#[case::no_wrap_line_feeds(
+    rewrite_no_wrap,
+    "|A|B|\n|---|---|\n|1|2|\n",
+    "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n"
+)]
+#[case::no_wrap_carriage_returns(
+    rewrite_no_wrap,
+    "|A|B|\r\n|---|---|\r\n|1|2|\r\n",
+    "| A   | B   |\r\n| --- | --- |\r\n| 1   | 2   |\r\n"
+)]
+#[case::no_wrap_carriage_return_majority(
+    rewrite_no_wrap,
+    "|A|B|\r\n|---|---|\r\n|1|2|\n",
+    "| A   | B   |\r\n| --- | --- |\r\n| 1   | 2   |\r\n"
+)]
+#[case::no_wrap_line_feed_majority(
+    rewrite_no_wrap,
+    "|A|B|\n|---|---|\n|1|2|\r\n",
+    "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n"
+)]
+#[case::no_wrap_exact_tie(
+    rewrite_no_wrap,
+    "|A|B|\r\n|---|---|\n",
+    "| A   | B   |\n| --- | --- |\n"
+)]
+#[case::no_wrap_no_line_endings(rewrite_no_wrap, "Only prose", "Only prose\n")]
 fn rewrite_preserves_the_majority_line_ending(
     #[case] rewrite_fn: fn(&Path) -> std::io::Result<()>,
+    #[case] input: &str,
+    #[case] expected: &str,
 ) {
-    for (input, expected) in REWRITE_LINE_ENDING_CASES {
-        assert_eq!(
-            rewritten_bytes(input, rewrite_fn),
-            expected.as_bytes(),
-            "unexpected bytes for input {input:?}"
-        );
+    assert_eq!(
+        rewritten_bytes(input, rewrite_fn),
+        expected.as_bytes(),
+        "unexpected bytes for input {input:?}"
+    );
+}
+
+/// The shared helper reports the vote at every boundary: the library
+/// rewrite, which adds no boundary fields, and the executable's standard
+/// input and file boundaries, which add `operation` and, for files, `path`.
+#[test]
+#[traced_test]
+fn count_line_endings_reported_covers_every_boundary() {
+    let text = "alpha\r\nbeta\r\n";
+    let library = count_line_endings_reported(text, None, None);
+    let stdin = count_line_endings_reported(text, Some("stdin"), None);
+    let file = count_line_endings_reported(text, Some("file"), Some("doc.md"));
+
+    for counts in [library, stdin, file] {
+        assert_eq!(counts.ending, LineEnding::Crlf);
+        assert_eq!(counts.crlf_count, 2);
+        assert_eq!(counts.lone_lf_count, 0);
     }
+    logs_assert(|lines| {
+        let reports: Vec<&str> = lines
+            .iter()
+            .copied()
+            .filter(|line| line.contains("selected the majority line ending"))
+            .collect();
+        let has = |needle: &str| reports.iter().any(|line| line.contains(needle));
+        let unnamed = reports.iter().any(|line| !line.contains("operation="));
+        if reports.len() == 3
+            && unnamed
+            && has("crlf_count=2")
+            && has("lone_lf_count=0")
+            && has(r#"operation="stdin""#)
+            && has(r#"operation="file""#)
+            && has("path=doc.md")
+        {
+            Ok(())
+        } else {
+            Err(format!("unexpected line-ending reports: {lines:?}"))
+        }
+    });
 }
 
 proptest! {

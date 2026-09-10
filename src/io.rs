@@ -151,6 +151,59 @@ pub fn count_line_endings(text: &str) -> LineEndingCounts {
     }
 }
 
+/// Counts `text`'s line endings, reports the vote, and returns the counts.
+///
+/// This is [`count_line_endings`] with the reporting boundary attached, so
+/// every site that selects an output style emits the same message with the
+/// same `crlf_count`, `lone_lf_count`, and `selected_ending` fields.
+/// `operation` names the boundary, such as `"file"` or `"stdin"`, and `path`
+/// names the file where one exists; both are omitted from the event when they
+/// are not supplied, so the library's own rewrite boundary reports the vote
+/// without either field.
+///
+/// # Examples
+///
+/// ```rust
+/// use mdtablefix::{LineEnding, count_line_endings_reported};
+///
+/// let counts = count_line_endings_reported("alpha\r\nbeta\r\n", None, None);
+///
+/// assert_eq!(counts.ending, LineEnding::Crlf);
+/// assert_eq!(counts.crlf_count, 2);
+/// ```
+#[must_use]
+pub fn count_line_endings_reported(
+    text: &str,
+    operation: Option<&str>,
+    path: Option<&str>,
+) -> LineEndingCounts {
+    let counts = count_line_endings(text);
+    match (operation, path) {
+        (Some(operation), Some(path)) => debug!(
+            operation,
+            path = %path,
+            crlf_count = counts.crlf_count,
+            lone_lf_count = counts.lone_lf_count,
+            selected_ending = counts.ending.as_str(),
+            "selected the majority line ending"
+        ),
+        (Some(operation), None) => debug!(
+            operation,
+            crlf_count = counts.crlf_count,
+            lone_lf_count = counts.lone_lf_count,
+            selected_ending = counts.ending.as_str(),
+            "selected the majority line ending"
+        ),
+        (None, _) => debug!(
+            crlf_count = counts.crlf_count,
+            lone_lf_count = counts.lone_lf_count,
+            selected_ending = counts.ending.as_str(),
+            "selected the majority line ending"
+        ),
+    }
+    counts
+}
+
 /// Renders `lines` as one document whose lines end with `ending`.
 ///
 /// An empty slice yields an empty string. Otherwise every line is followed by
@@ -205,20 +258,10 @@ where
 {
     let (directory, name) = open_parent(path)?;
     let text = directory.read_to_string(&name)?;
-    let LineEndingCounts {
-        ending,
-        crlf_count,
-        lone_lf_count,
-    } = count_line_endings(&text);
-    debug!(
-        crlf_count,
-        lone_lf_count,
-        selected_ending = ending.as_str(),
-        "selected the majority line ending"
-    );
+    let counts = count_line_endings_reported(&text, None, None);
     let lines: Vec<String> = text.lines().map(str::to_string).collect();
     let fixed = f(&lines);
-    replace_file(&directory, &name, &serialize_lines(&fixed, ending))
+    replace_file(&directory, &name, &serialize_lines(&fixed, counts.ending))
 }
 
 /// Opens a directory capability for the parent of `path`.
