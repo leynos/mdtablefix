@@ -6,6 +6,8 @@
 
 use unicode_width::UnicodeWidthStr;
 
+use super::{ParagraphState, ParagraphWriter, PrefixLine};
+
 /// Buffers a prefixed line whose inline code span continues on later source lines.
 pub(in crate::wrap) struct PendingPrefix {
     /// Stores the bullet, blockquote, or footnote prefix.
@@ -89,4 +91,40 @@ pub(in crate::wrap) fn continuation_prefix_for(
     let indent_str = crate::textproc::leading_indent(prefix);
     let indent_width = UnicodeWidthStr::width(indent_str);
     format!("{}{}", indent_str, " ".repeat(prefix_width - indent_width))
+}
+
+impl ParagraphWriter<'_> {
+    /// Buffers a prefixed line so later continuation lines are reflowed with it.
+    ///
+    /// The buffered line is emitted by `flush_paragraph` through
+    /// `append_stable_pending_prefix`, whose two-stage reflow is deterministic
+    /// for the same prefix, rest, and available width.
+    pub(super) fn defer_prefix_line(
+        &mut self,
+        state: &mut ParagraphState,
+        prefix_line: &PrefixLine<'_>,
+        open_fence_len: Option<usize>,
+        continuation_mode: ContinuationMode,
+    ) {
+        let prefix = prefix_line.prefix.as_ref().to_string();
+        let prefix_width = UnicodeWidthStr::width(prefix.as_str());
+        state.pending_prefix = Some(PendingPrefix {
+            prefix,
+            rest: prefix_line.rest.to_string(),
+            original_lines: vec![format!(
+                "{prefix}{rest}",
+                prefix = prefix_line.prefix.as_ref(),
+                rest = prefix_line.rest,
+            )],
+            synthetic_join_spaces: Vec::new(),
+            rest_width: self.width.saturating_sub(prefix_width).max(1),
+            repeat_prefix: prefix_line.repeat_prefix,
+            outer_prefix: prefix_line.outer_prefix.as_deref().map(ToOwned::to_owned),
+            hard_break: false,
+            open_fence_len,
+            continuation_mode,
+            used_prefix: false,
+            tail_reflow: TailReflow::Allowed,
+        });
+    }
 }

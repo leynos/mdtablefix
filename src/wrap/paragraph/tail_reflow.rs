@@ -5,12 +5,16 @@
 //! markers, isolating that logic from the buffer-management code in the parent
 //! module.
 
+use unicode_width::UnicodeWidthStr;
+
 use super::{
     ParagraphWriter,
     PrefixLine,
+    continuation_folds_tail,
     continuation_prefix_for,
     hard_break::trailing_hard_break_marker_len,
     wrap_preserving_code,
+    wraps_to_tail,
 };
 
 impl ParagraphWriter<'_> {
@@ -83,5 +87,31 @@ impl ParagraphWriter<'_> {
         {
             last.push_str("  ");
         }
+    }
+
+    /// Returns whether `line` must be deferred so its tail cannot absorb later lines.
+    ///
+    /// A prefixed source line that fits on a single output line emits no tail,
+    /// so the following source lines are re-wrapped as a fresh paragraph on
+    /// both this pass and the next: the result is already a fixed point. The
+    /// same holds when the tail does not re-parse as paragraph text; see
+    /// [`continuation_folds_tail`].
+    ///
+    /// Once a line that folds its tail spills onto one, the next pass joins the
+    /// following source lines into that tail, so the first pass must join them
+    /// too. Deferring the line lets the buffered continuation lines be reflowed
+    /// with it, emitting what the next pass would.
+    pub(super) fn prefix_line_needs_tail_deferral(&self, line: &PrefixLine<'_>) -> bool {
+        let continuation_prefix = continuation_prefix_for(
+            line.prefix.as_ref(),
+            line.repeat_prefix,
+            line.outer_prefix.as_deref(),
+        );
+        if !continuation_folds_tail(continuation_prefix.as_str()) {
+            return false;
+        }
+        let prefix_width = UnicodeWidthStr::width(line.prefix.as_ref());
+        let available = self.width.saturating_sub(prefix_width).max(1);
+        wraps_to_tail(line.rest, available)
     }
 }
