@@ -1120,7 +1120,6 @@ Apply it to any fixture function whose single-expression body triggers the lint:
 pub fn broken_table() -> Vec<String> { … }
 ```
 
-
 ### 2.4. Inline unit-test modules
 
 AGENTS.md caps a source file at 400 lines, so a `#[cfg(test)] mod tests` block

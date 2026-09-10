@@ -353,7 +353,6 @@ fn main() {}
 ```
 ````
 
-
 ## In-place editing
 
 Pass `--in-place` to rewrite each named file with the formatted result. The
@@ -401,7 +400,6 @@ loss immediately afterwards can revert the directory entry to the original
 file.
 
 ## Library API notes
-
 
 ### Atomic in-place rewrites
 

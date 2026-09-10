@@ -282,15 +282,17 @@ Text.
 
 ## Footnotes
 
- [^1]: First note
+ 1. First note
 
- [^2]: Second note
+ 2. Second note
 
-[^10]: Final note
+10. Final note
 ```
 
-`convert_footnotes` only processes the final contiguous numeric list that
-immediately follows an H2 heading when these conditions are met.
+After:
+
+```markdown
+Text.
 
 ## Footnotes
 
@@ -680,7 +682,6 @@ sequenceDiagram
 _Figure 4: The CLI processes file inputs in parallel, then reports results in
 their original order: formatted text goes to stdout, while in-place processing
 replaces each file atomically and both modes report errors on stderr._
-
 
 ## Atomic in-place writes
 
