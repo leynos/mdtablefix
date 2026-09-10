@@ -21,7 +21,7 @@
 //! has without the query itself becoming side-effecting.
 //!
 //! The rationale, the rejected alternatives and the known limitations are
-//! recorded in `docs/adrs/0006-line-ending-detection.md`.
+//! recorded in `docs/adrs/0007-line-ending-detection.md`.
 
 use std::{
     io::{self, Write},
