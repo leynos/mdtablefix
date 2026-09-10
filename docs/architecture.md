@@ -53,7 +53,12 @@ The function combines several helpers documented in `docs/`:
   underline must contain at least three identical `=` or `-` characters, so the
   converter can distinguish headings from thematic breaks or list markers. The
   helper only rewrites lines whose shared prefix is whitespace or `>` so nested
-  lists continue to behave normally.
+  lists continue to behave normally. A candidate is converted only when it is
+  paragraph text: a line that is itself a block start under the wrapper's
+  classification — an ATX heading, thematic break, list item, blockquote,
+  definition, directive, or fence marker — keeps its underline, so the line
+  below it survives as a block of its own. The predicate is measured after the
+  shared prefix is removed, so quoted headings still convert.
 
 Heading conversion runs after fence/table processing and before wrapping, so
 the wrapping stage observes ATX headings and leaves them untouched.

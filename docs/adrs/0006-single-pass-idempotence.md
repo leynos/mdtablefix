@@ -7,9 +7,9 @@
 
 `mdtablefix` was not idempotent: `format(format(x)) != format(x)` held for
 inputs reachable under the `make fmt` flag set (`--wrap`, `--renumber`,
-`--breaks`, `--ellipsis`, `--fences`), so a check-after-fix gate could never
-converge: one `--in-place` pass left a file that the next pass rewrote again.
-Four defect classes contributed:
+`--breaks`, `--ellipsis`, `--fences`), and for further inputs once `--headings`
+was added, so a check-after-fix gate could never converge: one `--in-place` pass
+left a file that the next pass rewrote again. Five defect classes contributed:
 
 - A normalized thematic break was absorbed into the following paragraph
   instead of passed through on its own line.
@@ -21,11 +21,15 @@ Four defect classes contributed:
   shortened the line.
 - A seventy-underscore break written by `--breaks` was attached to the next
   fence as an info string.
+- Setext conversion consumed the line below a candidate that was already a
+  block of its own. `## aa` above `---` became the single line `## ## aa`, and
+  because the first pass left the break behind and the second pass consumed it,
+  the output never settled.
 
 ## Decision
 
 The formatter is a fixed point: `format(format(x)) == format(x)` for every flag
-set the CLI exposes. Four rules enforce the invariant:
+set the CLI exposes. Five rules enforce the invariant:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
   `src/wrap/block.rs` recognizes a break with
@@ -53,16 +57,32 @@ set the CLI exposes. Four rules enforce the invariant:
   replacement, paragraph wrapping, and footnote conversion; replacing `...`
   with `…` shortens a line by two display columns, so a wrap that measured the
   source dots emitted a break that the next pass joined.
+- Setext conversion accepts only paragraph candidates. `is_setext_text` in
+  `src/headings.rs` measures the candidate after the indentation or blockquote
+  prefix it shares with the underline has been removed, so a quoted heading
+  such as `> Title` above `> -----` still converts. A candidate that is itself
+  a block start keeps its underline: an ATX heading, a thematic break, a list
+  item, a blockquote, a footnote definition, a link reference definition, a
+  markdownlint directive, or a fence marker. The kinds are the ones
+  `wrap::classify_block` already reports, so the heading pass and the wrapper
+  agree on what a block start is. A digit-prefixed candidate stays eligible,
+  because `BlockKind::DigitPrefix` marks a line the wrapper measures specially
+  rather than a block. The check is limited to the grammar this formatter
+  supports and is not a CommonMark block parser: HTML blocks other than the
+  `<table>` conversion in `src/html.rs` remain outside it.
 
 ## Consequences
 
 - A single `--in-place` run reaches the formatter's final output, so a
   check-after-fix gate cannot report drift indefinitely on the same file.
 - Changed output is confined to thematic breaks that are now preserved instead
-  of consumed, and to prefixed blocks that now reflow with their continuation
-  lines in one pass.
+  of consumed, to prefixed blocks that now reflow with their continuation lines
+  in one pass, and to candidates that are themselves block starts, which no
+  longer convert, so the line below them survives as a block of its own.
 - `tests/idempotence.rs` formats the fixture corpus under
   `tests/data/idempotence/` twice through the real binary and asserts
   byte-identical output; `tests/idempotence_properties.rs` is a `proptest!`
-  property over generated documents and a sampled eight-flag powerset.
-  Together they guard the invariant against regression.
+  property over generated documents and a sampled eight-flag powerset, and
+  generates structural adjacencies — a candidate directly above a thematic
+  break — with `--headings` forced on, since the `make fmt` flag set does not
+  enable it. Together they guard the invariant against regression.
