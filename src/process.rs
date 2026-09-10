@@ -135,14 +135,20 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         out = crate::code_emphasis::fix_code_emphasis(&out);
     }
 
+    // The ellipsis pass rewrites text, so it must run before the wrap measures
+    // it. Replacing `...` with `…` shortens the line by two columns, and a wrap
+    // that measured the longer text breaks a line the next pass would have
+    // joined: `format(format(x))` would differ from `format(x)` for any
+    // paragraph with an ellipsis near the wrap boundary.
+    if opts.ellipsis {
+        out = replace_ellipsis(&out);
+    }
+
     let mut out = if opts.wrap {
         wrap_text(&out, WRAP_COLS)
     } else {
         out
     };
-    if opts.ellipsis {
-        out = replace_ellipsis(&out);
-    }
     if opts.footnotes {
         out = convert_footnotes(&out);
     }
