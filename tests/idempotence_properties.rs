@@ -166,6 +166,29 @@ fn prefixed_block_strategy() -> impl Strategy<Value = String> {
         })
 }
 
+/// Generates a prefixed block whose first line overflows the target width and
+/// ends with a parenthesised inline code span, plus a continuation line.
+///
+/// This is the class B shape: the first line spills past the wrap width, so the
+/// block is deferred and must reflow with the continuation below it. The prose
+/// is grown until the line exceeds the width, because a short line never
+/// reaches the deferral path.
+fn overlong_code_span_block_strategy() -> impl Strategy<Value = String> {
+    (
+        prose_strategy(),
+        code_span_strategy(),
+        continuation_strategy(),
+    )
+        .prop_map(|(prose, span, continuation)| {
+            let mut line = format!("- {prose}");
+            while line.len() + span.len() + 3 <= 80 {
+                line.push_str(" and more prose");
+            }
+
+            format!("{line} ({span})\n{continuation}")
+        })
+}
+
 /// Generates a fenced code block with either fence spelling.
 fn fenced_block_strategy() -> impl Strategy<Value = String> {
     let fence = prop_oneof![Just("```"), Just("~~~")];
@@ -381,7 +404,9 @@ fn generated_corpus_produces_changed_and_unchanged_documents() {
 /// must survive a wrap as a standalone line, which is the property the
 /// normalised 70-underscore break lost. Class B is a prefixed line whose first
 /// line ends with a parenthesised inline code span followed by a continuation;
-/// re-wrapping that shape must reproduce its own line breaks.
+/// re-wrapping that shape must reproduce its own line breaks. Only first lines
+/// that overflow the target width reach the deferral path that shape exists
+/// for, so shorter ones are skipped.
 #[test]
 fn generated_corpus_reaches_both_defect_classes() {
     let breaks = sample(&proptest::sample::select(BREAK_SPELLINGS), SWEEP_DOCUMENTS);
@@ -404,14 +429,14 @@ fn generated_corpus_reaches_both_defect_classes() {
         "the generator did not reach every break spelling",
     );
 
-    let class_b = sample(&prefixed_block_strategy(), SWEEP_DOCUMENTS);
+    let class_b = sample(&overlong_code_span_block_strategy(), SWEEP_DOCUMENTS);
     let mut spans = 0_usize;
     for block in &class_b {
         let mut block_lines = block.lines();
         let Some(first_line) = block_lines.next() else {
             continue;
         };
-        if !first_line.contains("(`") || block_lines.next().is_none() {
+        if !first_line.contains("(`") || block_lines.next().is_none() || first_line.len() <= 80 {
             continue;
         }
 

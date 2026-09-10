@@ -58,13 +58,19 @@ fn wrap_text_keeps_normalised_break_on_its_own_line() {
 fn wrap_text_keeps_break_after_an_open_code_span() {
     // The unclosed span defers the bullet into a pending prefix; the break
     // that follows must still terminate the block rather than be matched as a
-    // bullet marker by the continuation handler.
+    // bullet marker by the continuation handler. The item, the break, and the
+    // body line keep their order.
     let input = lines("- item with `open span\n- - -\nbody");
+    let expected = vec![
+        "- item with `open span".to_string(),
+        "- - -".to_string(),
+        "body".to_string(),
+    ];
 
     let wrapped = wrap_text(&input, 80);
 
-    assert!(
-        wrapped.contains(&"- - -".to_string()),
-        "spaced break must survive a pending prefixed span: {wrapped:?}"
-    );
+    assert_eq!(wrapped, expected);
+
+    let rewrapped = wrap_text(&wrapped, 80);
+    assert_eq!(rewrapped, wrapped, "wrapping is not a fixed point");
 }

@@ -9,7 +9,14 @@
 //! is itself a block start keeps its underline instead of swallowing it. See
 //! [`is_setext_text`].
 
-use crate::wrap::{BlockKind, FenceTracker, LinkReferenceMatcher, classify_block, is_fence};
+use crate::wrap::{
+    BlockKind,
+    FenceTracker,
+    LinkReferenceMatcher,
+    classify_block,
+    is_fence,
+    leading_indent,
+};
 
 /// Convert Setext-style headings into ATX (`#`) headings.
 ///
@@ -69,6 +76,14 @@ fn detect_setext_heading(
     {
         return None;
     }
+    // Four columns of indentation make the pair an indented code block, where
+    // the second line is code rather than an underline. The width is measured
+    // on the whole line, before `prefix_len` is removed: the shared prefix
+    // swallows the very columns that mark the code block.
+    if content_indent_width(line) >= 4 {
+        return None;
+    }
+
     let text = line[prefix_len..].trim();
     if text.is_empty() {
         return None;
@@ -134,6 +149,22 @@ fn is_setext_text(text: &str, link_matcher: LinkReferenceMatcher) -> bool {
             | BlockKind::MarkdownlintDirective,
         ) => false,
     }
+}
+
+/// Returns the indentation width of a line's content, in columns.
+///
+/// Blockquote markers and the single space that may follow each one are
+/// consumed before the width is measured, so `>     code` counts as four
+/// columns inside the quote. Tabs count as four columns, matching
+/// [`crate::wrap::leading_indent`].
+fn content_indent_width(line: &str) -> usize {
+    let mut rest = line;
+
+    while let Some(tail) = rest.strip_prefix('>') {
+        rest = tail.strip_prefix(' ').unwrap_or(tail);
+    }
+
+    leading_indent(rest).0
 }
 
 fn shared_prefix_len(a: &str, b: &str) -> usize {
@@ -269,8 +300,33 @@ mod tests {
     #[case(vec!["[^1]: note".into(), "---".into()])]
     #[case(vec!["[label]: https://example.com".into(), "---".into()])]
     #[case(vec!["<!-- markdownlint-disable MD013 -->".into(), "---".into()])]
+    // Four columns of indentation make both lines an indented code block.
+    #[case(vec!["    code".into(), "    ---".into()])]
+    #[case(vec!["    code".into(), "    ===".into()])]
+    #[case(vec!["\tcode".into(), "\t---".into()])]
+    #[case(vec![">     code".into(), ">     ---".into()])]
+    #[case(vec![">>     code".into(), ">>     ===".into()])]
     fn refuses_underlines_below_a_block_start(#[case] lines: Vec<String>) {
         assert_eq!(convert_setext_headings(&lines), lines);
+    }
+
+    /// Asserts the indentation width is measured inside any blockquote markers.
+    ///
+    /// Three columns or fewer stay paragraph text and still convert; four or
+    /// more are an indented code block. The single space after each `>` marker
+    /// belongs to the marker, not to the content.
+    #[rstest]
+    #[case("code", 0)]
+    #[case("   code", 3)]
+    #[case("    code", 4)]
+    #[case("\tcode", 4)]
+    #[case("> code", 0)]
+    #[case(">   code", 2)]
+    #[case(">     code", 4)]
+    #[case(">> # aa", 0)]
+    #[case(">>     code", 4)]
+    fn measures_content_indentation(#[case] line: &str, #[case] expected: usize) {
+        assert_eq!(content_indent_width(line), expected);
     }
 
     /// Asserts the predicate rejects block starts and admits paragraph text.
