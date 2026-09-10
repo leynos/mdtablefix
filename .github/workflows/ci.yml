@@ -47,6 +47,34 @@ jobs:
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
 
 
+  windows-atomic-contract:
+    # The atomic replacement contract is platform-sensitive. The swap depends
+    # on rename semantics that differ between POSIX and Windows, and on the
+    # destination's read-only state, which Windows records as a file attribute
+    # rather than as a mode bit. These suites drive the library helpers and the
+    # CLI against a read-only destination, so they run on the platform whose
+    # semantics they assert. The scope is deliberately the atomic contract
+    # rather than the whole suite, which the `build-test` job already runs.
+    name: atomic write contract (windows)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_TERM_COLOR: always
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@77ea10341249024e22ec5d9069e3caa7596e0d4f
+        with:
+          install-binstall: false
+          use-sccache: false
+      - name: Test the atomic write contract
+        run: cargo test --all-features --test rewrite_atomic --test in_place_atomic
+
   binstall-packaging:
     # Runner-backed dry run of the release packaging. It proves the crate
     # builds on each release platform and that the staged assets match the

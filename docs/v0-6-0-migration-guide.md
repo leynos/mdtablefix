@@ -86,8 +86,9 @@ pub fn replace_file(
 ## Replacement metrics
 
 - **What changed:** `mdtablefix::io::replace_file`, and therefore `rewrite`,
-  `rewrite_no_wrap`, and `--in-place`, now emit three bounded counters through
-  the `metrics` façade. The crate installs no recorder.
+  `rewrite_no_wrap`, and `--in-place`, now emit three bounded counters and one
+  bounded histogram through the `metrics` façade. The crate installs no
+  recorder.
 - **Who is affected:** Library consumers and host applications that install a
   metrics recorder.
 - **Migration action:** No action is required for normal use. A host that wants

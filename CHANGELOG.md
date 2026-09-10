@@ -24,6 +24,11 @@
 - Treat common English date sequences as atomic inline fragments during
   wrapping, including ordinal day, numeric day, and month-name-first forms.
   ([#346](https://github.com/leynos/mdtablefix/issues/346))
+- The in-place replacement path emits bounded `metrics` counters and a
+  `mdtablefix_io_replace_duration_seconds` histogram, so a host application
+  that installs a recorder can watch replacements, their outcomes, and how long
+  they take. The crate installs no recorder itself.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
 
 ### Changed
 

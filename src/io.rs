@@ -10,6 +10,7 @@ use std::{
     io::{self, Write},
     path::Path,
     sync::OnceLock,
+    time::Instant,
 };
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -17,7 +18,7 @@ use cap_std::{
     ambient_authority,
     fs_utf8::{Dir, File, OpenOptions, Permissions},
 };
-use metrics::{counter, describe_counter};
+use metrics::{Unit, counter, describe_counter, describe_histogram, histogram};
 use tracing::{debug, trace};
 
 use crate::process::{process_stream, process_stream_no_wrap};
@@ -77,26 +78,40 @@ fn open_parent(path: &Path) -> io::Result<(Dir, Utf8PathBuf)> {
 
 /// Declares the metrics emitted by the replacement path.
 ///
+/// The descriptions are registered once per process rather than per
+/// replacement: they never change, and the work is not worth repeating on the
+/// path that exists to write a file.
+fn describe_metrics() {
+    static DESCRIPTION: OnceLock<()> = OnceLock::new();
+    DESCRIPTION.get_or_init(register_metrics);
+}
+
+/// Registers the descriptions of every metric the replacement path emits.
+///
 /// Every metric name and label value is fixed, so a recorder's cardinality
 /// stays bounded: no path, file name, or error text is used as a label. The
 /// library emits these metrics but never installs a recorder; a host
-/// application installs one, as documented in the developers' guide.
-fn describe_metrics() {
-    static DESCRIPTION: OnceLock<()> = OnceLock::new();
-    DESCRIPTION.get_or_init(|| {
-        describe_counter!(
-            "mdtablefix_io_replace_total",
-            "Atomic file replacements attempted, by outcome"
-        );
-        describe_counter!(
-            "mdtablefix_io_temporary_name_collisions_total",
-            "Temporary names rejected because they were already taken"
-        );
-        describe_counter!(
-            "mdtablefix_io_temporary_name_exhausted_total",
-            "Replacements abandoned because every candidate temporary name was taken"
-        );
-    });
+/// application installs one, as documented in the developers' guide. The tests
+/// call this directly, so their assertions on the declared unit and description
+/// do not depend on which test warmed [`describe_metrics`]'s `OnceLock`.
+fn register_metrics() {
+    describe_counter!(
+        "mdtablefix_io_replace_total",
+        "Atomic file replacements attempted, by outcome"
+    );
+    describe_histogram!(
+        "mdtablefix_io_replace_duration_seconds",
+        Unit::Seconds,
+        "Duration of atomic file replacements, by outcome"
+    );
+    describe_counter!(
+        "mdtablefix_io_temporary_name_collisions_total",
+        "Temporary names rejected because they were already taken"
+    );
+    describe_counter!(
+        "mdtablefix_io_temporary_name_exhausted_total",
+        "Replacements abandoned because every candidate temporary name was taken"
+    );
 }
 
 /// Atomically replaces `path` inside `directory` with `contents`.
@@ -117,12 +132,21 @@ fn describe_metrics() {
 #[tracing::instrument(level = "debug", skip(directory, contents), fields(path = %path))]
 pub fn replace_file(directory: &Dir, path: &Utf8Path, contents: &str) -> io::Result<()> {
     describe_metrics();
+    let started = Instant::now();
     let outcome = replace_file_inner(directory, path, contents);
-    counter!(
-        "mdtablefix_io_replace_total",
-        "outcome" => if outcome.is_ok() { "success" } else { "failure" }
+    let result = if outcome.is_ok() {
+        "success"
+    } else {
+        "failure"
+    };
+    counter!("mdtablefix_io_replace_total", "outcome" => result).increment(1);
+    // The duration is recorded for failures too, so a replacement that stalls
+    // before it fails is visible rather than missing from the distribution.
+    histogram!(
+        "mdtablefix_io_replace_duration_seconds",
+        "outcome" => result
     )
-    .increment(1);
+    .record(started.elapsed().as_secs_f64());
     outcome
 }
 

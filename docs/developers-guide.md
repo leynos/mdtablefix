@@ -702,12 +702,18 @@ debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified"
 
 ### Metrics
 
-The in-place replacement in `src/io.rs` emits three counters through the
-`metrics` façade. `describe_metrics` registers their descriptions exactly once
-per process behind a `std::sync::OnceLock`.
+The in-place replacement in `src/io.rs` emits three counters and one histogram
+through the `metrics` façade. `describe_metrics` registers their descriptions
+exactly once per process behind a `std::sync::OnceLock`.
 
 - `mdtablefix_io_replace_total` increments once per `replace_file` call and
   carries one label, `outcome`, with the value `success` or `failure`.
+- `mdtablefix_io_replace_duration_seconds` is a histogram of replacement
+  durations in seconds, with the unit declared by `metrics::Unit::Seconds`. It
+  is recorded once per `replace_file` call with the same `outcome` label as
+  `mdtablefix_io_replace_total`. Failures are recorded too, so a replacement
+  that stalls before it fails is visible rather than missing from the
+  distribution.
 - `mdtablefix_io_temporary_name_collisions_total` counts each candidate
   temporary name rejected because it was already taken. It carries no labels.
 - `mdtablefix_io_temporary_name_exhausted_total` counts each replacement
@@ -728,7 +734,10 @@ unless a host wires one in.
 through `metrics::with_local_recorder` on the test thread and asserts the
 emitted metric names, the counts for a success, for an occupied candidate
 name, and for an exhausted name space, plus the bounded label set: only the
-`outcome` key, with only the values `success` and `failure`.
+`outcome` key, with only the values `success` and `failure`. The tests also
+assert that the histogram's declared unit is seconds and that exactly one
+sample is recorded per replacement for both the `success` and `failure`
+outcomes.
 
 ### Performance discipline
 

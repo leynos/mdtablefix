@@ -5,11 +5,12 @@
 //! behind, a failed rewrite leaves the original byte-identical, and a symlinked
 //! target is declined rather than replaced by a regular file.
 
+use std::fs;
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
-use std::{fmt::Write as _, fs};
+use std::{fmt::Write as _, os::unix::fs::PermissionsExt};
 
 use assert_cmd::Command;
+#[cfg(unix)]
 use predicates::str::contains;
 use tempfile::tempdir;
 
@@ -42,6 +43,35 @@ fn entry_names(path: &std::path::Path) -> Vec<String> {
         .collect();
     names.sort();
     names
+}
+
+/// Marks `path` read-only the way its platform records it.
+///
+/// Unix keeps mode bits, which are set exactly so the umask cannot weaken the
+/// assertion; Windows keeps a read-only attribute, which is what
+/// [`std::fs::Permissions`] exposes there.
+fn set_read_only(path: &std::path::Path) {
+    let mut permissions = fs::metadata(path).expect("read metadata").permissions();
+    #[cfg(unix)]
+    permissions.set_mode(0o444);
+    #[cfg(not(unix))]
+    permissions.set_readonly(true);
+    fs::set_permissions(path, permissions).expect("make the target read-only");
+}
+
+/// Asserts that the run left `path` read-only.
+fn assert_read_only(path: &std::path::Path) {
+    let permissions = fs::metadata(path).expect("read metadata").permissions();
+    assert!(
+        permissions.readonly(),
+        "the read-only attribute must survive the swap"
+    );
+    #[cfg(unix)]
+    assert_eq!(
+        permissions.mode() & 0o777,
+        0o444,
+        "the read-only mode must survive the swap"
+    );
 }
 
 #[test]
@@ -78,24 +108,24 @@ fn in_place_preserves_file_mode() {
     assert_eq!(mode, 0o640, "the swap must preserve the original mode");
 }
 
-#[cfg(unix)]
+/// `--in-place` replaces a read-only target rather than refusing it, and the
+/// target stays read-only.
+///
+/// The atomic swap needs write permission on the directory, not on the file.
+/// Windows is the interesting case here: the destination carries
+/// `FILE_ATTRIBUTE_READONLY`, which the CLI's rename must ignore while
+/// preserving it on the file that replaces the target.
 #[test]
 fn in_place_replaces_read_only_file() {
     let dir = tempdir().expect("create temporary directory");
     let target = dir.path().join("sample.md");
     fs::write(&target, BROKEN).expect("write fixture");
-    // The atomic swap needs write permission on the directory, not the file.
-    fs::set_permissions(&target, fs::Permissions::from_mode(0o444)).expect("set mode");
+    set_read_only(&target);
 
     in_place(&target).success().stderr("");
 
     assert_eq!(fs::read_to_string(&target).expect("read target"), FIXED);
-    let mode = fs::metadata(&target)
-        .expect("read metadata")
-        .permissions()
-        .mode()
-        & 0o777;
-    assert_eq!(mode, 0o444, "the read-only mode must survive the swap");
+    assert_read_only(&target);
 }
 
 #[cfg(unix)]
@@ -133,6 +163,7 @@ fn in_place_failure_leaves_original_byte_identical() {
 
 /// A table whose rewrite is far larger than the file-size cap the write-failure
 /// test imposes on the child.
+#[cfg(unix)]
 fn large_table() -> String {
     let mut text = String::from("|Name|Value|\n|--|--|\n");
     for row in 0..200 {

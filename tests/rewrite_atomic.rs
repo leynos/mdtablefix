@@ -2,9 +2,14 @@
 //!
 //! `rewrite` and `rewrite_no_wrap` are the library's whole-file entry points.
 //! Each test drives them as a caller would and asserts the observable contract:
-//! a read-only target in a writable directory is replaced with its mode
-//! preserved, and a failure part-way through the replacement leaves the
-//! original byte-identical with no temporary file behind.
+//! a read-only target in a writable directory is replaced with its read-only
+//! attribute preserved, and a failure part-way through the replacement leaves
+//! the original byte-identical with no temporary file behind.
+//!
+//! The read-only case is the platform-sensitive one: Windows marks the
+//! destination `FILE_ATTRIBUTE_READONLY`, which `MoveFileExW` may refuse to
+//! replace, so the test runs on both platforms rather than only where the mode
+//! bits make it easy.
 
 #[cfg(unix)]
 use std::{fmt::Write as _, os::unix::fs::PermissionsExt, path::PathBuf};
@@ -44,6 +49,35 @@ fn entry_names(path: &Path) -> Vec<String> {
     names
 }
 
+/// Marks `path` read-only the way its platform records it.
+///
+/// Unix keeps mode bits, which are set exactly so the umask cannot weaken the
+/// assertion; Windows keeps a read-only attribute, which is what
+/// [`std::fs::Permissions`] exposes there.
+fn set_read_only(path: &Path) {
+    let mut permissions = fs::metadata(path).expect("read metadata").permissions();
+    #[cfg(unix)]
+    permissions.set_mode(0o444);
+    #[cfg(not(unix))]
+    permissions.set_readonly(true);
+    fs::set_permissions(path, permissions).expect("make the target read-only");
+}
+
+/// Asserts that the replacement left `path` read-only.
+fn assert_read_only(path: &Path) {
+    let permissions = fs::metadata(path).expect("read metadata").permissions();
+    assert!(
+        permissions.readonly(),
+        "the read-only attribute must survive the swap"
+    );
+    #[cfg(unix)]
+    assert_eq!(
+        permissions.mode() & 0o777,
+        0o444,
+        "the read-only mode must survive the swap"
+    );
+}
+
 /// A table whose rewrite is far larger than the file-size cap the
 /// write-failure test imposes on its child.
 #[cfg(unix)]
@@ -65,7 +99,14 @@ fn rewrite_with(operation: &str, path: &Path) -> std::io::Result<()> {
     }
 }
 
-#[cfg(unix)]
+/// A read-only destination is replaced rather than refused, and stays
+/// read-only.
+///
+/// The atomic swap needs write permission on the directory, not on the file, so
+/// the replacement must not be blocked by the target's own read-only state.
+/// Windows is the interesting case: the destination carries
+/// `FILE_ATTRIBUTE_READONLY`, which the rename must ignore while preserving it
+/// on the file that replaces the target.
 #[rstest]
 #[case(rewrite)]
 #[case(rewrite_no_wrap)]
@@ -73,18 +114,12 @@ fn read_only_target_is_replaced(#[case] rewrite_fn: fn(&Path) -> std::io::Result
     let dir = tempdir().expect("create temporary directory");
     let target = dir.path().join("sample.md");
     fs::write(&target, BROKEN).expect("write fixture");
-    // The atomic swap needs write permission on the directory, not the file.
-    fs::set_permissions(&target, fs::Permissions::from_mode(0o444)).expect("set mode");
+    set_read_only(&target);
 
     rewrite_fn(&target).expect("a read-only target must still be replaced");
 
     assert_eq!(fs::read_to_string(&target).expect("read target"), FIXED);
-    let mode = fs::metadata(&target)
-        .expect("read metadata")
-        .permissions()
-        .mode()
-        & 0o777;
-    assert_eq!(mode, 0o444, "the read-only mode must survive the swap");
+    assert_read_only(&target);
     assert_eq!(
         entry_names(dir.path()),
         vec!["sample.md"],
