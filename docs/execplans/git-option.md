@@ -1262,10 +1262,24 @@ GIT_CONFIG_GLOBAL=/dev/null
 HOME=<the temporary directory>
 LC_ALL=C
 LANGUAGE=
+GIT_AUTHOR_NAME=<fixture name>
+GIT_AUTHOR_EMAIL=<fixture address>
+GIT_COMMITTER_NAME=<fixture name>
+GIT_COMMITTER_EMAIL=<fixture address>
 ```
 
 `LC_ALL` and `LANGUAGE` are belt and braces only. Per AX-GIT-NLS, no assertion
 may depend on git's message text regardless.
+
+The identity variables are not belt and braces. `GIT_CONFIG_GLOBAL=/dev/null`
+removes `user.name` and `user.email` along with the rest of the developer's
+configuration, so `git commit` fails outright in the fixture — and the fixture
+cannot fix that by writing a configuration file, because a file inside the
+repository is exactly what the selection tests read. Supplying the identity
+through the environment keeps the repository's contents a function of the
+scenario alone. Found at Stage B, where the first commit in the fixture failed
+with git's "please tell me who you are"; the hardening list above previously
+omitted it.
 
 ## Behavioural specification
 
@@ -1376,31 +1390,77 @@ Feature: Select files from a Git repository
   Scenario: Reject an unusable extension
     When I run mdtablefix with "--git --md-exts md,,markdown"
     Then the command exits with status 2
+    And stdout is empty
+    And stderr contains "extension is empty"
 
   Scenario: Reject combining --git with explicit file arguments
     When I run mdtablefix with "--git notes.md"
     Then the command exits with status 2
+    And stdout is empty
 
   Scenario: Reject --list-files without --git
     When I run mdtablefix with "--list-files notes.md"
     Then the command exits with status 2
+    And stdout is empty
+    And stderr contains "--list-files requires --git"
 ```
 
-Three assertion choices are deliberate. `stderr contains "git ls-files"` names
-**our** wrapper's wording, never git's, per AX-GIT-NLS. The clap rejections
-assert on the **exit status** rather than on message text, because an earlier
-draft asserted `stderr contains "requires"` and clap 4.6.6 renders `the
-following required arguments were not provided:` for that error kind — the
-scenario would have failed on day one. `--list-files` gives the selection an
-honest oracle; an earlier draft asserted dedup by grepping a conflict marker
-out of a concatenated content dump, which was a symptom of the missing
-affordance.
+Assertion choices are deliberate. `stderr contains "git ls-files"` names
+**our** wrapper's wording, never git's, per AX-GIT-NLS. The `--git notes.md`
+rejection asserts on the **exit status** rather than on message text, because
+that wording is clap's: an earlier draft asserted `stderr contains "requires"`
+and clap 4.6.6 renders `the following required arguments were not provided:`
+for that error kind, so the scenario would have failed on day one. The other
+two rejections do assert message text, because it is **ours** — `ExtensionSpec`
+renders `extension is empty`, and `--list-files` is rejected by this plan's own
+post-parse check, which emits `--list-files requires --git` verbatim. The
+`stdout is empty` line in all three denies a naive implementation the escape of
+treating the flags as inert and formatting the positional as if `--git` were
+absent.
 
-Step definitions share state through an `rstest` fixture that builds the
-repository in a `tempfile::TempDir` and returns a handle carrying the directory
-and the last command's output. No globals and no `static`: they would make the
-scenarios order-dependent. `standard input was not read` is asserted by running
-the command with a closed or empty stdin and a timeout.
+`--list-files` gives the selection an honest oracle; an earlier draft asserted
+dedup by grepping a conflict marker out of a concatenated content dump, which
+was a symptom of the missing affordance.
+
+The two message assertions were added at Stage B. Without them the three
+rejection scenarios passed **before any production code existed**, because an
+unknown `--git` is itself an exit-2 clap error: red for the wrong reason, which
+is the same as green for the wrong reason. Stage B measured
+`1 passed; 16 failed` with the strengthened text, leaving only the status-only
+scenario the plan deliberately keeps — see Surprises & discoveries.
+
+Step definitions live in `tests/steps/git_selection.rs` and share state through
+an `rstest` fixture holding an `rstest_bdd::Slot` per fact, exactly as
+`tests/steps/reporting.rs` does — the same shape the `--check` work already
+established, so the two specifications cannot drift in house style. No globals
+and no `static`: they would make the scenarios order-dependent. A `Slot` is
+read with `get`, which requires `Clone`, so the `TempDir` slots are filled
+through `get_or_insert_with` instead; the directory is therefore created by the
+first `Given` that needs it rather than by a step of its own.
+
+`standard input was not read` is asserted by **writing a document to the
+child's standard input** and requiring standard output to be empty. The plan
+previously specified "a closed or empty stdin and a timeout", and the
+replacement is strictly stronger: an empty stdin is satisfied by a tool that
+reads and discards, whereas a document that would have been printed had it been
+read makes emptiness evidence. It is also deterministic — the pipe is closed
+after the write, so a read returns the document rather than blocking, and no
+timeout is needed. Every step writes `RAGGED` to stdin for this reason, not only
+the one that asserts on it.
+
+The fixture builds a real repository with a real `git`: real commits, a real
+ignore file, and for the conflict scenarios a real `git merge` that is allowed
+to fail. The conflict is not staged by writing marker text into a file — git
+writes the markers, and the step asserts that all three marker forms landed at
+the start of a line before letting the scenario proceed. The `--git`-absent
+scenario likewise runs in a genuine temporary directory that is not a
+repository, rather than in a repository whose `.git` was hidden.
+
+The symlink scenario and its step are gated on `#[cfg(unix)]`. On Windows git
+checks a symlink out as a plain file holding the target's path, so the scenario
+would have no subject there; both the step definition and the `#[scenario]`
+binding carry the gate, so the step registry and the feature file stay
+consistent.
 
 ## Plan of work
 
@@ -1661,11 +1721,35 @@ plateau.
       class the plan anticipated, and both are fixed by the mechanism it
       already prescribes — see Surprises & discoveries. The spike was reverted;
       the final form lands in EP-M2, after its red tests.
-- [ ] EP-M0, BDD half: confirm one scenario from this plan's feature file
-      runs, delivering `EV-M0-BDD`. This waits on Stage B, which writes that
-      feature file.
-- [ ] Stage B: add `thiserror`; write the feature file; write the red unit and
-      property tests for EP-M1.
+- [x] (2026-09-12) EP-M0, BDD half: one scenario from this plan's feature file
+      runs end to end, delivering `EV-M0-BDD`. The transcript is in Artefacts
+      and notes. The `Step failed at index 5` line is the substance of the
+      evidence: steps 0–3 are the `Background` and step 4 is the `When`, so the
+      real-git fixture built, the binary launched, and only the `Then` failed —
+      which is the intended red, `--git` being unknown to `Cli` as it stands.
+- [x] (2026-09-12) Stage B, dependencies and specification: `thiserror = "2"`
+      added (already in `Cargo.lock` at 2.0.20 as a transitive dependency, so
+      nothing was fetched). `tests/features/git_file_selection.feature` written
+      with 16 scenarios and a four-file `Background`, and bound from
+      `tests/git_file_selection.rs` with step definitions in
+      `tests/steps/git_selection.rs`.
+- [x] (2026-09-12) Stage B, red evidence: `cargo test --test
+      git_file_selection` reports **1 passed; 16 failed**. Every failure is at
+      the `Then` or later, never in the fixture, and every one names the
+      intended cause. Measured before any production code for the selection
+      exists. Three fixture-level corrections were needed to reach that state
+      and are recorded under Surprises & discoveries.
+- [x] (2026-09-12) Stage B, gate posture: `make check-fmt`, `make typecheck`,
+      `make lint`, `make markdownlint`, `make nixie`, and `cargo test --doc` are
+      green; `make test` is red **only** on `git_file_selection`, by design. A
+      `--no-fail-fast` sweep of the 27 targets cargo never reached found one
+      genuine failure, now fixed: this plan document was not a two-pass fixed
+      point, because prose added to it was hand-wrapped. See the new Surprises
+      entry — hand-fixing it failed three times and the settled text had to be
+      measured, not typed.
+- [ ] Stage B, remaining: the red unit and property tests for EP-M1, which must
+      fail for the intended reason — for the property tests, a compilation
+      failure naming the missing item rather than a spurious pass.
 - [ ] EP-M1: implement `extensions`, `policy`, `conflict`, `git_ls_files`, and
       `fs_probe`; discharge INV-NUL-SPLIT, INV-EXT-SOUND, INV-EXT-COMPLETE,
       INV-DEDUP, INV-ORDER-DET, INV-PROBE-EXCLUSIONS, INV-CONFLICT-GUARD.
@@ -1688,6 +1772,63 @@ Superseded and deliberately not carried forward: adding `googletest`,
 INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
 
 ## Surprises & discoveries
+
+- Observation: **a red test that fails for the wrong reason is as worthless as a
+  green one that passes for the wrong reason**, and three of this plan's
+  rejection scenarios were in exactly that state. With the feature file as
+  written, "Reject an unusable extension", "Reject combining `--git` with
+  explicit file arguments", and "Reject `--list-files` without `--git`" all
+  **passed before any production code existed** — an unknown `--git` is itself
+  an exit-2 clap error, so the exit-status assertion was satisfied by the
+  absence of the feature under test.
+  Evidence: the first Stage B run reports `3 passed; 14 failed`; after the two
+  message assertions were added and the test target rebuilt, `1 passed; 16
+  failed`, the survivor being the one scenario the plan deliberately leaves on
+  clap's exit status.
+  Impact: the two scenarios whose diagnostic text is **ours** now assert it —
+  `extension is empty` from `ExtensionSpec`'s `Display`, and `--list-files
+  requires --git` from the post-parse check. All three gained `stdout is
+  empty`, which denies a naive implementation the escape of treating the flags
+  as inert and formatting the positional as though `--git` were absent. Only
+  `--git notes.md` remains status-only, because its wording is clap's.
+
+- Observation: **the feature file is read at macro-expansion time, so editing it
+  does not by itself trigger a rebuild.** An unchanged test binary re-ran the
+  previous scenarios and reported the previous results.
+  Evidence: the run after the edit still reported `3 passed; 14 failed`; after
+  `touch tests/git_file_selection.rs` the same command reported `1 passed; 16
+  failed`.
+  Impact: recorded here so that a later revision of the specification is not
+  misread as having had no effect. `cargo test` cannot see the dependency, and
+  no build-script indirection is worth adding for it.
+
+- Observation: **`GIT_CONFIG_GLOBAL=/dev/null` leaves the fixture's `git commit`
+  with no identity, so the first commit fails outright.** The plan's hardening
+  list omitted the four `GIT_AUTHOR_*`/`GIT_COMMITTER_*` variables.
+  Evidence: the initial Stage B run failed in the `Background` of all 17
+  scenarios, at the first `commit_file`, before any `When` had run.
+  Impact: the fixture supplies the identity through the environment rather than
+  a configuration file, because a file inside the repository is precisely what
+  the selection tests read. The hardening list has been amended.
+
+- Observation: **the `ignored_file` fixture step asserted its premise
+  backwards.** `git check-ignore` exits zero when the path *is* ignored, and the
+  step asserted `!success()`, so it rejected its own correct fixtures.
+  Evidence: the first run's message, `build/out.md must not be ignored, or the
+  scenario proves nothing`, firing in the `Background` of every scenario.
+  Impact: fixed, and the assertion kept — its message now reads "must be
+  ignored". Worth recording because the inversion is invisible in a passing
+  run: it turned a premise check into its own negation, and only fired because
+  the fixture happened to be correct.
+
+- Observation: **a `Slot` cannot hold a `TempDir` read with `get`**, because
+  `get` requires `T: Clone` and `TempDir` is not `Clone`.
+  Evidence: `the trait bound TempDir: Clone is not satisfied` at the first
+  `repo_path` call.
+  Impact: the `TempDir` slots are filled through `get_or_insert_with`, so the
+  directory is created lazily by the first `Given` that touches it rather than
+  by a dedicated step. `tests/steps/reporting.rs` already used this form, so
+  the plan's step sketch was the thing out of step, not the pattern.
 
 - Observation: **`--list-files` with a positional argument is accepted by the
   grammar**, and the plan's own reasoning for why it need not be guarded is
@@ -1798,10 +1939,63 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   Impact: any `# Examples` block is unverified by every current gate. Stage C
   adds `cargo test --doc`.
 
+- Observation: **hand-wrapping prose in this plan is what breaks
+  `idempotence_drift`, and hand-fixing it does not work.** The gate runs the
+  binary over every `docs/**/*.md` with
+  `--wrap --renumber --breaks --ellipsis --fences` and asserts that pass 1
+  equals pass 2. A paragraph wrapped by hand to a different width than the
+  tool's is not settled after one pass, so the document fails even though
+  nothing is wrong with the prose. Three separate attempts to type a correct
+  fixed point all failed, including one that introduced a line with a trailing
+  space, which the tool then propagated. Evidence:
+  `docs/execplans/git-option.md` was the single failing file in an otherwise
+  green corpus;
+  `target/debug/mdtablefix --wrap --renumber --breaks
+  --ellipsis --fences --diff docs/execplans/git-option.md`
+  shows it drifting from its own first pass. Impact: **do not hand-wrap
+  paragraphs added to this plan.** When the gate fails, converge the file with
+  the tool rather than editing by eye: copy it aside, run the flag set with
+  `--in-place` until the output stops changing, take the settled region from
+  that converged copy, and splice it in — then confirm by running the flag set
+  twice more and diffing, as was done here. The whole-file alternative was
+  measured and rejected only for diff noise: it is 765 changed lines against
+  264 for the splice. Note also that the drifted region showed up *only* as
+  pass1 ≠ pass2; pass0 ≠ pass1 is normal for this corpus and is not what the
+  gate checks.
+
+- Observation: **red-before-green and "gate every commit" cannot both hold**,
+  and this plan mandates red-before-green while EP-M1 mandates that the CLI
+  stay unchanged. The consequence is unavoidable rather than incidental: from
+  Stage B until EP-M2 lands, `make test` reports `git_file_selection` as
+  failing, and no smaller commit can make it pass. Evidence: EP-M1's own
+  "Remaining gaps: no CLI flag", against Stage C's "Write the feature file and
+  its bindings … before any production code". Impact: the Stage B and EP-M1
+  commits are deliberately red at `make test`, and say so in their messages.
+  Everything else — `make check-fmt`, `make typecheck`, `make lint`,
+  `make markdownlint`, and the unit and property suites each commit does own —
+  is green on both. No CodeRabbit review is requested until EP-M2 restores a
+  fully green tree. The alternative considered and rejected was pinning the
+  scenarios to current behaviour so they pass, which is impossible here: the
+  feature under test does not exist at all, so there is no current behaviour to
+  pin. The second alternative, parking the scenarios behind `#[ignore]` or a
+  cargo feature, is forbidden by Stage B and would leave the target outside
+  `make test` permanently rather than for two commits.
+
 ## Decision log
 
 Entries are pointers; the reasoning lives in the body sections named. ADR 0010
 is the durable record, and EP-M3 reconciles this log into it.
+
+- Decision: accept a deliberately red `make test` on the Stage B and EP-M1
+  commits, rather than parking the specification or pinning it to behaviour
+  that does not exist.
+  Rationale: the plan requires the specification to exist and be observed
+  failing before the code that satisfies it, and EP-M1 requires the CLI to
+  remain unchanged, so no commit between Stage B and EP-M2 can be green. The
+  redness is bounded to two commits, stated in each commit message, and resolved
+  by EP-M2, which is the first commit eligible for review. Cost: `git bisect`
+  over these two commits lands on a failing test target by design.
+  Date/Author: 2026-09-12, implementation.
 
 - Decision: stack this work on `check-option` by rebasing onto it, rather than
   waiting for #464 to merge or re-deriving its composition locally.
@@ -2070,6 +2264,68 @@ formatter, so an exit of 0 or a runtime error is proof that clap admitted the
 command line. Adding `git` to the `inputs` group was the change most likely to
 break the positional: the two regression rows say it did not, and the first row
 says the same group closes in the other direction.
+
+**EV-M0-BDD** — measured 2026-09-12 on the Stage B tree, with
+`cargo test --test git_file_selection -- --exact list_the_selection_without_acting
+--nocapture`. Abridged to the lines that carry the evidence; the scenario's
+`Given` steps are the four-file `Background`.
+
+```plaintext
+---- list_the_selection_without_acting stdout ----
+Step failed at index 5: Then the command succeeds
+  - Panic in step 'the command succeeds', function 'command_succeeds':
+    assertion `left == right` failed: the command must succeed, stderr:
+      error: unexpected argument '--git' found
+        tip: to pass '--git' as a value, use '-- --git'
+      Usage: mdtablefix [OPTIONS] [FILES]...
+    left: 2
+   right: 0
+
+test list_the_selection_without_acting ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 16 filtered out
+```
+
+The index is the substance. Steps 0–3 are the `Background` — a repository
+initialised, committed to four times, with a tracked, an untracked, and an
+ignored file laid down — and step 4 is the `When`, which launches the real
+binary. All five succeeded. Only the `Then` failed, and it failed for the
+intended reason: `--git` does not exist on `Cli` yet. The feature file is
+therefore discovered, its `Background` executes, the step registry binds every
+step, and the failure is the missing feature rather than a broken harness.
+
+**EV-B-RED** — measured 2026-09-12, before any production code for the selection
+exists, log at `/tmp/stage-b-mdtablefix-git-option.out`. `cargo test --test
+git_file_selection`:
+
+```plaintext
+test accept_extensions_with_a_leading_dot ... FAILED
+test exit_successfully_when_nothing_is_selected ... FAILED
+test extend_the_selection_to_untracked_files ... FAILED
+test list_the_selection_without_acting ... FAILED
+test never_write_through_a_symlink ... FAILED
+test reformat_tracked_markdown_in_place ... FAILED
+test refuse_to_rewrite_a_conflicted_file ... FAILED
+test reject_an_unusable_extension ... FAILED
+test reject_combining_git_with_explicit_files ... ok
+test reject_list_files_without_git ... FAILED
+test report_a_clean_repository ... FAILED
+test report_a_clear_error_outside_a_repository ... FAILED
+test report_drift_across_the_repository ... FAILED
+test restrict_the_selection_to_chosen_extensions ... FAILED
+test rewrite_a_conflicted_file_when_allowed ... FAILED
+test scope_the_selection_to_the_current_directory ... FAILED
+test skip_a_tracked_file_deleted_from_the_working_tree ... FAILED
+
+test result: FAILED. 1 passed; 16 failed; 0 ignored; 0 measured
+```
+
+Every failure is at a `Then` or later and every one names `--git` as an unknown
+argument. The single pass is `reject_combining_git_with_explicit_files`, whose
+assertion the plan deliberately restricts to the exit status because the
+wording is clap's; it is red for the right reason only in the sense that a
+rejection is expected, and EP-M2 must re-examine it against the real
+diagnostic. The earlier run of the same command read `3 passed; 14 failed`, and
+why that was the worse result is under Surprises & discoveries.
 
 ## Revision note
 
