@@ -418,7 +418,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
       Revision 14. Revision 15 is a documentation revision, so its gate run is
       the Markdown pair: `markdownlint` (34 files, 0 errors) and `nixie` pass,
       and the Rust gates were not re-run because no Rust, test, or
-      configuration file changed.
+      configuration file changed. Revision 16 closes the two threads Revision
+      15 left open: the CodeRabbit review of Revision 15's own commit, which
+      returned 0 findings in 55 seconds, and a re-measurement of the `make fmt`
+      drift at that commit, which is the same ten files out of 35 tracked.
 
 ## Surprises & discoveries
 
@@ -3805,6 +3808,16 @@ slightly different width, and table padding tightened, with no word changed.
 Running the target would therefore rewrite ten files this documentation change
 has no business touching, in the commit that closes it.
 
+Re-measured at `ec936b2`, the branch's last commit: the tracked count has grown
+from 31 to 35 because this branch added documents, the drifting set is the same
+ten files, and only the deltas moved, for the documents this branch went on to
+edit — `docs/execplans/check-option.md` is now `+1158 -1230` and
+`docs/developers-guide.md` is `+129 -132`. The conclusion does not depend on the
+count: the same ten files drifted before this branch existed and drift still, so
+declining `make fmt` remains the decision. The command behind both measurements
+is `mdtablefix --check` with the five flags above over `git ls-files '*.md'`,
+which reports only the files that would change.
+
 Run over this branch's working tree instead, the same measurement is a check on
 the change itself, and it caught one regression: `docs/contents.md` is a fixed
 point at `HEAD`, and the index entry added for the two new ADRs was wrapped
@@ -4524,3 +4537,39 @@ not because they would fail: nothing outside these two Markdown files changed,
 so `check-fmt`, `lint`, `typecheck`, and the test suite would report exactly
 what Revision 14 recorded — green apart from the pre-existing #474
 counterexample in `check_properties`.
+
+### Revision 16, 2026-09-11
+
+Two threads left open by Revision 15 are closed here, and nothing else changes:
+the review of that revision's own commit, requested after the commit was pushed
+because the previous review's tip predated it, and the `make fmt` measurement,
+which had been taken at an earlier `HEAD`. No requirement, acceptance criterion,
+or code file changes; the diff is `docs/execplans/check-option.md` alone.
+
+`coderabbit review --agent --committed` over `ec936b2` — the commit that carries
+Revision 15 — completed in 55 seconds with exit 0, `review_completed`, 0
+findings, and no rate limit, quota message, or refusal anywhere in the log. Its
+`reviewedFiles` set is again exactly equal to
+`git diff --name-only origin/main...HEAD`, 73 files either way, so the review
+covered the documentation revision and the corpus and prediction test files
+alike. The log records no commit SHA; that is a limitation of the tool rather
+than of the run, and the commit is known by HEAD at launch and by `git log`, not
+from the transcript. Log:
+`/tmp/coderabbit-rev15-mdtablefix-check-option.out`. Taken with every earlier
+run this plan records, from `EP-M0` onward, no CodeRabbit review of this branch
+has yet raised a finding; that is a consistent result rather than independent
+evidence that the tree is correct, and this plan treats it as the former.
+
+The `make fmt` artefact in `Artefacts and notes` said that 10 of 31 tracked
+Markdown files drift. That reading was taken at an earlier `HEAD`; re-measured
+at `ec936b2` with the same five flags over `git ls-files '*.md'`, 10 of 35
+drift — the same ten files, the tracked count having grown because this branch
+added documents, and larger deltas only for the documents the branch itself
+edited. The section now carries both readings and the command that produced
+them, so the claim behind declining `make fmt` can be re-run rather than
+trusted.
+
+Gate run, through the gate runner, over this revision: `make markdownlint` (34
+files, 0 errors) passes. `make nixie` and the Rust gates are not re-run, and not
+because they would fail: no diagram, Rust source, test, or configuration file
+changed. Log: `/tmp/markdownlint-mdtablefix-check-option.out`.
