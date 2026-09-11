@@ -311,7 +311,13 @@ Hard invariants. Violating one requires escalation, not a workaround.
       mode in `tests/cli_check.rs`'s matrix. The `INV-DETERMINISTIC` negative
       control was applied and removed; it confirmed the hazard on the transition
       band and exposed a blind spot in the method, both recorded in
-      `Artefacts and notes → INV-DETERMINISTIC negative control`.
+      `Artefacts and notes → INV-DETERMINISTIC negative control`. All six gates
+      are green (43 suites, 1812 passed, 0 failed, 20 ignored), the post-gates
+      CodeRabbit pass returned `review_completed` with zero findings on the
+      pushed commit `cf8995d`, and the milestone's first gate run was red on two
+      rustfmt diffs that `cargo fmt --all` resolved. See
+      `Artefacts and notes → EP-M4 red and green transcripts` and
+      `→ CodeRabbit review after EP-M4`.
 - [ ] EP-M5 Curated CLI matrix coverage for the two new modes.
 - [ ] EP-M6 Targeted mutation testing of the counting and aggregation
       functions.
@@ -2770,6 +2776,19 @@ test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 
 Log: `/tmp/green-ep-m4-mdtablefix-check-option.out`.
 
+**The first full gate run was red, and only on formatting.** `make check-fmt`
+found two rustfmt diffs — the six-line signature of
+`unreadable_file_yields_the_error_status_in_diff_mode` in
+`tests/bdd_reporting.rs`, which `rustfmt` collapses onto one line, and the
+`assert_eq!` in the above-threshold determinism test, whose long message makes
+`rustfmt` put the expected `0` on its own line. `cargo fmt --all` was applied,
+it touched only those two files, and the second gate run was green on all six:
+43 suites, 1812 passed, 0 failed, 20 ignored, with `git status --short`
+byte-identical before and after. `make fmt` was deliberately not used, because
+it also runs `mdformat-all` over the whole repository. As in `EP-M3`, both
+diffs are formatting rather than behaviour, and both were in test code written
+earlier in the same session while the gates were held to the end.
+
 ### `INV-DETERMINISTIC` negative control
 
 The plan's non-vacuity requirement for `INV-DETERMINISTIC` is: "negative control
@@ -2859,6 +2878,32 @@ Closing that gap means either a corpus large enough to cross a plausible budget
 — which costs seconds per test — or a source-level assertion that the diff path
 names no clock. Neither is in `EP-M4`'s scope; both are recorded here rather than
 silently dropped.
+
+### CodeRabbit review after `EP-M4`
+
+Requested through the gate runner only once all six deterministic gates were
+green on this exact tree — 43 suites, 1812 passed, 0 failed, 20 ignored — so the
+review was not asked to find anything the gates could have caught first. It ran
+against the pushed commit `cf8995d` on `origin/check-option`, reviewing the whole
+branch diff rather than this milestone alone: 44 files, from `EP-M0` onward. It
+reported no rate limit, no refusal, and no findings:
+
+```plaintext
+{"type":"review_context","reviewType":"all","currentBranch":"check-option","baseBranch":"main",…}
+{"type":"status","phase":"analyzing","status":"reviewing"}
+{"type":"complete","status":"review_completed","findings":0,"reviewedFiles":[…44 paths…]}
+CODERABBIT_EXIT=0
+```
+
+The runner verified that the review's `reviewedFiles` list is set-equal to
+`git diff --name-only origin/main...HEAD`, so the zero is a completed review of
+the full change surface rather than a cache hit or a partial diff. Nothing
+carried into `EP-M5`. Two caveats are worth keeping with the result: the review
+completed in about 32 seconds over a roughly 3,400-line diff, so "no findings"
+means the contracted reviewer raised nothing rather than that the diff was
+exhaustively audited; and the same reviewer had already returned zero findings
+for `EP-M3`'s commit, so most of what it saw had passed once before. The full
+JSON-lines log is `/tmp/coderabbit-mdtablefix-check-option.out`.
 
 ## Documentation and skills to consult
 
