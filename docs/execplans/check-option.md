@@ -5,9 +5,11 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS — `EP-M6` is blocked by issue #474, a pre-existing
-non-idempotent transform class under `--headings`; every other milestone is
-discharged. See `Progress` and `Outcomes & retrospective`.
+Status: IN PROGRESS — `EP-M0`–`EP-M5` and `EP-M7` are discharged. The
+non-idempotent transform class under `--headings` that blocked `EP-M6` is fixed
+upstream by pull request #477 (issue #474), merged into this branch's base as
+`408c76a`, and the full `test` gate is green again; `EP-M6` is unblocked and has
+not yet run. See `Progress` and `Outcomes & retrospective`.
 
 ## Purpose / big picture
 
@@ -187,7 +189,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
   cases, which is partial evidence but not a general result.
   Materialised, twice, as predicted: two classes under `--wrap`/`--breaks`
   (issue #468, fixed by pull request #470) and a third under `--headings`
-  (issue #474, open). All three are pre-existing and none is reachable through
+  (issue #474, fixed upstream by pull request #477, merged as `408c76a` and
+  absorbed by this branch's rebase). All three are pre-existing and none is
+  reachable through
   `make fmt`'s flag set today. The mitigation worked as intended — the answer
   was known before any CLI surface existed — but the *unquantified* likelihood
   in the original wording is now measured and is not low: the third class is
@@ -196,14 +200,22 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 - Risk: the `INV-IDEMPOTENT` property is flaky rather than merely imperfect, so
   a green `test` gate is not evidence that the invariant holds. Severity: high.
-  Likelihood: confirmed. Mitigation: none available inside this plan — the
-  generator draws from a large space and reaches the failing shape in only a
-  fraction of runs, so `with_cases(48)` sometimes passes and sometimes fails on
-  an unchanged tree. Pinning a passing seed or excluding the test would turn the
-  gate green while the counterexample stands, which `Tolerances` forbids. The
-  fix belongs with the transform defect: issue #474 requires the generator to
-  reach the shape deterministically. Until then, `EP-M6` is blocked and no
-  commit claims a green `test` gate.
+  Likelihood: was confirmed, and the class behind it is now fixed. Mitigation:
+  none available inside this plan — the generator draws from a large space and
+  reaches the failing shape in only a fraction of runs, so `with_cases(48)`
+  sometimes passes and sometimes fails on an unchanged tree. Pinning a passing
+  seed or excluding the test would turn the gate green while the counterexample
+  stands, which `Tolerances` forbids. The fix was left where it belonged, with
+  the transform defect: issue #474 required the generator to reach the shape
+  deterministically, and pull request #477 instead removed the absorption the
+  shape exposed. It also landed the deterministic fixtures this plan's
+  `Artefacts and notes` asked for, as `tests/data/idempotence/T1`–`T6`. The
+  sampled shape is a fixed point now, so the property has been green in every
+  run since, and Revision 17 measures it green inside a fully green `make test`
+  (1860 passed, 0 failed). That retires this class and not the sampling: the
+  property still draws from a fraction of a large space, so a green run stays
+  evidence rather than proof. The fixtures are what make the shape's presence in
+  the suite unconditional rather than sampled.
 
 - Risk: `EP-M1` rewrites the serialization path used by every mode, including
   the one that mutates users' files, and the repository has **no existing
@@ -355,7 +367,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
       and exposed a real gap in the diff invariant rather than a snapshot
       problem; see `Artefacts and notes → EP-M5 red and green transcripts`.
 - [ ] EP-M6 Targeted mutation testing of the counting and aggregation
-      functions. **Blocked before its first command.** `cargo mutants --file
+      functions. **Was blocked before its first command; the blocker is now
+      cleared and the milestone has not been run.** `cargo mutants --file
       src/report/delta.rs --file src/driver.rs` finds the 43 mutants and then
       refuses to test them, because its baseline `cargo test` fails:
       `tests/check_properties.rs::generated_documents_reach_a_fixed_point` has
@@ -365,8 +378,14 @@ Hard invariants. Violating one requires escalation, not a workaround.
       does not exclude the test to get a score; the class is raised as GitHub
       issue #474 and the milestone resumes once the `test` gate is green. See
       `Surprises & discoveries` and
-      `Artefacts and notes → EP-M6 baseline blocked`. The `make test` gate is
-      **red** at `a06bab6` as a result.
+      `Artefacts and notes → EP-M6 baseline blocked`. The `make test` gate was
+      **red** at `a06bab6` as a result. **Cleared in Revision 17:** pull request
+      #477 fixed the transform, the branch rebased onto it, and the gate runner
+      measured the whole suite green — including
+      `generated_documents_reach_a_fixed_point` itself, which now reports `ok`
+      — so `cargo mutants`'s precondition is met and the milestone's first
+      command can run. It has not been run yet, so no mutant score exists and
+      this box stays unticked.
 - [x] Interleaved: forward-compatibility with the `--git` plan (pull request
       #466). Four small changes, requested by that plan's author, that stop this
       branch's shape from foreclosing a second input source: the `mode` group now
@@ -407,9 +426,14 @@ Hard invariants. Violating one requires escalation, not a workaround.
       both negative-control runs recorded. Step 12 was added in Revision 15
       and is complete: `docs/developers-guide.md`'s shared-closure argument no
       longer stops at the structure, and names the test that covers what the
-      structure cannot. The plan is **not** `COMPLETE`:
-      `EP-M6` is still blocked by #474, and `make test` is still red on that
-      counterexample. Gates for Revision 14, run through the gate runner:
+      structure cannot. The plan is **not** `COMPLETE`: `EP-M6` has not run,
+      and the `make test` gate it depends on is green again — restored by an
+      upstream fix rather than by anything this branch changed. Revision 17
+      rebases the branch onto `origin/main` at `408c76a`, the commit that fixes
+      #474, and measures every gate green afterwards: `check-fmt`, `lint`,
+      `typecheck`, `markdownlint` (34 files, 0 errors), `nixie`, and `test`
+      (45 test binaries plus the doc-test target: 1860 passed, 0 failed, 20
+      ignored). Gates for Revision 14, run through the gate runner:
       `check-fmt`, `lint`, `typecheck`, `markdownlint` (34 files, 0 errors),
       and `nixie` pass; `check_prediction` passes 11/11 inside `make test`,
       which is red only on `check_properties`; and the `--no-fail-fast` run
@@ -657,6 +681,38 @@ Hard invariants. Violating one requires escalation, not a workaround.
   untouched, because the refusal is a property of the replacement and there is
   now no replacement to make. Declared to the `--git` plan rather than left for
   a reviewer to find.
+  Date/Author: 2026-09-11.
+
+- Observation: **a rebase can report success and still be wrong.** The first
+  attempt at the second rebase exited clean, with no conflict, and silently
+  corrupted three Markdown documents: `docs/architecture.md`'s footnotes example
+  had its `Before:` lines rewritten to the `After:` form and lost the `After:`
+  label, its blank line, the opening fence, and the `Text.` line under it, and
+  fourteen blank lines appeared from nowhere across `docs/architecture.md` (one),
+  `docs/developers-guide.md` (five), and `docs/users-guide.md` (eight). The only
+  signal was a stream of `weave: N entities auto-resolved (<confidence>)`
+  notices, at `high`, `very_high`, and once `conflict` confidence — a merge
+  driver selected by the global attributes file for Markdown paths, reporting
+  confidence in an entity merge that had changed the meaning of a worked
+  example.
+  Evidence: the three blobs compared three ways (`origin/main:<path>`,
+  `2a73a58:<path>`, working file) — the corrupt copies, the rebase log, and both
+  diagnostic diffs are preserved under `/tmp/weave-corrupt/`; the recovery run
+  under `git -c core.attributesFile=/dev/null` produced a tree whose delta
+  against `2a73a58` is exactly `408c76a`'s own stat. Recorded in
+  `Artefacts and notes → Second rebase onto origin/main (#477)`.
+  Lesson: for this repository a clean driver exit is not evidence of intended
+  semantics, so the default is Git's built-in merge and a byte-level comparison
+  against both parents is what makes a driver's result acceptable. The
+  deterministic gates would have caught the damage in the end, and not only the
+  blank lines: the preserved copies fail `markdownlint` with 21 errors under the
+  repository's own configuration — 14 `MD012` from the inserted blanks, three
+  `MD053` on the `[^1]`, `[^2]`, and `[^10]` definitions the entity merge
+  invented, two `MD051`, and `MD031`/`MD040` on the fence it dropped — while the
+  same three files as merged report 0, which is what makes the corruption the
+  cause rather than a pre-existing finding. What the blob comparison bought was
+  finding it before the corrupted replay was committed and pushed, which the
+  gate run alone would not have done.
   Date/Author: 2026-09-11.
 
 ## Decision log
@@ -1165,13 +1221,15 @@ Hard invariants. Violating one requires escalation, not a workaround.
 ## Outcomes & retrospective
 
 **This plan is not `COMPLETE`.** `EP-M0`–`EP-M5` and `EP-M7` are discharged;
-`EP-M6` is blocked by issue #474, a pre-existing non-idempotent transform class
-under `--headings` that keeps `make test` red. The feature is implemented,
-documented, and gated by the suites that pass, but a formatter whose own gate
-can reject its own output is not finished, so the plan stays open and the
-reader should treat `Surprises & discoveries` and
-`Artefacts and notes → EP-M6 baseline blocked` as the live issues rather than
-as history.
+`EP-M6` was blocked by issue #474, a pre-existing non-idempotent transform class
+under `--headings`, and that blocker is now cleared without a change from this
+branch: pull request #477 fixed the transform, the branch rebased onto it, and
+every gate is green again (`make test` at 1860 passed, 0 failed). What remains
+open is the milestone itself, which has not run, so the reader should treat
+`Surprises & discoveries` and
+`Artefacts and notes → EP-M6 baseline blocked` as the record of a defect class
+this plan found and an upstream fix closed, not as live issues. `EP-M6`'s own
+mutant score is the one obligation still outstanding.
 
 What was delivered, against the obligations:
 
@@ -1204,10 +1262,14 @@ What was delivered, against the obligations:
 - `INV-IDEMPOTENT`: **the obligation that mattered most, and the one that is
   only partly discharged.** It was stated before any CLI surface existed, and
   it found two pre-existing defect classes immediately (issue #468, fixed by
-  pull request #470) and a third later (issue #474, still open). The lesson is
-  that the obligation was worth writing before the code; the residual gap is
-  that its evidence is a property test over a sampled domain, so a green run
-  is not proof while #474 stands.
+  pull request #470) and a third later (issue #474, open when this was written
+  and since fixed by pull request #477). The lesson is that the obligation was
+  worth writing before the code; the residual gap is that its evidence is a
+  property test over a sampled domain, so a green run is evidence rather than
+  proof. The fix closed the known hole in that domain rather than widening it:
+  the sampled shape is now a fixed point, and it is pinned unconditionally by
+  fixtures as well, so the invariant no longer depends on the generator
+  reaching it.
 - `INV-NOWRITE`: discharged as the type-level `ReadOnlyDir` argument plus
   `tests/cli_check.rs`'s directory snapshot, with the same snapshot assertion
   run against `--in-place` as its non-vacuity control.
@@ -2237,6 +2299,14 @@ whose own gate is red; both are rejected, so the milestone is deferred until
 the transform is fixed (GitHub issue #474). See
 `Artefacts and notes → EP-M6 baseline blocked`.
 
+Blocker cleared (recorded in Revision 17): the transform was fixed upstream, by
+pull request #477, which refuses Setext conversion of a table delimiter row. The
+branch rebased onto that commit as `408c76a`, the gate runner then measured
+`make test` green — `generated_documents_reach_a_fixed_point` itself reports
+`ok` — and so the baseline precondition below is met. The milestone is unblocked
+and remains unrun; the condition it was never allowed to satisfy itself, "green
+by exclusion or by a pinned seed", therefore still holds.
+
 Recovery: additive; no production change unless a survivor is found.
 
 Compatibility decision: none required.
@@ -2499,10 +2569,11 @@ re-running a gate to diagnose a failure.
 ### EP-M6
 
 0. Precondition: `make test` is green, because `cargo-mutants` aborts on a red
-   baseline. **Not met at `a06bab6`**; see `Artefacts and notes → EP-M6 baseline
-   blocked`. Do not start step 1 until the `--headings` table/setext defect
-   (issue #474) is fixed, and do not satisfy the precondition by excluding the
-   test or pinning a seed.
+   baseline. **Not met at `a06bab6`**; **met at `bb068f1`**, the rebased tip
+   measured in Revision 17. See `Artefacts and notes → EP-M6 baseline blocked`.
+   The `--headings` table/setext defect (issue #474) was fixed upstream by pull
+   request #477 rather than by this branch. Do not satisfy the precondition by
+   excluding the test or pinning a seed, in this tree or any later one.
 1. `cargo mutants --file src/report/delta.rs --file src/driver.rs`.
 2. Kill each survivor with a test, or record why it is acceptable.
 
@@ -2750,6 +2821,95 @@ in place:
 - `ADR 0006` and `ADR 0007` were already written by #470 and #469, so the
   check-and-diff record is now `ADR 0009` and the byte-order mark needs its own
   `ADR 0008`. See `Decision log`.
+
+### Second rebase onto `origin/main` (#477)
+
+One pull request merged after the first rebase above, and it is the one this
+plan had been waiting for:
+
+| PR | Issue | Merged subject | Effect on this plan |
+| --- | --- | --- | --- |
+| #477 | #474 | `Refuse Setext conversion of a table delimiter row (#474)` | fixes the `--headings` class recorded in `Artefacts and notes → EP-M6 baseline blocked`; clears `EP-M6`'s baseline precondition |
+
+The initial tip was `2a73a58`; the branch was replayed onto `origin/main` at
+`408c76a`, twenty-six commits, and **no file conflicted in either attempt**.
+`Cargo.toml` and `Cargo.lock` were untouched by the merge: `408c76a` changes
+neither, and the branch's own manifest changes were already in place, so there
+was no lock file to rebuild and nothing to take from `main` on that account.
+
+#### The first attempt rebased cleanly and was still wrong
+
+`git rebase origin/main` reported `Successfully rebased and updated
+refs/heads/check-option.`, with no conflict and nothing on stderr but
+`weave: N entities auto-resolved (<confidence>)` notices, at `high`,
+`very_high`, and once `conflict` confidence: the Weave merge driver, selected
+for Markdown and Rust paths by the global attributes file, had auto-resolved the
+documentation. Comparing the result against both parents showed what
+"auto-resolved" had cost:
+
+- `docs/architecture.md`: the footnotes example had its `Before:` lines
+  rewritten from `1. First note` to `[^1]: First note` — the *After* form — and
+  lost the `After:` label, its blank line, the opening fence, and the `Text.`
+  line beneath it: seven lines replaced by five, so the worked example no longer
+  demonstrates the transform it documents.
+- Fourteen stray blank lines were inserted across the same three files: one in
+  `docs/architecture.md`, five in `docs/developers-guide.md`, eight in
+  `docs/users-guide.md`.
+
+Both defects were found by comparing blobs, not by any driver message:
+`git show origin/main:<path>`, `git show 2a73a58:<path>`, and the working file,
+for each of the three documents. The evidence was then preserved in
+`/tmp/weave-corrupt/` — copies of the three merged files, the rebase log, and
+both diagnostic diffs (against the pre-rebase tip and against `origin/main`) —
+**before** any command that would recreate or discard it.
+
+Recovery followed the skill's procedure for a global Weave setup. The branch was
+reset to `2a73a58`; `git -c core.attributesFile=/dev/null check-attr merge --
+<path>` was measured to report `merge: unspecified` for a representative path,
+confirming that the selection comes from the global attributes file and that
+disabling it for the command leaves Git's built-in merge machinery in charge;
+then the whole operation was re-run with the same override:
+
+```plaintext
+$ git -c core.attributesFile=/dev/null rebase origin/main
+Successfully rebased and updated refs/heads/check-option.
+```
+
+The re-run resolved nothing silently and produced no conflict markers. The
+difference between the rebased tip and `2a73a58` is exactly `408c76a`'s own
+stat — 17 files, 1010 insertions, 551 deletions, the same 17 paths — which is
+the check that the replay is the branch plus `main` and nothing else. The
+footnotes example is byte-identical to `origin/main`'s, and the blank-line
+insertions are gone.
+
+The lesson generalises past this repository: a clean merge-driver exit means no
+recorded conflict remains, not that the result has the intended semantics. The
+default assumption for a rebase here is the built-in machinery, and a Weave
+result is worth accepting only after a byte-level comparison against both
+parents — which is the cheap thing to do and was not done on the first attempt
+until afterwards.
+
+#### Integrity checks after the re-run
+
+- The branch-versus-`main` file set is unchanged by the rebase: 73 files before
+  and after (`git diff --name-only origin/main...HEAD`).
+- Fourteen of `main`'s seventeen changed paths are byte-identical to
+  `origin/main`'s copies: `src/headings.rs`, `src/headings_tests.rs`,
+  `tests/idempotence.rs`, `tests/idempotence_adjacencies.rs`,
+  `tests/idempotence_drift.rs`, `tests/idempotence_properties.rs`,
+  `tests/support/idempotence_harness.rs`, and the six
+  `tests/data/idempotence/T*.dat` fixtures. The other three are the documents
+  this branch also edits, so they differ by the branch's own additions and
+  nothing else — every line `main` has there and the tree does not is one of the
+  branch's own rewrites (`format_to_string` and `rewrite_in_place`, which `EP-M3`
+  deleted, and the snapshot-portability sentence `EP-M5` corrected), checked one
+  by one rather than assumed.
+- Both sides' documentation edits are present: the branch's `--check`/`--diff`
+  sections and `main`'s rewritten idempotence material coexist, the architecture
+  footnotes example is byte-identical to `origin/main`'s (same MD5 over the
+  block), and no conflict marker appears anywhere in the tree.
+- The branch's intermediate commit `7b59154` (`EP-M7`) is intact, so the replay
+  is of the branch's real history rather than a squashed approximation.
 
 ### EP-M0 spike transcript
 
@@ -3679,6 +3839,30 @@ to either one alone. Satisfying the corpus alone does not close it, and neither
 does a property test that only sometimes samples the shape — which is the state
 the branch is in now.
 
+**Resolution, recorded in Revision 17: closed upstream, by pull request #477,
+merged as `408c76a` and absorbed by this branch's rebase.** Neither of the two
+remedies the issue names as necessary was skipped there. The deterministic
+corpus landed as `tests/data/idempotence/T1_delimiter_then_break.dat` through
+`T6_prose_between.dat`, and the six files are the `C1`–`C6` documents in the
+table above, renamed one for one and byte-identical (`C6`, the prose-between
+control, is `T6`). The unconditional coverage landed as
+`tests/idempotence_adjacencies.rs`, `tests/idempotence_drift.rs`, and
+`tests/support/idempotence_harness.rs`, which formats every fixture twice through
+the real binary, and as a rewritten `tests/idempotence.rs` and
+`tests/idempotence_properties.rs`. The fix itself is the exclusion direction this
+issue recommended: `src/headings.rs` no longer treats a table delimiter row as
+Setext underline text. The documentation of the rule moved with it, in
+`docs/adrs/0006-single-pass-idempotence.md`, `docs/architecture.md`,
+`docs/developers-guide.md`, and `docs/users-guide.md`.
+
+The rebase replayed this branch over those commits with no textual conflict in
+any of the seventeen files, and the gate runner's post-rebase run measured the
+`test` gate green, `generated_documents_reach_a_fixed_point` included, which is
+what clears `EP-M6`'s precondition. That is a measurement of this tree, not a
+proof that the generator can no longer reach a defect: what the resolution
+removes is this class, and the fixtures are what keep its shape present in the
+suite whatever the sampler draws.
+
 ### Forward-compatibility for `--git` (#466)
 
 The `--git` plan's author asked for four changes and supplied a rationale and a
@@ -3812,9 +3996,17 @@ Re-measured at `ec936b2`, the branch's last commit: the tracked count has grown
 from 31 to 35 because this branch added documents, the drifting set is the same
 ten files, and only the deltas moved, for the documents this branch went on to
 edit — `docs/execplans/check-option.md` is now `+1158 -1230` and
-`docs/developers-guide.md` is `+129 -132`. The conclusion does not depend on the
-count: the same ten files drifted before this branch existed and drift still, so
-declining `make fmt` remains the decision. The command behind both measurements
+`docs/developers-guide.md` is `+129 -132`. Re-measured a third time at
+`bb068f1`, the rebased tip, the drifting set is still the same ten files and the
+developers' guide is `+127 -131` — *down*, because `main`'s #477 rewrote that
+same document and took some of the drift with it. The plan's own figure is the
+special case: it was `+1158 -1230` at `ec936b2` and `+1259 -1329` at `bb068f1`,
+and it changes whenever this document is edited, so it is quoted as a reading
+taken at a named point rather than as a property of the file. Each reading is
+dated for the same reason. The conclusion does not depend on any of the counts:
+the same ten files drifted before this branch existed and drift still, three of
+them documents this change never touches, so declining `make fmt` remains the
+decision. The command behind both measurements
 is `mdtablefix --check` with the five flags above over `git ls-files '*.md'`,
 which reports only the files that would change.
 
@@ -4573,3 +4765,76 @@ Gate run, through the gate runner, over this revision: `make markdownlint` (34
 files, 0 errors) passes. `make nixie` and the Rust gates are not re-run, and not
 because they would fail: no diagram, Rust source, test, or configuration file
 changed. Log: `/tmp/markdownlint-mdtablefix-check-option.out`.
+
+### Revision 17, 2026-09-11
+
+This revision is the rebase onto `origin/main`, and the record of what it took
+to get right. The branch is replayed onto `408c76a`, `Refuse Setext conversion
+of a table delimiter row (#474) (#477)` — the upstream fix for the defect class
+this plan raised as issue #474 and recorded as `EP-M6`'s blocker. That clears
+the precondition `cargo mutants` aborted on, so `EP-M6` is unblocked and is now
+the only outstanding milestone; the milestone itself is **not** run here, and no
+mutant score is claimed. The substance of this branch's own diff is unchanged by
+the rebase: 26 commits replayed, no file conflicted in either attempt, and the
+difference between the rebased tip and the pre-rebase tip `2a73a58` is exactly
+`408c76a`'s own stat — 17 files, 1010 insertions, 551 deletions, the same 17
+paths.
+
+**The first attempt rebased cleanly and was still wrong.** `git rebase
+origin/main` exited successfully with no conflict, and the Weave merge driver
+that the global attributes file selects for Markdown silently corrupted three
+documents: `docs/architecture.md`'s footnotes example lost its `Before:`/`After:`
+structure — the `Before:` lines were rewritten to the `[^1]:` form and the
+`After:` label, its blank line, the opening fence, and the `Text.` line under it
+were dropped — and fourteen blank lines appeared across `docs/architecture.md`
+(one), `docs/developers-guide.md` (five), and `docs/users-guide.md` (eight).
+Nothing in the driver's output said so; it reported auto-resolutions at `high`
+and `very_high` confidence, and once at `conflict`.
+The blobs were compared three ways to
+establish it, the result was preserved under `/tmp/weave-corrupt/` before
+anything destructive, and the operation was re-run — after verifying with
+`git -c core.attributesFile=/dev/null check-attr merge -- <path>` that the
+override really does return the path to Git's built-in machinery — as
+`git -c core.attributesFile=/dev/null rebase origin/main`. The re-run produced no
+conflict markers, restored the footnotes example byte-for-byte (same MD5 as
+`origin/main`'s block), and left a tree whose delta against `2a73a58` is
+`main`'s change and nothing else. Measured afterwards: the preserved copies fail
+`markdownlint` with 21 errors under this repository's own configuration, against
+0 for the merged files, so the damage was real and the gates would eventually
+have caught it — after a corrupted rebase had been committed. The full account,
+with the integrity checks over all 17 of `main`'s paths, is in
+`Surprises & discoveries` and
+`Artefacts and notes → Second rebase onto origin/main (#477)`.
+
+`EP-M6`'s blocker is recorded as cleared in the milestone section, in its step 0
+precondition, in `Progress`, and in `Outcomes & retrospective`; the status line
+now says the milestone is unblocked and unrun rather than blocked. The condition
+the blocker paragraph refused to satisfy — green by excluding the failing test
+or pinning a passing seed — is untouched, because the fix came from upstream
+instead.
+
+Gate run, through the gate runner, over the rebased tip `bb068f1` with a clean
+tree, all six gates, sequentially: `make check-fmt` passes (7 s), `make lint`
+passes (74 s, cold dependency compile, clippy `--all-targets --all-features`
+`-D warnings`), `make typecheck` passes (10 s), `make test` passes (177 s: 45
+test binaries plus the doc-test target, 46 `test result:` blocks, 1860 passed,
+0 failed, 20 ignored, all ignored being doc-tests), `make markdownlint` passes
+(34 files, 0 errors), and `make nixie` passes (all Mermaid diagrams valid).
+`generated_documents_reach_a_fixed_point` — the test whose failure blocked the
+milestone — is `ok` in that log, so the green is the upstream fix arriving and
+not the failure moving. No `*.proptest-regressions` file was created or
+modified by the run (both pre-existing files are byte-identical by MD5,
+including the ignored `tests/check_properties.proptest-regressions`, which
+`git status` cannot show). `make fmt` is deliberately not run, unchanged from
+Revisions 15 and 16, and its artefact now carries a third reading taken at this
+tip: the same ten files drift, and the developers' guide is at `+127 -131`,
+lower than at `ec936b2` because `main`'s #477 rewrote that file too. The plan's
+own figure, `+1259 -1329` when that reading was taken, changes whenever this
+document is edited and is recorded as a reading rather than a property. Logs:
+`/tmp/check-fmt-mdtablefix-check-option.out`, `/tmp/lint-…`, `/tmp/typecheck-…`,
+`/tmp/test-…`, `/tmp/markdownlint-…`, `/tmp/nixie-…`, all under `/tmp` with the
+`mdtablefix-check-option` slug.
+
+This revision changes no requirement, obligation, acceptance criterion, or code
+file. The diff is `docs/execplans/check-option.md` alone; the rebase changed
+which commits the branch sits on, not what it contains.
