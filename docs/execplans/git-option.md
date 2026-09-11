@@ -881,6 +881,14 @@ impl ExtensionFilter {
     pub fn iter(&self) -> impl Iterator<Item = &str>;
 }
 
+/// Builds a filter from values `parse_extension` has already accepted.
+///
+/// The values are folded again, so collecting `["md", "MD"]` yields one
+/// extension, and a caller need not keep a `Vec` on the way to a set.
+impl FromIterator<String> for ExtensionFilter {
+    fn from_iter<T: IntoIterator<Item = String>>(iter: T) -> Self;
+}
+
 /// Renders as `md, mdc, markdown`, for `--help` and diagnostics.
 impl std::fmt::Display for ExtensionFilter { /* ... */ }
 
@@ -906,6 +914,18 @@ pub enum ExtensionSpecError {
     #[error("extension {value:?} contains {kind}")]
     InvalidCharacter { value: String, kind: InvalidCharacterKind },
 }
+
+/// Why a value is not usable as an extension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum InvalidCharacterKind {
+    /// A `/` or `\`, which would make one extension name two path components.
+    #[error("a path separator")]
+    PathSeparator,
+    /// A NUL byte, which cannot survive an `OsStr` round trip on all platforms.
+    #[error("a NUL byte")]
+    Nul,
+}
 ```
 
 Note what changed and why. The `EmptySegment { position: usize }` variant of an
@@ -923,10 +943,21 @@ In `src/select/policy.rs`:
 ```rust
 /// Identifies a file independently of the path used to reach it.
 ///
-/// On Unix this is `(st_dev, st_ino)`; elsewhere it is the canonicalized path.
-/// Deduplication keys on this, not on the path string.
+/// The canonicalized path, not `(st_dev, st_ino)`. Replacement writes a new
+/// inode over the target, so an identity keyed on the inode would collapse two
+/// hard links, format one, and leave the other stale. See INV-DEDUP.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct FileIdentity(/* platform-specific */);
+pub struct FileIdentity(camino::Utf8PathBuf);
+
+impl FileIdentity {
+    /// Wraps a canonicalized path, as the probe obtains it.
+    #[must_use]
+    pub fn from_canonical_path(path: camino::Utf8PathBuf) -> Self;
+
+    /// The canonicalized path this identity was built from.
+    #[must_use]
+    pub fn as_path(&self) -> &camino::Utf8Path;
+}
 
 /// What a candidate path turned out to be in the working tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1993,8 +2024,8 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   the commit. Measured against the real gates with a scratch `pub fn` in a
   private module of the binary: `` error: function `scratch` is never used ``,
   from `-D dead-code` implied by `-D warnings`. Evidence: the reproduction is
-  in Artefacts and notes, `EV-M1-DEADCODE`. Decision: EP-M1 declares the tree as
-  `#[cfg_attr(not(test), expect(dead_code, reason = "lands ahead of its wiring in EP-M2"))] mod select;`
+  in Artefacts and notes, `EV-M1-DEADCODE`. Decision: EP-M1 declares the tree
+  with `#[cfg_attr(not(test), expect(dead_code, …))]` around `mod select;`,
   rather than with a plain `allow`, which would rot: an `expect` that becomes
   unnecessary is itself an error (`unfulfilled_lint_expectations`), so EP-M2
   cannot forget to remove it. Measured the same way — the attribute passes
@@ -2234,10 +2265,10 @@ COMPLETE while any deviation remains unrecorded.
 
 Two items an earlier draft listed as follow-up work have since **merged** and
 must not be reopened: atomic `--in-place` writes are issue #465, delivered by
-#467; line-ending preservation is issue #451, delivered by #469 under ADR 0007.
-Confirm at closure that neither was reimplemented in `src/select/`, and that the
-`--git` write path routes through `driver::write_back` rather than calling
-`replace_file` directly.
+pull request #467; line-ending preservation is issue #451, delivered by pull
+request #469 under ADR 0007. Confirm at closure that neither was reimplemented
+in `src/select/`, and that the `--git` write path routes through
+`driver::write_back` rather than calling `replace_file` directly.
 
 Issue #474, the `--headings` fixed-point defect, was fixed by pull request #477
 before this plan was implemented, so no caveat is needed there. The
@@ -2330,10 +2361,13 @@ command line. Adding `git` to the `inputs` group was the change most likely to
 break the positional: the two regression rows say it did not, and the first row
 says the same group closes in the other direction.
 
-**EV-M0-BDD** — measured 2026-09-12 on the Stage B tree, with
-`cargo test --test git_file_selection -- --exact list_the_selection_without_acting --nocapture`.
-Abridged to the lines that carry the evidence; the scenario's `Given` steps
-are the four-file `Background`.
+**EV-M0-BDD** — measured 2026-09-12 on the Stage B tree, with a filtered run of
+one scenario, abridged to the lines that carry the evidence; the scenario's
+`Given` steps are the four-file `Background`.
+
+```plaintext
+cargo test --test git_file_selection -- --exact list_the_selection_without_acting --nocapture
+```
 
 ```plaintext
 ---- list_the_selection_without_acting stdout ----
@@ -2397,22 +2431,28 @@ selection exists, log at `/tmp/red-mdtablefix-git-option.out`.
 `cargo test --bin mdtablefix --all-features select`:
 
 ```plaintext
-error[E0432]: unresolved imports `super::has_conflict_markers`, `super::operation_in_progress`
+error[E0432]: unresolved imports `super::has_conflict_markers`,
+  `super::operation_in_progress`
   --> src/select/conflict_tests.rs:11:13
 
-error[E0432]: unresolved imports `super::ExtensionFilter`, `super::ExtensionSpecError`, `super::InvalidCharacterKind`, `super::parse_extension`
+error[E0432]: unresolved imports `super::ExtensionFilter`,
+  `super::ExtensionSpecError`, `super::InvalidCharacterKind`, `super::parse_extension`
   --> src/select/extensions_tests.rs:11:13
 
 error[E0432]: unresolved import `super::AmbientPathProbe`
  --> src/select/fs_probe_tests.rs:5:5
 
-error[E0432]: unresolved imports `crate::select::extensions::ExtensionFilter`, `crate::select::policy::PathKind`, `crate::select::policy::PathProbe`, `crate::select::policy::select_files`
+error[E0432]: unresolved imports `crate::select::extensions::ExtensionFilter`,
+  `crate::select::policy::PathKind`, `crate::select::policy::PathProbe`,
+  `crate::select::policy::select_files`
  --> src/select/fs_probe_tests.rs:7:5
 
-error[E0432]: unresolved imports `super::CandidateListing`, `super::GitListError`, `super::GitLsFiles`, `super::split_nul_delimited`
+error[E0432]: unresolved imports `super::CandidateListing`, `super::GitListError`,
+  `super::GitLsFiles`, `super::split_nul_delimited`
   --> src/select/git_ls_files_tests.rs:17:13
 
-error[E0432]: unresolved imports `super::FileIdentity`, `super::PathKind`, `super::PathProbe`, `super::select_files`
+error[E0432]: unresolved imports `super::FileIdentity`, `super::PathKind`,
+  `super::PathProbe`, `super::select_files`
   --> src/select/policy_tests.rs:19:13
 
 error[E0432]: unresolved import `crate::select::extensions::ExtensionFilter`
@@ -2427,6 +2467,11 @@ passed — the run cannot report a spurious green. And every error names the
 production item it needs, in the module the plan's Interfaces block puts it in,
 so the failure is the absence of the implementation rather than a mistake in
 the test's own binding.
+
+The headings are wrapped here to fit this document's code-block line limit,
+where rustc prints each import list on one line; the log holds the unwrapped
+text. Nothing else is altered, and the wrapping is the only reason this copy is
+not byte-identical to it.
 
 **EV-M1-DEADCODE** — measured 2026-09-12 against the real Clippy gate, log at
 `/tmp/deadcode-mdtablefix-git-option.out`. Each arm runs
@@ -2446,7 +2491,8 @@ A. plain `mod select;`
 
   error: could not compile `mdtablefix` (bin "mdtablefix") due to 1 previous error
 
-B. `#[cfg_attr(not(test), expect(dead_code, reason = "…"))] mod select;`
+B. #[cfg_attr(not(test), expect(dead_code, reason = "lands ahead of its wiring in EP-M2"))]
+   mod select;
 
   Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.31s
 

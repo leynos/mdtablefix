@@ -113,9 +113,20 @@ fn kind_for(verdict: Verdict, path: &Utf8Path) -> PathKind {
     }
 }
 
-fn probe_for(candidates: &[(Utf8PathBuf, Verdict)]) -> FakeProbe {
+/// The verdict each candidate path draws, with the last entry winning.
+///
+/// One map feeds both the probe and the expectation, so a case that names the
+/// same path twice cannot have the fixture answer one verdict while the
+/// expectation assumes another — which is exactly what two independent folds
+/// over `candidates` would allow, since a probe table keeps the last verdict
+/// and a `any` keeps the first.
+fn verdicts_for(candidates: &[(Utf8PathBuf, Verdict)]) -> BTreeMap<Utf8PathBuf, Verdict> {
+    candidates.iter().cloned().collect()
+}
+
+fn probe_for(verdicts: &BTreeMap<Utf8PathBuf, Verdict>) -> FakeProbe {
     FakeProbe::new(
-        candidates
+        verdicts
             .iter()
             .map(|(path, verdict)| (path.clone(), kind_for(*verdict, path))),
     )
@@ -136,7 +147,8 @@ fn a_path_is_selected_exactly_when_it_matches_and_probes_as_a_regular_file() {
     runner
         .run(&candidate_and_verdict(), |candidates| {
             let paths: Vec<Utf8PathBuf> = candidates.iter().map(|(path, _)| path.clone()).collect();
-            let probe = probe_for(&candidates);
+            let verdicts = verdicts_for(&candidates);
+            let probe = probe_for(&verdicts);
             let selected = select_files(&paths, select_root(), &filter, &probe);
 
             // Soundness: nothing reaches the output that the rule does not name.
@@ -154,9 +166,9 @@ fn a_path_is_selected_exactly_when_it_matches_and_probes_as_a_regular_file() {
             }
 
             // Completeness: nothing the rule names is left out.
-            let expected: BTreeSet<&Utf8Path> = candidates
+            let expected: BTreeSet<&Utf8Path> = verdicts
                 .iter()
-                .filter(|(path, verdict)| *verdict == Verdict::Regular && filter.matches(path))
+                .filter(|(path, verdict)| **verdict == Verdict::Regular && filter.matches(path))
                 .map(|(path, _)| path.as_path())
                 .collect();
             let actual: BTreeSet<&Utf8Path> = selected.iter().map(Utf8PathBuf::as_path).collect();
@@ -168,7 +180,7 @@ fn a_path_is_selected_exactly_when_it_matches_and_probes_as_a_regular_file() {
             } else {
                 saw_non_empty.set(true);
             }
-            if candidates
+            if verdicts
                 .iter()
                 .any(|(path, verdict)| *verdict != Verdict::Regular && filter.matches(path))
             {
