@@ -49,7 +49,17 @@ impl<'a> SourceDocument<'a> {
     /// let document = SourceDocument::parse("\u{FEFF}|A|B|\r\n|1|2|\r\n");
     ///
     /// assert_eq!(document.body(), "|A|B|\r\n|1|2|\r\n");
-    /// assert_eq!(document.render(document.body().lines().map(str::to_string).collect::<Vec<_>>().as_slice()), "\u{FEFF}|A|B|\r\n|1|2|\r\n");
+    /// assert_eq!(
+    ///     document.render(
+    ///         document
+    ///             .body()
+    ///             .lines()
+    ///             .map(str::to_string)
+    ///             .collect::<Vec<_>>()
+    ///             .as_slice()
+    ///     ),
+    ///     "\u{FEFF}|A|B|\r\n|1|2|\r\n"
+    /// );
     /// ```
     #[must_use]
     pub fn parse(content: &'a str) -> Self {
