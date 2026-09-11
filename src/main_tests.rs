@@ -13,6 +13,7 @@ use tempfile::tempdir;
 
 use super::{
     FormatOpts,
+    format_stdin,
     format_to_string,
     open_file_parent,
     render_stdin_output,
@@ -221,6 +222,26 @@ fn file_boundary_reports_the_line_ending_counts(no_opts: FormatOpts) {
     );
     assert!(logs_contain("selected the majority line ending"));
     assert!(logs_contain("operation=\"file\""));
+    assert!(logs_contain("crlf_count=3"));
+    assert!(logs_contain("lone_lf_count=0"));
+    assert!(logs_contain(r#"selected_ending="\r\n""#));
+}
+
+/// The standard-input boundary reports the same fields as the file boundary.
+/// It has no path to attach, so it names its own source rather than leaving
+/// the field absent, and one filter still finds both boundaries.
+#[rstest]
+#[tracing_test::traced_test]
+fn stdin_boundary_reports_the_line_ending_counts(no_opts: FormatOpts) {
+    let output = format_stdin("|A|B|\r\n|---|---|\r\n|1|2|\r\n", no_opts);
+
+    assert_eq!(
+        output, "| A   | B   |\r\n| --- | --- |\r\n| 1   | 2   |\r\n",
+        "the CRLF input was not re-emitted with carriage returns"
+    );
+    assert!(logs_contain("selected the majority line ending"));
+    assert!(logs_contain("operation=\"stdin\""));
+    assert!(logs_contain("path=<stdin>"));
     assert!(logs_contain("crlf_count=3"));
     assert!(logs_contain("lone_lf_count=0"));
     assert!(logs_contain(r#"selected_ending="\r\n""#));

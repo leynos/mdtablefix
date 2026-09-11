@@ -1,8 +1,9 @@
-//! Unit tests for line-ending detection, serialization, and the event the
-//! rewrite boundary emits.
+//! Unit tests for the line-ending policy, and for the event the rewrite
+//! boundary emits when it applies that policy.
 //!
-//! These moved out of `io.rs` so that adding them did not push the production
-//! module past the 400-line limit AGENTS.md sets.
+//! The policy is pure, so most of these tests drive `detect_line_ending` and
+//! `count_line_endings` directly; the boundary tests drive a real rewrite and
+//! assert what it reported.
 
 use std::{fs, path::Path};
 
@@ -139,45 +140,6 @@ fn rewrite_preserves_the_majority_line_ending(
     );
 }
 
-/// The shared helper reports the vote for each boundary shape: a caller
-/// that supplies no boundary context at all, the executable's standard
-/// input (`operation` alone), and a file (`operation` and `path`).
-#[test]
-#[traced_test]
-fn count_line_endings_reported_covers_every_boundary() {
-    let text = "alpha\r\nbeta\r\n";
-    let library = count_line_endings_reported(text, None, None);
-    let stdin = count_line_endings_reported(text, Some("stdin"), None);
-    let file = count_line_endings_reported(text, Some("file"), Some("doc.md"));
-
-    for counts in [library, stdin, file] {
-        assert_eq!(counts.ending, LineEnding::Crlf);
-        assert_eq!(counts.crlf_count, 2);
-        assert_eq!(counts.lone_lf_count, 0);
-    }
-    logs_assert(|lines| {
-        let reports: Vec<&str> = lines
-            .iter()
-            .copied()
-            .filter(|line| line.contains("selected the majority line ending"))
-            .collect();
-        let has = |needle: &str| reports.iter().any(|line| line.contains(needle));
-        let unnamed = reports.iter().any(|line| !line.contains("operation="));
-        if reports.len() == 3
-            && unnamed
-            && has("crlf_count=2")
-            && has("lone_lf_count=0")
-            && has(r#"operation="stdin""#)
-            && has(r#"operation="file""#)
-            && has("path=doc.md")
-        {
-            Ok(())
-        } else {
-            Err(format!("unexpected line-ending reports: {lines:?}"))
-        }
-    });
-}
-
 proptest! {
     /// Any mixture of endings is rewritten to the majority style alone.
     #[test]
@@ -218,15 +180,17 @@ proptest! {
     }
 }
 
-/// The majority rule stays a pure query: callers can ask which ending a
-/// document would select without emitting diagnostics.
+/// The majority rule stays a pure query: a caller can ask which ending a
+/// document would select, and how one-sided the vote was, without emitting
+/// diagnostics. Only the boundary that acts on the answer reports it.
 #[test]
 #[traced_test]
-fn detect_line_ending_emits_nothing() {
+fn the_line_ending_queries_emit_nothing() {
     assert_eq!(detect_line_ending("alpha\r\nbeta\r\n"), LineEnding::Crlf);
+    assert_eq!(count_line_endings("alpha\r\nbeta\r\n").crlf_count, 2);
     assert!(
         !logs_contain("selected the majority line ending"),
-        "the pure query emitted a diagnostic event"
+        "a pure query emitted a diagnostic event"
     );
 }
 

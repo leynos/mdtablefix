@@ -2,4 +2,4 @@
 source: src/io_tracing_tests.rs
 expression: declined
 ---
-DEBUG snapshots_declined_symlink_event:replace_file{path=link.md}: mdtablefix::io: rewrite declined error_category="symlink_target"
+DEBUG snapshots_declined_symlink_event:replace_file{path=link.md}: mdtablefix::io::replace: rewrite declined error_category="symlink_target"

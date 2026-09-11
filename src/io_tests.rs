@@ -4,6 +4,8 @@ use std::{fs, path::Path};
 #[cfg(unix)]
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::rstest;
 use tempfile::tempdir;
 

@@ -55,7 +55,6 @@ pub use io::{
     LineEnding,
     LineEndingCounts,
     count_line_endings,
-    count_line_endings_reported,
     detect_line_ending,
     rewrite,
     rewrite_no_wrap,
