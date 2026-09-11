@@ -5163,3 +5163,58 @@ in this run. Logs: `/tmp/check-fmt-epm7-mdtablefix-check-option.out`,
 `/tmp/lint-epm7-mdtablefix-check-option.out`,
 `/tmp/typecheck-epm7-mdtablefix-check-option.out`,
 `/tmp/test-epm7-mdtablefix-check-option.out`.
+
+### Revision 20, 2026-09-12
+
+This revision is driven by continuous integration rather than by review, and it
+changes no milestone, obligation, or acceptance criterion. The Windows job of
+this branch's own CI run failed on `44c718e`: `atomic write contract (windows)`,
+run `34654449073`, job `103443680234`, with exit 101 and two failing targets,
+`--test cli_check` and `--test cli_diff`. Both failures are the same test,
+`a_closed_pipe_is_a_successful_early_exit`, and both are the same panic at the
+`spawn` expectation:
+
+```plaintext
+spawn mdtablefix: Os { code: 206, kind: InvalidFilename,
+                        message: "The filename or extension is too long." }
+```
+
+The test builds 500 fixture names of 187 characters and passes them all, which
+is a command line of about 93 KiB. `CreateProcess` refuses a command line past
+32 767 characters, so on Windows the child is never spawned — the failure is in
+the test's fixture, not in the tool. Unix permits the shape (`ARG_MAX` and the
+per-argument limit are far above it), which is why the Linux job was green and
+the divergence went unnoticed until CI ran the whole suite on Windows.
+
+The two tests now take their fixture size from `CLOSED_PIPE_FILES` and
+`CLOSED_PIPE_PADDING`, which are per-platform constants in each file: 500 files
+of 180 padding on Unix, unchanged, and 250 files of 80 padding elsewhere. The
+arithmetic that couples the two numbers is worth stating, because it is what
+makes the Unix pair a *measurement* rather than a guess. A `--check` report is
+one line per file, and that line is the path the argument named, so the
+arguments *are* the output — the report is the name plus the `+N -M` delta. Unix
+holds 64 KiB in a pipe, so the run must write past that, and 500 × (187 + 8) is
+about 97 KiB: the child is blocked in `write` when the read end closes, which is
+what makes the early exit deterministic rather than a race. The Windows command
+line caps the same figure near 32 KiB, so a deterministic block cannot be
+guaranteed there at all, and the pipe is in any case created with a size hint of
+zero — the system default rather than the Unix 64 KiB. The exit-status assertion
+is split accordingly: `cfg(unix)` keeps the strict `Some(0)`, and elsewhere the
+test asserts that the run ends in a documented status, `0` or `1`, and never in
+a panic or a crash. Both platforms keep the assertion that no `panicked` reached
+stderr, which is the defect the test exists to catch.
+
+The Windows arm could not be measured here: this estate has no Windows host, so
+the assertion compiles only under `cfg(not(unix))` and its first real reading is
+the next CI run on the pushed commit. What *is* measured is that the shape the
+fix produces is still the shape Unix needs: through the gate runner, `make
+check-fmt` passes (2 s), `make lint` passes (1 s, clippy `--all-targets
+--all-features -D warnings`), `make typecheck` passes (under 1 s), and `make
+test` passes (50 s, 1864 passed, 0 failed, 20 ignored, the ignored being
+doc-tests), with `cli_check::a_closed_pipe_is_a_successful_early_exit` and
+`cli_diff::a_closed_pipe_is_a_successful_early_exit` both `ok` by name in the
+log. Nothing under `src/` changed, so no obligation's evidence and no milestone
+outcome is affected. Logs: `/tmp/check-fmt-ci-pipefix-mdtablefix-check-option.out`,
+`/tmp/lint-ci-pipefix-mdtablefix-check-option.out`,
+`/tmp/typecheck-ci-pipefix-mdtablefix-check-option.out`,
+`/tmp/test-ci-pipefix-mdtablefix-check-option.out`.
