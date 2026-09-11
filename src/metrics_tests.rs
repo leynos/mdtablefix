@@ -31,7 +31,7 @@ const FILE_DURATION: &str = "mdtablefix_file_duration_seconds";
 const FILE_ERROR_TOTAL: &str = "mdtablefix_file_error_total";
 
 /// The only values the `mode` label may take.
-const MODES: [&str; 4] = ["print", "in_place", "check", "diff"];
+const MODES: [&str; 5] = ["print", "in_place", "check", "diff", "list_files"];
 
 /// The only values the file outcome label may take.
 const FILE_OUTCOMES: [&str; 3] = ["changed", "unchanged", "error"];
@@ -211,7 +211,13 @@ pub(super) fn assert_labels_are_bounded(recorded: &[Recorded]) {
 #[test]
 fn a_run_is_counted_by_mode_and_outcome() {
     let ((), recorded) = recorded(|| {
-        for mode in [Mode::Print, Mode::InPlace, Mode::Check, Mode::Diff] {
+        for mode in [
+            Mode::Print,
+            Mode::InPlace,
+            Mode::Check,
+            Mode::Diff,
+            Mode::ListFiles,
+        ] {
             for status in [ExitStatus::Success, ExitStatus::Drift, ExitStatus::Error] {
                 record_run(mode, status);
             }

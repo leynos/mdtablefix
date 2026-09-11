@@ -10,6 +10,7 @@ use mdtablefix::report::LineDelta;
 use test_macros::traced_test;
 
 use super::{
+    ConflictGuard,
     Mode,
     analyse,
     assess,
@@ -79,6 +80,7 @@ fn check_reports_drift_without_writing() {
 
     let (report, payload) = analyse(
         Mode::Check,
+        ConflictGuard::unguarded(),
         &directory,
         Utf8Path::new("ragged.md"),
         Utf8Path::new("ragged.md"),
@@ -105,6 +107,7 @@ fn check_reports_a_clean_file_with_no_payload() {
 
     let (report, payload) = analyse(
         Mode::Check,
+        ConflictGuard::unguarded(),
         &directory,
         Utf8Path::new("clean.md"),
         Utf8Path::new("clean.md"),
@@ -137,6 +140,7 @@ fn check_reports_the_path_the_user_wrote() {
 
     let (_report, _payload) = analyse(
         Mode::Check,
+        ConflictGuard::unguarded(),
         &nested,
         Utf8Path::new("nested/inner.md"),
         Utf8Path::new("inner.md"),
@@ -170,6 +174,7 @@ fn diff_reports_a_unified_diff_without_writing() {
 
     let (report, payload) = analyse(
         Mode::Diff,
+        ConflictGuard::unguarded(),
         &directory,
         Utf8Path::new("ragged.md"),
         Utf8Path::new("ragged.md"),
@@ -203,6 +208,7 @@ fn diff_reports_a_clean_file_with_no_payload() {
 
     let (report, payload) = analyse(
         Mode::Diff,
+        ConflictGuard::unguarded(),
         &directory,
         Utf8Path::new("clean.md"),
         Utf8Path::new("clean.md"),
@@ -222,6 +228,7 @@ fn print_reports_the_formatted_text_without_writing() {
 
     let (_report, payload) = analyse(
         Mode::Print,
+        ConflictGuard::unguarded(),
         &directory,
         Utf8Path::new("ragged.md"),
         Utf8Path::new("ragged.md"),

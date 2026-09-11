@@ -8,7 +8,7 @@
 use camino::Utf8Path;
 use rstest::rstest;
 
-use super::{has_conflict_markers, operation_in_progress};
+use super::{ConflictGuard, has_conflict_markers, operation_in_progress};
 
 /// Git's own shape: three markers, each at the start of a line, with the
 /// conflicted content between them.
@@ -54,6 +54,43 @@ fn a_document_about_conflict_markers_is_not_a_conflicted_one() {
 fn a_fenced_example_carrying_all_three_markers_still_counts() {
     let fenced = "```text\n<<<<<<< HEAD\n=======\n>>>>>>> side\n```\n";
     assert!(has_conflict_markers(fenced));
+}
+
+/// The refusal is the conjunction of three facts, and each of them is load
+/// bearing: a rewrite that ignores the operation corrupts a resolution, one
+/// that ignores the markers rewrites an unresolved file, and one that ignores
+/// `--allow-conflicted` cannot be overridden by the user.
+#[rstest]
+#[case(false, false, true, false)]
+#[case(false, true, true, false)]
+#[case(true, false, true, true)]
+#[case(true, true, true, false)]
+#[case(true, false, false, false)]
+fn a_conflicted_file_is_refused_only_mid_operation_and_without_the_override(
+    #[case] in_progress: bool,
+    #[case] allowed: bool,
+    #[case] conflicted: bool,
+    #[case] expected: bool,
+) {
+    let content = if conflicted {
+        CONFLICTED
+    } else {
+        "| A | B |\n"
+    };
+
+    assert_eq!(
+        ConflictGuard::new(in_progress, allowed).refuses(content),
+        expected,
+        "in_progress={in_progress} allowed={allowed} conflicted={conflicted}"
+    );
+}
+
+/// A run that selected nothing from a repository never refuses: `--allow-conflicted`
+/// has nothing to permit, and no repository is consulted for a path the user
+/// named, which is what keeps an ordinary run from spawning `git`.
+#[test]
+fn the_unguarded_run_refuses_nothing() {
+    assert!(!ConflictGuard::unguarded().refuses(CONFLICTED));
 }
 
 #[derive(Debug, Clone, Copy)]
