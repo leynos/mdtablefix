@@ -1158,6 +1158,7 @@ impl Cli {
         for (name, present) in [
             ("--include-untracked", cli.include_untracked),
             ("--allow-conflicted", cli.allow_conflicted),
+            ("--list-files", cli.list_files),
         ] {
             if present && !cli.git {
                 Self::command()
@@ -1175,8 +1176,16 @@ impl Cli {
 
 `--md-exts` needs the same treatment keyed on
 `ArgMatches::value_source(..) != Some(ValueSource::DefaultValue)` rather than
-on a bool. `--list-files` no longer needs it, because `mode` already requires
-`inputs` and `--git` is the only way to satisfy that without positional files.
+on a bool, because `default_values` means it always carries a value.
+
+**`--list-files` needs it too**, which EP-M0 established by measurement and an
+earlier revision of this section got wrong. The claim was that `mode` already
+requires `inputs` and `--git` is the only way to satisfy that without positional
+files — but a positional argument *is* a way to satisfy `inputs`, so
+`mdtablefix --list-files notes.md` parses and runs. Listing a selection the user
+has just typed out by hand has nothing to resolve, so requiring `--git` is also
+the honest contract, and the feature file's "Reject `--list-files` without
+`--git`" scenario demands it. See Surprises & discoveries.
 
 ### Composition: `--git` as a second `Inputs` source
 
@@ -1638,11 +1647,22 @@ plateau.
       Git 2.52.0. All four facts and the merge case reproduce unchanged; see
       Artefacts and notes, `EV-A-TRANSCRIPTS`. No axiom changed, so the plan
       was not disturbed.
-- [ ] Prerequisite: extract `Cli` and `FormatOpts` into `src/cli.rs` as a
-      behaviour-free commit, returning `src/main.rs` from 386 lines to roughly
-      300.
-- [ ] EP-M0: reproduce the measured grammar against the real `Cli`, capture
-      clap's verbatim diagnostics, and run one scenario from this plan's
+- [x] (2026-09-12) Prerequisite: `Cli` and `FormatOpts` are out of the
+      composition root and into a binary-private module. The base branch had
+      already made that move, and made it more completely: `src/command.rs`
+      holds both declarations *and* `process_lines`, `format_lines`, and
+      `formatting_closure`. This branch therefore carries no `src/cli.rs` of
+      its own, and the `--git` additions to `Cli` are made in
+      `src/command.rs`. See the rebase entry under Progress.
+- [x] (2026-09-12) EP-M0, grammar half: the measured grammar reproduces on the
+      real `Cli` under clap 4.6.6. All eight EV-M0-GRAMMAR cases match; the
+      verbatim diagnostics are in Artefacts and notes, `EV-M0-GRAMMAR`. **No
+      escalation**: the shape holds. Two gaps surfaced, both already in the
+      class the plan anticipated, and both are fixed by the mechanism it
+      already prescribes — see Surprises & discoveries. The spike was reverted;
+      the final form lands in EP-M2, after its red tests.
+- [ ] EP-M0, BDD half: confirm one scenario from this plan's feature file
+      runs, delivering `EV-M0-BDD`. This waits on Stage B, which writes that
       feature file.
 - [ ] Stage B: add `thiserror`; write the feature file; write the red unit and
       property tests for EP-M1.
@@ -1668,6 +1688,33 @@ Superseded and deliberately not carried forward: adding `googletest`,
 INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
 
 ## Surprises & discoveries
+
+- Observation: **`--list-files` with a positional argument is accepted by the
+  grammar**, and the plan's own reasoning for why it need not be guarded is
+  wrong. The plan says "`--list-files` no longer needs it, because `mode`
+  already requires `inputs` and `--git` is the only way to satisfy that without
+  positional files" — but a positional argument *is* a way to satisfy `inputs`,
+  so `mdtablefix --list-files notes.md` parses. This is the same false-accept
+  the plan measured for `requires = "git"`, reached by a different route.
+  Evidence: `EV-M0-GRAMMAR`, where `--list-files a.md` exits 2 only because
+  `a.md` is absent — the parse succeeded. Under the feature file's own fixture,
+  where `notes.md` exists, it would exit 0.
+  Impact: the scenario "Reject `--list-files` without `--git`" would fail as
+  written. `--list-files` therefore joins `--include-untracked` and
+  `--allow-conflicted` in the post-parse check, rejected when `--git` is
+  absent, by the mechanism the plan already prescribes for exactly this class
+  of bug. The command-line shape does not change, which is why this is recorded
+  rather than escalated.
+
+- Observation: **an explicitly-given `--md-exts` without `--git` is accepted**,
+  which the plan predicted would need the `ArgMatches::value_source` treatment
+  rather than a bool test. Confirmed: `mdtablefix --md-exts md a.md` reaches the
+  file stage instead of being refused.
+  Evidence: `EV-M0-GRAMMAR`, supplementary cases.
+  Impact: EP-M2's post-parse check keys `--md-exts` on
+  `value_source(..) != Some(ValueSource::DefaultValue)`, as the plan already
+  specifies. A bool test is impossible here: `--md-exts` always has a value,
+  because `default_values` supplies one.
 
 - Observation: the ADR numbers moved twice between the plan's last revision and
   the start of implementation. `docs/adrs/` now holds **0008** (byte-order-mark
@@ -1957,6 +2004,72 @@ an unresolved merge collapsing to one line under `--deduplicate`, and
 directories): .git` outside a repository. The `-t` observation also holds: a
 tracked file deleted from the working tree reports `H`, and only
 `--deleted` produces `R`. No axiom changed.
+
+**EV-M0-GRAMMAR** — measured 2026-09-12 against the real `Cli` on clap 4.6.6
+and Git 2.52.0, log at `/tmp/stage-ep-m0-mdtablefix-git-option.out`. Each
+diagnostic below is verbatim; the spike that produced it was reverted.
+
+```plaintext
+$ mdtablefix --git a.md                                   [exit 2]
+  error: the argument '--git' cannot be used with '[FILES]...'
+
+$ mdtablefix --in-place                                   [exit 2]
+  error: the following required arguments were not provided:
+    <FILES|--git>
+
+$ mdtablefix a.md b.md                     [exit 0, both files printed]
+$ mdtablefix --in-place a.md b.md          [exit 0, both files rewritten]
+  (regression cases: a multi-value positional inside an exclusive group
+   still parses, and still satisfies a mode flag; both run in a directory
+   holding a.md and b.md. With `--check` added, the two mode flags are
+   rejected as usual, and the usage footer still reads `<FILES>...`)
+
+$ mdtablefix --git --in-place                             [exit 0]
+$ mdtablefix --git --check                                [exit 0]
+$ mdtablefix --git --diff                                 [exit 0]
+$ mdtablefix --git --list-files                           [exit 0]
+
+$ mdtablefix --include-untracked                           [exit 2]
+  error: --include-untracked requires --git
+
+$ mdtablefix --allow-conflicted                            [exit 2]
+  error: --allow-conflicted requires --git
+
+$ mdtablefix --list-files                                  [exit 2]
+  error: the following required arguments were not provided:
+    <FILES|--git>
+
+$ mdtablefix --list-files a.md                             [exit 2]
+  (accepted by the grammar; exit 2 is a runtime "No such file" error —
+   the false-accept recorded under Surprises & discoveries)
+
+$ mdtablefix --git --check --diff                          [exit 2]
+  error: the argument '--check' cannot be used with '--diff'
+
+$ mdtablefix --git --list-files --in-place                 [exit 2]
+  error: the argument '--list-files' cannot be used with '--in-place'
+
+$ mdtablefix --git --md-exts                               [exit 2]
+  error: a value is required for '--md-exts <EXT>' but none was supplied
+
+$ mdtablefix --git --md-exts md                            [exit 0]
+$ mdtablefix --git --include-untracked --list-files        [exit 0]
+
+$ mdtablefix --md-exts md a.md                             [exit 2]
+  (accepted by the grammar; needs the value_source check, see Surprises)
+
+$ mdtablefix --md-exts md --list-files                     [exit 2]
+  error: the following required arguments were not provided:
+    <FILES|--git>
+  Usage: mdtablefix --md-exts <EXT> --list-files <FILES|--git>
+```
+
+The exit-0 rows ran with standard input at `/dev/null`, which is what makes
+"accepted" observable: a parse failure exits 2 and can never reach the
+formatter, so an exit of 0 or a runtime error is proof that clap admitted the
+command line. Adding `git` to the `inputs` group was the change most likely to
+break the positional: the two regression rows say it did not, and the first row
+says the same group closes in the other direction.
 
 ## Revision note
 
