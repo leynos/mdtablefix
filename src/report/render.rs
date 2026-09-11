@@ -200,9 +200,10 @@ fn line_count(text: &str) -> usize {
 mod tests {
     //! Unit tests for report rendering.
 
+    use camino::Utf8Path;
     use rstest::rstest;
 
-    use super::render_summary;
+    use super::{DiffOptions, render_summary, write_unified_diff};
 
     #[rstest]
     #[case(0, 0, 0, "No files were analysed.")]
@@ -279,6 +280,31 @@ mod tests {
         #[case] expected: &str,
     ) {
         assert_eq!(render_summary(changed, unchanged, errored), expected);
+    }
+
+    /// Byte-equal texts render as nothing at all, headers included: `similar`
+    /// writes the header alongside the first hunk, and equal texts have no
+    /// hunk. A document that is already formatted therefore cannot render as
+    /// an empty diff carrying a file name.
+    ///
+    /// The driver still guards its diff arm on a change being present, so this
+    /// test is what keeps that guard's absence a cost rather than a
+    /// difference in output. See `EP-M6` in the `ExecPlan`.
+    #[test]
+    fn equal_texts_render_nothing() {
+        let mut out = Vec::new();
+        write_unified_diff(
+            &mut out,
+            Utf8Path::new("clean.md"),
+            "| A | B |\n",
+            "| A | B |\n",
+            DiffOptions {
+                context_radius: 3,
+                patience_threshold: 1000,
+            },
+        )
+        .expect("writing to a Vec cannot fail");
+        assert!(out.is_empty(), "a clean file has no diff: {out:?}");
     }
 
     #[test]

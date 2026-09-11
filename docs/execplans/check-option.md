@@ -5,11 +5,12 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS — `EP-M0`–`EP-M5` and `EP-M7` are discharged. The
-non-idempotent transform class under `--headings` that blocked `EP-M6` is fixed
-upstream by pull request #477 (issue #474), merged into this branch's base as
-`408c76a`, and the full `test` gate is green again; `EP-M6` is unblocked and has
-not yet run. See `Progress` and `Outcomes & retrospective`.
+Status: COMPLETE — `EP-M0`–`EP-M7` are discharged. `EP-M6` ran after the rebase
+onto `408c76a`, the upstream fix for the non-idempotent `--headings` class that
+had blocked it: the milestone's own command found 46 mutants and the run
+finished with 39 of the 40 viable ones killed, 6 unviable, and one equivalent
+mutation recorded with its justification rather than papered over. See
+`Progress`, `Outcomes & retrospective`, and `Artefacts and notes → EP-M6 run`.
 
 ## Purpose / big picture
 
@@ -366,9 +367,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
       snapshot reads `status: code: 0`. The first regeneration run was **red**
       and exposed a real gap in the diff invariant rather than a snapshot
       problem; see `Artefacts and notes → EP-M5 red and green transcripts`.
-- [ ] EP-M6 Targeted mutation testing of the counting and aggregation
-      functions. **Was blocked before its first command; the blocker is now
-      cleared and the milestone has not been run.** `cargo mutants --file
+- [x] EP-M6 Targeted mutation testing of the counting and aggregation
+      functions. **Was blocked before its first command; the blocker was
+      cleared in Revision 17 and the milestone ran in Revision 18.** `cargo
+      mutants --file
       src/report/delta.rs --file src/driver.rs` finds the 43 mutants and then
       refuses to test them, because its baseline `cargo test` fails:
       `tests/check_properties.rs::generated_documents_reach_a_fixed_point` has
@@ -384,8 +386,21 @@ Hard invariants. Violating one requires escalation, not a workaround.
       measured the whole suite green — including
       `generated_documents_reach_a_fixed_point` itself, which now reports `ok`
       — so `cargo mutants`'s precondition is met and the milestone's first
-      command can run. It has not been run yet, so no mutant score exists and
-      this box stays unticked.
+      command can run. **Run in Revision 18:** that command collected **46**
+      mutants at this tip, three more than the 43 enumerated at `a06bab6`
+      (`4a599ed` added all three, as `Inputs::resolve` and the
+      `Mode::InPlace if is_changed` guard), and its baseline `cargo test` passed,
+      so a score exists: the first run took 14 minutes and returned
+      **38 caught, 6 unviable, 2 missed, 0 timeouts**. One survivor,
+      `LineDelta::has_changes`'s `deletions < 0`, was killed by an assertion
+      added to `src/report/delta.rs`'s unit tests and re-measured as caught; the
+      other, `Mode::Diff if is_changed` behaving as `if true`, is an equivalent
+      mutation whose premise is pinned by a new `src/report/render.rs` test. A
+      third, complete run over the final tree then measured the score in one
+      reading rather than a sum: **39 caught, 1 missed, 6 unviable,
+      0 timeouts**, the miss being the equivalent mutant. Final state: **39 of
+      the 40 viable mutants killed, the fortieth recorded as equivalent**. See
+      `Artefacts and notes → EP-M6 run`.
 - [x] Interleaved: forward-compatibility with the `--git` plan (pull request
       #466). Four small changes, requested by that plan's author, that stop this
       branch's shape from foreclosing a second input source: the `mode` group now
@@ -426,9 +441,11 @@ Hard invariants. Violating one requires escalation, not a workaround.
       both negative-control runs recorded. Step 12 was added in Revision 15
       and is complete: `docs/developers-guide.md`'s shared-closure argument no
       longer stops at the structure, and names the test that covers what the
-      structure cannot. The plan is **not** `COMPLETE`: `EP-M6` has not run,
-      and the `make test` gate it depends on is green again — restored by an
-      upstream fix rather than by anything this branch changed. Revision 17
+      structure cannot. **At Revision 17 the plan is not yet `COMPLETE`:**
+      `EP-M6` has not run, and the `make test` gate it depends on is green
+      again — restored by an upstream fix rather than by anything this branch
+      changed; Revision 18 runs the milestone and declares the plan `COMPLETE`.
+      Revision 17
       rebases the branch onto `origin/main` at `408c76a`, the commit that fixes
       #474, and measures every gate green afterwards: `check-fmt`, `lint`,
       `typecheck`, `markdownlint` (34 files, 0 errors), `nixie`, and `test`
@@ -1220,16 +1237,20 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 ## Outcomes & retrospective
 
-**This plan is not `COMPLETE`.** `EP-M0`–`EP-M5` and `EP-M7` are discharged;
-`EP-M6` was blocked by issue #474, a pre-existing non-idempotent transform class
-under `--headings`, and that blocker is now cleared without a change from this
-branch: pull request #477 fixed the transform, the branch rebased onto it, and
-every gate is green again (`make test` at 1860 passed, 0 failed). What remains
-open is the milestone itself, which has not run, so the reader should treat
-`Surprises & discoveries` and
-`Artefacts and notes → EP-M6 baseline blocked` as the record of a defect class
-this plan found and an upstream fix closed, not as live issues. `EP-M6`'s own
-mutant score is the one obligation still outstanding.
+**This plan is `COMPLETE`.** `EP-M0`–`EP-M7` are discharged. `EP-M6` was
+blocked by issue #474, a pre-existing non-idempotent transform class under
+`--headings`, and that blocker cleared without a change from this branch: pull
+request #477 fixed the transform, the branch rebased onto it, and every gate is
+green again (`make test` at 1860 passed, 0 failed). The milestone then ran, in
+Revision 18, on the rebased tip: 46 mutants, 39 caught, 6 unviable, 1 missed, no
+timeouts — the miss recorded as an equivalent mutation whose premise is now a
+test, the other initial survivor having been killed by a new assertion and the
+score then re-measured in a single complete run over the final tree. No
+obligation is outstanding,
+so `Surprises & discoveries` and
+`Artefacts and notes → EP-M6 baseline blocked` are the record of a defect class
+this plan found and an upstream fix closed, not live issues, exactly as the
+previous revision of this paragraph asked the reader to take them.
 
 What was delivered, against the obligations:
 
@@ -2306,6 +2327,22 @@ branch rebased onto that commit as `408c76a`, the gate runner then measured
 `ok` — and so the baseline precondition below is met. The milestone is unblocked
 and remains unrun; the condition it was never allowed to satisfy itself, "green
 by exclusion or by a pinned seed", therefore still holds.
+
+Outcome (recorded in Revision 18): the milestone's command was run on the
+rebased tip and the outcome above is met. Of the **46** mutants it collected —
+28 in `src/driver.rs` and 18 in `src/report/delta.rs`, three more than the
+enumeration below because `4a599ed` landed after it — the first run, in 14
+minutes, **caught 38, found 6 unviable, and left 2 survivors, with no timeouts**,
+and a third run over the final tree, in 9 minutes, measured **39 caught, 1
+missed, 6 unviable, 0 timeouts** in a single reading. Both initial survivors are
+resolved: `src/report/delta.rs:92:84` (`>` mutated to `<` in
+`LineDelta::has_changes`) is killed by an assertion covering the deletion-only
+delta, with its insertion-side twin added for symmetry, and re-measured as
+caught; `src/driver.rs:287:23` (`Mode::Diff if is_changed` mutated to `if true`)
+is recorded as an equivalent mutation, because the renderer writes nothing for
+byte-equal texts, which is now a test rather than an argument. The final score
+is **39 of 40 viable mutants killed**, one run having measured it. See
+`Artefacts and notes → EP-M6 run`.
 
 Recovery: additive; no production change unless a survivor is found.
 
@@ -3733,6 +3770,11 @@ only; each is a distinct mutant of the two targets):
 | `src/driver.rs` | 25 |
 | `src/report/delta.rs` | 18 |
 
+That enumeration is a reading of the tree as it was, not of the tip: `a06bab6`
+predates `4a599ed`, which is where `Inputs::resolve` and the
+`Mode::InPlace if is_changed` guard came from, so the rebased tip yields 46
+mutants, 28 of them in `src/driver.rs`. See `Artefacts and notes → EP-M6 run`.
+
 The baseline failure is `tests/check_properties.rs:297`, and it is the third
 non-idempotent transform class:
 
@@ -3862,6 +3904,161 @@ what clears `EP-M6`'s precondition. That is a measurement of this tree, not a
 proof that the generator can no longer reach a defect: what the resolution
 removes is this class, and the fixtures are what keep its shape present in the
 suite whatever the sampler draws.
+
+### EP-M6 run
+
+`EP-M6` ran on the rebased tip, through the milestone's own command, from a
+clean tree:
+
+```plaintext
+$ TMPDIR=target/mutants-scratch cargo mutants -j 3 \
+    --file src/report/delta.rs --file src/driver.rs -o target   # cargo-mutants 27.1.0
+Found 46 mutants to test
+ok       Unmutated baseline in 136s build + 168s test
+ INFO Auto-set test timeout to 843s
+MISSED   src/driver.rs:287:23: replace match guard is_changed with true in analyse in 4s build + 164s test
+MISSED   src/report/delta.rs:92:84: replace > with < in LineDelta::has_changes in 5s build + 82s test
+46 mutants tested in 14m: 2 missed, 38 caught, 6 unviable
+```
+
+The unmutated baseline passing is the precondition this milestone spent two
+revisions waiting for, and it is measured here in the mutation tool's own
+scratch tree rather than inherited from `make test`. Three substitutions are
+deliberate and none of them changes what is measured: `-j 3` keeps three jobs on
+a six-core machine other agents are using, and `TMPDIR` plus `-o` keep the
+mutated copies, the build directories, and the results inside the ignored
+`target/` directory, so `/tmp` holds a log and nothing else. The two console
+transcripts are the durable evidence:
+`/tmp/mutants-run-mdtablefix-check-option.out` for the round below and
+`/tmp/mutants-iterate-mdtablefix-check-option.out` for the re-check that follows
+it. The per-mutant files — `caught.txt`, `missed.txt`, `unviable.txt`,
+`timeout.txt`, `mutants.json`, and one diff per mutant under
+`target/mutants.out/diff/` — are rewritten by each run and so describe the run
+that wrote them rather than the sequence; they live under the ignored `target/`
+directory and are not evidence any commit carries.
+
+**The count moved from 43 to 46 between the blocked run and this one**, and both
+figures are readings of real trees rather than a correction of an error: the
+enumeration above was taken at `a06bab6`. `git log -S` shows `4a599ed` ("Keep
+the reporting shape open to a second input source") is where `Inputs::resolve`
+and the `Mode::InPlace if is_changed` guard entered `src/driver.rs` — one mutant
+for the first and two for the second — and `git merge-base --is-ancestor`
+confirms that commit is not an ancestor of the blocked run's tree. Nothing was
+lost from the earlier list; it simply predates three of the mutants.
+
+The survivors, and what became of each:
+
+| Mutant | Verdict |
+| --- | --- |
+| `src/report/delta.rs:92:84`: `>` → `<` in `LineDelta::has_changes` | killed by a new test |
+| `src/driver.rs:287:23`: `Mode::Diff if is_changed` → `if true` | equivalent, recorded |
+
+The first is the narrow kind of survivor a one-sided corpus hides. The mutated
+body is `self.insertions > 0 || self.deletions < 0`, which agrees with the
+original whenever `insertions` is non-zero, and separates only on a delta whose
+only change is a deletion. No test asserted `has_changes()` for that shape: the
+doctest's cases are `(1, 1)` and `(0, 0)`, the fixed cases check counts rather
+than the flag, and the property that does compare the flag against byte
+inequality draws 256 generated pairs — by the fact that this mutant survived
+them, none of those pairs was a pure deletion. The kill is one assertion in a
+test that already computed that exact delta:
+
+```rust
+    #[test]
+    fn pure_deletion_counts_only_deletions() {
+        let delta = LineDelta::between("alpha\nbeta\n", "alpha\n");
+        assert_eq!((delta.insertions(), delta.deletions()), (0, 1));
+        assert!(delta.has_changes(), "a deletion alone is a change");
+    }
+```
+
+The symmetric insertion assertion was added to
+`pure_insertion_counts_only_insertions` for the same reason, and
+`src/report/render.rs` gained one test. Re-measured with `--iterate`, which
+skips the mutants already caught and so re-tests exactly the two survivors:
+
+```plaintext
+$ TMPDIR=target/mutants-scratch cargo mutants -j 3 --iterate \
+    --file src/report/delta.rs --file src/driver.rs -o target
+ INFO Iteration excludes 44 previously caught or unviable mutants
+Found 2 mutants to test
+ok       Unmutated baseline in 20s build + 83s test
+MISSED   src/driver.rs:287:23: replace match guard is_changed with true in analyse in 1s build + 86s test
+2 mutants tested in 3m: 1 missed, 1 caught
+```
+
+The delta mutant is now in `caught.txt` and out of `missed.txt`, and that run's
+baseline is green with the new assertions in place, which is how the kill is
+measured rather than argued. Transcript:
+`/tmp/mutants-iterate-mdtablefix-check-option.out`.
+
+**A third run closes the loop, and it is the one the score is read from.** The
+two runs above are a sequence — 38 caught, then the delta mutant killed — and a
+score assembled from two runs is a sum rather than a measurement. So the full
+set was run once more over the final tree, with the new assertions and the new
+test in place:
+
+```plaintext
+$ TMPDIR=target/mutants-scratch cargo mutants -j 3 \
+    --file src/report/delta.rs --file src/driver.rs -o target
+Found 46 mutants to test
+ok       Unmutated baseline in 77s build + 112s test
+MISSED   src/driver.rs:287:23: replace match guard is_changed with true in analyse in 0s build + 69s test
+46 mutants tested in 9m: 1 missed, 39 caught, 6 unviable
+```
+
+One run, one tally: **39 caught, 1 missed, 6 unviable, 0 timeouts**, the single
+miss being the equivalent mutant justified below. Nothing else moved between the
+two runs — the same six mutants are unviable and no mutant the first run caught
+became survivable — and the per-mutant lists under `target/mutants.out/` are
+this run's. Transcript: `/tmp/mutants-rerun-mdtablefix-check-option.out`.
+
+The second survivor is accepted, on a justification that is itself a test. The
+arm is `Mode::Diff if is_changed => render_diff(display_path, &assessment)?`;
+mutated to `if true`, a `--diff` run over a file the byte comparison found
+unchanged renders a diff of two identical texts. `similar` 2.7's
+`UnifiedDiff::to_writer` takes the header inside the hunk loop and `iter_hunks`
+filters empty op groups, so equal texts have no hunk, therefore no header, and
+therefore no bytes — a property the dependency asserts for itself in
+`src/udiff.rs`'s `test_empty_unified_diff`. Under the mutant the payload is
+still the empty string, the `is_changed` field of the `FileReport` is computed
+before the match and independently of which arm runs, and stdout, stderr, the
+exit status, and every file's bytes are identical to the unmutated run. The
+mutant's only effect is that a clean file pays for a render that cannot produce
+output. Because that reasoning is a claim about this crate's boundary, it is now
+pinned there:
+
+```rust
+    /// Byte-equal texts render as nothing at all, headers included: `similar`
+    /// writes the header alongside the first hunk, and equal texts have no
+    /// hunk. A document that is already formatted therefore cannot render as
+    /// an empty diff carrying a file name.
+    #[test]
+    fn equal_texts_render_nothing() {
+```
+
+If the renderer ever gains an unconditional banner or header, that test fails
+and the guard stops being optional — which is the condition under which this
+justification would need revisiting. This is the one survivor the milestone's
+own outcome allows to stand, by its second clause: "each survivor is either
+killed by a new test or recorded with a justification".
+
+Six mutants are **unviable**, meaning the mutated source does not compile and so
+says nothing about test coverage: `exit_status`, `Inputs::resolve`, `assess`,
+both `analyse` replacements, and `in_argument_order` mutated to
+`vec![Default::default()]`. Each is a default-value substitution for a type that
+has no `Default` impl — `ExitStatus`, `Inputs`, `Assessment`, and `FileReport`
+derive `Debug`, `Clone`, `PartialEq` and `Eq`, not `Default` — or, for
+`in_argument_order`, for an unconstrained generic `T`. They are excluded from
+the score rather than counted as kills, which is why the denominator above is 40
+rather than 46.
+
+One caveat belongs with the score. `cargo-mutants` counts a mutant as caught
+whenever any test fails, so the historically flaky idempotence property can only
+move a mutant from missed to caught, never the reverse: the score is an upper
+bound on the kills and cannot be the cause of a survivor. No mutant timed out
+in either run, and the auto-set timeout — 843 s, then 420 s — was never
+approached, the slowest mutant test taking 164 s.
 
 ### Forward-compatibility for `--git` (#466)
 
@@ -4838,3 +5035,68 @@ document is edited and is recorded as a reading rather than a property. Logs:
 This revision changes no requirement, obligation, acceptance criterion, or code
 file. The diff is `docs/execplans/check-option.md` alone; the rebase changed
 which commits the branch sits on, not what it contains.
+
+### Revision 18, 2026-09-12
+
+This revision runs `EP-M6` on the tip Revision 17 produced, kills the survivor
+it turned up, and discharges the last outstanding milestone. `EP-M0`–`EP-M7`
+are complete; the status line, `Progress`, `Outcomes & retrospective`, and the
+milestone section all say so, and `Artefacts and notes → EP-M6 run` carries the
+command, the transcript, and the per-mutant evidence paths.
+
+The run was the milestone's own command over the two files `EP-M6` names, at
+the rebased tip, from a clean tree, with `-j 3`, `TMPDIR=target/mutants-scratch`
+and `-o target` so that the mutated copies, the scratch builds, and the results
+all stay inside the ignored `target/` directory and `/tmp` holds only logs.
+Measured: the unmutated baseline is green (136 s build + 168 s test) — the
+precondition the previous two revisions could not satisfy — and of **46
+mutants, 38 were caught, 6 were unviable, 2 were missed, none timed out**, in
+14 minutes. The delta survivor (`LineDelta::has_changes` mutated from `>` to
+`<`) is killed by a new `pure_deletion_counts_only_deletions` test and a
+symmetric assertion in `pure_insertion_counts_only_insertions`; re-measured
+with `--iterate`, which re-tests only the two survivors, it moves into
+`caught.txt` (`1 missed, 1 caught`, baseline green with the new tests). The
+driver survivor (`Mode::Diff if is_changed` mutated to `if true`) is accepted as
+an equivalent mutation, and its premise is pinned by the new
+`equal_texts_render_nothing` test rather than left as an argument, so a future
+renderer that emits an unconditional header fails a test instead of silently
+changing what that guard costs. **Final state: 39 of the 40 viable mutants
+killed, the fortieth recorded as equivalent.**
+
+The mutant count is 46, not the 43 the blocked run enumerated, and that is three
+mutants arriving rather than a number being corrected: `4a599ed` ("Keep the
+reporting shape open to a second input source") added `Inputs::resolve` and the
+`Mode::InPlace if is_changed` guard, and `git merge-base --is-ancestor` confirms
+that commit is not an ancestor of the tree the 43 were counted on. The earlier
+enumeration is kept in place with a note, and the PR body's figure is corrected
+to the measured one. The six unviable mutants are default-value substitutions
+for types with no `Default` impl (`ExitStatus`, `Inputs`, `Assessment`,
+`FileReport`) or an unconstrained generic (`in_argument_order<T>`): they do not
+compile, so they are excluded from the denominator rather than counted as
+kills, which is why it is 40 and not 46.
+
+The code change is two files, `src/report/delta.rs` and `src/report/render.rs`,
+`+29 -1`: one assertion added to each of the two one-sided delta tests, which
+pre-existed and already computed the deltas they now also assert on, and one new
+test in `src/report/render.rs` whose doc comment states why the guard it pins
+exists. Nothing in `src/driver.rs` changes — the accepted survivor is a
+statement about the renderer's output, so the pin belongs at the renderer's
+boundary.
+
+Gate run, through the gate runner, over this tip: `make check-fmt` passes (6 s),
+`make lint` passes (5 s, clippy `--all-targets --all-features` `-D warnings`),
+`make typecheck` passes (1 s), `make test` passes (81 s: 45 test binaries plus
+the doc-test target, 1861 passed, 0 failed, 20 ignored, the ignored being
+doc-tests), `make markdownlint` passes (34 files, 0 errors), and `make nixie`
+passes. The test count is Revision 17's 1860 plus the one new test, which is the
+only test either change adds — the delta change adds two assertions to existing
+tests. The first lint pass failed on a `doc_markdown` finding this revision
+introduced, `ExecPlan` unbackticked in the new test's doc comment
+(`src/report/render.rs:292`), which was fixed and re-gated rather than argued
+away; `make test` is unchanged by that fix, a doc comment being invisible to the
+harness. Logs: `/tmp/check-fmt-epm6-mdtablefix-check-option.out`,
+`/tmp/lint-epm6-2-mdtablefix-check-option.out`,
+`/tmp/typecheck-epm6-mdtablefix-check-option.out`,
+`/tmp/test-epm6-mdtablefix-check-option.out`,
+`/tmp/markdownlint-epm6-mdtablefix-check-option.out`,
+`/tmp/nixie-epm6-mdtablefix-check-option.out`.

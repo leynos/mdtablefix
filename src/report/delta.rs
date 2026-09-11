@@ -102,12 +102,14 @@ mod tests {
     fn pure_insertion_counts_only_insertions() {
         let delta = LineDelta::between("alpha\n", "alpha\nbeta\n");
         assert_eq!((delta.insertions(), delta.deletions()), (1, 0));
+        assert!(delta.has_changes(), "an insertion alone is a change");
     }
 
     #[test]
     fn pure_deletion_counts_only_deletions() {
         let delta = LineDelta::between("alpha\nbeta\n", "alpha\n");
         assert_eq!((delta.insertions(), delta.deletions()), (0, 1));
+        assert!(delta.has_changes(), "a deletion alone is a change");
     }
 
     #[test]
