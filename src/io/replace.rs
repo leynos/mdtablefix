@@ -34,9 +34,14 @@ use crate::process::{process_stream, process_stream_no_wrap};
 /// This helper encapsulates the common pattern used by [`rewrite`] and
 /// [`rewrite_no_wrap`].
 ///
+/// Visible to `super` rather than private so the unit tests can drive it with
+/// an identity transform: [`rewrite`] and [`rewrite_no_wrap`] always transform
+/// the content, so neither can separate the bytes the boundary restores from
+/// the bytes a transform produces. Nothing else calls it.
+///
 /// # Errors
 /// Returns an error if reading or writing the file fails.
-fn rewrite_with<F>(path: &Path, operation: &str, f: F) -> std::io::Result<()>
+pub(super) fn rewrite_with<F>(path: &Path, operation: &str, f: F) -> std::io::Result<()>
 where
     F: Fn(&[String]) -> Vec<String>,
 {

@@ -6,11 +6,11 @@
 //! them alone. Byte-exact comparison is the point: these files are the
 //! regression oracle for the serialization path.
 
-use std::fs;
-
 use assert_cmd::Command;
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::rstest;
-use tempfile::tempdir;
+use tempfile::{TempDir, tempdir};
 
 /// Canonical rendering of the three-line probe table shared by most fixtures.
 ///
@@ -34,18 +34,37 @@ fn document(lines: &[&str], ending: &str, bom: bool) -> Vec<u8> {
 /// Renders `bytes` for a readable assertion message.
 fn escaped(bytes: &[u8]) -> String { String::from_utf8_lossy(bytes).escape_debug().to_string() }
 
+/// The fixture's name, addressed relative to the directory capability.
+const FIXTURE_NAME: &str = "fixture.dat";
+
+/// Opens a directory capability for `tempdir` and returns it with its UTF-8
+/// host path.
+///
+/// The host path is kept for exactly one purpose: naming the file to the
+/// subprocess, which cannot inherit the capability. Every read and write this
+/// test performs goes through the returned `Dir`, so the fixture is reached the
+/// way the binary reaches it rather than through ambient filesystem calls.
+fn capability_directory(tempdir: &TempDir) -> (Dir, Utf8PathBuf) {
+    let path = Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf())
+        .expect("temporary directory path is UTF-8");
+    let directory = Dir::open_ambient_dir(&path, ambient_authority())
+        .expect("failed to open temporary directory");
+    (directory, path)
+}
+
 /// Runs `mdtablefix --in-place` over `input` and returns the resulting bytes.
 fn rewrite_in_place(input: &[u8]) -> Vec<u8> {
     let dir = tempdir().expect("temporary directory");
-    let path = dir.path().join("fixture.dat");
-    fs::write(&path, input).expect("write fixture");
+    let (directory, root) = capability_directory(&dir);
+    let name = Utf8Path::new(FIXTURE_NAME);
+    directory.write(name, input).expect("write fixture");
     Command::cargo_bin("mdtablefix")
         .expect("cargo binary")
         .arg("--in-place")
-        .arg(&path)
+        .arg(root.join(FIXTURE_NAME).as_std_path())
         .assert()
         .success();
-    fs::read(&path).expect("read result")
+    directory.read(name).expect("read result")
 }
 
 #[rstest]

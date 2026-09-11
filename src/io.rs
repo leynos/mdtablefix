@@ -42,7 +42,7 @@ pub use line_endings::{
 /// Re-exposes the internals the unit tests drive directly, so that a test
 /// module reaches them without naming the child module they live in.
 #[cfg(test)]
-use replace::register_metrics;
+use replace::{register_metrics, rewrite_with};
 pub use replace::{replace_file, rewrite, rewrite_no_wrap};
 #[cfg(test)]
 use swap::{TEMP_FILE_ATTEMPTS, create_temporary_file, rename_failure_seam, temporary_path};

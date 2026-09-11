@@ -5100,3 +5100,66 @@ harness. Logs: `/tmp/check-fmt-epm6-mdtablefix-check-option.out`,
 `/tmp/test-epm6-mdtablefix-check-option.out`,
 `/tmp/markdownlint-epm6-mdtablefix-check-option.out`,
 `/tmp/nixie-epm6-mdtablefix-check-option.out`.
+
+### Revision 19, 2026-09-12
+
+This revision is a review-driven round over the same branch after the plan was
+declared `COMPLETE`. It changes no milestone, obligation, or acceptance
+criterion, and its two code changes are follow-ups on work the milestones
+already delivered rather than new scope.
+
+The first is a unit test that reaches the file-rewriting boundary with nothing
+in the way of it. `src/io_tests.rs` now calls `rewrite_with` directly with an
+identity transform over three cases — CRLF endings, a leading byte-order mark,
+and a body with no final newline — writing the fixture to a temporary file and
+comparing the bytes read back. `rewrite_with` becomes `pub(super)` for it, which
+is the visibility the test actually needs rather than a convenience: the item is
+private to `io::replace` and the test module is `io::tests`, a sibling, so a
+private item is not nameable from there at all. `register_metrics` is
+`pub(super)` for exactly that reason and is reached through the same
+`#[cfg(test)] use replace::{…}` line. This is the only test that can separate
+the bytes the boundary restores from the bytes a transform produces, because
+both public entry points always transform content.
+
+Two of the three cases assert byte-identity and the third deliberately does not.
+A non-empty document whose last line is unterminated gains a terminator on the
+way out, which ADR 0007 states as "unterminated non-empty file gains one
+terminator" and the users' guide states as "is unterminated gains a terminator
+and is reported as drift, as `+1 -1`". Asserting byte-identity for that case
+would pin the opposite of the crate's contract, so the case table carries its
+expected bytes explicitly and the test's doc comment says why; the test passes
+with the terminator restored rather than absent.
+
+The second is `tests/document_properties.rs`'s `rewrite_in_place`, which reached
+its fixture through ambient `std::fs` on both sides of the command it runs. It
+now opens a `cap_std::fs_utf8::Dir` over the temporary directory — a camino
+path, `Dir::open_ambient_dir`, the shape `tests/cli.rs`'s
+`capability_directory` uses, on which the local helper is modelled — writes
+`fixture.dat` and reads it back through that capability, and keeps the host path
+for the one thing that cannot inherit a capability: the argument handed to the
+subprocess. `std::fs` is gone from the file, and the twelve document-boundary
+cases pass unchanged.
+
+The third finding is the formatting one at `#[case::mixed_in_fence(...)]`, and
+it is skipped rather than fixed, because the attribute is already what this
+repository's rustfmt produces. Its second argument is a 112-column line, which
+is what the finding noticed, but running rustfmt over a copy of the file with
+this repository's own `.rustfmt.toml` exits 0 and reports no diff, so the
+formatter has nothing to change in that file and a hand-reflow would be a
+departure from rustfmt rather than a fix. The check was proved non-vacuous by
+appending a
+deliberately misformatted function to the same scratch copy, where rustfmt
+reported that diff and exited 1. `make fmt` itself was not run, unchanged from
+Revisions 15 to 17 and for the same reason: it cannot be scoped to a diff, and
+ten Markdown files in the tree drift under it.
+
+Gate run, through the gate runner, over this round: `make check-fmt` passes
+(2 s), `make lint` passes (4 s, clippy `--all-targets --all-features` `-D
+warnings`), `make typecheck` passes (1 s), and `make test` passes (70 s, 1864
+passed, 0 failed, 20 ignored, the ignored being doc-tests). The total is
+Revision 18's 1861 plus the three new cases, and the log shows each of them
+running and passing by name rather than only the total moving. No test was flaky
+in this run. Logs: `/tmp/check-fmt-epm7-mdtablefix-check-option.out`,
+`/tmp/lint-epm7-mdtablefix-check-option.out`,
+`/tmp/typecheck-epm7-mdtablefix-check-option.out`,
+`/tmp/test-epm7-mdtablefix-check-option.out`.
