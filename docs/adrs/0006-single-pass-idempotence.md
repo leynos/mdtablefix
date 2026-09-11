@@ -109,9 +109,13 @@ set the CLI exposes. Six rules enforce the invariant:
 - `tests/idempotence.rs` formats the fixture corpus under
   `tests/data/idempotence/` twice through the real binary and asserts
   byte-identical output; the class `T` fixtures pin the delimiter-row
-  adjacency and assert that the row survives as table syntax.
+  adjacency and assert that the row survives as table syntax. Its
+  repository-wide drift sweeps live in `tests/idempotence_drift.rs`.
   `tests/idempotence_properties.rs` is a `proptest!` property over generated
-  documents and a sampled eight-flag powerset, and generates structural
+  documents and a sampled eight-flag powerset, while
+  `tests/idempotence_adjacencies.rs` holds the structural-adjacency property
+  and its coverage sweep; the generator both suites share lives in
+  `tests/support/idempotence_harness.rs`. The property generates structural
   adjacencies — a candidate directly above a thematic break — with `--headings`
   forced on, since the `make fmt` flag set does not enable it. The delimiter
   row is generated both alone and below a header row, and a deterministic sweep

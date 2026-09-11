@@ -1120,12 +1120,13 @@ Integration-test helpers are organized under `tests/support/`:
 
 Table: Integration-test support modules and their purposes.
 
-| Module               | Purpose                                                           |
-| -------------------- | ----------------------------------------------------------------- |
-| `cli_args.rs`        | `run_cli_with_args` — invokes the binary with argument-only tests |
-| `cli_stdin.rs`       | `run_cli_with_stdin` — invokes the binary feeding stdin           |
-| `fixtures.rs`        | Shared rstest fixtures (e.g. `broken_table`)                      |
-| `wrap_assertions.rs` | Higher-level assertions for wrapping output                       |
+| Module                   | Purpose                                                               |
+| ------------------------ | --------------------------------------------------------------------- |
+| `cli_args.rs`            | `run_cli_with_args` — invokes the binary with argument-only tests     |
+| `cli_stdin.rs`           | `run_cli_with_stdin` — invokes the binary feeding stdin               |
+| `fixtures.rs`            | Shared rstest fixtures (e.g. `broken_table`)                          |
+| `wrap_assertions.rs`     | Higher-level assertions for wrapping output                           |
+| `idempotence_harness.rs` | Shared proptest generators and CLI harness for the idempotence suites |
 
 Each integration-test file declares the modules it needs via explicit
 `#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
@@ -1185,8 +1186,9 @@ wired back in with `#[path]`:
 mod tests;
 ```
 
-`src/io.rs` and `src/main.rs` use this shape, as do the tracing-snapshot modules
-listed under [Tracing-event snapshot tests](#tracing-event-snapshot-tests). The
+`src/headings.rs`, `src/io.rs`, and `src/main.rs` use this shape, as do the
+tracing-snapshot modules listed under
+[Tracing-event snapshot tests](#tracing-event-snapshot-tests). The
 moved tests keep their original paths (`io::tests::…`), and `super` still
 resolves to the owning module, so unqualified access to its items is unchanged.
 
