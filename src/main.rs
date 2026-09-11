@@ -28,6 +28,7 @@ use rayon::prelude::*;
 mod command;
 mod driver;
 mod metrics;
+mod select;
 
 use command::{Cli, FormatOpts, format_lines, formatting_closure};
 use driver::{ExitStatus, Formatter, Inputs, Mode, analyse, exit_status, in_argument_order};
