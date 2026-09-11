@@ -183,6 +183,25 @@ Hard invariants. Violating one requires escalation, not a workaround.
   *before* any CLI surface exists, so the answer is known early and cheaply.
   `tests/cli.rs:307-356` already round-trips `--in-place` twice for its own
   cases, which is partial evidence but not a general result.
+  Materialised, twice, as predicted: two classes under `--wrap`/`--breaks`
+  (issue #468, fixed by pull request #470) and a third under `--headings`
+  (issue #474, open). All three are pre-existing and none is reachable through
+  `make fmt`'s flag set today. The mitigation worked as intended — the answer
+  was known before any CLI surface existed — but the *unquantified* likelihood
+  in the original wording is now measured and is not low: the third class is
+  reachable by the property test's own generator. See
+  `Surprises & discoveries`.
+
+- Risk: the `INV-IDEMPOTENT` property is flaky rather than merely imperfect, so
+  a green `test` gate is not evidence that the invariant holds. Severity: high.
+  Likelihood: confirmed. Mitigation: none available inside this plan — the
+  generator draws from a large space and reaches the failing shape in only a
+  fraction of runs, so `with_cases(48)` sometimes passes and sometimes fails on
+  an unchanged tree. Pinning a passing seed or excluding the test would turn the
+  gate green while the counterexample stands, which `Tolerances` forbids. The
+  fix belongs with the transform defect: issue #474 requires the generator to
+  reach the shape deterministically. Until then, `EP-M6` is blocked and no
+  commit claims a green `test` gate.
 
 - Risk: `EP-M1` rewrites the serialization path used by every mode, including
   the one that mutates users' files, and the repository has **no existing
@@ -334,7 +353,18 @@ Hard invariants. Violating one requires escalation, not a workaround.
       and exposed a real gap in the diff invariant rather than a snapshot
       problem; see `Artefacts and notes → EP-M5 red and green transcripts`.
 - [ ] EP-M6 Targeted mutation testing of the counting and aggregation
-      functions.
+      functions. **Blocked before its first command.** `cargo mutants --file
+      src/report/delta.rs --file src/driver.rs` finds the 43 mutants and then
+      refuses to test them, because its baseline `cargo test` fails:
+      `tests/check_properties.rs::generated_documents_reach_a_fixed_point` has
+      a deterministic counterexample (`document = "|1|2|\n|---|---|\n---",
+      mask = 128`) from a **third** pre-existing non-idempotent transform class
+      under `--headings`. Per `Tolerances`, the plan does not work around it and
+      does not exclude the test to get a score; the class is raised as GitHub
+      issue #474 and the milestone resumes once the `test` gate is green. See
+      `Surprises & discoveries` and
+      `Artefacts and notes → EP-M6 baseline blocked`. The `make test` gate is
+      **red** at `a06bab6` as a result.
 - [ ] EP-M7 Documentation, ADRs, changelog, and issue closure.
 
 ## Surprises & discoveries
@@ -499,6 +529,46 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `make fmt` there will rewrite unrelated prose across the documentation set, so
   that step must be reviewed as its own change rather than folded into the
   content edit.
+  Date/Author: 2026-09-11.
+
+- Observation: a **third** non-idempotent transform class exists, and it is both
+  pre-existing and reachable by the plan's own test suite. Under `--headings`
+  alone, a table whose delimiter row is immediately followed by a `---` line is
+  not a fixed point: the `---` makes the delimiter row a Setext heading
+  candidate, so pass 1 rewrites `|---|---|` as `## | --- | --- |` and pads the
+  body row to the delimiter row's cell widths, and pass 2 re-pads that body row
+  against the new heading's narrower cells.
+  Evidence: `printf '|1|2|\n|---|---|\n---'` → pass 1
+  `| 1   | 2   |\n## | --- | --- |\n` → pass 2
+  `| 1 | 2 |\n## | --- | --- |\n`; five of six corpus cases drift, and the
+  sixth (`|A|B|\n|---|---|\nTitle\n---\n`) is the control in which a line of
+  prose between the delimiter row and the `---` prevents the absorption. The
+  pass-1 bytes are **byte-identical** to those of a binary built from
+  `git archive origin/main` (v0.5.1), and this branch's `src/` diff against
+  `origin/main` contains no transform code, so the class is pre-existing rather
+  than introduced by the reporting work — the same finding as the `EP-M2`
+  classes, and the same reason issue #468's closure was incomplete.
+  Date/Author: 2026-09-11.
+
+- Observation: `tests/check_properties.rs::generated_documents_reach_a_fixed_point`
+  **samples the failing class too rarely to fail reliably**, so the `test` gate
+  has been passing by luck. The generator's `markdown_lines()` can emit
+  `"|---|---|"` and `"---"` but draws a document of at most twelve lines, so the
+  three-line shape that triggers the class is one of a very large space of
+  draws and `with_cases(48)` does not reliably reach it.
+  Evidence: repeated runs in one unchanged tree gave 10 passes, then 3 passes
+  followed by 27 failures, then 5 failures out of 5; another tree gave a pass
+  followed by failures. With `PROPTEST_RNG_SEED=0` the failure is reproducible
+  and always shrinks to `document = "|1|2|\n|---|---|\n---", mask = 128` (the
+  `--headings` bit). `PROPTEST_RNG_SEED` is honoured by proptest 1.11.0, so the
+  seed explains which draw is taken, but **why some earlier unseeded runs in the
+  same tree passed is not fully explained**: stale-binary, feature-flag,
+  target-directory, `RUSTFLAGS`, path-dependence, assert_cmd-resolution, and
+  binary-nondeterminism explanations were each tested and each ruled out (30 of
+  30 identical invocations at five different paths). The honest statement is that
+  the property is flaky because the generator is sparse, which is exactly the
+  vacuity hazard issue #468's acceptance criteria name; the residual variance is
+  recorded as an open question rather than asserted away.
   Date/Author: 2026-09-11.
 
 ## Decision log
@@ -897,6 +967,46 @@ Hard invariants. Violating one requires escalation, not a workaround.
   boundary that exists only to move lines, while the reporting helpers already
   live in their own `tests/cli_matrix/reporting.rs` because they are a distinct
   concern rather than because of the cap.
+  Date/Author: 2026-09-11.
+
+- Decision: `EP-M6` is halted before its first command, and the mutation run is
+  deferred until the `test` gate is green again.
+  Rationale: `cargo-mutants` refuses to test any mutant when the unmutated
+  baseline `cargo test` fails (`ERROR cargo test failed in an unmutated tree, so
+  no mutants were tested`), and the baseline is red on `a06bab6` because
+  `generated_documents_reach_a_fixed_point` has a genuine counterexample. The
+  options were to fix the transform, to exclude the flaky test from the baseline,
+  or to defer. Excluding it was rejected outright: it would report a mutation
+  score for a tree whose own gate is red, which is the "hide the failure"
+  outcome `Tolerances` forbids. Fixing the transform is the correct outcome but
+  is a change to `src/headings.rs` (or its call site) that this plan's
+  `Constraints` place out of scope, and the established precedent for exactly
+  this situation — the `EP-M2` classes, which became issue #468 and pull request
+  #470 — is a separate issue and a separate change. So the milestone is deferred,
+  the gap is recorded rather than skipped, and the plan does not claim a mutation
+  result it does not have.
+  Date/Author: 2026-09-11.
+
+- Decision: the new defect class is escalated as GitHub issue #474, with a
+  reproduction corpus and a non-vacuity requirement, in the shape issue #468
+  used, rather than folded into this plan's remaining milestones.
+  Rationale: the user's instruction for #468 fixed the acceptance bar —
+  "the issue cannot be considered fixed until both the reproduction corpus and a
+  substantive property check demonstrate idempotency" — and this class passes
+  neither half today: the corpus does not carry the shape, and the property
+  check that would have caught it is the flaky one. Raising it separately keeps
+  the reporting feature's own acceptance criteria honest, because a green `test`
+  gate reached by narrowing the property would close the feature while leaving
+  the defect live.
+  Date/Author: 2026-09-11.
+
+- Decision: work does not proceed past the halt into `EP-M7` as though the tree
+  were healthy, and no further commit claims all gates green.
+  Rationale: `make test` is red at `HEAD` and the failure is deterministic under
+  a fixed seed. `EP-M7` is documentation-only, so its own diff can still be gated
+  by `markdownlint` and `nixie`, but the `Gates:` line of any commit that touches
+  code or tests must not assert a passing test suite while this counterexample
+  stands. Recording the true state is the whole point of the `Progress` section.
   Date/Author: 2026-09-11.
 
 ## Outcomes & retrospective
@@ -1812,6 +1922,16 @@ directly and empirically, at a fraction of the cost of a toolchain adoption.
 Fallback: if `cargo-mutants` is unavailable, skip and record the gap. It is a
 developer tool, not a manifest entry, and is not added to any gate.
 
+Blocker (recorded 2026-09-11): `cargo-mutants` is available, but this milestone
+cannot start. It refuses to test any mutant while the unmutated baseline
+`cargo test` fails, and the baseline is red on `a06bab6` because
+`generated_documents_reach_a_fixed_point` reaches a genuine third
+non-idempotent transform class with `--headings`. Excluding the failing test
+from the baseline, or pinning a passing seed, would produce a score for a tree
+whose own gate is red; both are rejected, so the milestone is deferred until
+the transform is fixed (GitHub issue #474). See
+`Artefacts and notes → EP-M6 baseline blocked`.
+
 Recovery: additive; no production change unless a survivor is found.
 
 Compatibility decision: none required.
@@ -2073,6 +2193,11 @@ re-running a gate to diagnose a failure.
 
 ### EP-M6
 
+0. Precondition: `make test` is green, because `cargo-mutants` aborts on a red
+   baseline. **Not met at `a06bab6`**; see `Artefacts and notes → EP-M6 baseline
+   blocked`. Do not start step 1 until the `--headings` table/setext defect
+   (issue #474) is fixed, and do not satisfy the precondition by excluding the
+   test or pinning a seed.
 1. `cargo mutants --file src/report/delta.rs --file src/driver.rs`.
 2. Kill each survivor with a test, or record why it is acceptable.
 
@@ -3107,6 +3232,135 @@ The check also established that the file drifted at `HEAD` too (`+101 -103`), so
 the residual drift is pre-existing and not introduced here; see
 `Surprises & discoveries`.
 
+### EP-M6 baseline blocked
+
+`EP-M6` did not run. Its first command, `cargo mutants --file
+src/report/delta.rs --file src/driver.rs`, collects the 43 mutants the milestone
+targets and then refuses to test them because the unmutated baseline is red:
+
+```plaintext
+$ cargo mutants --file src/report/delta.rs --file src/driver.rs   # cargo-mutants 27.1.0
+Found 43 mutants to test
+FAILED   Unmutated baseline in 21s build + 11s test
+*** baseline
+*** .../cargo test --no-run --verbose --package=mdtablefix@0.6.0
+ERROR cargo test failed in an unmutated tree, so no mutants were tested
+```
+
+The 43 survivors-to-be, as enumerated before the refusal (line and mutation
+only; each is a distinct mutant of the two targets):
+
+| File | Mutants |
+| --- | --- |
+| `src/driver.rs` | 25 |
+| `src/report/delta.rs` | 18 |
+
+The baseline failure is `tests/check_properties.rs:297`, and it is the third
+non-idempotent transform class:
+
+```plaintext
+---- generated_documents_reach_a_fixed_point stdout ----
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+thread 'generated_documents_reach_a_fixed_point' panicked at tests/check_properties.rs:297:1:
+Test failed: assertion failed: `(left == right)`
+  left: `"| 1 | 2 |\n## | --- | --- |\n"`,
+ right: `"| 1   | 2   |\n## | --- | --- |\n"`: document must be a fixed point under ["--headings"]
+minimal failing input: document = "|1|2|\n|---|---|\n---", mask = 128
+test result: FAILED. 19 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+error: test failed, to rerun pass `-p mdtablefix --test check_properties`
+make: *** [Makefile:20: test] Error 101
+```
+
+A self-checking corpus script over six documents, two passes each, comparing
+pass-1 bytes with pass-2 bytes:
+
+| Case | Document (escaped) | `--headings` | `mdformat-all` set |
+| --- | --- | --- | --- |
+| `C1` | `\|1\|2\|\n\|---\|---\|\n---` | drifts | fixed point |
+| `C2` | `\|1\|2\|\n\|---\|---\|\n---\n` | drifts | fixed point |
+| `C3` | `prose\n\|1\|2\|\n\|---\|---\|\n---\n` | drifts | fixed point |
+| `C4` | `\|A\|B\|\n\|---\|---\|\n---\n\|1\|2\|\n` | drifts | fixed point |
+| `C5` | `\|---\|---\|\n\|1\|2\|\n---\n` | drifts | fixed point |
+| `C6` | `\|A\|B\|\n\|---\|---\|\nTitle\n---\n` | fixed point | fixed point |
+
+`C6` is the control: prose between the delimiter row and the `---` stops the
+absorption. The `mdformat-all` column matters for blast radius — `make fmt` runs
+`--wrap --renumber --breaks --ellipsis --fences --in-place` and does **not**
+include `--headings`, so no repository document is affected by this class today.
+The only route to it is the property test's sampled powerset.
+
+`C1`, pass 0 through pass 3, on the branch's binary:
+
+```plaintext
+-- pass0:            -- pass1:
+|1|2|               | 1   | 2   |
+|---|---|               ## | --- | --- |
+---                 -- pass2, pass3 (stable):
+                    | 1 | 2 |
+                    ## | --- | --- |
+```
+
+`C4`, whose trailing body row shows the re-padding rather than the loss of the
+header row:
+
+```plaintext
+-- pass0:                     -- pass1, pass2, pass3 (stable):
+|A|B|                         | A   | B   |     -> | A | B |
+|---|---|                       ## | --- | --- |       ## | --- | --- |
+---                           | 1 | 2 |             | 1 | 2 |
+|1|2|
+```
+
+Pre-existence, measured against a binary built from `git archive origin/main`
+(v0.5.1) and run on the same corpus:
+
+```plaintext
+$ /home/leynos/scratch/mdtablefix-main-probe/target/debug/mdtablefix --headings C1
+| 1   | 2   |$
+## | --- | --- |$
+
+$ /home/leynos/scratch/mdtablefix-main-probe/target/debug/mdtablefix --headings C4
+| A   | B   |$
+## | --- | --- |$
+| 1 | 2 |$
+```
+
+Those are the branch's pass-1 bytes exactly. A self-checking corpus script (the
+same one the issue carries) takes the six cases above, formats each twice, and
+asserts both the fixed point and the survival of the delimiter row: it reports
+`1/6 cases pass` and exits `1`, identically on the branch's binary and on the
+`origin/main` binary. This branch's `src/` diff against `origin/main` touches
+`driver.rs`, `driver_tests.rs`, `io.rs`, `io/document.rs`, `io/replace.rs`,
+`lib.rs`, `main.rs`, `main_tests.rs`, `report.rs`, `report/delta.rs`,
+`report/render.rs`, and one snapshot — no transform code — so the class
+predates the reporting work.
+
+Gate variance, measured rather than assumed. In one unchanged tree, ten
+unseeded runs passed; thirty further runs gave three passes and twenty-seven
+failures; five more failed. A second tree gave one pass, then failures. With
+`PROPTEST_RNG_SEED=0` the shrink is deterministic and always the same
+three-line document. Ruled out as explanations, each by test: a stale binary
+(inode and hard-link checked), a feature difference (the manifest has no
+`[features]` section, so `--all-features` is a no-op), binary nondeterminism
+(30 of 30 identical invocations), path dependence (five different directories,
+identical output), and assert_cmd resolution (the worktree binary, the scratch
+head binary, and the installed release binary were each run directly). The
+residual variance is left as an open question in `Surprises & discoveries`
+rather than explained away.
+
+Raised as GitHub issue #474 on the same reasoning that produced #468, and with
+the same acceptance bar: the two- to five-line corpus landed as fixtures (for
+example under `tests/data/idempotence/`) with a test that formats each fixture
+twice through the real binary, **and** a generated-document property whose
+generator reaches the table-delimiter / `---` shape often enough that the
+assertion fails deterministically rather than flakily. The issue also records
+the recommended fix direction — exclude table delimiter rows from Setext
+detection, since a delimiter row is table syntax rather than paragraph text —
+and the isolated probes that pin the interaction to the two passes rather than
+to either one alone. Satisfying the corpus alone does not close it, and neither
+does a property test that only sometimes samples the shape — which is the state
+the branch is in now.
+
 ## Documentation and skills to consult
 
 Repository documents:
@@ -3376,3 +3630,39 @@ No requirement, obligation, or acceptance criterion changed. The two modes
 remain rendering variants of one assessment, the exit-status contract is
 unchanged, and nothing in this milestone touched production code: the diff is
 `tests/` and `docs/` only.
+
+### Revision 9, 2026-09-11
+
+`EP-M6` halted before its first command; nothing was implemented in this
+revision. The halt is a finding, not a failure to start: the mutation run is
+blocked by a genuine counterexample in the `test` gate, and the plan's
+`Tolerances` require recording and escalating rather than working around it.
+
+What changed in the plan itself:
+
+- `Progress` now records `EP-M6` as blocked with the reason, and states plainly
+  that `make test` is red at `a06bab6`. No earlier milestone's completion claim
+  is retracted — every one of them was gated on a run that passed — but the
+  claim that the tree is currently green is not made.
+- `Concrete steps → EP-M6` gains a step 0 precondition, `Milestones and
+  plateaus → EP-M6` gains its blocker paragraph, and three `Decision log`
+  entries record why the milestone was deferred rather than the flaky test
+  excluded, why the class is escalated as GitHub issue #474, and why no further
+  commit claims all gates green.
+- `Surprises & discoveries` gains the class itself (with the six-case corpus
+  and the `origin/main` byte-identity evidence) and the flakiness finding, whose
+  unexplained residual variance is recorded as an open question rather than
+  asserted away.
+- `Artefacts and notes → EP-M6 baseline blocked` carries the mutants refusal
+  transcript, the corpus table, the pass-by-pass bytes, the pre-existence
+  measurements, the variance evidence and what would close the gap.
+
+No requirement, obligation, or acceptance criterion changed for `EP-M0` through
+`EP-M5` or for `EP-M7`. The reporting feature's own contract — one assessment
+rendered three ways, exit `0`/`1`/`2`, drift only in the reporting modes — is
+untouched by this class, which lies in the `--headings` transform and predates
+the branch. What the discovery does change is the meaning of the `test` gate for
+`EP-M6` and `EP-M7`: it is currently a coin flip on this input class, so a green
+run is not by itself evidence that `INV-IDEMPOTENT` holds. `EP-M7` can proceed
+on its documentation diff, gated by `markdownlint` and `nixie`, but the feature
+cannot be called closed while a `--headings` input is not a fixed point.
