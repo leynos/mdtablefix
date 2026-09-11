@@ -1,7 +1,7 @@
 //! Selection of the files `--git` acts on.
 //!
-//! Binary-private, like [`crate::cli`]: `src/lib.rs` does not declare it, so the
-//! tree adds no public API. `src/main.rs` declares it alone.
+//! Binary-private, like [`crate::command`]: `src/lib.rs` does not declare it,
+//! so the tree adds no public API. `src/main.rs` declares it alone.
 //!
 //! Dependencies point inwards. [`policy`] states the selection contract and
 //! names the [`PathProbe`](policy::PathProbe) port; it imports neither
@@ -12,8 +12,11 @@
 //! from corrupting an in-progress merge resolution. [`extensions`] parses and
 //! matches `--md-exts` values and knows nothing of either.
 
-mod conflict;
-mod extensions;
-mod fs_probe;
-mod git_ls_files;
-mod policy;
+// `pub(crate)`, not `pub`: the tree is binary-private, and the composition root
+// is a sibling module rather than a descendant, so it needs the path to reach
+// `git_inputs`' wiring. Nothing here is reachable from `src/lib.rs`.
+pub(crate) mod conflict;
+pub(crate) mod extensions;
+pub(crate) mod fs_probe;
+pub(crate) mod git_ls_files;
+pub(crate) mod policy;

@@ -14,7 +14,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use proptest::{collection::vec, prelude::*, test_runner::TestRunner};
 use rstest::rstest;
 
-use super::{CandidateListing, GitListError, GitLsFiles, split_nul_delimited};
+use super::{CandidateListing, GitListError, GitLsFiles, relayable, split_nul_delimited};
 
 /// Printable ASCII, the common case for a repository path.
 fn ascii_text() -> impl Strategy<Value = Vec<u8>> { vec(0x20u8..=0x7e, 1..=40) }
@@ -204,13 +204,147 @@ fn a_failing_command_is_reported_with_its_status_and_gits_own_stderr() {
     let error = GitLsFiles::with_program("/bin/false", false)
         .list_candidates(Utf8Path::new("."))
         .expect_err("`false` always fails");
-    assert!(
-        error.to_string().contains("git ls-files"),
-        "the failure must name the command the user could run: {error}"
-    );
-    let GitListError::Failed { status, stderr } = error else {
+    let GitListError::Failed {
+        command,
+        status,
+        stderr,
+    } = error
+    else {
         panic!("expected a git failure, got {error}");
     };
+    assert_eq!(command, "/bin/false ls-files");
     assert_eq!(status.code(), Some(1));
     assert!(stderr.is_empty(), "`false` writes nothing: {stderr:?}");
+}
+
+/// The command is named as the caller spelled its program, so a test that
+/// drives the failure paths with something other than `git` reads as that
+/// program's failure rather than as a misleading reference to `git`.
+#[cfg(unix)]
+#[test]
+fn a_failure_names_the_command_with_the_program_that_ran() {
+    let error = GitLsFiles::with_program("/bin/false", false)
+        .list_candidates(Utf8Path::new("."))
+        .expect_err("`false` always fails");
+
+    assert_eq!(
+        error.to_string(),
+        "`/bin/false ls-files` failed with exit status: 1"
+    );
+}
+
+/// The Git directory is asked of Git, not guessed from a `.git` entry.
+///
+/// Run against a linked worktree, which is the case a directory walk gets
+/// wrong: its `.git` is a file naming a directory under the main repository's
+/// administrative area, so the guard would look for `MERGE_HEAD` in a file.
+#[test]
+fn the_git_directory_is_resolved_through_git() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let root = Utf8Path::from_path(directory.path()).expect("a UTF-8 temporary directory");
+    git(root, &["init", "--quiet", "-b", "main"]);
+    write(root, "docs/guide.md", "|A|B|\n");
+    git(root, &["add", "--", "docs/guide.md"]);
+    git(root, &["commit", "-m", "initialise"]);
+    let worktree = root.join("linked");
+    git(
+        root,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            worktree.as_str(),
+            "-b",
+            "side",
+        ],
+    );
+
+    let resolved = GitLsFiles::new(false)
+        .resolve_git_dir(&worktree)
+        .expect("git rev-parse --absolute-git-dir");
+
+    assert!(
+        resolved.as_str().ends_with("worktrees/linked"),
+        "a linked worktree's Git directory is not the main repository's: {resolved}"
+    );
+    assert!(
+        std::fs::symlink_metadata(resolved.join("HEAD")).is_ok(),
+        "{resolved} must be the directory git itself reports"
+    );
+}
+
+/// A directory outside any repository is a failure rather than an empty
+/// answer, and the failure carries git's own diagnostic as one line.
+#[test]
+fn a_directory_outside_a_repository_has_no_git_directory() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let outside = Utf8Path::from_path(directory.path()).expect("a UTF-8 temporary directory");
+
+    let error = GitLsFiles::new(false)
+        .resolve_git_dir(outside)
+        .expect_err("no repository governs a fresh temporary directory");
+
+    let message = error.to_string();
+    assert!(
+        message.starts_with("`git rev-parse` failed with exit status"),
+        "unexpected message: {message}"
+    );
+    let diagnostic = error.diagnostic();
+    assert!(
+        diagnostic.starts_with(&message) && diagnostic.len() > message.len(),
+        "the diagnostic must relay git's own text beside our own: {diagnostic:?}"
+    );
+    assert!(
+        !diagnostic.contains('\n') && !diagnostic.contains('\r'),
+        "the relayed diagnostic must be one line: {diagnostic:?}"
+    );
+}
+
+#[test]
+fn the_repository_query_reports_an_absent_program_as_such() {
+    let error = GitLsFiles::with_program("mdtablefix-no-such-program-6f2c", false)
+        .resolve_git_dir(Utf8Path::new("."))
+        .expect_err("no such program exists");
+
+    assert!(
+        matches!(error, GitListError::ProgramNotFound { .. }),
+        "{error}"
+    );
+}
+
+/// `relayable`: Git's text is scrubbed into one line before it is shown.
+#[rstest]
+#[case(b"", "")]
+#[case(b"fatal: bad revision\n", "fatal: bad revision")]
+// A message that is several lines is shown as one, so a repository cannot
+// forge additional lines of this tool's stderr.
+#[case(b"fatal: bad\nusage: git ls-files\n", "fatal: bad usage: git ls-files")]
+#[case(b"a\r\nb\rc", "a b c")]
+// A run at either end disappears rather than becoming a gap.
+#[case(b"\n\nfatal\n\n", "fatal")]
+// An escape sequence loses its escape character, so the rest is inert text
+// rather than a terminal instruction a path in the repository chose.
+#[case(b"\x1b[31mfatal\x1b[0m", "[31mfatal [0m")]
+#[case(b"a\x07b", "a b")]
+// Bytes that are not UTF-8 become the replacement character: this is a
+// diagnostic, not a path, and nothing acts on it.
+#[case(b"bad \xff byte", "bad \u{fffd} byte")]
+fn relayed_diagnostics_are_scrubbed_into_one_line(#[case] input: &[u8], #[case] expected: &str) {
+    assert_eq!(relayable(input), expected);
+}
+
+/// A diagnostic long enough to bury the message it supports is cut, and the
+/// cut is visible rather than silent.
+#[test]
+fn a_relayed_diagnostic_is_capped() {
+    let flood = "x".repeat(4096);
+
+    let relayed = relayable(flood.as_bytes());
+
+    assert_eq!(relayed.chars().count(), 1025, "{relayed:?}");
+    assert!(relayed.ends_with('…'), "{relayed:?}");
+    assert!(
+        relayed.starts_with(&"x".repeat(1024)),
+        "the cap must keep a prefix, not drop the message: {relayed:?}"
+    );
 }

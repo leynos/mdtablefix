@@ -25,6 +25,11 @@ impl FileIdentity {
     pub fn from_canonical_path(path: Utf8PathBuf) -> Self { Self(path) }
 
     /// The canonicalized path this identity was built from.
+    ///
+    /// `#[cfg(test)]` because the selection acts on the spelling a user's run
+    /// reports rather than on the identity's own name: this reads the identity
+    /// back, which is what the probe's tests assert the probe formed it from.
+    #[cfg(test)]
     #[must_use]
     pub fn as_path(&self) -> &Utf8Path { &self.0 }
 }

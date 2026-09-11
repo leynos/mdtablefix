@@ -13,7 +13,10 @@ use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
 use super::{driver, format_stdin, open_file_parent, render_stdin_output};
-use crate::command::{FormatOpts, formatting_closure};
+use crate::{
+    command::{FormatOpts, formatting_closure},
+    select::conflict::ConflictGuard,
+};
 
 /// Formats a capability-scoped file without modifying it.
 ///
@@ -22,6 +25,7 @@ use crate::command::{FormatOpts, formatting_closure};
 fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
     let (_, output) = driver::analyse(
         Mode::Print,
+        ConflictGuard::unguarded(),
         directory,
         path,
         path,
@@ -35,6 +39,7 @@ fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyho
 fn rewrite_in_place(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<()> {
     driver::analyse(
         Mode::InPlace,
+        ConflictGuard::unguarded(),
         directory,
         path,
         path,

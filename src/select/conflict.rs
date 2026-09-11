@@ -38,6 +38,60 @@ const MARKERS: [char; 3] = ['<', '=', '>'];
 /// counted up to.
 const MARKER_LEN: usize = 7;
 
+/// Whether a rewrite must refuse a file that carries conflict markers.
+///
+/// The two facts it holds are decided once per run — whether an operation is in
+/// progress, and whether the user overrode the refusal — so the per-file
+/// question is the marker scan alone. Both are consulted together rather than
+/// by the caller, because a refusal that forgets one of them either corrupts a
+/// conflict resolution or ignores `--allow-conflicted`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConflictGuard {
+    /// Whether a merge, rebase, or cherry-pick is paused in this repository.
+    in_progress: bool,
+    /// Whether `--allow-conflicted` was given.
+    allowed: bool,
+}
+
+impl ConflictGuard {
+    /// The guard for a run that is not selecting from a Git repository.
+    ///
+    /// A path the user named on the command line is not a selection this tool
+    /// made, so it is not this tool's to refuse; and no repository is consulted
+    /// for one, which is what keeps an ordinary run from spawning `git`.
+    #[must_use]
+    pub const fn unguarded() -> Self {
+        Self {
+            in_progress: false,
+            allowed: false,
+        }
+    }
+
+    /// The guard for a run whose repository may be mid-operation.
+    #[must_use]
+    pub const fn new(in_progress: bool, allowed: bool) -> Self {
+        Self {
+            in_progress,
+            allowed,
+        }
+    }
+
+    /// Whether `content` must not be rewritten.
+    ///
+    /// Takes `self` by value, as `clippy::trivially_copy_pass_by_ref` requires
+    /// of a two-byte `Copy` type: the guard is two `bool`s and copying it is
+    /// cheaper than the reference.
+    ///
+    /// The marker scan runs only while an operation is in progress: a document
+    /// that quotes all three markers inside a fenced block is otherwise
+    /// indistinguishable from a conflicted one, and refusing to rewrite it
+    /// would be a false alarm about a file nothing is merging.
+    #[must_use]
+    pub fn refuses(self, content: &str) -> bool {
+        self.in_progress && !self.allowed && has_conflict_markers(content)
+    }
+}
+
 /// Reports whether the repository is mid-merge, mid-rebase, or
 /// mid-cherry-pick, by testing for `MERGE_HEAD`, `rebase-merge`,
 /// `rebase-apply`, and `CHERRY_PICK_HEAD` under the Git directory.
