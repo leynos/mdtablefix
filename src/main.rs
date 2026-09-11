@@ -28,6 +28,10 @@ use rayon::prelude::*;
 mod command;
 mod driver;
 mod metrics;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "lands ahead of its wiring in EP-M2")
+)]
 mod select;
 
 use command::{Cli, FormatOpts, format_lines, formatting_closure};

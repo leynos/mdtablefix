@@ -877,7 +877,11 @@ impl ExtensionFilter {
     #[must_use]
     pub fn matches(&self, path: &camino::Utf8Path) -> bool;
 
-    /// Iterates the extensions in sorted order, without dots.
+    /// Iterates the extensions shortest-first, then byte-wise, without dots.
+    ///
+    /// Shortest-first is what renders the default as `md, mdc, markdown`; a
+    /// byte-wise sort alone would render it `markdown, md, mdc`. The order is
+    /// total, so a rendering does not depend on the order the user gave.
     pub fn iter(&self) -> impl Iterator<Item = &str>;
 }
 
@@ -1792,9 +1796,29 @@ plateau.
       Transcript in Artefacts and notes, `EV-M1-RED`. The red commit carries no
       `expect(dead_code)` attribute — see Surprises & discoveries for why the
       attribute belongs to EP-M1 instead.
-- [ ] EP-M1: implement `extensions`, `policy`, `conflict`, `git_ls_files`, and
-      `fs_probe`; discharge INV-NUL-SPLIT, INV-EXT-SOUND, INV-EXT-COMPLETE,
-      INV-DEDUP, INV-ORDER-DET, INV-PROBE-EXCLUSIONS, INV-CONFLICT-GUARD.
+- [x] (2026-09-12) EP-M1, the selection module: `extensions`, `policy`,
+      `conflict`, `git_ls_files`, and `fs_probe` are implemented, and
+      `cargo test --bin mdtablefix --all-features select` reports **69 passed; 0
+      failed; 46 filtered out**. Discharged: INV-NUL-SPLIT, INV-EXT-SOUND,
+      INV-EXT-COMPLETE, INV-DEDUP, INV-ORDER-DET, INV-PROBE-EXCLUSIONS,
+      INV-CONFLICT-GUARD. `cargo clippy --all-targets --all-features -- -D
+      warnings` is clean, which is what makes `main.rs`'s
+      `expect(dead_code, …)` an evidence-backed declaration rather than a
+      hopeful one: the attribute is still *fulfilled*, so nothing in the tree
+      has been wired up yet. Transcript in Artefacts and notes, `EV-M1-SELECT`.
+      Writing the implementation exposed four latent type errors in the red
+      tests, which no name-resolution failure can surface; see Surprises &
+      discoveries.
+- [x] (2026-09-12) EP-M1, gate posture, measured with `scrutineer`:
+      `make check-fmt`, `make typecheck`, `make lint`, `make markdownlint`, and
+      `make nixie` are green. `make test` is red, and red only on
+      `tests/git_file_selection.rs`, which reports **1 passed; 16 failed**,
+      every failure being `error: unexpected argument '--git' found`. This is
+      the posture the Decision log already accepts rather than a new defect:
+      `--git` does not exist until EP-M2, so the committed behavioural suite
+      cannot pass until then. Because the first `cargo test` command fails,
+      `make test` never reaches its second, so `cargo test --doc --all-features`
+      was run separately and reports **40 passed; 0 failed; 20 ignored**.
 - [ ] EP-M1: confirm `std::fs::canonicalize` case behaviour on the macOS and
       Windows release targets, per the INV-DEDUP residual gap.
 - [ ] EP-M1: add `make mutants` and `mutants.toml`; reach zero survivors in
@@ -2084,6 +2108,45 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   separator rows whose runs of `-` grew to the column width, which is the
   tool's stated job. Taking the canonical form once is also what makes every
   later splice in this document a minimal diff.
+
+- Observation: **the red transcript proves less than it appears to: name
+  resolution fails before type checking, so `E0432` hides every type error
+  behind it.** Four were waiting in the test files once the imports resolved,
+  and none was reachable from the `EV-M1-RED` run. `ascii_text()` was
+  `vec(0x20u8..=0x7e, 1..=40).prop_map(String::into_bytes)`, whose strategy
+  yields `Vec<u8>` while the function takes a `String` — a `prop_map` over a
+  byte range needs `fn(Vec<u8>) -> _`, and the range already *is* the byte
+  vector. `splitting_is_a_faithful_inverse` moved `textual` into
+  `prop_assert_eq!` and then read `textual.len()` two lines later; the count now
+  comes first. `.map(Utf8PathBuf::as_str)` names an associated function that
+  does not exist — `as_str` belongs to `Utf8Path`, and a path cannot be reached
+  from `&Utf8PathBuf` as a function pointer — so the map is now a closure over
+  the deref. And `regular(path.as_str())` over an iterator of `&str` resolves to
+  the unstable `str_as_str`; passing `path` directly lets the argument coercion
+  do the same job. Each fix is mechanical and none changes what a test asserts:
+  the same generator, the same assertion, the same expected values. The same
+  files also needed one Clippy fix under `-D warnings`
+  (`redundant_closure_for_method_calls`), which is the gates doing their job
+  rather than a further defect. Impact: the "red before green" claim needs
+  restating precisely, and the Progress entry now does — the red state is a
+  *name-resolution* failure, and it is evidence that the items under test were
+  absent, not evidence that the tests around them were sound.
+
+- Observation: **`BTreeSet`'s own order contradicts the order this plan
+  specifies for `--help`.** Byte-wise, `markdown < md < mdc`, because `a` sorts
+  before `d`; the default set would therefore have rendered as
+  `markdown, md, mdc`, while the `Display` doc comment in the Interfaces block
+  says `md, mdc, markdown` and the `--md-exts` declaration in this plan gives
+  `default_values = ["md", "mdc", "markdown"]`. Both statements cannot hold
+  under a plain byte-wise sort, and the tests written against the Interfaces
+  block assert the documented order. Resolved by making `iter()` sort
+  shortest-first and then byte-wise — the order that puts the common `md` first
+  — and correcting the `iter()` doc comment, which had said only "in sorted
+  order". The chosen order is total and independent of how the user spelled the
+  flag, so a `--help` rendering or a diagnostic is reproducible from the set
+  alone; insertion order would have made it depend on the command line. Storage
+  stays the `BTreeSet` the plan specifies, so membership and deduplication are
+  unchanged. Impact: one doc-comment correction, made in place.
 
 ## Decision log
 
@@ -2518,6 +2581,36 @@ own tests, which reference every production item. The scratch item was reverted
 by restoring `src/main.rs` and `src/select.rs` from copies taken beforehand —
 `git diff` is configured to render side by side here and its output is not an
 applicable patch.
+
+**EV-M1-SELECT** — measured 2026-09-12, after the five modules were
+implemented, log at `/tmp/test-select-mdtablefix-git-option.out`. Abridged at
+the two points marked, and nowhere else. The command is a filter on the
+binary's test target, so it runs the selection tests and nothing else:
+
+```plaintext
+RUSTFLAGS="-D warnings" cargo test --bin mdtablefix --all-features select
+```
+
+```plaintext
+   Compiling mdtablefix v0.6.0 (/…/mdtablefix)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.93s
+     Running unittests src/main.rs (target/debug/deps/mdtablefix-e8d034ec44cfb1db)
+
+running 69 tests
+test select::conflict::tests::a_document_about_conflict_markers_is_not_a_conflicted_one ... ok
+test select::conflict::tests::all_three_markers_are_required_at_the_start_of_a_line::case_1 ... ok
+(… 65 more `ok` lines …)
+
+test result: ok. 69 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.10s
+```
+
+Counted per module, so that no obligation rests on a single module's suite:
+`conflict` 16, `extensions` 27, `fs_probe` 7, `git_ls_files` 10, `policy` 9. The
+`RUSTFLAGS` setting is the one `make test` uses, and it matters here for the
+reason it matters everywhere else: a warning is an error in this build too. The
+`expect(dead_code, …)` attribute is absent from this build, because `cfg(test)`
+is set for a test target, so what keeps the *non-test* build clean is measured
+separately, in `EV-M1-DEADCODE`.
 
 ## Revision note
 

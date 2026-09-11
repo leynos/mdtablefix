@@ -345,7 +345,7 @@ fn two_spellings_of_one_entry_collapse_to_the_first_path() {
 #[test]
 fn distinct_entries_are_all_selected_sorted_byte_wise() {
     let paths = ["notes.md", "docs/guide.md", "README.mdc"];
-    let probe = FakeProbe::new(paths.iter().map(|path| (at(path), regular(path.as_str()))));
+    let probe = FakeProbe::new(paths.iter().map(|path| (at(path), regular(path))));
     let candidates = paths.map(at).to_vec();
     let selected = select_files(
         &candidates,
