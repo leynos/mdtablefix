@@ -47,6 +47,46 @@ jobs:
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
 
 
+  windows-atomic-contract:
+    # The atomic replacement contract is platform-sensitive. The swap depends
+    # on rename semantics that differ between POSIX and Windows, and on the
+    # destination's read-only state, which Windows records as a file attribute
+    # rather than as a mode bit. The suites that assert it drive the library
+    # helpers and the CLI against a read-only destination, so they run on the
+    # platform whose semantics they assert. The whole suite runs here too, so a
+    # change that is correct on Unix but not on Windows is caught by the same
+    # job rather than by the release that follows it.
+    name: atomic write contract (windows)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_TERM_COLOR: always
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@77ea10341249024e22ec5d9069e3caa7596e0d4f
+        with:
+          install-binstall: false
+          use-sccache: false
+      - name: Test the atomic write contract
+        # `--lib` is required, not incidental: the rollback a failed swap
+        # performs after the destination was prepared is unreachable through a
+        # real rename, so it is covered by a private, test-only seam in
+        # `src/io.rs`, which only a unit-test build compiles.
+        run: cargo test --all-features --no-fail-fast --lib --test rewrite_atomic --test in_place_atomic
+      - name: Test the whole suite
+        # Every target reports, rather than stopping at the first one that
+        # fails. The checkout keeps the repository's LF line endings — see
+        # `.gitattributes`, without which Git for Windows hands the suites
+        # CRLF fixtures — so the byte-for-byte fixture and snapshot
+        # comparisons match the output this tool writes here too.
+        run: cargo test --all-features --no-fail-fast
+
   binstall-packaging:
     # Runner-backed dry run of the release packaging. It proves the crate
     # builds on each release platform and that the staged assets match the

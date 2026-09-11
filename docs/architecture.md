@@ -8,6 +8,7 @@
 - [HTML table support](#html-table-support-in-mdtablefix)
 - [Module relationships](#module-relationships)
 - [Concurrency with `rayon`](#concurrency-with-rayon)
+- [Atomic in-place writes](#atomic-in-place-writes)
 - [Unicode width handling](#unicode-width-handling)
 
 ## Markdown stream processor
@@ -641,6 +642,10 @@ provided on the command line. Each worker gathers its output before printing,
 so results appear in the original order. This buffering increases memory usage
 and may reduce performance if many tiny files are processed.
 
+In-place rewrites replace each file through a temporary file in the same
+directory and a rename, so one worker failing cannot leave its target truncated
+and the other files in the batch are unaffected.
+
 ```mermaid
 sequenceDiagram
     participant User as actor User
@@ -676,7 +681,73 @@ sequenceDiagram
 
 _Figure 4: The CLI processes file inputs in parallel, then reports results in
 their original order: formatted text goes to stdout, while in-place processing
-writes files directly and both modes report errors on stderr._
+replaces each file atomically and both modes report errors on stderr._
+
+## Atomic in-place writes
+
+Both the CLI's `rewrite_in_place` and the library's `rewrite_with` replace a
+file by writing the formatted output to a temporary file in the same directory
+and renaming it over the target. Both call the single implementation in
+`mdtablefix::io::replace_file`, which takes a `cap_std::fs_utf8::Dir`
+capability and a path relative to it, so every create, write, permission change
+and rename runs through the same directory capability as the rest of the run and
+no step falls back to ambient access. Within the library, `open_parent` is the
+only ambient filesystem entry point. The CLI opens the target's parent
+directory once in `open_file_parent` and passes that capability into the
+replacement path. The temporary file is created with `create_new`, so it never
+clobbers an existing file, and its name carries the process id and the attempt
+number, so a stale name left by a killed run costs only one retry. A freshly
+created file does not inherit the target mode, so `swap_into_place` applies the
+target's permissions to the temporary file before the rename, which carries
+them into the file that takes over the target's name. Windows needs one step
+more: a destination carrying `FILE_ATTRIBUTE_READONLY` cannot be renamed over at
+all, so that attribute is cleared on the destination immediately before the
+rename and put back if the swap does not complete. A target that is a symbolic
+link is declined, because the rename would swap the link entry for a regular
+file and leave the real file untouched.
+
+For screen readers: The following sequence diagram traces one atomic in-place
+rewrite from the caller through the rewriter, the containing directory, the
+temporary file, and the target, including the failure path.
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant Rewriter
+    participant Directory
+    participant TempFile
+    participant Target
+
+    Caller->>Rewriter: rewrite_in_place / rewrite
+    Rewriter->>Directory: metadata(target)
+    Rewriter->>Directory: create_temporary_file(target)
+    Directory-->>TempFile: create_new(same directory)
+    Rewriter->>TempFile: write_all(contents)
+    Rewriter->>TempFile: flush()
+    Rewriter->>TempFile: sync_all()
+    Rewriter->>Directory: set_permissions(temp, target mode)
+    opt Windows and target is read-only
+        Rewriter->>Directory: clear target read-only attribute
+    end
+    Rewriter->>Directory: rename(temp, target)
+    Directory-->>Target: atomic replacement
+    alt write or rename fails
+        Rewriter->>Directory: remove_file(temp)
+        Directory-->>Target: original remains intact
+        opt Windows and the target attribute was cleared
+            Rewriter->>Directory: restore target read-only attribute
+        end
+    end
+```
+
+_Figure 5: Atomic in-place rewrite. The rewriter reads the target metadata,
+creates a temporary file in the same directory, writes, flushes and syncs the
+formatted contents, applies the target's permissions to the temporary file, and
+renames it over the target. Windows records read-only as an attribute that
+blocks the rename, so a read-only destination has it cleared immediately before
+the rename, and the swap puts the original attribute back if it does not
+complete. If a step fails after the temporary file is created, it is cleaned up
+where possible and the original file is left intact._
 
 ## Unicode Width Handling
 

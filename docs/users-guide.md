@@ -353,7 +353,80 @@ fn main() {}
 ```
 ````
 
+## In-place editing
+
+Pass `--in-place` to rewrite each named file with the formatted result. The
+formatted output is written to a temporary file in the same directory as the
+target and then renamed over it, so the replacement is atomic on POSIX
+filesystems: a reader sees either the whole original file or the whole
+replacement, never a partial write. When the run fails before the rename — a
+full disk, a permission error, or a declined target — the original file is left
+byte-identical and any temporary file is removed on a best-effort basis, so the
+run can be retried safely. A run killed abruptly, by `SIGKILL` or a power loss,
+can leave a stale temporary file beside the target; the original is still
+intact, and the next run retries past the stale name rather than reusing it.
+Stale files are named `<target>.mdtablefix-<pid>-<n>.tmp`. Delete them once no
+run is in progress.
+
+When an in-place rewrite fails, `mdtablefix` reports the full error chain on
+standard error: first the file context, naming the path exactly as given on the
+command line, then the underlying cause beneath a `Caused by:` heading. Every
+failing file is reported this way, and the run then exits with a non-zero
+status. Scripts that match exact standard-error text should expect the chain
+and its multi-line form; matching the file name or the cause is more robust.
+
+The original file mode is preserved. A freshly created temporary file does not
+inherit the target's permissions, so `mdtablefix` copies them to the temporary
+file before the rename: a file with mode `0640` still has mode `0640`
+afterwards. Because the replacement is a rename, it needs write permission on
+the containing directory rather than on the file itself, so a read-only file in
+a writable directory is replaced successfully, and the replacement takes over
+the read-only state rather than losing it.
+
+Windows needs one step more than that. There, read-only is a file attribute,
+`FILE_ATTRIBUTE_READONLY`, and the rename cannot replace a destination that
+carries it. `mdtablefix` therefore clears that attribute on the destination
+through its directory capability immediately before the rename. The temporary
+file still carries the original read-only attribute, so the file that takes over
+the target's name is read-only as soon as the rename lands. If the swap does not
+complete, the original attribute is put back on a best-effort basis: a run
+interrupted between those two steps, or a restoration that itself fails, can
+leave the target's read-only attribute cleared. The contents are unaffected,
+because a swap that does not complete leaves the original file byte-identical.
+
+Symbolic links are declined rather than replaced. The read follows the link, but
+the rename swaps the link entry itself, which would turn the symlink into a
+regular file while leaving the real file untouched. The run reports the declined
+link on standard error; rewrite the link's target directly instead. A link whose
+target resolves outside the file's directory is refused by the directory
+capability before the rewrite begins.
+
+Two limitations apply. On Windows the replacement can fail if another process
+holds the destination open without delete sharing, because the rename cannot
+displace an open handle. Atomicity is also not durability: the new contents are
+flushed to storage before the rename, but the rename itself is not, so a power
+loss immediately afterwards can revert the directory entry to the original
+file.
+
 ## Library API notes
+
+### Atomic in-place rewrites
+
+`rewrite(path)` and `rewrite_no_wrap(path)` give library callers the same
+guarantee as `--in-place`: the replacement is written to a temporary file beside
+the target, flushed, and renamed over it, with the original file mode preserved.
+The temporary file receives the target's permissions before the rename, so a
+read-only target is replaced by a read-only file rather than by a writable one.
+On Windows, where the destination's `FILE_ATTRIBUTE_READONLY` blocks the rename
+outright, that attribute is cleared immediately before the rename and put back
+if the swap does not complete. Symbolic links are declined, as described in
+[In-place editing](#in-place-editing).
+
+Callers that already hold a `cap_std::fs_utf8::Dir` capability can use
+`mdtablefix::io::replace_file(directory, path, contents)` instead. It performs
+the same temporary-file-and-rename sequence relative to the supplied directory,
+so no ambient filesystem access is needed. The CLI and the two path helpers all
+call it, so the sequence has one implementation.
 
 ### `format_breaks` return type
 

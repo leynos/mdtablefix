@@ -1,6 +1,10 @@
 //! Protects the release workflow's binary provenance and publication contract.
 
 use anyhow::{Context, Result, ensure};
+// The only use drives the CLI through `bash`, so the import is dead weight
+// everywhere that has no `bash` on the same terms, and `-D warnings` in CI
+// rejects it there.
+#[cfg(target_family = "unix")]
 use assert_cmd::Command;
 use serde_yaml::{Mapping, Value};
 

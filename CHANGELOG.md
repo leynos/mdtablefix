@@ -19,14 +19,41 @@
   archive matches, for every published target.
 - A `binstall-packaging` continuous-integration job that builds, stages,
   extracts and runs the release binary on Ubuntu, macOS and Windows.
+- A `windows-atomic-contract` continuous-integration job that runs the atomic
+  replacement suites, and then the whole test suite, on a Windows runner, so a
+  change that is correct only on Unix is caught by the pull request rather than
+  by the release that follows it.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - `--code-emphasis` flag to fix emphasis markers that adjoin inline code.
   Runs before wrapping and footnote conversion.
 - Treat common English date sequences as atomic inline fragments during
   wrapping, including ordinal day, numeric day, and month-name-first forms.
   ([#346](https://github.com/leynos/mdtablefix/issues/346))
+- The in-place replacement path emits bounded `metrics` counters and a
+  `mdtablefix_io_replace_duration_seconds` histogram, so a host application
+  that installs a recorder can watch replacements, their outcomes, and how long
+  they take. The crate installs no recorder itself.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
 
 ### Changed
 
+- `--in-place`, `rewrite` and `rewrite_no_wrap` replace a read-only file in a
+  writable directory instead of failing, because the atomic swap needs write
+  permission on the containing directory rather than on the file itself, and the
+  replacement inherits the target's permissions, read-only included. On Windows
+  the destination's `FILE_ATTRIBUTE_READONLY` blocks the rename, so it is
+  cleared immediately before the swap and put back if the swap does not
+  complete.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
+- `--in-place`, `rewrite` and `rewrite_no_wrap` decline a symbolic link instead
+  of replacing the link entry with a regular file, which previously left the
+  real file untouched while destroying the link. Rewrite the link's target
+  directly.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
+- A failed file reports the full error chain, so a declined rewrite states its
+  reason rather than only the file being written. See
+  [Migrating to 0.6.0](docs/v0-6-0-migration-guide.md) for the actions these
+  changes require.
 - Ungate the `[package.metadata.binstall]` configuration, which no longer
   applies only to 64-bit Linux GNU targets. One `pkg-url` template now covers
   Linux, macOS and Windows.
@@ -36,12 +63,41 @@
 - Require callers of `FenceTracker::observe` and `FenceTracker::in_fence` to
   provide the current blockquote depth. This is a breaking API change for
   existing one-argument callers.
+- Declare LF line endings for every tracked file in `.gitattributes`, so a
+  Windows checkout hands the suites the fixture and snapshot bytes a Unix
+  checkout sees rather than the CRLF that Git for Windows writes by default.
+- Record the CLI matrix exit status as the numeric exit code rather than through
+  `ExitStatus`'s `Display`, which spells an ordinary exit `exit status: 0` on
+  Unix and `exit code: 0` on Windows. Envelopes now read `status: code: 0`,
+  `status: code: <n>` for a non-zero exit, or `status: no exit code` when a
+  signal ended the process, so the snapshots are platform-independent.
+- Gate the `check-static-regexes` regression tests to Unix, because the guard
+  they drive is a `bash` script that stands in for ripgrep with stub scripts
+  carrying the executable bit. The Linux lint job still runs that guard over
+  the same sources.
   ([#347](https://github.com/leynos/mdtablefix/issues/347))
 - `format_breaks` now returns `Vec<Cow<'_, str>>` rather than `Vec<String>`,
   so unchanged lines stay borrowed instead of forcing heap allocations.
 
 ### Fixed
 
+- Format text adjoining an inline code span when it ends with a non-ASCII
+  character, such as the ellipsis `--ellipsis` produces, instead of aborting on
+  a character boundary. The emphasis split stepped one byte past the last
+  character rather than one character past it.
+- Write in-place output through a temporary file in the same directory and
+  rename it over the target, so an interrupted run or a full disk can no longer
+  leave a Markdown file truncated with no way to recover it. The original file
+  mode is preserved, and a stale temporary file left by an abruptly killed run
+  is retried past rather than reused.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
+- Replace a read-only destination on Windows too, by clearing
+  `FILE_ATTRIBUTE_READONLY` on the target immediately before the rename and
+  putting the original attribute back if the swap does not complete, so a
+  read-only file in a writable directory is replaced instead of failing. The
+  temporary file carries the target's permissions into the rename, so the
+  replacement is read-only as well.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - Set the `cargo-binstall` `bin-dir` to `{ bin }{ binary-ext }`. The previous
   `.` rendered an empty source path, so `cargo binstall mdtablefix` failed
   before downloading anything.

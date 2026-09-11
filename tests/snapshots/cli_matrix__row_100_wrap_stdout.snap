@@ -5,7 +5,7 @@ expression: stdout_result.envelope(&stdout_case)
 case: row_100_wrap
 mode: stdout
 args: --wrap --renumber --fences --footnotes --headings
-status: exit status: 0
+status: code: 0
 
 [stdout]
 | Name  | Notes                                |

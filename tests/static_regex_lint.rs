@@ -21,6 +21,15 @@
 //! temporary directory they belong to. [`TempDir`] still provides the isolated
 //! directories and [`Command`] still runs the guard; only the path and
 //! filesystem layers change.
+//!
+//! The guard itself is Unix-only: it is a `bash` script that shells out to
+//! ripgrep, and the tests stand in for ripgrep with stub scripts that have to
+//! carry the executable bit. The whole file is gated to match, so a checkout
+//! without a POSIX shell reports this target as empty rather than failing it.
+//! Nothing goes unguarded on account of it: the `check-static-regexes`
+//! Makefile target runs the same script over the same sources in the Linux
+//! lint job.
+#![cfg(unix)]
 
 use std::process::Command;
 

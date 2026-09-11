@@ -5,7 +5,7 @@ expression: in_place_result.envelope(&in_place_case)
 case: row_101_wrap
 mode: in_place
 args: --wrap --renumber --ellipsis --fences --code-emphasis --in-place
-status: exit status: 0
+status: code: 0
 
 [stdout]
 

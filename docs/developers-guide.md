@@ -105,14 +105,31 @@ restores the separator row with widths derived from the final table body.
   formats a file through `cap_std::fs_utf8::Dir` without modifying it. Its
   returned text uses the same trailing-newline convention as a rewritten file.
 - `rewrite_in_place(directory, path, opts) -> anyhow::Result<()>` reads and
-  formats a capability-scoped file, then writes the formatted text back through
-  the same directory capability.
+  formats a capability-scoped file, then replaces it through the same directory
+  capability with `mdtablefix::io::replace_file`.
 
 Callers select the function that matches their intent rather than passing a
 Boolean mode flag. This keeps stdout and in-place contracts explicit while
 allowing both paths to share the exact formatting result. New file-output call
 sites must receive a directory capability and relative `camino::Utf8Path`
 rather than performing ambient filesystem access themselves.
+
+`src/io.rs`:
+
+- `replace_file(directory, path, contents) -> std::io::Result<()>` performs the
+  shared atomic replacement. It declines a symlinked target, creates a
+  `create_new` temporary file in the same directory, writes, flushes and syncs
+  the contents, then calls `swap_into_place`, which applies the target's
+  permissions to the temporary file before the rename and clears a Windows
+  destination's read-only attribute first, because that attribute blocks the
+  rename. It attempts to remove the temporary file when a later step fails. The
+  CLI and
+  `rewrite`/`rewrite_no_wrap` all call it, so the sequence has one
+  implementation.
+- `open_parent(path) -> std::io::Result<(Dir, Utf8PathBuf)>` is the library's
+  only ambient filesystem boundary. It opens a directory capability for the
+  target's parent and returns the target's file name relative to that
+  capability.
 
 `src/reflow.rs`:
 
@@ -603,11 +620,12 @@ replacing `LineBuffer` with `textwrap`.
 
 ### Dependency
 
-`tracing = "0.1"` is the runtime observability dependency, used by both the
-library and executables. `tracing-test = "0.2"` is a test-only dev-dependency;
-use it only in tests (e.g. `#[traced_test]`). The crate does not install a
-global subscriber or metrics recorder. Executables and test harnesses that want
-log output must install their own subscriber (e.g.
+`tracing = "0.1"` and `metrics = "0.24"` are the runtime observability
+dependencies, used by the library and the executables. `tracing-test = "0.2"`
+and `metrics-util = "0.20"` are test-only dev-dependencies; use them only in
+tests (e.g. `#[traced_test]` or `DebuggingRecorder`). The crate does not
+install a global subscriber or metrics recorder. Executables and test harnesses
+that want log output must install their own subscriber (e.g.
 `tracing_subscriber::fmt::init()` in `main`).
 
 ### Log levels
@@ -635,6 +653,34 @@ the `open`, `matching_close`, or `implicit_close` transition, and
 corresponding `reason` values are `no_blockquote_prefix`,
 `blockquote_depth_decreased`, and `incompatible_active_opener`.
 
+The in-place rewrite in `src/io.rs` follows the same discipline. `replace_file`
+carries a `debug` span whose only field is the target `path`. The `path` field
+is span metadata rather than a metric label, and the replacement path's metrics
+use only fixed label values, so target paths cannot create unbounded metric
+cardinality; the crate installs no recorder. Inside it,
+`target metadata read` (trace), `temporary file created` (debug, with
+`attempt`), `temporary file written` (debug, with `bytes`),
+`temporary file synced` (debug), `destination read-only attribute cleared`
+(debug, on a read-only Windows destination, immediately before the rename),
+`target mode applied` (debug, on the temporary file and before the rename on
+every platform), and `target replaced` (debug) mark the success path;
+`temporary name rejected` (trace, with `attempt` and
+`reason = "already_exists"`) marks the retry path;
+`temporary file removed after failure` (trace), `temporary file cleanup failed`
+(debug, with `error_category` from `io::ErrorKind`), and
+`temporary file mode could not be cleared` (debug, with
+`error_category` from `io::ErrorKind`, on Windows, where a read-only
+temporary file has its attribute cleared before it can be deleted)
+mark the cleanup path; and `rewrite declined` (debug, with
+`error_category = "symlink_target"`) marks a symbolic-link target.
+`replacement failed` (debug, with `error_category` from `io::ErrorKind`)
+marks a failed metadata read, temporary-file creation, or write/swap.
+`destination mode restore failed` (debug, with `error_category` from
+`io::ErrorKind`) marks a swap that failed after the destination's read-only
+attribute had been cleared and whose original attribute could not be put back;
+that restoration is best effort, so a failure to restore never masks the reason
+the swap failed. None of these events carry file content.
+
 Table: Structured field names emitted by tracing instrumentation.
 
 | Field             | Type            | Used in                                       | Meaning                                                     |
@@ -648,7 +694,9 @@ Table: Structured field names emitted by tracing instrumentation.
 | `is_image`        | `bool`          | `link or image parsed`                        | `true` when the link token is an image literal (`![]()`)    |
 | `row_index`       | `usize`         | table-row events                              | Zero-based index of the parsed logical row                  |
 | `cell_count`      | `usize`         | table-row events                              | Number of cells in the parsed logical row                   |
-| `error_category`  | `&str`          | declined or discarded events                  | Stable category for a non-successful classification outcome |
+| `error_category`  | `&str`, Debug   | declined, discarded, and replacement failures | Stable category or I/O error kind for a failure             |
+| `attempt`         | `u32`           | `replace_file` events                         | Zero-based index of the temporary-file creation attempt     |
+| `bytes`           | `usize`         | `replace_file` events                         | Byte length of the formatted replacement that was written   |
 | `line_len`        | `usize`         | blockquote-prefix events                      | Byte length of the examined source line                     |
 | `prefix_len`      | `usize`         | blockquote-prefix events                      | Byte length of the recognized blockquote prefix             |
 | `depth`           | `usize`         | blockquote and fence events                   | Current blockquote nesting depth                            |
@@ -663,6 +711,45 @@ For example:
 ```rust
 debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified");
 ```
+
+### Metrics
+
+The in-place replacement in `src/io.rs` emits three counters and one histogram
+through the `metrics` façade. `describe_metrics` registers their descriptions
+exactly once per process behind a `std::sync::OnceLock`.
+
+- `mdtablefix_io_replace_total` increments once per `replace_file` call and
+  carries one label, `outcome`, with the value `success` or `failure`.
+- `mdtablefix_io_replace_duration_seconds` is a histogram of replacement
+  durations in seconds, with the unit declared by `metrics::Unit::Seconds`. It
+  is recorded once per `replace_file` call with the same `outcome` label as
+  `mdtablefix_io_replace_total`. Failures are recorded too, so a replacement
+  that stalls before it fails is visible rather than missing from the
+  distribution.
+- `mdtablefix_io_temporary_name_collisions_total` counts each candidate
+  temporary name rejected because it was already taken. It carries no labels.
+- `mdtablefix_io_temporary_name_exhausted_total` counts each replacement
+  abandoned when all 16 candidate names are taken. It carries no labels.
+
+Metric cardinality is bounded by construction: every metric name and every
+label value is a compile-time constant. Target paths, file names, and error
+text are never labels. The target `path` appears only as a tracing span field.
+
+The library emits metrics but never installs a recorder, in line with
+`AGENTS.md`. A host application installs one once, as early as practical in
+startup, for example `metrics::set_global_recorder(...)` or an exporter such as
+`metrics_exporter_prometheus::PrometheusBuilder::install()`. With no recorder
+installed the emission macros are no-ops, so the `mdtablefix` CLI stays silent
+unless a host wires one in.
+
+`src/io_metrics_tests.rs` uses `metrics_util::debugging::DebuggingRecorder`
+through `metrics::with_local_recorder` on the test thread and asserts the
+emitted metric names, the counts for a success, for an occupied candidate
+name, and for an exhausted name space, plus the bounded label set: only the
+`outcome` key, with only the values `success` and `failure`. The tests also
+assert that the histogram's declared unit is seconds and that exactly one
+sample is recorded per replacement for both the `success` and `failure`
+outcomes.
 
 ### Performance discipline
 
@@ -699,6 +786,7 @@ Table: Instrumented functions and their logging levels and fields.
 | `parse_link_or_image`     | debug        | `idx` (in), `skip(text)`; `token_length` and `is_image` events                                    |
 | `find_footnote_end`       | trace        | `idx` (in), `skip(text)`, return value (out)                                                      |
 | `parse_rows`              | trace, debug | `skip(trimmed)`; `row_index`, `cell_count`, and `error_category` events                           |
+| `replace_file`            | debug        | `path` (in); emits the in-place rewrite events                                                    |
 
 ### Tracing-event snapshot tests
 
@@ -710,6 +798,9 @@ are caught in review. These tests live next to the instrumented code:
 - `src/wrap/inline/span_helper_tracing_tests.rs` – date-span events.
 - `src/wrap/tokenize/parsing_tracing_snapshots.rs` – link, image, and footnote
   events.
+- `src/io_tracing_tests.rs` – in-place rewrite events: `temporary file written`,
+  `target replaced`, and `rewrite declined`; `replacement failed` is covered by
+  a presence assertion rather than a snapshot.
 
 Each is wired into its owning module as a `#[cfg(test)]` `#[path = "…"]`
 submodule so the snapshot test sits beside the code it pins while keeping the
@@ -1036,6 +1127,48 @@ Apply it to any fixture function whose single-expression body triggers the lint:
 #[rstest::fixture]
 pub fn broken_table() -> Vec<String> { … }
 ```
+
+### 2.4. Inline unit-test modules
+
+AGENTS.md caps a source file at 400 lines, so a `#[cfg(test)] mod tests` block
+that pushes its production module over the limit moves into a sibling file
+wired back in with `#[path]`:
+
+```rust
+#[cfg(test)]
+#[path = "io_tests.rs"]
+mod tests;
+```
+
+`src/io.rs` and `src/main.rs` use this shape, as do the tracing-snapshot modules
+listed under [Tracing-event snapshot tests](#tracing-event-snapshot-tests). The
+moved tests keep their original paths (`io::tests::…`), and `super` still
+resolves to the owning module, so unqualified access to its items is unchanged.
+
+### 2.5. Platform portability of the test suite
+
+Every tracked file is LF in the repository and checks out as LF on every
+platform, because `.gitattributes` pins `* text=auto eol=lf`. The CLI suites
+compare fixture and snapshot bytes against output the tool writes with `\n`, so
+a CRLF checkout — the default for Git for Windows — would fail those
+comparisons for reasons unrelated to the change under test.
+
+Snapshot content has to be platform-independent as well. The CLI matrix
+envelope records a process-result *value*, not diagnostic wording:
+`tests/cli_matrix/support.rs` renders `ExitStatus` through the private
+`status_text` helper, which reports `code: 0`, `code: <n>`, or `no exit code`
+for a process that was killed by a signal. `ExitStatus`'s own `Display` is not
+portable — an ordinary exit reads `exit status: 0` on Unix and `exit code: 0`
+on Windows — so snapshotting it directly would make every envelope a
+Windows-only failure. The committed snapshots under `tests/snapshots/` therefore
+carry `status: code: 0`.
+
+`tests/static_regex_lint.rs` is gated whole-file with `#![cfg(unix)]`. The guard
+it drives is a `bash` script that shells out to ripgrep, and the tests stand in
+for ripgrep with stub scripts that have to carry the executable bit; on Windows
+the target compiles to an empty binary rather than failing. Nothing goes
+unguarded on that account: the Linux lint job runs the same script over the same
+sources through the `check-static-regexes` Makefile target.
 
 ## 3. Breaks module – Cow allocation strategy
 

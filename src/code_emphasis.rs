@@ -30,7 +30,15 @@ use crate::{
 /// ```
 fn split_marks(s: &str) -> (&str, &str, &str) {
     let first = s.find(|c| c != '*' && c != '_').unwrap_or(s.len());
-    let last = s.rfind(|c| c != '*' && c != '_').map_or(first, |i| i + 1);
+    // The end of the body is the byte *after* the last non-marker character,
+    // which is not `index + 1` when that character is not ASCII: the ellipsis
+    // in `text…*` is three bytes, and the extra two belong to it. Ask the
+    // character itself for its length so the split stays on char boundaries.
+    let last = s
+        .char_indices()
+        .rev()
+        .find(|&(_, c)| c != '*' && c != '_')
+        .map_or(first, |(index, c)| index + c.len_utf8());
     (&s[..first], &s[first..last], &s[last..])
 }
 
@@ -261,6 +269,24 @@ mod tests {
     #[test]
     fn preserves_standalone_code() {
         let input = vec!["before `code` after".to_string()];
+        assert_eq!(fix_code_emphasis(&input), input);
+    }
+
+    #[test]
+    fn splits_body_ending_in_a_multibyte_character() {
+        // The body ends with a three-byte ellipsis, so the byte after the last
+        // non-marker character is not `index + 1`.
+        assert_eq!(split_marks("text…"), ("", "text…", ""));
+        assert_eq!(split_marks("text…*"), ("", "text…", "*"));
+        assert_eq!(split_marks("**text…**"), ("**", "text…", "**"));
+        assert_eq!(split_marks("…_"), ("", "…", "_"));
+    }
+
+    #[test]
+    fn keeps_multibyte_text_adjacent_to_code() {
+        // Splitting the leading text on a char boundary used to panic here:
+        // the ellipsis is three bytes, and `index + 1` landed inside it.
+        let input = vec!["text…*`code`".to_string()];
         assert_eq!(fix_code_emphasis(&input), input);
     }
 
