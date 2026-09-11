@@ -1227,6 +1227,17 @@ the target compiles to an empty binary rather than failing. Nothing goes
 unguarded on that account: the Linux lint job runs the same script over the same
 sources through the `check-static-regexes` Makefile target.
 
+A narrower gate follows the same reasoning one item down. `#[cfg(unix)]` on a
+test removes that test from a Windows build, so it has to own every symbol that
+only it reads: a constant, helper or import left at module level beside tests
+every target compiles is dead code once its only reader is gone, and the
+`RUSTFLAGS: "-D warnings"` the `atomic write contract (windows)` job sets turns
+that into a build failure before any test runs. Such items live inside the same
+`#[cfg(...)]` scope as the test, as the inline `mod unix` in
+[src/io_metrics_tests.rs](../src/io_metrics_tests.rs) does. The scope is the
+enforcement, so no lint rule stands in for it: the Windows job already compiles
+the whole suite with warnings denied.
+
 ## 3. Breaks module – Cow allocation strategy
 
 `format_breaks` in [src/breaks.rs](../src/breaks.rs) returns
