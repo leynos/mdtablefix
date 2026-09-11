@@ -2499,6 +2499,17 @@ not generate and which is the dimension this plan changed. Both files say so in
 their own documentation. No snapshot churn was introduced beyond the single new
 `summary_grammar` snapshot, well inside the usual limit of 30.
 
+**Close-out.** All six gates pass on the committed tree, with each gate's log
+under `/tmp/<gate>-mdtablefix-check-option.out`, and `coderabbit review
+--agent --base main` returned `findings: 0` (logged to
+`/tmp/coderabbit-mdtablefix-check-option.out`). The accepted commits are
+`91692d6` and `8bcf3eb`.
+
+The branch was rebased before this milestone, so publishing it required
+`--force-with-lease`: `origin/check-option` moved from `377e158` to `8bcf3eb`.
+The twelve remote-only commits were the pre-rebase duplicates of commits that
+survive locally, matched one for one by subject before the push.
+
 ## Documentation and skills to consult
 
 Repository documents:
