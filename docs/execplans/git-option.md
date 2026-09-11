@@ -274,13 +274,16 @@ Stop and escalate when any of these is reached.
   Severity: high for `--headings` users. Likelihood: low, and zero for the
   default flag set — `make fmt`'s `mdformat-all` flag set excludes
   `--headings`, and no file in this repository is affected today.
-  Mitigation: none available here; #474 is a formatter defect, not a selection
-  defect, and fixing it is out of scope. Do **not** claim in the users' guide
-  that `--git --in-place` converges in one pass. State the dependency on #474
-  explicitly, and add a scenario only once #474 closes. Note that a seed sweep
-  of `tests/idempotence_properties.rs` (seeds 0, 1, 7, 42, 99) passes: that
+  Mitigation: **owned elsewhere and being fixed in parallel.** #474 is a
+  formatter defect, not a selection defect; do not plan around it, design for
+  it, or add a workaround. The expectation is that it closes before this plan
+  is implemented, so the plan assumes convergence. Check its status at EP-M3
+  and, only if it is still open then, add a caveat to the users' guide.
+  Recorded here because it is the one thing that would make `--git --check`
+  unusable as a gate, and because a seed sweep of
+  `tests/idempotence_properties.rs` (seeds 0, 1, 7, 42, 99) passes — that
   suite's generators do not reach this shape, so a green run there is not
-  evidence of convergence.
+  evidence either way.
 
 - Risk: `src/main.rs` on `check-option` is already **386 lines** against the
   400-line cap, before this plan adds a single field.
@@ -1581,20 +1584,16 @@ Quality criteria — what "done" means:
 ## Idempotence and recovery
 
 Every step is re-runnable. `mdtablefix --git --in-place` is idempotent on its
-own output for every flag combination **except `--headings`**, and for those
-`write_back` strengthens re-running into "a second run performs no writes at
-all".
+own output, which `driver::write_back` strengthens into "a second run performs
+no writes at all".
 
-The exception is issue #474, and `--git` amplifies it: under `--headings`, a
-table whose delimiter row is the last line before a thematic break is
-restructured on every pass, so a whole-repository run never converges and
-`--git --check` would report drift no number of `--in-place` passes clears. Do
-not document `--git --in-place --headings` as convergent, and do not add a
-convergence scenario for `--headings` until #474 closes. Note that a seed sweep
-of `tests/idempotence_properties.rs` (seeds 0, 1, 7, 42, 99) passes, because
-that suite's generators do not reach this shape; a green run there is not
-evidence of convergence. The gates are read-only apart from build artefacts.
-`cargo insta reject` undoes a snapshot review.
+That rests on the formatter being a fixed point, which is a property this plan
+consumes rather than establishes. Issue #474 is the one known exception, under
+`--headings`, and it is being fixed in parallel; this plan assumes it closes.
+Verify at EP-M3 rather than designing around it.
+
+The gates are read-only apart from build artefacts. `cargo insta reject` undoes
+a snapshot review.
 
 The destructive operation is rewriting files in place. The acceptance
 transcripts use a throwaway repository under `mktemp -d`. Never run
@@ -1670,13 +1669,14 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   avoiding a spurious error on a file the user never named — and commit
   `83e6150` makes that error intermittent by skipping unchanged files.
 
-- Observation: the formatter is still not a fixed point under `--headings`.
-  Evidence: issue #474, open; found by the property test that #470 landed, so
-  it survives that fix.
-  Impact: `--git --in-place --headings` never converges and `--git --check`
-  would report unclearable drift. A seed sweep of
-  `tests/idempotence_properties.rs` (0, 1, 7, 42, 99) passes, so that suite is
-  not evidence against it. Recorded as a Risk; out of scope to fix.
+- Observation: the formatter was still not a fixed point under `--headings`
+  when this plan was rebased.
+  Evidence: issue #474; found by the property test that #470 landed, so it
+  survived that fix. A seed sweep of `tests/idempotence_properties.rs` (0, 1,
+  7, 42, 99) passes, so that suite is not evidence against it.
+  Impact: none on this plan's design. A fix is in progress elsewhere and this
+  plan assumes convergence. Retained because the seed-sweep point is worth
+  knowing: do not cite that suite as evidence the formatter converges.
 
 - Observation: `git ls-files -t` does not reliably flag a tracked file deleted
   from the working tree; it reported `H`, not `R`, because the `R` tag requires
@@ -1875,9 +1875,9 @@ under ADR 0007. Confirm at closure that neither was reimplemented in
 `src/select/`, and that the `--git` write path routes through
 `driver::write_back` rather than calling `replace_file` directly.
 
-One item remains genuinely open and is **not** this plan's to fix: issue #474,
-the `--headings` fixed-point defect. Confirm at closure that the users' guide
-does not claim convergence for that flag.
+Issue #474, the `--headings` fixed-point defect, is being fixed in parallel and
+is not this plan's work. Confirm its status at closure: if it closed, nothing
+is needed; if it did not, add the convergence caveat to the users' guide then.
 
 ## Artefacts and notes
 
@@ -1910,10 +1910,11 @@ Corrections: the decision record moves to ADR 0008, because 0006 and 0007 were
 taken; the failure transcript exits 2 rather than 1 and does not render through
 `Termination`, because `main` now returns `ExitCode`; and `src/main.rs` at 386
 lines makes the file-size contingency a prerequisite rather than a fallback.
-Issue #474 is recorded as a new risk: the formatter is still not a fixed point
-under `--headings`, which `--git` amplifies from one file to a whole
-repository. Scenarios for `--git --check` and `--git --diff` were added, since
-the group change makes them parse for free.
+Issue #474 is recorded as a tracked risk rather than a constraint: the
+formatter is not yet a fixed point under `--headings`, which `--git` would
+amplify from one file to a repository, but a fix is in progress elsewhere and
+this plan assumes it lands. Scenarios for `--git --check` and `--git --diff`
+were added, since the group change makes them parse for free.
 
 Revised 2026-09-09, second pass, after the requester identified two in-flight
 pieces of work. Atomic `--in-place` writes are issue #465 and CRLF handling is
