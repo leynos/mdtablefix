@@ -6,9 +6,10 @@ This ExecPlan (execution plan) is a living document. The sections
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT — sequenced after pull request #464, which is in review. The
-sequencing question that previously blocked this plan is settled; see
-`Conformance basis`, "Related work".
+Status: IN PROGRESS — rebased onto `check-option` and being implemented there,
+stacked on pull request #464. The prerequisite extraction of `src/cli.rs` has
+landed, Stage A is discharged, and EP-M0 to EP-M3 follow. See `Progress`,
+`Surprises & discoveries`, and `Conformance basis`, "Related work".
 
 ## Purpose / big picture
 
@@ -319,15 +320,18 @@ Stop and escalate when any of these is reached.
 There is **no Terms of Reference document and no separate technical design
 document** for this feature. Do not invent one. The governing upstream
 artefacts that exist are `AGENTS.md` (at commit `c792270`),
-`docs/developers-guide.md`, `docs/documentation-style-guide.md`, and ADRs 0001
-to 0005 (none of which constrains file selection). This plan creates the
-missing design record as **ADR 0008**.
+`docs/developers-guide.md`, `docs/documentation-style-guide.md`, and the
+accepted ADRs (none of which constrains file selection). This plan creates the
+missing design record as **ADR 0010**.
 
 ### Related work
 
 The sequencing question that previously blocked this plan is settled: this work
-comes **after** pull request #464. Three of its dependencies have merged and
-one remains in review.
+comes **after** pull request #464. Three of its dependencies have merged, and
+pull request #464 itself is still open, so implementation proceeds by
+**branching from `check-option`** rather than waiting for the merge. See the
+Decision log, "stack this work on `check-option`", and Surprises &
+discoveries.
 
 **Merged to `main`, and now load-bearing for this plan:**
 
@@ -344,8 +348,12 @@ one remains in review.
   it.
 - **#470** (issue #468), single-pass idempotence, with ADR 0006.
 
-Those merges take the ADR numbers 0006 and 0007, so this plan's decision record
-is **ADR 0008**.
+Those merges took the ADR numbers 0006 and 0007, and the numbers have moved
+twice since this plan was drafted: **0008** is now byte-order-mark preservation
+(delivered on `check-option`) and **0009** is check and diff reporting (pull
+request #464). This plan's decision record is therefore **ADR 0010**. The
+earlier drafts of this plan said 0008; every reference in this document has
+been renumbered, and EP-M3 must create `docs/adrs/0010-git-file-selection.md`.
 
 **In review, and a prerequisite for this plan:** pull request #464 adds
 `--check` and `--diff`. Its commit `83e6150`, "Keep the reporting shape open to
@@ -388,21 +396,21 @@ recorded by its author rather than left to be discovered:
 documents that exist are feature-scoped and neither mentions `--git`,
 `git ls-files`, or file selection. The instruction to mark a roadmap entry as
 done is therefore **not applicable**; do not create a roadmap entry to satisfy
-it. ADR 0008 is the durable record.
+it. ADR 0010 is the durable record.
 
 Requirements, traced through milestones to evidence:
 
 ```plaintext
-REQ-GIT-001 -> ADR-0008 -> EP-M1 -> select::git_ls_files::tests::lists_tracked_only
-REQ-GIT-002 -> ADR-0008 -> EP-M1 -> select::policy::tests::selects_only_configured_extensions
-REQ-GIT-003 -> ADR-0008 -> EP-M2 -> cli_git.rs::md_exts_replaces_the_default_set
-REQ-GIT-004 -> ADR-0008 -> EP-M2 -> cli_git.rs::rejects_git_with_explicit_files
-REQ-GIT-005 -> ADR-0008 -> EP-M2 -> cli_git.rs::in_place_is_satisfied_by_git
-REQ-GIT-006 -> ADR-0008 -> EP-M1 -> select::policy::tests::excludes_missing_other_symlink
-REQ-GIT-007 -> ADR-0008 -> EP-M1 -> select::git_ls_files::tests::maps_spawn_and_exit_failures
-REQ-GIT-008 -> ADR-0008 -> EP-M2 -> feature::"Exit successfully when nothing is selected"
-REQ-GIT-009 -> ADR-0008 -> EP-M2 -> feature::"Refuse to rewrite a conflicted file"
-REQ-GIT-010 -> ADR-0008 -> EP-M2 -> feature::"List the selection without acting"
+REQ-GIT-001 -> ADR-0010 -> EP-M1 -> select::git_ls_files::tests::lists_tracked_only
+REQ-GIT-002 -> ADR-0010 -> EP-M1 -> select::policy::tests::selects_only_configured_extensions
+REQ-GIT-003 -> ADR-0010 -> EP-M2 -> cli_git.rs::md_exts_replaces_the_default_set
+REQ-GIT-004 -> ADR-0010 -> EP-M2 -> cli_git.rs::rejects_git_with_explicit_files
+REQ-GIT-005 -> ADR-0010 -> EP-M2 -> cli_git.rs::in_place_is_satisfied_by_git
+REQ-GIT-006 -> ADR-0010 -> EP-M1 -> select::policy::tests::excludes_missing_other_symlink
+REQ-GIT-007 -> ADR-0010 -> EP-M1 -> select::git_ls_files::tests::maps_spawn_and_exit_failures
+REQ-GIT-008 -> ADR-0010 -> EP-M2 -> feature::"Exit successfully when nothing is selected"
+REQ-GIT-009 -> ADR-0010 -> EP-M2 -> feature::"Refuse to rewrite a conflicted file"
+REQ-GIT-010 -> ADR-0010 -> EP-M2 -> feature::"List the selection without acting"
 CON-SAFE-001 -> EP-M2 -> feature::"Never write through a symlink"
 ```
 
@@ -470,7 +478,7 @@ on nothing else; the adapters and `main` depend on policy.**
 Every module's `//!` header must state its side of that sentence explicitly —
 for example, "This module is the selection domain. It depends on `PathProbe`
 and performs no I/O." A maintainer must be able to derive the direction from
-the modules alone, without reading ADR 0008.
+the modules alone, without reading ADR 0010.
 
 **Directories are parameters, never ambient state.** Both `list_candidates` and
 `probe` take the working-tree root explicitly. Nothing in the selection code
@@ -712,7 +720,7 @@ recursion, no unbounded arithmetic, and no inductive structure; it is
 discharged by the bidirectional properties, whose negative controls demonstrate
 they can fail; and Verus needs its own toolchain, conflicting with this
 repository's `rust-toolchain.toml` pin of `nightly-2026-03-26`. Revisit if
-selection later becomes recursive. Full reasoning belongs in ADR 0008, not
+selection later becomes recursive. Full reasoning belongs in ADR 0010, not
 repeated here.
 
 ### Mutation testing replaces hand-applied negative controls
@@ -830,11 +838,11 @@ selection module is a real, revert-safe state.
 
 - Outcome: `README.md`, `docs/users-guide.md`, `docs/architecture.md`,
   `docs/developers-guide.md`, `docs/contents.md`, and
-  `docs/adrs/0008-git-file-selection.md` describe the feature, the boundary,
+  `docs/adrs/0010-git-file-selection.md` describe the feature, the boundary,
   the CRLF caveat, and the rejected alternatives.
 - Acceptance evidence: `EV-M3-DOCS` — `make markdownlint` and, if a Mermaid
   diagram was added, `make nixie` both pass.
-- Conformance check: every Decision log entry appears in ADR 0008 or a
+- Conformance check: every Decision log entry appears in ADR 0010 or a
   component document; `docs/contents.md` indexes the new ADR.
 - Recovery: documentation-only.
 - Remaining gaps: none. Set Status to COMPLETE only after reconciling.
@@ -1581,7 +1589,7 @@ Quality criteria — what "done" means:
   with no shell interpretation and no user-controlled arguments, so there is no
   injection surface on the **input** side. On the **output** side, git's stderr
   is untrusted, unbounded, and may contain paths and ANSI escapes, so cap it
-  and strip control characters before printing. State both halves in ADR 0008.
+  and strip control characters before printing. State both halves in ADR 0010.
 
 ## Idempotence and recovery
 
@@ -1622,7 +1630,14 @@ plateau.
 - [x] (2026-09-11) Rebase onto `main` at `d0549d9`; study the three merged
       dependencies and the `check-option` interfaces.
 - [x] (2026-09-11) Confirm the sequencing decision: this plan follows #464.
-- [ ] Stage A: re-establish the reference-command transcripts on this machine.
+- [x] (2026-09-12) Rebase onto `origin/check-option` at `9bcb95d`, on the
+      requester's instruction, so the interfaces this plan consumes are present.
+      PR #466 moves with the branch and is stacked on #464. Backup tag
+      `backup/git-option-pre-rebase` preserves the pre-rebase tip.
+- [x] (2026-09-12) Stage A: reference-command transcripts re-established on
+      Git 2.52.0. All four facts and the merge case reproduce unchanged; see
+      Artefacts and notes, `EV-A-TRANSCRIPTS`. No axiom changed, so the plan
+      was not disturbed.
 - [ ] Prerequisite: extract `Cli` and `FormatOpts` into `src/cli.rs` as a
       behaviour-free commit, returning `src/main.rs` from 386 lines to roughly
       300.
@@ -1643,9 +1658,9 @@ plateau.
       `driver::Inputs`.
 - [ ] EP-M2: bound `Mode::Print` memory with the chunked drain.
 - [ ] EP-M2: land the scenarios and the `--help` snapshot.
-- [ ] EP-M3: write **ADR 0008** and update `README.md`, `docs/users-guide.md`,
+- [ ] EP-M3: write **ADR 0010** and update `README.md`, `docs/users-guide.md`,
       `docs/architecture.md`, `docs/developers-guide.md`, `docs/contents.md`.
-- [ ] Reconcile Decision log and Surprises with ADR 0008, then set Status.
+- [ ] Reconcile Decision log and Surprises with ADR 0010, then set Status.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
@@ -1653,6 +1668,25 @@ Superseded and deliberately not carried forward: adding `googletest`,
 INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
 
 ## Surprises & discoveries
+
+- Observation: the ADR numbers moved twice between the plan's last revision and
+  the start of implementation. `docs/adrs/` now holds **0008** (byte-order-mark
+  preservation) and **0009** (check and diff reporting), both delivered on
+  `check-option`; the plan's draft said its record would be 0008.
+  Evidence: `ls docs/adrs/` on the rebased tree.
+  Impact: this plan's decision record is **ADR 0010**, and every reference in
+  this document has been renumbered. Nothing else in the plan depends on the
+  number.
+
+- Observation: pull request #464 has not merged, and its own ExecPlan records
+  `EP-M6` as unrun, so "wait for the merge" would have stalled this plan
+  indefinitely.
+  Evidence: `gh pr view 464` reports `OPEN`;
+  `docs/execplans/check-option.md` reads `Status: IN PROGRESS`.
+  Impact: on the requester's instruction the work is stacked on `check-option`
+  rather than sequenced behind it. The plan's composition section is unchanged,
+  because the interfaces it names are present on that branch exactly as
+  described; what changes is only which ref they arrive from.
 
 - Observation: `src/main.rs` on `check-option` is 386 lines against a 400-line
   cap, and `src/driver.rs` is 369.
@@ -1719,8 +1753,19 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
 
 ## Decision log
 
-Entries are pointers; the reasoning lives in the body sections named. ADR 0008
+Entries are pointers; the reasoning lives in the body sections named. ADR 0010
 is the durable record, and EP-M3 reconciles this log into it.
+
+- Decision: stack this work on `check-option` by rebasing onto it, rather than
+  waiting for #464 to merge or re-deriving its composition locally.
+  Rationale: #464 was still open with `EP-M6` unrun when implementation began,
+  so neither waiting nor duplicating was acceptable. Consuming the interfaces
+  from the branch that defines them keeps the plan's composition section
+  exactly as written and avoids building a second ordering scheme, a second
+  exit-status contract, and a second `--list-files` mode that would have to be
+  reconciled the moment #464 merged. Cost: PR #466's diff is stacked, and this
+  branch must be rebased again once #464 lands.
+  Date/Author: 2026-09-12, requester.
 
 - Decision: sequence this plan after pull request #464 and consume its
   interfaces rather than duplicating them.
@@ -1732,7 +1777,7 @@ is the durable record, and EP-M3 reconciles this log into it.
   second exit-status contract.
   Date/Author: 2026-09-11, requester.
 
-- Decision: this plan's decision record is **ADR 0008**, not 0006.
+- Decision: this plan's decision record is **ADR 0010**, not 0006.
   Rationale: #470 took 0006 (single-pass idempotence) and #469 took 0007
   (line-ending detection) while this plan was in review.
   Date/Author: 2026-09-11, planning agent.
@@ -1757,7 +1802,7 @@ is the durable record, and EP-M3 reconciles this log into it.
   Rationale: equivalence by construction rather than by reimplementation; no
   Git-operating dependency; inherits every Git configuration input for free.
   libgit2 diverges from Git on nested `.gitignore` negation, so `git2` would
-  make equivalence approximate. The stronger argument, which ADR 0008 should
+  make equivalence approximate. The stronger argument, which ADR 0010 should
   lead with, is that a walker-based approach such as the `ignore` crate
   **structurally cannot see force-added ignored files**, whereas `--cached`
   gets them right by construction. Cost: `git` on `PATH`, turned into an
@@ -1867,7 +1912,7 @@ is the durable record, and EP-M3 reconciles this log into it.
   argument: `mdtablefix somedir/` is an error today and would become a
   recursive rewrite. That is a different feature from the one requested, and
   bundling it would widen the blast radius of a change whose whole risk profile
-  is unintended writes. Record it in ADR 0008 as the recommended successor.
+  is unintended writes. Record it in ADR 0010 as the recommended successor.
   Date/Author: 2026-09-09, planning agent, on a reviewer alternative.
 
 - Decision: the roadmap instruction is **not applicable**.
@@ -1877,7 +1922,7 @@ is the durable record, and EP-M3 reconciles this log into it.
 ## Outcomes & retrospective
 
 To be completed at EP-M3. Before setting Status to COMPLETE, reconcile every
-Surprise and Decision against ADR 0008 and the component documents. Do not mark
+Surprise and Decision against ADR 0010 and the component documents. Do not mark
 COMPLETE while any deviation remains unrecorded.
 
 Two items an earlier draft listed as follow-up work have since **merged** and
@@ -1901,6 +1946,18 @@ the red and green output for each milestone; the `make mutants` survivor
 report; the accepted `--help` snapshot; and the final gate run. Keep them
 short.
 
+**EV-A-TRANSCRIPTS** — re-established 2026-09-12 on Git 2.52.0, log at
+`/tmp/stage-a-mdtablefix-git-option.out`. Every transcript in "Measured
+behaviour of the reference command" reproduced byte for byte: the unsorted
+six-path listing, the same listing verbatim under `-z`, the subtree-scoped
+`sub/`-relative listing, the C-quoted `"we ird \303\251\"q.md"` without `-z`
+against the raw `303 251` bytes with it, the three-fold `c.md` staging during
+an unresolved merge collapsing to one line under `--deduplicate`, and
+`exit=128` with `fatal: not a git repository (or any of the parent
+directories): .git` outside a repository. The `-t` observation also holds: a
+tracked file deleted from the working tree reports `H`, and only
+`--deleted` produces `R`. No axiom changed.
+
 ## Revision note
 
 Revised 2026-09-11, third pass, after rebasing onto `main` at `d0549d9` and
@@ -1920,7 +1977,7 @@ rationale, because `replace_file` already declines symlinks, and kept the
 variant for a weaker but real reason. `INV-NOWRITE-UNCHANGED` is discharged
 by #464 and is no longer this plan's work.
 
-Corrections: the decision record moves to ADR 0008, because 0006 and 0007 were
+Corrections: the decision record moves to ADR 0010, because 0006 and 0007 were
 taken; the failure transcript exits 2 rather than 1 and does not render through
 `Termination`, because `main` now returns `ExitCode`; and `src/main.rs` at 386
 lines makes the file-size contingency a prerequisite rather than a fallback.
