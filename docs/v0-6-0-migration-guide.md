@@ -34,7 +34,7 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   library entry points `mdtablefix::io::rewrite` and
   `mdtablefix::io::rewrite_no_wrap`; standard input keeps its existing contract
   of printing one terminator even when the output has no lines, while an empty
-  file still produces empty output. The selection is new public API:
+  file still produces empty output. Three items are new public API:
   `LineEnding`, whose `as_str` method returns the characters written between
   lines, `detect_line_ending(text) -> LineEnding`, and
   `serialize_lines(lines, ending) -> String`. The boundary that acts on the
