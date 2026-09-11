@@ -980,7 +980,11 @@ The CLI matrix harness in [tests/cli_matrix.rs](../tests/cli_matrix.rs) checks
 that important option combinations keep working through the real `mdtablefix`
 binary. It uses `assert_cmd` to run the command and `insta` to snapshot a
 labelled envelope containing the case identifier, execution mode, arguments,
-exit status, stdout, stderr, and rewritten file content where relevant.
+exit status, stdout, stderr, and rewritten file content. Every case runs in a
+fresh temporary directory with its fixture staged as `input.dat`, so a mode
+that echoes the file it reports echoes the same name in every snapshot. The
+`[file]` block is recorded as `<not applicable>` for the read-only modes, which
+is what keeps a reporting snapshot free to claim the file was not written.
 
 The base catalogue lives in
 [tests/cli_matrix/support.rs](../tests/cli_matrix/support.rs). It covers the
@@ -995,15 +999,41 @@ seven non-wrap transform flags:
 - `--headings`
 
 The harness expands every base row into both `--wrap` and no-`--wrap` variants.
-It then runs each logical variant twice: once as file-to-stdout formatting and
-once with `--in-place` against an equivalent temporary file. The snapshot test
-also asserts that stdout output and the `--in-place` rewritten file are
-identical for the same logical case.
+It then runs each logical variant as file-to-stdout formatting and with
+`--in-place` against an equivalent temporary file. The snapshot test also
+asserts that stdout output and the `--in-place` rewritten file are identical
+for the same logical case.
+
+### Curated reporting coverage
+
+`--check` and `--diff` report what the printing mode would write, so the
+harness exercises them over a curated subset of base rows rather than doubling
+every snapshot. A row that joins the subset declares both reporting modes and
+therefore runs them in both wrap variants; the self-test
+`matrix_reporting_rows_are_curated` holds that declaration to those rules, and
+`matrix_cases_expand_to_their_declared_modes` checks that every logical case
+runs exactly the modes it declares. The subset is `row_000` (the plain table
+case), `row_010` (whose unwrapped variant is already a fixed point, so the
+subset covers a file that needs no change as well as one that drifts), and
+`row_111` (the frontmatter document boundary).
+
+The reporting modes are measured against the printing mode's own output for the
+same document rather than against counts written into the test. Each reporting
+run must leave the file unwritten, exit `0` when the printed document already
+matches the file and `1` when it does not, and report exactly the edit that
+status implies: `--check` prints one `<path> +<n> -<m>` line, and `--diff`
+prints a unified diff whose marked lines are those same counts.
+`matrix_reporting_modes_agree` additionally requires the two modes to agree on
+the counts for the same document. The diff body itself is checked by applying
+its hunks to the file, copying the lines no hunk covers as a patch would, and
+asserting that the result is exactly the printed document.
 
 Matrix input fixtures live under `tests/data/cli-matrix/` and must use the
 `.dat` extension. Do not use `.md` or `.txt` for these fixtures because
 `make fmt` runs Markdown formatting and must not rewrite matrix inputs. The
-harness has a self-test that rejects non-`.dat` fixtures.
+harness has a self-test that rejects non-`.dat` fixtures, and the staging name
+above is why: a reporting mode echoes the name the file was given, so only a
+`.dat` fixture keeps that name stable in a snapshot.
 
 `make typecheck` runs `cargo check --all-targets --all-features` to verify
 type-correctness without running tests. Use it for rapid feedback during
@@ -1013,9 +1043,11 @@ Before changing snapshots, run the harness self-tests:
 
 ```bash
 cargo test --test cli_matrix matrix_case_ids_are_unique
-cargo test --test cli_matrix matrix_cases_expand_to_stdout_and_in_place
+cargo test --test cli_matrix matrix_cases_expand_to_their_declared_modes
 cargo test --test cli_matrix matrix_cases_expand_to_wrapped_and_unwrapped
 cargo test --test cli_matrix matrix_cases_cover_all_transform_pairs
+cargo test --test cli_matrix matrix_reporting_rows_are_curated
+cargo test --test cli_matrix matrix_reporting_modes_agree
 ```
 
 Create or update snapshots only when the behaviour change is intentional:
@@ -1207,8 +1239,9 @@ envelope records a process-result *value*, not diagnostic wording:
 for a process that was killed by a signal. `ExitStatus`'s own `Display` is not
 portable — an ordinary exit reads `exit status: 0` on Unix and `exit code: 0`
 on Windows — so snapshotting it directly would make every envelope a
-Windows-only failure. The committed snapshots under `tests/snapshots/` therefore
-carry `status: code: 0`.
+Windows-only failure. The committed snapshots under `tests/snapshots/`
+therefore carry `status: code: 0`, or `status: code: 1` where a reporting mode
+is asked about a file that drifts.
 
 `tests/static_regex_lint.rs` is gated whole-file with `#![cfg(unix)]`. The guard
 it drives is a `bash` script that shells out to ripgrep, and the tests stand in

@@ -12,6 +12,19 @@ use tempfile::tempdir;
 
 #[path = "invariants.rs"]
 mod invariants;
+#[path = "reporting.rs"]
+mod reporting;
+
+pub(crate) use reporting::{assert_reporting_invariants, check_counts, diff_counts};
+
+/// The name every matrix case stages its fixture under.
+///
+/// A reporting mode names the file it reports, and that name has to survive
+/// into a snapshot, so the command runs in the temporary directory and is given
+/// this relative name rather than a path the temporary directory invented. It
+/// carries the `.dat` extension every matrix fixture uses, which the harness's
+/// own self-test pins.
+pub(crate) const STAGED_FILE: &str = "input.dat";
 
 /// Represents a non-wrap CLI transform flag.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -56,6 +69,15 @@ pub(crate) struct BaseCase {
     pub(crate) fixture: &'static str,
     /// Non-wrap transform flags enabled for this base row.
     pub(crate) flags: &'static [TransformFlag],
+    /// Reporting modes this row also runs, curated rather than exhaustive.
+    ///
+    /// The reporting modes share their whole assessment path with the printing
+    /// modes, so the matrix exercises them over a representative subset of rows
+    /// instead of doubling every snapshot. A row that joins the subset runs
+    /// *both* reporting modes in *both* wrap variants: a half-covered row would
+    /// pin one mode's verdict without the other's, and a curated row is the
+    /// unit of coverage here.
+    pub(crate) reporting: &'static [ExecutionMode],
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -83,6 +105,10 @@ pub(crate) enum ExecutionMode {
     Stdout,
     /// Rewrites the temporary input file with `--in-place`.
     InPlace,
+    /// Reports drifting files with `--check`, without writing.
+    Check,
+    /// Prints a unified diff with `--diff`, without writing.
+    Diff,
 }
 
 impl ExecutionMode {
@@ -90,8 +116,26 @@ impl ExecutionMode {
         match self {
             Self::Stdout => "stdout",
             Self::InPlace => "in_place",
+            Self::Check => "check",
+            Self::Diff => "diff",
         }
     }
+
+    /// The flag that selects this mode, absent for the default one.
+    fn flag(self) -> Option<&'static str> {
+        match self {
+            Self::Stdout => None,
+            Self::InPlace => Some("--in-place"),
+            Self::Check => Some("--check"),
+            Self::Diff => Some("--diff"),
+        }
+    }
+
+    /// Whether this mode rewrites the file it is given.
+    pub(crate) fn writes_file(self) -> bool { self == Self::InPlace }
+
+    /// Whether this mode reports drift rather than printing formatted text.
+    pub(crate) fn reports(self) -> bool { matches!(self, Self::Check | Self::Diff) }
 }
 
 #[derive(Clone)]
@@ -105,6 +149,8 @@ pub(crate) struct LogicalCase {
     pub(crate) is_wrapped: bool,
     /// Non-wrap transform flags enabled for the logical case.
     pub(crate) flags: Vec<TransformFlag>,
+    /// Reporting modes this case also runs, as declared by its base row.
+    pub(crate) reporting: Vec<ExecutionMode>,
 }
 
 /// Represents one executable matrix case after mode expansion.
@@ -134,12 +180,22 @@ pub(crate) const ALL_FLAGS: &[TransformFlag] = &[
     TransformFlag::Headings,
 ];
 
+/// The reporting modes a curated base row runs, in the order it runs them.
+const REPORTING_MODES: &[ExecutionMode] = &[ExecutionMode::Check, ExecutionMode::Diff];
+
 /// Curated pairwise base matrix rows.
+///
+/// Three rows join the reporting subset: `row_000` is the plain table case
+/// every user meets first, `row_010` is the one row whose unwrapped variant is
+/// already a fixed point (so the subset covers the no-drift branch as well as
+/// the drifting one), and `row_111` carries the frontmatter document boundary
+/// through both reporting modes.
 pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
     BaseCase {
         id: "row_000",
         fixture: "table-prose.dat",
         flags: &[],
+        reporting: REPORTING_MODES,
     },
     BaseCase {
         id: "row_001",
@@ -150,6 +206,7 @@ pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
             TransformFlag::CodeEmphasis,
             TransformFlag::Headings,
         ],
+        reporting: &[],
     },
     BaseCase {
         id: "row_010",
@@ -160,6 +217,7 @@ pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
             TransformFlag::CodeEmphasis,
             TransformFlag::Headings,
         ],
+        reporting: REPORTING_MODES,
     },
     BaseCase {
         id: "row_011",
@@ -170,6 +228,7 @@ pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
             TransformFlag::Fences,
             TransformFlag::Footnotes,
         ],
+        reporting: &[],
     },
     BaseCase {
         id: "row_100",
@@ -180,6 +239,7 @@ pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
             TransformFlag::Footnotes,
             TransformFlag::Headings,
         ],
+        reporting: &[],
     },
     BaseCase {
         id: "row_101",
@@ -190,6 +250,7 @@ pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
             TransformFlag::Fences,
             TransformFlag::CodeEmphasis,
         ],
+        reporting: &[],
     },
     BaseCase {
         id: "row_110",
@@ -200,6 +261,7 @@ pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
             TransformFlag::Footnotes,
             TransformFlag::CodeEmphasis,
         ],
+        reporting: &[],
     },
     BaseCase {
         id: "row_111",
@@ -210,6 +272,7 @@ pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
             TransformFlag::Ellipsis,
             TransformFlag::Headings,
         ],
+        reporting: REPORTING_MODES,
     },
 ];
 
@@ -230,10 +293,15 @@ fn status_text(status: ExitStatus) -> String {
 
 impl RunResult {
     /// Builds the labelled text snapshot for a physical command run.
+    ///
+    /// The resulting-file block is elided for every read-only mode: `--check`
+    /// and `--diff` leave the file untouched by definition, and repeating the
+    /// input there would record nothing the `[stdout]` block does not already
+    /// show, while doubling the size of each snapshot.
     pub(crate) fn envelope(&self, case: &PhysicalCase) -> String {
         let stdout = String::from_utf8_lossy(&self.output.stdout);
         let stderr = String::from_utf8_lossy(&self.output.stderr);
-        let file = if case.mode == ExecutionMode::InPlace {
+        let file = if case.mode.writes_file() {
             String::from_utf8_lossy(&self.file_content).into_owned()
         } else {
             "<not applicable>\n".to_string()
@@ -265,9 +333,7 @@ impl PhysicalCase {
             args.push("--wrap");
         }
         args.extend(self.logical.flags.iter().map(|flag| flag.as_arg()));
-        if self.mode == ExecutionMode::InPlace {
-            args.push("--in-place");
-        }
+        args.extend(self.mode.flag());
         args
     }
 }
@@ -282,20 +348,46 @@ pub(crate) fn logical_cases() -> Vec<LogicalCase> {
                 fixture: case.fixture,
                 is_wrapped: variant == WrapVariant::Wrapped,
                 flags: case.flags.to_vec(),
+                reporting: case.reporting.to_vec(),
             })
         })
         .collect()
 }
 
-/// Expands every logical case into stdout and `--in-place` command runs.
+/// The curated logical cases that carry reporting modes.
+pub(crate) fn reporting_cases() -> Vec<LogicalCase> {
+    logical_cases()
+        .into_iter()
+        .filter(|case| !case.reporting.is_empty())
+        .collect()
+}
+
+/// Builds the physical case for one logical case in one mode.
+pub(crate) fn physical_case(logical: &LogicalCase, mode: ExecutionMode) -> PhysicalCase {
+    PhysicalCase {
+        logical: logical.clone(),
+        mode,
+    }
+}
+
+/// Expands one logical case into every command run it declares.
+fn modes_for(logical: &LogicalCase) -> Vec<ExecutionMode> {
+    let mut modes = vec![ExecutionMode::Stdout, ExecutionMode::InPlace];
+    modes.extend(logical.reporting.iter().copied());
+    modes
+}
+
+/// Expands every logical case into every command run it declares.
 pub(crate) fn physical_cases() -> Vec<PhysicalCase> {
     logical_cases()
         .into_iter()
         .flat_map(|logical| {
-            [ExecutionMode::Stdout, ExecutionMode::InPlace].map(move |mode| PhysicalCase {
-                logical: logical.clone(),
-                mode,
-            })
+            modes_for(&logical)
+                .into_iter()
+                .map(move |mode| PhysicalCase {
+                    logical: logical.clone(),
+                    mode,
+                })
         })
         .collect()
 }
@@ -305,14 +397,18 @@ pub(crate) fn assert_transform_invariants(logical: &LogicalCase, stdout: &[u8]) 
     invariants::assert_transform_invariants(logical, stdout)
 }
 
+/// Returns whether the named matrix fixture contains a table delimiter.
+pub(crate) fn fixture_has_table(file_name: &str) -> Result<bool> {
+    invariants::fixture_has_table(file_name)
+}
+
 /// Copies a matrix fixture into the temporary command directory.
 ///
-/// The staged input preserves the fixture extension for debugging clarity.
+/// The staged input takes its name from [`STAGED_FILE`] so that a mode which
+/// echoes the file it reports echoes the same name on every run.
 pub(crate) fn stage_fixture(case: &PhysicalCase, dir: &Path) -> Result<PathBuf> {
     let fixture = fixture_path(case.logical.fixture);
-    let file_path = dir
-        .join("input")
-        .with_extension(fixture.extension().unwrap_or_default());
+    let file_path = dir.join(STAGED_FILE);
     fs::copy(&fixture, &file_path).with_context(|| {
         format!(
             "copy fixture '{}' to '{}'",
@@ -324,15 +420,18 @@ pub(crate) fn stage_fixture(case: &PhysicalCase, dir: &Path) -> Result<PathBuf> 
 }
 
 /// Builds a run result from process output and the temporary input file.
+///
+/// The file is read back for every mode, including the read-only ones: that
+/// read is what a reporting mode's "did not write" assertion compares against
+/// the fixture, so the evidence is collected here rather than assumed.
 pub(crate) fn collect_result(
     output: Output,
     file_path: &Path,
     mode: ExecutionMode,
 ) -> Result<RunResult> {
-    let file_content = match mode {
-        ExecutionMode::Stdout | ExecutionMode::InPlace => fs::read(file_path)
-            .with_context(|| format!("read file '{}' after {:?} run", file_path.display(), mode))?,
-    };
+    let file_content = fs::read(file_path)
+        .with_context(|| format!("read file '{}' after {:?} run", file_path.display(), mode))?;
+
     Ok(RunResult {
         output,
         file_content,
@@ -345,7 +444,13 @@ pub(crate) fn run_physical_case(case: &PhysicalCase) -> Result<RunResult> {
     let file_path = stage_fixture(case, dir.path())?;
 
     let mut command = Command::cargo_bin("mdtablefix").context("create mdtablefix test command")?;
-    command.args(case.args()).arg(&file_path);
+    // The command runs inside the temporary directory and is given the bare
+    // file name, so a reporting mode that names the file names it as
+    // `input.dat` rather than by a temporary path no snapshot could pin.
+    command
+        .current_dir(dir.path())
+        .args(case.args())
+        .arg(STAGED_FILE);
     let output = command.output().with_context(|| {
         format!(
             "execute mdtablefix for matrix case '{}'",
@@ -446,7 +551,7 @@ mod tests {
     #[rstest]
     #[case(TransformFlag::Renumber, true)] #[case(TransformFlag::Fences, false)]
     fn has_flag_returns_expected_value(#[case] flag: TransformFlag, #[case] expected: bool) {
-        let case = BaseCase { id: "row_001", fixture: "fixture.dat", flags: &[TransformFlag::Renumber] };
+        let case = BaseCase { id: "row_001", fixture: "fixture.dat", flags: &[TransformFlag::Renumber], reporting: &[] };
         assert_eq!(has_flag(&case, flag), expected);
     }
 }

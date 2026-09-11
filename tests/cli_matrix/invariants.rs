@@ -51,6 +51,33 @@ pub(crate) fn assert_transform_invariants(logical: &LogicalCase, stdout: &[u8]) 
     Ok(())
 }
 
+/// Reads a matrix fixture and reports whether it contains a table delimiter.
+pub(crate) fn fixture_has_table(file_name: &str) -> Result<bool> {
+    let path = fixture_path(file_name);
+    let fixture = fs::read_to_string(&path)
+        .with_context(|| format!("read matrix fixture '{}'", path.display()))?;
+
+    Ok(contains_table_delimiter(&fixture))
+}
+
+/// Whether `fixture` contains the delimiter run that makes a line a table row.
+///
+/// A delimiter cell is made only of dashes and colons, and it has to sit in a
+/// line that carries pipes: a Setext heading underline is the same run of
+/// dashes on a line that carries none.
+fn contains_table_delimiter(fixture: &str) -> bool {
+    fixture.lines().any(|line| {
+        line.contains('|')
+            && line.split('|').any(|cell| {
+                let cell = cell.trim();
+                !cell.is_empty()
+                    && cell
+                        .chars()
+                        .all(|character| character == '-' || character == ':')
+            })
+    })
+}
+
 fn fixture_has_fence_candidate(fixture: &str) -> bool {
     fixture.lines().any(|line| {
         line.trim_start().starts_with("```")

@@ -318,7 +318,21 @@ Hard invariants. Violating one requires escalation, not a workaround.
       rustfmt diffs that `cargo fmt --all` resolved. See
       `Artefacts and notes → EP-M4 red and green transcripts` and
       `→ CodeRabbit review after EP-M4`.
-- [ ] EP-M5 Curated CLI matrix coverage for the two new modes.
+- [x] EP-M5 Curated CLI matrix coverage for the two new modes. Complete. The
+      reporting invariants live in the new `tests/cli_matrix/reporting.rs`;
+      `ExecutionMode` grew `Check` and `Diff` with a shared `reports()`
+      predicate, and each base row declares the reporting modes it runs.
+      `row_000`, `row_010`, and `row_111` were chosen by measurement (only
+      `row_010` unwrapped is a fixed point, so the subset covers the no-drift
+      branch as well as the drifting one) and run both modes in both wrap
+      variants. `cargo test --test cli_matrix` passes with 51 tests; the
+      snapshot regeneration added twelve files and changed none of the 88
+      pre-existing ones. `docs/developers-guide.md` gained the reporting
+      subsection in the same commit, its fixture-extension rule now carries the
+      staging reason, and its portability section no longer claims every
+      snapshot reads `status: code: 0`. The first regeneration run was **red**
+      and exposed a real gap in the diff invariant rather than a snapshot
+      problem; see `Artefacts and notes → EP-M5 red and green transcripts`.
 - [ ] EP-M6 Targeted mutation testing of the counting and aggregation
       functions.
 - [ ] EP-M7 Documentation, ADRs, changelog, and issue closure.
@@ -445,6 +459,47 @@ Hard invariants. Violating one requires escalation, not a workaround.
   check does not go green without a second fix. `Tolerances` forbids narrowing
   the property as a workaround, so the decision is the user's: fix both
   defects on this branch, or halt.
+
+- Observation: a unified diff does **not** spell out the whole right-hand side
+  of the document. The first version of the `--diff` matrix invariant
+  reconstructed it from the body's context and insertion lines, which holds only
+  where every line falls inside some hunk's context.
+  Evidence: `row_000_nowrap_diff` failed that comparison, short by the trailing
+  blank line, `Title`, and `=====`. The `similar` payload is `@@ -1,4 +1,6 @@`
+  for a seven-line file: the last change is on line 1, so the three lines of
+  trailing context end at line 4 and lines 5-7 are absent from the payload
+  entirely, exactly as GNU `diff` omits them. The invariant was replaced by a
+  patch applier that copies the lines no hunk covers from the file, which is
+  what any consumer of the diff must do; the case now passes without weakening
+  the assertion, and unit tests pin the gap and tail cases directly. Measuring
+  twice here was worth it: the naive version was one fixture away from being
+  silently vacuous.
+  Date/Author: 2026-09-11.
+
+- Observation: `mdformat-all` is not `mdformat`. It runs this crate's own CLI
+  over every Markdown-like file — `mdtablefix --wrap --renumber --breaks
+  --ellipsis --fences --in-place` — and then `markdownlint-cli2 --fix`.
+  Evidence: the wrapper script at `~/.local/bin/mdformat-all`; `mdformat` is not
+  installed at all. Two consequences for documentation work. First, the scoped
+  equivalent of `make fmt` for one file is now available as a check:
+  `mdtablefix --wrap --renumber --breaks --ellipsis --fences --check <file>`.
+  Second, the wrapper re-wraps a paragraph as a whole rather than line by line,
+  so prose whose every line fits within 80 columns can still be re-flowed: the
+  new `docs/developers-guide.md` prose was re-balanced across lines even though
+  no line exceeded the limit. Those sections were therefore taken from that
+  command's own output rather than hand-wrapped.
+  Date/Author: 2026-09-11.
+
+- Observation: the repository's Markdown does not satisfy its own formatter at
+  `HEAD`. All three of `README.md`, `docs/users-guide.md`, and
+  `docs/developers-guide.md` drift under the `mdformat-all` flag set.
+  Evidence: `mdtablefix --wrap --renumber --breaks --ellipsis --fences --check
+  <file>` exits `1` for each, with `+101 -103` for `docs/developers-guide.md` at
+  `HEAD` before this milestone's edits. Consequence for `EP-M7`: running
+  `make fmt` there will rewrite unrelated prose across the documentation set, so
+  that step must be reviewed as its own change rather than folded into the
+  content edit.
+  Date/Author: 2026-09-11.
 
 ## Decision log
 
@@ -792,6 +847,56 @@ Hard invariants. Violating one requires escalation, not a workaround.
   was one wrapped paragraph line beginning `#469`. The `MD029` and `MD018`
   fixes were verified by re-running markdownlint over the plan alone, and the
   cast errors by `cast_signed()`, which is what clippy itself suggests.
+  Date/Author: 2026-09-11.
+
+- Decision: the reporting subset is the three base rows `row_000`, `row_010`,
+  and `row_111`, not a spread across the matrix.
+  Rationale: the rows were chosen by measurement rather than by taste. Running
+  every row under both wrap variants and both reporting modes showed that only
+  `row_010` **unwrapped** is already a fixed point, so that row is the only
+  source of the no-drift branch (`--check` and `--diff` silent, exit `0`);
+  `row_000` is the plain table case a user meets first, and `row_111` carries
+  the frontmatter boundary, which is where the report line and the diff can
+  disagree about the document's extent. Twelve snapshots are added, well inside
+  the milestone's raised churn limit, and no existing snapshot changes.
+  Date/Author: 2026-09-11.
+
+- Decision: the matrix stages every fixture as `input.dat` and runs the binary
+  with the temporary directory as its working directory.
+  Rationale: both reporting modes name the file they report, so a staged path
+  the harness invented (a `tempdir()` path) would be written into a snapshot and
+  make it machine-specific. The relative name is stable, and the existing
+  `.dat` fixture self-test now carries the second reason for its rule. The cost
+  is that a case cannot distinguish two same-named inputs, which no matrix row
+  needs.
+  Date/Author: 2026-09-11.
+
+- Decision: the `--diff` invariant applies the payload to the file rather than
+  reconstructing the printed document from the body's marker lines.
+  Rationale: the payload is a patch, so applying it is the semantics a consumer
+  relies on, and it is the only version that holds once a change is far enough
+  from the end of the file (see `Surprises & discoveries`). The applier asserts
+  each context and deleted line against the file as it goes, so a diff of the
+  wrong text fails loudly rather than reconstructing something merely different.
+  Date/Author: 2026-09-11.
+
+- Decision: `RunResult::envelope` keeps emitting the `[file]` block for the
+  read-only modes, marked `<not applicable>`, rather than omitting it.
+  Rationale: omitting the block would change all 32 pre-existing matrix
+  snapshots for a purely cosmetic gain. Keeping the block means the milestone
+  adds twelve snapshots and rewrites none, so the reviewer reads exactly the new
+  evidence. The block also records the mode's defining property — a reporting
+  run does not write — which the harness then asserts against the fixture bytes.
+  Date/Author: 2026-09-11.
+
+- Decision: `tests/cli_matrix/support.rs` is left above 400 lines rather than
+  split again to satisfy the `AGENTS.md` file-length rule.
+  Rationale: the rule is written for production modules, and this repository
+  already carries test files over the limit (`tests/idempotence_properties.rs`
+  537, `tests/fences.rs` 493). Splitting the harness further would add a module
+  boundary that exists only to move lines, while the reporting helpers already
+  live in their own `tests/cli_matrix/reporting.rs` because they are a distinct
+  concern rather than because of the cap.
   Date/Author: 2026-09-11.
 
 ## Outcomes & retrospective
@@ -2905,6 +3010,103 @@ exhaustively audited; and the same reviewer had already returned zero findings
 for `EP-M3`'s commit, so most of what it saw had passed once before. The full
 JSON-lines log is `/tmp/coderabbit-mdtablefix-check-option.out`.
 
+### EP-M5 red and green transcripts
+
+Red — the first `INSTA_UPDATE=always cargo test --test cli_matrix
+cli_matrix_snapshots` run did not get as far as writing the new snapshots. It
+panicked inside the new diff invariant:
+
+```plaintext
+thread 'cli_matrix_snapshots' panicked at tests/cli_matrix/reporting.rs:167:5:
+assertion `left == right` failed: row_000_nowrap_diff: a diff must be a diff of
+the printed document, not merely a non-empty one
+  left: "| Name  | Notes…|\n\n1. first item\n3. second item …\n"
+ right: "| Name  | Notes…|\n\n1. first item\n3. second item …\n\nTitle\n=====\n"
+```
+
+The left side was the reconstructed right-hand side of the payload; the right
+side was the document the printing mode had produced. The payload for that case
+is `@@ -1,4 +1,6 @@` against a seven-line file, whose last change is on line 1,
+so its three lines of trailing context end at line 4 and lines 5-7 are not in
+the payload at all — the diff was right and the reconstruction was wrong. (The
+fixture is `tests/data/cli-matrix/table-prose.dat`, seven lines by `wc -l`:
+table row, blank, `1. first item`, the long item, blank, `Title`, `=====`.) The
+invariant was replaced by a patch applier rather than weakened, and two unit
+tests pin the "lines between hunks" and "lines after the last hunk" cases
+directly.
+
+Green — the harness, after regeneration:
+
+```plaintext
+$ cargo test --test cli_matrix
+test result: ok. 51 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+Snapshot churn, measured against a baseline captured before the milestone
+(`md5sum tests/snapshots/*.snap`, 88 entries) rather than eyeballed: twelve
+files added, none modified. The twelve are `row_000`, `row_010`, and `row_111`
+in both wrap variants and both reporting modes. What they pin, in order:
+
+- `row_000_nowrap`: `input.dat +3 -1`; the diff opens `@@ -1,4 +1,6 @@` and
+  shows the collapsed table row replaced by three rows, with the document's tail
+  deliberately outside the hunk. This is the case that caught the reconstruction
+  bug, so it is now the load-bearing one.
+- `row_000_wrap`: `input.dat +6 -4`; the same table plus a re-wrapped list item
+  and a Setext heading folded to `Title =====`.
+- `row_010_nowrap`: **silent**, exit `0`, stderr `1 file left unchanged.` — the
+  no-drift branch, which is why this row is in the subset at all.
+- `row_010_wrap`: `input.dat +2 -1`; only the wrapped paragraph drifts.
+- `row_111_{nowrap,wrap}`: `input.dat +3 -4`; the diff's first hunk line is a
+  context line for `title: Matrix` inside the frontmatter, and the frontmatter's
+  own `---` stays a context line while the document-level `---` becomes the
+  normalized thematic break. That is the boundary the reporting modes have to
+  respect, recorded in both renderings.
+
+The subset's selection rule was re-measured as a script rather than remembered:
+each base row's fixture was written to one file and the binary run over it with
+that row's flags, with and without `--wrap`, and the output compared with the
+input. Exactly one of the sixteen combinations is a fixed point.
+
+```plaintext
+row_000 nowrap drifts
+row_000 wrap   drifts
+row_001 nowrap drifts
+row_001 wrap   drifts
+row_010 nowrap FIXED POINT (clean, exit 0)
+row_010 wrap   drifts
+row_011 nowrap drifts
+row_011 wrap   drifts
+row_100 nowrap drifts
+row_100 wrap   drifts
+row_101 nowrap drifts
+row_101 wrap   drifts
+row_110 nowrap drifts
+row_110 wrap   drifts
+row_111 nowrap drifts
+row_111 wrap   drifts
+```
+
+So the no-drift branch is not a hope that some row happens to be clean: it is
+`row_010_nowrap`, the one combination the formatter leaves alone, and the
+`clean > 0` assertion fails the moment that stops being true.
+
+Every verdict above was cross-checked between the two modes by
+`matrix_reporting_modes_agree`, which requires `--check`'s counts and `--diff`'s
+marked lines to be equal for all six curated cases, so the transcripts cannot
+drift apart without failing. Two further properties are measured rather than
+written down: the file's bytes after a reporting run are compared against the
+fixture, and the expected exit status is computed from `printed != source`. A
+report that always fired would fail the `clean > 0` assertion in
+`cli_matrix_snapshots`, and one that never fired would fail `drifting > 0`.
+
+The docs change was checked the same way rather than trusted:
+`mdtablefix --wrap --renumber --breaks --ellipsis --fences --check
+docs/developers-guide.md` reports the file's drift, and the new sections were
+taken from that command's own stdout, which is what `mdformat-all` would write.
+The check also established that the file drifted at `HEAD` too (`+101 -103`), so
+the residual drift is pre-existing and not introduced here; see
+`Surprises & discoveries`.
+
 ## Documentation and skills to consult
 
 Repository documents:
@@ -3144,3 +3346,33 @@ the exit-status contract, the read-only guarantee, and the deterministic
 rendering were all met as specified. The above-threshold test is a strengthening
 of `INV-DETERMINISTIC`'s artefact, not a new obligation: it asserts the same
 invariant over the corpus shape where the invariant is actually at risk.
+
+### Revision 8, 2026-09-11
+
+`EP-M5` implemented; see `Artefacts and notes → EP-M5 red and green transcripts`.
+
+What changed in the plan itself:
+
+- `EP-M5`'s step 2 said to review every changed `.snap`. That is the wrong test
+  for this milestone: the curated subset adds twelve snapshots and changes none,
+  so the review covers every *added* file, and the "none changed" claim is
+  established by an `md5sum` comparison against a baseline taken before
+  regeneration rather than by inspection.
+- `EP-M5`'s step 1 is recorded as implemented with its three curated rows named
+  and the reason each is in the subset. The no-drift branch exists only because
+  `row_010` unwrapped happens to be a fixed point, which was measured across
+  all sixteen row-and-wrap combinations rather than assumed from the row's
+  transforms.
+- The `Constraints` snapshot-churn allowance is spent to twelve of its forty
+  lines, and the "full four-mode expansion" that the milestone rejects remains
+  rejected: it would add 32 files against this subset's twelve.
+- The diff invariant's first form is recorded in `Surprises & discoveries` as a
+  near-miss. It reconstructed the printed document from the payload's marker
+  lines, which is only correct while every line of the document falls inside
+  some hunk's context; the smallest curated fixture already falsifies that, and
+  the replacement applies the payload instead.
+
+No requirement, obligation, or acceptance criterion changed. The two modes
+remain rendering variants of one assessment, the exit-status contract is
+unchanged, and nothing in this milestone touched production code: the diff is
+`tests/` and `docs/` only.
