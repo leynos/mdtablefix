@@ -147,6 +147,13 @@ fn is_setext_text(text: &str, link_matcher: LinkReferenceMatcher) -> bool {
         );
         return false;
     }
+    if is_table_delimiter_row(text) {
+        trace!(
+            payload_len = text.len(),
+            "refusing a Setext candidate that is a table delimiter row"
+        );
+        return false;
+    }
 
     match classify_block(text, link_matcher) {
         None | Some(BlockKind::DigitPrefix) => true,
@@ -166,6 +173,28 @@ fn is_setext_text(text: &str, link_matcher: LinkReferenceMatcher) -> bool {
             false
         }
     }
+}
+
+/// Determine whether a stripped candidate is a table delimiter row.
+///
+/// A delimiter row is table syntax rather than paragraph text, so the `---`
+/// below it is a thematic break and not an underline for it.
+/// `| --- | --- |` above `---` was converted into the single line
+/// `## | --- | --- |`: the break was consumed, the table above lost its
+/// delimiter row, and the orphaned header row was then padded differently on
+/// the next pass, so the output never settled.
+///
+/// The `|` is required. A bare `---` is a thematic break, which
+/// [`classify_block`] already refuses, and a break above another break must
+/// stay two breaks. Alignment markers and dashes alone are covered by the
+/// delimiter row's own pipe, so `|---|---|`, `| --- | --- |`, and `--- | ---`
+/// are all refused while a paragraph that merely contains a pipe, such as
+/// `Text with > inside | here`, still converts.
+///
+/// The pattern is the one the table parser already uses to find the delimiter
+/// row, so the heading pass and the table pass agree on what one is.
+fn is_table_delimiter_row(text: &str) -> bool {
+    text.contains('|') && crate::table::SEP_RE.is_match(text)
 }
 
 /// Returns the indentation width of a line's content, in columns.
@@ -326,6 +355,15 @@ mod tests {
     #[case(vec!["***".into(), "---".into()])]
     #[case(vec!["___".into(), "---".into()])]
     #[case(vec!["- - -".into(), "---".into()])]
+    // Table delimiter rows are table syntax, not paragraph text, so the break
+    // below one is not its underline. The repaired delimiter row is what the
+    // table pass emits, and the quoted spelling reaches the predicate only after
+    // the shared prefix has been removed.
+    #[case(vec!["| --- | --- |".into(), "---".into()])]
+    #[case(vec!["|---|---|".into(), "---".into()])]
+    #[case(vec!["> | --- | --- |".into(), "> ---".into()])]
+    #[case(vec![">> |:--|--:|".into(), ">> ---".into()])]
+    #[case(vec!["   | --- | --- |".into(), "   ---".into()])]
     // List items, including the indented forms whose prefix is shared.
     #[case(vec!["* item".into(), "-----".into()])]
     #[case(vec!["  - item".into(), "  ---".into()])]
@@ -395,10 +433,20 @@ mod tests {
     #[case("<!-- markdownlint-disable MD013 -->", false)]
     #[case("```", false)]
     #[case("~~~", false)]
+    // Table delimiter rows are table syntax, not paragraph text. Each one is a
+    // candidate the table pass has just repaired, and the line below it in the
+    // reported shape is a thematic break rather than an underline.
+    #[case("| --- | --- |", false)]
+    #[case("|---|---|", false)]
+    #[case("--- | ---", false)]
+    #[case("|:--|--:|", false)]
+    // A header row is paragraph-like text: only the delimiter row is refused, so
+    // a table row above a genuine underline still converts.
+    #[case("| a | b |", true)]
     #[case("plain paragraph", true)]
     #[case("2024 revenue", true)]
     #[case("Text with > inside", true)]
-    #[case("| a | b |", true)]
+    #[case("Text with > inside | here", true)]
     fn classifies_setext_text(#[case] payload: &str, #[case] expected: bool) {
         let matcher = LinkReferenceMatcher::production();
         assert_eq!(is_setext_text(payload, matcher), expected);
