@@ -1819,6 +1819,12 @@ plateau.
       cannot pass until then. Because the first `cargo test` command fails,
       `make test` never reaches its second, so `cargo test --doc --all-features`
       was run separately and reports **40 passed; 0 failed; 20 ignored**.
+- [x] (2026-09-12) EP-M1, CodeRabbit review: **completed, zero findings**
+      across 19 reviewed files, run through `scrutineer` against the local
+      branch's own work. Transcript in Artefacts and notes, `EV-M1-CR`. No
+      concern was raised about the red behavioural suite or the unwired module
+      tree, both of which were given to the reviewer as stated intent rather
+      than left to be inferred.
 - [ ] EP-M1: confirm `std::fs::canonicalize` case behaviour on the macOS and
       Windows release targets, per the INV-DEDUP residual gap.
 - [ ] EP-M1: add `make mutants` and `mutants.toml`; reach zero survivors in
@@ -2611,6 +2617,29 @@ reason it matters everywhere else: a warning is an error in this build too. The
 `expect(dead_code, …)` attribute is absent from this build, because `cfg(test)`
 is set for a test target, so what keeps the *non-test* build clean is measured
 separately, in `EV-M1-DEADCODE`.
+
+**EV-M1-CR** — CodeRabbit review, run 2026-09-12 through `scrutineer` against
+the local branch, log at `/tmp/coderabbit-mdtablefix-git-option.out`. The base
+is the branch this one is stacked on, so the review is scoped to this branch's
+work rather than to pull request #464's:
+
+```plaintext
+coderabbit review --agent --base check-option
+```
+
+```plaintext
+{"type":"complete","status":"review_completed","findings":0,"reviewedFiles":["Cargo.lock","Cargo.toml", …]}
+```
+
+Nineteen files were reviewed: `src/select.rs` and the five `src/select/`
+modules with their five test files, `src/cli.rs`, `src/main.rs`, `Cargo.toml`,
+`Cargo.lock`, the `git_file_selection` feature with its step definitions and
+its integration test, and this plan. The review reported **zero findings**. The
+status line is quoted with its file list elided; the log holds all nineteen
+names. This is a *local* review, not a pull-request review: it diffs the
+working tree against a base commit, so it reviewed the rebased work that is not
+yet pushed, which a pull-request review could not have reached while
+`origin/git-option` still points at the pre-rebase tip.
 
 ## Revision note
 
