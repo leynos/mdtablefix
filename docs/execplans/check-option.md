@@ -404,7 +404,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
       Revision 14 and is complete: `INV-PREDICTS` had been claimed against
       `tests/check_properties.rs`, which does not test it, and is now
       discharged by `tests/check_prediction.rs` and its corpus module, with
-      both negative-control runs recorded. The plan is **not** `COMPLETE`:
+      both negative-control runs recorded. Step 12 was added in Revision 15
+      and is complete: `docs/developers-guide.md`'s shared-closure argument no
+      longer stops at the structure, and names the test that covers what the
+      structure cannot. The plan is **not** `COMPLETE`:
       `EP-M6` is still blocked by #474, and `make test` is still red on that
       counterexample. Gates for Revision 14, run through the gate runner:
       `check-fmt`, `lint`, `typecheck`, `markdownlint` (34 files, 0 errors),
@@ -412,7 +415,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
       which is red only on `check_properties`; and the `--no-fail-fast` run
       executes all 43 binaries with that same single failure and passes the
       doctests, so no part of the suite is left unrun. Logs are listed in
-      Revision 14.
+      Revision 14. Revision 15 is a documentation revision, so its gate run is
+      the Markdown pair: `markdownlint` (34 files, 0 errors) and `nixie` pass,
+      and the Rust gates were not re-run because no Rust, test, or
+      configuration file changed.
 
 ## Surprises & discoveries
 
@@ -2542,6 +2548,11 @@ re-running a gate to diagnose a failure.
     module, which run `--check` and `--in-place` over byte-identical copies with
     the printer as the oracle, and run the obligation's negative control as a
     real mutation. See `Artefacts and notes → EP-M7 prediction control`.
+12. Added in Revision 15: amend `docs/developers-guide.md`'s "One formatter,
+    built once" so that the shared-closure argument is stated as necessary but
+    not sufficient and the test that covers the rest is named. The section
+    previously left a reader able to conclude that the structure alone makes
+    the two modes agree, which is the reading Revision 14 refuted.
 
 ## Validation and acceptance
 
@@ -4435,3 +4446,81 @@ persisted regression file — and the doctests pass, 40 passed and 20 ignored. N
 `/tmp/doctest-mdtablefix-check-option.out`,
 `/tmp/markdownlint-mdtablefix-check-option.out`,
 `/tmp/nixie-mdtablefix-check-option.out`.
+
+### Revision 15, 2026-09-11
+
+Revision 14 added the missing `INV-PREDICTS` artefact. This revision records
+what followed from it: the one sentence in the developer's guide that it left
+stale, a hand-check of the committed artefact, a second CodeRabbit run in place
+of the one that returned nothing, and the pull request description. No
+requirement, acceptance criterion, or code file changes; the diff is two
+Markdown files.
+
+`docs/developers-guide.md`'s "One formatter, built once" said that one closure
+behind both modes "is what makes `--check` and `--in-place` structurally unable
+to disagree". The sentence is true, and it was read as sufficient — which is
+exactly the reading Revision 14 refuted, because two modes that consult one
+decision agree with each other however wrong that decision is. The section now
+separates the two claims: the structure is necessary but not sufficient, and
+`tests/check_prediction.rs` is what tests the rest. It names the corpus module,
+states why two runs would be vacuous, and says what the third run supplies
+instead. That is `EP-M7` step 4's subject matter, so the step list gains a step
+12 for it.
+
+The artefact was then checked by hand as well as through the suite, on the
+fixture that carries the terminator rule: a padded table with no final newline.
+`--check` printed `/tmp/spot2/input.md +1 -1` on stdout and
+`1 file would be reformatted.` on stderr, exited 1, and left the file
+byte-identical, confirmed by `cmp` against a copy. `--in-place` over that same
+file exited 0 and added the terminator, visible under `od -c` as the closing
+`\n`, and a second `--check` printed `1 file left unchanged.` and exited 0. The
+report line names the path as given rather than the file's base name, the counts
+are the rewrite's own delta, and the sequence is the prediction test in
+miniature. Doing it by hand also exercises the shipped binary rather than the
+test harness, which is the only place `main`'s argument handling, the exit
+status, and the printer meet.
+
+`coderabbit review --agent --committed` was run again over the branch tip
+`17d242e`, because the attempt taken in Revision 14's wake stopped without a
+result — its log held only `review_context` and `connecting_to_review_service`.
+The second run completed: exit 0, `review_completed`, 0 findings, 73 seconds,
+against a `reviewedFiles` set measured as exactly equal to
+`git diff --name-only origin/main...HEAD` — 73 files either way, no file in the
+diff unreviewed and none reviewed that is not in the diff, the two new test
+files among them.
+As with the earlier reviews, that zero means nothing was raised, not that the
+diff was exhaustively audited. Log:
+`/tmp/coderabbit-mdtablefix-check-option.out`. This revision is documentation
+that was committed after that review, so the reviewed tip predates it; a
+further run over the new head was requested and its outcome is recorded in the
+revision that follows this one.
+
+Pull request #464's description still described the plan as unstarted — it
+carried "the Rust gates were not applicable", which was written when the
+deliverable was expected to be documentation, and a Sourcery summary of the
+plan document rather than of the implementation. It was rewritten to describe
+what the branch does: the two reporting modes and the exit-status contract, the
+three changes taken beyond the two flags, the obligation-to-artefact table, the
+gate behaviour including the #474 deviation and the `--no-fail-fast` run, the
+supersession of issue #452, and the design review's four architectural
+corrections. The body is a summary of this plan and cites it for the detail;
+where the two disagree, the plan is the record.
+
+A gate run over this revision cost one fix, and it is the same defect class this
+plan already records twice: a line wrapped so that it begins with `#452` parses
+as an ATX heading missing its space, and `make markdownlint` reports MD018. The
+prose was reflowed to put the issue number mid-line, changing nothing about
+what the revision says. The reminder is that a rewrap is an edit, and a plan
+that mentions issue numbers in running prose will trip this whenever a line
+break lands on the `#`.
+
+Gate run, through the gate runner, over this revision: `make markdownlint` (34
+files, 0 errors) and `make nixie` (all diagrams validated) pass. The first
+markdownlint attempt was the red one described above; the re-run after the
+reflow is the pass that counts, and it was taken over this text, including this
+paragraph. Logs: `/tmp/markdownlint-mdtablefix-check-option.out`,
+`/tmp/nixie-mdtablefix-check-option.out`. The Rust gates were not re-run, and
+not because they would fail: nothing outside these two Markdown files changed,
+so `check-fmt`, `lint`, `typecheck`, and the test suite would report exactly
+what Revision 14 recorded — green apart from the pre-existing #474
+counterexample in `check_properties`.

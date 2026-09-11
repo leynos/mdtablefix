@@ -304,6 +304,17 @@ route would drift from the writer by edits rather than by construction, which
 is the divergence the shared closure removes. See
 `docs/adrs/0009-check-and-diff-reporting.md`.
 
+The structure is necessary but not sufficient, and it is tested as well as
+argued. `tests/check_prediction.rs` runs the reporting and writing modes over
+byte-identical copies of one document and compares the report against the
+writer's bytes. Those two runs alone would be vacuous, because both modes
+consult one shared change decision: a decision that answered wrongly would move
+them together and the comparison would still agree. Each case therefore runs
+the document a third time in print mode, which renders the formatter's output
+without consulting that decision, and measures both sides against it. Its
+sixteen-document corpus is in `tests/check_prediction/corpus.rs`, one document
+per transform flag, each measured to drift under the flag it is paired with.
+
 ### Explicit argument order
 
 `driver::in_argument_order(Vec<(usize, T)>) -> Vec<T>` sorts indexed results
