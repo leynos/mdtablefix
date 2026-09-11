@@ -13,7 +13,7 @@
 use std::{
     borrow::Cow,
     io::{self, Read, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::ExitCode,
 };
 
@@ -33,11 +33,12 @@ use rayon::prelude::*;
 
 mod driver;
 
-use driver::{ExitStatus, Formatter, Mode, analyse, exit_status, in_argument_order};
+use driver::{ExitStatus, Formatter, Inputs, Mode, analyse, exit_status, in_argument_order};
 
 #[derive(Parser)]
 #[command(version, about = "Reflow broken markdown tables")]
-#[command(group(clap::ArgGroup::new("mode").multiple(false).requires("files")))]
+#[command(group(clap::ArgGroup::new("inputs").args(["files"])))]
+#[command(group(clap::ArgGroup::new("mode").multiple(false).requires("inputs")))]
 struct Cli {
     /// Rewrite files in place
     #[arg(long = "in-place", group = "mode")]
@@ -57,9 +58,10 @@ struct Cli {
 impl Cli {
     /// The mode the flags select.
     ///
-    /// The argument group already guarantees that at most one flag is set, and
-    /// that any flag at all requires files, so these branches cannot disagree
-    /// with the parser: they only name the decision it made.
+    /// The `mode` argument group already guarantees that at most one flag is
+    /// set, and its `requires("inputs")` guarantees that any flag at all comes
+    /// with a file argument, so these branches cannot disagree with the parser:
+    /// they only name the decision it made.
     fn mode(&self) -> Mode {
         if self.in_place {
             Mode::InPlace
@@ -140,9 +142,10 @@ fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
 /// This is the only ambient filesystem boundary for CLI file processing. The
 /// returned directory capability restricts subsequent handler I/O to the
 /// selected file's parent directory.
-fn open_file_parent(path: &Path) -> anyhow::Result<(Dir, Utf8PathBuf)> {
-    let path = Utf8Path::from_path(path)
-        .with_context(|| format!("converting {} to a UTF-8 path", path.display()))?;
+///
+/// The path is already UTF-8, because [`Inputs::resolve`] converts every
+/// positional argument once, before any file is analysed.
+fn open_file_parent(path: &Utf8Path) -> anyhow::Result<(Dir, Utf8PathBuf)> {
     let parent = path
         .parent()
         .filter(|parent| !parent.as_str().is_empty())
@@ -211,19 +214,12 @@ fn format_stdin(input: &str, opts: FormatOpts) -> String {
 /// writes, and every other mode reads.
 fn analyse_one(
     mode: Mode,
-    path: &Path,
+    path: &Utf8Path,
     format: &Formatter,
 ) -> anyhow::Result<(FileReport, String)> {
     open_file_parent(path)
-        .and_then(|(directory, storage_key)| {
-            // `open_file_parent` has already rejected a non-UTF-8 path, so
-            // this only keeps the function total instead of panicking on a
-            // path the user supplied.
-            let display_path = Utf8Path::from_path(path)
-                .with_context(|| format!("converting {} to a UTF-8 path", path.display()))?;
-            analyse(mode, &directory, display_path, &storage_key, format)
-        })
-        .with_context(|| format!("{} {}", mode.verb(), path.display()))
+        .and_then(|(directory, storage_key)| analyse(mode, &directory, path, &storage_key, format))
+        .with_context(|| format!("{} {}", mode.verb(), path))
 }
 
 /// Writes `text` to standard output.
@@ -250,24 +246,52 @@ fn is_broken_pipe(error: &anyhow::Error) -> bool {
 
 /// Runs the requested mode and returns the documented exit status.
 ///
-/// The only errors returned here are infrastructure failures — standard input
-/// or standard output. A file that cannot be read or rewritten is reported as
-/// it is encountered, counted in the summary, and folded into
-/// [`ExitStatus::Error`], so one unreadable file does not abandon the rest.
+/// Resolution comes first, so a command line that cannot name its inputs fails
+/// as a whole — through [`exit_status`], like every other operational failure —
+/// rather than being discovered file by file. The only errors propagated out of
+/// here are infrastructure failures of standard input or standard output. A
+/// file that cannot be read or rewritten is reported as it is encountered,
+/// counted in the summary, and folded into [`ExitStatus::Error`], so one
+/// unreadable file does not abandon the rest.
 fn run() -> anyhow::Result<ExitStatus> {
     let cli = Cli::parse();
-
-    if cli.files.is_empty() {
-        let mut input = String::new();
-        io::stdin().read_to_string(&mut input)?;
-        write_stdout(&format_stdin(&input, cli.opts))?;
-        return Ok(ExitStatus::Success);
-    }
-
     let mode = cli.mode();
-    let format = formatting_closure(cli.opts);
+    let inputs = match Inputs::resolve(cli.files) {
+        Ok(inputs) => inputs,
+        Err(error) => {
+            eprintln!("{error:?}");
+            return Ok(exit_status(mode, false, true));
+        }
+    };
+
+    match inputs {
+        Inputs::Stdin => run_stdin(cli.opts),
+        Inputs::Files(files) => run_files(mode, &files, cli.opts),
+    }
+}
+
+/// Formats standard input and writes the result to standard output.
+///
+/// The destination is standard output whatever the mode, because there is no
+/// file for a mode flag to act on: the parser's `inputs` group is what
+/// guarantees a mode flag arrives with a file argument instead.
+fn run_stdin(opts: FormatOpts) -> anyhow::Result<ExitStatus> {
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input)?;
+    write_stdout(&format_stdin(&input, opts))?;
+
+    Ok(ExitStatus::Success)
+}
+
+/// Analyses the named files under `mode`, in argument order.
+///
+/// The only errors returned here are writes to standard output; a file that
+/// cannot be read or rewritten is reported and counted instead, and decides the
+/// status along with the drift the reporting modes found.
+fn run_files(mode: Mode, files: &[Utf8PathBuf], opts: FormatOpts) -> anyhow::Result<ExitStatus> {
+    let format = formatting_closure(opts);
     let results = in_argument_order(
-        cli.files
+        files
             .par_iter()
             .enumerate()
             .map(|(index, path)| (index, analyse_one(mode, path, &format)))

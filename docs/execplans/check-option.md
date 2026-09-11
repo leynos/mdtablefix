@@ -365,6 +365,20 @@ Hard invariants. Violating one requires escalation, not a workaround.
       `Surprises & discoveries` and
       `Artefacts and notes → EP-M6 baseline blocked`. The `make test` gate is
       **red** at `a06bab6` as a result.
+- [x] Interleaved: forward-compatibility with the `--git` plan (pull request
+      #466). Four small changes, requested by that plan's author, that stop this
+      branch's shape from foreclosing a second input source: the `mode` group now
+      requires a named `inputs` group holding `files`; `driver::Inputs` replaces
+      `main`'s `cli.files.is_empty()` test, so "no paths were named" is no longer
+      conflated with "the source matched nothing"; input-resolution errors reach
+      `exit_status` and exit `2` like every other operational failure; and
+      `--in-place` no longer writes a file whose bytes would not change.
+      `--git` itself is **not** implemented — file discovery is that plan's
+      scope. `cargo test --bin mdtablefix` (46 passed) and
+      `cargo test --test cli_check` (7 passed), `--test in_place_atomic`
+      (10 passed) are green on the new tests. See `Decision log`,
+      `Surprises & discoveries`, and
+      `Artefacts and notes → Forward-compatibility for --git (#466)`.
 - [ ] EP-M7 Documentation, ADRs, changelog, and issue closure.
 
 ## Surprises & discoveries
@@ -569,6 +583,38 @@ Hard invariants. Violating one requires escalation, not a workaround.
   the property is flaky because the generator is sparse, which is exactly the
   vacuity hazard issue #468's acceptance criteria name; the residual variance is
   recorded as an open question rather than asserted away.
+  Date/Author: 2026-09-11.
+
+- Observation: resolving the positional arguments up front **changes what one
+  unusable path does to a run**. Before, a path that is not valid UTF-8 was
+  rejected per file by `open_file_parent`, so it was counted as one file's error
+  while its siblings were still analysed and reported. Now the whole run fails
+  before the parallel stage, prints no reports, and exits `2`.
+  Evidence: `tests/cli_check.rs::a_non_utf8_path_argument_exits_error` runs
+  `--check clean.md <invalid>` and asserts exit `2`, an empty standard output, and
+  a message naming the problem; the source behaviour is
+  `Inputs::resolve`'s single conversion, and
+  `src/driver_tests.rs::resolve_declines_a_non_utf8_path` pins it at unit level.
+  The change is deliberate: a path the tool cannot name cannot be a per-file
+  report, because the report would have to name it. It is called out here because
+  it is a user-visible difference that the `--git` request implied rather than
+  stated.
+  Date/Author: 2026-09-11.
+
+- Observation: making the clean-file write a no-op also **removes the symlink
+  refusal for clean targets**. `--in-place link.md`, where `link.md` is a symlink
+  to a file that already matches the formatter's output, used to fail with
+  `refusing to replace the symlink …` and now succeeds without touching the link
+  or its target.
+  Evidence: measured on the built binary — a symlink to `| A | B |\n| 1 | 2 |\n`
+  exits `0`, and the link, its target, and both inodes and modification times are
+  unchanged. A symlink to a *drifting* file still fails, which
+  `tests/in_place_atomic.rs::in_place_declines_symlinked_target` pins beside the
+  new `in_place_accepts_a_symlink_to_a_clean_file`; `src/io_tests.rs` and
+  `src/io_tracing_tests.rs` pin the refusal at the `replace_file` level and are
+  untouched, because the refusal is a property of the replacement and there is
+  now no replacement to make. Declared to the `--git` plan rather than left for
+  a reviewer to find.
   Date/Author: 2026-09-11.
 
 ## Decision log
@@ -1009,6 +1055,71 @@ Hard invariants. Violating one requires escalation, not a workaround.
   stands. Recording the true state is the whole point of the `Progress` section.
   Date/Author: 2026-09-11.
 
+- Decision: the `mode` group requires a new `inputs` group that holds `files`,
+  so the input source is a named thing rather than a flag-to-positional
+  dependency.
+  Rationale: `requires("files")` states the same runtime behaviour, but it binds
+  every mode flag to one particular source. The requesting plan's author measured
+  both shapes on `clap` 4.6.6 and found them behaviourally identical (`[]` and
+  `["--in-place"]` refused; `["a.md", "b.md"]` and `["--in-place", "a.md"]`
+  accepted; `["--check", "--diff", …]` refused), and
+  `tests/cli_check.rs::mode_flags_require_an_input_source` pins that matrix from
+  this branch's side, including the two-file cell that a group with
+  `multiple(false)` could plausibly have broken.
+  Date/Author: 2026-09-11, requested by the `--git` plan's author.
+
+- Decision: `main` no longer chooses between standard input and files by testing
+  whether the file list is empty. `driver::Inputs::resolve` returns
+  `Inputs::Stdin` or `Inputs::Files(Vec<Utf8PathBuf>)`, and `run` matches on it.
+  Rationale: emptiness-as-sentinel conflates "no paths were named, so read
+  standard input" with "the source matched no paths". A source that discovers its
+  own inputs must be able to match nothing and exit `0`, rather than block on a
+  terminal's standard input. The conversion to `Utf8PathBuf` happens once in the
+  same place, so the parallel stage no longer carries a path that cannot name a
+  file in a `Dir` capability. See `AX-6`.
+  Date/Author: 2026-09-11, requested by the `--git` plan's author.
+
+- Decision: input-resolution failures return through `exit_status(mode, false,
+  true)` rather than propagating out of `run`.
+  Rationale: the documented contract is that an operational error exits `2`, and
+  a pre-flight failure — a path that cannot be named, and later a missing `git`
+  or a directory that is not a repository — is an operational error like any
+  other. Folding it into `exit_status` keeps one place that decides the status,
+  and `tests/cli_check.rs::a_non_utf8_path_argument_exits_error` pins exit `2`
+  for the one such failure that exists today.
+  Date/Author: 2026-09-11, requested by the `--git` plan's author.
+
+- Decision: `--in-place` does not write a file whose bytes would not change.
+  Rationale: the write is invisible in the text but not in the file. `--check`
+  reports drift only when the bytes differ, so a clean file is by definition one
+  `--in-place` has nothing to do to; an unconditional `replace_file` still
+  renames a temporary over the target, swapping the inode and the modification
+  time, so a staleness check downstream sees a rebuild where there was nothing
+  to rebuild. `tests/in_place_atomic.rs` and `src/driver_tests.rs` now pin the
+  inode and the modification time of a clean target, each beside a pair that
+  proves a drifting file *is* replaced, so neither test can pass by never
+  writing at all. Behaviour change accepted and declared to the `--git` plan: a
+  symlink to a *clean* file is no longer declined, because a declined
+  replacement is a property of a replacement that no longer happens.
+  Date/Author: 2026-09-11. Offered as optional by the `--git` plan's author and
+  accepted here.
+
+- Decision: the `--git` plan's remaining requests need no change here, and none
+  was made. `ReadOnlyDir`, `Assessment`, `Mode`, `exit_status`, and
+  `in_argument_order` stay named items, which is what `--git --list-files` needs
+  to take a `ReadOnlyDir` and be a `Mode` variant; no file discovery was added,
+  because directory walking, globbing, and `git ls-files` are that plan's scope
+  and not this one's.
+  Rationale: it also closes the `clap` trap the requesting plan described. That
+  trap — `requires` from one boolean flag to another being unreliable once a
+  positional is present — needs a flag-to-flag relationship, and this CLI has
+  none: every requirement here is flag-to-group, and the acceptance and rejection
+  cells are measured by `tests/cli_check.rs::mode_flags_require_an_input_source`
+  rather than reasoned about. The `AX-4` citation in the ADR stays, as the
+  requesting plan asked: `rayon`'s `collect` still does not document order
+  preservation.
+  Date/Author: 2026-09-11, requested by the `--git` plan's author.
+
 ## Outcomes & retrospective
 
 Not started. Complete at each milestone boundary and before setting the plan
@@ -1159,6 +1270,14 @@ interface.
   **not** treat a lone `\r` as a separator. It therefore disagrees with AX-1
   on lone-`\r` input. Every obligation below is stated over exactly one of the
   two notions, never both.
+- AX-6: an empty positional list says only that no paths were named; it is not a
+  statement about where the input comes from. The driver therefore resolves the
+  command line into an `Inputs` value — `Stdin` or `Files(Vec<Utf8PathBuf>)` —
+  rather than testing the list for emptiness. This is a design decision rather
+  than a third-party fact, recorded here because the `--git` plan (pull request
+  #466) depends on it: a source that discovers its own inputs must be able to
+  match nothing and exit `0` without falling through to a terminal's standard
+  input.
 
 ### Obligations
 
@@ -1678,6 +1797,24 @@ pub enum ExitStatus { Success, Drift, Error }
 /// files yields [`ExitStatus::Success`], as does a bare invocation.
 pub fn exit_status(mode: Mode, any_drift: bool, any_error: bool) -> ExitStatus;
 
+/// Where the text to format comes from. See `AX-6`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Inputs {
+    /// No paths were named: the document is read from standard input.
+    Stdin,
+    /// The named files, in argument order.
+    Files(Vec<camino::Utf8PathBuf>),
+}
+
+impl Inputs {
+    /// Resolves the command line's positional arguments.
+    ///
+    /// # Errors
+    /// Returns an error naming the offending path if any argument is not
+    /// valid UTF-8.
+    pub fn resolve(files: Vec<std::path::PathBuf>) -> anyhow::Result<Self>;
+}
+
 /// Reads a file and pairs its text with the formatted result.
 ///
 /// Takes [`ReadOnlyDir`], so this function cannot write. `storage_key` is the
@@ -1693,7 +1830,11 @@ pub fn assess(
     format: &(dyn Fn(&SourceDocument) -> String + Sync),
 ) -> anyhow::Result<Assessment>;
 
-/// Writes the formatted text back. Only reachable from [`Mode::InPlace`].
+/// Writes the formatted text back.
+///
+/// Only reachable from [`Mode::InPlace`], and only for a file whose bytes would
+/// change: the replacement renames a temporary over the target, so an
+/// unconditional call would swap the inode of a file it left byte-identical.
 ///
 /// # Errors
 /// Returns an error if the file cannot be written.
@@ -1721,7 +1862,8 @@ Adapter only: `clap` inbound, `cap_std` and the standard streams outbound.
 ```rust
 #[derive(Parser)]
 #[command(version, about = "Reflow broken markdown tables")]
-#[command(group(clap::ArgGroup::new("mode").multiple(false).requires("files")))]
+#[command(group(clap::ArgGroup::new("inputs").args(["files"])))]
+#[command(group(clap::ArgGroup::new("mode").multiple(false).requires("inputs")))]
 struct Cli {
     /// Rewrite files in place
     #[arg(long = "in-place", group = "mode")]
@@ -1738,6 +1880,18 @@ struct Cli {
     files: Vec<PathBuf>,
 }
 ```
+
+The `inputs` group holds the input *sources* — today the `files` positional
+alone — and `mode` requires it, so a mode flag still demands something to act
+on while the source itself is a named thing to extend. The requesting `--git`
+plan needs the separate group: its `--git` is a second source, and a
+flag-to-positional `requires` would have bound every mode flag to files.
+
+`run` resolves the command line into an `Inputs` value before doing anything
+else — see `AX-6` — and routes a resolution failure through
+`exit_status(mode, false, true)`, so it exits `2` like every other operational
+error rather than propagating out of `run`. `run_stdin` and `run_files` hold the
+two halves that the empty-list test used to jump between.
 
 `fn main` returns `std::process::ExitCode`. A broken pipe on standard output,
 as in `mdtablefix --check *.md | head`, must be caught and treated as a
@@ -3361,6 +3515,52 @@ to either one alone. Satisfying the corpus alone does not close it, and neither
 does a property test that only sometimes samples the shape — which is the state
 the branch is in now.
 
+### Forward-compatibility for `--git` (#466)
+
+The `--git` plan's author asked for four changes and supplied a rationale and a
+`clap` measurement for each. None of them implements `--git`; all four keep this
+branch's shape from foreclosing it. The requests are recorded as A1–A4 in the
+request that arrived, and in this plan's own terms:
+
+| Request | This plan's change | Evidence |
+| --- | --- | --- |
+| mode group requires an `inputs` group | `inputs` holds `files`; `mode.requires("inputs")` | `tests/cli_check.rs::mode_flags_require_an_input_source` |
+| an explicit input type, not an empty-list test | `driver::Inputs` with `Stdin` / `Files` | `src/driver_tests.rs::resolve_*`, `AX-6` |
+| resolution errors reach `exit_status` | `run` prints and returns `exit_status(mode, false, true)` | `tests/cli_check.rs::a_non_utf8_path_argument_exits_error` |
+| `--in-place` is a no-op for clean files | the `Mode::InPlace` payload arm is guarded by `is_changed` | inode and modification-time assertions in `src/driver_tests.rs` and `tests/in_place_atomic.rs` |
+
+Measurements taken while implementing, all on the built binary:
+
+```plaintext
+$ printf '| A | B |\n| 1 | 2 |\n' > clean.md; ln -s clean.md link.md
+$ ls -i --full-time
+8005586 -rw-r--r--. 1 leynos leynos 20 2026-09-11 15:48:16.884265088 +0200 clean.md
+8005588 lrwxrwxrwx. 1 leynos leynos  8 2026-09-11 15:48:16.886265118 +0200 link.md -> clean.md
+$ mdtablefix --in-place clean.md; echo $?
+0
+$ mdtablefix --in-place link.md; echo $?
+0
+$ ls -i --full-time
+8005586 -rw-r--r--. 1 leynos leynos 20 2026-09-11 15:48:16.884265088 +0200 clean.md
+8005588 lrwxrwxrwx. 1 leynos leynos  8 2026-09-11 15:48:16.886265118 +0200 link.md -> clean.md
+```
+
+Both the inode and the modification time are unchanged by the clean-file run,
+and the clean symlink succeeds. The second line is the behaviour change recorded
+in `Surprises & discoveries`: before this change, `--in-place` over any symlink
+called `replace_file` unconditionally and was refused.
+
+Two further requests needed no code. `--git --list-files` will be a `Mode`
+variant taking a `ReadOnlyDir`, and all five of the named items it depends on
+(`ReadOnlyDir`, `Assessment`, `Mode`, `exit_status`, `in_argument_order`) are
+still items rather than inlined. No file discovery was added: directory walking,
+globbing, and `git ls-files` are pull request #466's scope, and the plan's
+`Constraints` place new CLI surface outside this plan. The `clap` flag-to-flag
+hazard the request described does not arise, because this CLI has no
+flag-to-flag requirement to be unreliable — the `mode`-to-`inputs` requirement is
+flag-to-group, and its cells are measured rather than reasoned about. The `AX-4`
+citation in `ADR 0009` stays, as asked.
+
 ## Documentation and skills to consult
 
 Repository documents:
@@ -3666,3 +3866,49 @@ the branch. What the discovery does change is the meaning of the `test` gate for
 run is not by itself evidence that `INV-IDEMPOTENT` holds. `EP-M7` can proceed
 on its documentation diff, gated by `markdownlint` and `nixie`, but the feature
 cannot be called closed while a `--headings` input is not a fixed point.
+
+### Revision 10, 2026-09-11
+
+Forward-compatibility with the `--git` plan (pull request #466): four small
+changes, no new CLI surface, and `--git` itself not implemented. The `--git`
+plan is sequenced after this one, and its author asked for the changes so that
+its second input source would not have to be contorted around this branch's
+shape — with the explicit invitation to decline anything that conflicted with
+this plan. Nothing did.
+
+What changed:
+
+- The `mode` group now requires an `inputs` group holding `files`, so a mode
+  flag still demands an input source while the source is a named thing to
+  extend. Behaviour is unchanged; the requesting plan measured both shapes on
+  `clap` 4.6.6, and `tests/cli_check.rs` now pins the whole accept/reject matrix
+  from this side, including the two-file positional that a group with
+  `multiple(false)` could plausibly have broken.
+- `driver::Inputs` replaces `main`'s `cli.files.is_empty()` test, recorded as
+  `AX-6` in `Verification plan`: no paths named is `Inputs::Stdin`, and a source
+  that resolves to no paths is `Inputs::Files(vec![])`, which a future `--git`
+  needs in order to exit `0` on an empty match rather than block on a terminal.
+- Input resolution now happens before the parallel stage and its failures return
+  through `exit_status(mode, false, true)`, so they exit `2` like every other
+  operational failure. This is a user-visible change for a non-UTF-8 argument,
+  recorded in `Surprises & discoveries`: the run now fails as a whole instead of
+  counting that path as one file's error.
+- `--in-place` no longer writes a file whose bytes would not change. The bytes
+  would be identical but the file would not be: the replacement renames a
+  temporary over the target, so the inode and the modification time would move.
+  Both properties are now pinned, each beside a positive control that proves a
+  drifting file *is* replaced. This is a behaviour change and is declared as one:
+  a symlink to a clean file is no longer declined, because there is no
+  replacement to decline.
+
+The plan's interfaces were updated to match (`driver::Inputs`, the `write_back`
+doc, the `Cli` group attributes and the `run`/`run_stdin`/`run_files` split), the
+`Decision log` carries one entry per request plus one recording that the
+remaining requests needed no change, and
+`Artefacts and notes → Forward-compatibility for --git (#466)` carries the
+request-to-evidence table and the inode measurement. The `AX-4` citation stays in
+the ADR, as the requesting plan asked.
+
+`EP-M6` stays blocked and `EP-M7` stays pending; this revision neither unblocks
+nor blocks them. `make test` is still red for the recorded #474 counterexample,
+so no commit in this revision claims a passing test suite.

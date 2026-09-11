@@ -3,11 +3,16 @@
 //! Each test drives the real binary and asserts on the observable contract: a
 //! successful rewrite preserves the target's mode and leaves no temporary file
 //! behind, a failed rewrite leaves the original byte-identical, and a symlinked
-//! target is declined rather than replaced by a regular file.
+//! target is declined rather than replaced by a regular file. A file that is
+//! already formatted is not rewritten at all, so a symlink to one is not
+//! declined — there is nothing to decline.
 
 use std::fs;
 #[cfg(unix)]
-use std::{fmt::Write as _, os::unix::fs::PermissionsExt};
+use std::{
+    fmt::Write as _,
+    os::unix::fs::{MetadataExt, PermissionsExt},
+};
 
 use assert_cmd::Command;
 #[cfg(unix)]
@@ -327,6 +332,71 @@ fn in_place_declines_symlinked_target() {
         BROKEN,
         "declining a symlink must leave its target untouched"
     );
+    assert!(
+        fs::symlink_metadata(&link)
+            .expect("read link metadata")
+            .file_type()
+            .is_symlink(),
+        "the symlink itself must survive"
+    );
+    assert_eq!(entry_names(dir.path()), vec!["link.md", "real.md"]);
+}
+
+/// A file that is already formatted is not rewritten.
+///
+/// The bytes written would be the bytes already there, but the file would not
+/// be the same file: the replacement renames a temporary over the target, so an
+/// unconditional write would swap the inode and move the modification time. A
+/// build system watching this file would see a change where there was none.
+#[cfg(unix)]
+#[test]
+fn in_place_leaves_a_clean_file_untouched() {
+    let dir = tempdir().expect("create temporary directory");
+    let target = dir.path().join("clean.md");
+    fs::write(&target, FIXED).expect("write fixture");
+    let before = fs::metadata(&target).expect("read metadata before");
+
+    in_place(&target).success();
+
+    let after = fs::metadata(&target).expect("read metadata after");
+    assert_eq!(
+        before.ino(),
+        after.ino(),
+        "a clean file must not be replaced through a temporary"
+    );
+    assert_eq!(
+        before.mtime(),
+        after.mtime(),
+        "a clean file's modification time must not move"
+    );
+    assert_eq!(
+        before.mtime_nsec(),
+        after.mtime_nsec(),
+        "a clean file's modification time must not move"
+    );
+    assert_eq!(fs::read_to_string(&target).expect("read fixture"), FIXED);
+    assert_eq!(entry_names(dir.path()), vec!["clean.md"]);
+}
+
+/// A clean file is not written, so a symlink to one is not declined.
+///
+/// Declining a symlinked target is a property of the replacement, not of the
+/// run: with nothing to write there is nothing to decline, and the run succeeds
+/// without touching the link or its target.
+/// [`in_place_declines_symlinked_target`] pins the other half, where the target
+/// does need rewriting.
+#[cfg(unix)]
+#[test]
+fn in_place_accepts_a_symlink_to_a_clean_file() {
+    let dir = tempdir().expect("create temporary directory");
+    let real = dir.path().join("real.md");
+    let link = dir.path().join("link.md");
+    fs::write(&real, FIXED).expect("write fixture");
+    std::os::unix::fs::symlink("real.md", &link).expect("create symlink");
+
+    in_place(&link).success();
+
+    assert_eq!(fs::read_to_string(&real).expect("read real file"), FIXED);
     assert!(
         fs::symlink_metadata(&link)
             .expect("read link metadata")

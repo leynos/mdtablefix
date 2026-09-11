@@ -1,17 +1,19 @@
 //! Mode-independent file analysis and the documented exit statuses.
 //!
-//! This is the application boundary: the one place in the binary where a
-//! directory capability is turned into text and back, and where the process
-//! exit status is decided. It sits beside `src/main.rs` rather than in the
-//! library, because the library's entry points stay infallible and free of
-//! filesystem policy.
+//! This is the application boundary: the one place in the binary where the
+//! command line is resolved into an input source, where a directory capability
+//! is turned into text and back, and where the process exit status is decided.
+//! It sits beside `src/main.rs` rather than in the library, because the
+//! library's entry points stay infallible and free of filesystem policy.
 //!
 //! The reporting modes are handed a [`ReadOnlyDir`], so "a reporting mode
 //! cannot write" is a property of the type they receive rather than of a test
 //! double that declines to write.
 
-use anyhow::Context;
-use camino::Utf8Path;
+use std::path::PathBuf;
+
+use anyhow::{Context, anyhow};
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use mdtablefix::{
     LineEndingCounts,
@@ -152,6 +154,51 @@ pub fn exit_status(mode: Mode, any_drift: bool, any_error: bool) -> ExitStatus {
     }
 }
 
+/// Where the text to format comes from.
+///
+/// An explicit answer rather than "the file list is empty", because the two
+/// facts that emptiness would conflate are not the same: "no paths were named,
+/// so read standard input" and "the selected source resolved to no paths". The
+/// second is a legitimate outcome for a source that discovers its own inputs —
+/// it must be able to name nothing and still exit [`ExitStatus::Success`],
+/// rather than fall through to a standard input that may be a terminal. See
+/// `AX-6`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Inputs {
+    /// No paths were named: the document is read from standard input.
+    Stdin,
+    /// The named files, in argument order.
+    Files(Vec<Utf8PathBuf>),
+}
+
+impl Inputs {
+    /// Resolves the command line's positional arguments.
+    ///
+    /// The conversion to [`Utf8PathBuf`] happens once, here, rather than per
+    /// file: a path that is not valid UTF-8 cannot name a file within a
+    /// [`Dir`] capability, so a run containing one fails as a whole instead of
+    /// being counted as a single file's error while its siblings proceed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error naming the offending path if any argument is not valid
+    /// UTF-8.
+    pub fn resolve(files: Vec<PathBuf>) -> anyhow::Result<Self> {
+        if files.is_empty() {
+            return Ok(Self::Stdin);
+        }
+        let files = files
+            .into_iter()
+            .map(|path| {
+                Utf8PathBuf::from_path_buf(path)
+                    .map_err(|path| anyhow!("converting {} to a UTF-8 path", path.display()))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        Ok(Self::Files(files))
+    }
+}
+
 /// Reads a file and pairs its text with the formatted result.
 ///
 /// Takes [`ReadOnlyDir`], so this function cannot write. `storage_key` is the
@@ -178,10 +225,13 @@ pub fn assess(
     })
 }
 
-/// Writes the formatted text back. Only reachable from [`Mode::InPlace`].
+/// Writes the formatted text back.
 ///
-/// The replacement is atomic and capability-scoped: see
-/// [`mdtablefix::io::replace_file`].
+/// Only reachable from [`Mode::InPlace`], and only for a file whose bytes would
+/// change: see [`Assessment::is_changed`]. The replacement is atomic and
+/// capability-scoped, and it renames a temporary over the target, so an
+/// unconditional call would swap the inode of a file it left byte-identical.
+/// See [`mdtablefix::io::replace_file`].
 ///
 /// # Errors
 ///
@@ -235,11 +285,17 @@ pub fn analyse(
         Mode::Print => assessment.formatted.clone(),
         Mode::Check if is_changed => format!("{}\n", render_report_line(display_path, delta)),
         Mode::Diff if is_changed => render_diff(display_path, &assessment)?,
-        Mode::InPlace => {
+        // A clean file is left alone byte for byte. The write would be
+        // invisible in the text but not in the file: `replace_file` renames a
+        // temporary over the target, so it would swap the inode and the
+        // modification time of a file it did not change, and `make`-style
+        // staleness checks would see a rebuild where there was nothing to
+        // rebuild.
+        Mode::InPlace if is_changed => {
             write_back(directory, storage_key, &assessment)?;
             String::new()
         }
-        Mode::Check | Mode::Diff => String::new(),
+        Mode::InPlace | Mode::Check | Mode::Diff => String::new(),
     };
 
     Ok((

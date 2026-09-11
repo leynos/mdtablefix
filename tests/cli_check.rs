@@ -14,6 +14,7 @@
 //! place so that a mode cannot be added to it partially.
 
 use std::{
+    ffi::OsString,
     fs,
     path::{Path, PathBuf},
     time::SystemTime,
@@ -39,18 +40,28 @@ const RAGGED_INSERTIONS: i64 = 3;
 /// The matching deletion count.
 const RAGGED_DELETIONS: i64 = 3;
 
-/// Runs the binary with `args` in `directory` and returns its raw output.
+/// Runs the binary with raw arguments in `directory` and returns its output.
 ///
-/// Paths are passed relative to `directory`, which is also the working
-/// directory, so report lines name the files as the user wrote them rather
-/// than by an absolute path the temporary directory invented.
-fn run_in(directory: &Path, args: &[&str]) -> std::process::Output {
+/// The arguments are [`OsString`] rather than `&str` because a path on the
+/// command line need not be valid UTF-8, and what the tool does with such a path
+/// is part of its contract rather than an accident of the test helper.
+fn run_in_os(directory: &Path, args: &[OsString]) -> std::process::Output {
     Command::cargo_bin("mdtablefix")
         .expect("cargo binary")
         .current_dir(directory)
         .args(args)
         .output()
         .expect("run mdtablefix")
+}
+
+/// Runs the binary with `args` in `directory` and returns its raw output.
+///
+/// Paths are passed relative to `directory`, which is also the working
+/// directory, so report lines name the files as the user wrote them rather
+/// than by an absolute path the temporary directory invented.
+fn run_in(directory: &Path, args: &[&str]) -> std::process::Output {
+    let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+    run_in_os(directory, &args)
 }
 
 /// The captured standard output as text.
@@ -270,6 +281,103 @@ fn exit_status_matrix() {
             }
         }
     }
+}
+
+/// A mode flag demands an input source, and at most one mode flag is accepted.
+///
+/// The parser's half of the exit-status contract: because the `mode` group
+/// requires the `inputs` group, a mode flag that reaches the driver always has
+/// files to act on, so no mode has to ask whether an empty file list meant
+/// standard input. The rejections are exit `2`, like every other operational
+/// failure; a mode flag alone would otherwise be silently ignored while the
+/// run fell through to standard input.
+#[test]
+fn mode_flags_require_an_input_source() {
+    let dir = tempdir().expect("create temporary directory");
+    fs::write(dir.path().join("clean.md"), CLEAN).expect("write fixture");
+    fs::write(dir.path().join("also.md"), CLEAN).expect("write fixture");
+
+    for mode in [CliMode::InPlace, CliMode::Check, CliMode::Diff] {
+        // Two files, not one: `files` is a multi-value positional, so a group
+        // that admitted only a single use of it would fail right here.
+        let mut with_inputs: Vec<&str> = mode.args().to_vec();
+        with_inputs.extend(["clean.md", "also.md"]);
+        assert_eq!(
+            status_of(&run_in(dir.path(), &with_inputs)),
+            mode.expected_status(Files::Clean, false),
+            "{mode:?} over named files must be accepted"
+        );
+
+        let without_input = mode.args().to_vec();
+        let output = run_in(dir.path(), &without_input);
+        assert_eq!(
+            status_of(&output),
+            2,
+            "{mode:?} without an input source must be refused, stderr: {}",
+            stderr_of(&output)
+        );
+    }
+
+    let conflicting = ["--check", "--diff", "clean.md"];
+    let output = run_in(dir.path(), &conflicting);
+    assert_eq!(
+        status_of(&output),
+        2,
+        "two mode flags must conflict, stderr: {}",
+        stderr_of(&output)
+    );
+
+    // Naming a file with no mode flag still prints it: the historical contract,
+    // and the reason `inputs` is a group of its own rather than a requirement
+    // the mode flags impose on `files` directly.
+    assert_eq!(
+        status_of(&run_in(dir.path(), &["clean.md"])),
+        0,
+        "naming a file with no mode flag must still print it"
+    );
+}
+
+/// A path that is not valid UTF-8 fails the whole run, not just that one file.
+///
+/// Resolution happens before any file is analysed, so the exit status is the
+/// documented error code and nothing is reported as clean: an argument the tool
+/// cannot even name cannot be counted as one file's problem while its siblings
+/// proceed. The other file is named first, so a run that had already started
+/// analysing would show it.
+#[cfg(unix)]
+#[test]
+fn a_non_utf8_path_argument_exits_error() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    let dir = tempdir().expect("create temporary directory");
+    fs::write(dir.path().join("clean.md"), CLEAN).expect("write fixture");
+    let invalid = OsString::from_vec(b"bad\xff.md".to_vec());
+
+    let output = run_in_os(
+        dir.path(),
+        &[
+            OsString::from("--check"),
+            OsString::from("clean.md"),
+            invalid,
+        ],
+    );
+
+    assert_eq!(
+        status_of(&output),
+        2,
+        "a non-UTF-8 argument must exit 2, stderr: {}",
+        stderr_of(&output)
+    );
+    assert!(
+        stderr_of(&output).contains("UTF-8"),
+        "the error must name the problem: {}",
+        stderr_of(&output)
+    );
+    assert_eq!(
+        stdout_of(&output),
+        "",
+        "no file may be reported from a run that could not resolve its inputs"
+    );
 }
 
 /// A file's observable identity: name, length, and modification time.

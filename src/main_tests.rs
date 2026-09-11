@@ -73,6 +73,15 @@ fn open_dir(path: &std::path::Path) -> std::io::Result<Dir> {
     Dir::open_ambient_dir(&utf8, ambient_authority())
 }
 
+/// An ambient path as the UTF-8 path the command line would have supplied.
+///
+/// `Inputs::resolve` converts every positional argument once, before any file
+/// is analysed, so a path reaching the CLI's parent-directory boundary is
+/// already UTF-8.
+fn as_utf8(path: &std::path::Path) -> &Utf8Path {
+    Utf8Path::from_path(path).expect("the temporary directory path is UTF-8")
+}
+
 /// Lists the sorted names of the entries in `path`.
 fn entry_names(path: &std::path::Path) -> Vec<String> {
     let mut names: Vec<String> = fs::read_dir(path)
@@ -177,7 +186,8 @@ fn rewrite_in_place_declines_symlinked_target(no_opts: FormatOpts) {
     fs::write(&real, original).expect("write fixture");
     // A relative target keeps the link resolvable inside the capability.
     std::os::unix::fs::symlink("real.md", &link).expect("create symlink");
-    let (directory, name) = open_file_parent(&link).expect("open the CLI's directory capability");
+    let (directory, name) =
+        open_file_parent(as_utf8(&link)).expect("open the CLI's directory capability");
 
     let err = rewrite_in_place(&directory, &name, no_opts).expect_err("symlink must be declined");
 
@@ -203,7 +213,8 @@ fn capability_scoped_failure_removes_temporary_file() {
     let dir = tempdir().expect("create temporary directory");
     let target = dir.path().join("target.md");
     fs::create_dir(&target).expect("create target directory");
-    let (directory, name) = open_file_parent(&target).expect("open the CLI's directory capability");
+    let (directory, name) =
+        open_file_parent(as_utf8(&target)).expect("open the CLI's directory capability");
 
     // The temporary file is created, written and synced, and only then does
     // the final rename fail, because a file cannot replace a directory.

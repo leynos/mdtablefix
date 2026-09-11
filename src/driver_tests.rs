@@ -5,7 +5,9 @@
 //! binary; these tests pin the decisions that file cannot isolate, such as
 //! which mode may hold a writable capability.
 
-use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+use std::{fs, path::PathBuf};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -13,7 +15,16 @@ use mdtablefix::{io::SourceDocument, report::LineDelta};
 use rstest::rstest;
 use tempfile::{TempDir, tempdir};
 
-use super::{ExitStatus, Mode, ReadOnlyDir, analyse, assess, exit_status, in_argument_order};
+use super::{
+    ExitStatus,
+    Inputs,
+    Mode,
+    ReadOnlyDir,
+    analyse,
+    assess,
+    exit_status,
+    in_argument_order,
+};
 
 /// A ragged table, whose every line the aligning formatter below replaces.
 const RAGGED: &str = "|A|B|\n|---|---|\n|1|2|\n";
@@ -139,6 +150,43 @@ fn in_argument_order_accepts_an_empty_batch() {
     let empty: Vec<(usize, &str)> = Vec::new();
 
     assert_eq!(in_argument_order(empty), Vec::<&str>::new());
+}
+
+/// `AX-6`: no paths named means standard input, and says so in the type rather
+/// than by leaving a list empty.
+#[test]
+fn resolve_reads_an_empty_argument_list_as_standard_input() {
+    assert_eq!(
+        Inputs::resolve(Vec::new()).expect("resolve the empty argument list"),
+        Inputs::Stdin
+    );
+}
+
+/// The resolved files keep argument order, so a later sort cannot quietly
+/// reorder the reports the user will read.
+#[test]
+fn resolve_keeps_the_named_paths_in_argument_order() {
+    let files = vec![PathBuf::from("b.md"), PathBuf::from("a.md")];
+
+    assert_eq!(
+        Inputs::resolve(files).expect("resolve the named files"),
+        Inputs::Files(vec![Utf8PathBuf::from("b.md"), Utf8PathBuf::from("a.md"),])
+    );
+}
+
+/// A path that is not valid UTF-8 cannot name a file in a `Dir` capability, so
+/// resolution fails as a whole rather than as one file's error.
+#[cfg(unix)]
+#[test]
+fn resolve_declines_a_non_utf8_path() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    let invalid = PathBuf::from(OsString::from_vec(b"bad\xff.md".to_vec()));
+
+    let error = Inputs::resolve(vec![invalid]).expect_err("a non-UTF-8 path must fail");
+
+    let message = format!("{error:?}");
+    assert!(message.contains("UTF-8"), "unexpected error: {message}");
 }
 
 /// `INV-PREDICTS`: a formatter that reproduces its input reports no change, so
@@ -342,6 +390,83 @@ fn in_place_writes_the_formatted_text() {
 
     assert_eq!(payload, "");
     assert_eq!(read(&directory, "ragged.md"), ALIGNED);
+}
+
+/// A drifting file is replaced, not edited in place.
+///
+/// The positive control for [`in_place_leaves_a_clean_file_untouched`]:
+/// `replace_file` renames a temporary over the target, so a file that really is
+/// rewritten must come back with a different inode. Without this, an
+/// implementation that never wrote anything would satisfy the invariance test.
+#[cfg(unix)]
+#[test]
+fn in_place_replaces_a_drifting_file() {
+    let (dir, directory) = fixture("ragged.md", RAGGED);
+    let target = dir.path().join("ragged.md");
+    let before = fs::metadata(&target).expect("read the metadata before the write");
+
+    analyse(
+        Mode::InPlace,
+        &directory,
+        Utf8Path::new("ragged.md"),
+        Utf8Path::new("ragged.md"),
+        &align,
+    )
+    .expect("analyse fixture");
+
+    let after = fs::metadata(&target).expect("read the metadata after the write");
+    assert_ne!(
+        before.ino(),
+        after.ino(),
+        "a drifting file must be replaced through a temporary"
+    );
+    assert_eq!(read(&directory, "ragged.md"), ALIGNED);
+}
+
+/// A clean file is left alone byte for byte, and observably so.
+///
+/// The write would be invisible in the text — the bytes written would be the
+/// bytes already there — but not in the file: `replace_file` swaps the inode and
+/// the modification time of a file it did not change, so a staleness check
+/// downstream would see a rebuild where there was nothing to rebuild.
+#[cfg(unix)]
+#[test]
+fn in_place_leaves_a_clean_file_untouched() {
+    let (dir, directory) = fixture("clean.md", ALIGNED);
+    let target = dir.path().join("clean.md");
+    let before = fs::metadata(&target).expect("read the metadata before the analysis");
+
+    let (report, payload) = analyse(
+        Mode::InPlace,
+        &directory,
+        Utf8Path::new("clean.md"),
+        Utf8Path::new("clean.md"),
+        &identity,
+    )
+    .expect("analyse fixture");
+
+    let after = fs::metadata(&target).expect("read the metadata after the analysis");
+    assert_eq!(payload, "");
+    assert!(
+        !report.is_changed,
+        "the fixture is the formatter's own output"
+    );
+    assert_eq!(
+        before.ino(),
+        after.ino(),
+        "a clean file must not be replaced by a temporary"
+    );
+    assert_eq!(
+        before.mtime(),
+        after.mtime(),
+        "a clean file's modification time must not move"
+    );
+    assert_eq!(
+        before.mtime_nsec(),
+        after.mtime_nsec(),
+        "a clean file's modification time must not move"
+    );
+    assert_eq!(read(&directory, "clean.md"), ALIGNED);
 }
 
 /// The capability names a file inside it, so a path outside the capability is
