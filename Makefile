@@ -1,8 +1,9 @@
-.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes markdownlint nixie
+.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes markdownlint nixie mutants
 
 APP ?= mdtablefix
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
 BUILD_JOBS ?=
+MUTANTS_JOBS ?= 3
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= $(or $(shell command -v markdownlint-cli2 2>/dev/null),$(HOME)/.bun/bin/markdownlint-cli2)
 NIXIE ?= nixie
@@ -50,6 +51,12 @@ markdownlint: ## Lint Markdown files
 
 nixie: ## Validate Mermaid diagrams
 	nixie --no-sandbox
+
+mutants: ## Run mutation testing over the selection module
+	@# Absolute so the tool's own child processes, which run in the scratch
+	@# tree, inherit a TMPDIR that exists.
+	@mkdir -p target/mutants-scratch
+	TMPDIR=$(CURDIR)/target/mutants-scratch $(CARGO) mutants -j $(MUTANTS_JOBS)
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

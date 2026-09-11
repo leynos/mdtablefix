@@ -1,8 +1,11 @@
 //! Tests for the working-tree probe, against a real temporary tree.
 
-use camino::{Utf8Path, Utf8PathBuf};
+use std::io::ErrorKind;
 
-use super::AmbientPathProbe;
+use camino::{Utf8Path, Utf8PathBuf};
+use rstest::rstest;
+
+use super::{AmbientPathProbe, unnameable};
 use crate::select::{
     extensions::ExtensionFilter,
     policy::{PathKind, PathProbe, select_files},
@@ -82,6 +85,23 @@ fn a_directory_is_neither_a_regular_file_nor_a_symlink() {
     let (_guard, root) = temp_root();
     std::fs::create_dir_all(root.join("docs")).expect("create the fixture directory");
     assert_eq!(probe(&root, "docs"), PathKind::Other);
+}
+
+/// How a canonicalization failure is classified, as a function of the error
+/// kind rather than of a tree.
+///
+/// A path `symlink_metadata` has already accepted can reach this decision again
+/// only by losing a race with the filesystem, so the second arm has no fixture
+/// that stages it. `NotFound` is a candidate that is gone, or staged for
+/// deletion; every other kind is a file present but unnameable.
+#[rstest]
+#[case(ErrorKind::NotFound, PathKind::Missing)]
+#[case(ErrorKind::PermissionDenied, PathKind::Other)]
+fn a_canonicalization_failure_is_classified_by_its_kind(
+    #[case] kind: ErrorKind,
+    #[case] expected: PathKind,
+) {
+    assert_eq!(unnameable(kind), expected);
 }
 
 #[test]

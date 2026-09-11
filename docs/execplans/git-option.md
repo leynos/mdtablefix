@@ -731,11 +731,35 @@ diff, no CI signal, and nothing a reviewer can re-run, and under context
 pressure it will be recorded rather than performed.
 
 Use `cargo-mutants`, which is a cargo subcommand binary and therefore not a
-manifest entry, so CON-DEP-001 is untouched. Add a `make mutants` target scoped
-to `--file 'src/select/**'`, commit a `mutants.toml`, and make "zero surviving
-mutants in `src/select/policy.rs` and `src/select/git_ls_files.rs`" an EP-M1
-acceptance criterion. Keep the named controls in this document as a
+manifest entry, so CON-DEP-001 is untouched. `make mutants` runs it, and
+`.cargo/mutants.toml` — the tool's own default path for the config — holds the
+scope and the test selection, so that a bare `cargo mutants` in this checkout
+behaves as the target does. Keep the named controls in this document as a
 specification of what must die; let the tool prove it.
+
+Three properties of that config are load-bearing rather than incidental:
+
+- `examine_globs = ["src/select/**"]` is the scope, one definition of it rather
+  than one on the command line and another in the file. `--file` would be the
+  same glob in a second place, free to drift from this one.
+- `additional_cargo_test_args = ["--bin", "mdtablefix"]` narrows the run to the
+  binary's own test target. Until EP-M2 lands `--git`,
+  `tests/git_file_selection.rs` fails whatever the source says, and the tool
+  checks the unmutated baseline first: a suite that is already red would make
+  every mutant look caught. This is the one place the plan's `make mutants`
+  differs from `make test`, and it is a difference in *scope*, not in rigour —
+  the selection module's tests are all in that target.
+- `TMPDIR` is set by the target, absolutely, to `target/mutants-scratch`. The
+  tool copies the tree into a scratch directory under `TMPDIR` and builds there,
+  and `/tmp` is not this machine's build target; `target/` is ignored, inside
+  the worktree, and on the filesystem the work already lives on. The path must
+  be absolute: the tool's own child processes run inside the scratch copy, where
+  a relative `target/mutants-scratch` does not exist.
+
+Zero survivors is the acceptance criterion. `src/select/policy.rs` and
+`src/select/git_ls_files.rs` are the two files it names, and the scope is the
+whole selection module, so the criterion is discharged for every file in it —
+a survivor anywhere in `src/select/` fails the run, and the run exits non-zero.
 
 ## Milestones and plateaus
 
@@ -778,8 +802,10 @@ Both halves of this milestone have shrunk since the plan was first written.
   The CLI is unchanged.
 - Requirements: REQ-GIT-001, REQ-GIT-002, REQ-GIT-006, REQ-GIT-007.
 - Acceptance evidence: `EV-M1-SELECT` — `cargo test --bin mdtablefix select`
-  passes with every obligation above discharged and observed red first, and
-  `make mutants` reports zero survivors in the two named files.
+  passes with every obligation above discharged and observed red first; and
+  `EV-M1-MUTANTS` — `make mutants` reports **40 mutants, 34 caught, 6 unviable,
+  0 missed**, which is zero survivors across the whole `src/select/**` scope,
+  not merely in the two files named above.
 - Conformance check: `src/lib.rs` is unmodified (CON-API-001); `policy.rs`
   imports nothing from `std::process`, `std::fs`, or `cap_std`; `probe` and
   `list_candidates` both take a root parameter and no test calls
@@ -1827,11 +1853,26 @@ plateau.
       than left to be inferred.
 - [ ] EP-M1: confirm `std::fs::canonicalize` case behaviour on the macOS and
       Windows release targets, per the INV-DEDUP residual gap.
-- [ ] EP-M1: add `make mutants` and `mutants.toml`; reach zero survivors in
-      `src/select/policy.rs` and `src/select/git_ls_files.rs`.
+- [x] (2026-09-12) EP-M1, mutation testing: `.cargo/mutants.toml` and
+      `make mutants` exist, and the run reports **40 mutants: 34 caught, 6
+      unviable, 0 missed** — `missed.txt` empty, exit status 0, over the whole
+      `src/select/**` scope rather than the two files the criterion names alone.
+      The first run, before the change below, reported **3 missed**. Transcript
+      in Artefacts and notes, `EV-M1-MUTANTS`.
+- [x] (2026-09-12) EP-M1, the three survivors that first run reported: all three
+      were the failed-canonicalization path in `src/select/fs_probe.rs`, whose
+      second arm is reachable only by losing a race with the filesystem. Fixed
+      by moving the classification into `unnameable`, a function of
+      `io::ErrorKind`, and testing both arms by constructing the errors rather
+      than by staging a fixture that cannot be staged. See Surprises &
+      discoveries.
 - [ ] EP-M2: add `git` to the `inputs` group and the four supporting flags,
       with post-parse dependency checks; wire `resolve_git_inputs` into
       `driver::Inputs`.
+- [ ] EP-M2: widen the mutation run back to the whole test suite once
+      `tests/git_file_selection.rs` is green — drop `additional_cargo_test_args`
+      from `.cargo/mutants.toml` and re-run `make mutants`, so the behavioural
+      scenarios are part of the oracle rather than merely outside it.
 - [ ] EP-M2: bound `Mode::Print` memory with the chunked drain.
 - [ ] EP-M2: land the scenarios and the `--help` snapshot.
 - [ ] EP-M3: write **ADR 0010** and update `README.md`, `docs/users-guide.md`,
@@ -2154,10 +2195,79 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   stays the `BTreeSet` the plan specifies, so membership and deduplication are
   unchanged. Impact: one doc-comment correction, made in place.
 
+- Observation: **a relative `TMPDIR` breaks `cargo-mutants`' own baseline**,
+  because the tool's child processes run inside the scratch copy of the tree
+  rather than in the directory it was invoked from. Evidence: the first
+  `make mutants` run failed at `FAILED   Unmutated baseline in 0s build` with a
+  `mktemp: failed to create file via template` diagnostic naming
+  `target/mutants-scratch/tmp.XXXXXXXXXX` as a path it could not create, raised
+  from a rustc wrapper after cargo had already been started. Impact:
+  `TMPDIR=$(CURDIR)/target/mutants-scratch`, absolute, with the Makefile giving
+  the reason at the point of use. Worth recording because the failure names a
+  path the invoking shell can see and the failing process cannot, so it reads
+  as a missing directory rather than as a bad variable.
+
+- Observation: **`make <target> | tee <log>` exits with `tee`'s status, so a red
+  gate can be recorded as a green one.** Evidence: that same failed run ended
+  `make: *** [Makefile:57: mutants] Error 4` in the log, while the shell around
+  it reported `0`. Impact: gate runs piped to a log now run under
+  `set -o pipefail`, since the convention of teeing a log exists precisely to be
+  read by whoever checks the exit status afterwards. The log itself was never
+  wrong; only the status was, and it was wrong in the direction that hides a
+  failure.
+
+- Observation: **the first mutation run found three survivors, and all three were
+  the same two source lines: the classification of a failed `canonicalize`.**
+  A path `symlink_metadata` has already accepted can reach the second arm only
+  by losing a race with the filesystem, so the guard's arms were unobservable to
+  any test rather than merely untested — which is why three mutants of it
+  (`true`, `false`, and an `==`/`!=` swap) outlived a suite that covers every
+  other branch of that function. Impact: the classification moved to
+  `unnameable`, a function of `io::ErrorKind`, tested by constructing both
+  errors. Excluding the three with `exclude_re` was the cheaper route to a green
+  run, and is what the rigour section above rules out: a survivor either has a
+  test that kills it, or has a written reason it cannot have one — and "the
+  fixture is impossible to stage" is a reason to change the seam, not to record
+  an exception.
+
+- Observation: **`cargo-mutants` does not mutate test code**, so the five
+  `*_tests.rs` files that `src/select/**` matches produce no mutants at all.
+  Evidence: `cargo mutants --list-files` names the five production modules and
+  nothing else. Impact: the count of 40 is a count over production code, so a
+  reader comparing it against module sizes should not read the test files as
+  either covered or uncovered by it — they are where the killing is done, not
+  where it is measured.
+
 ## Decision log
 
 Entries are pointers; the reasoning lives in the body sections named. ADR 0010
 is the durable record, and EP-M3 reconciles this log into it.
+
+- Decision: narrow the mutation run to the binary's own test target
+  (`additional_cargo_test_args = ["--bin", "mdtablefix"]`) rather than the whole
+  suite. Rationale: `cargo-mutants` checks the unmutated baseline first, and
+  until EP-M2 lands `--git`, `tests/git_file_selection.rs` fails however the
+  source reads — a suite that is already red would report every mutant as
+  caught. Cost: the behavioural suite contributes nothing to the run yet, so the
+  setting is a temporary narrowing and EP-M2 revisits it once that suite is
+  green. Date/Author: 2026-09-12, implementation.
+
+- Decision: change the seam rather than exclude the mutants that could not be
+  killed. Rationale: three mutants of `fs_probe`'s failed-canonicalization match
+  survived because their two arms differ only under a filesystem race, and
+  `exclude_re` would have turned the run green in one line. Extracting the
+  classification into a function of `io::ErrorKind` costs six lines, kills all
+  three, and pins a decision the module's own comment already claimed — that
+  absence is reported as absence and every other failure as unnameable. Cost:
+  one production change after the milestone's review; see the Progress entry.
+  Date/Author: 2026-09-12, implementation.
+
+- Decision: keep the mutation scratch trees under `target/`, with `TMPDIR` set
+  absolutely to it, rather than letting the tool default to `/tmp`. Rationale:
+  `/tmp` is not a build target on this machine, and `cargo-mutants` builds a
+  full dependency tree in its scratch copy. Cost: none measured; the scratch is
+  inside an already-ignored directory on the filesystem the work lives on.
+  Date/Author: 2026-09-12, implementation.
 
 - Decision: accept a deliberately red `make test` on the Stage B and EP-M1
   commits, rather than parking the specification or pinning it to behaviour
@@ -2640,6 +2750,46 @@ names. This is a *local* review, not a pull-request review: it diffs the
 working tree against a base commit, so it reviewed the rebased work that is not
 yet pushed, which a pull-request review could not have reached while
 `origin/git-option` still points at the pre-rebase tip.
+
+**EV-M1-MUTANTS** — measured 2026-09-12, log at
+`/tmp/mutants-mdtablefix-git-option.out`. Run with the target as committed, so
+the command line is the whole of what a reader has to reproduce:
+
+```plaintext
+TMPDIR=/…/target/mutants-scratch cargo mutants -j 3
+```
+
+```plaintext
+Found 40 mutants to test
+ok       Unmutated baseline in 18s build + 0s test
+ INFO Auto-set test timeout to 20s
+40 mutants tested in 84s: 34 caught, 6 unviable
+```
+
+An empty `missed.txt` is the whole of the acceptance criterion: no mutant
+anywhere in `src/select/**` survives the tests. The six unviable mutants are
+one cause and not six — each substitutes `Default::default()` for a return type
+that deliberately has no `Default`: `PathKind` (twice), `FileIdentity`,
+`GitLsFiles`, and `InvalidCharacterKind`. A mutant that does not build cannot
+be caught, and the tool counts it apart from the survivors rather than among
+them. The baseline line is what makes the rest legible: the unmutated tree is
+built and tested first, so a mutant reported caught was caught by a suite that
+had already passed on its own.
+
+The run before the classifier extraction, same command:
+
+```plaintext
+Found 41 mutants to test
+MISSED   src/select/fs_probe.rs:49:27: replace match guard error.kind() == ErrorKind::NotFound with true
+MISSED   src/select/fs_probe.rs:49:27: replace match guard error.kind() == ErrorKind::NotFound with false
+MISSED   src/select/fs_probe.rs:49:40: replace == with != in <impl PathProbe for AmbientPathProbe>::probe
+41 mutants tested in 87s: 3 missed, 33 caught, 5 unviable
+```
+
+Those three lines are cut at the `with … in <impl …>` boundary and before the
+per-mutant timings, to stay inside the 120 columns markdownlint allows a code
+block; the log holds them whole. All three are the same two source lines, which
+is why one change kills all three.
 
 ## Revision note
 
