@@ -1,0 +1,30 @@
+# cargo-mutants configuration, used by `make mutants`.
+#
+# The scope is the selection module: it is the part of `--git` whose
+# correctness rests on properties rather than on a transcript, and the plan
+# names the negative controls each mutant must have to be killed by.
+examine_globs = ["src/select/**"]
+
+# The binary's own test target, and only it. Until EP-M2 lands the flag,
+# `tests/git_file_selection.rs` fails whatever the source says, and a run whose
+# baseline is already red accounts for nothing: every mutant would look caught.
+additional_cargo_test_args = ["--bin", "mdtablefix"]
+
+# As `make test` runs them: every feature enabled. The crate declares no
+# features today, so this is here so that adding one cannot quietly narrow
+# what the mutants are tested against.
+all_features = true
+
+# Results land in `mutants.out` under the already-ignored `target/`, rather
+# than at the repository root.
+output = "target"
+
+# The scratch tree is rebuilt from source rather than copied from `target/`,
+# which is 15 GB here. Within one run the scratch tree is reused, so the cold
+# dependency build is paid once rather than once per mutant.
+copy_target = false
+
+# Stated rather than assumed, because `target/` is both git-ignored and the
+# parent of the scratch tree: a copy that ignored `.gitignore` would copy the
+# scratch into itself.
+gitignore = true

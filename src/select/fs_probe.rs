@@ -38,17 +38,33 @@ impl PathProbe for AmbientPathProbe {
         }
 
         // An identity is only useful if it is the one true name, so a path that
-        // cannot be canonicalized is not reported as a regular file. Absence is
-        // reported as absence, because it is the one cause the caller can act
-        // on; every other error leaves the file present but unnameable.
+        // cannot be canonicalized is not reported as a regular file.
         match std::fs::canonicalize(&absolute) {
             Ok(canonical) => Utf8PathBuf::from_path_buf(canonical)
                 .map_or(PathKind::Other, |canonical| {
                     PathKind::RegularFile(FileIdentity::from_canonical_path(canonical))
                 }),
-            Err(error) if error.kind() == ErrorKind::NotFound => PathKind::Missing,
-            Err(_) => PathKind::Other,
+            Err(error) => unnameable(error.kind()),
         }
+    }
+}
+
+/// Classifies a failed canonicalization by the kind of failure.
+///
+/// Absence is reported as absence, because it is the one cause the caller can
+/// act on: a candidate staged for deletion, or one removed between the metadata
+/// read in [`PathProbe::probe`] and this call's own. Every other kind leaves the
+/// file present but unnameable, which is [`PathKind::Other`].
+///
+/// The reason this is a function of the error kind rather than a pair of match
+/// arms in the probe above: a path `symlink_metadata` has already accepted can
+/// reach the second arm only by losing a race with the filesystem, so no
+/// fixture can stage it. Here, both arms are a test's to cover.
+fn unnameable(kind: ErrorKind) -> PathKind {
+    if kind == ErrorKind::NotFound {
+        PathKind::Missing
+    } else {
+        PathKind::Other
     }
 }
 
