@@ -103,10 +103,53 @@ restores the separator row with widths derived from the final table body.
   directory and returns a relative UTF-8 path for capability-scoped handling.
 - `format_to_string(directory, path, opts) -> anyhow::Result<String>` reads and
   formats a file through `cap_std::fs_utf8::Dir` without modifying it. Its
-  returned text uses the same trailing-newline convention as a rewritten file.
+  returned text uses the same trailing-newline convention as a rewritten file,
+  and it terminates every line with the majority line-ending style detected in
+  that file, so standard output and `--in-place` agree byte-for-byte.
 - `rewrite_in_place(directory, path, opts) -> anyhow::Result<()>` reads and
   formats a capability-scoped file, then replaces it through the same directory
   capability with `mdtablefix::io::replace_file`.
+
+`src/io/line_endings.rs` line-ending policy:
+
+- `LineEnding` is the closed set of terminators the formatter can emit;
+  `as_str` returns the characters written between lines.
+- `detect_line_ending(text) -> LineEnding` counts carriage return and line feed
+  (CRLF) pairs, subtracts them from the total line feed count to obtain the
+  lone line feeds, and selects CRLF only when it strictly outnumbers them. An
+  exact tie, and a document with no line endings at all, select LF, so the
+  result is deterministic.
+- `count_line_endings(text) -> LineEndingCounts` returns the selection together
+  with the `crlf_count` and `lone_lf_count` that decided it.
+  `LineEndingCounts::ending` is the selected style, and `detect_line_ending` is
+  the selection-only form of the same query, so the command boundaries can
+  report the vote without restating the counting rule.
+- The counting query is pure and emits nothing. The report lives in the
+  boundary that acts on it: a private `report_line_endings(counts, operation,
+  path)` in `src/io/replace.rs`, called by `rewrite_with` with an `operation` of
+  `"rewrite"` or `"rewrite_no_wrap"` and always with the file's path; and,
+  because the binary is a separate crate, a repeated private helper in
+  `src/main.rs`, called by `format_to_string` with `operation = "file"` and the
+  file's path, and by `format_stdin` with `operation = "stdin"` and the path
+  reported as `<stdin>`. The message shape is identical across boundaries, so
+  one filter finds them all.
+- `serialize_lines(lines, ending) -> String` joins lines with the selected
+  terminator and appends one further terminator, yielding an empty string for
+  no lines.
+- `detect_line_ending` is a pure query and emits no events. The rewrite
+  helpers report the selected ending at `debug` level, with the `crlf_count`,
+  `lone_lf_count`, and `selected_ending` fields, and also name the entry point
+  and the file, so the decision is traceable without the query becoming
+  side-effecting.
+
+Detection runs on the raw document at each input boundary: `rewrite_with` in
+`src/io/replace.rs`, and `format_to_string` and `format_stdin` in `src/main.rs`,
+with each boundary reporting through its own private `report_line_endings`
+helper. The internal pipeline stays LF-only —
+`str::lines` strips each line's terminator before a transform sees it — and
+only the serializer re-applies the detected style. Standard input keeps its
+historical contract of printing one terminator even when it produces no lines,
+which `tests/parallel.rs` pins.
 
 Callers select the function that matches their intent rather than passing a
 Boolean mode flag. This keeps stdout and in-place contracts explicit while
@@ -114,18 +157,17 @@ allowing both paths to share the exact formatting result. New file-output call
 sites must receive a directory capability and relative `camino::Utf8Path`
 rather than performing ambient filesystem access themselves.
 
-`src/io.rs`:
+`src/io/replace.rs`:
 
 - `replace_file(directory, path, contents) -> std::io::Result<()>` performs the
   shared atomic replacement. It declines a symlinked target, creates a
   `create_new` temporary file in the same directory, writes, flushes and syncs
-  the contents, then calls `swap_into_place`, which applies the target's
-  permissions to the temporary file before the rename and clears a Windows
-  destination's read-only attribute first, because that attribute blocks the
-  rename. It attempts to remove the temporary file when a later step fails. The
-  CLI and
-  `rewrite`/`rewrite_no_wrap` all call it, so the sequence has one
-  implementation.
+  the contents, then calls `swap_into_place` in `src/io/swap.rs`, which applies
+  the target's permissions to the temporary file before the rename and clears a
+  Windows destination's read-only attribute first, because that attribute
+  blocks the rename. It attempts to remove the temporary file when a later step
+  fails. The CLI and `rewrite`/`rewrite_no_wrap` all call it, so the sequence
+  has one implementation.
 - `open_parent(path) -> std::io::Result<(Dir, Utf8PathBuf)>` is the library's
   only ambient filesystem boundary. It opens a directory capability for the
   target's parent and returns the target's file name relative to that
@@ -642,9 +684,12 @@ Use the stable structured field names `token_length`, `kind`, `start`, `end`,
 `width`, `reason`, `is_image`, `row_index`, `cell_count`, and `error_category`.
 Blockquote and fence events additionally use `line_len`, `prefix_len`, `depth`,
 `inner_len`, `open_depth`, `marker_len`, `open_marker_len`, and `transition`.
-These events are content-free: never include raw Markdown, blockquote prefixes,
-fence info strings, or other document content. Executables remain responsible
-for installing subscribers.
+Line-ending events use `crlf_count`, `lone_lf_count`, and `selected_ending`,
+and every reporting boundary adds `operation` and, for a file, `path` (the
+library rewrite reports both; standard input has no path).
+These events are content-free: never include raw Markdown, blockquote
+prefixes, fence info strings, or other document content. Executables remain
+responsible for installing subscribers.
 
 Blockquote parsing emits `blockquote prefix parsed` or
 `blockquote prefix rejected`. Fence tracking emits `fence state changed` with
@@ -653,11 +698,11 @@ the `open`, `matching_close`, or `implicit_close` transition, and
 corresponding `reason` values are `no_blockquote_prefix`,
 `blockquote_depth_decreased`, and `incompatible_active_opener`.
 
-The in-place rewrite in `src/io.rs` follows the same discipline. `replace_file`
-carries a `debug` span whose only field is the target `path`. The `path` field
-is span metadata rather than a metric label, and the replacement path's metrics
-use only fixed label values, so target paths cannot create unbounded metric
-cardinality; the crate installs no recorder. Inside it,
+The in-place rewrite in `src/io/replace.rs` follows the same discipline.
+`replace_file` carries a `debug` span whose only field is the target `path`.
+The `path` field is span metadata rather than a metric label, and the
+replacement path's metrics use only fixed label values, so target paths cannot
+create unbounded metric cardinality; the crate installs no recorder. Inside it,
 `target metadata read` (trace), `temporary file created` (debug, with
 `attempt`), `temporary file written` (debug, with `bytes`),
 `temporary file synced` (debug), `destination read-only attribute cleared`
@@ -714,9 +759,9 @@ debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified"
 
 ### Metrics
 
-The in-place replacement in `src/io.rs` emits three counters and one histogram
-through the `metrics` façade. `describe_metrics` registers their descriptions
-exactly once per process behind a `std::sync::OnceLock`.
+The in-place replacement in `src/io/replace.rs` emits three counters and one
+histogram through the `metrics` façade. `describe_metrics` registers their
+descriptions exactly once per process behind a `std::sync::OnceLock`.
 
 - `mdtablefix_io_replace_total` increments once per `replace_file` call and
   carries one label, `outcome`, with the value `success` or `failure`.

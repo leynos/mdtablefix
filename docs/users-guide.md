@@ -251,6 +251,28 @@ byte or character count. Continuation lines therefore stay correctly aligned
 when the prefix contains full-width characters such as ideographic spaces or
 CJK punctuation.
 
+## Line endings
+
+`mdtablefix` preserves the line-ending style of the document it formats. It
+counts carriage return and line feed (CRLF) (`\r\n`) and lone line feed (`\n`)
+endings in the input and terminates every output line with whichever style
+holds the strict majority. A file authored with Windows line endings therefore
+stays CRLF, and a file authored with Unix line endings stays LF; formatting
+never converts a consistently ended file to the other style.
+
+When the two styles occur equally often, and when a non-empty input contains no
+line ending at all, `mdtablefix` emits LF. That tie-break is deterministic: it
+does not depend on which style appears first.
+
+Detection covers the whole document, including fenced code blocks. A document
+whose endings are predominantly CRLF is emitted entirely as CRLF, so a code
+sample authored with LF endings inside such a document is rewritten to CRLF.
+
+Standard input is treated the same way: the style detected on standard input
+selects the endings written to standard output. Empty standard input still
+prints a single line ending, as it always has, while an empty file still
+produces empty output.
+
 ## Heading conversion
 
 Pass `--headings` to convert Setext headings into ATX headings. A Setext
@@ -447,4 +469,55 @@ let owned: Vec<String> = format_breaks(&lines)
     .into_iter()
     .map(|c| c.into_owned())
     .collect();
+```
+
+### Line-ending helpers
+
+`LineEnding` is the closed set of terminators the formatter emits.
+`LineEnding::Lf` is `\n` and `LineEnding::Crlf` is `\r\n`. The `const fn`
+`LineEnding::as_str` returns the characters written between lines.
+
+`detect_line_ending(text) -> LineEnding` selects the style holding the strict
+majority of the text's line endings. CRLF pairs are counted first and
+subtracted from the line-feed count to obtain the lone line feeds; CRLF wins
+only when it strictly outnumbers lone line feeds. An exact tie, and a non-empty
+input with no line endings at all, select `LineEnding::Lf`. Only CRLF and lone
+LF are recognized: a lone carriage return is content, matching the `str::lines`
+split.
+
+`count_line_endings(text) -> LineEndingCounts` returns the selection together
+with the counts that decided it. `LineEndingCounts::ending` is the selected
+style, `crlf_count` counts CRLF pairs, and `lone_lf_count` counts lone line
+feeds, so a caller that reports or acts on the vote does not restate the
+counting rule.
+
+The boundaries that act on the decision (`rewrite`, `rewrite_no_wrap`, and the
+CLI's file and standard-input boundaries) each emit one `debug` event,
+`selected the majority line ending`, with the fields `operation`, `path`,
+`crlf_count`, `lone_lf_count`, and `selected_ending`. The event is visible to
+anyone who enables `debug` logging.
+
+`serialize_lines(lines, ending) -> String` joins the processed lines with the
+selected terminator and appends one further terminator, so a non-empty result
+always ends with a line ending; an empty slice yields an empty string.
+
+See [Line endings](#line-endings) for the user-facing behaviour.
+
+<!-- markdownlint-disable-next-line MD046 -->
+```rust
+use mdtablefix::{
+    LineEnding, count_line_endings, detect_line_ending, serialize_lines,
+};
+
+let counts = count_line_endings("alpha\r\nbeta\r\ngamma\n");
+assert_eq!(counts.ending, LineEnding::Crlf);
+assert_eq!(counts.crlf_count, 2);
+assert_eq!(counts.lone_lf_count, 1);
+
+let ending = detect_line_ending("alpha\r\nbeta\r\n");
+assert_eq!(ending, LineEnding::Crlf);
+
+let lines = vec!["| A |".to_string(), "| 1 |".to_string()];
+assert_eq!(serialize_lines(&lines, ending), "| A |\r\n| 1 |\r\n");
+assert!(serialize_lines(&[], ending).is_empty());
 ```

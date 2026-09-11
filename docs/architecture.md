@@ -408,6 +408,9 @@ classDiagram
         <<module>>
         +rewrite()
         +rewrite_no_wrap()
+        +detect_line_ending()
+        +serialize_lines()
+        +LineEnding
     }
     lib --> html
     lib --> table
@@ -447,7 +450,11 @@ Tokenization is handled by `wrap::tokenize_markdown`, replacing the small state
 machine that previously resided in `process_tokens`. The `process` module
 provides streaming helpers that combine the lower-level functions. The `io`
 module handles filesystem operations, delegating the text processing to
-`process`.
+`process`, and owns the line-ending policy. It detects the terminator style
+holding the majority of a document's line endings and re-emits the formatted
+lines with that style, so a carriage return and line feed (CRLF) document stays
+CRLF while the transform pipeline itself remains line-ending agnostic. The
+rationale is recorded in [ADR 0007](adrs/0007-line-ending-detection.md).
 
 ### Stateful helpers
 
@@ -645,6 +652,11 @@ and may reduce performance if many tiny files are processed.
 In-place rewrites replace each file through a temporary file in the same
 directory and a rename, so one worker failing cannot leave its target truncated
 and the other files in the batch are unaffected.
+
+For screen readers: The following sequence diagram traces the CLI's parallel
+file-processing sequence: one branch formats each file and prints it to
+standard output, the other rewrites each file in place, and both report their
+results in the input order.
 
 ```mermaid
 sequenceDiagram

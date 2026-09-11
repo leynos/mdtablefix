@@ -94,6 +94,11 @@ _Figure 1: Simplified repository tree._
 
 - `src/main.rs`: Command-line entry point and application boundary.
 - `src/lib.rs`: Library surface used by the binary and integration tests.
+- `src/io.rs` and `src/io/`: Library file-rewriting helpers (`rewrite`,
+  `rewrite_no_wrap`) and the line-ending policy they share, split into
+  `line_endings`, `replace`, and `swap`. `detect_line_ending` selects the
+  terminator style holding the majority of a document's line endings, and
+  `serialize_lines` re-emits formatted lines with it, so a CRLF file stays CRLF.
 - `src/process.rs`: High-level document processing orchestration.
 - `src/table.rs`: Markdown table parsing and rendering.
 - `src/reflow.rs` and `src/reflow/`: Reflow coordination and focused reflow
@@ -105,8 +110,8 @@ _Figure 1: Simplified repository tree._
 - `src/footnotes.rs` and `src/footnotes/`: Footnote parsing, list handling,
   inline handling, and renumbering.
 - `src/*.rs`: Focused Markdown transformations such as headings, breaks,
-  frontmatter, HyperText Markup Language (HTML), lists, emphasis, ellipses,
-  text processing, and input/output (I/O).
+  frontmatter, HyperText Markup Language (HTML), lists, emphasis, ellipses, and
+  text processing.
 
 ## Test paths
 

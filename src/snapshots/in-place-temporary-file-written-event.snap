@@ -2,4 +2,4 @@
 source: src/io_tracing_tests.rs
 expression: written
 ---
-DEBUG snapshots_successful_replacement_events:replace_file{path=sample.md}: mdtablefix::io: temporary file written bytes=11
+DEBUG snapshots_successful_replacement_events:replace_file{path=sample.md}: mdtablefix::io::swap: temporary file written bytes=11

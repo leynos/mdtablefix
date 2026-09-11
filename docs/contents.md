@@ -37,6 +37,9 @@
   Accepted decision covering links, URLs, and filesystem-like tokens.
 - [Single-pass idempotence](adrs/0006-single-pass-idempotence.md): Accepted
   decision covering the fixed-point guarantee for the formatting pipeline.
+- [Majority line-ending preservation](adrs/0007-line-ending-detection.md):
+  Accepted decision covering how the formatter selects the output line-ending
+  style.
 
 ## Reference material
 

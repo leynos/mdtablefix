@@ -34,6 +34,11 @@
   that installs a recorder can watch replacements, their outcomes, and how long
   they take. The crate installs no recorder itself.
   ([#465](https://github.com/leynos/mdtablefix/issues/465))
+- Add the line-ending helpers `LineEnding`, `LineEndingCounts`,
+  `count_line_endings`, `detect_line_ending`, and `serialize_lines`, so a
+  caller can select and apply the majority line-ending style of an input
+  document through pure queries.
+  ([#451](https://github.com/leynos/mdtablefix/issues/451))
 
 ### Changed
 
@@ -81,6 +86,12 @@
 
 ### Fixed
 
+- Emit formatted output with the line-ending style that holds the majority of
+  the input's line endings, so a carriage return and line feed (CRLF) document
+  is no longer rewritten as LF. A consistently ended document keeps its ending,
+  while a mixed-ending document is normalized to the majority style. An exact
+  tie, and a non-empty input with no line endings at all, select LF.
+  ([#451](https://github.com/leynos/mdtablefix/issues/451))
 - Format text adjoining an inline code span when it ends with a non-ASCII
   character, such as the ellipsis `--ellipsis` produces, instead of aborting on
   a character boundary. The emphasis split stepped one byte past the last

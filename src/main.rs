@@ -16,13 +16,18 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use clap::Parser;
 use mdtablefix::{
+    LineEnding,
+    LineEndingCounts,
     Options,
+    count_line_endings,
     format_breaks,
     io::replace_file,
     process::{process_stream_inner, process_with_frontmatter},
     renumber_lists,
+    serialize_lines,
 };
 use rayon::prelude::*;
+use tracing::debug;
 
 #[derive(Parser)]
 #[command(version, about = "Reflow broken markdown tables")]
@@ -119,17 +124,78 @@ fn open_file_parent(path: &Path) -> anyhow::Result<(Dir, Utf8PathBuf)> {
     Ok((directory, Utf8PathBuf::from(file_name)))
 }
 
+/// Renders standard-input output.
+///
+/// Standard input keeps its historical contract of printing one terminator
+/// even when it produces no lines, whereas an empty file produces empty
+/// output. `tests/parallel.rs` pins that difference.
+fn render_stdin_output(fixed: &[String], ending: LineEnding) -> String {
+    if fixed.is_empty() {
+        ending.as_str().to_string()
+    } else {
+        serialize_lines(fixed, ending)
+    }
+}
+
+/// Reports the line-ending decision at the command boundary that made it.
+///
+/// The library keeps the same report for its own entry points, but the binary
+/// is a separate crate and cannot share it, so the message is repeated here with
+/// the same fields: one filter finds every boundary. `operation` names the
+/// boundary — `"file"` when formatting a file for stdout, `"stdin"` when
+/// reading standard input — and `path` names the file being formatted, or is
+/// `None` for standard input, which is reported as its own source rather than
+/// left nameless.
+///
+/// This stays private, and takes the counts the pure [`count_line_endings`]
+/// query already produced, so no query emits events and only the boundary that
+/// acts on the answer logs it.
+fn report_line_endings(counts: LineEndingCounts, operation: &str, path: Option<&str>) {
+    debug!(
+        operation,
+        path = %path.unwrap_or("<stdin>"),
+        crlf_count = counts.crlf_count,
+        lone_lf_count = counts.lone_lf_count,
+        selected_ending = counts.ending.as_str(),
+        "selected the majority line ending"
+    );
+}
+
+/// Formats `content` into output lines, leaving the terminator to the caller.
+///
+/// This is the pure half of both command boundaries: it neither reads an input
+/// nor selects a line ending, so each boundary counts the endings, reports its
+/// decision, and only then renders these lines with the style it chose.
+fn format_lines(content: &str, opts: FormatOpts) -> Vec<String> {
+    let lines: Vec<String> = content.lines().map(str::to_string).collect();
+    process_lines(&lines, opts)
+}
+
 /// Reads and formats a capability-scoped file without modifying it.
+///
+/// The majority line-ending style of the file is detected before formatting
+/// and used to terminate the returned lines, so a CRLF file is not reported as
+/// wholly changed.
 fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
     let content = directory.read_to_string(path)?;
-    let lines: Vec<String> = content.lines().map(str::to_string).collect();
-    let fixed = process_lines(&lines, opts);
+    let counts = count_line_endings(&content);
+    report_line_endings(counts, "file", Some(path.as_str()));
     // Keep file output newline-terminated, matching the CLI stdout contract.
-    Ok(if fixed.is_empty() {
-        String::new()
-    } else {
-        fixed.join("\n") + "\n"
-    })
+    Ok(serialize_lines(
+        &format_lines(&content, opts),
+        counts.ending,
+    ))
+}
+
+/// Formats standard input and renders it for standard output.
+///
+/// Standard input is the boundary with no path to name, so its report says so
+/// rather than omitting the field. The majority style of the input otherwise
+/// decides the terminators exactly as it does for a file.
+fn format_stdin(input: &str, opts: FormatOpts) -> String {
+    let counts = count_line_endings(input);
+    report_line_endings(counts, "stdin", None);
+    render_stdin_output(&format_lines(input, opts), counts.ending)
 }
 
 /// Reads, formats, and atomically replaces a capability-scoped file in place.
@@ -198,9 +264,7 @@ fn main() -> anyhow::Result<()> {
     if cli.files.is_empty() {
         let mut input = String::new();
         io::stdin().read_to_string(&mut input)?;
-        let lines: Vec<String> = input.lines().map(str::to_string).collect();
-        let fixed = process_lines(&lines, cli.opts);
-        println!("{}", fixed.join("\n"));
+        print!("{}", format_stdin(&input, cli.opts));
         return Ok(());
     }
 

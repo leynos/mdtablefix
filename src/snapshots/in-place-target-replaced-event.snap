@@ -2,4 +2,4 @@
 source: src/io_tracing_tests.rs
 expression: replaced
 ---
-DEBUG snapshots_successful_replacement_events:replace_file{path=sample.md}: mdtablefix::io: target replaced
+DEBUG snapshots_successful_replacement_events:replace_file{path=sample.md}: mdtablefix::io::swap: target replaced
