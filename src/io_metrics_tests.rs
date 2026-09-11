@@ -7,11 +7,19 @@
 
 use std::fs;
 
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use metrics::Unit;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
 use tempfile::tempdir;
 
-use super::{TEMP_FILE_ATTEMPTS, register_metrics, rewrite, temporary_path};
+use super::{
+    TEMP_FILE_ATTEMPTS,
+    register_metrics,
+    remove_failed_temporary_file,
+    rewrite,
+    temporary_path,
+};
 
 /// The outcome label's name.
 const OUTCOME_LABEL: &str = "outcome";
@@ -30,6 +38,13 @@ const COLLISIONS: &str = "mdtablefix_io_temporary_name_collisions_total";
 
 /// The counter recording exhausted temporary name spaces.
 const EXHAUSTED: &str = "mdtablefix_io_temporary_name_exhausted_total";
+
+/// The counter recording temporary files a failed replacement could not
+/// remove.
+const CLEANUP_FAILURES: &str = "mdtablefix_io_temporary_cleanup_failures_total";
+
+/// The counter recording symbolic-link targets declined rather than replaced.
+const SYMLINK_DECLINED: &str = "mdtablefix_io_symlink_declined_total";
 
 /// What a recorded metric carried.
 #[derive(Debug)]
@@ -137,6 +152,14 @@ fn samples<'a>(recorded: &'a [Recorded], name: &str, labels: &[(&str, &str)]) ->
     }
 }
 
+/// Reports whether the metric `name`, under exactly `labels`, carries a
+/// non-empty description.
+fn is_described(recorded: &[Recorded], name: &str, labels: &[(&str, &str)]) -> bool {
+    find(recorded, name, labels)
+        .and_then(|metric| metric.description.as_deref())
+        .is_some_and(|text| !text.is_empty())
+}
+
 /// Returns the unit declared for `name`, if the metric was recorded at all.
 fn unit(recorded: &[Recorded], name: &str) -> Option<Unit> {
     recorded
@@ -233,14 +256,9 @@ fn replacement_duration_is_recorded() {
         Some(Unit::Seconds),
         "the duration must be declared in seconds: {recorded:?}"
     );
-    let described = find(&recorded, REPLACE_DURATION, &[(OUTCOME_LABEL, "success")])
-        .expect("the histogram is recorded under the outcome label");
     assert!(
-        described
-            .description
-            .as_deref()
-            .is_some_and(|text| !text.is_empty()),
-        "the histogram must carry a description: {described:?}"
+        is_described(&recorded, REPLACE_DURATION, &[(OUTCOME_LABEL, "success")]),
+        "the histogram must carry a description: {recorded:?}"
     );
     let durations = outcome_samples(&recorded, "success");
     assert_eq!(
@@ -322,6 +340,79 @@ fn an_exhausted_name_space_is_counted() {
         outcome_samples(&recorded, "failure").len(),
         1,
         "a failed replacement is timed too, so stalls before failure are visible: {recorded:?}"
+    );
+    assert_eq!(
+        count(&recorded, CLEANUP_FAILURES, &[]),
+        0,
+        "a replacement abandoned before its temporary file existed has none to clean up: \
+         {recorded:?}"
+    );
+}
+
+/// A declined symbolic link is counted as its own event as well as a failure,
+/// so an operator can tell "the target is a symlink" from "the replacement
+/// failed" without reading the log.
+#[cfg(unix)]
+#[test]
+fn a_declined_symlink_is_counted() {
+    let dir = tempdir().expect("create temporary directory");
+    fixture(&dir);
+    let link = dir.path().join("link.md");
+    // A relative target keeps the link resolvable inside the capability.
+    std::os::unix::fs::symlink("sample.md", &link).expect("create the symlink");
+
+    let (result, recorded) = recorded(|| rewrite(&link));
+
+    let error = result.expect_err("a symlink target must be declined");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert_labels_are_bounded(&recorded);
+    assert_eq!(
+        count(&recorded, SYMLINK_DECLINED, &[]),
+        1,
+        "a declined symlink is counted once: {recorded:?}"
+    );
+    assert!(
+        is_described(&recorded, SYMLINK_DECLINED, &[]),
+        "the counter must carry a description: {recorded:?}"
+    );
+    assert_eq!(
+        outcome_count(&recorded, "failure"),
+        1,
+        "a declined symlink is a replacement that did not happen: {recorded:?}"
+    );
+    assert_eq!(
+        count(&recorded, CLEANUP_FAILURES, &[]),
+        0,
+        "a declined symlink never created a temporary file: {recorded:?}"
+    );
+}
+
+/// A cleanup that does not complete is counted, because the failure that
+/// prompted it is the one the caller sees: the counter is the only signal that
+/// a stale temporary file was left beside the target.
+#[test]
+fn a_cleanup_that_cannot_remove_the_temporary_file_is_counted() {
+    let dir = tempdir().expect("create temporary directory");
+    let root = Utf8Path::from_path(dir.path()).expect("the temporary directory is UTF-8");
+    let directory =
+        Dir::open_ambient_dir(root, ambient_authority()).expect("open the directory capability");
+    // `std::fs::remove_file` is documented to fail when the path points to a
+    // directory, on every platform, so the cleanup fails without the test
+    // depending on a permission bit, which root would ignore.
+    fs::create_dir(dir.path().join("taken.tmp")).expect("create the unremovable entry");
+
+    let ((), recorded) =
+        recorded(|| remove_failed_temporary_file(&directory, Utf8Path::new("taken.tmp")));
+
+    assert_labels_are_bounded(&recorded);
+    assert_eq!(
+        count(&recorded, CLEANUP_FAILURES, &[]),
+        1,
+        "a cleanup that did not complete is counted once: {recorded:?}"
+    );
+    assert!(
+        is_described(&recorded, CLEANUP_FAILURES, &[]),
+        "the counter must carry a description: {recorded:?}"
     );
 }
 

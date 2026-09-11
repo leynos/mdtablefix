@@ -134,6 +134,14 @@ pub(super) fn register_metrics() {
         "mdtablefix_io_temporary_name_exhausted_total",
         "Replacements abandoned because every candidate temporary name was taken"
     );
+    describe_counter!(
+        "mdtablefix_io_temporary_cleanup_failures_total",
+        "Temporary files a failed replacement could not remove"
+    );
+    describe_counter!(
+        "mdtablefix_io_symlink_declined_total",
+        "Symbolic-link targets declined rather than replaced"
+    );
 }
 
 /// Atomically replaces `path` inside `directory` with `contents`.
@@ -180,6 +188,7 @@ fn replace_file_inner(directory: &Dir, path: &Utf8Path, contents: &str) -> io::R
         debug!(error_category = ?error.kind(), "replacement failed");
     })?;
     if metadata.file_type().is_symlink() {
+        counter!("mdtablefix_io_symlink_declined_total").increment(1);
         debug!(error_category = "symlink_target", "rewrite declined");
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -194,19 +203,30 @@ fn replace_file_inner(directory: &Dir, path: &Utf8Path, contents: &str) -> io::R
     let outcome = write_and_swap(directory, &temp_path, path, contents, &permissions, file);
     if let Err(error) = &outcome {
         debug!(error_category = ?error.kind(), "replacement failed");
-        // Best effort: failing to clean up must not mask the original error,
-        // and the next run retries past any stale name it finds.
-        match remove_temporary_file(directory, &temp_path) {
-            Ok(()) => trace!("temporary file removed after failure"),
-            Err(cleanup_error) => {
-                debug!(
-                    error_category = ?cleanup_error.kind(),
-                    "temporary file cleanup failed"
-                );
-            }
-        }
+        remove_failed_temporary_file(directory, &temp_path);
     }
     outcome
+}
+
+/// Removes the temporary file a failed replacement left behind, counting a
+/// cleanup that does not complete.
+///
+/// Best effort by design: the failure that prompted the cleanup is the one the
+/// caller must see, so a cleanup that fails is counted and traced rather than
+/// returned, and the next run retries past any stale name it finds. The count
+/// carries no labels — `mdtablefix_io_replace_total` already reports the
+/// replacement as a `failure` — so a recorder's cardinality stays bounded.
+pub(super) fn remove_failed_temporary_file(directory: &Dir, temp_path: &Utf8Path) {
+    match remove_temporary_file(directory, temp_path) {
+        Ok(()) => trace!("temporary file removed after failure"),
+        Err(cleanup_error) => {
+            counter!("mdtablefix_io_temporary_cleanup_failures_total").increment(1);
+            debug!(
+                error_category = ?cleanup_error.kind(),
+                "temporary file cleanup failed"
+            );
+        }
+    }
 }
 
 /// Rewrite a file in place with wrapped tables.
