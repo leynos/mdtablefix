@@ -365,7 +365,7 @@ plan made, so the interfaces this plan consumes now exist:
 | `ArgGroup "inputs"` holding `files`, with `mode` requiring `inputs` | `git` joins `inputs`; `--git --check`, `--git --diff`, `--git --in-place` all parse |
 | `driver::Inputs { Stdin, Files(Vec<Utf8PathBuf>) }` | `--git` becomes a second source producing `Inputs::Files`; an empty selection exits 0 without reading stdin |
 | `driver::Mode { Print, InPlace, Check, Diff }` | `--list-files` becomes a fifth variant |
-| `driver::ReadOnlyDir` | `--list-files` and any read-only selection path take it, so writing is impossible by type |
+| `driver::ReadOnlyDir` | every mode reads through it, because `analyse` clones the caller's capability and wraps the clone; `--list-files` returns one statement earlier still, before the clone, so it holds no read capability at all. See the Decision log for what that does and does not guarantee |
 | `driver::Assessment::is_changed`, and `write_back` skipping unchanged files | discharges what this plan called INV-NOWRITE-UNCHANGED; this plan no longer implements it |
 | `driver::{ExitStatus, exit_status}` | `--git` failures map to `ExitStatus::Error`, exit code **2**, not 1 |
 | `driver::in_argument_order` | re-establishes ordering without relying on the withdrawn `AX-RAYON-ORDER` |
@@ -742,19 +742,21 @@ Three properties of that config are load-bearing rather than incidental:
 - `examine_globs = ["src/select/**"]` is the scope, one definition of it rather
   than one on the command line and another in the file. `--file` would be the
   same glob in a second place, free to drift from this one.
-- `additional_cargo_test_args = ["--bin", "mdtablefix"]` narrows the run to the
-  binary's own test target. Until EP-M2 lands `--git`,
-  `tests/git_file_selection.rs` fails whatever the source says, and the tool
-  checks the unmutated baseline first: a suite that is already red would make
-  every mutant look caught. This is the one place the plan's `make mutants`
-  differs from `make test`, and it is a difference in *scope*, not in rigour —
-  the selection module's tests are all in that target.
-- `TMPDIR` is set by the target, absolutely, to `target/mutants-scratch`. The
-  tool copies the tree into a scratch directory under `TMPDIR` and builds there,
-  and `/tmp` is not this machine's build target; `target/` is ignored, inside
-  the worktree, and on the filesystem the work already lives on. The path must
-  be absolute: the tool's own child processes run inside the scratch copy, where
-  a relative `target/mutants-scratch` does not exist.
+- **No `additional_cargo_test_args`**: the whole suite is the test set, exactly
+  as `make test` runs it. The setting was there while
+  `tests/git_file_selection.rs` was red — the tool checks the unmutated baseline
+  first, and a suite that is already red makes every mutant look caught — and
+  EP-M2 dropped it once that suite went green. The file records the history
+  where the setting used to be, because a narrowed run and a widened one report
+  the same number for a mutant no test in either set exercises.
+- `TMPDIR` is set by the target, absolutely, to
+  `$(HOME)/.cache/mdtablefix/mutants/$(notdir $(CURDIR))`. Absolute, because the
+  tool's own child processes run inside the scratch copy of the tree, where a
+  relative path does not exist. Outside the worktree, because the children
+  inherit `TMPDIR` and a test suite whose temporary directories landed inside
+  this repository would fail the `--git` scenarios that assert on being outside
+  one. `$HOME/.cache` is neither `/tmp`, which is not a build target on this
+  machine, nor inside the tree under test.
 
 Zero survivors is the acceptance criterion. `src/select/policy.rs` and
 `src/select/git_ls_files.rs` are the two files it names, and the scope is the
@@ -1151,7 +1153,7 @@ are already as pull request #464 leaves them and need no change:
     clap::ArgGroup::new("inputs").args(["files", "git"]).multiple(false)
 ))]
 #[command(group(clap::ArgGroup::new("mode").multiple(false).requires("inputs")))]
-struct Cli {
+pub struct Cli {
     /// Rewrite files in place
     #[arg(long = "in-place", group = "mode")]
     in_place: bool,
@@ -1175,7 +1177,7 @@ struct Cli {
         long = "md-exts",
         value_name = "EXT",
         value_delimiter = ',',
-        default_values = ["md", "mdc", "markdown"],
+        default_value = "md,mdc,markdown",
         value_parser = select::extensions::parse_extension,
     )]
     md_exts: Vec<String>,
@@ -1183,11 +1185,17 @@ struct Cli {
     #[arg(long = "allow-conflicted")]
     allow_conflicted: bool,
     #[command(flatten)]
-    opts: FormatOpts,
+    pub opts: FormatOpts,
     /// Markdown files to fix
-    files: Vec<PathBuf>,
+    pub files: Vec<PathBuf>,
 }
 ```
+
+Two details differ from this plan's first draft and are recorded in Surprises &
+discoveries: the default is one comma-separated `default_value` rather than
+three `default_values`, because `clap` renders the latter space-joined; and
+`Cli` and the two fields the composition root reads are `pub`, because the
+binary's modules are siblings rather than nested.
 
 `--list-files` joins the `mode` group rather than standing beside it, because
 it is a fifth thing to do with a selection, not a modifier. That also gets the
@@ -1207,9 +1215,10 @@ parse.
 **accepted**, silently running a `--git`-only flag with no `--git`. The same
 holds under `conflicts_with = "files"`, so group membership is not the cause;
 a bool flag's `requires` on another bool flag is not dependable once a
-positional is present, and `default_values` on `--md-exts` is a second instance
-of the same class. Use an explicit post-parse check emitting a real clap error,
-so the exit status stays 2 and the usage footer survives:
+positional is present, and `--md-exts` is a second instance of the same class
+because its default means it always carries a value. Use an explicit post-parse
+check emitting a real clap error, so the exit status stays 2 and the usage
+footer survives:
 
 ```rust
 impl Cli {
@@ -1255,15 +1264,28 @@ invent. `driver::Inputs` distinguishes `Stdin` from `Files(Vec<Utf8PathBuf>)`,
 and `main` matches on it. `--git` adds a second way to produce `Files`:
 
 ```rust
-/// Resolves `--git` into the paths to act on.
+/// Resolves `--git` into the paths to act on, and the guard that governs them.
 ///
-/// Returns `Inputs::Files`, which may be empty: an empty selection is success
-/// and must not fall through to standard input. Never returns `Inputs::Stdin`.
-fn resolve_git_inputs(
+/// `inputs` is `Inputs::Files`, which may be empty: an empty selection is
+/// success and must not fall through to standard input. Never `Stdin`.
+pub fn resolve(
     cli: &Cli,
+    mode: Mode,
     working_directory: &Utf8Path,
-) -> Result<Inputs, GitListError>;
+) -> Result<GitSelection, GitListError>;
+
+pub struct GitSelection {
+    pub inputs: Inputs,
+    pub guard: ConflictGuard,
+}
 ```
+
+Two shapes changed from this plan's earlier draft, both in EP-M2 and both
+recorded in the Decision log: the function takes `mode` (the guard is resolved
+only where it can refuse) and returns the guard beside the inputs rather than
+the inputs alone. It lives in `src/git_inputs.rs`, a binary-private module
+beside `src/driver.rs`, so that `src/main.rs` stays under its size cap and the
+composition is testable without a repository.
 
 Three properties of the surrounding contract are inherited rather than
 restated, and must not be re-implemented:
@@ -1281,8 +1303,10 @@ restated, and must not be re-implemented:
   in the tree from aborting a whole-repository operation, without disturbing
   the positional-argument contract.
 
-`--list-files` takes `driver::ReadOnlyDir`, or no capability at all, so that it
-cannot write by construction rather than by convention.
+`--list-files` reads no content: `driver::analyse` answers it in its first
+statement, before the read capability is cloned, so the mode holds a directory
+capability it never uses rather than being denied one by type. The Decision log
+records why the early return is the guarantee and what it leaves to review.
 
 ### Dependencies
 
@@ -1649,13 +1673,14 @@ Expected: the untracked file joins the selection; the ignored one does not.
 
 ```console
 $ cd / && mdtablefix --git ; echo "exit=$?"
-mdtablefix: running `git ls-files`: fatal: not a git repository (or any of
-the parent directories): .git
+mdtablefix: `git ls-files` failed with exit status: 128: fatal: not a git
+repository (or any of the parent directories): .git
 exit=2
 ```
 
-Expected: exit **2** and a diagnostic naming the cause. Three things about this
-transcript are load-bearing and each corrects an earlier draft:
+Shown wrapped to this document's margin; the tool prints one line. Expected:
+exit **2** and a diagnostic naming the cause. Five things about this transcript
+are load-bearing, and four of them correct an earlier draft:
 
 - The status is 2, not 1. Pull request #464 establishes
   `ExitStatus { Success, Drift, Error }`, and a `--git` failure is an
@@ -1664,11 +1689,23 @@ transcript are load-bearing and each corrects an earlier draft:
 - `fn main` now returns `ExitCode`, not `anyhow::Result<()>`, so nothing goes
   through `Termination`. The `Error:` / `Caused by:` rendering a previous draft
   showed cannot occur; the message is whatever the binary prints deliberately.
-- The text after the colon comes from `git`, is version- and locale-dependent
+- The wording before the first colon is this repository's and is composed on
+  purpose: `` `git ls-files` failed with {status}``. `ExitStatus`'s own
+  `Display` already renders the status as `exit status: 128`, so the message
+  does not spell those words a second time — an earlier draft's
+  `"{command} failed with exit status {status}"` did, and said "exit status"
+  twice. `GitListError::diagnostic` appends git's scrubbed text beside it;
+  `Display` alone ends at the status, which is the part a test asserts.
+- The text after that colon comes from `git`, is version- and locale-dependent
   (AX-GIT-NLS), and is therefore asserted by **no** test. Snapshots of failure
   messages are driven through `GitLsFiles::with_program` against a fixture
   program emitting fixed bytes, so they are a function of this repository's
   code rather than of the machine's `git`.
+- It is one line, at most 1024 characters, with control characters and newlines
+  in git's text replaced: a path in the repository cannot forge a second line
+  of this tool's stderr, nor drive the terminal reading it. See
+  `src/select/git_ls_files.rs`'s `relayable`, and the tests that pin both
+  halves.
 
 ```console
 $ mdtablefix --git notes.md ; echo "exit=$?"
@@ -1681,14 +1718,40 @@ is clap's, so the test asserts the exit status; EP-M0 records the verbatim text
 for the documentation.
 
 ```console
+$ mdtablefix --md-exts md ; echo "exit=$?"
+error: --md-exts requires --git
+exit=2
+
+$ mdtablefix --list-files ; echo "exit=$?"
+error: the following required arguments were not provided:
+  <FILES|--git>
+exit=2
+```
+
+Measured. Expected: the first is the dependency `clap` cannot express, enforced
+after parsing and reported as a clap error, so the status is 2 and the usage
+footer is clap's. `--list-files notes.md` is the case that forced the mechanism:
+on clap 4.6.6 it satisfies `requires = "git"` through the positional, with no
+`--git` in sight. The second is the `mode` group's own `requires("inputs")`,
+which is why `--git` is a way to satisfy `--in-place` rather than a way to
+bypass it.
+
+```console
 $ mdtablefix --git --check ; echo "exit=$?"
-docs/guide.md: would reformat
+docs/guide.md +3 -2
+1 file would be reformatted.
 exit=1
 ```
 
-Expected: exit **1**, drift rather than error. This is the combination
-`--git` exists to enable in continuous integration, and it works because `git`
-joined the `inputs` group that `mode` requires.
+Measured on the fixture above, before the `--in-place` run. Expected: exit
+**1**, drift rather than error, and the summary on standard error while the
+finding stays on standard output. This is the combination `--git` exists to
+enable in continuous integration, and it works because `git` joined the
+`inputs` group that `mode` requires. The sibling `--diff` renders the same
+finding as a unified diff with the same exit status, and `--list-files` over
+the same tree exits **0**: it reports paths rather than drift, so a tree full
+of drift it was never asked to assess is not a failure. That last asymmetry is
+`Mode::reports`, and `driver_tests` pins it.
 
 Red-Green-Refactor evidence to record in Progress:
 
@@ -1873,15 +1936,55 @@ plateau.
       `io::ErrorKind`, and testing both arms by constructing the errors rather
       than by staging a fixture that cannot be staged. See Surprises &
       discoveries.
-- [ ] EP-M2: add `git` to the `inputs` group and the four supporting flags,
-      with post-parse dependency checks; wire `resolve_git_inputs` into
-      `driver::Inputs`.
-- [ ] EP-M2: widen the mutation run back to the whole test suite once
-      `tests/git_file_selection.rs` is green — drop `additional_cargo_test_args`
-      from `.cargo/mutants.toml` and re-run `make mutants`, so the behavioural
-      scenarios are part of the oracle rather than merely outside it.
-- [ ] EP-M2: bound `Mode::Print` memory with the chunked drain.
-- [ ] EP-M2: land the scenarios and the `--help` snapshot.
+- [x] (2026-09-12) EP-M2, production code: `git` joins the `inputs` group with
+      the four supporting flags and the post-parse dependency check; a new
+      binary-private `src/git_inputs.rs` resolves the selection and the conflict
+      guard; `driver::Mode` gained `ListFiles`, answered by the first statement
+      of `analyse`, before the read capability is cloned; `ConflictGuard`
+      refuses a conflicted file only where the write would happen; and
+      `run_files` drains in chunks of 256 through one `BufWriter` over one
+      `stdout().lock()`. `src/main.rs` is 350 lines, inside both the 400-line
+      cap and the 380-line escalation trigger. Every change is covered in the
+      Decision log; two of them — `ListFiles`' capability and the guard's
+      placement — deviate from this plan's earlier draft and say so there.
+- [x] (2026-09-12) EP-M2, first green, before any test file was added:
+      `cargo test --test git_file_selection` reports **17 passed; 0 failed** and
+      `cargo test --bin mdtablefix` **136 passed; 0 failed**. The behavioural
+      suite that was red from Stage B through EP-M1 turns green on the first
+      run of the wiring, with no scenario amended.
+- [x] (2026-09-12) EP-M2, `tests/cli_git.rs`: 15 tests pinning what a scenario
+      cannot state — REQ-GIT-003's replacement semantics over four spellings of
+      `--md-exts`, REQ-GIT-004, REQ-GIT-005's both halves, the four post-parse
+      rejections with their usage footers, REQ-GIT-010 discharged by listing a
+      tracked file whose bytes are not UTF-8, a `--git` failure outside a
+      repository as one deliberate line, and the `--help` snapshot
+      `tests/snapshots/cli_git_help.snap`. REQ-GIT-010's evidence is the one
+      with teeth: the file cannot be decoded, so any mode that read it would
+      fail, and `--list-files` lists it.
+- [x] (2026-09-12) EP-M2, two measured corrections to the pinned help text,
+      both found by running the binary rather than by reading the declaration —
+      see Surprises & discoveries. The `--help` snapshot is what caught the
+      first: it is the whole rendering, not the flags this milestone added.
+- [ ] EP-M2: re-run `make mutants` with the widening in place — the config
+      change has landed (`.cargo/mutants.toml` no longer narrows the test set)
+      and the run is what remains, so that the behavioural scenarios are part
+      of the oracle rather than merely outside it.
+- Measurement, 2026-09-12, against the Scope tolerance (more than 24 files
+      touched, or more than 1600 net added lines): **EP-M2's own change is 16
+      files — 13 modified and 3 new — with 669 insertions and 94 deletions in
+      the tracked files and about 520 added lines across
+      `src/git_inputs.rs`, `tests/cli_git.rs`, and the snapshot: roughly 1,190
+      added, 95 removed, so ~1,095 net.** Both thresholds hold for the change.
+      The *cumulative* branch does not: `git diff --stat
+      origin/check-option..HEAD` reports 30 files and 5,374 insertions, most of
+      them this plan document. The two readings cannot both be the intended
+      one — the plan's Interfaces section names more than 24 files by itself,
+      and the Tolerance bullet records that an earlier draft's 14 and 900 were
+      "arithmetically unsatisfiable" — so the per-change reading is the one
+      taken: the numbers bound a single milestone's diff rather than the sum of
+      every commit the plan produces. Recorded rather than assumed, because a
+      reader checking the tolerance will reach for the branch diff and find it
+      over on both counts.
 - [ ] EP-M3: write **ADR 0010** and update `README.md`, `docs/users-guide.md`,
       `docs/architecture.md`, `docs/developers-guide.md`, `docs/contents.md`.
 - [ ] Reconcile Decision log and Surprises with ADR 0010, then set Status.
@@ -2245,10 +2348,120 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   either covered or uncovered by it — they are where the killing is done, not
   where it is measured.
 
+- Observation: **a doc comment on a `clap` field is user-facing help text, and a
+  second paragraph in one changes the rendering of every flag.** Evidence: the
+  first `--help` snapshot, taken while `--md-exts`'s doc comment carried a second
+  paragraph explaining why it declares `default_value` rather than
+  `default_values`. `clap` reads the first paragraph as `help` and the rest as
+  `long_help`, and the presence of any long help switches the *whole* `--help`
+  to the long layout: every flag in its own indented block, the internal
+  rationale printed to users, and the snapshot 71 lines instead of 31. Resolved
+  by moving the rationale to a `//` comment, which `clap` does not read.
+  Impact: no behaviour changed, and nothing short of the whole-rendering
+  snapshot would have caught it — a `help.contains("--md-exts")` assertion
+  passes in both layouts, which is the argument for snapshotting the text.
+
+- Observation: **`default_values` renders space-joined, so the default extension
+  set read as one extension with spaces in it.** Evidence:
+  `[default: md mdc markdown]` in the first snapshot, and a user copying that
+  string into `--md-exts` would have had it accepted by `parse_extension` as a
+  single extension named `md mdc markdown`, which matches no file. Resolved by
+  one `default_value = "md,mdc,markdown"` under the same `value_delimiter`:
+  identical rendering to the grammar the flag accepts, identical three
+  extensions after splitting, and `ValueSource::DefaultValue` either way, so the
+  post-parse check is unaffected. Impact: the Interfaces block's
+  `default_values = [...]` is superseded, and
+  `cli_git.rs::md_exts_replaces_the_default_set`'s unflagged case is what shows
+  the default selection did not move.
+
+- Observation: **`ExitStatus`'s own `Display` already renders the words "exit
+  status", so the pinned failure message said it twice.** Evidence: the rendered
+  `` `/bin/false ls-files` failed with exit status exit status: 1``. The unit
+  test that existed asserted only `.contains("git ls-files")`, so the doubling
+  passed every gate until EP-M2's sanitizer work added an assertion on the whole
+  string. Resolved by `` `{command}` failed with {status}``, with the reason
+  recorded where the message is declared. Impact: an illustration of what a
+  substring assertion on a message pins — the substring, and nothing else about
+  the sentence around it.
+
 ## Decision log
 
 Entries are pointers; the reasoning lives in the body sections named. ADR 0010
 is the durable record, and EP-M3 reconciles this log into it.
+
+- Decision: `--list-files` is answered by the first statement of
+  `driver::analyse`, before the read capability is cloned, and is *not* given a
+  `ReadOnlyDir` parameter of its own. Rationale: the plan asked for the mode to
+  be unable to write by type, and the type is not available here — `analyse` is
+  one function whose mode is a run-time value, so the capability it receives
+  cannot change type with the mode. What the early return does give is that the
+  listing path reaches no capability and no `Directory` call at all, so the
+  reading and writing arms are unreachable rather than merely unentered; what it
+  leaves to review is that the `&Dir` is still held. The alternatives were to
+  split `analyse` into a read-only half and a write half (a larger change to
+  #464's composition than this milestone is for) or to build the listing payload
+  in `src/main.rs` (which would put the meaning of listing in two places).
+  Cost: one plan sentence softened from "by type" to "by construction, with the
+  capability held but unused", recorded in Table 1 and in the composition
+  section rather than left as a claim a reader would have to falsify.
+  Date/Author: 2026-09-12, implementation.
+
+- Decision: `git_inputs::resolve` takes `Mode` and returns
+  `GitSelection { inputs, guard }` rather than returning `Inputs` alone.
+  Rationale: two facts, one reason. The guard is needed by the caller exactly
+  when the mode can write, and resolving it costs a second `git` process, so a
+  `--check`, `--diff`, or `--list-files` run must not pay for one it cannot use
+  — hence the mode parameter. And the guard has to reach `driver::analyse`
+  through `run_files`, so it must travel out of the resolver beside the inputs;
+  returning it through a field of `Inputs` would have put a conflict policy
+  inside the type that answers "where does the text come from". Cost: the
+  composition section's pinned signature is superseded, and the resolver now
+  lives in `src/git_inputs.rs` rather than in `src/main.rs` so that the choice is
+  testable without a repository. Date/Author: 2026-09-12, implementation.
+
+- Decision: the conflict guard refuses inside the `Mode::InPlace if is_changed`
+  arm, not before the assessment. Rationale: the refusal is only meaningful for
+  a file this run would write, and `is_changed` is what decides that — a clean
+  file containing a marker (a resolved file already committed, say) has nothing
+  to refuse, and refusing it would fail a run that would have changed nothing.
+  It also means the guard sees `Assessment::original`, the bytes actually on
+  disk, rather than a second read that could race the first. Cost: `analyse`
+  gained a `ConflictGuard` parameter, which is one more argument at eight call
+  sites in `driver_tests` and two in `main_tests`. Date/Author: 2026-09-12,
+  implementation.
+
+- Decision: the Git directory is resolved with
+  `git rev-parse --absolute-git-dir` rather than by walking up for a `.git`
+  entry. Rationale: a linked worktree and a submodule hold a `.git` *file*
+  naming a directory elsewhere, and `GIT_DIR` may point anywhere at all, so a
+  walk misresolves exactly the repositories a merge is most likely to be paused
+  in — the case the guard exists for. It also answers for a bare repository,
+  where the working tree has no `.git` entry to find. Cost: one more subprocess
+  per `--in-place` run that is not `--allow-conflicted`, and a failure mode
+  (`NoGitDir`) that has no analogue in a walk. Date/Author: 2026-09-12,
+  implementation.
+
+- Decision: git's own stderr is relayed beside this repository's message, as one
+  scrubbed line, capped at 1024 characters — rather than dropped, or printed
+  verbatim. Rationale: AX-GIT-NLS forbids asserting on git's text, so the part a
+  test may assert has to be this repository's wording; but dropping git's text
+  would leave a user with "git ls-files failed" and no reason. `relayable`
+  replaces control characters and newlines with single spaces and non-UTF-8
+  bytes with the replacement character, so a path in the repository cannot forge
+  a second line of stderr or drive the terminal reading it, and the cap keeps a
+  kilobyte of a repository's name from burying the message it supports. Cost:
+  one screen of scrubbing logic, five cases in `git_ls_files_tests`, and a
+  `diagnostic()` method whose output differs from `Display`. Date/Author:
+  2026-09-12, implementation.
+
+- Decision: REQ-GIT-010's evidence is a tracked file whose bytes are not UTF-8,
+  not an unreadable file. Rationale: a file this process cannot read proves
+  "reads no content" only for a user who cannot read it, and the suite may run
+  as root or as the file's owner; a file that cannot be *decoded* fails every
+  mode that reads it, whoever runs it. The test therefore means the same thing
+  on every machine. Cost: none; the scenario in the feature file pins the
+  ordinary case, and this pins the strong one. Date/Author: 2026-09-12,
+  implementation.
 
 - Decision: narrow the mutation run to the binary's own test target
   (`additional_cargo_test_args = ["--bin", "mdtablefix"]`) rather than the whole
@@ -2815,6 +3028,34 @@ one milestone is the honest count rather than a repetition: the mutation
 tooling landed after the first, and it is the tooling that found the three
 survivors, so a review of the implementation alone would have passed a
 milestone whose acceptance criterion was not yet met.
+
+**EV-M2-CLI** — measured 2026-09-12, logs at
+`/tmp/test-cli-git-mdtablefix-git-option.out` and
+`/tmp/test-grown-mdtablefix-git-option.out`. The acceptance command, on the tree
+this milestone lands:
+
+```plaintext
+cargo test --test cli_git --test git_file_selection --bin mdtablefix
+```
+
+```plaintext
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 136 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out
+```
+
+The second run is that command *without* `INSTA_UPDATE`, which is what makes the
+`--help` snapshot **accepted** rather than merely written: the first run created
+`tests/snapshots/cli_git_help.snap`, and the second compared against it and
+passed. The snapshot holds the whole rendering, 31 lines of it — see Surprises &
+discoveries for the two defects it caught, neither of which an assertion of the
+form `help.contains("--md-exts")` would have.
+
+The five transcripts under "Validation and acceptance" were re-measured on
+`target/debug/mdtablefix` at this commit, against a scratch repository built by
+the commands shown there. Every exit status quoted in them is the measured one,
+including the `--check` transcript's exit 1 and the empty-selection case's exit
+0.
 
 ## Revision note
 
