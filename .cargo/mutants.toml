@@ -5,10 +5,10 @@
 # names the negative controls each mutant must have to be killed by.
 examine_globs = ["src/select/**"]
 
-# The binary's own test target, and only it. Until EP-M2 lands the flag,
-# `tests/git_file_selection.rs` fails whatever the source says, and a run whose
-# baseline is already red accounts for nothing: every mutant would look caught.
-additional_cargo_test_args = ["--bin", "mdtablefix"]
+# No `additional_cargo_test_args`: the whole suite is the test set, as `make
+# test` runs it. The run was narrowed to the binary's own target while
+# `tests/git_file_selection.rs` was red, because a red baseline makes every
+# mutant look caught; EP-M2 made that suite green and dropped the narrowing.
 
 # As `make test` runs them: every feature enabled. The crate declares no
 # features today, so this is here so that adding one cannot quietly narrow
@@ -24,7 +24,7 @@ output = "target"
 # dependency build is paid once rather than once per mutant.
 copy_target = false
 
-# Stated rather than assumed, because `target/` is both git-ignored and the
-# parent of the scratch tree: a copy that ignored `.gitignore` would copy the
-# scratch into itself.
+# Stated rather than assumed: a copy that ignored `.gitignore` would try to
+# copy `target/`, which is 15 GB here, and would copy the scratch tree into
+# itself if `TMPDIR` were ever set inside the worktree again.
 gitignore = true
