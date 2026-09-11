@@ -278,9 +278,9 @@ Stop and escalate when any of these is reached.
 
   Severity: medium, and only for `--code-emphasis` users. Likelihood: low —
   one of 110 fixtures swept, and `make fmt`'s flag set excludes the flag.
-  Mitigation: **not this plan's defect and not this plan's to fix.** It is
-  untracked: issues #468, #474, and #375 are all closed and no open issue
-  covers it, so raising one is the right next step and is outside this plan.
+  Mitigation: **not this plan's defect and not this plan's to fix.** Tracked
+  as issue #478, raised from this plan's measurement, which also records the
+  root cause and the `--ellipsis` precedent for the fix.
   `tests/idempotence_drift.rs` gates the `make fmt` flag set and that set plus
   `--headings`; `--code-emphasis` is deliberately outside both. Do not add it
   to a corpus-wide drift gate as part of this work. Document `--git --check`
@@ -1683,8 +1683,8 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   `tests/data/cli-matrix/table-prose.dat` differing between pass one and pass
   two under `--code-emphasis --in-place`, and identical between passes two and
   three. `tests/idempotence_drift.rs` gates only the `make fmt` flag set and
-  that set plus `--headings`. Issues #468, #474 and #375 are closed; no open
-  issue covers this.
+  that set plus `--headings`. Raised as issue #478; its siblings #468, #474
+  and #375 are all closed.
   Impact: `--git --check` is a sound gate for the gated flag sets and not for
   `--code-emphasis`. Do not cite a green `tests/idempotence_properties.rs` as
   evidence of convergence for an ungated flag — its generators do not reach
@@ -1889,9 +1889,9 @@ under ADR 0007. Confirm at closure that neither was reimplemented in
 
 Issue #474, the `--headings` fixed-point defect, was fixed by pull
 request #477 before this plan was implemented, so no caveat is needed there.
-The `--code-emphasis` two-pass residual recorded under Risks is untracked and
-is not this plan's work; confirm at closure that an issue exists for it and
-that the users' guide does not claim one-pass convergence for that flag.
+The `--code-emphasis` two-pass residual recorded under Risks is issue #478 and
+is not this plan's work; confirm at closure that it is resolved, or that the
+users' guide does not claim one-pass convergence for that flag.
 
 ## Artefacts and notes
 
@@ -1927,9 +1927,9 @@ lines makes the file-size contingency a prerequisite rather than a fallback.
 Issue #474 has since been fixed by pull request #477 and the plan no longer
 carries a caveat for `--headings`. A sweep of the fixture corpus at `408c76a`
 found one residual the gates do not cover: `--code-emphasis` settles on the
-second pass, not the first, which is recorded as a risk and is untracked
-upstream. Scenarios for `--git --check` and `--git --diff`
-were added, since the group change makes them parse for free.
+second pass, not the first. That is now issue #478. Scenarios for
+`--git --check` and `--git --diff` were added, since the group change makes
+them parse for free.
 
 Revised 2026-09-09, second pass, after the requester identified two in-flight
 pieces of work. Atomic `--in-place` writes are issue #465 and CRLF handling is
