@@ -136,7 +136,7 @@ fn generated_structural_adjacencies_reach_every_shape() {
 
         let lines: Vec<&str> = once.lines().collect();
         assert!(
-            lines.iter().any(|line| *line == break_line.as_str()),
+            lines.contains(&break_line.as_str()),
             "the {break_line:?} break was consumed in {document:?}: {lines:?}",
         );
 
