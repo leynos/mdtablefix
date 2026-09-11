@@ -290,10 +290,17 @@ Hard invariants. Violating one requires escalation, not a workaround.
       passes. All three `Verification plan` negative controls were applied as
       temporary local mutations, each was rejected, and each was reverted; see
       `Artefacts and notes → EP-M2 green transcripts`.
-- [ ] EP-M3 Driver, read-only capability, `--check`, exit-status contract. The
-      version bump to `0.6.0` is already in the manifest and unreleased, so this
-      milestone changes the exit status under an existing version rather than
-      raising it; the record moves to `ADR 0009`.
+- [x] EP-M3 Driver, read-only capability, `--check`, exit-status contract.
+      Complete. `src/driver.rs` and `src/driver_tests.rs` are new, `src/main.rs`
+      is now an adapter over `driver::analyse`, and
+      `tests/features/check_mode.feature` with `tests/steps/reporting.rs` and
+      `tests/bdd_reporting.rs` drive the real binary. All gates pass, and the
+      post-gates CodeRabbit pass returned `review_completed` with zero findings
+      on the pushed commit `6c9dd90`. See
+      `Artefacts and notes → EP-M3 red and green transcripts`. The version bump
+      to `0.6.0` is already in the manifest and unreleased, so this milestone
+      changes the exit status under an existing version rather than raising it;
+      the record moves to `ADR 0009`.
 - [ ] EP-M4 `--diff`, sharing `--check`'s exit semantics.
 - [ ] EP-M5 Curated CLI matrix coverage for the two new modes.
 - [ ] EP-M6 Targeted mutation testing of the counting and aggregation
@@ -2650,6 +2657,22 @@ end, whereas what they checked was code written earlier in the same session:
 
 The re-run was green on all six gates — 42 test suites, 1795 passed, 0 failed,
 20 ignored — with the working tree byte-identical across the run.
+
+### CodeRabbit review after `EP-M3`
+
+Requested through the gate runner only once the deterministic suite was green,
+so that the review was not asked to catch anything the gates could have caught
+first. It ran against the pushed commit `6c9dd90` on `origin/check-option`,
+reviewing the whole branch diff — 43 files, from `EP-M0` onward, not just this
+milestone's — and reported no rate limit and no refusal:
+
+```plaintext
+{"type":"complete","status":"review_completed","findings":0,"reviewedFiles":[…]}
+CODERABBIT_EXIT=0
+```
+
+Zero findings, so nothing carried into `EP-M4`. The full JSON-lines log is
+`/tmp/coderabbit-mdtablefix-check-option.out`.
 
 ## Documentation and skills to consult
 
