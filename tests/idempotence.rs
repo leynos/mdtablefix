@@ -17,6 +17,20 @@
 //! `make fmt` flag set does not enable: a candidate line that is itself a block
 //! start must not swallow the underline below it. It is recorded separately
 //! because the first defect classes were all reachable without `--headings`.
+//!
+//! Class `T` is a second `--headings` defect, found by the property suite after
+//! the first was fixed. A table whose delimiter row is the last line before a
+//! thematic break is not a fixed point: the delimiter row is table syntax, so
+//! the `---` below it is a break, but the Setext pass read the pair as a
+//! level-2 heading and rewrote the delimiter row as `## | --- | --- |`. The
+//! table then had no delimiter row, so the next pass padded its header row
+//! differently and the output never settled. `T6` is the control: a line of
+//! prose between the delimiter row and the `---` still becomes a heading, so
+//! the class is the adjacency and not Setext conversion itself.
+//!
+//! Every case also records the structural expectation its fix must preserve, so
+//! a fix that reached a fixed point by consuming the break on the *first* pass
+//! fails rather than passing for the wrong reason.
 
 use std::{
     fs,
@@ -33,8 +47,27 @@ const WRAP: &[&str] = &["--wrap"];
 const WRAP_BREAKS: &[&str] = &["--wrap", "--breaks"];
 /// Flag set `make fmt` runs through `mdformat-all`.
 const FULL: &[&str] = &["--wrap", "--renumber", "--breaks", "--ellipsis", "--fences"];
+/// The `make fmt` flag set plus `--headings`.
+///
+/// The reported class needs the Setext pass, which `make fmt` does not enable,
+/// so a drift check over the repository fixtures has to add the flag to reach
+/// it.
+const FULL_HEADINGS: &[&str] = &[
+    "--wrap",
+    "--renumber",
+    "--breaks",
+    "--ellipsis",
+    "--fences",
+    "--headings",
+];
 /// Flag set recorded for the heading cases, which `make fmt` does not enable.
 const HEADINGS: &[&str] = &["--footnotes", "--code-emphasis", "--headings"];
+/// Flag set recorded for the class `T` cases, which isolate the Setext pass.
+///
+/// `--headings` alone reaches the defect: `HEADINGS` also enables `--footnotes`
+/// and `--code-emphasis`, and the class `T` fixtures must pin the Setext pass
+/// rather than whatever those two flags happen to do to the output.
+const HEADINGS_ONLY: &[&str] = &["--headings"];
 
 /// Line that a case must keep standalone in the formatted output.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,16 +76,45 @@ enum Standalone {
     NormalisedBreak,
     /// A thematic break that must survive spelling-for-spelling.
     Literal(&'static str),
+    /// A table delimiter row that must survive as table syntax.
+    DelimiterRow,
 }
 
 impl Standalone {
-    /// Returns the exact output line this expectation requires.
-    fn line(self) -> String {
+    /// Returns whether the formatted output satisfies this expectation.
+    fn holds(self, lines: &[String]) -> bool {
         match self {
-            Self::NormalisedBreak => "_".repeat(THEMATIC_BREAK_LEN),
-            Self::Literal(break_line) => break_line.to_string(),
+            Self::NormalisedBreak => {
+                let expected = "_".repeat(THEMATIC_BREAK_LEN);
+                lines.iter().any(|line| line == &expected)
+            }
+            Self::Literal(expected) => lines.iter().any(|line| line.as_str() == expected),
+            Self::DelimiterRow => lines.iter().any(|line| is_delimiter_row(line)),
         }
     }
+
+    /// Describes this expectation for an assertion message.
+    fn describe(self) -> String {
+        match self {
+            Self::NormalisedBreak => format!("{:?}", "_".repeat(THEMATIC_BREAK_LEN)),
+            Self::Literal(expected) => format!("{expected:?}"),
+            Self::DelimiterRow => "a table delimiter row".to_string(),
+        }
+    }
+}
+
+/// Returns whether `line` is still a table delimiter row.
+///
+/// The shape is the one the table parser reads as the alignment row: built only
+/// from pipes, colons, dashes, and spaces, carrying at least one pipe and one
+/// dash. The reported class rewrote the row as `## | --- | --- |`, so the hash
+/// marker alone disqualifies the line.
+fn is_delimiter_row(line: &str) -> bool {
+    line.contains('|')
+        && line.contains('-')
+        && line
+            .chars()
+            .all(|ch| matches!(ch, '|' | ':' | '-') || ch.is_whitespace())
 }
 
 /// One case in the reproduction corpus.
@@ -63,8 +125,12 @@ struct IdempotenceCase {
     fixture: &'static str,
     /// Flags recorded for this case.
     flags: &'static [&'static str],
-    /// Break that must stay on its own line, when the case has one.
-    standalone: Option<Standalone>,
+    /// Structural expectations the formatted output must satisfy.
+    ///
+    /// A slice rather than a single value because the class `T` control records
+    /// two: its delimiter row must survive *and* the prose line below it must
+    /// still convert. Either one alone would let a regression through.
+    expects: &'static [Standalone],
 }
 
 /// The reproduction corpus, one fixture per case.
@@ -73,55 +139,98 @@ const CASES: &[IdempotenceCase] = &[
         id: "A1_hyphen_break_unterminated",
         fixture: "A1_hyphen_break_unterminated.dat",
         flags: WRAP_BREAKS,
-        standalone: Some(Standalone::NormalisedBreak),
+        expects: &[Standalone::NormalisedBreak],
     },
     IdempotenceCase {
         id: "A2_hyphen_break_terminated",
         fixture: "A2_hyphen_break_terminated.dat",
         flags: WRAP_BREAKS,
-        standalone: Some(Standalone::NormalisedBreak),
+        expects: &[Standalone::NormalisedBreak],
     },
     IdempotenceCase {
         id: "A3_setext_underline",
         fixture: "A3_setext_underline.dat",
         flags: WRAP_BREAKS,
-        standalone: Some(Standalone::NormalisedBreak),
+        expects: &[Standalone::NormalisedBreak],
     },
     IdempotenceCase {
         id: "A4_frontmatter_fixture",
         fixture: "A4_frontmatter_fixture.dat",
         flags: FULL,
-        standalone: Some(Standalone::NormalisedBreak),
+        expects: &[Standalone::NormalisedBreak],
     },
     IdempotenceCase {
         id: "B1_code_span_tail",
         fixture: "B1_code_span_tail.dat",
         flags: WRAP,
-        standalone: None,
+        expects: &[],
     },
     IdempotenceCase {
         id: "B2_code_span_tail_full_flags",
         fixture: "B2_code_span_tail_full_flags.dat",
         flags: FULL,
-        standalone: None,
+        expects: &[],
     },
     IdempotenceCase {
         id: "R1_asterisk_break_absorbed",
         fixture: "R1_asterisk_break_absorbed.dat",
         flags: WRAP,
-        standalone: Some(Standalone::Literal("***")),
+        expects: &[Standalone::Literal("***")],
     },
     IdempotenceCase {
         id: "R2_underscore_break_absorbed",
         fixture: "R2_underscore_break_absorbed.dat",
         flags: WRAP,
-        standalone: Some(Standalone::Literal("___")),
+        expects: &[Standalone::Literal("___")],
     },
     IdempotenceCase {
         id: "H1_atx_heading_above_break",
         fixture: "H1_atx_heading_above_break.dat",
         flags: HEADINGS,
-        standalone: Some(Standalone::Literal("---")),
+        expects: &[Standalone::Literal("---")],
+    },
+    // Class `T`: a delimiter row directly above a thematic break must keep the
+    // break and stay a delimiter row. `T1` has no trailing newline and `T2` does,
+    // because a missing terminator is a distinct input the reader sees.
+    IdempotenceCase {
+        id: "T1_delimiter_then_break",
+        fixture: "T1_delimiter_then_break.dat",
+        flags: HEADINGS_ONLY,
+        expects: &[Standalone::DelimiterRow, Standalone::Literal("---")],
+    },
+    IdempotenceCase {
+        id: "T2_delimiter_then_break_terminated",
+        fixture: "T2_delimiter_then_break_terminated.dat",
+        flags: HEADINGS_ONLY,
+        expects: &[Standalone::DelimiterRow, Standalone::Literal("---")],
+    },
+    IdempotenceCase {
+        id: "T3_leading_prose",
+        fixture: "T3_leading_prose.dat",
+        flags: HEADINGS_ONLY,
+        expects: &[Standalone::DelimiterRow, Standalone::Literal("---")],
+    },
+    IdempotenceCase {
+        id: "T4_trailing_body_row",
+        fixture: "T4_trailing_body_row.dat",
+        flags: HEADINGS_ONLY,
+        expects: &[Standalone::DelimiterRow, Standalone::Literal("---")],
+    },
+    IdempotenceCase {
+        id: "T5_delimiter_first",
+        fixture: "T5_delimiter_first.dat",
+        flags: HEADINGS_ONLY,
+        expects: &[Standalone::DelimiterRow, Standalone::Literal("---")],
+    },
+    // The control: prose between the delimiter row and the break absorbs the
+    // break through ordinary Setext conversion, which `--headings` exists to
+    // perform. The delimiter row survives regardless, so the class is the
+    // adjacency rather than Setext conversion itself.
+    IdempotenceCase {
+        id: "T6_prose_between",
+        fixture: "T6_prose_between.dat",
+        flags: HEADINGS_ONLY,
+        expects: &[Standalone::DelimiterRow, Standalone::Literal("## Title")],
     },
 ];
 
@@ -238,13 +347,13 @@ fn every_corpus_case_is_a_fixed_point() -> Result<(), Box<dyn std::error::Error>
             case.flags,
         );
 
-        if let Some(standalone) = case.standalone {
-            let expected = standalone.line();
-            let lines = output_lines(&once);
+        let lines = output_lines(&once);
+        for expectation in case.expects {
             assert!(
-                lines.iter().any(|line| line == &expected),
-                "case {} lost the standalone break line {expected:?}; output was {lines:?}",
+                expectation.holds(&lines),
+                "case {} lost {}; output was {lines:?}",
                 case.id,
+                expectation.describe(),
             );
         }
     }
@@ -304,6 +413,45 @@ fn data_files(root: &Path) -> Vec<PathBuf> {
 /// copies each file, formats the copy twice with the `make fmt` flag set, and
 /// compares the two passes. A file that is already formatted simply produces
 /// its own bytes twice.
+/// Formats every file in `files` twice with `flags`, asserting no drift.
+///
+/// Returns the number of files checked. Files that cannot be read, or that are
+/// not UTF-8, are skipped rather than failing the check.
+fn assert_no_drift(
+    files: &[PathBuf],
+    flags: &[&str],
+    description: &str,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    let directory = TempDir::new()?;
+    let mut checked = 0_usize;
+    for file in files {
+        let Ok(original) = fs::read(file) else {
+            continue;
+        };
+        if String::from_utf8(original.clone()).is_err() {
+            continue;
+        }
+        let name = file
+            .file_name()
+            .expect("a file has a name")
+            .to_string_lossy()
+            .into_owned();
+
+        let once = format_once(&directory, &name, &original, flags)?;
+        let twice = format_once(&directory, &name, &once, flags)?;
+
+        assert_eq!(
+            String::from_utf8_lossy(&twice),
+            String::from_utf8_lossy(&once),
+            "{} is not a fixed point under {description}",
+            file.display(),
+        );
+        checked += 1;
+    }
+
+    Ok(checked)
+}
+
 #[test]
 fn repository_documents_do_not_drift_on_a_second_pass() -> Result<(), Box<dyn std::error::Error>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -317,36 +465,43 @@ fn repository_documents_do_not_drift_on_a_second_pass() -> Result<(), Box<dyn st
         "the drift check must cover docs/developers-guide.md",
     );
 
-    let directory = TempDir::new()?;
-    let mut checked = 0_usize;
-    for file in files {
-        let Ok(original) = fs::read(&file) else {
-            continue;
-        };
-        if String::from_utf8(original.clone()).is_err() {
-            continue;
-        }
-        let name = file
-            .file_name()
-            .expect("a file has a name")
-            .to_string_lossy()
-            .into_owned();
-
-        let once = format_once(&directory, &name, &original, FULL)?;
-        let twice = format_once(&directory, &name, &once, FULL)?;
-
-        assert_eq!(
-            String::from_utf8_lossy(&twice),
-            String::from_utf8_lossy(&once),
-            "{} is not a fixed point under the full flag set",
-            file.display(),
-        );
-        checked += 1;
-    }
+    let checked = assert_no_drift(&files, FULL, "the full flag set")?;
 
     assert!(
         checked > 100,
         "expected the whole corpus, checked {checked}"
+    );
+    Ok(())
+}
+
+/// Asserts that no repository fixture drifts under `--headings`.
+///
+/// The reported defect was reachable only through the Setext pass, so a
+/// check-after-fix gate has to hold for the output `--headings` produces from
+/// the fixtures already in `tests/data/`. The class `T` fixtures are the
+/// reproduction: before the delimiter-row guard, the second pass restructured
+/// the table above the row and the output never settled.
+#[test]
+fn repository_fixtures_do_not_drift_under_headings() -> Result<(), Box<dyn std::error::Error>> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let files = data_files(&root.join("tests").join("data"));
+    assert!(!files.is_empty(), "found no fixtures to check for drift");
+    assert!(
+        files
+            .iter()
+            .any(|path| path.ends_with("tests/data/idempotence/T1_delimiter_then_break.dat")),
+        "the drift check must cover the class `T` reproduction",
+    );
+
+    let checked = assert_no_drift(
+        &files,
+        FULL_HEADINGS,
+        "the `make fmt` flag set with --headings",
+    )?;
+
+    assert!(
+        checked > 100,
+        "expected the whole fixture corpus, checked {checked}"
     );
     Ok(())
 }
