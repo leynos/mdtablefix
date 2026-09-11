@@ -33,6 +33,10 @@ html5ever = "0.39.0"
 markup5ever_rcdom = "0.39.0"
 textwrap = "0.16.2"
 metrics = "0.24"
+# Domain error enums for the binary's file-selection tree. `AGENTS.md` mandates
+# a concrete error type over an opaque one, and `thiserror` derives the
+# `Display` impl that keeps the diagnostics in one place we own.
+thiserror = "2"
 tracing = "0.1"
 unicode-width = "0.2"
 
