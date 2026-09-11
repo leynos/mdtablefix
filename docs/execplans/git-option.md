@@ -264,26 +264,28 @@ Stop and escalate when any of these is reached.
   therefore reduced to confirming a scenario in this plan's own feature file
   runs.
 
-- Risk: **the formatter is not a fixed point under `--headings`**
-  (issue #474, open). A table whose delimiter row is the last line before a
-  thematic break is restructured on every pass, because the `---` is taken as a
-  Setext underline. `--git` amplifies this from one named file to every
-  matching file in the repository: `--git --in-place --headings` would rewrite
-  such a file on every run and never converge, and `--git --check` would report
-  drift that no number of `--in-place` passes clears.
-  Severity: high for `--headings` users. Likelihood: low, and zero for the
-  default flag set — `make fmt`'s `mdformat-all` flag set excludes
-  `--headings`, and no file in this repository is affected today.
-  Mitigation: **owned elsewhere and being fixed in parallel.** #474 is a
-  formatter defect, not a selection defect; do not plan around it, design for
-  it, or add a workaround. The expectation is that it closes before this plan
-  is implemented, so the plan assumes convergence. Check its status at EP-M3
-  and, only if it is still open then, add a caveat to the users' guide.
-  Recorded here because it is the one thing that would make `--git --check`
-  unusable as a gate, and because a seed sweep of
-  `tests/idempotence_properties.rs` (seeds 0, 1, 7, 42, 99) passes — that
-  suite's generators do not reach this shape, so a green run there is not
-  evidence either way.
+- Risk: **`--code-emphasis` reaches a fixed point on the second pass, not the
+  first**, so a single `--in-place` run does not settle it. Measured on this
+  branch at `408c76a`: formatting `tests/data/cli-matrix/table-prose.dat` with
+  `--code-emphasis --in-place` shortens emphasis markers on pass one without
+  re-padding the table, and pass two narrows the two affected column rules by
+  two characters. Pass three is identical to pass two, so it converges — it
+  does not drift forever.
+
+  This matters for `--git --check` as a gate: after one `--in-place` pass over
+  a repository, a `--check` run would still report drift on such a file, and a
+  check-fix-check loop needs two fixes rather than one.
+
+  Severity: medium, and only for `--code-emphasis` users. Likelihood: low —
+  one of 110 fixtures swept, and `make fmt`'s flag set excludes the flag.
+  Mitigation: **not this plan's defect and not this plan's to fix.** It is
+  untracked: issues #468, #474, and #375 are all closed and no open issue
+  covers it, so raising one is the right next step and is outside this plan.
+  `tests/idempotence_drift.rs` gates the `make fmt` flag set and that set plus
+  `--headings`; `--code-emphasis` is deliberately outside both. Do not add it
+  to a corpus-wide drift gate as part of this work. Document `--git --check`
+  as a gate for the gated flag sets, and do not claim one-pass convergence for
+  `--code-emphasis`.
 
 - Risk: `src/main.rs` on `check-option` is already **386 lines** against the
   400-line cap, before this plan adds a single field.
@@ -1588,9 +1590,15 @@ own output, which `driver::write_back` strengthens into "a second run performs
 no writes at all".
 
 That rests on the formatter being a fixed point, which is a property this plan
-consumes rather than establishes. Issue #474 is the one known exception, under
-`--headings`, and it is being fixed in parallel; this plan assumes it closes.
-Verify at EP-M3 rather than designing around it.
+consumes rather than establishes. Issue #474 — the `--headings` case — was
+**fixed by pull request #477**, merged at `408c76a`, and
+`tests/idempotence_drift.rs` now gates the whole repository corpus for the
+`make fmt` flag set and for that set plus `--headings`.
+
+One measured exception remains, outside those gated sets: `--code-emphasis`
+settles on the second pass rather than the first. See Risks. It converges, so
+`--git --in-place` is still safe to re-run; what it costs is the claim that one
+pass is enough, which the users' guide must not make for that flag.
 
 The gates are read-only apart from build artefacts. `cargo insta reject` undoes
 a snapshot review.
@@ -1669,14 +1677,18 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   avoiding a spurious error on a file the user never named — and commit
   `83e6150` makes that error intermittent by skipping unchanged files.
 
-- Observation: the formatter was still not a fixed point under `--headings`
-  when this plan was rebased.
-  Evidence: issue #474; found by the property test that #470 landed, so it
-  survived that fix. A seed sweep of `tests/idempotence_properties.rs` (0, 1,
-  7, 42, 99) passes, so that suite is not evidence against it.
-  Impact: none on this plan's design. A fix is in progress elsewhere and this
-  plan assumes convergence. Retained because the seed-sweep point is worth
-  knowing: do not cite that suite as evidence the formatter converges.
+- Observation: `--headings` convergence (issue #474) was fixed by #477, but
+  `--code-emphasis` still needs two passes, and nothing tracks it.
+  Evidence: a sweep of 110 fixtures under `tests/data/` at `408c76a` found
+  `tests/data/cli-matrix/table-prose.dat` differing between pass one and pass
+  two under `--code-emphasis --in-place`, and identical between passes two and
+  three. `tests/idempotence_drift.rs` gates only the `make fmt` flag set and
+  that set plus `--headings`. Issues #468, #474 and #375 are closed; no open
+  issue covers this.
+  Impact: `--git --check` is a sound gate for the gated flag sets and not for
+  `--code-emphasis`. Do not cite a green `tests/idempotence_properties.rs` as
+  evidence of convergence for an ungated flag — its generators do not reach
+  these shapes.
 
 - Observation: `git ls-files -t` does not reliably flag a tracked file deleted
   from the working tree; it reported `H`, not `R`, because the `R` tag requires
@@ -1875,9 +1887,11 @@ under ADR 0007. Confirm at closure that neither was reimplemented in
 `src/select/`, and that the `--git` write path routes through
 `driver::write_back` rather than calling `replace_file` directly.
 
-Issue #474, the `--headings` fixed-point defect, is being fixed in parallel and
-is not this plan's work. Confirm its status at closure: if it closed, nothing
-is needed; if it did not, add the convergence caveat to the users' guide then.
+Issue #474, the `--headings` fixed-point defect, was fixed by pull
+request #477 before this plan was implemented, so no caveat is needed there.
+The `--code-emphasis` two-pass residual recorded under Risks is untracked and
+is not this plan's work; confirm at closure that an issue exists for it and
+that the users' guide does not claim one-pass convergence for that flag.
 
 ## Artefacts and notes
 
@@ -1910,10 +1924,11 @@ Corrections: the decision record moves to ADR 0008, because 0006 and 0007 were
 taken; the failure transcript exits 2 rather than 1 and does not render through
 `Termination`, because `main` now returns `ExitCode`; and `src/main.rs` at 386
 lines makes the file-size contingency a prerequisite rather than a fallback.
-Issue #474 is recorded as a tracked risk rather than a constraint: the
-formatter is not yet a fixed point under `--headings`, which `--git` would
-amplify from one file to a repository, but a fix is in progress elsewhere and
-this plan assumes it lands. Scenarios for `--git --check` and `--git --diff`
+Issue #474 has since been fixed by pull request #477 and the plan no longer
+carries a caveat for `--headings`. A sweep of the fixture corpus at `408c76a`
+found one residual the gates do not cover: `--code-emphasis` settles on the
+second pass, not the first, which is recorded as a risk and is untracked
+upstream. Scenarios for `--git --check` and `--git --diff`
 were added, since the group change makes them parse for free.
 
 Revised 2026-09-09, second pass, after the requester identified two in-flight
