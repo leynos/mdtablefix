@@ -379,7 +379,24 @@ Hard invariants. Violating one requires escalation, not a workaround.
       (10 passed) are green on the new tests. See `Decision log`,
       `Surprises & discoveries`, and
       `Artefacts and notes → Forward-compatibility for --git (#466)`.
-- [ ] EP-M7 Documentation, ADRs, changelog, and issue closure.
+- [ ] EP-M7 Documentation, ADRs, changelog, and issue closure. In progress;
+      **steps 1–8 are written and step 10 is outstanding.** `docs/users-guide.md`
+      gained a `Command-line usage` section (flag table, the three file modes,
+      the exit-status table, how to read a report line, line-ending and
+      byte-order-mark behaviour, the trailing-newline rule, the empty-glob
+      hazard, and the symlink limitation); `README.md`'s flag list is now a
+      synopsis linking to it; `docs/architecture.md` gained
+      `Check and diff reporting` with a sequence diagram, a `report` and
+      `driver` class, and corrected symbol names; `docs/developers-guide.md`
+      gained the CLI driver and reporting architecture sections and lost the
+      two stale `format_to_string` / `rewrite_in_place` blocks that named
+      functions deleted in EP-M3; `CHANGELOG.md`, `docs/contents.md`, and
+      `docs/v0-6-0-migration-guide.md` are updated; both ADRs are written;
+      and both vendored guides carry a provenance header. Step 9 is measured
+      rather than assumed: `make fmt` was declined with the drift table and
+      the reasoning in `Artefacts and notes → make fmt measured, and declined`.
+      Step 10 (closing #451 and #452) has not run yet; #451 was closed by an
+      earlier milestone.
 
 ## Surprises & discoveries
 
@@ -2388,8 +2405,10 @@ re-running a gate to diagnose a failure.
    that this is not reversible for files already rewritten.
 8. Update `docs/contents.md` for every new document, and add the missing entry
    for `docs/state-machine-abstractions-roadmap.md`.
-9. Run `make fmt`, then `make markdownlint`, `make nixie`, and all Rust gates.
-   Commit.
+9. Run `make markdownlint`, `make nixie`, and all Rust gates, then commit. Do
+   **not** run `make fmt`: `mdformat-all` is repository-wide and is not a gate,
+   and 10 of the 31 tracked Markdown files already drift under its flag set.
+   See `Artefacts and notes → make fmt measured, and declined`.
 10. Close issues #451 and #452 with a comment linking this plan and explaining
     the `--concise` supersession.
 
@@ -3561,6 +3580,110 @@ flag-to-flag requirement to be unreliable — the `mode`-to-`inputs` requirement
 flag-to-group, and its cells are measured rather than reasoned about. The `AX-4`
 citation in `ADR 0009` stays, as asked.
 
+### CodeRabbit review after the `--git` forward-compatibility change
+
+Requested through the gate runner with five of the six deterministic gates green
+on this tree — `check-fmt`, `lint`, `typecheck`, `markdownlint` (30 files, 0
+errors) and `nixie` — and the sixth, `make test`, red on the recorded
+pre-existing #474 counterexample. That is a deviation from the standing rule
+that every gate be green before a review is requested, and it is recorded rather
+than glossed: the rule exists so that CodeRabbit is not asked to catch what a
+deterministic gate could catch first, and #474 *is* deterministically caught, by
+`make test`, and is already its own issue. The red is a defect in the
+`--headings` transform that predates the branch, not a fault in this change, and
+every test this change touches passes. The clean result below should still be
+read as "nothing was raised about this diff", not as "the tree is green".
+
+The review ran against the pushed commit `83e6150` on `origin/check-option`,
+reviewing the whole branch diff rather than this change alone: 62 files, from
+`EP-M0` onward. It reported no rate limit, no refusal, and no findings:
+
+```plaintext
+{"type":"review_context","reviewType":"committed","currentBranch":"check-option","baseBranch":"origin/main",…}
+{"type":"status","phase":"connecting","status":"connecting_to_review_service"}
+{"type":"status","phase":"analyzing","status":"reviewing"}
+{"type":"complete","status":"review_completed","findings":0,"reviewedFiles":[…62 paths…]}
+```
+
+The `reviewedFiles` list was checked against `git diff --name-only
+origin/main...HEAD` and is set-equal to it, 62 paths each way: the zero is a
+completed review of the whole change surface, with no changed file skipped. (The
+gate runner's own summary said 69 files; the log it cites says 62, and the
+set-equality check is what the claim rests on.) The four areas this change is
+most likely to be questioned on drew no comment, because the review produced no
+findings at all: the `clap` `inputs` group, `driver::Inputs` and
+`Inputs::resolve`, the `exit_status(mode, false, true)` pre-flight path, and the
+`--in-place` clean-file no-op with its symlink-to-a-clean-file consequence. As
+with the earlier reviews, the zero means the contracted reviewer raised nothing
+rather than that the diff was exhaustively audited — it completed in about 49
+seconds over a 9,467-line diff, most of which had passed review once before. The
+full JSON-lines log is `/tmp/coderabbit-mdtablefix-check-option.out`.
+
+### `make fmt` measured, and declined
+
+`make fmt` was not run on this change. It is not one of the commit gates, and
+it cannot be scoped to a diff: `/home/leynos/.local/bin/mdformat-all` accepts no
+path arguments and applies itself to every Markdown file in the repository.
+
+```bash
+with_all_md() {
+  fd --print0 --type f --extension md --extension markdown --extension mdx . |
+    xargs -0 "$@"
+}
+with_all_md mdtablefix --wrap --renumber --breaks --ellipsis --fences --in-place
+with_all_md markdownlint-cli2 --fix
+```
+
+The first stage is this project's own binary, and the flag set includes
+`--wrap`, so running the target would reformat the documents this milestone
+writes with the very tool the milestone documents. The second stage is
+`markdownlint-cli2 --fix`, which `make markdownlint` already runs in check mode
+over the same tree.
+
+Measured rather than assumed, with this branch's binary and the flag set above.
+At `HEAD`, 10 of the 31 tracked Markdown files drift:
+
+| File | Drift at `HEAD` |
+| --- | --- |
+| `CHANGELOG.md` | `+7 -10` |
+| `README.md` | `+2 -2` |
+| `docs/adrs/0006-single-pass-idempotence.md` | `+15 -16` |
+| `docs/adrs/0007-line-ending-detection.md` | `+2 -3` |
+| `docs/architecture.md` | `+13 -13` |
+| `docs/developers-guide.md` | `+99 -101` |
+| `docs/execplans/check-option.md` | `+1028 -1098` |
+| `docs/execplans/issue-373-code-block-pipe-line-trailing-pipe.md` | `+1 -2` |
+| `docs/users-guide.md` | `+25 -25` |
+| `docs/v0-6-0-migration-guide.md` | `+9 -10` |
+
+Three of those — ADR 0006, ADR 0007, and the #373 plan — are files this change
+never touches, which is what makes the drift pre-existing rather than a residue
+of this work. It is also the same class in every case: prose re-wrapped at a
+slightly different width, and table padding tightened, with no word changed.
+Running the target would therefore rewrite ten files this documentation change
+has no business touching, in the commit that closes it.
+
+Run over this branch's working tree instead, the same measurement is a check on
+the change itself, and it caught one regression: `docs/contents.md` is a fixed
+point at `HEAD`, and the index entry added for the two new ADRs was wrapped
+differently from the formatter, so it drifted at `+3 -4`. The four new
+documents were each measured the same way. The two vendored guides are already
+fixed points, and the two new ADRs drifted (`+24 -22` and `+19 -19`).
+
+Those three files were therefore re-authored to the formatter's own output, on
+the reasoning that a brand-new document has no history to preserve and should
+not enter the repository already drifting; the two ADRs and `docs/contents.md`
+were each re-run through the flag set a second time to confirm the result is a
+fixed point. The only content-level difference in either ADR is the table
+separator padding, checked by comparing the two word streams. After that, 10 of
+the 35 Markdown files on disk drift — the same ten as at `HEAD`, none of them
+new — and the vendored guides, the two ADRs, and the contents index are all
+fixed points.
+
+`make check-fmt`, the gate that does exist for formatting, is
+`cargo fmt --all -- --check` and covers Rust sources only; it ran with the other
+gates on this change.
+
 ## Documentation and skills to consult
 
 Repository documents:
@@ -3912,3 +4035,84 @@ the ADR, as the requesting plan asked.
 `EP-M6` stays blocked and `EP-M7` stays pending; this revision neither unblocks
 nor blocks them. `make test` is still red for the recorded #474 counterexample,
 so no commit in this revision claims a passing test suite.
+
+### Revision 11, 2026-09-11
+
+The forward-compatibility change of revision 10 was reviewed by CodeRabbit and
+came back clean: `review_completed`, 0 findings, no rate limit and no refusal.
+The review ran against the pushed commit `83e6150` over the whole branch diff —
+62 files, set-equal to `git diff --name-only origin/main...HEAD` — and raised
+nothing on any of the four areas the change is most exposed on. That is one more
+piece of evidence, not proof: as with `EP-M0`, `EP-M3` and `EP-M4`, the review
+is a contracted second reader, and its zero means it raised nothing rather than
+that the diff was exhaustively audited.
+
+What changed in the plan itself is the record of how that review was requested.
+Five of the six deterministic gates were green and `make test` was red on the
+recorded pre-existing #474 counterexample, so the request was a deviation from
+the standing "all gates green first" rule. The artefact note recording the
+CodeRabbit review of the `--git` forward-compatibility change states the
+deviation and its reasoning plainly, and asks the reader to take the clean
+result as "nothing raised about this diff" rather than as evidence that the tree
+is green. The same
+section records the `reviewedFiles` set-equality check and notes that the gate
+runner's summary reported 69 files where the log it cites carries 62, so the
+number in this plan is the measured one.
+
+`EP-M6` remains blocked on issue #474 and `EP-M7` remains pending. No
+requirement, obligation, or acceptance criterion changed in this revision, and
+no code, test, or configuration file was touched: the revision is
+`docs/execplans/check-option.md` alone.
+
+### Revision 12, 2026-09-11
+
+`EP-M7` steps 1–8, the documentation of the whole feature. No Rust source,
+test, or configuration file changed: the diff is `README.md`, `CHANGELOG.md`,
+`docs/contents.md`, `docs/users-guide.md`, `docs/v0-6-0-migration-guide.md`,
+`docs/architecture.md`, `docs/developers-guide.md`,
+`docs/execplans/check-option.md`, and the four new documents
+(`docs/adrs/0008-byte-order-mark-preservation.md`,
+`docs/adrs/0009-check-and-diff-reporting.md`, and the two vendored guides).
+
+What is written, against the step list:
+
+- The user's guide's `Command-line usage` section covers every flag, the three
+  file modes, the exit-status table, how to read a report line, line-ending and
+  byte-order-mark behaviour (including the fenced-code homogenisation and the
+  lone-`\r` limitation), the trailing-newline rule, the empty-glob hazard, and
+  the symlink limitation. Each claim was reproduced on the built binary before
+  it was written, and the two empty-glob workarounds were run rather than
+  quoted.
+- `README.md`'s 52-line flag list is now a synopsis linking to that section.
+- `docs/architecture.md` gained `Check and diff reporting` with a sequence
+  diagram, a `report` class, a `driver` class, a `SourceDocument` entry on
+  `io`, and a corrected `## Contents`. The figure numbering was corrected as
+  part of the edit: the new section sits between the concurrency and atomic
+  figures, so the concurrency figure became `Figure 3` and the new one
+  `Figure 4`, keeping reading order ascending.
+- `docs/developers-guide.md` gained the CLI driver and reporting architecture
+  sections (read-only by type, one formatter built once, explicit argument
+  order, the binary's private driver) and the BDD test-infrastructure
+  subsection. The two `## Internal API reference` blocks that still described
+  `format_to_string` and `rewrite_in_place` — functions deleted in `EP-M3` —
+  were replaced with the items that exist, and the `report_line_endings` prose
+  now names the boundary in `src/driver.rs` as well as the private one in
+  `src/io/replace.rs`.
+- Both ADRs are written to the house template. `ADR 0009` keeps the `AX-4`
+  citation, as the `--git` plan's author asked.
+- Both vendored guides carry a provenance header naming the source repository,
+  the commit, and the blob hash, each verified by md5 against the sibling
+  checkout rather than asserted.
+
+One decision belongs in the open: `make fmt` was declined, with the
+measurement and the reasoning in
+`Artefacts and notes → make fmt measured, and declined`. The measurement also
+caught a regression this change had introduced — `docs/contents.md` is a fixed
+point at `HEAD` and my index entry was not — so the two new ADRs and
+`docs/contents.md` were re-authored to the formatter's own output and re-run to
+confirm they are fixed points. After that the change adds no new drift: 10 of
+the 35 Markdown files on disk drift, the same 10 as at `HEAD`, three of which
+this change never touches. The Markdown gates are not yet run for this revision
+and step 10 (closing #451 and #452) has not run; both are outstanding, and no
+commit in this revision claims a green `make test`, which remains red for the
+recorded #474 counterexample.

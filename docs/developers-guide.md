@@ -101,14 +101,18 @@ restores the separator row with widths derived from the final table body.
 - `open_file_parent(path) -> anyhow::Result<(Dir, Utf8PathBuf)>` is the CLI's
   sole ambient filesystem boundary. It opens the selected file's parent
   directory and returns a relative UTF-8 path for capability-scoped handling.
-- `format_to_string(directory, path, opts) -> anyhow::Result<String>` reads and
-  formats a file through `cap_std::fs_utf8::Dir` without modifying it. Its
-  returned text uses the same trailing-newline convention as a rewritten file,
-  and it terminates every line with the majority line-ending style detected in
-  that file, so standard output and `--in-place` agree byte-for-byte.
-- `rewrite_in_place(directory, path, opts) -> anyhow::Result<()>` reads and
-  formats a capability-scoped file, then replaces it through the same directory
-  capability with `mdtablefix::io::replace_file`.
+- `formatting_closure(opts) -> impl Fn(&SourceDocument<'_>) -> String + Sync`
+  builds the one formatter every mode shares. It renders the document's body
+  through the pipeline and re-attaches the mark and the selected line ending,
+  so standard output, `--check`, `--diff`, and `--in-place` agree byte for
+  byte.
+- `format_lines(content, opts) -> Vec<String>` is the pure half of the
+  boundary: it splits the body into lines and runs the transforms, leaving the
+  terminator to the caller.
+- `analyse_one(mode, path, format)` names the file in any error and delegates
+  the work to `driver::analyse` through the capability `open_file_parent`
+  returned. `run_stdin` and `run_files` are the two command boundaries built on
+  those pieces.
 
 `src/io/line_endings.rs` line-ending policy:
 
@@ -128,11 +132,12 @@ restores the separator row with widths derived from the final table body.
   boundary that acts on it: a private `report_line_endings(counts, operation,
   path)` in `src/io/replace.rs`, called by `rewrite_with` with an `operation` of
   `"rewrite"` or `"rewrite_no_wrap"` and always with the file's path; and,
-  because the binary is a separate crate, a repeated private helper in
-  `src/main.rs`, called by `format_to_string` with `operation = "file"` and the
-  file's path, and by `format_stdin` with `operation = "stdin"` and the path
-  reported as `<stdin>`. The message shape is identical across boundaries, so
-  one filter finds them all.
+  because the binary is a separate crate and cannot reach that private helper,
+  `driver::report_line_endings(counts, operation, path)` in `src/driver.rs`,
+  called by `driver::analyse` with `"file"` and the file's path, and by
+  `format_stdin` with `"stdin"` and `None`, which the report renders as
+  `<stdin>`. The message shape is identical across boundaries, so one filter
+  finds them all.
 - `serialize_lines(lines, ending) -> String` joins lines with the selected
   terminator and appends one further terminator, yielding an empty string for
   no lines.
@@ -143,19 +148,20 @@ restores the separator row with widths derived from the final table body.
   side-effecting.
 
 Detection runs on the raw document at each input boundary: `rewrite_with` in
-`src/io/replace.rs`, and `format_to_string` and `format_stdin` in `src/main.rs`,
-with each boundary reporting through its own private `report_line_endings`
-helper. The internal pipeline stays LF-only —
+`src/io/replace.rs`, `driver::analyse` in `src/driver.rs`, and `format_stdin`
+in `src/main.rs`, each reporting through its own `report_line_endings` with the
+same message shape. The internal pipeline stays LF-only —
 `str::lines` strips each line's terminator before a transform sees it — and
 only the serializer re-applies the detected style. Standard input keeps its
 historical contract of printing one terminator even when it produces no lines,
 which `tests/parallel.rs` pins.
 
-Callers select the function that matches their intent rather than passing a
-Boolean mode flag. This keeps stdout and in-place contracts explicit while
-allowing both paths to share the exact formatting result. New file-output call
-sites must receive a directory capability and relative `camino::Utf8Path`
-rather than performing ambient filesystem access themselves.
+The mode selects behaviour rather than a formatting variant: every mode shares
+the one closure `formatting_closure` builds, and `driver::analyse` chooses what
+to do with its result, so standard output and `--in-place` cannot disagree
+about the formatted text. New file-output call sites must receive a directory
+capability and relative `camino::Utf8Path` rather than performing ambient
+filesystem access themselves.
 
 `src/io/replace.rs`:
 
@@ -254,6 +260,87 @@ refactoring audit covering issues `#357`–`#367` in PR `#368`.
   punctuation) and contains a corresponding closing fence, with or without a
   trailing inflectional suffix. Used by `classify_fragment` and `inline.rs` to
   identify combined code+suffix tokens as atomic inline code.
+
+## CLI driver and reporting architecture
+
+### Read-only by type
+
+`ReadOnlyDir` in `src/driver.rs` is a newtype over `cap_std::fs_utf8::Dir`. It
+exposes only `new` and `read`, so the reporting modes receive a capability that
+cannot write: read-only access is a property of the type rather than of a
+convention or of a test double that declines to write.
+
+Re-use policy:
+
+- `driver::analyse` clones the caller's writable `Dir` capability with
+  `try_clone` and wraps the clone as a `ReadOnlyDir`, so every mode reads
+  through one type and only `Mode::InPlace` holds a capability that can write.
+  The clone is how the same directory handle serves both the read and the
+  write.
+- Keep the read-only view on the type system. A convention can be broken by a
+  later edit that never read the convention, and a runtime flag records a
+  decision that a wrong branch can still make; a type with no write method
+  cannot. A test double proves only that the double declined, not that the
+  production path cannot write.
+
+### One formatter, built once
+
+`Formatter` in `src/driver.rs` is:
+
+```rust
+pub type Formatter = dyn Fn(&SourceDocument<'_>) -> String + Sync;
+```
+
+`formatting_closure(opts)` in `src/main.rs` builds the closure once per run,
+and `run_files` passes it by reference to every file and every mode. `assess`
+is the only place it is called. A mode that built its own formatting path is
+the defect this design exists to prevent.
+
+One closure behind both reporting modes and the writer is what makes `--check`
+and `--in-place` structurally unable to disagree: they assess the same bytes
+with the same formatter, so neither can report drift the other would not
+write, or leave a file the other reported. A mode with a second formatting
+route would drift from the writer by edits rather than by construction, which
+is the divergence the shared closure removes. See
+`docs/adrs/0009-check-and-diff-reporting.md`.
+
+### Explicit argument order
+
+`driver::in_argument_order(Vec<(usize, T)>) -> Vec<T>` sorts indexed results
+by their recorded index. `rayon`'s `ParallelIterator::collect` into a `Vec` is
+not documented to preserve input order, so a report list that relied on it
+could follow completion order instead of argument order, and the difference
+would be invisible on a machine that happened to finish in order. The index is
+captured by `par_iter().enumerate()` in `src/main.rs`'s `run_files`, and
+`in_argument_order` restores the sequence explicitly. Because each index is
+unique, sorting on it is deterministic whatever order the workers produced.
+
+`tests/cli_check.rs`'s `reports_every_file_in_order` pins the sequence: its
+batch of eight files is in neither alphabetical nor size order, so a report
+list that came back sorted by file name, by file size, or by completion order
+is rejected rather than passing by luck. The plan records the reasoning as
+`AX-4`.
+
+## The binary's private driver
+
+`src/driver.rs` is declared `mod driver;` in `src/main.rs`, so it is not part
+of the published library. The library's entry points stay infallible and free
+of filesystem policy, while the CLI's exit-status contract, its directory
+capabilities, and its `Mode`, `Inputs`, and `ExitStatus` types live in the
+binary.
+
+This placement is why the module can hold `anyhow` error types: its callers
+are the binary's own, so the module fails with context-rich errors and reports
+them at the command boundary. The public library keeps the formatting entry
+points and the report types (`mdtablefix::report` is public so a host can
+render a `FileReport` itself) and returns `std::io::Result` from its
+filesystem entry points rather than the binary's diagnostic error type.
+
+`src/driver_tests.rs` covers `exit_status`, `Inputs::resolve`,
+`in_argument_order`, and the read-only behaviour as unit tests. The same
+contract is exercised end to end through the built binary by
+`tests/cli_check.rs`, `tests/cli_diff.rs`, and the BDD scenarios in
+`tests/features/`.
 
 ## HTML parser dependency coupling
 
@@ -1249,6 +1336,43 @@ for ripgrep with stub scripts that have to carry the executable bit; on Windows
 the target compiles to an empty binary rather than failing. Nothing goes
 unguarded on that account: the Linux lint job runs the same script over the same
 sources through the `check-static-regexes` Makefile target.
+
+### 2.6. Behaviour-driven scenario tests
+
+`rstest-bdd` features live in `tests/features/`. The scenario bindings are in
+`tests/bdd_reporting.rs`, which is its own test binary, and the step
+definitions are in `tests/steps/reporting.rs`, declared by the bindings as a
+`#[path]` submodule.
+
+Conventions:
+
+- The step definitions must be declared before the bindings. The step registry
+  is populated as macros expand, so a binding that expanded first would not
+  yet see them, and `strict-compile-time-validation` would report every step
+  as missing.
+- Both feature files share one set of steps because they describe one analysis
+  with two renderings. A step that differed between them would be exactly the
+  place the two modes could silently diverge.
+- Each scenario has its own `ReportingState` fixture, built by the `state`
+  fixture in `tests/bdd_reporting.rs` and injected through `#[from(state)]`.
+  The state holds `Slot` fields, so a step borrows the whole state immutably
+  and fills one slot, which is what lets `Given`, `When`, and `Then` share
+  data without a mutable borrow crossing a step boundary. The state covers the
+  scenario's temporary directory, the files as named in argument order, and the
+  directory fingerprint from before a run through to the most recent `Run`, or
+  the outputs when a scenario repeats the run.
+- Every step drives the real binary through `assert_cmd`'s
+  `Command::cargo_bin`, so the features specify the command-line contract
+  rather than a reimplementation of it. There is no external fixture-file
+  directory: the steps create their fixtures on demand with `std::fs::write`
+  inside a `tempfile::tempdir()`, writing the ragged or already-formatted
+  content and recording the name in argument order. The read-only scenarios
+  capture a fingerprint of entry names, bytes, and modification times before
+  the run and compare it afterwards.
+- [docs/rstest-bdd-users-guide.md](rstest-bdd-users-guide.md) is vendored in
+  this repository. It records the framework conventions and the
+  `strict-compile-time-validation` feature that
+  `rstest-bdd-macros` is pinned with in `Cargo.toml`.
 
 ## 3. Breaks module – Cow allocation strategy
 

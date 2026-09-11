@@ -40,6 +40,12 @@
 - [Majority line-ending preservation](adrs/0007-line-ending-detection.md):
   Accepted decision covering how the formatter selects the output line-ending
   style.
+- [Byte-order-mark preservation](adrs/0008-byte-order-mark-preservation.md):
+  Accepted decision covering how a leading byte-order mark is split from the
+  document body and restored on render.
+- [Check and diff reporting](adrs/0009-check-and-diff-reporting.md): Accepted
+  decision covering the read-only reporting modes, the shared assessment, and
+  the exit-status contract.
 
 ## Reference material
 
@@ -49,6 +55,10 @@
   Reference for the fixture and parameterization patterns used in tests.
 - [Trailing spaces](trailing-spaces.md): Notes on preserving Markdown hard line
   breaks and other trailing-space-sensitive content.
+- [rstest-bdd user's guide](rstest-bdd-users-guide.md): Vendored guide to the
+  `rstest-bdd` framework, whose scenarios drive the reporting tests.
+- [Reliable testing in Rust via dependency injection](reliable-testing-in-rust-via-dependency-injection.md):
+  Vendored guide to making tests deterministic by injecting their dependencies.
 
 ## Execution plans
 
@@ -65,3 +75,8 @@
   Roadmap for parallel processing work.
 - [YAML frontmatter](execplans/yaml-frontmatter.md): Plan for YAML
   frontmatter handling.
+- [Check option](execplans/check-option.md): Plan for `--check`, `--diff`, the
+  document boundary, and the exit-status contract.
+- [State-machine abstractions roadmap](state-machine-abstractions-roadmap.md):
+  Roadmap turning ADR 0004 into implementation work for the parser and wrapping
+  state machines.

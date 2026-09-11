@@ -111,6 +111,46 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 - **Migration action:** Update scripts that match exact standard-error text
   where the added detail breaks an assertion.
 
+
+## Exit status for operational errors
+
+- **What changed:** A run that cannot read or rewrite a file now exits `2`,
+  where earlier versions exited `1`. Exit `1` is reserved for drift: `--check`
+  and `--diff` return it when at least one file would be reformatted.
+- **Who is affected:** Scripts and continuous-integration jobs that branch on
+  the status. A guard written as
+  `mdtablefix ...; [ $? -eq 1 ] && handle_failure` stops firing, and a test
+  that asserts only "non-zero" cannot tell the two failures apart.
+- **Migration action:** Test for the status you mean. Use `--check` and read
+  its `1` when the question is whether the tree drifts, and treat `2` as an
+  operational failure in every mode. An error outranks drift, so `2` is the
+  status to alert on.
+
+
+## Unchanged files are not rewritten
+
+- **What changed:** `--in-place` writes only the files whose bytes would
+  change. A file that is already formatted keeps its inode and its
+  modification time, and a symbolic link to such a file now succeeds because
+  no write is attempted.
+- **Who is affected:** Build systems that use modification time for staleness
+  checks, and anyone who watches inodes to detect rewrites.
+- **Migration action:** None. A clean tree no longer looks modified.
+
+
+## Read-only reporting modes
+
+- **What changed:** `--check` reports each file that would be reformatted, as
+  its path followed by the line delta, and `--diff` prints a unified diff for
+  each of them. Both are read-only: a clean file prints nothing. A mode flag
+  requires at least one file path, so `mdtablefix --check` with no files is a
+  usage error, and at most one of `--in-place`, `--check`, and `--diff` may be
+  given.
+- **Who is affected:** Anyone adding a formatting gate to a pipeline.
+- **Migration action:** None. The modes are additive; see the
+  [user's guide](users-guide.md#command-line-usage) for the report line format
+  and the exit-status contract.
+
 ## New library entry point
 
 - **What changed:** `mdtablefix::io::replace_file` atomically replaces a target

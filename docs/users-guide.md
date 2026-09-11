@@ -1,5 +1,143 @@
 # User guide
 
+## Command-line usage
+
+```bash
+mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
+          [--footnotes] [--code-emphasis] [--headings]
+          [--in-place | --check | --diff] [FILE...]
+```
+
+Every named file is formatted, and the result is printed to standard output. If
+no file is named, the document is read from standard input and the formatted
+text is written to standard output. The behaviour of each formatting flag is
+described in the sections that follow.
+
+| Flag               | Effect                                                    |
+| ------------------ | --------------------------------------------------------- |
+| `--wrap`           | Reflow paragraphs and list items to 80 columns.           |
+| `--renumber`       | Renumber ordered lists sequentially.                      |
+| `--breaks`         | Rewrite thematic breaks as a line of 70 underscores.      |
+| `--ellipsis`       | Replace `...` with the ellipsis character.                |
+| `--fences`         | Normalise fenced code blocks where compression is safe.   |
+| `--footnotes`      | Convert bare numeric references into footnote links.      |
+| `--code-emphasis`  | Repair emphasis markers that adjoin inline code.          |
+| `--headings`       | Convert Setext headings to hash-prefixed headings.        |
+| `--in-place`       | Rewrite each named file instead of printing it.           |
+| `--check`          | Report each file that would be reformatted, without       |
+|                    | writing.                                                  |
+| `--diff`           | Print a unified diff for each file that would be          |
+|                    | reformatted.                                              |
+| `--version`        | Print the version and exit.                               |
+
+_Table 1: The command-line flags._
+
+### The three file modes
+
+`--in-place`, `--check`, and `--diff` act on the files named on the command
+line, and at most one of them may be given. Each requires at least one file:
+`mdtablefix --check` on its own is a usage error, because there is no file for
+the mode to act on. With no mode flag the tool prints the formatted text, which
+is what makes `mdtablefix FILE` and `cat FILE | mdtablefix` interchangeable.
+
+`--check` prints one line per file that would be reformatted, and `--diff`
+prints a unified diff per file that would be reformatted. Neither writes
+anything: a clean file prints nothing at all. `--in-place` rewrites only the
+files whose bytes would change, so a file that is already formatted keeps its
+inode and its modification time. See
+[In-place editing](#in-place-editing) for the replacement guarantees.
+
+Standard output is the machine-readable half of the contract: report lines for
+`--check`, diffs for `--diff`, formatted text otherwise. The summary
+(`2 files would be reformatted, 1 file left unchanged.`) and every error go to
+standard error, so standard output can be piped or captured on its own.
+
+### Exit status
+
+| Status | Meaning                                                            |
+| ------ | ------------------------------------------------------------------ |
+| `0`    | Every file was analysed, and no reporting mode found drift.        |
+| `1`    | `--check` or `--diff` found a file that would be reformatted.      |
+| `2`    | A file could not be read or rewritten, or the command line was     |
+|        | rejected.                                                          |
+
+_Table 2: The exit statuses._
+
+An error outranks drift: a run that could not read one file exits `2` even when
+another file drifted, so a gate never reports a clean tree from an incomplete
+analysis. Drift is a failure only under `--check` and `--diff`; `--in-place`
+over drifting files exits `0`, because the drift was the work it was asked to
+do. A run whose standard output is closed early — the shape produced by
+`mdtablefix --check *.md | head` — exits `0` rather than failing, because the
+reader stopped early and that says nothing about the files.
+
+### Reading a report line
+
+A report line is the file's path followed by the line delta of the rewrite, as
+two further space-separated fields:
+
+```text
+docs/users-guide.md +25 -25
+```
+
+Read it from the right: the last field is the deletion count with a `-` prefix,
+the field before it is the insertion count with a `+` prefix, and the path is
+everything before those two, so a path containing spaces needs no quoting. The
+counts come from a line diff between the file's bytes and the text a rewrite
+would write, so they count lines replaced rather than edits a reviewer would
+tally by hand.
+
+### Line endings and byte-order marks
+
+`mdtablefix` writes the line-ending style that holds the majority of the
+document's line endings, and preserves a leading byte-order mark (BOM) only
+when the file already has one. Both rules apply in every mode, so `--check`,
+`--diff`, and `--in-place` agree on the bytes a file would end up with. See
+[Line endings](#line-endings) for the detection rule and its tie-breaks.
+
+Two consequences are worth knowing before running the tool over a repository.
+
+- Detection covers the whole document, including fenced code blocks. A
+  predominantly CRLF document whose code samples use LF endings has those
+  samples rewritten to CRLF, which is a change to the content of the code
+  rather than to its formatting.
+- A lone carriage return is content, not a line ending. A file that separates
+  its lines with `\r` alone is therefore treated as a single line.
+
+### Trailing newlines
+
+A non-empty result always ends with one line ending, so a file whose last line
+is unterminated gains a terminator and is reported as drift, as `+1 -1`. The
+rule applies to every mode, including standard input, which prints the bare
+terminator even when the input produces no lines; an empty file stays empty.
+
+### Paths that match nothing
+
+`mdtablefix` takes file paths, not patterns, and does no discovery of its own.
+A shell expands a glob before the tool sees it, so `mdtablefix --check *.md` in
+a directory with no Markdown files passes the literal pattern `*.md`, which is
+then reported as an unreadable path and exits `2`. That is deliberate: a run
+asked to check a set of files and checking none of them has not earned a clean
+tree. A gate should expand the list in a way that runs the tool only when there
+is something to check:
+
+```bash
+fd -e md -X mdtablefix --check
+find . -name '*.md' -print0 | xargs -0 -r mdtablefix --check
+```
+
+Both run the tool once with every match, and run nothing at all — exiting `0` —
+when there are no matches.
+
+### Symbolic links
+
+A read follows a symbolic link, so `--check` and `--diff` report a link's target
+like any other file. A write declines the link rather than replacing it,
+because the rename would turn the link into a regular file; the run reports the
+declined link, fails that file, and exits `2`. A link to a file that needs no
+changes is not written at all, so it succeeds. See
+[In-place editing](#in-place-editing) for the full replacement contract.
+
 ## Table reflow
 
 `mdtablefix` reformats Markdown pipe tables so each column is aligned to a

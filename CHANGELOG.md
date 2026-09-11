@@ -39,6 +39,11 @@
   caller can select and apply the majority line-ending style of an input
   document through pure queries.
   ([#451](https://github.com/leynos/mdtablefix/issues/451))
+- `--check` reports each file that would be reformatted, with the line delta
+  the rewrite would make, and `--diff` prints a unified diff of the changes
+  instead. Both are read-only, both exit `1` when a file would change, and
+  neither writes anything.
+  ([#452](https://github.com/leynos/mdtablefix/issues/452))
 
 ### Changed
 
@@ -83,6 +88,16 @@
   ([#347](https://github.com/leynos/mdtablefix/issues/347))
 - `format_breaks` now returns `Vec<Cow<'_, str>>` rather than `Vec<String>`,
   so unchanged lines stay borrowed instead of forcing heap allocations.
+- Reserve exit `1` for drift and exit `2` for operational failure. A run that
+  could not read or rewrite a file now exits `2` where it previously exited
+  `1`, so a caller written as `mdtablefix ...; [ $? -eq 1 ]` needs updating.
+  Drift fails a run only under `--check` and `--diff`, and an incomplete
+  analysis is never reported as a clean tree. This is a breaking change for
+  scripts, and the crate version becomes `0.6.0`.
+  ([#451](https://github.com/leynos/mdtablefix/issues/451))
+- Write only the files whose bytes would change under `--in-place`. A file that
+  is already formatted keeps its inode and its modification time, and a
+  symbolic link to such a file succeeds because no write is attempted.
 
 ### Fixed
 
@@ -90,7 +105,10 @@
   the input's line endings, so a carriage return and line feed (CRLF) document
   is no longer rewritten as LF. A consistently ended document keeps its ending,
   while a mixed-ending document is normalized to the majority style. An exact
-  tie, and a non-empty input with no line endings at all, select LF.
+  tie, and a non-empty input with no line endings at all, select LF. An
+  `--in-place` run over a CRLF file now writes CRLF rather than line feeds, and
+  the change is not reversible for a file an earlier version already rewrote:
+  its original endings are no longer recoverable from the file.
   ([#451](https://github.com/leynos/mdtablefix/issues/451))
 - Format text adjoining an inline code span when it ends with a non-ASCII
   character, such as the ellipsis `--ellipsis` produces, instead of aborting on
