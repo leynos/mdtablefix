@@ -5,7 +5,7 @@ expression: stdout_result.envelope(&stdout_case)
 case: row_110_wrap
 mode: stdout
 args: --wrap --renumber --breaks --footnotes --code-emphasis
-status: exit status: 0
+status: code: 0
 
 [stdout]
 This paragraph references item 1 and uses enough words to demonstrate wrapping

@@ -3,7 +3,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Output,
+    process::{ExitStatus, Output},
 };
 
 use anyhow::{Context as _, Result};
@@ -213,6 +213,21 @@ pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
     },
 ];
 
+/// Renders a process status as the portable value every platform agrees on.
+///
+/// `ExitStatus`'s own `Display` is not portable: an ordinary exit reads
+/// `exit status: 0` on Unix and `exit code: 0` on Windows, so snapshotting it
+/// directly would make every envelope below platform-specific for no gain.
+/// `ExitStatus::code()` is the cross-platform accessor for the child's exit
+/// code; it yields `None` only when the process was killed by a signal, which
+/// no matrix case reaches, and that case is named rather than numbered.
+fn status_text(status: ExitStatus) -> String {
+    match status.code() {
+        Some(code) => format!("code: {code}"),
+        None => "no exit code".to_string(),
+    }
+}
+
 impl RunResult {
     /// Builds the labelled text snapshot for a physical command run.
     pub(crate) fn envelope(&self, case: &PhysicalCase) -> String {
@@ -229,7 +244,7 @@ impl RunResult {
             case.logical.id,
             case.mode.id_part(),
             case.args().join(" "),
-            self.output.status,
+            status_text(self.output.status),
             stdout,
             stderr,
             file,
@@ -375,8 +390,45 @@ pub(crate) fn has_flag(case: &BaseCase, flag: TransformFlag) -> bool { case.flag
 mod tests {
     //! Unit tests for CLI-matrix support helpers.
 
-    use super::{BaseCase, TransformFlag, has_flag, is_case_id, non_wrap_signature};
+    use super::{BaseCase, TransformFlag, has_flag, is_case_id, non_wrap_signature, status_text};
+    use assert_cmd::Command;
     use rstest::rstest;
+    use std::process::ExitStatus;
+
+    #[cfg(unix)]
+    use std::os::unix::process::ExitStatusExt as _;
+
+    #[test]
+    fn status_text_renders_a_successful_exit_as_code_zero() {
+        // `ExitStatus::default()` is documented as "successful completion", and
+        // is the only success status std will hand out without spawning.
+        assert_eq!(status_text(ExitStatus::default()), "code: 0");
+    }
+
+    #[test]
+    fn status_text_renders_a_failing_exit_as_its_code() {
+        // An unknown argument is rejected before any work happens, which is the
+        // cheapest portable source of a real non-zero status.
+        let status = Command::cargo_bin("mdtablefix")
+            .expect("create mdtablefix test command")
+            .arg("--not-a-real-flag")
+            .output()
+            .expect("run mdtablefix with an unknown flag")
+            .status;
+        let code = status.code().expect("a rejected invocation exits normally");
+        assert_ne!(code, 0, "an unknown flag should be rejected");
+        assert_eq!(status_text(status), format!("code: {code}"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn status_text_names_a_signal_terminated_status() {
+        // Raw wait status 15: killed by SIGTERM, with no core dump. The child
+        // never exited, so there is no code to report.
+        let status = ExitStatus::from_raw(15);
+        assert_eq!(status.code(), None);
+        assert_eq!(status_text(status), "no exit code");
+    }
 
     #[rstest]
     #[case("row_001", true)] #[case("row-001", true)] #[case("abc123", true)]

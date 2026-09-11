@@ -66,9 +66,15 @@
 - Declare LF line endings for every tracked file in `.gitattributes`, so a
   Windows checkout hands the suites the fixture and snapshot bytes a Unix
   checkout sees rather than the CRLF that Git for Windows writes by default.
-  The `check-static-regexes` regression tests are gated to Unix with the same
-  change, because the guard they drive is a `bash` script; the Linux lint job
-  still runs that guard.
+- Record the CLI matrix exit status as the numeric exit code rather than through
+  `ExitStatus`'s `Display`, which spells an ordinary exit `exit status: 0` on
+  Unix and `exit code: 0` on Windows. Envelopes now read `status: code: 0`,
+  `status: code: <n>` for a non-zero exit, or `status: no exit code` when a
+  signal ended the process, so the snapshots are platform-independent.
+- Gate the `check-static-regexes` regression tests to Unix, because the guard
+  they drive is a `bash` script that stands in for ripgrep with stub scripts
+  carrying the executable bit. The Linux lint job still runs that guard over
+  the same sources.
   ([#347](https://github.com/leynos/mdtablefix/issues/347))
 - `format_breaks` now returns `Vec<Cow<'_, str>>` rather than `Vec<String>`,
   so unchanged lines stay borrowed instead of forcing heap allocations.

@@ -5,7 +5,7 @@ expression: stdout_result.envelope(&stdout_case)
 case: row_111_nowrap
 mode: stdout
 args: --renumber --breaks --ellipsis --headings
-status: exit status: 0
+status: code: 0
 
 [stdout]
 ---

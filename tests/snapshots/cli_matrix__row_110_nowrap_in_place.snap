@@ -5,7 +5,7 @@ expression: in_place_result.envelope(&in_place_case)
 case: row_110_nowrap
 mode: in_place
 args: --renumber --breaks --footnotes --code-emphasis --in-place
-status: exit status: 0
+status: code: 0
 
 [stdout]
 

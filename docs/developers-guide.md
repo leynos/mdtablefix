@@ -1145,13 +1145,23 @@ listed under [Tracing-event snapshot tests](#tracing-event-snapshot-tests). The
 moved tests keep their original paths (`io::tests::…`), and `super` still
 resolves to the owning module, so unqualified access to its items is unchanged.
 
-### 2.5. Line endings and platform-gated tests
+### 2.5. Platform portability of the test suite
 
 Every tracked file is LF in the repository and checks out as LF on every
 platform, because `.gitattributes` pins `* text=auto eol=lf`. The CLI suites
 compare fixture and snapshot bytes against output the tool writes with `\n`, so
 a CRLF checkout — the default for Git for Windows — would fail those
 comparisons for reasons unrelated to the change under test.
+
+Snapshot content has to be platform-independent as well. The CLI matrix
+envelope records a process-result *value*, not diagnostic wording:
+`tests/cli_matrix/support.rs` renders `ExitStatus` through the private
+`status_text` helper, which reports `code: 0`, `code: <n>`, or `no exit code`
+for a process that was killed by a signal. `ExitStatus`'s own `Display` is not
+portable — an ordinary exit reads `exit status: 0` on Unix and `exit code: 0`
+on Windows — so snapshotting it directly would make every envelope a
+Windows-only failure. The committed snapshots under `tests/snapshots/` therefore
+carry `status: code: 0`.
 
 `tests/static_regex_lint.rs` is gated whole-file with `#![cfg(unix)]`. The guard
 it drives is a `bash` script that shells out to ripgrep, and the tests stand in
