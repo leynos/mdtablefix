@@ -287,6 +287,10 @@ survives: an ATX heading, a thematic break, a list item, a blockquote, a
 footnote or link reference definition, a markdownlint directive, or a
 fenced-code marker.
 
+A table delimiter row is refused too. It is table syntax rather than paragraph
+text, so the `---` beneath it is a thematic break and not an underline, and the
+table above it keeps its alignment row.
+
 Indentation and blockquote markers shared by the heading and its underline are
 preserved, so `> Title` above `> -----` becomes `> ## Title`.
 
