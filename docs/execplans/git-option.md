@@ -1851,6 +1851,13 @@ plateau.
       concern was raised about the red behavioural suite or the unwired module
       tree, both of which were given to the reviewer as stated intent rather
       than left to be inferred.
+- [x] (2026-09-12) EP-M1, CodeRabbit review of the mutation work: **completed,
+      zero findings** across 21 reviewed files — `EV-M1-CR`'s nineteen plus
+      `Makefile` and `.cargo/mutants.toml`. Transcript in Artefacts and notes,
+      `EV-M1-CR-2`. EP-M1 carries two reviews because the mutation tooling
+      landed after the first, and it was the tooling that found the three
+      survivors; a review of the implementation alone would have passed a
+      milestone whose acceptance criterion was still unmet.
 - [ ] EP-M1: confirm `std::fs::canonicalize` case behaviour on the macOS and
       Windows release targets, per the INV-DEDUP residual gap.
 - [x] (2026-09-12) EP-M1, mutation testing: `.cargo/mutants.toml` and
@@ -2790,6 +2797,24 @@ Those three lines are cut at the `with … in <impl …>` boundary and before th
 per-mutant timings, to stay inside the 120 columns markdownlint allows a code
 block; the log holds them whole. All three are the same two source lines, which
 is why one change kills all three.
+
+**EV-M1-CR-2** — CodeRabbit review of the mutation work, run 2026-09-12 through
+`scrutineer`, log at `/tmp/coderabbit-mdtablefix-git-option.out`:
+
+```plaintext
+coderabbit review --agent --base check-option
+```
+
+```plaintext
+{"type":"complete","status":"review_completed","findings":0,"reviewedFiles":[…21 files…]}
+```
+
+Twenty-one files were reviewed — the nineteen of `EV-M1-CR`, plus `Makefile` and
+`.cargo/mutants.toml` — and the review reported zero findings. Two reviews for
+one milestone is the honest count rather than a repetition: the mutation
+tooling landed after the first, and it is the tooling that found the three
+survivors, so a review of the implementation alone would have passed a
+milestone whose acceptance criterion was not yet met.
 
 ## Revision note
 
