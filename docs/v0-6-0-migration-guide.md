@@ -29,14 +29,16 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   lone line feeds are counted, and CRLF is selected only when it strictly
   outnumbers the lone line feeds. An exact tie, and an input with no line
   endings at all, select LF, so the result is deterministic. Only CRLF and lone
-  LF are recognised; a lone carriage return is content. The change covers file
+  LF are recognized; a lone carriage return is content. The change covers file
   arguments printed to standard output, `--in-place`, standard input, and the
   library entry points `mdtablefix::io::rewrite` and
   `mdtablefix::io::rewrite_no_wrap`; standard input keeps its existing contract
   of printing one terminator even when the output has no lines, while an empty
-  file still produces empty output. Three items are new public API:
-  `LineEnding`, whose `as_str` method returns the characters written between
-  lines, `detect_line_ending(text) -> LineEnding`, and
+  file still produces empty output. Five items are new public API: `LineEnding`,
+  whose `as_str` method returns the characters written between lines;
+  `LineEndingCounts`, the counts behind a selection;
+  `detect_line_ending(text) -> LineEnding`;
+  `count_line_endings(text) -> LineEndingCounts`; and
   `serialize_lines(lines, ending) -> String`. The boundary that acts on the
   selection reports it at `debug` level, under the message
   `selected the majority line ending`.
@@ -44,13 +46,14 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   endings, through the CLI or the library.
 - **Migration action:** No action is required for normal use. A file authored
   with one style keeps it, so a CRLF file is no longer rewritten as LF, and the
-  whole-file diff that changed nothing but terminators disappears. A document
-  whose endings are consistent, and which already ends with a terminator, is
-  rewritten with identical bytes, so it can be compared with formatter output
-  byte-for-byte. Because the choice is made per document, a mostly-CRLF
-  document is emitted entirely as CRLF, so an LF-authored snippet inside it is
-  rewritten to CRLF, and a mixed-ending document is normalised to its majority
-  style on the first run; that diff can be larger than the table changes alone.
+  whole-file diff that changed nothing but terminators disappears. An
+  already-formatted document whose endings are consistent, and which already
+  ends with a terminator, is rewritten with identical bytes, so it can be
+  compared with formatter output byte-for-byte. Because the choice is made per
+  document, a mostly-CRLF document is emitted entirely as CRLF, so an
+  LF-authored snippet inside it is rewritten to CRLF, and a mixed-ending
+  document is normalized to its majority style on the first run; that diff can
+  be larger than the table changes alone.
 
 ## Preserved file mode
 
