@@ -6,8 +6,9 @@ This ExecPlan (execution plan) is a living document. The sections
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: BLOCKED — awaiting the sequencing decision recorded under
-`Conformance basis`, "Related work in flight".
+Status: DRAFT — sequenced after pull request #464, which is in review. The
+sequencing question that previously blocked this plan is settled; see
+`Conformance basis`, "Related work".
 
 ## Purpose / big picture
 
@@ -252,53 +253,55 @@ Stop and escalate when any of these is reached.
   `GitLsFiles::with_program`. `--git` is opt-in and its premise is a Git
   working tree, so the requirement is reasonable.
 
-- Risk: a repository contains a path that is not valid UTF-8, which
-  `cap_std::fs_utf8` cannot represent.
+- Risk: `rstest-bdd` was new to this repository.
+  Severity: low now. Likelihood: low.
+  Mitigation: **largely discharged.** Pull request #464 already adds
+  `rstest-bdd = "0.5.0"` and
+  `rstest-bdd-macros = { version = "0.5.0", features =
+  ["strict-compile-time-validation"] }`, and ships passing feature files, so
+  the toolchain question is answered. Note the explicit macros crate and the
+  feature: match them rather than re-deriving them. EP-M0's BDD half is
+  therefore reduced to confirming a scenario in this plan's own feature file
+  runs.
+
+- Risk: **the formatter is not a fixed point under `--headings`**
+  (issue #474, open). A table whose delimiter row is the last line before a
+  thematic break is restructured on every pass, because the `---` is taken as a
+  Setext underline. `--git` amplifies this from one named file to every
+  matching file in the repository: `--git --in-place --headings` would rewrite
+  such a file on every run and never converge, and `--git --check` would report
+  drift that no number of `--in-place` passes clears.
+  Severity: high for `--headings` users. Likelihood: low, and zero for the
+  default flag set — `make fmt`'s `mdformat-all` flag set excludes
+  `--headings`, and no file in this repository is affected today.
+  Mitigation: none available here; #474 is a formatter defect, not a selection
+  defect, and fixing it is out of scope. Do **not** claim in the users' guide
+  that `--git --in-place` converges in one pass. State the dependency on #474
+  explicitly, and add a scenario only once #474 closes. Note that a seed sweep
+  of `tests/idempotence_properties.rs` (seeds 0, 1, 7, 42, 99) passes: that
+  suite's generators do not reach this shape, so a green run there is not
+  evidence of convergence.
+
+- Risk: `src/main.rs` on `check-option` is already **386 lines** against the
+  400-line cap, before this plan adds a single field.
+  Severity: high. Likelihood: certain.
+  Mitigation: this is no longer a contingency but a required first step. The
+  `Cli` and `FormatOpts` declarations occupy roughly lines 38 to 120 of that
+  file; extract them into a binary-private `src/cli.rs` declared by
+  `main.rs`, which returns it to roughly 300 lines and leaves room for the
+  five new fields and the composition wiring. Do the extraction as its own
+  commit, with no behaviour change, before EP-M2 adds anything. `src/driver.rs`
+  at 369 lines has the same little headroom, so `--git` wiring must go in
+  `src/select/`, not there.
+
+- Risk: a repository contains a path that is not valid UTF-8.
   Severity: low. Likelihood: low.
-  Mitigation: count and drop such candidates rather than aborting; the
-  composition root prints one content-free stderr warning giving the count.
-
-- Risk: `src/main.rs` exceeds 400 lines once the new flags and wiring land.
-  Severity: medium. Likelihood: medium.
-  Mitigation: all policy and adapter code lives in `src/select/`, so `main.rs`
-  gains field declarations plus roughly 60 lines of wiring. Contingency at the
-  380-line tolerance: move the composition root into `src/select/compose.rs`,
-  following the precedent of `src/process/buffer.rs`.
-
-- Risk: `rstest-bdd` is new to this repository, on a pinned
-  `nightly-2026-03-26` toolchain, and pulls in `gherkin`, `fluent`,
-  `i18n-embed`, `rust-embed`, and `inventory` — a large increase over the
-  current ten lean dev-dependencies. Version `0.6.0-beta3` already exists with
-  a reorganized harness, so this adopts an API one minor version before it
-  moves.
-  Severity: medium. Likelihood: medium.
-  Mitigation: EP-M0 proves one trivial scenario compiles and runs before any
-  real scenario is written. If it cannot be made to work within the iteration
-  tolerance, escalate; do not silently downgrade behavioural coverage to plain
-  `assert_cmd`.
-
-- Risk: `format_to_string` splits with `content.lines()`, which strips `\r`,
-  then rejoins with `\n`. On a CRLF checkout every selected file's line endings
-  change, so a whole-repository run produces a diff of pure churn in which a
-  genuine corruption would be invisible.
-  Severity: medium. Likelihood: medium on Windows, low elsewhere.
-  Mitigation: **resolved elsewhere, not by this plan.** Pull request #464
-  introduces `src/document.rs` with `SourceDocument` and
-  `LineEnding::detect`, which preserves each document's majority line-ending
-  style and its byte-order mark across a rewrite. This plan must not
-  reimplement line-ending handling; it consumes that boundary. Retained here
-  only so the dependency is visible.
-
-- Risk: `--in-place` writes are truncate-then-write with no signal handling, so
-  interrupting a large run can leave a file truncated. `--git` makes long runs
-  routine and therefore makes interruption routine.
-  Severity: medium. Likelihood: low.
-  Mitigation: **tracked separately as issue #465**, "Write files atomically in
-  `--in-place` mode", which specifies temporary-file-plus-rename with mode
-  preservation and is sequenced with pull request #464 because both rewrite the
-  same serialization path. This plan must not implement it. Skipping the write
-  when output is byte-identical still shrinks the window in the meantime, and
-  that check comes from #464's `Assessment::is_changed` rather than from here.
+  Mitigation: `driver::Inputs::resolve` now fails the whole run on a non-UTF-8
+  argument, so selection must drop such candidates **before** constructing
+  `Inputs`, counting them and emitting one content-free stderr warning. This
+  keeps the disproportionate outcome — a whole-repository operation aborted by
+  one stray filename elsewhere in the tree — off the `--git` path without
+  disturbing the positional-argument contract #464 established.
 
 - Risk: the extension filter is the only thing between `--git` and rewriting
   source files, so a defect there is destructive.
@@ -313,74 +316,88 @@ document** for this feature. Do not invent one. The governing upstream
 artefacts that exist are `AGENTS.md` (at commit `c792270`),
 `docs/developers-guide.md`, `docs/documentation-style-guide.md`, and ADRs 0001
 to 0005 (none of which constrains file selection). This plan creates the
-missing design record as **ADR 0006**.
+missing design record as **ADR 0008**.
 
-### Related work in flight, and an unresolved sequencing decision
+### Related work
 
-**Status: this plan is BLOCKED on the decision recorded below.** Do not begin
-implementation until it is settled.
+The sequencing question that previously blocked this plan is settled: this work
+comes **after** pull request #464. Three of its dependencies have merged and
+one remains in review.
 
-Pull request #464, "Plan: add `--check` and `--diff` reporting modes" (branch
-`check-option`), is an unapproved draft plan that restructures the exact code
-this plan modifies. Issue #465, "Write files atomically in `--in-place` mode",
-is sequenced with it. The overlap is not incidental:
+**Merged to `main`, and now load-bearing for this plan:**
 
-| This plan | Pull request #464 | Nature of the overlap |
-| --- | --- | --- |
-| `ArgGroup "inputs"` over `files` and `git`; `--in-place` requires it | `ArgGroup "mode"` over `--in-place`, `--check`, `--diff`, requiring `files` | **Hard conflict.** Their group requires positional `files`, so `--git --in-place` would be rejected outright. One of the two must give. |
-| INV-NOWRITE-UNCHANGED, skip the write when output matches input | `Assessment::is_changed`, "a direct byte comparison, and the authoritative answer" | **Duplicate.** This plan should consume theirs. |
-| `--list-files` as a boolean flag | `Mode { Print, InPlace, Check, Diff }` | **Shape.** Selection listing belongs as a `Mode` variant, not a parallel flag. |
-| `resolve_inputs` in `src/main.rs` | `src/driver.rs`, binary-private, with `main.rs` reduced to an adapter | **Placement.** The composition root moves. |
-| CON-CAP-001 discharged by code review only | `ReadOnlyDir`, making read-only-ness a property of the type | **Theirs is stronger.** `--list-files` should be unable to write by construction. |
-| Exit 1 when `git` fails | `ExitStatus { Success, Drift, Error }`, with `Error` mapping to 2 | **Contract conflict.** A `git` failure is an `Error`, so 2, not 1. |
-| Transcript rendering `Error: … Caused by:` via `Termination` | `fn main` returns `ExitCode`; crate bumps to `0.6.0` | **This plan's transcript is wrong** if #464 lands first. |
-| CRLF churn recorded as an accepted risk | `SourceDocument` and `LineEnding::detect` | **Resolved by theirs.** |
+- **#467** (issue #465), atomic in-place writes. `mdtablefix::io::replace_file`
+  writes a temporary file beside the target, applies the target's permissions,
+  and renames over it. It reads `symlink_metadata` and **declines a symbolic
+  link** with `io::ErrorKind::InvalidInput`. Both the CLI's `rewrite_in_place`
+  and the library's `rewrite_with` route through it. Documented in
+  `docs/architecture.md`, "Atomic in-place writes", with Figure 5.
+- **#469** (issue #451), line-ending preservation. `LineEnding`,
+  `LineEndingCounts`, `count_line_endings`, `detect_line_ending`, and
+  `serialize_lines` are now **public library API**, re-exported at the crate
+  root. ADR 0007 records the rationale. This plan must not reimplement any of
+  it.
+- **#470** (issue #468), single-pass idempotence, with ADR 0006.
 
-*Table 1: overlap between this plan and pull request #464.*
+Those merges take the ADR numbers 0006 and 0007, so this plan's decision record
+is **ADR 0008**.
 
-Beyond the conflicts, the two features compose into the combination most worth
-having: `mdtablefix --git --check` is a continuous-integration gate answering
-"is every Markdown file in this repository formatted?" with a non-zero exit on
-drift. Neither plan currently delivers it, and #464's `mode` group forbids it
-by construction.
+**In review, and a prerequisite for this plan:** pull request #464 adds
+`--check` and `--diff`. Its commit `83e6150`, "Keep the reporting shape open to
+a second input source", implements the four forward-compatibility requests this
+plan made, so the interfaces this plan consumes now exist:
 
-The decision to be taken, and its consequence for this document:
+| Interface on `check-option` | How this plan uses it |
+| --- | --- |
+| `ArgGroup "inputs"` holding `files`, with `mode` requiring `inputs` | `git` joins `inputs`; `--git --check`, `--git --diff`, `--git --in-place` all parse |
+| `driver::Inputs { Stdin, Files(Vec<Utf8PathBuf>) }` | `--git` becomes a second source producing `Inputs::Files`; an empty selection exits 0 without reading stdin |
+| `driver::Mode { Print, InPlace, Check, Diff }` | `--list-files` becomes a fifth variant |
+| `driver::ReadOnlyDir` | `--list-files` and any read-only selection path take it, so writing is impossible by type |
+| `driver::Assessment::is_changed`, and `write_back` skipping unchanged files | discharges what this plan called INV-NOWRITE-UNCHANGED; this plan no longer implements it |
+| `driver::{ExitStatus, exit_status}` | `--git` failures map to `ExitStatus::Error`, exit code **2**, not 1 |
+| `driver::in_argument_order` | re-establishes ordering without relying on the withdrawn `AX-RAYON-ORDER` |
 
-1. **Sequence this plan after #464.** Rewrite the interfaces here to consume
-   `SourceDocument`, `Assessment`, `driver.rs`, `Mode`, `ReadOnlyDir`, and the
-   exit-status contract, and change #464's `mode` group to require the
-   `inputs` group rather than `files`. Cleanest result; this plan stays blocked
-   until #464 merges.
-2. **Sequence this plan before #464.** Keep it self-contained and let #464
-   absorb `--git` while it rewrites `main.rs` anyway. Cost: this plan builds a
-   changed-file comparison and an ordering scheme that #464 then deletes.
-3. **Proceed independently.** Not recommended: both modify the same `Cli`
-   struct, the same `main`, and the same write path, so whichever merges second
-   faces a non-trivial rebase in the code carrying the highest destructive
-   risk.
+*Table 1: interfaces this plan consumes from pull request #464.*
 
-Whichever is chosen, record it in the Decision log, update this section, and
-set Status accordingly before Stage A begins.
+Pull request #464 also adds `googletest`, `pretty_assertions`, `rstest-bdd`,
+and `rstest-bdd-macros` as development dependencies, adds
+`cargo test --doc --all-features` to the `test` target, and bumps the crate to
+`0.6.0`. All four were items this plan intended to introduce; none of them is
+this plan's work any more.
+
+**Two consequences of `83e6150` that this plan must accommodate**, both
+recorded by its author rather than left to be discovered:
+
+1. `Inputs::resolve` now fails the **whole run** when any argument is not valid
+   UTF-8, rather than counting it as one file's error. This plan's
+   drop-and-count posture for non-UTF-8 paths therefore has to happen during
+   selection, before a path reaches `Inputs`. See the note under
+   "Interfaces and dependencies".
+2. A symlink pointing at a file that is already clean is no longer declined,
+   because `write_back` attempts no replacement. The refusal still fires for a
+   drifting target. That makes the symlink error **intermittent**, which is a
+   further argument for excluding symlinks at selection time rather than
+   relying on the write boundary to reject them.
 
 **Roadmap**: this repository has no general-purpose roadmap. The two roadmap
 documents that exist are feature-scoped and neither mentions `--git`,
 `git ls-files`, or file selection. The instruction to mark a roadmap entry as
 done is therefore **not applicable**; do not create a roadmap entry to satisfy
-it. ADR 0006 is the durable record.
+it. ADR 0008 is the durable record.
 
 Requirements, traced through milestones to evidence:
 
 ```plaintext
-REQ-GIT-001 -> ADR-0006 -> EP-M1 -> select::git_ls_files::tests::lists_tracked_only
-REQ-GIT-002 -> ADR-0006 -> EP-M1 -> select::policy::tests::selects_only_configured_extensions
-REQ-GIT-003 -> ADR-0006 -> EP-M2 -> cli_git.rs::md_exts_replaces_the_default_set
-REQ-GIT-004 -> ADR-0006 -> EP-M2 -> cli_git.rs::rejects_git_with_explicit_files
-REQ-GIT-005 -> ADR-0006 -> EP-M2 -> cli_git.rs::in_place_is_satisfied_by_git
-REQ-GIT-006 -> ADR-0006 -> EP-M1 -> select::policy::tests::excludes_missing_other_symlink
-REQ-GIT-007 -> ADR-0006 -> EP-M1 -> select::git_ls_files::tests::maps_spawn_and_exit_failures
-REQ-GIT-008 -> ADR-0006 -> EP-M2 -> feature::"Exit successfully when nothing is selected"
-REQ-GIT-009 -> ADR-0006 -> EP-M2 -> feature::"Refuse to rewrite a conflicted file"
-REQ-GIT-010 -> ADR-0006 -> EP-M2 -> feature::"List the selection without acting"
+REQ-GIT-001 -> ADR-0008 -> EP-M1 -> select::git_ls_files::tests::lists_tracked_only
+REQ-GIT-002 -> ADR-0008 -> EP-M1 -> select::policy::tests::selects_only_configured_extensions
+REQ-GIT-003 -> ADR-0008 -> EP-M2 -> cli_git.rs::md_exts_replaces_the_default_set
+REQ-GIT-004 -> ADR-0008 -> EP-M2 -> cli_git.rs::rejects_git_with_explicit_files
+REQ-GIT-005 -> ADR-0008 -> EP-M2 -> cli_git.rs::in_place_is_satisfied_by_git
+REQ-GIT-006 -> ADR-0008 -> EP-M1 -> select::policy::tests::excludes_missing_other_symlink
+REQ-GIT-007 -> ADR-0008 -> EP-M1 -> select::git_ls_files::tests::maps_spawn_and_exit_failures
+REQ-GIT-008 -> ADR-0008 -> EP-M2 -> feature::"Exit successfully when nothing is selected"
+REQ-GIT-009 -> ADR-0008 -> EP-M2 -> feature::"Refuse to rewrite a conflicted file"
+REQ-GIT-010 -> ADR-0008 -> EP-M2 -> feature::"List the selection without acting"
 CON-SAFE-001 -> EP-M2 -> feature::"Never write through a symlink"
 ```
 
@@ -448,7 +465,7 @@ on nothing else; the adapters and `main` depend on policy.**
 Every module's `//!` header must state its side of that sentence explicitly —
 for example, "This module is the selection domain. It depends on `PathProbe`
 and performs no I/O." A maintainer must be able to derive the direction from
-the modules alone, without reading ADR 0006.
+the modules alone, without reading ADR 0008.
 
 **Directories are parameters, never ambient state.** Both `list_candidates` and
 `probe` take the working-tree root explicitly. Nothing in the selection code
@@ -489,25 +506,17 @@ repository's logic against the real interface at the boundary.
   therefore a latent defect, not a contract. Selection must not depend on it:
   each unit of work carries its index and results are ordered on that index.
   See the note on ordering under EP-M2.
-- **AX-CLAP-GRAMMAR** — partially **falsified during planning**; see the note
-  under `src/main.rs` in "Interfaces and dependencies". What was verified on
-  clap 4.6.6: an `ArgGroup` with `multiple(false)` over `files` and `git`
-  rejects `--git a.md` while still accepting `mdtablefix a.md b.md` and
-  `--in-place a.md b.md`, so a multi-value positional in an exclusive group is
-  safe; and `mode` requiring the `inputs` group rejects `--in-place` alone
-  while accepting `--git --in-place`, `--git --check`, and `--git --diff`. What
-  was **disproved**: `requires = "git"` on a bool flag, which admits
-  `--list-files a.md`. The plan now uses a post-parse check for every such
-  dependency. Retained below for the parts that still stand: a `clap::ArgGroup`
-  with `multiple(false)` permits at
-  most one member; `requires = "<group>"` demands at least one member; and an
-  argument carrying `default_values` counts as present, so `requires` on such
-  an argument needs `ArgMatches::value_source` rather than a plain relation.
-  EP-M0 confirms all three empirically **and captures clap's exact diagnostic
-  text**, because three behavioural scenarios assert on strings clap owns
-  rather than strings we own. An earlier draft asserted `stderr contains
-  "requires"`; clap 4.6.6 renders `the following required arguments were not
-  provided:` and never emits "requires" for that error kind.
+- **AX-CLAP-GRAMMAR** — partially **falsified during planning**, and the
+  surviving parts are now **measured rather than assumed**. Verified against
+  clap 4.6.6: adding `git` to the `inputs` group with `multiple(false)` still
+  accepts `mdtablefix a.md b.md` and `--in-place a.md b.md`, rejects
+  `--git a.md`, and accepts `--git --check`, `--git --diff`, and
+  `--git --in-place`; and `mode` requiring `inputs` rejects a mode flag used
+  alone. **Disproved**: `requires = "git"` on a bool flag, which admits
+  `--list-files a.md`. Every such dependency now uses a post-parse check; see
+  "Command-line surface". The `inputs` group itself is no longer this plan's to
+  create — pull request #464 added it at this plan's request in commit
+  `83e6150`.
 
 ### Obligations
 
@@ -550,28 +559,51 @@ output.
   non-empty selections, empty selections, and at least one case where a
   matching extension is excluded solely because of the probe verdict.
 
-**INV-DEDUP** — no two selected paths denote the same file.
+**INV-DEDUP** — no two selected paths denote the same directory entry.
 
 - Method: `rstest` cases over a fake probe returning colliding
-  `FileIdentity` values, covering (a) the three-stage merge listing, (b) two
-  paths differing only in ASCII case, and (c) a hard link.
-- Rationale: **this is a claim about inodes, not strings.** An earlier draft
-  deduplicated a `BTreeSet<Utf8PathBuf>` and asserted the result contained no
-  duplicate path string — which is a property of `BTreeSet`, not of this
-  design, and which cannot see the failure it was named for. On a
-  case-insensitive filesystem (macOS APFS and Windows NTFS are both release
-  targets, added at commit `1f64236`) `README.md` and `Readme.md` are distinct
-  index entries naming one file. Both survive string dedup, both probe as
-  `RegularFile`, and `rayon` then runs `format_to_string` and `rewrite_in_place`
-  on them concurrently: one thread truncates while the other reads, the reader
-  gets `""`, `format_to_string` returns `String::new()` for empty input, and
-  the file ends up zero bytes with both threads returning `Ok(())` and the run
-  exiting 0. Deduplicating on the `FileIdentity` the probe already fetched
-  closes it for nothing.
+  `FileIdentity` values, covering the three-stage merge listing and a pair of
+  paths differing only in ASCII case.
+- Rationale, **substantially revised** now that #467 has merged. An earlier
+  draft justified this invariant with a data-loss scenario: two entries naming
+  one file on a case-insensitive filesystem, formatted concurrently by `rayon`,
+  where one thread truncates while the other reads and the file ends up zero
+  bytes with the run exiting 0. **That scenario is now closed at the write
+  boundary.** `replace_file` writes a temporary file and renames it over the
+  target, so there is no truncation window and no reader can observe an empty
+  file. The worst remaining outcome is a redundant format and a last-writer-wins
+  result, both of which are correct content.
+
+  The invariant survives at much lower severity, for three honest reasons:
+  `git ls-files` genuinely emits a conflicted path once per index stage, so
+  duplicates are real; formatting the same file twice is wasted work
+  proportional to repository size; and `--list-files` printing a path twice
+  would be a visible defect. Do not justify it with the data-loss story.
+
+- **`FileIdentity` must be the canonicalized path, not `(st_dev, st_ino)`.**
+  This is the reverse of an earlier draft and follows directly from #467.
+  Consider two hard links to one inode. Before atomic replacement they aliased,
+  so collapsing them was right. After it, replacing the first creates a new
+  inode that takes over the first name, and the second link still refers to the
+  original, unformatted content — the migration guide states this outright:
+  "handles, hard links, and watches tied to the previous file keep the old
+  contents and do not follow the replacement". Collapsing them on inode would
+  therefore format one and silently leave the other stale, which is worse than
+  formatting both. A case-insensitive alias is one directory entry and
+  canonicalizes to one path; two hard links are two entries and canonicalize to
+  two. `std::fs::canonicalize` draws exactly the line this invariant needs.
+- Domain: the merge-stage listing; `README.md` against `Readme.md`; and a
+  hard-link pair that must **not** collapse.
 - Artefact: `src/select/policy.rs` `mod tests`.
-- Non-vacuity: each case asserts the collision was actually present in the
-  input and that exactly one representative survives. Negative control:
-  deduplicating on the path string must fail cases (b) and (c).
+- Non-vacuity: each case asserts the collision was present in the input. The
+  hard-link case is the negative control for the identity choice: an
+  implementation keyed on `(st_dev, st_ino)` must fail it.
+- Residual gap: whether `std::fs::canonicalize` normalizes case on macOS APFS
+  and on Windows is asserted here from documentation, not measured — this
+  machine is Linux. EP-M1 must confirm it on the release matrix, both of which
+  are release targets as of commit `1f64236`. If it does not, fall back to
+  comparing `(st_dev, st_ino)` **plus** parent-directory identity, and record
+  the change here.
 
 **INV-ORDER-DET** — selection is a deterministic function of the candidate
 multiset: permuting the input does not change the output, and the output is
@@ -592,28 +624,39 @@ sorted byte-wise on the UTF-8 path.
 
 - Method: `rstest` parameterized over all four variants, each with a matching
   extension so exclusion is attributable to the verdict alone.
-- Rationale: a finite four-valued partition. `Symlink` is the variant that
-  matters and the one an earlier draft omitted: `std::fs::metadata` **follows**
-  symlinks, so a tracked `src/notes.md -> lib.rs` would probe as `RegularFile`,
-  pass the extension filter on the *link* name, and `open_file_parent("src")`
-  plus `Dir::write("notes.md")` would resolve **within** the cap-std sandbox
-  and write Markdown output over `src/lib.rs`. The capability boundary does not
-  help, because its root is the file's parent directory, not the repository.
-  `symlink_metadata` plus an explicit variant is the whole fix.
+- Rationale, **revised** now that #467 has merged. An earlier draft justified
+  the `Symlink` variant as preventing a destructive write: `std::fs::metadata`
+  follows symlinks, so a tracked `src/notes.md -> lib.rs` would probe as
+  `RegularFile`, pass the extension filter on the *link* name, and have
+  Markdown written over `src/lib.rs` from inside the cap-std sandbox, whose
+  root is the file's parent directory rather than the repository. **That write
+  is now impossible**: `replace_file` reads `symlink_metadata` and declines a
+  symlink with `io::ErrorKind::InvalidInput`, so CON-SAFE-001 is defended at
+  the write boundary regardless of what selection does.
+
+  The variant is still required, for a different reason. `--git` selects files
+  the user never named, so a repository containing a tracked Markdown symlink
+  would emit a per-file error on every run for a file the user did not ask
+  about — and REQ-GIT-006 promises such candidates are skipped silently.
+  Commit `83e6150` makes it worse rather than better: with `write_back`
+  skipping unchanged files, the refusal fires only when the symlink's target
+  drifts, so the error is **intermittent**. Excluding symlinks at selection
+  time is what makes the behaviour predictable.
 - Artefact: `src/select/policy.rs` `mod tests`, plus an end-to-end scenario.
 
-**INV-NOWRITE-UNCHANGED** — `--in-place` writes a file only when the formatted
-output differs from the bytes read.
+**INV-NOWRITE-UNCHANGED** — **discharged by pull request #464; not this
+plan's work.** `driver::write_back` is documented as reachable "only for a file
+whose bytes would change", and commit `83e6150` pins two properties for it,
+each beside a positive control proving a drifting file is still replaced, so
+neither can pass by never writing. Its rationale is now stronger than this plan
+anticipated: because replacement renames a temporary over the target, an
+unconditional write would move the inode and the modification time of a
+byte-identical file, and a downstream staleness check would see a rebuild where
+there was nothing to rebuild.
 
-- Method: `rstest` on the rewrite helper, plus an end-to-end assertion that an
-  already-formatted file's modification time is unchanged after a run.
-- Rationale: correctness, not politeness. It removes the truncate-then-write
-  window for every unchanged file, which on a healthy repository is most of
-  them; it converts the CRLF churn risk from silent to visible; and it makes
-  the changed-file summary meaningful.
-- Artefact: `src/main.rs` `mod tests` and `tests/cli_git.rs`.
-- Non-vacuity: one case must have differing content and assert the write
-  happened, so the check cannot pass by never writing.
+This plan's only obligation here is not to regress it: the `--git` path must
+route writes through `write_back` rather than calling `replace_file` directly.
+Verify by inspection at the EP-M2 conformance check.
 
 **INV-CONFLICT-GUARD** — when the repository is mid-merge, mid-rebase, or
 mid-cherry-pick, a selected file containing all three conflict-marker forms is
@@ -664,7 +707,7 @@ recursion, no unbounded arithmetic, and no inductive structure; it is
 discharged by the bidirectional properties, whose negative controls demonstrate
 they can fail; and Verus needs its own toolchain, conflicting with this
 repository's `rust-toolchain.toml` pin of `nightly-2026-03-26`. Revisit if
-selection later becomes recursive. Full reasoning belongs in ADR 0006, not
+selection later becomes recursive. Full reasoning belongs in ADR 0008, not
 repeated here.
 
 ### Mutation testing replaces hand-applied negative controls
@@ -688,22 +731,29 @@ pre-1.0, `--git` is new, CON-API-001 keeps the module tree private to the
 binary, and the one existing-interface change (REQ-GIT-005) strictly widens
 what is accepted.
 
-### EP-M0 — prototyping spike, argument grammar and BDD viability
+### EP-M0 — prototyping spike, reduced scope
 
-- Outcome: throwaway evidence for AX-CLAP-GRAMMAR and that `rstest-bdd` plus
-  `rstest-bdd-macros` compile and run one trivial scenario on the pinned
-  toolchain.
-- Acceptance evidence: `EV-M0-GRAMMAR`, a transcript covering `mdtablefix --git
-  file.md` (rejected), `mdtablefix --in-place` (rejected), `mdtablefix --git
-  --in-place` (accepted), `mdtablefix a.md b.md` (**still accepted** — the
-  regression case, since `files` is a `Vec` positional entering an `ArgGroup`),
-  `mdtablefix --md-exts md a.md` (rejected), and the **verbatim diagnostic
-  text** for each rejection; and `EV-M0-BDD`, a passing one-scenario run.
-- Go/no-go: if `ArgGroup` cannot express the grammar, escalate with the
-  alternative (a post-parse check with hand-written diagnostics and its own
-  snapshot) rather than choosing unilaterally — the diagnostics are
-  user-visible. If `rstest-bdd` cannot be made to run, escalate under the
-  iteration tolerance.
+Both halves of this milestone have shrunk since the plan was first written.
+
+- Outcome: confirm on the merged `check-option` tree what was measured here in
+  isolation, then delete the spike.
+- The grammar half is largely done. Adding `git` to the `inputs` group was
+  measured against clap 4.6.6 and the results are recorded under
+  AX-CLAP-GRAMMAR. What remains is to reproduce them against the **real**
+  `Cli`, which carries `mode`, `--check`, and `--diff` as well, and to capture
+  clap's verbatim diagnostics for the documentation.
+- The BDD half is largely done: pull request #464 ships `rstest-bdd` and
+  `rstest-bdd-macros` with passing feature files, so the toolchain question is
+  answered. Confirm one scenario in this plan's own feature file runs.
+- Acceptance evidence: `EV-M0-GRAMMAR`, a transcript covering `--git a.md`
+  (rejected), `--in-place` alone (rejected), `mdtablefix a.md b.md` (**still
+  accepted** — the regression case), `--git --in-place`, `--git --check`,
+  `--git --diff`, `--git --list-files`, and `--include-untracked` without
+  `--git` (rejected by the post-parse check, exit 2), each with its verbatim
+  diagnostic; and `EV-M0-BDD`, one passing scenario.
+- Go/no-go: if the measured grammar does not reproduce on the real `Cli`,
+  escalate rather than choosing a different shape unilaterally — the
+  diagnostics are user-visible.
 - Recovery: `git checkout -- .`; the spike is additive and discardable.
 - Compatibility decision: none required.
 
@@ -739,23 +789,27 @@ selection module is a real, revert-safe state.
 - Requirements: REQ-GIT-003, REQ-GIT-004, REQ-GIT-005, REQ-GIT-008,
   REQ-GIT-009, REQ-GIT-010, and end-to-end discharge of LEM-SELECT-SETEQ,
   INV-NOWRITE-UNCHANGED, and CON-SAFE-001.
-- Additional obligation, from the memory profile: **stdout mode must not retain
-  the whole formatted corpus.** Today `cli.files.par_iter().map(...).collect()`
-  is a hard barrier that holds every file's complete formatted output before
-  printing anything. Measured on this repository, 28 Markdown files average
-  17.7 KB, so a 20,000-file documentation monorepo would hold roughly 354 MB —
-  fine on a workstation, fatal in a 2 GB CI container, and previously bounded
-  only by `ARG_MAX`. `--git` removes that bound. Iterate `chunks(256)`
-  sequentially, `par_iter()` within each chunk, and drain each chunk to a
-  `BufWriter` over a single `stdout().lock()` before the next. Peak drops to a
-  constant ~4.5 MB, and the `BufWriter` also collapses the current one
-  `write(2)` per output line — `Stdout` is `LineWriter`-backed unconditionally,
-  which at 20,000 files is roughly 8.6 million syscalls. Because
-  `AX-RAYON-ORDER` is withdrawn, ordering within a chunk must be
-  re-established explicitly from each unit's
-  index rather than inherited from `collect`; pull request #464 introduces
-  `driver::in_argument_order` for exactly this, and this plan uses it rather
-  than reimplementing it.
+- Additional obligation, from the memory profile: **`Mode::Print` must not
+  retain the whole formatted corpus.** Pull request #464 improved this for the
+  reporting modes — `driver::analyse` drops each `Assessment` before returning,
+  "so retained memory is proportional to the rendered payload rather than to
+  twice the whole input" — but under `Mode::Print` the rendered payload *is*
+  every file's formatted text, and the `collect()` before printing is still a
+  hard barrier. Measured on this repository, 28 Markdown files average 17.7 KB,
+  so a 20,000-file documentation monorepo would hold roughly 354 MB: fine on a
+  workstation, fatal in a 2 GB container, and previously bounded only by
+  `ARG_MAX`. `--git` removes that bound. Iterate `chunks(256)` sequentially,
+  `par_iter()` within each chunk, and drain each chunk to a `BufWriter` over a
+  single `stdout().lock()` before the next. Peak becomes a constant ~4.5 MB,
+  and the `BufWriter` also collapses the present one `write(2)` per output line
+  — `Stdout` is `LineWriter`-backed unconditionally, roughly 8.6 million
+  syscalls at that scale. Ordering within a chunk comes from
+  `driver::in_argument_order`, not from `collect`, because `AX-RAYON-ORDER` is
+  withdrawn.
+
+  Note this is a pre-existing defect that `--git` makes reachable, not one
+  `--git` introduces. If it proves larger than it looks, it is separable: raise
+  it as its own issue rather than growing this plan.
 - Acceptance evidence: `EV-M2-CLI` — `cargo test --test cli_git --test
   git_file_selection` passes, the `--help` snapshot is accepted, and the
   transcripts under "Validation and acceptance" reproduce.
@@ -771,11 +825,11 @@ selection module is a real, revert-safe state.
 
 - Outcome: `README.md`, `docs/users-guide.md`, `docs/architecture.md`,
   `docs/developers-guide.md`, `docs/contents.md`, and
-  `docs/adrs/0006-git-file-selection.md` describe the feature, the boundary,
+  `docs/adrs/0008-git-file-selection.md` describe the feature, the boundary,
   the CRLF caveat, and the rejected alternatives.
 - Acceptance evidence: `EV-M3-DOCS` — `make markdownlint` and, if a Mermaid
   diagram was added, `make nixie` both pass.
-- Conformance check: every Decision log entry appears in ADR 0006 or a
+- Conformance check: every Decision log entry appears in ADR 0008 or a
   component document; `docs/contents.md` indexes the new ADR.
 - Recovery: documentation-only.
 - Remaining gaps: none. Set Status to COMPLETE only after reconciling.
@@ -1004,7 +1058,17 @@ pub fn operation_in_progress(git_dir: &camino::Utf8Path) -> bool;
 pub fn has_conflict_markers(content: &str) -> bool;
 ```
 
-In `src/main.rs`, the `Cli` struct gains:
+### Command-line surface
+
+**Prerequisite: split `src/main.rs` first.** On `check-option` it is 386 lines
+against a 400-line cap. Extract the `Cli` and `FormatOpts` declarations into a
+binary-private `src/cli.rs`, declared from `main.rs`, as a separate
+behaviour-free commit before adding anything. That returns `main.rs` to roughly
+300 lines. Do not put `--git` wiring in `src/driver.rs`, which is 369 lines.
+
+`Cli` gains `git` as a member of the existing `inputs` group, and four
+supporting flags. The `mode` group and `--in-place`, `--check`, and `--diff`
+are already as pull request #464 leaves them and need no change:
 
 ```rust
 #[derive(Parser)]
@@ -1012,15 +1076,25 @@ In `src/main.rs`, the `Cli` struct gains:
 #[command(group(
     clap::ArgGroup::new("inputs").args(["files", "git"]).multiple(false)
 ))]
+#[command(group(clap::ArgGroup::new("mode").multiple(false).requires("inputs")))]
 struct Cli {
     /// Rewrite files in place
-    #[arg(long = "in-place", requires = "inputs")]
+    #[arg(long = "in-place", group = "mode")]
     in_place: bool,
+    /// Report which files would be reformatted, and by how many lines
+    #[arg(long = "check", group = "mode")]
+    check: bool,
+    /// Print a unified diff for each file that would be reformatted
+    #[arg(long = "diff", group = "mode")]
+    diff: bool,
+    /// Print the selected paths and exit, without reading or writing them
+    #[arg(long = "list-files", group = "mode")]
+    list_files: bool,
     /// Select Markdown files tracked by Git beneath the current directory
     #[arg(long = "git")]
     git: bool,
     /// Also select untracked files that Git does not ignore
-    #[arg(long = "include-untracked")] // see the note on `requires` below
+    #[arg(long = "include-untracked")]
     include_untracked: bool,
     /// File extensions to select under `--git`
     #[arg(
@@ -1031,11 +1105,8 @@ struct Cli {
         value_parser = select::extensions::parse_extension,
     )]
     md_exts: Vec<String>,
-    /// Print the selected paths and exit without reading or writing them
-    #[arg(long = "list-files")] // see the note on `requires` below
-    list_files: bool,
     /// Rewrite files containing conflict markers during a merge or rebase
-    #[arg(long = "allow-conflicted")] // see the note on `requires` below
+    #[arg(long = "allow-conflicted")]
     allow_conflicted: bool,
     #[command(flatten)]
     opts: FormatOpts,
@@ -1044,27 +1115,27 @@ struct Cli {
 }
 ```
 
-`value_delimiter` plus `value_parser` rather than a hand-parsed
-`Option<String>`: clap drops `default_values` entirely when any occurrence is
-supplied, giving replacement semantics for free; both `--md-exts md,mdc` and
-`--md-exts md --md-exts mdc` work; an invalid extension becomes a clap error
-with exit status 2 and a usage footer, matching every other argument mistake
-rather than exiting 1 through `anyhow`; and `--help` renders the default set
-automatically.
+`--list-files` joins the `mode` group rather than standing beside it, because
+it is a fifth thing to do with a selection, not a modifier. That also gets the
+mutual exclusion with `--check`, `--diff`, and `--in-place` for free, and makes
+`--list-files` require the `inputs` group like every other mode.
 
-**`requires = "git"` does not work here and must not be used.** Empirical
-result on clap 4.6.6, with `git` a member of the `inputs` group and `files` a
-`Vec` positional: `--list-files` alone is correctly rejected, but
-`--list-files a.md` is **accepted**, silently running a `--git`-only flag with
-no `--git`. The same holds when exclusivity is expressed with
-`conflicts_with = "files"` instead of a group, so group membership is not the
-cause; a bool flag's `requires` on another bool flag is simply not dependable
-once a positional is present. The `default_values` on `--md-exts` are a second
-instance of the same class of problem, since a defaulted argument always counts
-as present.
+Adding `git` to `inputs` was verified against clap 4.6.6 before being specified
+here. `mdtablefix a.md b.md` and `--in-place a.md b.md` still parse — a
+multi-value positional inside an exclusive group is safe — while `--git a.md`
+is rejected, and `--git --check`, `--git --diff`, and `--git --in-place` all
+parse.
 
-Express all four dependencies as an explicit post-parse check instead, emitting
-a real clap error so the exit status stays 2 and the usage footer is preserved:
+**`requires = "git"` does not work and must not be used** for
+`--include-untracked`, `--md-exts`, or `--allow-conflicted`. Measured on clap
+4.6.6, with `git` in the `inputs` group and `files` a `Vec` positional:
+`--list-files` alone is correctly rejected, but `--list-files a.md` is
+**accepted**, silently running a `--git`-only flag with no `--git`. The same
+holds under `conflicts_with = "files"`, so group membership is not the cause;
+a bool flag's `requires` on another bool flag is not dependable once a
+positional is present, and `default_values` on `--md-exts` is a second instance
+of the same class. Use an explicit post-parse check emitting a real clap error,
+so the exit status stays 2 and the usage footer survives:
 
 ```rust
 impl Cli {
@@ -1073,7 +1144,6 @@ impl Cli {
         let cli = Self::parse();
         for (name, present) in [
             ("--include-untracked", cli.include_untracked),
-            ("--list-files", cli.list_files),
             ("--allow-conflicted", cli.allow_conflicted),
         ] {
             if present && !cli.git {
@@ -1090,58 +1160,66 @@ impl Cli {
 }
 ```
 
-`--md-exts` needs the same treatment, keyed on
+`--md-exts` needs the same treatment keyed on
 `ArgMatches::value_source(..) != Some(ValueSource::DefaultValue)` rather than
-on a bool. EP-M0 must confirm all of this, including that the resulting exit
-status is 2.
+on a bool. `--list-files` no longer needs it, because `mode` already requires
+`inputs` and `--git` is the only way to satisfy that without positional files.
 
-The composition root returns a type, not an overloaded emptiness sentinel:
+### Composition: `--git` as a second `Inputs` source
+
+Pull request #464 already resolved the shape this plan previously had to
+invent. `driver::Inputs` distinguishes `Stdin` from `Files(Vec<Utf8PathBuf>)`,
+and `main` matches on it. `--git` adds a second way to produce `Files`:
 
 ```rust
-/// What `main` should act on.
-enum Inputs {
-    /// Read standard input. Only when no positional files and no `--git`.
-    Stdin,
-    /// Act on these paths. May be empty, which is success and not stdin.
-    Files(Vec<camino::Utf8PathBuf>),
-}
-
-fn resolve_inputs(cli: &Cli) -> anyhow::Result<Inputs>;
+/// Resolves `--git` into the paths to act on.
+///
+/// Returns `Inputs::Files`, which may be empty: an empty selection is success
+/// and must not fall through to standard input. Never returns `Inputs::Stdin`.
+fn resolve_git_inputs(
+    cli: &Cli,
+    working_directory: &Utf8Path,
+) -> Result<Inputs, GitListError>;
 ```
 
-An earlier draft returned `Vec<PathBuf>` and left `main` branching on
-`is_empty()`. That conflates "the user named no files, so read stdin" with
-"`--git` legitimately matched nothing", so `mdtablefix --git --in-place` in a
-repository with no Markdown would block on a TTY forever — and under
-`--in-place` would then print formatted stdin, silently the wrong mode.
-REQ-GIT-008 exists because of this. Carrying `Utf8PathBuf` rather than
-`PathBuf` also avoids round-tripping through a lossy type only for
-`open_file_parent` to re-validate it.
+Three properties of the surrounding contract are inherited rather than
+restated, and must not be re-implemented:
 
-`anyhow` remains correct in `main.rs`, which is the application boundary
-`AGENTS.md:266` describes.
+- **Exit status** comes from `driver::exit_status`. A `--git` failure — `git`
+  absent, or the directory is not a repository — is an operational failure, so
+  `ExitStatus::Error`, exit code **2**. An earlier draft of this plan
+  documented exit 1; that was written before the contract existed.
+- **Ordering** comes from `driver::in_argument_order`. Selection assigns each
+  path an index from its sorted order and lets the driver re-establish it.
+  `AX-RAYON-ORDER` remains withdrawn.
+- **Non-UTF-8 paths** must be dropped during selection, counted, and reported
+  once on stderr, so that no such path ever reaches `Inputs::resolve` — which
+  now fails the whole run on one. This keeps a single stray filename elsewhere
+  in the tree from aborting a whole-repository operation, without disturbing
+  the positional-argument contract.
 
-New `[dependencies]`:
+`--list-files` takes `driver::ReadOnlyDir`, or no capability at all, so that it
+cannot write by construction rather than by convention.
+
+### Dependencies
+
+One runtime dependency, which neither `main` nor `check-option` has:
 
 ```toml
 thiserror = "2"
 ```
 
-New `[dev-dependencies]`:
+`AGENTS.md:264` mandates it for domain error enums and `AGENTS.md:268` forbids
+the alternative of exporting an opaque error type.
 
-```toml
-rstest-bdd = "0.5"
-rstest-bdd-macros = "0.5"
-googletest = "0.14"
-pretty_assertions = "1.4"
-```
-
-`rstest-bdd-macros` is listed explicitly and deliberately. `rstest-bdd` 0.5.0
-does **not** re-export the macros — verified against the vendored source, whose
-`lib.rs` re-exports `context`, `registry`, `pattern` and others but no
-`rstest_bdd_macros` — so every consumer writes
-`use rstest_bdd_macros::{given, scenario, then, when};`. The upstream README's
-two-line install block is incomplete.
+**No development dependency is this plan's to add.** Pull request #464 already
+adds `googletest = "0.14"`, `pretty_assertions = "1"`, `rstest-bdd = "0.5.0"`,
+and `rstest-bdd-macros = { version = "0.5.0", features =
+["strict-compile-time-validation"] }`. Match those exactly, including the
+explicit macros crate — `rstest-bdd` 0.5.0 does not re-export its macros — and
+the feature. Pull request #464 also adds
+`cargo test --doc --all-features` to the `test` target, so the doctest gap this
+plan recorded is closed.
 
 Assertion style, per the `rust-unit-testing` skill: use
 `pretty_assertions::assert_eq` for structural comparisons of path vectors, and
@@ -1243,6 +1321,17 @@ Feature: Select files from a Git repository
     Given an unresolved merge conflict in the tracked file "docs/guide.md"
     When I run mdtablefix with "--git --in-place --allow-conflicted"
     Then the command succeeds
+
+  Scenario: Report drift across the repository without changing it
+    When I run mdtablefix with "--git --check"
+    Then the exit status is 1
+    And stdout names "docs/guide.md"
+    And the file "docs/guide.md" is unchanged
+
+  Scenario: Report a clean repository
+    Given every tracked Markdown file is already formatted
+    When I run mdtablefix with "--git --check"
+    Then the exit status is 0
 
   Scenario: Exit successfully when nothing is selected
     Given a Git repository containing only the committed file "src/lib.rs"
@@ -1417,21 +1506,26 @@ Expected: the untracked file joins the selection; the ignored one does not.
 
 ```console
 $ cd / && mdtablefix --git ; echo "exit=$?"
-Error: running `git ls-files`
-
-Caused by:
-    fatal: not a git repository (or any of the parent directories): .git
-exit=1
+mdtablefix: running `git ls-files`: fatal: not a git repository (or any of
+the parent directories): .git
+exit=2
 ```
 
-Expected: a non-zero exit and a diagnostic naming the cause. Note the shape:
-`fn main() -> anyhow::Result<()>` prints through `Termination`, which renders
-`Error: {e:?}` — capital `E`, with an indented `Caused by:` chain. An earlier
-draft's transcript showed a lowercase colon-joined `error:` line, which nothing
-in the binary can produce. The **second** line comes from git and is
-version- and locale-dependent, so no test asserts on it; snapshots of failure
-messages are driven through `GitLsFiles::with_program` against a fixture
-program emitting fixed bytes, so they are a function of our code.
+Expected: exit **2** and a diagnostic naming the cause. Three things about this
+transcript are load-bearing and each corrects an earlier draft:
+
+- The status is 2, not 1. Pull request #464 establishes
+  `ExitStatus { Success, Drift, Error }`, and a `--git` failure is an
+  operational error, which is 2. Exit 1 is reserved for a reporting mode that
+  found drift.
+- `fn main` now returns `ExitCode`, not `anyhow::Result<()>`, so nothing goes
+  through `Termination`. The `Error:` / `Caused by:` rendering a previous draft
+  showed cannot occur; the message is whatever the binary prints deliberately.
+- The text after the colon comes from `git`, is version- and locale-dependent
+  (AX-GIT-NLS), and is therefore asserted by **no** test. Snapshots of failure
+  messages are driven through `GitLsFiles::with_program` against a fixture
+  program emitting fixed bytes, so they are a function of this repository's
+  code rather than of the machine's `git`.
 
 ```console
 $ mdtablefix --git notes.md ; echo "exit=$?"
@@ -1442,6 +1536,16 @@ exit=2
 Expected: clap rejects the combination before any file is touched. This wording
 is clap's, so the test asserts the exit status; EP-M0 records the verbatim text
 for the documentation.
+
+```console
+$ mdtablefix --git --check ; echo "exit=$?"
+docs/guide.md: would reformat
+exit=1
+```
+
+Expected: exit **1**, drift rather than error. This is the combination
+`--git` exists to enable in continuous integration, and it works because `git`
+joined the `inputs` group that `mode` requires.
 
 Red-Green-Refactor evidence to record in Progress:
 
@@ -1472,13 +1576,24 @@ Quality criteria — what "done" means:
   with no shell interpretation and no user-controlled arguments, so there is no
   injection surface on the **input** side. On the **output** side, git's stderr
   is untrusted, unbounded, and may contain paths and ANSI escapes, so cap it
-  and strip control characters before printing. State both halves in ADR 0006.
+  and strip control characters before printing. State both halves in ADR 0008.
 
 ## Idempotence and recovery
 
 Every step is re-runnable. `mdtablefix --git --in-place` is idempotent on its
-own output, which INV-NOWRITE-UNCHANGED strengthens into "a second run performs
-no writes at all". The gates are read-only apart from build artefacts.
+own output for every flag combination **except `--headings`**, and for those
+`write_back` strengthens re-running into "a second run performs no writes at
+all".
+
+The exception is issue #474, and `--git` amplifies it: under `--headings`, a
+table whose delimiter row is the last line before a thematic break is
+restructured on every pass, so a whole-repository run never converges and
+`--git --check` would report drift no number of `--in-place` passes clears. Do
+not document `--git --in-place --headings` as convergent, and do not add a
+convergence scenario for `--headings` until #474 closes. Note that a seed sweep
+of `tests/idempotence_properties.rs` (seeds 0, 1, 7, 42, 99) passes, because
+that suite's generators do not reach this shape; a green run there is not
+evidence of convergence. The gates are read-only apart from build artefacts.
 `cargo insta reject` undoes a snapshot review.
 
 The destructive operation is rewriting files in place. The acceptance
@@ -1497,26 +1612,71 @@ plateau.
 
 ## Progress
 
+- [x] (2026-09-11) Rebase onto `main` at `d0549d9`; study the three merged
+      dependencies and the `check-option` interfaces.
+- [x] (2026-09-11) Confirm the sequencing decision: this plan follows #464.
 - [ ] Stage A: re-establish the reference-command transcripts on this machine.
-- [ ] EP-M0: confirm AX-CLAP-GRAMMAR, including the `a.md b.md` regression case
-      and the `default_values` plus `requires` wrinkle; capture verbatim clap
-      diagnostics.
-- [ ] EP-M0: prove one `rstest-bdd` scenario runs on the pinned toolchain.
-- [ ] Stage B: add the five dependencies and write the feature file.
-- [ ] Stage B: write the red unit and property tests for EP-M1.
+- [ ] Prerequisite: extract `Cli` and `FormatOpts` into `src/cli.rs` as a
+      behaviour-free commit, returning `src/main.rs` from 386 lines to roughly
+      300.
+- [ ] EP-M0: reproduce the measured grammar against the real `Cli`, capture
+      clap's verbatim diagnostics, and run one scenario from this plan's
+      feature file.
+- [ ] Stage B: add `thiserror`; write the feature file; write the red unit and
+      property tests for EP-M1.
 - [ ] EP-M1: implement `extensions`, `policy`, `conflict`, `git_ls_files`, and
       `fs_probe`; discharge INV-NUL-SPLIT, INV-EXT-SOUND, INV-EXT-COMPLETE,
       INV-DEDUP, INV-ORDER-DET, INV-PROBE-EXCLUSIONS, INV-CONFLICT-GUARD.
-- [ ] EP-M1: add `cargo test --doc` to the `test` target; add `make mutants`
-      and `mutants.toml`; reach zero survivors in the two named files.
-- [ ] EP-M2: wire the five new flags and `resolve_inputs` into `main`.
-- [ ] EP-M2: implement the chunked stdout drain and INV-NOWRITE-UNCHANGED.
+- [ ] EP-M1: confirm `std::fs::canonicalize` case behaviour on the macOS and
+      Windows release targets, per the INV-DEDUP residual gap.
+- [ ] EP-M1: add `make mutants` and `mutants.toml`; reach zero survivors in
+      `src/select/policy.rs` and `src/select/git_ls_files.rs`.
+- [ ] EP-M2: add `git` to the `inputs` group and the four supporting flags,
+      with post-parse dependency checks; wire `resolve_git_inputs` into
+      `driver::Inputs`.
+- [ ] EP-M2: bound `Mode::Print` memory with the chunked drain.
 - [ ] EP-M2: land the scenarios and the `--help` snapshot.
-- [ ] EP-M3: write ADR 0006 and update `README.md`, `docs/users-guide.md`,
+- [ ] EP-M3: write **ADR 0008** and update `README.md`, `docs/users-guide.md`,
       `docs/architecture.md`, `docs/developers-guide.md`, `docs/contents.md`.
-- [ ] Reconcile Decision log and Surprises with ADR 0006, then set Status.
+- [ ] Reconcile Decision log and Surprises with ADR 0008, then set Status.
+
+Superseded and deliberately not carried forward: adding `googletest`,
+`pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
+`cargo test --doc` to the `test` target; and implementing
+INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
 
 ## Surprises & discoveries
+
+- Observation: `src/main.rs` on `check-option` is 386 lines against a 400-line
+  cap, and `src/driver.rs` is 369.
+  Evidence: `git show origin/check-option:src/main.rs | wc -l`.
+  Impact: the file-size contingency became a prerequisite. `Cli` and
+  `FormatOpts` must move to `src/cli.rs` before any field is added, and `--git`
+  wiring cannot live in `driver.rs`.
+
+- Observation: atomic replacement changes what deduplication should key on.
+  Evidence: `docs/v0-6-0-migration-guide.md` — "handles, hard links, and
+  watches tied to the previous file keep the old contents and do not follow the
+  replacement".
+  Impact: `FileIdentity` becomes the canonicalized path rather than
+  `(st_dev, st_ino)`. Collapsing two hard links would now format one and leave
+  the other stale. See INV-DEDUP.
+
+- Observation: the destructive symlink write this plan was designed to prevent
+  is already impossible.
+  Evidence: `src/io/replace.rs`, `replace_file_inner` reads `symlink_metadata`
+  and returns `InvalidInput` for a symlink.
+  Impact: INV-PROBE-EXCLUSIONS survives with a different and weaker rationale —
+  avoiding a spurious error on a file the user never named — and commit
+  `83e6150` makes that error intermittent by skipping unchanged files.
+
+- Observation: the formatter is still not a fixed point under `--headings`.
+  Evidence: issue #474, open; found by the property test that #470 landed, so
+  it survives that fix.
+  Impact: `--git --in-place --headings` never converges and `--git --check`
+  would report unclearable drift. A seed sweep of
+  `tests/idempotence_properties.rs` (0, 1, 7, 42, 99) passes, so that suite is
+  not evidence against it. Recorded as a Risk; out of scope to fix.
 
 - Observation: `git ls-files -t` does not reliably flag a tracked file deleted
   from the working tree; it reported `H`, not `R`, because the `R` tag requires
@@ -1547,14 +1707,45 @@ plateau.
 
 ## Decision log
 
-Entries are pointers; the reasoning lives in the body sections named. ADR 0006
+Entries are pointers; the reasoning lives in the body sections named. ADR 0008
 is the durable record, and EP-M3 reconciles this log into it.
+
+- Decision: sequence this plan after pull request #464 and consume its
+  interfaces rather than duplicating them.
+  Rationale: #464 was already in implementation when the collision was found,
+  and its commit `83e6150` adopted the four forward-compatibility requests this
+  plan made. `driver::{Inputs, Mode, ReadOnlyDir, Assessment, ExitStatus,
+  exit_status, in_argument_order}` now exist, so the alternative would mean
+  building a second changed-file comparison, a second ordering scheme, and a
+  second exit-status contract.
+  Date/Author: 2026-09-11, requester.
+
+- Decision: this plan's decision record is **ADR 0008**, not 0006.
+  Rationale: #470 took 0006 (single-pass idempotence) and #469 took 0007
+  (line-ending detection) while this plan was in review.
+  Date/Author: 2026-09-11, planning agent.
+
+- Decision: cover `--git --check` and `--git --diff` with scenarios rather than
+  leaving them merely parseable.
+  Rationale: adding `git` to the `inputs` group makes these combinations parse
+  for free, and `--git --check` is the continuous-integration gate the feature
+  exists to enable. Shipping a combination that parses but is untested would be
+  worse than either supporting or forbidding it. This is a judgement call the
+  requester has not confirmed; if the intent is to defer it, strike the two
+  scenarios and the transcript, and the rest of the plan is unaffected.
+  Date/Author: 2026-09-11, planning agent.
+
+- Decision: key deduplication on the canonicalized path, reversing the earlier
+  `(st_dev, st_ino)` choice, and downgrade the invariant's severity.
+  Rationale: see INV-DEDUP. Atomic replacement closed the data-loss scenario
+  and simultaneously made inode-keyed deduplication wrong for hard links.
+  Date/Author: 2026-09-11, planning agent.
 
 - Decision: spawn `git ls-files -z` rather than link `git2` or `gix`.
   Rationale: equivalence by construction rather than by reimplementation; no
   Git-operating dependency; inherits every Git configuration input for free.
   libgit2 diverges from Git on nested `.gitignore` negation, so `git2` would
-  make equivalence approximate. The stronger argument, which ADR 0006 should
+  make equivalence approximate. The stronger argument, which ADR 0008 should
   lead with, is that a walker-based approach such as the `ignore` crate
   **structurally cannot see force-added ignored files**, whereas `--cached`
   gets them right by construction. Cost: `git` on `PATH`, turned into an
@@ -1664,7 +1855,7 @@ is the durable record, and EP-M3 reconciles this log into it.
   argument: `mdtablefix somedir/` is an error today and would become a
   recursive rewrite. That is a different feature from the one requested, and
   bundling it would widen the blast radius of a change whose whole risk profile
-  is unintended writes. Record it in ADR 0006 as the recommended successor.
+  is unintended writes. Record it in ADR 0008 as the recommended successor.
   Date/Author: 2026-09-09, planning agent, on a reviewer alternative.
 
 - Decision: the roadmap instruction is **not applicable**.
@@ -1674,14 +1865,19 @@ is the durable record, and EP-M3 reconciles this log into it.
 ## Outcomes & retrospective
 
 To be completed at EP-M3. Before setting Status to COMPLETE, reconcile every
-Surprise and Decision against ADR 0006 and the component documents. Do not mark
+Surprise and Decision against ADR 0008 and the component documents. Do not mark
 COMPLETE while any deviation remains unrecorded.
 
-Two items an earlier draft listed as follow-up work are already owned
-elsewhere, and must **not** be reopened here: atomic `--in-place` writes are
-issue #465, and CRLF and byte-order-mark preservation is part of pull
-request #464. Confirm at closure that neither was reimplemented in
-`src/select/`.
+Two items an earlier draft listed as follow-up work have since **merged** and
+must not be reopened: atomic `--in-place` writes are issue #465,
+delivered by #467; line-ending preservation is issue #451, delivered by #469
+under ADR 0007. Confirm at closure that neither was reimplemented in
+`src/select/`, and that the `--git` write path routes through
+`driver::write_back` rather than calling `replace_file` directly.
+
+One item remains genuinely open and is **not** this plan's to fix: issue #474,
+the `--headings` fixed-point defect. Confirm at closure that the users' guide
+does not claim convergence for that flag.
 
 ## Artefacts and notes
 
@@ -1692,6 +1888,32 @@ report; the accepted `--help` snapshot; and the final gate run. Keep them
 short.
 
 ## Revision note
+
+Revised 2026-09-11, third pass, after rebasing onto `main` at `d0549d9` and
+studying the merged code.
+
+What changed. Three dependencies merged — #467 (atomic writes), #469 (line
+endings) and #470 (single-pass idempotence) — and #464 is in review with the
+four forward-compatibility requests adopted in commit `83e6150`. The sequencing
+question is settled, so the status returns to DRAFT.
+
+The merged code changed two invariants on their merits rather than merely
+renumbering them. `INV-DEDUP` lost its data-loss rationale, because atomic
+replacement closes the truncate-and-read race; and it gained a corrected
+identity, because collapsing hard links on `(st_dev, st_ino)` would now format
+one and leave the other stale. `INV-PROBE-EXCLUSIONS` lost its destructive-write
+rationale, because `replace_file` already declines symlinks, and kept the
+variant for a weaker but real reason. `INV-NOWRITE-UNCHANGED` is discharged
+by #464 and is no longer this plan's work.
+
+Corrections: the decision record moves to ADR 0008, because 0006 and 0007 were
+taken; the failure transcript exits 2 rather than 1 and does not render through
+`Termination`, because `main` now returns `ExitCode`; and `src/main.rs` at 386
+lines makes the file-size contingency a prerequisite rather than a fallback.
+Issue #474 is recorded as a new risk: the formatter is still not a fixed point
+under `--headings`, which `--git` amplifies from one file to a whole
+repository. Scenarios for `--git --check` and `--git --diff` were added, since
+the group change makes them parse for free.
 
 Revised 2026-09-09, second pass, after the requester identified two in-flight
 pieces of work. Atomic `--in-place` writes are issue #465 and CRLF handling is
