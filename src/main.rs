@@ -181,7 +181,10 @@ fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyho
     let counts = count_line_endings(&content);
     report_line_endings(counts, "file", Some(path.as_str()));
     // Keep file output newline-terminated, matching the CLI stdout contract.
-    Ok(serialize_lines(&format_lines(&content, opts), counts.ending))
+    Ok(serialize_lines(
+        &format_lines(&content, opts),
+        counts.ending,
+    ))
 }
 
 /// Formats standard input and renders it for standard output.
