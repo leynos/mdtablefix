@@ -25,24 +25,32 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 
 - **What changed:** The formatter now terminates every line of its output with
   the line-ending style holding the strict majority of the input document's
-  line endings. CRLF pairs and lone line feeds are counted, and CRLF is
-  selected only when it strictly outnumbers the lone line feeds. An exact tie,
-  and an input with no line endings at all, select LF, so the result is
-  deterministic. Only CRLF and lone LF are recognised; a lone carriage return
-  is content. The change covers file arguments printed to standard output,
-  `--in-place`, standard input, and the library entry points
-  `mdtablefix::io::rewrite` and `mdtablefix::io::rewrite_no_wrap`; standard
-  input keeps its existing contract of printing one terminator even when the
-  output has no lines, so an empty file still produces empty output. The
-  boundary that acts on the selection reports it at `debug` level, under the
-  message `selected the majority line ending`.
+  line endings, rather than always emitting line feeds (LFs). CRLF pairs and
+  lone line feeds are counted, and CRLF is selected only when it strictly
+  outnumbers the lone line feeds. An exact tie, and an input with no line
+  endings at all, select LF, so the result is deterministic. Only CRLF and lone
+  LF are recognised; a lone carriage return is content. The change covers file
+  arguments printed to standard output, `--in-place`, standard input, and the
+  library entry points `mdtablefix::io::rewrite` and
+  `mdtablefix::io::rewrite_no_wrap`; standard input keeps its existing contract
+  of printing one terminator even when the output has no lines, while an empty
+  file still produces empty output. The selection is new public API:
+  `LineEnding`, whose `as_str` method returns the characters written between
+  lines, `detect_line_ending(text) -> LineEnding`, and
+  `serialize_lines(lines, ending) -> String`. The boundary that acts on the
+  selection reports it at `debug` level, under the message
+  `selected the majority line ending`.
 - **Who is affected:** Anyone who formats a document with CRLF or mixed
   endings, through the CLI or the library.
-- **Migration action:** No action is required for normal use. Because the
-  choice is made per document, a mostly-CRLF document is emitted entirely as
-  CRLF, so an LF-authored snippet inside it is rewritten to CRLF, and a
-  mixed-ending document is normalised to its majority style on the first run;
-  that diff can be larger than the table changes alone.
+- **Migration action:** No action is required for normal use. A file authored
+  with one style keeps it, so a CRLF file is no longer rewritten as LF, and the
+  whole-file diff that changed nothing but terminators disappears. A document
+  whose endings are consistent, and which already ends with a terminator, is
+  rewritten with identical bytes, so it can be compared with formatter output
+  byte-for-byte. Because the choice is made per document, a mostly-CRLF
+  document is emitted entirely as CRLF, so an LF-authored snippet inside it is
+  rewritten to CRLF, and a mixed-ending document is normalised to its majority
+  style on the first run; that diff can be larger than the table changes alone.
 
 ## Preserved file mode
 
