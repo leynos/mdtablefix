@@ -213,18 +213,18 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - Risk: changing operational errors from exit `1` to exit `2` silently breaks
   a caller written as `mdtablefix ...; [ $? -eq 1 ] && handle_failure`, which
   would stop firing. Severity: medium. Likelihood: low. Mitigation: bump the
-  crate from `0.5.1` to `0.6.0`, record it in `CHANGELOG.md` and ADR 0006, and
+  crate from `0.5.1` to `0.6.0`, record it in `CHANGELOG.md` and ADR 0009, and
   assert all three statuses explicitly. Note that `tests/parallel.rs:56-103`
   uses `assert_cmd`'s `.failure()`, which only checks for non-zero and would
   not have caught this.
 
 - Risk: `--in-place` uses create-truncate-write with no atomic rename and no
   backup, so a kill or a full disk leaves files truncated. Severity: high.
-  Likelihood: low. Mitigation: **out of scope for this plan**, raised as
-  GitHub issue #465 and to be fixed separately. `EP-M1` touches the same seam,
-  so sequencing #465 immediately after this work avoids editing the code
-  twice. Recorded here because this plan rewrites the serialization path and a
-  reader must not conclude the hazard was overlooked.
+  Likelihood: low. Mitigation: **discharged.** This plan kept it out of scope
+  and raised it as GitHub issue #465, which pull request #467 then fixed while
+  this plan was halted at `EP-M2`. The rebase took that fix, and
+  `src/main.rs` now writes through `replace_file`'s write-then-rename. See
+  `Artefacts and notes → Rebase onto origin/main`.
 
 - Risk: `rstest-bdd` has never been used here, and its user's guide does not
   cover subprocess testing, so the harness is a repository-local convention
@@ -267,19 +267,33 @@ Hard invariants. Violating one requires escalation, not a workaround.
       flipped. All gates pass; `CHANGELOG.md` records the byte change and that
       an already-rewritten file cannot be un-rewritten by reverting. The
       lone-`\r` limitation remains and stays on `EP-M7`'s documentation list.
-- [ ] EP-M2 Pure reporting domain (`src/report/`), including the idempotence
-      result. **Halted at step 3: `INV-IDEMPOTENT` fails.** The red state was
-      built and observed (`cargo test --test check_properties count` panics on
-      the `todo!()` bodies; `cargo test --lib report` reports 1 passed,
-      33 failed), the deterministic corpus cases pass, and the generated
-      document found two pre-existing non-idempotent transforms. Per
+      **Rebased onto `origin/main`:** pull request #469 had meanwhile landed an
+      equivalent line-ending implementation as `src/io/line_endings.rs`, so the
+      rebase took `main`'s for endings and re-landed only the byte-order-mark
+      half, as `src/io/document.rs`. See
+      `Artefacts and notes → Rebase onto origin/main`.
+- [x] EP-M2 Pure reporting domain (`src/report/`), including the idempotence
+      result. **Was halted at step 3** because `INV-IDEMPOTENT` failed: the red
+      state was built and observed (`cargo test --test check_properties count`
+      panics on the `todo!()` bodies; `cargo test --lib report` reports
+      1 passed, 33 failed), the deterministic corpus cases passed, and the
+      generated document found two pre-existing non-idempotent transforms. Per
       `Tolerances`, work stopped and the finding was escalated rather than
-      worked around. See `Surprises & discoveries` and
-      `Artefacts and notes → EP-M2 idempotence failure`. Raised as GitHub
-      issue #468 with the reproduction corpus and its acceptance criteria;
-      green work stays suspended pending the scope decision.
-- [ ] EP-M3 Driver, read-only capability, `--check`, exit-status contract,
-      version bump to `0.6.0`.
+      worked around; see `Surprises & discoveries` and
+      `Artefacts and notes → EP-M2 idempotence failure`. Raised as GitHub issue
+      #468 with the reproduction corpus and its acceptance criteria. **Merged
+      pull request #470 then fixed both defect classes and closed issue #468**,
+      which unblocked the green step. `LineDelta::between`,
+      `render_report_line`, `render_summary`, and `write_unified_diff` are
+      implemented on the rebased tree; `cargo test --lib report` and
+      `cargo test --test check_properties` are green, and every idempotence case
+      passes. All three `Verification plan` negative controls were applied as
+      temporary local mutations, each was rejected, and each was reverted; see
+      `Artefacts and notes → EP-M2 green transcripts`.
+- [ ] EP-M3 Driver, read-only capability, `--check`, exit-status contract. The
+      version bump to `0.6.0` is already in the manifest and unreleased, so this
+      milestone changes the exit status under an existing version rather than
+      raising it; the record moves to `ADR 0009`.
 - [ ] EP-M4 `--diff`, sharing `--check`'s exit semantics.
 - [ ] EP-M5 Curated CLI matrix coverage for the two new modes.
 - [ ] EP-M6 Targeted mutation testing of the counting and aggregation
@@ -674,6 +688,89 @@ Hard invariants. Violating one requires escalation, not a workaround.
   explicit instruction from `@leynos`, who set the two-part acceptance bar.
   Date/Author: 2026-09-09, on explicit instruction from `@leynos`.
 
+- Decision: resolve the rebase onto `origin/main` by taking pull request #469's
+  line-ending implementation and re-landing only the byte-order-mark half of
+  `EP-M1`.
+  Rationale: #469 (issue #451) had already landed `src/io/line_endings.rs` with
+  equivalent behaviour, so keeping both would leave two competing definitions of
+  the same policy in one crate. But a `git grep` over `main` showed no
+  byte-order-mark handling anywhere: a marked file would reach the transforms
+  with `U+FEFF` fused to its first line, defeating them and making `--check`
+  report a ragged file clean. That is a silent false negative in the
+  user-facing guarantee, so the mark still had to land.
+  Date/Author: 2026-09-11.
+
+- Decision: move the document boundary from the planned `src/document.rs` to
+  `src/io/document.rs`, and take `LineEnding`, `LineEndingCounts`,
+  `count_line_endings`, and `serialize_lines` from `src/io/line_endings.rs`
+  instead of redefining them.
+  Rationale: with #469 merged, a top-level `src/document` and an `src/io` that
+  both needed the line-ending policy would form a cyclic module dependency, and
+  a second public `LineEnding` beside the crate-root re-export would be two
+  types with one name in the published surface. `SourceDocument` keeps its shape
+  and its type-level guarantee.
+  Date/Author: 2026-09-11.
+
+- Decision: write the check-and-diff ADR as `0009` and give the byte-order mark
+  its own `0008`, rather than reusing the `0006` and `0007` numbers this plan
+  had reserved.
+  Rationale: #470 and #469 had already written `0006-single-pass-idempotence.md`
+  and `0007-line-ending-detection.md`. An ADR number is a stable reference, so
+  renumbering merged records to reclaim the reserved slots would break every
+  citation of them; the new records take the next free numbers instead. `0007`
+  covers line endings only and does not mention the mark, so the mark still
+  needs a record of its own.
+  Date/Author: 2026-09-11.
+
+- Decision: treat the atomic `--in-place` write as discharged by pull request
+  #467 (issue #465) rather than implementing it here.
+  Rationale: this plan had deliberately deferred write-then-rename to issue #465
+  and recorded it as a high-severity risk. #467 landed it as `replace_file`,
+  which is what `src/main.rs` and this branch's document-boundary work now call,
+  so `EP-M3` inherits the guarantee instead of restating it.
+  Date/Author: 2026-09-11.
+
+- Decision: keep the idempotence cases in `tests/check_properties.rs` but scope
+  them to the document boundary, leaving the general suites to
+  `tests/idempotence.rs` and `tests/idempotence_properties.rs`.
+  Rationale: #470 landed those two suites for document *structure*, with a
+  stronger generator than this plan's, so carrying an unscoped copy here would
+  duplicate both the runtime and the maintenance. The *boundary* dimension —
+  ending style, byte-order mark, and trailing terminator, under every singleton
+  flag — is not sampled by those suites and is exactly what this plan changed,
+  so dropping it entirely would lose real coverage of the new code.
+  Date/Author: 2026-09-11.
+
+- Decision: sample *related* text pairs in
+  `count_conserves_tokens_and_agrees_with_byte_equality`, in addition to
+  independent random pairs.
+  Rationale: applying the `LEM-COUNT` negative control showed the property test
+  caught nothing, because two independent `any::<String>()` draws never share a
+  line and both assertions then hold for any diff at all. The property test now
+  fails under all three controls. This is the plan's own argument that the
+  conservation law is not falsifiable by itself, applied to the generator rather
+  than only to the golden fixtures.
+  Date/Author: 2026-09-11.
+
+- Decision: the three gate failures reported by the first `EP-M2` gate run were
+  fixed rather than waived: four `cast_possible_wrap` errors in
+  `tests/check_properties.rs`, nine rustfmt diffs, and three markdownlint
+  errors in this plan.
+  Rationale: green tests are not a gate. `make check-fmt` had not been run over
+  `src/io/document.rs`, which an earlier segment of this session committed, so
+  its `SourceDocument::parse` doc example was still a single over-long line;
+  the rest of the rustfmt diffs were in this milestone's own new code. The
+  `MD029` errors were structural rather than cosmetic:
+  `.markdownlint-cli2.jsonc` sets `MD029` to `ordered`, and the
+  negative-control transcripts' column-zero fences ended the numbered list, so
+  the items numbered `2.` and `3.` each started a fresh list that has to begin
+  at `1.`. Those items are now dash-bulleted `**Control N.**` entries, which
+  keeps the numbering visible and removes the ordered list entirely. `MD018`
+  was one wrapped paragraph line beginning `#469`. The `MD029` and `MD018`
+  fixes were verified by re-running markdownlint over the plan alone, and the
+  cast errors by `cast_signed()`, which is what clippy itself suggests.
+  Date/Author: 2026-09-11.
+
 ## Outcomes & retrospective
 
 Not started. Complete at each milestone boundary and before setting the plan
@@ -772,18 +869,22 @@ repository, and none should be invented. Upstream artefacts:
   (discharged in full).
 
 New ADRs created here, joining the basis once accepted:
-`docs/adrs/0006-check-and-diff-reporting.md` and
-`docs/adrs/0007-document-boundary-preservation.md`.
+`docs/adrs/0008-byte-order-mark-preservation.md` and
+`docs/adrs/0009-check-and-diff-reporting.md`. The numbers this plan originally
+reserved, `0006` and `0007`, were taken by merged pull requests #470 and #469
+before the plan reached `EP-M7`; see `Decision log`. Pull request #469's
+`docs/adrs/0007-line-ending-detection.md` covers the line-ending half of the
+document boundary only, so the byte-order mark still needs its own record.
 
 Trace links:
 
 ```plaintext
 ISSUE-451 -> ADR-0007 -> EP-M1 -> tests::document_properties::crlf_round_trips
-ISSUE-452-check -> ADR-0006 -> EP-M3 -> tests::cli_check::reports_drift_and_exits_one
-ISSUE-452-diff -> ADR-0006 -> EP-M4 -> tests::cli_diff::emits_unified_diff_and_exits_zero
-ISSUE-452-no-write -> ADR-0006 -> EP-M3 -> tests::cli_check::directory_snapshot_unchanged
-ISSUE-452-exit -> ADR-0006 -> EP-M3 -> tests::driver::exit_status_matrix
-ISSUE-452-multifile -> ADR-0006 -> EP-M3 -> tests::cli_check::reports_every_file_in_order
+ISSUE-452-check -> ADR-0009 -> EP-M3 -> tests::cli_check::reports_drift_and_exits_one
+ISSUE-452-diff -> ADR-0009 -> EP-M4 -> tests::cli_diff::emits_unified_diff_and_exits_zero
+ISSUE-452-no-write -> ADR-0009 -> EP-M3 -> tests::cli_check::directory_snapshot_unchanged
+ISSUE-452-exit -> ADR-0009 -> EP-M3 -> tests::driver::exit_status_matrix
+ISSUE-452-multifile -> ADR-0009 -> EP-M3 -> tests::cli_check::reports_every_file_in_order
 ```
 
 Issue #452's `--concise` criteria are deliberately untraced; see
@@ -929,7 +1030,7 @@ interface.
   majority; an exact tie; no line endings; empty; lone `\r`; leading
   byte-order mark with each ending style; **and mixed endings inside a fenced
   code block**, which is the case that reveals homogenization.
-  Artefact: `src/document.rs` unit tests and `tests/document_properties.rs`.
+  Artefact: `src/io/document.rs` unit tests and `tests/document_properties.rs`.
   Evidence: `cargo test --lib document` and
   `cargo test --test document_properties`.
   Non-vacuity: the tie case must assert LF. Negative controls: change the
@@ -1071,7 +1172,25 @@ step definition into a compile error. Both `rstest-bdd` crates need Rust 1.85
 or newer; this repository pins `1.89` in `Cargo.toml` and
 `nightly-2026-03-26` in `rust-toolchain.toml`.
 
-### `src/document.rs` (new, library, budget 200 lines)
+### `src/io/document.rs` (new, library, budget 200 lines)
+
+**Relocated and narrowed during the rebase onto `origin/main`.** This module
+was specified as `src/document.rs` with its own `LineEnding` enum. PR #469 then
+landed `src/io/line_endings.rs` carrying an equivalent `LineEnding`,
+re-exported from the crate root and already asserted by
+`tests/document_properties.rs`. Two things followed:
+
+- The module moved under `src/io/`. A top-level `src/document` and an `src/io`
+  that both needed the line-ending policy would be a cyclic module dependency,
+  and defining a second public `LineEnding` beside the crate-root re-export
+  would leave two types with one name.
+- `LineEnding`, `LineEndingCounts`, `count_line_endings`, and `serialize_lines`
+  now come from `super::line_endings` rather than being redefined here.
+
+`SourceDocument` is unchanged in shape and still guarantees at the type level
+that a document's lines are rendered with that document's own style. Read the
+interface below with those two substitutions; it is otherwise the original
+specification.
 
 The shared document boundary, replacing the duplicated logic in
 `src/main.rs:129-133` and `src/io.rs:21-25`. Infallible; no error type.
@@ -1403,9 +1522,12 @@ Compatibility decision: none required.
 
 ### EP-M1: document boundary
 
-Outcome: `src/document.rs` exists; `src/main.rs` and `src/io.rs` both use it;
-line endings and byte-order marks are preserved in every mode. Issue #451 is
-discharged. No new flag exists yet.
+Outcome: `src/io/document.rs` exists; `src/main.rs` and `src/io.rs` both use
+it; line endings and byte-order marks are preserved in every mode. Issue #451
+is discharged: the line-ending half by merged pull request #469, whose
+implementation was taken during the rebase, and the byte-order-mark half by
+`src/io/document.rs`, which this branch re-landed because `git grep` showed
+`main` had no mark handling anywhere. No new flag exists yet.
 
 Requirements: `ISSUE-451`, `INV-DOCUMENT`, `INV-BOM` (partially; its
 end-to-end half lands in `EP-M3`).
@@ -1473,7 +1595,9 @@ asserted, **including that `--in-place` over a drifting file exits `0`** and
 that drift plus an error yields `2`.
 
 Conformance check: `main`'s return type changed and the error status moved
-from `1` to `2`, requiring ADR 0006 and the version bump; `--check` is a new
+from `1` to `2`, requiring ADR 0009; the manifest already declares `0.6.0` as
+unreleased, so the bump recorded under `EP-M0` covers the change and no further
+version bump is needed. `--check` is a new
 public command-line interface approved at the gate; no trust boundary widens,
 because access still flows through `open_file_parent`.
 
@@ -1727,7 +1851,7 @@ re-running a gate to diagnose a failure.
    lone-`\r`, empty-file, and no-trailing-newline fixtures under
    `tests/data/`, with tests asserting the **current** behaviour. Commit. This
    is the regression oracle, and it does not exist yet.
-2. Red: add `src/document.rs` with signatures and `todo!()` bodies, plus its
+2. Red: add `src/io/document.rs` with signatures and `todo!()` bodies, plus its
    unit tests and `tests/document_properties.rs`. Run `cargo test --lib
    document` and observe the `todo!()` panics.
 3. Green: implement `LineEnding::detect` (subtracting CRLF occurrences from
@@ -1816,9 +1940,10 @@ re-running a gate to diagnose a failure.
    ordering and why `rayon`'s collection order is not relied upon, the
    `rstest-bdd` conventions and subprocess harness, and the binary-private
    status of `src/driver.rs`.
-5. Write `docs/adrs/0006-check-and-diff-reporting.md` and
-   `docs/adrs/0007-document-boundary-preservation.md` following ADR 0004's
-   header format.
+5. Write `docs/adrs/0008-byte-order-mark-preservation.md` and
+   `docs/adrs/0009-check-and-diff-reporting.md` following ADR 0004's header
+   format. Do not renumber the existing `0006` and `0007`, which merged pull
+   requests already filled.
 6. Vendor `docs/rstest-bdd-users-guide.md` and
    `docs/reliable-testing-in-rust-via-dependency-injection.md` with a
    provenance header naming the source repository and commit.
@@ -1987,6 +2112,35 @@ them in a scratch directory or delete them afterwards.
 Populate during implementation with the `EP-M0` spike transcript, the red and
 green transcripts per milestone, and the observed failure message from each
 negative control. Keep each excerpt short and focused on what proves success.
+
+### Rebase onto `origin/main`
+
+Three pull requests merged while this plan was halted at `EP-M2`. The branch was
+rebased onto `origin/main` before any further work:
+
+| PR | Issue | Merged subject | Effect on this plan |
+| --- | --- | --- | --- |
+| #467 | #465 | `Write files atomically in --in-place mode` | lands the atomic `--in-place` write this plan had deferred; see `Decision log` |
+| #469 | #451 | `Preserve the majority input line-ending style in formatter output` | supersedes the line-ending half of `EP-M1`, and writes `docs/adrs/0007-line-ending-detection.md` |
+| #470 | #468 | `Make the formatter a fixed point in one pass` | discharges `INV-IDEMPOTENT`, unblocks `EP-M2` step 3, and writes `docs/adrs/0006-single-pass-idempotence.md` |
+
+Conflicts were resolved in `Cargo.lock` (regenerated from the merged manifest),
+`src/io.rs`, and `src/main.rs`, taking `main`'s line-ending implementation and
+re-applying only this plan's byte-order-mark work on top. Twelve commits were
+carried across the rebase; the BOM half of `EP-M1` is re-landed as
+`src/io/document.rs`, and the working tree was clean before the `EP-M2` green
+step began.
+
+Three premises of this plan did not survive the rebase and have been corrected
+in place:
+
+- `EP-M1`'s module was specified as a top-level `src/document.rs`; it is now
+  `src/io/document.rs`. See `Interfaces and dependencies`.
+- `EP-M3`'s "version bump to `0.6.0`" had already landed, so the exit-status
+  change ships under the existing unreleased `0.6.0` rather than raising it.
+- `ADR 0006` and `ADR 0007` were already written by #470 and #469, so the
+  check-and-diff record is now `ADR 0009` and the byte-order mark needs its own
+  `ADR 0008`. See `Decision log`.
 
 ### EP-M0 spike transcript
 
@@ -2257,6 +2411,94 @@ generated-document property test over the sampled eight-flag powerset with
 non-vacuity. Satisfying the eight cases alone does not close the issue, and
 neither does a property test that never reaches the failing shapes.
 
+### EP-M2 green transcripts
+
+Red, from `cargo test --test check_properties` on the rebased tree with the four
+bodies still stubbed as `todo!()`:
+
+```plaintext
+test result: FAILED. 11 passed; 9 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+All ten `formatting_is_idempotent` cases and
+`generated_documents_reach_a_fixed_point` already passed in that red state.
+That is what proved `INV-IDEMPOTENT` was discharged by #470 *before* any green
+code was written — the nine failures were the `todo!()` panics and nothing
+else. The milestone's `Tolerances` gate on idempotence therefore did not fire.
+
+Green, from the milestone's own acceptance commands:
+
+```plaintext
+$ cargo test --lib report
+test result: ok. 44 passed; 0 failed; 0 ignored; 0 measured; 886 filtered out
+
+$ cargo test --test check_properties
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+$ cargo test --doc report
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 50 filtered out
+```
+
+`similar` is a direct runtime dependency and `cargo tree --duplicates` reports
+no second copy, satisfying the milestone's conformance check.
+
+**Negative controls.** Each was applied as a temporary local mutation to
+`src/report/delta.rs`, run, and reverted; `cmp` confirmed the file restored
+byte-identical each time. Logs are
+`/tmp/test-mdtablefix-check-option.control<N>.out`. Line numbers quoted below
+are those of the tree when each control ran; a later rustfmt pass re-wrapped
+one `CORPUS` entry and shifted them by three.
+
+- **Control 1.** Count `Equal` as `Insert`
+  (`ChangeTag::Equal => delta.insertions += 1`). Rejected: 6 of 20 cases
+  failed, including the long-file golden fixture.
+
+```plaintext
+left: `2`,  right: `4`: tokens are conserved: after = before + insertions - deletions at tests/check_properties.rs:131.
+left: (20, 1)  right: (1, 1)
+```
+
+- **Control 2.** Return whole-file line counts instead of a diff. Rejected: 6
+  of 20 cases failed, the long-file fixture reporting `+20 -20` where the
+  golden expects `+1 -1`.
+
+```plaintext
+left: `true`,  right: `false`: the delta is non-zero exactly when the bytes differ at tests/check_properties.rs:136.
+left: (20, 20)  right: (1, 1)
+```
+
+- **Control 3.** Compute the delta from `str::lines()`-split text. Rejected: 5
+  of 20 cases failed, including both INV-AGREE cases the obligation names.
+
+```plaintext
+failures:
+    agree_reports_drift_exactly_when_bytes_differ::case_2_line_endings_only
+    agree_reports_drift_exactly_when_bytes_differ::case_3_trailing_newline_only
+```
+
+Control 1 exposed a non-vacuity hole in the red state. Because
+`count_conserves_tokens_and_agrees_with_byte_equality` drew `original` and
+`formatted` from two independent `any::<String>()` generators, the pair
+essentially never shared a line, and both assertions then hold for *any* diff
+whatsoever: conservation follows from the pairing the diff performs, and
+disagreement from the two strings being distinct. The property test caught none
+of the three controls. `tests/check_properties.rs` now samples related pairs as
+well — one document with a single line-level edit applied to it, which may be
+byte-equal or differ only in line endings or only in the final terminator — and
+all three controls now fail the property test as well as the golden fixtures.
+This is the plan's own `LEM-COUNT` reasoning, that "the conservation law alone
+is **not** falsifiable", turned on the generator rather than only on the
+fixtures.
+
+Idempotence artefacts were rescoped rather than duplicated.
+`tests/idempotence.rs` and `tests/idempotence_properties.rs` arrived with #470
+and are now the general suites, sampling document *structure*. The idempotence
+cases in `tests/check_properties.rs` are narrowed to the document *boundary* —
+ending style, byte-order mark, and trailing terminator — which those suites do
+not generate and which is the dimension this plan changed. Both files say so in
+their own documentation. No snapshot churn was introduced beyond the single new
+`summary_grammar` snapshot, well inside the usual limit of 30.
+
 ## Documentation and skills to consult
 
 Repository documents:
@@ -2414,3 +2656,33 @@ Approved. `@leynos` directed implementation to proceed, with the standing
 instruction that every applicable deterministic gate must pass before each
 CodeRabbit review, and that the ExecPlan is to be kept current as work
 proceeds. Status moved from `DRAFT` to `IN PROGRESS`.
+
+### Revision 5, 2026-09-11
+
+Rebased onto `origin/main` after three pull requests merged while the plan was
+halted at `EP-M2`, and resumed. Recorded in `Artefacts and notes → Rebase onto
+origin/main` and in six `Decision log` entries dated 2026-09-11.
+
+What changed in the plan itself:
+
+- `EP-M1`'s module is `src/io/document.rs`, not `src/document.rs`, and it takes
+  the line-ending policy from `src/io/line_endings.rs` rather than redefining
+  it. `EP-M1` now delivers the byte-order-mark half only; #469 delivered the
+  line-ending half.
+- `INV-DOCUMENT`'s artefact reference follows the module move.
+- `EP-M3` no longer claims a version bump: `0.6.0` is already declared and
+  unreleased, so the exit-status change ships inside it.
+- The check-and-diff ADR is `0009` and the byte-order mark gets `0008`; `0006`
+  and `0007` are held by merged records, and the trace links in `Conformance
+  basis` follow.
+- The `--in-place` truncation risk is marked discharged by #467.
+- `EP-M2` is complete. `INV-IDEMPOTENT` was the blocker and #470 cleared it; the
+  red state was re-observed on the rebased tree before any green code was
+  written, so the milestone's own tolerance gate was honoured rather than
+  assumed.
+
+`EP-M2`'s acceptance was met, including all three `Verification plan` negative
+controls; see `Artefacts and notes → EP-M2 green transcripts`. One control
+exposed that the conservation property was near-vacuous under the red state's
+generator, which is now fixed, and one artefact was rescoped against the two
+idempotence suites #470 added.
