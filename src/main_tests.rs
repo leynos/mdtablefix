@@ -6,6 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use driver::Mode;
 use mdtablefix::io::{SourceDocument, replace_file};
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
@@ -13,12 +14,41 @@ use tempfile::tempdir;
 
 use super::{
     FormatOpts,
+    driver,
     format_stdin,
-    format_to_string,
+    formatting_closure,
     open_file_parent,
     render_stdin_output,
-    rewrite_in_place,
 };
+
+/// Formats a capability-scoped file without modifying it.
+///
+/// The CLI reaches this same analysis through `driver::analyse`; fixing the
+/// mode here keeps the fixtures readable while taking the identical path.
+fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
+    let (_, output) = driver::analyse(
+        Mode::Print,
+        directory,
+        path,
+        path,
+        &formatting_closure(opts),
+    )?;
+
+    Ok(output)
+}
+
+/// Reads, formats, and atomically replaces a capability-scoped file in place.
+fn rewrite_in_place(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<()> {
+    driver::analyse(
+        Mode::InPlace,
+        directory,
+        path,
+        path,
+        &formatting_closure(opts),
+    )?;
+
+    Ok(())
+}
 
 /// Format options with every transformation disabled.
 #[fixture]

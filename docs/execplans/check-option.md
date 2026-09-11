@@ -1429,8 +1429,9 @@ pub fn exit_status(mode: Mode, any_drift: bool, any_error: bool) -> ExitStatus;
 /// Reads a file and pairs its text with the formatted result.
 ///
 /// Takes [`ReadOnlyDir`], so this function cannot write. `storage_key` is the
-/// bare file name within the capability; `display_path` is the path as
-/// supplied on the command line and is used only for reporting.
+/// bare file name within the capability, and is what the line-ending report
+/// names; the display path is attached by the caller, the only place that
+/// knows how the file was written on the command line.
 ///
 /// # Errors
 /// Returns an error if the file cannot be read.
@@ -1885,10 +1886,17 @@ re-running a gate to diagnose a failure.
 
 1. Red: write `tests/features/check_mode.feature`, `tests/steps/reporting.rs`,
    `tests/bdd_reporting.rs`, and `tests/cli_check.rs`. They will not compile,
-   because `--check` does not exist; record the exact error.
+   because `--check` does not exist; record the exact error. **Observed:** they
+   *do* compile, and fail at run time instead — `--check` is an unknown
+   *argument*, so the binary builds, `clap` rejects the flag, and the run exits
+   `2`. See `Artefacts and notes → EP-M3`, which also records the test that
+   passed vacuously in that state.
 2. Green: add `src/driver.rs`; add the `mode` argument group and `--check`;
    change `fn main` to return `ExitCode` and to handle a broken pipe without
-   panicking; build the formatting closure once and share it.
+   panicking; build the formatting closure once and share it. `Mode::Diff` is
+   deliberately *not* added here: `EP-M4` adds the variant with its arm and its
+   `INV-EXIT` cells, so no variant is ever left unconstructed and no dead-code
+   suppression is needed.
 3. Add the `src/driver.rs` unit tests, including the `INV-EXIT` cross product
    and the `in_argument_order` reverse-order test.
 4. Confirm the three statuses, and specifically that `--in-place` over a
@@ -1965,10 +1973,15 @@ A reviewer should reproduce each of the following without reading source.
 ```bash
 cargo build --bin mdtablefix
 export MDT=./target/debug/mdtablefix
-printf '| A | B |\n| --- | --- |\n| 1 | 2 |\n' > clean.md
+printf '| A   | B   |\n| --- | --- |\n| 1   | 2   |\n' > clean.md
 printf '|A|B|\n|---|---|\n|1|2|\n' > ragged.md
 cp ragged.md ragged.md.orig
 ```
+
+`clean.md` holds the formatter's **own** bytes, not a hand-written
+approximation: cells are padded to the delimiter row's width, so `| A | B |` is
+itself reported as drift (`+2 -2`). See `Artefacts and notes → EP-M3`. The
+padding is also why a ragged table reports `+3 -3` rather than `+2 -2`.
 
 A clean file succeeds silently on standard output:
 
@@ -1991,10 +2004,15 @@ $ cmp ragged.md ragged.md.orig && echo unmodified
 unmodified
 ```
 
-An error is distinguishable from drift:
+An error is distinguishable from drift, and names the file that failed:
 
 ```console
 $ $MDT --check missing.md; echo "status=$?"
+reading missing.md
+
+Caused by:
+    No such file or directory (os error 2)
+1 file could not be read.
 status=2
 ```
 
@@ -2018,9 +2036,9 @@ $ $MDT --diff ragged.md; echo "status=$?"
 -|A|B|
 -|---|---|
 -|1|2|
-+| A | B |
++| A   | B   |
 +| --- | --- |
-+| 1 | 2 |
++| 1   | 2   |
 status=1
 $ $MDT --diff clean.md; echo "status=$?"
 status=0
@@ -2510,6 +2528,129 @@ The branch was rebased before this milestone, so publishing it required
 The twelve remote-only commits were the pre-rebase duplicates of commits that
 survive locally, matched one for one by subject before the push.
 
+### EP-M3 red and green transcripts
+
+Red, before any `--check` existed: `cargo test --test cli_check` reported
+`2 passed; 2 failed` (log
+`/tmp/red-cli_check-mdtablefix-check-option.out`) and
+`cargo test --test bdd_reporting` reported `1 passed; 7 failed` (log
+`/tmp/red-bdd_reporting-mdtablefix-check-option.out`), every failure sharing one
+cause:
+
+```plaintext
+error: unexpected argument '--check' found
+
+  tip: to pass '--check' as a value, use '-- --check'
+
+Usage: mdtablefix [OPTIONS] [FILES]...
+```
+
+**The red state was a run-time failure, not a compile-time one.** `EP-M3` step 1
+predicted that the tests would not compile because `--check` does not exist; in
+fact the binary still builds, `clap` rejects the unknown flag while parsing, and
+the process exits `2`. Two consequences followed. First, a red test whose
+failure is "the flag was rejected" proves much less than one whose failure is
+"the flag was accepted and the behaviour was wrong", so `EP-M3`'s assertions
+were checked for non-vacuity rather than taken on trust. Second, the one
+scenario that passed — `--in-place` over a drifting file still exits `0` — is
+the only one whose command line `clap` accepted *and* whose assertions held: it
+rereads the file and requires those bytes to equal the fixture, so its passing
+is what confirmed the corrected fixture below is the formatter's true output.
+
+**One test passed for the wrong reason.** `directory_snapshot_unchanged`
+asserted only that an unreadable file exits `2`, and `clap`'s usage error also
+exits `2`, so it was satisfied by a run that never opened a file. It now also
+requires standard error to name `missing.md`, which a usage error cannot do,
+because `clap` never learns the file names. The companion test in the same file
+asserts that the snapshot helper *does* detect a write, so the read-only
+assertion is not vacuous in the other direction either.
+
+**`| A | B |` is not a fixed point.** The first draft of the `CLEAN` fixture was
+a hand-written approximation, which the `--in-place` scenario rejected with
+`left: "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n"`. The formatter pads
+every cell to the delimiter row's width, so `| A | B |` is itself drift. Both
+test files now hold the formatter's own bytes, and `tests/line_endings.rs` holds
+the same fixture. The plan's own `Validation and acceptance` block carried the
+same error and has been corrected, as has its `--diff` transcript, whose body is
+the padded output.
+
+Green, from the milestone's acceptance commands:
+
+```plaintext
+$ cargo check --all-targets --all-features
+(no output, no warnings)
+
+$ cargo test --bin mdtablefix
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+$ cargo test --test cli_check
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+$ cargo test --test bdd_reporting
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+The manual validation block was replayed at this point and matches, including
+the `+3 -3` report for a ragged table, `unmodified` after `cmp`, `status=2` for
+an unreadable file, and `status=0` for `--in-place` over that same drifting
+file.
+
+**Design decisions taken in the green step.**
+
+- `exit_status` and the driver, not the parser, decide the status. `clap` still
+  exits `2` on a rejected command line, which is the same code as
+  `ExitStatus::Error`, so the two are indistinguishable to a caller and need no
+  reconciling.
+- The summary goes to standard error, and only in the reporting modes. A bare
+  or `--in-place` run keeps its historical output byte for byte, so no existing
+  suite changes; standard output stays a machine contract.
+- A closed pipe is `ExitStatus::Success`. Rust ignores `SIGPIPE`, so the write
+  returns `EPIPE`; `print!` would panic into the undocumented status `101`.
+  Standard output is therefore written through an explicit handle, and every
+  write error is inspected for `ErrorKind::BrokenPipe` before it is treated as
+  a failure. `tests/cli_check.rs` pins this with the plan's own
+  `--check *.md | head` shape, sized so that the child cannot finish writing:
+  every file drifts, so `0` is reachable only through the early exit.
+- Errors are printed once. The previous code printed the chain in
+  `report_results` and then returned the error, which `main`'s `Termination`
+  printed a second time as `Error: …`; the run now owns the printing and
+  returns a status.
+- An unreadable file moved from exit `1` to exit `2`, which is the change
+  `ADR 0009` records.
+- The per-file analysis returns `(FileReport, String)`, and drops each
+  `Assessment` before returning, so retained memory is proportional to the
+  rendered payload rather than to twice the whole input.
+- `format_to_string` and `rewrite_in_place` became test-local helpers in
+  `src/main_tests.rs`, built on `driver::analyse` with a fixed mode. They are
+  one-line adapters, not a second implementation, and keeping them out of
+  `src/main.rs` avoids dead code in the binary.
+- `report_line_endings` moved from `src/main.rs` to `src/driver.rs`, because the
+  driver is now what parses a document and therefore what selects an ending.
+  Its message and fields are unchanged.
+- The spec block's `assess` documentation mentioned a `display_path` parameter
+  its signature does not take; the signature is authoritative, and the block has
+  been corrected to say the caller attaches the display path.
+
+**The first gate run was red, and for two avoidable reasons.** `make
+check-fmt` and `make lint` failed on the new files while `typecheck`, `test`,
+`markdownlint`, and `nixie` passed. Neither failure was a behavioural defect,
+and both are recorded here because the milestone's steps put the gates at the
+end, whereas what they checked was code written earlier in the same session:
+
+- `cargo fmt` rewrapped four call chains in `src/driver_tests.rs` and reordered
+  the import block in `src/main_tests.rs`. The formatter's own output was
+  applied, and it touched only those two files.
+- Three Clippy lints fired in `tests/cli_check.rs`, all in test fixtures rather
+  than in the code under test: `format_push_string` and `format_collect` in the
+  batch-file writer and its expected-string builder, and
+  `bool_to_int_with_if` in the exit-status oracle. The first two became
+  `str::repeat` and an explicit loop appending to a `String`; the third became
+  `i32::from(files != Files::Clean && self == Self::Check)`, which states the
+  drift condition positively instead of negating a disjunction.
+
+The re-run was green on all six gates — 42 test suites, 1795 passed, 0 failed,
+20 ignored — with the working tree byte-identical across the run.
+
 ## Documentation and skills to consult
 
 Repository documents:
@@ -2697,3 +2838,25 @@ controls; see `Artefacts and notes → EP-M2 green transcripts`. One control
 exposed that the conservation property was near-vacuous under the red state's
 generator, which is now fixed, and one artefact was rescoped against the two
 idempotence suites #470 added.
+
+### Revision 6, 2026-09-11
+
+`EP-M3` implemented; see `Artefacts and notes → EP-M3 red and green
+transcripts`.
+
+What changed in the plan itself:
+
+- `Validation and acceptance`'s clean fixture is the formatter's own padded
+  bytes. `| A | B |` is not a fixed point, so the block as written would have
+  failed the first command a reviewer ran, and its `--diff` transcript carried
+  the same unpadded body.
+- `EP-M3` step 1 records what the red state actually was: a run-time rejection
+  by `clap`, not the compile error the step predicted.
+- `EP-M3` step 2 records the deliberate split of `Mode::Diff` into `EP-M4`.
+- `Interfaces and dependencies`' `assess` documentation no longer mentions a
+  `display_path` parameter the signature does not take.
+
+No requirement, obligation, or acceptance criterion changed. The `EP-M3`
+outcome, the three exit statuses, the read-only guarantee, and the argument
+order guarantee were all met as specified; the four corrections above are
+factual, not scope.
