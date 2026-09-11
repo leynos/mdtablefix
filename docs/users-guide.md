@@ -491,14 +491,11 @@ style, `crlf_count` counts CRLF pairs, and `lone_lf_count` counts lone line
 feeds, so a caller that reports or acts on the vote does not restate the
 counting rule.
 
-`count_line_endings_reported(text, operation, path) -> LineEndingCounts` is
-`count_line_endings` with the reporting boundary attached. It returns the same
-counts and additionally emits one `debug` event, `selected the majority line
-ending`, whose fields are `crlf_count`, `lone_lf_count` and `selected_ending`,
-plus `operation` (for example `"file"` or `"stdin"`) and `path` where the
-calling boundary has them. The library's `rewrite` and `rewrite_no_wrap`
-report an `operation` of `"rewrite"` or `"rewrite_no_wrap"` together with the
-path of the rewritten file.
+The boundaries that act on the decision (`rewrite`, `rewrite_no_wrap`, and the
+CLI's file and standard-input boundaries) each emit one `debug` event,
+`selected the majority line ending`, with the fields `operation`, `path`,
+`crlf_count`, `lone_lf_count`, and `selected_ending`. The event is visible to
+anyone who enables `debug` logging.
 
 `serialize_lines(lines, ending) -> String` joins the processed lines with the
 selected terminator and appends one further terminator, so a non-empty result
@@ -508,7 +505,9 @@ See [Line endings](#line-endings) for the user-facing behaviour.
 
 <!-- markdownlint-disable-next-line MD046 -->
 ```rust
-use mdtablefix::{LineEnding, count_line_endings, count_line_endings_reported, detect_line_ending, serialize_lines};
+use mdtablefix::{
+    LineEnding, count_line_endings, detect_line_ending, serialize_lines,
+};
 
 let counts = count_line_endings("alpha\r\nbeta\r\ngamma\n");
 assert_eq!(counts.ending, LineEnding::Crlf);
@@ -521,8 +520,4 @@ assert_eq!(ending, LineEnding::Crlf);
 let lines = vec!["| A |".to_string(), "| 1 |".to_string()];
 assert_eq!(serialize_lines(&lines, ending), "| A |\r\n| 1 |\r\n");
 assert!(serialize_lines(&[], ending).is_empty());
-
-// The reporting helper emits the same counts at `debug` level.
-let reported = count_line_endings_reported("alpha\r\nbeta\r\ngamma\n", Some("stdin"), None);
-assert_eq!(reported, counts);
 ```

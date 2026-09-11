@@ -21,6 +21,29 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   target declined for being a symbolic link, leaves the original file
   untouched.
 
+## Line-ending preservation
+
+- **What changed:** The formatter now terminates every line of its output with
+  the line-ending style holding the strict majority of the input document's
+  line endings. CRLF pairs and lone line feeds are counted, and CRLF is
+  selected only when it strictly outnumbers the lone line feeds. An exact tie,
+  and an input with no line endings at all, select LF, so the result is
+  deterministic. Only CRLF and lone LF are recognised; a lone carriage return
+  is content. The change covers file arguments printed to standard output,
+  `--in-place`, standard input, and the library entry points
+  `mdtablefix::io::rewrite` and `mdtablefix::io::rewrite_no_wrap`; standard
+  input keeps its existing contract of printing one terminator even when the
+  output has no lines, so an empty file still produces empty output. The
+  boundary that acts on the selection reports it at `debug` level, under the
+  message `selected the majority line ending`.
+- **Who is affected:** Anyone who formats a document with CRLF or mixed
+  endings, through the CLI or the library.
+- **Migration action:** No action is required for normal use. Because the
+  choice is made per document, a mostly-CRLF document is emitted entirely as
+  CRLF, so an LF-authored snippet inside it is rewritten to CRLF, and a
+  mixed-ending document is normalised to its majority style on the first run;
+  that diff can be larger than the table changes alone.
+
 ## Preserved file mode
 
 - **What changed:** The target's permissions are copied to the temporary file

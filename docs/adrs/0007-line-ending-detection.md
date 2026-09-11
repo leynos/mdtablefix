@@ -82,10 +82,10 @@ Option A. The `io` module owns the policy through the following public items:
 - `count_line_endings(text) -> LineEndingCounts`, the same query returned
   together with the `crlf_count` and `lone_lf_count` that decided it, so a
   reporting boundary can state the vote without restating the counting rule.
-- `count_line_endings_reported(text, operation, path)`, the same query with the
-  reporting boundary attached: it returns identical counts and emits one
-  `debug` event with the `crlf_count`, `lone_lf_count`, and `selected_ending`
-  fields, plus `operation` and `path` where the boundary has them.
+- Reporting is not a public query: the queries above emit nothing, and the
+  boundary that acts on the answer emits one `debug` event with the
+  `operation`, `path`, `crlf_count`, `lone_lf_count`, and `selected_ending`
+  fields.
 - `serialize_lines(lines, ending) -> String`, which joins the processed lines
   with the selected terminator and appends one further terminator so a
   non-empty result always ends with a line ending.

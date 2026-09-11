@@ -110,7 +110,7 @@ restores the separator row with widths derived from the final table body.
   formats a capability-scoped file, then replaces it through the same directory
   capability with `mdtablefix::io::replace_file`.
 
-`src/io.rs` line-ending policy:
+`src/io/line_endings.rs` line-ending policy:
 
 - `LineEnding` is the closed set of terminators the formatter can emit;
   `as_str` returns the characters written between lines.
@@ -124,13 +124,15 @@ restores the separator row with widths derived from the final table body.
   `LineEndingCounts::ending` is the selected style, and `detect_line_ending` is
   the selection-only form of the same query, so the command boundaries can
   report the vote without restating the counting rule.
-- `count_line_endings_reported(text, operation, path) -> LineEndingCounts` is
-  the counting query with the `debug` event attached, so the rewrite helpers
-  and the executable's boundaries cannot drift on the event message or field
-  names. `operation` names the boundary (`"rewrite"` and `"rewrite_no_wrap"` for
-  the library entry points, `"file"` and `"stdin"` for the executable's
-  input/output boundaries) and `path` the file; a boundary without them omits
-  the fields.
+- The counting query is pure and emits nothing. The report lives in the
+  boundary that acts on it: a private `report_line_endings(counts, operation,
+  path)` in `src/io/replace.rs`, called by `rewrite_with` with an `operation` of
+  `"rewrite"` or `"rewrite_no_wrap"` and always with the file's path; and,
+  because the binary is a separate crate, a repeated private helper in
+  `src/main.rs`, called by `format_to_string` with `operation = "file"` and the
+  file's path, and by `format_stdin` with `operation = "stdin"` and the path
+  reported as `<stdin>`. The message shape is identical across boundaries, so
+  one filter finds them all.
 - `serialize_lines(lines, ending) -> String` joins lines with the selected
   terminator and appends one further terminator, yielding an empty string for
   no lines.
@@ -141,9 +143,9 @@ restores the separator row with widths derived from the final table body.
   side-effecting.
 
 Detection runs on the raw document at each input boundary: `rewrite_with` in
-`src/io.rs`, `format_to_string` in `src/main.rs`, and the standard-input branch
-of `main` in `src/main.rs`, with each boundary reporting through
-`count_line_endings_reported`. The internal pipeline stays LF-only —
+`src/io/replace.rs`, and `format_to_string` and `format_stdin` in `src/main.rs`,
+with each boundary reporting through its own private `report_line_endings`
+helper. The internal pipeline stays LF-only —
 `str::lines` strips each line's terminator before a transform sees it — and
 only the serializer re-applies the detected style. Standard input keeps its
 historical contract of printing one terminator even when it produces no lines,
@@ -155,18 +157,17 @@ allowing both paths to share the exact formatting result. New file-output call
 sites must receive a directory capability and relative `camino::Utf8Path`
 rather than performing ambient filesystem access themselves.
 
-`src/io.rs`:
+`src/io/replace.rs`:
 
 - `replace_file(directory, path, contents) -> std::io::Result<()>` performs the
   shared atomic replacement. It declines a symlinked target, creates a
   `create_new` temporary file in the same directory, writes, flushes and syncs
-  the contents, then calls `swap_into_place`, which applies the target's
-  permissions to the temporary file before the rename and clears a Windows
-  destination's read-only attribute first, because that attribute blocks the
-  rename. It attempts to remove the temporary file when a later step fails. The
-  CLI and
-  `rewrite`/`rewrite_no_wrap` all call it, so the sequence has one
-  implementation.
+  the contents, then calls `swap_into_place` in `src/io/swap.rs`, which applies
+  the target's permissions to the temporary file before the rename and clears a
+  Windows destination's read-only attribute first, because that attribute
+  blocks the rename. It attempts to remove the temporary file when a later step
+  fails. The CLI and `rewrite`/`rewrite_no_wrap` all call it, so the sequence
+  has one implementation.
 - `open_parent(path) -> std::io::Result<(Dir, Utf8PathBuf)>` is the library's
   only ambient filesystem boundary. It opens a directory capability for the
   target's parent and returns the target's file name relative to that
@@ -697,11 +698,11 @@ the `open`, `matching_close`, or `implicit_close` transition, and
 corresponding `reason` values are `no_blockquote_prefix`,
 `blockquote_depth_decreased`, and `incompatible_active_opener`.
 
-The in-place rewrite in `src/io.rs` follows the same discipline. `replace_file`
-carries a `debug` span whose only field is the target `path`. The `path` field
-is span metadata rather than a metric label, and the replacement path's metrics
-use only fixed label values, so target paths cannot create unbounded metric
-cardinality; the crate installs no recorder. Inside it,
+The in-place rewrite in `src/io/replace.rs` follows the same discipline.
+`replace_file` carries a `debug` span whose only field is the target `path`.
+The `path` field is span metadata rather than a metric label, and the
+replacement path's metrics use only fixed label values, so target paths cannot
+create unbounded metric cardinality; the crate installs no recorder. Inside it,
 `target metadata read` (trace), `temporary file created` (debug, with
 `attempt`), `temporary file written` (debug, with `bytes`),
 `temporary file synced` (debug), `destination read-only attribute cleared`
@@ -758,9 +759,9 @@ debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified"
 
 ### Metrics
 
-The in-place replacement in `src/io.rs` emits three counters and one histogram
-through the `metrics` façade. `describe_metrics` registers their descriptions
-exactly once per process behind a `std::sync::OnceLock`.
+The in-place replacement in `src/io/replace.rs` emits three counters and one
+histogram through the `metrics` façade. `describe_metrics` registers their
+descriptions exactly once per process behind a `std::sync::OnceLock`.
 
 - `mdtablefix_io_replace_total` increments once per `replace_file` call and
   carries one label, `outcome`, with the value `success` or `failure`.

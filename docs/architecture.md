@@ -653,6 +653,11 @@ In-place rewrites replace each file through a temporary file in the same
 directory and a rename, so one worker failing cannot leave its target truncated
 and the other files in the batch are unaffected.
 
+For screen readers: The following sequence diagram traces the CLI's parallel
+file-processing sequence: one branch formats each file and prints it to
+standard output, the other rewrites each file in place, and both report their
+results in the input order.
+
 ```mermaid
 sequenceDiagram
     participant User as actor User

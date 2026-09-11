@@ -94,8 +94,9 @@ _Figure 1: Simplified repository tree._
 
 - `src/main.rs`: Command-line entry point and application boundary.
 - `src/lib.rs`: Library surface used by the binary and integration tests.
-- `src/io.rs`: Library file-rewriting helpers (`rewrite`, `rewrite_no_wrap`)
-  and the line-ending policy they share. `detect_line_ending` selects the
+- `src/io.rs` and `src/io/`: Library file-rewriting helpers (`rewrite`,
+  `rewrite_no_wrap`) and the line-ending policy they share, split into
+  `line_endings`, `replace`, and `swap`. `detect_line_ending` selects the
   terminator style holding the majority of a document's line endings, and
   `serialize_lines` re-emits formatted lines with it, so a CRLF file stays CRLF.
 - `src/process.rs`: High-level document processing orchestration.
