@@ -43,9 +43,6 @@ const EXHAUSTED: &str = "mdtablefix_io_temporary_name_exhausted_total";
 /// remove.
 const CLEANUP_FAILURES: &str = "mdtablefix_io_temporary_cleanup_failures_total";
 
-/// The counter recording symbolic-link targets declined rather than replaced.
-const SYMLINK_DECLINED: &str = "mdtablefix_io_symlink_declined_total";
-
 /// What a recorded metric carried.
 #[derive(Debug)]
 enum Value {
@@ -349,42 +346,54 @@ fn an_exhausted_name_space_is_counted() {
     );
 }
 
-/// A declined symbolic link is counted as its own event as well as a failure,
-/// so an operator can tell "the target is a symlink" from "the replacement
-/// failed" without reading the log.
+/// Unix-only tests, with the constants they use, kept together so that the
+/// whole group is compiled out together on other targets: a symbol left at
+/// module level would be dead code, and therefore a denied warning, wherever
+/// its only test is removed.
 #[cfg(unix)]
-#[test]
-fn a_declined_symlink_is_counted() {
-    let dir = tempdir().expect("create temporary directory");
-    fixture(&dir);
-    let link = dir.path().join("link.md");
-    // A relative target keeps the link resolvable inside the capability.
-    std::os::unix::fs::symlink("sample.md", &link).expect("create the symlink");
+mod unix {
+    use super::*;
 
-    let (result, recorded) = recorded(|| rewrite(&link));
+    /// The counter recording symbolic-link targets declined rather than
+    /// replaced.
+    const SYMLINK_DECLINED: &str = "mdtablefix_io_symlink_declined_total";
 
-    let error = result.expect_err("a symlink target must be declined");
-    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
-    assert_labels_are_bounded(&recorded);
-    assert_eq!(
-        count(&recorded, SYMLINK_DECLINED, &[]),
-        1,
-        "a declined symlink is counted once: {recorded:?}"
-    );
-    assert!(
-        is_described(&recorded, SYMLINK_DECLINED, &[]),
-        "the counter must carry a description: {recorded:?}"
-    );
-    assert_eq!(
-        outcome_count(&recorded, "failure"),
-        1,
-        "a declined symlink is a replacement that did not happen: {recorded:?}"
-    );
-    assert_eq!(
-        count(&recorded, CLEANUP_FAILURES, &[]),
-        0,
-        "a declined symlink never created a temporary file: {recorded:?}"
-    );
+    /// A declined symbolic link is counted as its own event as well as a
+    /// failure, so an operator can tell "the target is a symlink" from "the
+    /// replacement failed" without reading the log.
+    #[test]
+    fn a_declined_symlink_is_counted() {
+        let dir = tempdir().expect("create temporary directory");
+        fixture(&dir);
+        let link = dir.path().join("link.md");
+        // A relative target keeps the link resolvable inside the capability.
+        std::os::unix::fs::symlink("sample.md", &link).expect("create the symlink");
+
+        let (result, recorded) = recorded(|| rewrite(&link));
+
+        let error = result.expect_err("a symlink target must be declined");
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_labels_are_bounded(&recorded);
+        assert_eq!(
+            count(&recorded, SYMLINK_DECLINED, &[]),
+            1,
+            "a declined symlink is counted once: {recorded:?}"
+        );
+        assert!(
+            is_described(&recorded, SYMLINK_DECLINED, &[]),
+            "the counter must carry a description: {recorded:?}"
+        );
+        assert_eq!(
+            outcome_count(&recorded, "failure"),
+            1,
+            "a declined symlink is a replacement that did not happen: {recorded:?}"
+        );
+        assert_eq!(
+            count(&recorded, CLEANUP_FAILURES, &[]),
+            0,
+            "a declined symlink never created a temporary file: {recorded:?}"
+        );
+    }
 }
 
 /// A cleanup that does not complete is counted, because the failure that
