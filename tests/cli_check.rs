@@ -7,9 +7,11 @@
 //! order, the exit-status contract is a cross product, and the read-only
 //! guarantee is asserted against a directory snapshot.
 //!
-//! `--in-place` is exercised here too, because the contract that separates it
-//! from `--check` — drift is reported, not failed — is only meaningful beside
-//! the mode that does fail.
+//! `--in-place` and `--diff` are exercised here too, because the contract that
+//! separates them from `--check` — drift is reported, not failed, and it is
+//! reported by both reporting modes rather than only by the terse one — is only
+//! meaningful beside the modes it separates. The cross product lives in one
+//! place so that a mode cannot be added to it partially.
 
 use std::{
     fs,
@@ -188,6 +190,8 @@ enum CliMode {
     InPlace,
     /// `--check`.
     Check,
+    /// `--diff`.
+    Diff,
 }
 
 impl CliMode {
@@ -197,18 +201,23 @@ impl CliMode {
             Self::Print => &[],
             Self::InPlace => &["--in-place"],
             Self::Check => &["--check"],
+            Self::Diff => &["--diff"],
         }
     }
 
+    /// Whether drift in this mode is reported through the exit status.
+    fn reports(self) -> bool { matches!(self, Self::Check | Self::Diff) }
+
     /// The status this mode must yield for the given observations.
     ///
-    /// An error outranks drift in every mode, drift is a status only under
-    /// `--check`, and a successful `--in-place` over drifting files succeeds.
+    /// An error outranks drift in every mode, drift is a status only under the
+    /// two reporting modes, and a successful `--in-place` over drifting files
+    /// succeeds.
     fn expected_status(self, files: Files, with_error: bool) -> i32 {
         if with_error {
             2
         } else {
-            i32::from(files != Files::Clean && self == Self::Check)
+            i32::from(files != Files::Clean && self.reports())
         }
     }
 }
@@ -220,7 +229,12 @@ fn exit_status_matrix() {
         ("some_drift", Files::SomeDrift),
         ("all_drift", Files::AllDrift),
     ];
-    let modes = [CliMode::Print, CliMode::InPlace, CliMode::Check];
+    let modes = [
+        CliMode::Print,
+        CliMode::InPlace,
+        CliMode::Check,
+        CliMode::Diff,
+    ];
 
     for (shape_name, files) in shapes {
         for mode in modes {

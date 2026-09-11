@@ -99,6 +99,10 @@ fn readable(directory: &Dir) -> ReadOnlyDir {
 #[case(Mode::Check, true, false, ExitStatus::Drift)]
 #[case(Mode::Check, false, true, ExitStatus::Error)]
 #[case(Mode::Check, true, true, ExitStatus::Error)]
+#[case(Mode::Diff, false, false, ExitStatus::Success)]
+#[case(Mode::Diff, true, false, ExitStatus::Drift)]
+#[case(Mode::Diff, false, true, ExitStatus::Error)]
+#[case(Mode::Diff, true, true, ExitStatus::Error)]
 fn exit_status_covers_inv_exit(
     #[case] mode: Mode,
     #[case] any_drift: bool,
@@ -235,6 +239,70 @@ fn check_reports_a_clean_file_with_no_payload() {
 
     assert!(!report.is_changed);
     assert_eq!(report.delta, LineDelta::default());
+    assert_eq!(payload, "");
+}
+
+/// Prefixes every line of `text` with `marker`, which is how a unified diff
+/// body presents its two sides.
+fn marked(marker: char, text: &str) -> String {
+    let mut out = String::new();
+    for line in text.lines() {
+        out.push(marker);
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
+/// `INV-EXIT` under the verbose rendering: the payload is a unified diff that
+/// names the file on both sides, and the file is still not written.
+#[test]
+fn diff_reports_a_unified_diff_without_writing() {
+    let (_dir, directory) = fixture("ragged.md", RAGGED);
+
+    let (report, payload) = analyse(
+        Mode::Diff,
+        &directory,
+        Utf8Path::new("ragged.md"),
+        Utf8Path::new("ragged.md"),
+        &align,
+    )
+    .expect("analyse fixture");
+
+    assert!(report.is_changed);
+    assert_eq!(report.delta, LineDelta::between(RAGGED, ALIGNED));
+    assert_eq!(
+        payload,
+        format!(
+            "--- ragged.md\n+++ ragged.md\n@@ -1,3 +1,3 @@\n{}{}",
+            marked('-', RAGGED),
+            marked('+', ALIGNED),
+        )
+    );
+    assert_eq!(
+        read(&directory, "ragged.md"),
+        RAGGED,
+        "a reporting mode must not write"
+    );
+}
+
+/// A clean file produces no diff at all — not a header with no hunks, and not
+/// an empty hunk. The unchanged arm is what this pins, and it is separate from
+/// the `--check` case because the two renderings share that arm.
+#[test]
+fn diff_reports_a_clean_file_with_no_payload() {
+    let (_dir, directory) = fixture("clean.md", ALIGNED);
+
+    let (report, payload) = analyse(
+        Mode::Diff,
+        &directory,
+        Utf8Path::new("clean.md"),
+        Utf8Path::new("clean.md"),
+        &identity,
+    )
+    .expect("analyse fixture");
+
+    assert!(!report.is_changed);
     assert_eq!(payload, "");
 }
 

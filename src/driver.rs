@@ -16,7 +16,7 @@ use cap_std::fs_utf8::Dir;
 use mdtablefix::{
     LineEndingCounts,
     io::{SourceDocument, replace_file},
-    report::{FileReport, LineDelta, render_report_line},
+    report::{DiffOptions, FileReport, LineDelta, render_report_line, write_unified_diff},
 };
 use tracing::debug;
 
@@ -66,10 +66,6 @@ impl Assessment {
 }
 
 /// What the caller asked for.
-///
-/// `Mode::Diff` joins these in `EP-M4`, with the `--diff` flag that selects
-/// it; the exit-status cross product grows a mode at the same time, so no
-/// variant is ever left unconstructed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     /// No mode flag: the formatted text goes to standard output.
@@ -78,6 +74,8 @@ pub enum Mode {
     InPlace,
     /// `--check`: report drift, and fail on it.
     Check,
+    /// `--diff`: show what would change, and fail on drift.
+    Diff,
 }
 
 impl Mode {
@@ -85,18 +83,32 @@ impl Mode {
     ///
     /// The reporting modes are exactly the ones that fail on drift, because a
     /// mode that only describes files must not also silently rewrite them.
+    /// The check and diff modes differ only in how they render what they
+    /// found, so a mode added here without a matching failure would be a mode
+    /// that describes a drift it does not report.
     #[must_use]
-    pub const fn reports(self) -> bool { matches!(self, Self::Check) }
+    pub const fn reports(self) -> bool { matches!(self, Self::Check | Self::Diff) }
 
     /// The verb naming what this mode does to a file, for error contexts.
     #[must_use]
     pub const fn verb(self) -> &'static str {
         match self {
             Self::InPlace => "writing",
-            Self::Print | Self::Check => "reading",
+            Self::Print | Self::Check | Self::Diff => "reading",
         }
     }
 }
+
+/// The diff configuration the reporting rendering uses.
+///
+/// Three lines of context is the unified-diff convention. The degradation
+/// threshold is a line count rather than a wall-clock budget: a timeout would
+/// make the output depend on how fast the machine happened to be, which is
+/// exactly what `INV-DETERMINISTIC` forbids.
+const DIFF_OPTIONS: DiffOptions = DiffOptions {
+    context_radius: 3,
+    patience_threshold: 1000,
+};
 
 /// The documented process exit status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -214,14 +226,20 @@ pub fn analyse(
     } else {
         LineDelta::default()
     };
+    // The two reporting modes render the same finding in different shapes, and
+    // an unchanged file renders as nothing under either: a clean file must
+    // leave standard output empty rather than print an empty diff. The
+    // `is_changed` guards are what carry that, which is why the unchanged arms
+    // are written last.
     let payload = match mode {
         Mode::Print => assessment.formatted.clone(),
         Mode::Check if is_changed => format!("{}\n", render_report_line(display_path, delta)),
-        Mode::Check => String::new(),
+        Mode::Diff if is_changed => render_diff(display_path, &assessment)?,
         Mode::InPlace => {
             write_back(directory, storage_key, &assessment)?;
             String::new()
         }
+        Mode::Check | Mode::Diff => String::new(),
     };
 
     Ok((
@@ -232,6 +250,28 @@ pub fn analyse(
         },
         payload,
     ))
+}
+
+/// Renders the unified diff for one changed file.
+///
+/// The renderer streams into a byte sink rather than a `String`, because that
+/// is what lets it go straight to standard output when the caller wants it to.
+/// Here the payload has to be a `String`, so the bytes are collected and then
+/// validated: both sides of the diff came from `String`s, so the validation
+/// cannot fail in practice, but the driver does not get to assume it.
+fn render_diff(display_path: &Utf8Path, assessment: &Assessment) -> anyhow::Result<String> {
+    let mut buffer = Vec::new();
+    write_unified_diff(
+        &mut buffer,
+        display_path,
+        &assessment.original,
+        &assessment.formatted,
+        DIFF_OPTIONS,
+    )
+    .with_context(|| format!("rendering the diff for {display_path}"))?;
+
+    String::from_utf8(buffer)
+        .with_context(|| format!("validating the rendered diff for {display_path} as UTF-8"))
 }
 
 /// Orders indexed results by argument index.

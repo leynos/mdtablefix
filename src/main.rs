@@ -2,9 +2,10 @@
 //!
 //! Parses command-line arguments and coordinates Markdown formatting. When
 //! file paths are supplied, they are analysed in parallel and reported in
-//! argument order: each file may be printed, rewritten in place, or checked
-//! for drift. Without paths the tool reads from standard input and prints
-//! results to stdout while preserving the input order.
+//! argument order: each file may be printed, rewritten in place, checked for
+//! drift, or shown as a unified diff. Without paths the tool reads from
+//! standard input and prints results to stdout while preserving the input
+//! order.
 //!
 //! Every mode shares one formatting closure, built once, so `--check` cannot
 //! disagree with `--in-place` about what the formatter would write.
@@ -44,6 +45,9 @@ struct Cli {
     /// Report which files would be reformatted, and by how many lines
     #[arg(long = "check", group = "mode")]
     check: bool,
+    /// Print a unified diff for each file that would be reformatted
+    #[arg(long = "diff", group = "mode")]
+    diff: bool,
     #[command(flatten)]
     opts: FormatOpts,
     /// Markdown files to fix
@@ -61,6 +65,8 @@ impl Cli {
             Mode::InPlace
         } else if self.check {
             Mode::Check
+        } else if self.diff {
+            Mode::Diff
         } else {
             Mode::Print
         }
@@ -307,8 +313,9 @@ fn run() -> anyhow::Result<ExitStatus> {
 /// Entry point for the command-line tool that reflows broken markdown tables.
 ///
 /// Parses command-line arguments to determine whether to process files in
-/// place, check them for drift, print fixed output to standard output, or read
-/// from standard input. Handles file I/O, the summary, and the exit status.
+/// place, check them for drift, show what would change, print fixed output to
+/// standard output, or read from standard input. Handles file I/O, the
+/// summary, and the exit status.
 ///
 /// # Returns
 ///
@@ -327,6 +334,9 @@ fn run() -> anyhow::Result<ExitStatus> {
 ///
 /// # Report which files would be reformatted, without writing
 /// mdtablefix --check myfile.md
+///
+/// # Show what would change, without writing
+/// mdtablefix --diff myfile.md
 ///
 /// # Fix tables from standard input
 /// cat myfile.md | mdtablefix

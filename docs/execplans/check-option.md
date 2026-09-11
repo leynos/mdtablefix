@@ -301,7 +301,17 @@ Hard invariants. Violating one requires escalation, not a workaround.
       to `0.6.0` is already in the manifest and unreleased, so this milestone
       changes the exit status under an existing version rather than raising it;
       the record moves to `ADR 0009`.
-- [ ] EP-M4 `--diff`, sharing `--check`'s exit semantics.
+- [x] EP-M4 `--diff`, sharing `--check`'s exit semantics. Complete. `Mode::Diff`
+      is wired through `src/main.rs` and `src/driver.rs`; the diff is rendered
+      from the same `Assessment` the other modes use, so it cannot disagree with
+      `--in-place` about what would be written. Covered by
+      `tests/features/diff_mode.feature` (six scenarios),
+      `tests/bdd_reporting.rs`, `tests/cli_diff.rs` (five tests), the `Mode::Diff`
+      cells of the `src/driver_tests.rs` exit-status cross product, and the fourth
+      mode in `tests/cli_check.rs`'s matrix. The `INV-DETERMINISTIC` negative
+      control was applied and removed; it confirmed the hazard on the transition
+      band and exposed a blind spot in the method, both recorded in
+      `Artefacts and notes → INV-DETERMINISTIC negative control`.
 - [ ] EP-M5 Curated CLI matrix coverage for the two new modes.
 - [ ] EP-M6 Targeted mutation testing of the counting and aggregation
       functions.
@@ -1103,10 +1113,18 @@ interface.
   Method: end-to-end test running the same invocation ten times.
   Rationale: determinism is a hard constraint with no obligation in the first
   draft, and every snapshot test depends on it.
-  Artefact: `tests/cli_diff.rs`.
-  Evidence: `cargo test --test cli_diff deterministic`.
-  Non-vacuity: negative control is enabling `TextDiffConfig::timeout`, which
-  must make the test flaky or fail.
+  Artefact: `tests/cli_diff.rs`, including an above-threshold case whose
+  changes are far enough apart that prefix and suffix trimming cannot reduce
+  it to the changed table.
+  Evidence: `cargo test --test cli_diff diff_is_deterministic`.
+  Non-vacuity: the negative control — enabling `TextDiffConfig::timeout` — was
+  applied and removed. It confirmed the hazard on the transition band, where
+  ten identical invocations produced up to six distinct outputs, and it failed
+  the above-threshold case outright, where a tripped deadline reports 1020
+  untouched prose lines as deleted. It also showed that the ten-run method
+  detects a budget only when the budget lands mid-computation, which is
+  recorded as a residual gap rather than a passing control; see
+  `Artefacts and notes → INV-DETERMINISTIC negative control`.
 
 - **INV-SUMMARY**: the summary line renders correctly for every combination of
   zero, one, and many in each of the changed, unchanged, and errored counts.
@@ -1151,7 +1169,13 @@ formatter (AX-5) but is for `similar` (AX-1), so counts for such files use
 `similar`'s notion; this is documented rather than reconciled. Symlinks
 pointing outside their parent directory fail under the capability model where
 `cat` would succeed. Paths containing a newline cannot be represented in the
-report format and are rejected as operational errors.
+report format and are rejected as operational errors. `INV-DETERMINISTIC` is
+held by construction rather than enforced: the renderer chooses its algorithm
+from a line count and names no clock, but the ten-run test can only see a
+wall-clock budget that lands mid-computation, so a future budget that is never
+crossed would pass every suite while making output depend on machine speed. The
+control that established this, and the two candidate ways to close it, are in
+`Artefacts and notes → INV-DETERMINISTIC negative control`.
 
 ## Interfaces and dependencies
 
@@ -1625,10 +1649,16 @@ Requirements: `ISSUE-452-diff`, `INV-DETERMINISTIC`, and the `--diff` cells of
 `INV-EXIT`.
 
 Acceptance: `tests/cli_diff.rs` and `tests/features/diff_mode.feature` pass;
-the determinism test passes over ten runs; `--diff` over a drifting file exits
-`1` and over a clean file exits `0`. The first draft's criterion that `patch`
-reproduce the file is dropped, per `Decision log`, which also removes an
-undeclared external tool dependency from the suite.
+the determinism test passes over ten runs, below and above the line-count
+threshold; `--diff` over a drifting file exits `1` and over a clean file exits
+`0`. The first draft's criterion that `patch` reproduce the file is dropped, per
+`Decision log`, which also removes an undeclared external tool dependency from
+the suite.
+
+Control outcome: the wall-clock-budget control was applied and removed. It
+rejected the above-threshold test and made the transition band nondeterministic,
+and it showed the method's blind spot; see
+`Artefacts and notes → INV-DETERMINISTIC negative control`.
 
 Recovery: revert; `--check` remains functional.
 
@@ -2674,6 +2704,162 @@ CODERABBIT_EXIT=0
 Zero findings, so nothing carried into `EP-M4`. The full JSON-lines log is
 `/tmp/coderabbit-mdtablefix-check-option.out`.
 
+### EP-M4 red and green transcripts
+
+Red, before `--diff` existed: `cargo test --test cli_diff` reported `0 passed;
+4 failed` (log `/tmp/red-cli_diff-mdtablefix-check-option.out`),
+`cargo test --test bdd_reporting` reported `9 passed; 5 failed`, and
+`cargo test --test cli_check` reported `4 passed; 1 failed`. Every failure shared
+one cause, and it was again a run-time rejection rather than a compile error:
+
+```plaintext
+error: unexpected argument '--diff' found
+
+  tip: to pass '--diff' as a value, use '-- --diff'
+
+Usage: mdtablefix [OPTIONS] [FILES]...
+
+assertion left == right failed: a drifting file must exit 1 on every run,
+attempt 0: error: unexpected argument '--diff' found
+```
+
+The `cli_check` failure names the mode and the shape it was checking, which is
+what widening that matrix was for:
+
+```plaintext
+all_clean under Diff (with_error: false) exited 2,
+stderr: error: unexpected argument '--diff' found
+```
+
+**`String` does not implement `io::Write`.** `write_unified_diff` streams into
+`&mut impl io::Write`, and the first draft of the driver passed a `String`,
+because `write!`-style rendering to a string feels as though it should work. It
+does not: `String` implements `fmt::Write` and nothing else, so the type error
+arrives from a direction that reads like a missing import. A standalone
+`rustc --edition 2024 --crate-type lib --emit=metadata` snippet settled it before
+the driver was changed. `render_diff` now renders into a `Vec<u8>` and validates
+with `String::from_utf8`, which is also where the fallible step belongs: both
+sides came from `String`s, so validation cannot fail in practice, but the driver
+does not get to assume it.
+
+**A determinism scenario that would have passed in the red state.** The spec's
+`Diff output is byte-identical across repeated runs` compares ten runs against
+each other, and ten rejections of an unknown flag are ten *identical empty*
+outputs, so the scenario was satisfied before any implementation existed. Two
+changes remove that vacuity: the scenario now also asserts that the diff contains
+a hunk header, and the step `every run produced identical standard output`
+requires the output to be non-empty on its own. An empty repeated output now
+fails in both places.
+
+Green, from the milestone's acceptance commands, after the negative control below
+had been applied and removed:
+
+```plaintext
+$ cargo test --test cli_diff
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+$ cargo test --test cli_check
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+$ cargo test --test bdd_reporting
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+$ cargo test --bin mdtablefix
+test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+Log: `/tmp/green-ep-m4-mdtablefix-check-option.out`.
+
+### `INV-DETERMINISTIC` negative control
+
+The plan's non-vacuity requirement for `INV-DETERMINISTIC` is: "negative control
+is enabling `TextDiffConfig::timeout`, which must make the test flaky or fail."
+The control was applied, and the outcome is reported in two parts, because the
+answer is not the one the plan predicted.
+
+The mechanism is reachable. In `similar` 2.7.0 the deadline is checked once per
+iteration of `myers::find_middle_snake` (`src/algorithms/myers.rs:178`) and once
+per row of `lcs::make_table` (`src/algorithms/lcs.rs:169`), against
+`Instant::now() > deadline`. When it trips, `find_middle_snake` returns `None`
+and `conquer` takes its `else` branch (`myers.rs:314`), deleting the entire old
+range and inserting the entire new range. The failure mode is therefore a
+*wholesale replacement* of whatever region the search was working on, not a
+partial or approximate answer.
+
+**The hazard is real, and it is a budget-dependence rather than a per-run one on
+the plateau.** With the renderer's timeout driven from the environment, a
+1601-line corpus holding 400 scattered ragged tables — so that no common prefix
+or suffix trimming can reduce the problem — renders two different files for the
+same input and flags:
+
+```plaintext
+budget     1ns: 3202 lines of output (hash c4b9e382)
+budget     1s: 2803 lines of output (hash 85e55838, equal to unbounded)
+```
+
+Sweeping the budget over ten runs at each value gives a step function with wide
+plateaus, which is what `conquer`'s `else` branch implies: any trip inside one
+node's search replaces that node's whole range, so the exact iteration that
+tripped does not matter, only which node it tripped in.
+
+```plaintext
+budget  10µs–100ms     1 distinct output in 6 runs
+budget  140ms          5 distinct outputs in 10 runs
+budget  150ms          3           "
+budget  160ms          4           "
+budget  170ms          1           "
+budget  180ms          2           "
+budget  190ms          6           "
+budget  200ms          5           "
+budget  220ms          1           "
+budget  240ms–unbounded 1          "
+```
+
+So the plan's prediction holds in the transition band, where the deadline lands
+mid-computation: ten invocations of one command produce up to six different
+answers, and the determinism test would fail there. On the plateaus the same
+mutation is stable but *speed-dependent*, which is the other half of the hazard
+and the one no single-machine repetition can see: a budget that is fast for one
+machine is slow for another.
+
+**The first version of the above-threshold test could not see the hazard at
+all.** It used 1200 prose lines followed by one ragged table, and with a 1ns
+budget it produced byte-identical output to the unbounded run. The reason is
+trimming: the common prefix of 1200 lines is removed before any search, leaving
+a three-line range whose wholesale replacement is indistinguishable from its
+diff. The test was exercising the threshold's *algorithm selection* and nothing
+else. It now uses four ragged tables spread across 1372 lines — above the
+threshold, and with changes far enough apart that trimming has nothing to
+remove — and asserts that no untouched prose line comes back as deleted:
+
+```plaintext
+$ cargo test --test cli_diff diff_is_deterministic_above  (budget 1ns)
+the diff must localise the change to the tables; 1020 of the 1360 untouched
+prose lines came back as deleted, which is a wholesale replacement rather than a
+diff
+test result: FAILED. 0 passed; 1 failed
+
+$ cargo test --test cli_diff                            (budget unset)
+test result: ok. 5 passed; 0 failed
+```
+
+Same mutated binary in both runs, so the red is attributable to the wall-clock
+budget and not to the fixture or the assertion. Logs:
+`/tmp/control-timeout-cli_diff-mdtablefix-check-option.out` and the sweep above.
+The mutation was then removed with `git checkout -- src/report/render.rs`, and
+`rg 'timeout|Instant|Duration|deadline' src/report/render.rs` finds nothing: the
+algorithm is chosen by `line_count` and the file consults no clock.
+
+**Residual gap.** The ten-run method detects nondeterminism only when a budget
+lands mid-computation. A budget never crossed is invisible to it, and nothing in
+the suite forbids one structurally, so a future `.timeout(500ms)` would pass
+every test here while making output depend on machine speed. The invariant
+currently rests on `write_unified_diff` reading `line_count` and nothing else.
+Closing that gap means either a corpus large enough to cross a plausible budget
+— which costs seconds per test — or a source-level assertion that the diff path
+names no clock. Neither is in `EP-M4`'s scope; both are recorded here rather than
+silently dropped.
+
 ## Documentation and skills to consult
 
 Repository documents:
@@ -2883,3 +3069,33 @@ No requirement, obligation, or acceptance criterion changed. The `EP-M3`
 outcome, the three exit statuses, the read-only guarantee, and the argument
 order guarantee were all met as specified; the four corrections above are
 factual, not scope.
+
+### Revision 7, 2026-09-11
+
+`EP-M4` implemented; see `Artefacts and notes → EP-M4 red and green transcripts`
+and `→ INV-DETERMINISTIC negative control`.
+
+What changed in the plan itself:
+
+- `INV-DETERMINISTIC`'s non-vacuity line stated the control's predicted outcome
+  as a requirement — "must make the test flaky or fail". The control was applied
+  and the outcome is now recorded as measured: it does make the test fail, both
+  deterministically on an above-threshold corpus and nondeterministically in the
+  transition band, and it also exposed that the ten-run method cannot see a
+  budget that is never crossed. The prediction was right about the hazard and
+  incomplete about its detection.
+- The same block's artefact and evidence lines now name the above-threshold
+  case, because the first version of that test was insensitive to the hazard it
+  existed to detect: with one changed table at the end of 1200 unchanged lines,
+  trimming reduces the work to that table and the degraded render is
+  byte-identical to the correct one.
+- `Rigour and residual gaps` records that `INV-DETERMINISTIC` is held by
+  construction rather than enforced, with the two candidate ways to close it.
+- `EP-M4`'s acceptance now says "below and above the line-count threshold", and
+  its control outcome is recorded as its own line.
+
+No requirement, obligation, or acceptance criterion changed. `EP-M4`'s outcome,
+the exit-status contract, the read-only guarantee, and the deterministic
+rendering were all met as specified. The above-threshold test is a strengthening
+of `INV-DETERMINISTIC`'s artefact, not a new obligation: it asserts the same
+invariant over the corpus shape where the invariant is actually at risk.

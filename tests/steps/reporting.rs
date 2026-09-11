@@ -1,4 +1,5 @@
-//! Step definitions for `tests/features/check_mode.feature`.
+//! Step definitions for `tests/features/check_mode.feature` and
+//! `tests/features/diff_mode.feature`.
 //!
 //! Every step drives the real binary through `assert_cmd`, so the feature
 //! specifies the command-line contract rather than a reimplementation of it.
@@ -55,6 +56,8 @@ pub struct ReportingState {
     before: Slot<Fingerprint>,
     /// The most recent run.
     run: Slot<Run>,
+    /// Every run's standard output, when a scenario repeats the run.
+    outputs: Slot<Vec<String>>,
 }
 
 /// The scenario's directory, created on first use.
@@ -125,10 +128,13 @@ fn missing_path(state: &ReportingState, name: String) {
     state.files.get_or_insert_with(Vec::new).push(name);
 }
 
-#[when("mdtablefix runs with {flags:string} against those files")]
-fn runs_against_files(state: &ReportingState, flags: String) {
+/// Runs the binary once against the scenario's files, without recording it.
+///
+/// Separated from the step so a scenario that repeats the run can invoke it
+/// without re-recording the pre-run fingerprint, which only the first run can
+/// meaningfully capture.
+fn run_once(state: &ReportingState, flags: &str) -> Run {
     let directory = directory_path(state);
-    state.before.set(fingerprint(&directory));
     let files = state.files.get().unwrap_or_default();
     let output = Command::cargo_bin("mdtablefix")
         .expect("cargo binary")
@@ -137,11 +143,29 @@ fn runs_against_files(state: &ReportingState, flags: String) {
         .args(&files)
         .output()
         .expect("run mdtablefix");
-    state.run.set(Run {
+
+    Run {
         status: output.status.code().unwrap_or(-1),
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    });
+    }
+}
+
+#[when("mdtablefix runs with {flags:string} against those files")]
+fn runs_against_files(state: &ReportingState, flags: String) {
+    state.before.set(fingerprint(&directory_path(state)));
+    state.run.set(run_once(state, &flags));
+}
+
+#[when("mdtablefix runs with {flags:string} against those files ten times")]
+fn runs_ten_times(state: &ReportingState, flags: String) {
+    let mut outputs = Vec::new();
+    for _ in 0..10 {
+        let run = run_once(state, &flags);
+        outputs.push(run.stdout.clone());
+        state.run.set(run);
+    }
+    state.outputs.set(outputs);
 }
 
 #[then("the exit status is {expected:i32}")]
@@ -179,6 +203,49 @@ fn stdout_lists_before(state: &ReportingState, first: String, second: String) {
         "{first} must be reported before {second}: {:?}",
         run.stdout
     );
+}
+
+/// The unified-diff header names the file on both sides, with no timestamps,
+/// so the output is stable and a consumer can recover the path.
+#[then("the diff header names {name:string} on both sides")]
+fn diff_header_names_both_sides(state: &ReportingState, name: String) {
+    let run = last_run(state);
+    let header = format!("--- {name}\n+++ {name}\n");
+    assert!(
+        run.stdout.contains(&header),
+        "the diff must name {name} on both sides: {:?}",
+        run.stdout
+    );
+}
+
+#[then("the diff contains a hunk header")]
+fn diff_contains_a_hunk_header(state: &ReportingState) {
+    let run = last_run(state);
+    assert!(
+        run.stdout.lines().any(|line| line.starts_with("@@ ")),
+        "the diff must contain a hunk header: {:?}",
+        run.stdout
+    );
+}
+
+/// Repetition alone would be satisfied by ten identical *empty* outputs, which
+/// is exactly what a rejected `--diff` flag produces, so the step also requires
+/// the repeated output to be something.
+#[then("every run produced identical standard output")]
+fn every_run_produced_identical_output(state: &ReportingState) {
+    let outputs = state
+        .outputs
+        .get()
+        .expect("the scenario must repeat the run before comparing its outputs");
+    let first = outputs.first().expect("ten runs produce ten outputs");
+    assert!(
+        !first.is_empty(),
+        "ten identical empty outputs would be vacuous: {}",
+        last_run(state).stderr
+    );
+    for (index, output) in outputs.iter().enumerate() {
+        assert_eq!(output, first, "run {index} differed from the first run");
+    }
 }
 
 #[then("the summary reads {expected:string}")]
