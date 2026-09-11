@@ -5218,3 +5218,16 @@ outcome is affected. Logs: `/tmp/check-fmt-ci-pipefix-mdtablefix-check-option.ou
 `/tmp/lint-ci-pipefix-mdtablefix-check-option.out`,
 `/tmp/typecheck-ci-pipefix-mdtablefix-check-option.out`,
 `/tmp/test-ci-pipefix-mdtablefix-check-option.out`.
+
+### Revision 21, 2026-09-12
+
+Revision 20 left one claim open on purpose: the Windows arm of the split
+assertion had no local reading, because this estate has no Windows host, so the
+CI run on the pushed commit would be its first measurement. That run has now
+happened, on `4cfb2d6`, run `34655247077`, and it is green: `atomic write
+contract (windows)` passes in 6m22s, and every other job — `build-test` and the
+four `binstall packaging` targets — passes with it. The two failures that
+motivated Revision 20, `--test cli_check` and `--test cli_diff` exiting 101 at
+the spawn, are gone, which is the reading the fixture-sizing fix needed and
+could not get locally. Nothing was changed to obtain it; this entry records the
+measurement, not a further edit.
