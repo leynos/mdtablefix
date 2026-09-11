@@ -58,7 +58,10 @@ The function combines several helpers documented in `docs/`:
   paragraph text: a line that is itself a block start under the wrapper's
   classification — an ATX heading, thematic break, list item, blockquote,
   definition, directive, or fence marker — keeps its underline, so the line
-  below it survives as a block of its own. The predicate is measured after the
+  below it survives as a block of its own. A table delimiter row is refused on
+  the same grounds: it is table syntax rather than paragraph text, recognized
+  with the table parser's `SEP_RE`, so the break below it is not read as its
+  underline. The predicate is measured after the
   shared prefix is removed, so quoted headings still convert. A candidate
   indented by four or more columns is refused as an indented code
   block. The indentation width is measured on the whole line before the shared
