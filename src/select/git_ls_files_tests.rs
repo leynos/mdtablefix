@@ -16,10 +16,8 @@ use rstest::rstest;
 
 use super::{CandidateListing, GitListError, GitLsFiles, split_nul_delimited};
 
-/// A printable ASCII string, the common case for a repository path.
-fn ascii_text() -> impl Strategy<Value = Vec<u8>> {
-    vec(0x20u8..=0x7e, 1..=40).prop_map(String::into_bytes)
-}
+/// Printable ASCII, the common case for a repository path.
+fn ascii_text() -> impl Strategy<Value = Vec<u8>> { vec(0x20u8..=0x7e, 1..=40) }
 
 /// Arbitrary bytes that are not NUL and so can be a path in Git's framing.
 fn raw_bytes() -> impl Strategy<Value = Vec<u8>> {
@@ -53,15 +51,15 @@ fn splitting_is_a_faithful_inverse_of_nul_framing() {
                 .filter_map(|segment| std::str::from_utf8(segment).ok())
                 .collect();
 
+            prop_assert_eq!(listing.skipped_non_utf8, segments.len() - textual.len());
             prop_assert_eq!(
                 listing
                     .paths
                     .iter()
-                    .map(Utf8PathBuf::as_str)
+                    .map(|path| path.as_str())
                     .collect::<Vec<_>>(),
                 textual
             );
-            prop_assert_eq!(listing.skipped_non_utf8, segments.len() - textual.len());
 
             if listing.skipped_non_utf8 > 0 {
                 saw_non_utf8.set(true);
@@ -113,7 +111,11 @@ fn splitting_cases(#[case] input: &[u8], #[case] expected: &[&str], #[case] skip
 /// rather than about Git's output order, which INV-ORDER-DET exists because it
 /// is not sorted.
 fn names(listing: &CandidateListing) -> Vec<String> {
-    let mut names: Vec<String> = listing.paths.iter().map(|path| path.to_string()).collect();
+    let mut names: Vec<String> = listing
+        .paths
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
     names.sort();
     names
 }
