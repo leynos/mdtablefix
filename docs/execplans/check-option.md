@@ -5,7 +5,9 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: IN PROGRESS — `EP-M6` is blocked by issue #474, a pre-existing
+non-idempotent transform class under `--headings`; every other milestone is
+discharged. See `Progress` and `Outcomes & retrospective`.
 
 ## Purpose / big picture
 
@@ -379,8 +381,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
       (10 passed) are green on the new tests. See `Decision log`,
       `Surprises & discoveries`, and
       `Artefacts and notes → Forward-compatibility for --git (#466)`.
-- [ ] EP-M7 Documentation, ADRs, changelog, and issue closure. In progress;
-      **steps 1–8 are written and step 10 is outstanding.** `docs/users-guide.md`
+- [x] EP-M7 Documentation, ADRs, changelog, and issue closure. Complete, in
+      commit `95ec57c`. `docs/users-guide.md`
       gained a `Command-line usage` section (flag table, the three file modes,
       the exit-status table, how to read a report line, line-ending and
       byte-order-mark behaviour, the trailing-newline rule, the empty-glob
@@ -393,10 +395,24 @@ Hard invariants. Violating one requires escalation, not a workaround.
       functions deleted in EP-M3; `CHANGELOG.md`, `docs/contents.md`, and
       `docs/v0-6-0-migration-guide.md` are updated; both ADRs are written;
       and both vendored guides carry a provenance header. Step 9 is measured
-      rather than assumed: `make fmt` was declined with the drift table and
-      the reasoning in `Artefacts and notes → make fmt measured, and declined`.
-      Step 10 (closing #451 and #452) has not run yet; #451 was closed by an
-      earlier milestone.
+      rather than assumed: `make markdownlint` (34 files, 0 errors) and
+      `make nixie` (10 diagrams) pass, and `make fmt` was declined with the
+      drift table and the reasoning in
+      `Artefacts and notes → make fmt measured, and declined`. Step 10 is done:
+      #451 was already closed by an earlier milestone, and #452 is closed with
+      a comment recording the `--concise` supersession. Step 11 was added in
+      Revision 14 and is complete: `INV-PREDICTS` had been claimed against
+      `tests/check_properties.rs`, which does not test it, and is now
+      discharged by `tests/check_prediction.rs` and its corpus module, with
+      both negative-control runs recorded. The plan is **not** `COMPLETE`:
+      `EP-M6` is still blocked by #474, and `make test` is still red on that
+      counterexample. Gates for Revision 14, run through the gate runner:
+      `check-fmt`, `lint`, `typecheck`, `markdownlint` (34 files, 0 errors),
+      and `nixie` pass; `check_prediction` passes 11/11 inside `make test`,
+      which is red only on `check_properties`; and the `--no-fail-fast` run
+      executes all 43 binaries with that same single failure and passes the
+      doctests, so no part of the suite is left unrun. Logs are listed in
+      Revision 14.
 
 ## Surprises & discoveries
 
@@ -1139,8 +1155,94 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 ## Outcomes & retrospective
 
-Not started. Complete at each milestone boundary and before setting the plan
-to `COMPLETE`, reconciling every discovery against `Conformance basis`.
+**This plan is not `COMPLETE`.** `EP-M0`–`EP-M5` and `EP-M7` are discharged;
+`EP-M6` is blocked by issue #474, a pre-existing non-idempotent transform class
+under `--headings` that keeps `make test` red. The feature is implemented,
+documented, and gated by the suites that pass, but a formatter whose own gate
+can reject its own output is not finished, so the plan stays open and the
+reader should treat `Surprises & discoveries` and
+`Artefacts and notes → EP-M6 baseline blocked` as the live issues rather than
+as history.
+
+What was delivered, against the obligations:
+
+- `INV-PREDICTS`: **the obligation this retrospective first claimed for the
+  wrong artefact.** A draft of this bullet said that
+  `tests/check_properties.rs` "runs both paths over two real copies and
+  compares bytes". It does not: that file drives the formatter in print mode
+  and tests the delta and idempotence claims, and no test anywhere ran
+  `--check` against `--in-place`. The obligation is discharged by
+  `tests/check_prediction.rs`, written afterwards and after the claim, which is
+  the order the plan's own method forbids. The test could not be the obvious
+  two-run comparison either: both modes consult one shared change decision, so
+  a decision that answered wrongly would move both sides together and the
+  agreement would hold vacuously. Each case therefore runs the document a
+  third time in print mode, which renders the shared formatter's output without
+  consulting that decision, and measures both the writer's bytes and the
+  report's answer against it. The lesson is the one the plan already states and
+  this bullet is the counter-example to: a claim about evidence is itself a
+  claim, and it needs the same treatment as the code.
+- `LEM-COUNT`, `INV-AGREE`: discharged in `tests/check_properties.rs`, and the
+  same draft sentence was wrong about these too — the file makes in-process
+  assertions on `LineDelta` rather than running modes over copies. The
+  conservation law is stated over generated text pairs, and the golden
+  `tests/data/numstat/` fixtures are what give it bite, because the law alone
+  is satisfied by returning whole-file line counts. `INV-AGREE`'s
+  line-ending-only and terminator-only pairs are folded into the same property,
+  so "zero exactly when the bytes are equal" is tested on the two cases a naive
+  implementation gets wrong. Corrected here rather than left standing, because
+  a claim about evidence is itself a claim.
+- `INV-IDEMPOTENT`: **the obligation that mattered most, and the one that is
+  only partly discharged.** It was stated before any CLI surface existed, and
+  it found two pre-existing defect classes immediately (issue #468, fixed by
+  pull request #470) and a third later (issue #474, still open). The lesson is
+  that the obligation was worth writing before the code; the residual gap is
+  that its evidence is a property test over a sampled domain, so a green run
+  is not proof while #474 stands.
+- `INV-NOWRITE`: discharged as the type-level `ReadOnlyDir` argument plus
+  `tests/cli_check.rs`'s directory snapshot, with the same snapshot assertion
+  run against `--in-place` as its non-vacuity control.
+- `INV-BOM`: discharged end to end, the ragged and already-formatted
+  byte-order-marked pair, in `tests/cli_check.rs`.
+- `INV-DOCUMENT`: discharged by the `src/io/document.rs` unit tests and
+  `tests/document_properties.rs`, including the fenced-code homogenisation case
+  and both recorded negative controls.
+- `INV-ORDER`, `INV-EXIT`, `INV-SUMMARY`, `INV-DETERMINISTIC`,
+  `INV-FRONTMATTER`: discharged in `src/driver_tests.rs`, `tests/cli_check.rs`,
+  and the BDD scenarios. `INV-DETERMINISTIC`'s negative control exposed a
+  blind spot in the method itself — the hazard sits on a transition band that
+  a single fixed input cannot straddle — and the finding is recorded rather
+  than papered over.
+- `AX-4` was correct and is now load-bearing in two places: the design does not
+  rely on `rayon`'s collection order, and `ADR 0009` cites the reasoning. The
+  `--git` plan (pull request #466) asked for the citation to stay.
+
+Discoveries that changed the plan rather than being absorbed by it:
+
+- The document boundary is two features, not one. Pull request #469 landed the
+  line-ending half on `main` while this plan was in flight, so the rebase took
+  `main`'s implementation and re-landed only the byte-order-mark half, as
+  `src/io/document.rs` with `ADR 0008`. The reserved ADR numbers `0006` and
+  `0007` were taken by merged pull requests before `EP-M7` was reached; nothing
+  was renumbered.
+- `--in-place` writing only changed files is a behaviour change, not an
+  optimisation: the replacement renames over the target, so a clean file's
+  inode and modification time would move. It makes a symlink to a clean file
+  succeed where a symlink to a drifting one is still declined.
+- A non-UTF-8 path argument now fails the run as a whole (exit `2`) instead of
+  counting as one file's error, because input resolution moved ahead of the
+  parallel stage for the `--git` plan's benefit.
+- `make fmt` is repository-wide and cannot be scoped, and it runs this project's
+  own binary; 10 of the 31 tracked Markdown files already drift under its flag
+  set. Its measurement caught a regression this plan introduced in
+  `docs/contents.md`. See
+  `Artefacts and notes → make fmt measured, and declined`.
+
+The method that worked, recorded for whoever continues: write the falsifiable
+obligation before the code, run the negative control as a real mutation, and
+measure the tooling instead of assuming it — `cargo mutants`' baseline refusal,
+`mdformat-all`'s scope, and the property test's own flakiness were each found by
+running the thing rather than by reading about it.
 
 ## Context and orientation
 
@@ -1224,9 +1326,12 @@ repository, and none should be invented. Upstream artefacts:
   observability (`:286-306`), and documentation duties.
 - `docs/documentation-style-guide.md`: prose, Markdown, and ADR conventions.
 - `docs/architecture.md`: current component narrative and diagrams.
-- `docs/developers-guide.md`: internal API reference, the "callers select the
-  function that matches their intent rather than passing a Boolean mode flag"
-  convention at `:111-113`, the CLI matrix harness, and observability.
+- `docs/developers-guide.md`: internal API reference, the
+  "callers select the function that matches their intent rather than passing a
+  Boolean mode flag" convention at `:111-113` — superseded in `EP-M7` by the
+  shared-closure rule at `:159-163`, since the two functions it contrasted
+  (`format_to_string` and `rewrite_in_place`) no longer exist — the CLI matrix
+  harness, and observability.
 - `docs/adrs/0004-state-machine-abstractions.md`: the ADR header format to
   follow.
 - `docs/execplans/cli-matrix-testing.md`: inherited constraints on test
@@ -1302,7 +1407,14 @@ interface.
   transform flags, `--check` exits `1` if and only if running `--in-place`
   over an identical copy changes that copy's bytes, and the reported counts
   equal the delta between the copy's before and after bytes.
-  Method: property test that actually runs both paths over two copies.
+  Method: property test that actually runs both paths over two copies, with a
+  third run as the oracle. **Two runs are not enough**, and the reason is the
+  same one the rationale records: both modes consult one shared change
+  decision, so a decision that answered wrongly would move the report and the
+  write in the same direction and the agreement would hold vacuously. Each
+  case therefore also runs the document in print mode, which renders the shared
+  formatter's output without consulting that decision, and asserts both
+  `--in-place`'s bytes and `--check`'s exit status against the printed bytes.
   Rationale: the first draft claimed this held "structurally" because both
   modes read one `Assessment`, and proposed asserting
   `is_changed() == (original != formatted)`. That is the definition of
@@ -1313,14 +1425,27 @@ interface.
   Domain: generated Markdown mixing tables, prose, lists, fenced code, and
   frontmatter; LF, CRLF, mixed, and byte-order-marked; with and without a
   trailing newline; over the eight-flag powerset, sampled; including CJK and
-  combining-mark content, since table padding is width-sensitive.
-  Artefact: `tests/check_properties.rs`, extending the shape of
-  `src/main.rs:252-301` but not its weak generator (six fixed words, one table
-  shape, all options false).
-  Evidence: `cargo test --test check_properties`.
-  Non-vacuity: assert the generator produced both drifting and clean cases and
-  reached each of the eight flags. Negative control: make `--check` compare
-  trimmed strings; a trailing-newline case must fail.
+  combining-mark content, since table padding is width-sensitive. The corpus
+  adds one measured fixture per flag, because a flag whose fixture never drifts
+  is untested however many cases name it.
+  Artefact: `tests/check_prediction.rs` and its corpus module
+  `tests/check_prediction/corpus.rs`, split so neither file breaks
+  `AGENTS.md`'s 400-line limit. **This obligation was first claimed
+  against `tests/check_properties.rs`, which does not test it** — that file
+  drives the formatter in print mode and never runs `--check`. The mistake is
+  recorded in `Outcomes & retrospective` rather than corrected quietly, since
+  the plan's method is to write the falsifiable obligation before the code and
+  a claim about evidence is itself a claim.
+  Evidence: `cargo test --test check_prediction`.
+  Non-vacuity: each corpus case asserts that both a drifting and a clean
+  document were observed, and that each fixture drifts under the flag it was
+  chosen for; the generated property samples the eight-flag powerset from a
+  bitmask and asserts `--check` printed exactly one report line carrying the
+  delta recomputed from the two byte strings. Negative control: make `--check`
+  compare trimmed strings; a trailing-newline case must fail. **Run, and it
+  fails as required** — the corpus fixture `unterminated_clean` drifts by one
+  terminator byte only, and the property shrinks to `document = "prose words
+  here"`. Transcript in `Artefacts and notes → EP-M7 prediction control`.
 
 - **INV-IDEMPOTENT**: `--check` over the formatter's own output reports clean,
   for every input and flag combination.
@@ -2411,6 +2536,12 @@ re-running a gate to diagnose a failure.
    See `Artefacts and notes → make fmt measured, and declined`.
 10. Close issues #451 and #452 with a comment linking this plan and explaining
     the `--concise` supersession.
+11. Added in Revision 14, after the closing audit found `INV-PREDICTS` claimed
+    against a file that does not exercise the reporting modes: write
+    `tests/check_prediction.rs` and its `tests/check_prediction/corpus.rs`
+    module, which run `--check` and `--in-place` over byte-identical copies with
+    the printer as the oracle, and run the obligation's negative control as a
+    real mutation. See `Artefacts and notes → EP-M7 prediction control`.
 
 ## Validation and acceptance
 
@@ -3684,6 +3815,75 @@ fixed points.
 `cargo fmt --all -- --check` and covers Rust sources only; it ran with the other
 gates on this change.
 
+### EP-M7 prediction control
+
+`INV-PREDICTS` names its own negative control: make `--check` compare trimmed
+strings, and a trailing-newline case must fail. It was run as a real mutation
+rather than argued about, twice, because the first run showed the control was
+weaker than the obligation assumed.
+
+The mutation went into the single shared change decision,
+`Assessment::is_changed` at `src/driver.rs:67`, replacing
+`self.original != self.formatted` with a comparison of the two texts trimmed.
+That is the sharpest form of the hazard, because `--check` and `--in-place`
+consult one predicate: under trimmed comparison a document whose whole drift is
+its final terminator reports clean **and** is not written, so the two modes
+agree with each other perfectly. A test that compared only those two runs would
+pass against a broken formatter. The third run is what catches it — printing
+renders `assessment.formatted` without consulting `is_changed` at all, so the
+printed bytes carry the terminator while the writer's copy does not.
+
+First run, against the corpus as it then stood:
+
+```plaintext
+test result: FAILED. 10 passed; 1 failed
+minimal failing input: document = "prose words here", mask = 0
+  left:  [112, 114, 111, 115, 101, 32, 119, 111, 114, 100, 115, 32, 104, 101, 114, 101]
+ right: [112, 114, 111, 115, 101, 32, 119, 111, 114, 100, 115, 32, 104, 101, 114, 101, 10]
+generated: --in-place must write exactly the bytes the printer prints, under []
+```
+
+All ten corpus cases passed, which was a defect in the corpus rather than in
+the mutation: every fixture that drifted under the terminator rule also drifted
+in its body text, so trimmed comparison left it drifting anyway. A case only
+fails this control if its *entire* drift is the terminator, so
+`unterminated_clean` was added — `tests/cli_check.rs`'s `CLEAN` document with
+its final newline removed, byte for byte — and the corpus's own assertion, that
+each fixture drifts under the flag it was chosen for, now also covers a
+document that drifts under no flag at all. The corpus lives in
+`tests/check_prediction/corpus.rs`, a module of its own, because it is measured
+data rather than a test and because that keeps both files under `AGENTS.md`'s
+line limit.
+
+Second run, against the corrected corpus:
+
+```plaintext
+failures:
+    check_predicts_in_place_on_generated_documents
+    check_predicts_in_place_over_the_corpus::case_01
+    ... case_02 through case_10 ...
+test result: FAILED. 0 passed; 11 failed
+```
+
+Every corpus case fails naming `unterminated_clean` and two byte vectors that
+differ in one trailing `10`, and the property shrinks to
+`document = "```sh", mask = 0` — a fence, also missing its terminator. The
+fixture is load-bearing rather than decorative: the first run's ten-and-one
+split became the second run's eleven-and-nothing.
+
+Both runs are logged, as
+`/tmp/test-mdtablefix-check-option-negative-control.out` and `-2.out`. Each
+time, `src/driver.rs` was restored exactly — verified by
+`git status --porcelain` on that file and by reading the unmutated line back
+before any behaviour was believed. One trap is worth recording: `cargo test`
+builds the binary through `assert_cmd`, so the stale mutated binary remained in
+`target/debug` after the source was restored, and a manual run against it
+reported "clean" for a document the printer changed. That looked like a real
+`INV-PREDICTS` failure for as long as it took to remember to rebuild. Proptest
+also wrote `tests/check_prediction.proptest-regressions` on each failing run,
+pinning a counterexample to a mutation that no longer exists; it was deleted
+both times and is not committed.
+
 ## Documentation and skills to consult
 
 Repository documents:
@@ -4112,7 +4312,126 @@ point at `HEAD` and my index entry was not — so the two new ADRs and
 `docs/contents.md` were re-authored to the formatter's own output and re-run to
 confirm they are fixed points. After that the change adds no new drift: 10 of
 the 35 Markdown files on disk drift, the same 10 as at `HEAD`, three of which
-this change never touches. The Markdown gates are not yet run for this revision
-and step 10 (closing #451 and #452) has not run; both are outstanding, and no
-commit in this revision claims a green `make test`, which remains red for the
-recorded #474 counterexample.
+this change never touches. The gates for this revision and the issue closure
+are recorded in Revision 13; no commit in this revision claims a green
+`make test`, which remains red for the recorded #474 counterexample.
+
+### Revision 13, 2026-09-11
+
+`EP-M7` closes, and the plan takes stock without declaring itself finished.
+
+Gate run for the documentation change of Revision 12, through the gate runner:
+`make markdownlint` reports 34 files and 0 errors
+(`/tmp/markdownlint-mdtablefix-check-option-3.out`), and `make nixie` validates
+all 10 Mermaid diagrams in the tree, including the two new and one edited
+diagram in `docs/architecture.md`
+(`/tmp/nixie-mdtablefix-check-option-2.out`). The first markdownlint run was
+**red** — three `MD060` table-alignment errors on the exit-status table this
+change adds to `docs/users-guide.md` — and is kept at
+`/tmp/markdownlint-mdtablefix-check-option-2.out` rather than overwritten,
+because the failure is evidence that the gate ran over the new content rather
+than that it was skipped. No Rust gate was run: no Rust source, test, or
+configuration file changed in this revision.
+
+The documentation landed as commit `95ec57c` and is pushed to
+`origin/check-option`. Issue #452 is closed as not planned, with a comment
+recording the `--concise` supersession, the two renderings that replace it, and
+the links to `ADR 0009` and this plan; #451 was already closed by an earlier
+milestone.
+
+`Outcomes & retrospective` is written, `Progress` records `EP-M7` as complete,
+and the plan's status line now states what remains: `EP-M6` is blocked by issue
+[#474](https://github.com/leynos/mdtablefix/issues/474) and `make test` is
+still red on that counterexample, so the plan stays `IN PROGRESS` rather than
+being set `COMPLETE`. Nothing in this revision changes a requirement,
+obligation, or acceptance criterion.
+
+### Revision 14, 2026-09-11
+
+Revision 13 closed `EP-M7` and the plan claimed, in three places, that every
+obligation was discharged. An audit of those claims found one that was not:
+`INV-PREDICTS` was recorded as tested by `tests/check_properties.rs`, which
+never runs `--check` or `--in-place` at all — it drives the formatter in print
+mode and asserts the delta and idempotence claims. The obligation was therefore
+discharged by no test, and the retrospective said otherwise. This revision adds
+the missing artefact and corrects the claims. **The obligation is strengthened,
+not changed**: no requirement, acceptance criterion, or behaviour moves, and no
+implementation file changes.
+
+`tests/check_prediction.rs` (356 lines) and its corpus module
+`tests/check_prediction/corpus.rs` (82 lines, split for `AGENTS.md`'s 400-line
+limit) run the reporting and writing modes over byte-identical copies of one
+document and compare what `--check` said with what `--in-place` did.
+
+The obvious shape — two runs, compared — is vacuous here, and that is the
+finding worth recording. Both modes consult one shared change decision, so a
+predicate that answered wrongly would move the report and the write in the same
+direction and the agreement would hold. A third run is therefore the oracle:
+printing renders `assessment.formatted` without consulting `is_changed`, so the
+prediction is measured against bytes that decision cannot move. The generator
+samples the document boundary — line-ending style, byte-order mark, final
+terminator — which is where a comparison made on body text would miss the
+difference.
+
+Eleven tests: ten corpus cases (the bare flag set, each of the eight flags
+alone, and all eight together) over a sixteen-document corpus, plus one
+generated property of 48 cases sampling the flag powerset from a bitmask.
+`cargo test --test check_prediction` is green — 11 passed, 0 failed
+(`/tmp/test-mdtablefix-check-option-prediction.out`).
+
+The corpus was measured rather than assumed, and measuring it found the
+neighbouring corpus's comment wrong: `tests/check_properties.rs` describes its
+entries as "Documents that drift under exactly one flag each", but `prose`
+never drifts, its `--wrap` entry drifts only because of the Setext heading in
+it, and its footnotes entry is a no-op. That comment is left alone — the
+idempotence claim it supports does not depend on it — while the new corpus
+carries its own measured association: one fixture per flag, each asserted to
+drift under that flag, alongside the boundary and clean documents.
+
+The obligation's negative control — make `--check` compare trimmed strings, and
+a trailing-newline case must fail — was run as a real mutation of the shared
+predicate, twice. The first run failed only the generated property, because
+every corpus fixture that drifted under the terminator rule also drifted in its
+body and so kept drifting under trimmed comparison. `unterminated_clean` was
+added — `tests/cli_check.rs`'s `CLEAN` document minus its final newline — after
+which the second run failed all eleven tests: the corpus cases naming that
+fixture, and the property shrinking to `document = "```sh"`. Both transcripts
+are in `Artefacts and notes → EP-M7 prediction control`, which also records the
+stale `target/debug` binary that produced a false alarm after the mutation was
+reverted, because that is the kind of evidence a reader would otherwise have to
+rediscover.
+
+Two plan errors are corrected rather than overwritten. `Outcomes &
+retrospective` now says what `tests/check_properties.rs` actually discharges —
+`LEM-COUNT` and `INV-AGREE`, in-process and not over two copies — and keeps the
+`INV-PREDICTS` mistake visible with its lesson: a claim about evidence is itself
+a claim. The obligation carries the corrected artefact, evidence, non-vacuity
+statement, and control result. `Progress` records step 11, added to `EP-M7` for
+this work.
+
+Gate run, through the gate runner, over the new test and this plan revision
+(including the Revision 13 text, the status line, and the corrected
+retrospective and obligation, none of which was committed when the last gate
+run was taken): `make check-fmt`,
+`make lint`, `make typecheck`, `make markdownlint` (34 files, 0 errors), and
+`make nixie` all pass, and the new test files compile under
+`--all-targets --all-features` with `-D warnings` contributing no diagnostic.
+`make test` is **red**, and `check_prediction` passed 11/11 inside it before the
+abort — the failure is
+`check_properties::generated_documents_reach_a_fixed_point` on
+`document = "|1|2|\n|---|---|\n---", mask = 128`: the recorded issue #474
+class, and not this change. Because `cargo test` fail-fast aborted there,
+36 integration binaries and the doctests did not execute in that run, so the
+whole suite was run again with `--no-fail-fast` rather than left partly
+unverified: all 43 binaries ran, exactly one failed — the same
+`check_properties` function on the same minimal input, replayed from the
+persisted regression file — and the doctests pass, 40 passed and 20 ignored. No
+`*.proptest-regressions` file was created or modified by either run. Logs:
+`/tmp/check-fmt-mdtablefix-check-option.out`,
+`/tmp/lint-mdtablefix-check-option.out`,
+`/tmp/typecheck-mdtablefix-check-option.out`,
+`/tmp/test-mdtablefix-check-option.out`,
+`/tmp/test-no-fail-fast-mdtablefix-check-option.out`,
+`/tmp/doctest-mdtablefix-check-option.out`,
+`/tmp/markdownlint-mdtablefix-check-option.out`,
+`/tmp/nixie-mdtablefix-check-option.out`.
