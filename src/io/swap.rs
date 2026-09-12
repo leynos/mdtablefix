@@ -234,16 +234,17 @@ pub(super) fn temporary_path(path: &Utf8Path, attempt: u32) -> Utf8PathBuf {
     path.with_file_name(name)
 }
 
-/// A test-only seam that fails the rename half of the swap.
-///
-/// Every rename a test can be made to fail for real fails before the
-/// destination is prepared, so the rollback in [`swap_into_place`] is
-/// otherwise unreachable. The arming is per-thread, because the tests that use
-/// it drive the swap on the thread that armed it, and it is undone when the
-/// value [`arm`] returns is dropped, so a failing assertion cannot leave the
-/// failure armed for whatever runs next on that thread.
 #[cfg(test)]
 pub(crate) mod rename_failure_seam {
+    //! A test-only seam that fails the rename half of the swap.
+    //!
+    //! Every rename a test can be made to fail for real fails before the
+    //! destination is prepared, so the rollback in `swap_into_place` is
+    //! otherwise unreachable. The arming is per-thread, because the tests that
+    //! use it drive the swap on the thread that armed it, and it is undone when
+    //! the value [`arm`] returns is dropped, so a failing assertion cannot
+    //! leave the failure armed for whatever runs next on that thread.
+
     use std::cell::Cell;
 
     thread_local! {
@@ -271,17 +272,19 @@ pub(crate) mod rename_failure_seam {
     pub(crate) fn take() -> bool { ARMED.with(|armed| armed.replace(false)) }
 }
 
-/// A test-only seam that fails the removal of a temporary file.
-///
-/// The cleanup after a failed replacement is otherwise reachable only through a
-/// real removal failure, which no test can force on every platform: a directory
-/// target fails the swap before a temporary file is named, and a permission bit
-/// is ignored by a run as root. The arming is per-thread, because the tests that
-/// use it drive the replacement on the thread that armed it, and it is undone
-/// when the value [`arm`] returns is dropped, so a failing assertion cannot
-/// leave the removal failing for whatever runs next on that thread.
 #[cfg(test)]
 pub(crate) mod cleanup_failure_seam {
+    //! A test-only seam that fails the removal of a temporary file.
+    //!
+    //! The cleanup after a failed replacement is otherwise reachable only
+    //! through a real removal failure, which no test can force on every
+    //! platform: a directory target fails the swap before a temporary file is
+    //! named, and a permission bit is ignored by a run as root. The arming is
+    //! per-thread, because the tests that use it drive the replacement on the
+    //! thread that armed it, and it is undone when the value [`arm`] returns is
+    //! dropped, so a failing assertion cannot leave the removal failing for
+    //! whatever runs next on that thread.
+
     use std::cell::Cell;
 
     thread_local! {
