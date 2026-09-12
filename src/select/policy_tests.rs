@@ -10,13 +10,14 @@
 use std::{
     cell::Cell,
     collections::{BTreeMap, BTreeSet},
+    io,
 };
 
 use camino::{Utf8Path, Utf8PathBuf};
 use proptest::{collection::vec, prelude::*, test_runner::TestRunner};
 use rstest::rstest;
 
-use super::{FileIdentity, PathKind, PathProbe, select_files};
+use super::{FileIdentity, PathKind, PathProbe, ProbeError, select_files};
 use crate::select::extensions::ExtensionFilter;
 
 /// The root every fake probe is handed and ignores.
@@ -47,8 +48,8 @@ impl FakeProbe {
 impl PathProbe for FakeProbe {
     /// Answers `Missing` for anything the table omits, so a case can never pass
     /// because a path was absent from the fixture.
-    fn probe(&self, _root: &Utf8Path, path: &Utf8Path) -> PathKind {
-        self.0.get(path).cloned().unwrap_or(PathKind::Missing)
+    fn probe(&self, _root: &Utf8Path, path: &Utf8Path) -> Result<PathKind, ProbeError> {
+        Ok(self.0.get(path).cloned().unwrap_or(PathKind::Missing))
     }
 }
 
@@ -56,7 +57,42 @@ impl PathProbe for FakeProbe {
 struct FixedProbe(PathKind);
 
 impl PathProbe for FixedProbe {
-    fn probe(&self, _root: &Utf8Path, _path: &Utf8Path) -> PathKind { self.0.clone() }
+    fn probe(&self, _root: &Utf8Path, _path: &Utf8Path) -> Result<PathKind, ProbeError> {
+        Ok(self.0.clone())
+    }
+}
+
+/// A probe for which every candidate but one is a regular file.
+struct UnreadableProbe {
+    /// The candidate it cannot read, spelled as `git ls-files` spells it.
+    unreadable: &'static str,
+    /// Why it cannot read it.
+    kind: io::ErrorKind,
+}
+
+impl PathProbe for UnreadableProbe {
+    fn probe(&self, root: &Utf8Path, path: &Utf8Path) -> Result<PathKind, ProbeError> {
+        if path == Utf8Path::new(self.unreadable) {
+            Err(ProbeError {
+                path: root.join(path),
+                source: io::Error::from(self.kind),
+            })
+        } else {
+            Ok(regular(path.as_str()))
+        }
+    }
+}
+
+/// `select_files` over `candidates` against `probe`, for the cases where the
+/// probe answers.
+fn selecting<P: PathProbe + ?Sized>(candidates: &[Utf8PathBuf], probe: &P) -> Vec<Utf8PathBuf> {
+    select_files(
+        candidates,
+        select_root(),
+        &ExtensionFilter::default(),
+        probe,
+    )
+    .expect("the fixture's probe answers for every path it is asked about")
 }
 
 /// Candidates and the verdict each one draws.
@@ -149,7 +185,8 @@ fn a_path_is_selected_exactly_when_it_matches_and_probes_as_a_regular_file() {
             let paths: Vec<Utf8PathBuf> = candidates.iter().map(|(path, _)| path.clone()).collect();
             let verdicts = verdicts_for(&candidates);
             let probe = probe_for(&verdicts);
-            let selected = select_files(&paths, select_root(), &filter, &probe);
+            let selected = select_files(&paths, select_root(), &filter, &probe)
+                .expect("the fake probe answers every candidate it is handed");
 
             // Soundness: nothing reaches the output that the rule does not name.
             for path in &selected {
@@ -159,7 +196,10 @@ fn a_path_is_selected_exactly_when_it_matches_and_probes_as_a_regular_file() {
                     path
                 );
                 prop_assert!(
-                    matches!(probe.probe(select_root(), path), PathKind::RegularFile(_)),
+                    matches!(
+                        probe.probe(select_root(), path),
+                        Ok(PathKind::RegularFile(_))
+                    ),
                     "{} was selected without a regular-file verdict",
                     path
                 );
@@ -247,8 +287,10 @@ fn selection_does_not_depend_on_the_order_the_listing_arrives_in() {
                     .iter()
                     .map(|path| (path.clone(), regular(path.as_str()))),
             );
-            let in_listing_order = select_files(&paths, select_root(), &filter, &probe);
-            let in_shuffled_order = select_files(&shuffled, select_root(), &filter, &probe);
+            let in_listing_order = select_files(&paths, select_root(), &filter, &probe)
+                .expect("the fake probe answers every candidate it is handed");
+            let in_shuffled_order = select_files(&shuffled, select_root(), &filter, &probe)
+                .expect("the fake probe answers every candidate it is handed");
             prop_assert_eq!(
                 &in_listing_order,
                 &in_shuffled_order,
@@ -283,12 +325,7 @@ fn selection_does_not_depend_on_the_order_the_listing_arrives_in() {
 #[case(PathKind::Other, false)]
 fn the_probe_verdict_alone_decides(#[case] verdict: PathKind, #[case] expected: bool) {
     let candidates = [at("docs/guide.md")];
-    let selected = select_files(
-        &candidates,
-        select_root(),
-        &ExtensionFilter::default(),
-        &FixedProbe(verdict.clone()),
-    );
+    let selected = selecting(&candidates, &FixedProbe(verdict.clone()));
     assert_eq!(
         !selected.is_empty(),
         expected,
@@ -303,12 +340,7 @@ fn a_path_reported_once_per_merge_stage_is_selected_once() {
     let paths = ["docs/guide.md", "docs/guide.md", "docs/guide.md"];
     let probe = FakeProbe::new(paths.map(|path| (at(path), regular(path))));
     let candidates: Vec<Utf8PathBuf> = paths.map(at).to_vec();
-    let selected = select_files(
-        &candidates,
-        select_root(),
-        &ExtensionFilter::default(),
-        &probe,
-    );
+    let selected = selecting(&candidates, &probe);
     assert_eq!(selected, vec![at("docs/guide.md")]);
 }
 
@@ -321,17 +353,20 @@ fn two_spellings_of_one_entry_collapse_to_the_first_path() {
 
     // Non-vacuity: the fixture really does present a collision.
     assert_eq!(
-        probe.probe(select_root(), Utf8Path::new(paths[0])),
-        probe.probe(select_root(), Utf8Path::new(paths[1])),
+        probe
+            .probe(select_root(), Utf8Path::new(paths[0]))
+            .expect("the fake probe answers every candidate it is handed"),
+        probe
+            .probe(select_root(), Utf8Path::new(paths[1]))
+            .expect("the fake probe answers every candidate it is handed"),
         "the two spellings must share one identity for this case to mean anything"
     );
 
-    let filter = ExtensionFilter::default();
     for candidates in [
         paths.map(at).to_vec(),
         paths.iter().rev().copied().map(at).collect::<Vec<_>>(),
     ] {
-        let selected = select_files(&candidates, select_root(), &filter, &probe);
+        let selected = selecting(&candidates, &probe);
         assert_eq!(
             selected,
             vec![at("README.md")],
@@ -347,15 +382,40 @@ fn distinct_entries_are_all_selected_sorted_byte_wise() {
     let paths = ["notes.md", "docs/guide.md", "README.mdc"];
     let probe = FakeProbe::new(paths.iter().map(|path| (at(path), regular(path))));
     let candidates = paths.map(at).to_vec();
-    let selected = select_files(
-        &candidates,
-        select_root(),
-        &ExtensionFilter::default(),
-        &probe,
-    );
+    let selected = selecting(&candidates, &probe);
     assert_eq!(
         selected,
         vec![at("README.mdc"), at("docs/guide.md"), at("notes.md")],
         "byte-wise: uppercase sorts before lowercase, and a prefix before its extension"
     );
+}
+
+/// The rule for a candidate that cannot be classified: the selection stops, and
+/// says which path it could not read.
+///
+/// The alternative — skipping the candidate and returning the rest — is the
+/// failure this test exists to prevent, because a run that cannot read one
+/// candidate does not know which files it is about to format.
+#[test]
+fn a_candidate_the_probe_cannot_read_fails_the_selection() {
+    let candidates = [at("docs/guide.md"), at("docs/notes.md"), at("docs/api.md")];
+    let probe = UnreadableProbe {
+        unreadable: "docs/notes.md",
+        kind: io::ErrorKind::PermissionDenied,
+    };
+
+    let error = select_files(
+        &candidates,
+        select_root(),
+        &ExtensionFilter::default(),
+        &probe,
+    )
+    .expect_err("an unreadable candidate must not be silently skipped");
+
+    assert_eq!(
+        error.path,
+        select_root().join("docs/notes.md"),
+        "the failure names the candidate it could not read, addressed as the probe was"
+    );
+    assert_eq!(error.source.kind(), io::ErrorKind::PermissionDenied);
 }

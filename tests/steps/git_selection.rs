@@ -274,6 +274,21 @@ fn deleted_from_working_tree(state: &GitSelectionState, name: String) {
     fs::remove_file(repo_path(state).join(&name)).expect("delete the fixture");
 }
 
+/// Makes every candidate beneath `name` unreadable, without a permission trick.
+///
+/// Replacing the directory with a regular file leaves the index listing
+/// `docs/guide.md` while the working tree cannot resolve it: `symlink_metadata`
+/// fails with "not a directory", which is a failure to classify rather than an
+/// absence. A permission-based fixture would behave the same way for an
+/// unprivileged user and differently for a privileged one, which is why this
+/// one does not use permissions.
+#[given("the directory {name:string} is replaced by a regular file")]
+fn directory_replaced_by_a_file(state: &GitSelectionState, name: String) {
+    let path = repo_path(state).join(&name);
+    fs::remove_dir_all(&path).expect("remove the fixture directory");
+    fs::write(&path, "not a directory\n").expect("write the fixture file");
+}
+
 /// Leaves the repository mid-merge with `name` conflicted.
 ///
 /// The conflict is real rather than staged: two branches change the same line

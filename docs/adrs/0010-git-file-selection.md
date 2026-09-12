@@ -178,7 +178,13 @@ candidate whose canonical path leaves the working directory — what a symlinked
 ancestor produces — and anything else are skipped silently, because each is an
 ordinary repository state rather than a user error, and writing a candidate that
 leaves the working directory would write outside the tree the selection was made
-in. The probe's answer carries a `FileIdentity`,
+in. Each of those is an _answer_: the probe says what the candidate is and the
+policy has a rule for it. A candidate the probe cannot classify at all — a
+permission failure, a path whose ancestor is a file, a symbolic-link loop among
+the ancestors — is a question that went unasked, and the selection stops with
+the path named rather than returning the candidates it did manage to read: a run
+that cannot classify one candidate cannot say which set it is about to format.
+The probe's answer carries a `FileIdentity`,
 which is the canonicalized path: two names for one file collapse, and two hard
 links to one inode do not. Keying identity on `(st_dev, st_ino)` would be the
 opposite mistake, because `--in-place` replaces a file through a temporary file
@@ -349,13 +355,20 @@ otherwise meet a line that is not a path.
   canonical path leaves the working tree, so a repository that keeps its
   Markdown behind such links selects nothing from them. Writing it would write
   outside the tree the selection was made in.
+- A candidate the probe cannot classify fails the whole selection rather than
+  being skipped, so one unreadable Markdown file — behind a directory the run
+  may not traverse, for instance — leaves a `--git` run formatting nothing
+  until it is fixed. Formatting the candidates it _could_ read would act on a
+  set the run cannot describe, and the file would be a silent omission.
 - The conflict guard is a heuristic in both directions. It refuses a document
   that quotes all three marker forms inside a fence during a real operation,
   and it does not detect conflict markers left behind by an operation that has
   already been completed. `--allow-conflicted` addresses the first;
   `git status` remains the authority for the second.
-- Marker state is read at most once per run, so a merge that begins while a long
-  `--in-place` run is already under way is not noticed by that run.
+- The guard is consulted per file, at the moment that file would be replaced, so
+  a merge that begins while a long `--in-place` run is already under way is
+  noticed by the writes that follow it. What remains unseen is a merge that
+  begins between the check for one file and that file's own replacement.
 - Line endings are chosen by this tool's own majority rule and not by
   `.gitattributes`, and detection covers the whole document including fenced
   code. A predominantly CRLF file whose code samples use LF therefore has those

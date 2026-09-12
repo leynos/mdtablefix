@@ -1,11 +1,13 @@
 //! What `--git` selects, stated as a rule rather than as a procedure.
 //!
-//! Depends on the [`PathProbe`] port, [`ExtensionFilter`], and `camino` alone.
-//! Nothing here imports `std::fs`, `std::process`, or `cap_std`: the rule is
-//! testable against a fake probe, and no test needs to change directory. The
-//! adapters that answer the port live in [`crate::select::fs_probe`].
+//! Depends on the [`PathProbe`] port, [`ExtensionFilter`], `camino`, and
+//! `std::io` — the last for the failure a probe returns, never for a read of
+//! its own. Nothing here imports `std::fs`, `std::process`, or `cap_std`: the
+//! rule is testable against a fake probe, and no test needs to change
+//! directory. The adapters that answer the port live in
+//! [`crate::select::fs_probe`].
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, io};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -56,20 +58,53 @@ pub enum PathKind {
     OutsideRoot,
 }
 
+/// A candidate whose class could not be established.
+///
+/// Distinct from [`PathKind::Missing`], which is an answer: a staged deletion
+/// is absent, and absent is a class the selection has a rule for. This is the
+/// absence of an answer — a permission failure, a path through a file, a
+/// symbolic-link loop among the ancestors — and a selection that met one
+/// cannot say what it selected. See [`select_files`].
+#[derive(Debug, thiserror::Error)]
+#[error("reading `{path}` while selecting files")]
+pub struct ProbeError {
+    /// The path that could not be read, as the probe addressed it.
+    pub path: Utf8PathBuf,
+    /// Why it could not be read.
+    #[source]
+    pub source: io::Error,
+}
+
 /// Reports what a candidate path actually is. Implemented by adapters.
 pub trait PathProbe {
-    fn probe(&self, root: &Utf8Path, path: &Utf8Path) -> PathKind;
+    /// Classifies `path`, which is spelled relative to `root` unless it is
+    /// already absolute.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ProbeError`] if the path cannot be read for a reason that is
+    /// not its absence. Absence itself is [`PathKind::Missing`]: the caller has
+    /// a rule for a candidate that is gone, and none for one it could not look
+    /// at.
+    fn probe(&self, root: &Utf8Path, path: &Utf8Path) -> Result<PathKind, ProbeError>;
 }
 
 /// Narrows candidates to the sorted, alias-free set of files that exist as
 /// regular files and carry a configured extension.
-#[must_use]
+///
+/// # Errors
+///
+/// Returns the first [`ProbeError`] a candidate draws. The selection stops
+/// there rather than returning what it had: a run that cannot classify one
+/// candidate does not know what it is about to format, so the incomplete set
+/// must not be presented as a selection. The caller reports it the way it
+/// reports a failed listing, before any file is analysed.
 pub fn select_files<P>(
     candidates: &[Utf8PathBuf],
     root: &Utf8Path,
     extensions: &ExtensionFilter,
     probe: &P,
-) -> Vec<Utf8PathBuf>
+) -> Result<Vec<Utf8PathBuf>, ProbeError>
 where
     P: PathProbe + ?Sized,
 {
@@ -90,7 +125,7 @@ where
 
     let mut by_identity: BTreeMap<FileIdentity, &Utf8Path> = BTreeMap::new();
     for path in matching {
-        if let PathKind::RegularFile(identity) = probe.probe(root, path) {
+        if let PathKind::RegularFile(identity) = probe.probe(root, path)? {
             by_identity.entry(identity).or_insert(path);
         }
     }
@@ -99,7 +134,7 @@ where
         by_identity.into_values().map(Utf8Path::to_owned).collect();
     selected.sort_unstable();
 
-    selected
+    Ok(selected)
 }
 
 #[cfg(test)]

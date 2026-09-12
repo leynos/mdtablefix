@@ -69,6 +69,12 @@ fn skip_a_tracked_file_deleted_from_the_working_tree(#[from(state)] _state: GitS
 
 #[scenario(
     path = "tests/features/git_file_selection.feature",
+    name = "Report a candidate that cannot be classified"
+)]
+fn report_a_candidate_that_cannot_be_classified(#[from(state)] _state: GitSelectionState) {}
+
+#[scenario(
+    path = "tests/features/git_file_selection.feature",
     name = "Refuse to rewrite a conflicted file mid-merge"
 )]
 fn refuse_to_rewrite_a_conflicted_file(#[from(state)] _state: GitSelectionState) {}

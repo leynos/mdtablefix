@@ -89,9 +89,14 @@ Candidates that no longer exist in the working tree — a file deleted but not
 yet staged, for instance — and candidates that are not regular files, symbolic
 links among them, are skipped without comment. Each is an ordinary repository
 state rather than a mistake, and a link is skipped rather than followed for the
-reason given under [Symbolic links](#symbolic-links). A selected path that is
-not valid UTF-8 cannot be shown, so such paths are counted and the count is
-reported on standard error.
+reason given under [Symbolic links](#symbolic-links). A candidate whose
+classification cannot be read at all — one behind a directory the run may not
+traverse, or one reached through a link loop — is not skipped: the selection
+stops, the path is named on standard error, and the run exits `2` without
+formatting anything, because a run that could not classify one candidate cannot
+say which set it would have formatted. A selected path that is not valid UTF-8
+cannot be shown, so such paths are counted and the count is reported on
+standard error.
 
 The selection is ordered by path, byte-wise, so it does not follow Git's own
 order and does not change between runs. `--list-files` prints it, one path per

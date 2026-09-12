@@ -22,9 +22,43 @@ use crate::{
         conflict::ConflictGuard,
         fs_probe::AmbientPathProbe,
         git_ls_files::{GitListError, GitLsFiles},
-        policy::select_files,
+        policy::{ProbeError, select_files},
     },
 };
+
+/// Why a `--git` run could not resolve its selection.
+///
+/// Two failures with one report: the listing the candidates come from, and the
+/// reading of the candidates themselves. Both stop the run before any file is
+/// analysed and both are operational failures rather than drift, so a caller
+/// reports them the same way and exits through
+/// [`exit_status`](crate::driver::exit_status) with the same status.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum GitInputsError {
+    /// The candidate listing could not be obtained.
+    #[error(transparent)]
+    Git(#[from] GitListError),
+    /// A listed candidate could not be classified.
+    #[error(transparent)]
+    Probe(#[from] ProbeError),
+}
+
+impl GitInputsError {
+    /// The one line this failure prints, with the underlying reason appended.
+    ///
+    /// The same division as [`GitListError::diagnostic`]: this tool's wording
+    /// first, so a test may assert on text this repository owns, then the
+    /// relayed reason — Git's own diagnostic for a failed command, the operating
+    /// system's for a path that could not be read.
+    #[must_use]
+    pub fn diagnostic(&self) -> String {
+        match self {
+            Self::Git(error) => error.diagnostic(),
+            Self::Probe(error) => format!("{error}: {}", error.source),
+        }
+    }
+}
 
 /// What `--git` resolved to: the paths to act on, and the guard governing them.
 pub struct GitSelection {
@@ -46,13 +80,17 @@ pub struct GitSelection {
 ///
 /// # Errors
 ///
-/// Returns a [`GitListError`] if `git` cannot be run, if it fails, or if the
-/// Git directory cannot be resolved for a run that needs the guard.
+/// Returns a [`GitInputsError`] if `git` cannot be run, if it fails, if the Git
+/// directory cannot be resolved for a run that needs the guard, or if a listed
+/// candidate cannot be classified — a permission failure or a path through a
+/// file, rather than the absence the selection has a rule for. A candidate that
+/// cannot be read is reported rather than skipped: the run would otherwise
+/// format a set it cannot describe.
 pub fn resolve(
     cli: &Cli,
     mode: Mode,
     working_directory: &Utf8Path,
-) -> Result<GitSelection, GitListError> {
+) -> Result<GitSelection, GitInputsError> {
     let extensions = cli.extensions();
     let listing = GitLsFiles::new(cli.includes_untracked()).list_candidates(working_directory)?;
     report_skipped(listing.skipped_non_utf8);
@@ -62,7 +100,7 @@ pub fn resolve(
         working_directory,
         &extensions,
         &AmbientPathProbe,
-    );
+    )?;
     debug!(
         candidates = listing.paths.len(),
         selected = selected.len(),
