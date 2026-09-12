@@ -2502,10 +2502,16 @@ plateau.
       round, which is why it carries a creation date of 2026-09-09 — was last
       updated at 12:09:11Z with the range `6be1a76af63045837205cff7fcbeafffa1b746b1`
       through `9f187a270ba94e5042aec94e4cee81b5e0827826`, 34 files selected and
-      `Cargo.lock` and the `--help` snapshot excluded by path filters. So the
-      queued comment is a second request and not the first thing to arrive; the
-      push itself had already asked, and the seat cooldown is what gates it
-      either way. The same reading found a third reviewer's verdict worth
+      `Cargo.lock` and the `--help` snapshot excluded by path filters. That
+      review then ended without a verdict and without findings, which is worth
+      recording precisely because an empty result reads like a clean one: the
+      walkthrough comment is 770 characters of scaffolding with its "review in
+      progress" block removed, `gh api .../pulls/466/comments` returns an empty
+      list, and the `Kody Code Review` check run on the head commit is
+      `completed skipped`. So the queued comment is not a second request
+      duplicating a first — it is the request that will produce the round, and
+      the push's own attempt was skipped by the seat cooldown rather than
+      declined on merit. The same reading found a third reviewer's verdict worth
       recording because it is a limit rather than a finding: Sourcery declined
       the pull request with "larger than the review limit of 150,000 diff
       characters", which is a property of the diff's size and not a defect in
