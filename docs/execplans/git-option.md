@@ -6,14 +6,18 @@ This ExecPlan (execution plan) is a living document. The sections
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS — rebased onto `check-option` and implemented there, stacked
-on pull request #464. The prerequisite extraction of `src/cli.rs` has landed,
-Stage A is discharged, and EP-M0 through EP-M2 are complete. EP-M3's
-documentation — ADR 0010 and the five component documents — is written and
-reconciled with `Surprises & discoveries` and the Decision log; its `EV-M3-DOCS`
-gate run and the milestone's CodeRabbit review are outstanding, and Status
-becomes COMPLETE when both are recorded under `Progress`. See `Progress`,
-`Surprises & discoveries`, and `Conformance basis`, "Related work".
+Status: COMPLETE — 2026-09-12, at commit `9a83339`, on branch `git-option`,
+stacked on pull request #464 and carried by pull request #466. The prerequisite
+extraction of `src/cli.rs` landed, Stage A is discharged, and all four
+milestones — EP-M0's grammar measurement, EP-M1's selection tree, EP-M2's
+command-line surface, and EP-M3's documentation — are delivered. Every
+deterministic gate is green on the milestone tree, the four CodeRabbit rounds
+recorded under `Artefacts and notes` returned zero findings, and `Outcomes &
+retrospective` states what was delivered against what was planned and which
+pinned interfaces the implementation superseded. The plan's remaining work is
+not this plan's: pull request #464 must merge before this one can. See
+`Progress`, `Outcomes & retrospective`, and `Conformance basis`, "Related
+work".
 
 ## Purpose / big picture
 
@@ -2054,8 +2058,23 @@ plateau.
       in both documents) and the Surprises section gains three. One stale doc
       comment fixed while drafting: `GitSelection::inputs` claimed Git's order
       while `select_files` sorts.
-- [ ] EP-M3, `EV-M3-DOCS`: `make markdownlint` and `make nixie` over the
-      documentation diff, then the milestone's CodeRabbit review.
+- [x] (2026-09-12) EP-M3, `EV-M3-DOCS`: six gates through `scrutineer` over the
+      uncommitted documentation tree — `make check-fmt`, `make typecheck`, `make
+      lint`, and `make test` (1988 passed, 0 failed, 20 ignored) green on the
+      first run; `make markdownlint` red with one `MD038` inside this plan's own
+      new Surprises entry, fixed by describing the measured line rather than
+      quoting it in a code span split across two lines, then re-run alone to **36
+      files, 0 errors**; and `make nixie` validating every diagram, the new
+      sequence diagram among them. `cargo test --test idempotence_drift` reports
+      **2 passed**. Transcript in Artefacts and notes, `EV-M3-DOCS`.
+- [x] (2026-09-12) EP-M3, `EV-M3-CR`: `coderabbit review --agent --base
+      check-option` through `scrutineer` at `9a83339` — **completed, zero
+      findings** over 33 reviewed files. No rate, seat, or quota limit, so no
+      wait was needed. Transcript in Artefacts and notes, `EV-M3-CR`.
+- [x] (2026-09-12) EP-M3 complete: the branch is pushed, the plan's Status is
+      COMPLETE, and `Outcomes & retrospective` records what was delivered
+      against what was planned. Milestone work is finished; what remains is
+      pull request #464's merge, which this stack waits on.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
@@ -2857,22 +2876,65 @@ is the durable record, and EP-M3 reconciles this log into it.
 
 ## Outcomes & retrospective
 
-To be completed at EP-M3. Before setting Status to COMPLETE, reconcile every
-Surprise and Decision against ADR 0010 and the component documents. Do not mark
-COMPLETE while any deviation remains unrecorded.
+Completed 2026-09-12, at commit `9a83339`. Every milestone is delivered: EP-M0's
+grammar measurement, EP-M1's selection tree with zero surviving mutants, EP-M2's
+command-line surface and end-to-end behaviour, and EP-M3's ADR 0010 and the five
+component documents. Every Surprise and Decision above is reconciled into ADR
+0010 or into a component document — the reconciliation is the ADR's "Decision
+outcome" and "Known risks and limitations" sections, which is where the
+alternatives and the residuals now live — and no deviation is left unrecorded.
 
-Two items an earlier draft listed as follow-up work have since **merged** and
-must not be reopened: atomic `--in-place` writes are issue #465, delivered by
-pull request #467; line-ending preservation is issue #451, delivered by pull
-request #469 under ADR 0007. Confirm at closure that neither was reimplemented
-in `src/select/`, and that the `--git` write path routes through
-`driver::write_back` rather than calling `replace_file` directly.
+**Delivered against the plan.** `--git` with its four modifiers and
+`--list-files`; the selection tree private to the binary, with `PathProbe` as
+its one driven port and `src/lib.rs` untouched; a conflict guard that runs only
+when a write can corrupt a resolution; Git's diagnostics scrubbed to one capped
+line before being relayed; five new flags on the command line with a post-parse
+dependency check standing in for `requires = "git"`; seventeen behavioural
+scenarios, fifteen tests pinning the command-line surface, and unit and property
+tests for every selection module; a mutation run of 60 mutants with none missed
+once the oracle was widened; ADR 0010; and the user's guide, architecture,
+developer's guide, README, and documentation contents updated to match. Four
+CodeRabbit rounds are recorded in Artefacts and notes — two at EP-M1 (the
+second after the mutation widening), one at EP-M2, and one at EP-M3 for this
+milestone — and every one returned zero findings.
 
-Issue #474, the `--headings` fixed-point defect, was fixed by pull request #477
-before this plan was implemented, so no caveat is needed there. The
-`--code-emphasis` two-pass residual recorded under Risks is issue #478 and is
-not this plan's work; confirm at closure that it is resolved, or that the
-users' guide does not claim one-pass convergence for that flag.
+**Deviation from the plan's pinned interfaces, all recorded.** The composition
+root is `src/git_inputs.rs` rather than `src/main.rs`, and `resolve` returns
+`GitSelection { inputs, guard }` rather than `Inputs` alone, because the guard
+must travel beside the inputs and only a writable run should pay for it.
+`--md-exts` declares `default_value = "md,mdc,markdown"` rather than
+`default_values = [...]`, because the latter renders space-joined and reads as
+one extension with spaces in it. `--list-files` is answered by the first
+statement of `driver::analyse` instead of by a type, because one function's
+capability cannot change type with a run-time mode. Each has its Decision log
+entry, and each supersedes a pinned signature or table row that the plan's
+Interfaces section still shows; a reader comparing the two should take the
+Decision log as current.
+
+**The two closure checks this section demanded.** Neither merged feature was
+reimplemented: `src/select/**` names no `replace_file`, no `LineEnding`, and no
+`detect_line_ending`, and its only filesystem call is `std::fs::canonicalize`
+inside the probe's identity rule. The `--git` write path routes through
+`driver::write_back` — the same `Mode::InPlace` arm of `driver::analyse` that a
+positional path reaches, so there is one writer rather than two.
+
+Issue #474 was fixed by pull request #477 before this plan was implemented, so
+no caveat was needed. The `--code-emphasis` two-pass residual is issue #478 and
+is not this plan's work; the user's guide makes no convergence claim for that
+flag, and the one sentence in it that reads as a whole-formatter guarantee
+("The formatter therefore reaches its final form in one pass", in the wrapping
+section) is scoped by its own paragraph to the wrapper's handling of prefixed
+blocks. The residual is recorded where a reader of the design will meet it, in
+ADR 0010's "Known risks and limitations", with the blast radius the new
+repository-wide mode gives it.
+
+**What a reader should take from the record.** Three things were found by
+writing rather than by testing: a stale doc comment on the selection's order, a
+refusal transcript that was plausible and wrong until it was measured, and a
+survivor count that fell only after the oracle was widened. Documentation is a
+reading of the code from a direction no test takes, which is why it found the
+first; a decision record that quotes a tool must run the tool, which is why it
+found the second.
 
 ## Artefacts and notes
 
@@ -3338,6 +3400,57 @@ feature file with its step definitions and integration test, `Cargo.toml`,
 reported **zero findings**. The status line is quoted with its file list elided,
 as the earlier rounds quote theirs; the log holds all twenty-seven names. No
 rate, seat, or quota limit appears anywhere in the round's output, so no wait
+was needed.
+
+**EV-M3-DOCS** — the documentation milestone's gates, run 2026-09-12 through
+`scrutineer` over the uncommitted EP-M3 tree, one log per gate under
+`/tmp/<gate>-git-option.out`. Six gates, run sequentially:
+
+```plaintext
+make check-fmt     exit 0    cargo fmt --all -- --check
+make typecheck     exit 0    cargo check --all-targets --all-features
+make lint          exit 0    cargo clippy -- -D warnings
+make test          exit 0    1988 passed, 0 failed, 20 ignored
+make markdownlint  exit 2    one MD038 in docs/execplans/git-option.md
+make nixie         exit 0    all diagrams validated successfully
+```
+
+The Markdown gate failed on the first run and is the reason this milestone's
+evidence is not a single green run. `MD038/no-space-in-code`, at
+`docs/execplans/git-option.md:2495`, was a code span split across two source
+lines whose content therefore began with an escaped backtick and a space — a
+span written in the Surprises entry *about* line-length rules, which is a
+small lesson of its own. The entry now describes the measured line instead of
+quoting it inline, and the gate was re-run alone over the whole corpus:
+**36 files, 0 errors**. The other five gates were not re-run, because the only
+change since they passed is prose inside one Markdown file; their logs remain
+canonical for the committed tree.
+
+`cargo test --test idempotence_drift` was run separately, before the gates, and
+reports **2 passed** — `repository_documents_do_not_drift_on_a_second_pass` and
+`repository_fixtures_do_not_drift_under_headings` — so the new ADR, the new
+architecture section, and the edits to `docs/**` are all wrap fixed points.
+
+**EV-M3-CR** — CodeRabbit review of this milestone, run 2026-09-12 through
+`scrutineer` against the local branch at `9a83339`, log at
+`/tmp/coderabbit-git-option.out`. The base is the branch this one is stacked
+on, so the review is scoped to this branch's work rather than to the work of
+pull request 464:
+
+```plaintext
+coderabbit review --agent --base check-option
+```
+
+```plaintext
+{"type":"complete","status":"review_completed","findings":0,"reviewedFiles":[".cargo/mutants.toml", …]}
+```
+
+Thirty-three files were reviewed and the review reported **zero findings**, so
+no concern was raised about the new ADR, the four edited documents, or the
+figure renumbering. `"reviewType":"all"` in the round's context line means the
+file list is the review's own scope rather than this branch's diff; the branch's
+diff against `check-option` at this commit is the eight files of `9a83339`.
+No rate, seat, or quota limit appears anywhere in the round's output, so no wait
 was needed.
 
 ## Revision note
