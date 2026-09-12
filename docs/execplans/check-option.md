@@ -5382,4 +5382,43 @@ needs as well, the analysis's result outliving the recording of it. The
 `check-fmt` and `test` gates passed in that same pass, so the failure was one
 lint and nothing else.
 
-**Gate evidence.** To be recorded from the gate run over this revision.
+**Gate evidence.** `scrutineer` ran the six gates sequentially over `1fce083`,
+capturing each to `/tmp/<gate>-premerge-mdtablefix-check-option.out`. Five were
+green:
+
+- `make check-fmt` — `cargo fmt --all -- --check`, no output.
+- `make lint` — `cargo clippy --all-targets --all-features -- -D warnings`,
+  clean.
+- `make typecheck` — `cargo check --all-targets --all-features`, clean.
+- `make test` — 46 test binaries, 1884 passed, 0 failed, 20 ignored, then the
+  separate `--doc` run. `tests/bdd_reporting.rs` contributes the fourteen
+  scenarios.
+- `make nixie` — every diagram validated.
+
+**A second gate failure, taken as a finding.** `make markdownlint` was red over
+the same tree — 5 errors across 34 files — and both causes were this round's own
+documentation work rather than anything pre-existing. The build-and-test table
+`996d701` added had one row wider than its separator, so its pipes did not align
+with the header (MD060, two errors), and the rebase's conflict resolution in the
+migration guide left a second blank line before three headings (MD012, three
+errors): removing the weave markers also removed the hint line that had
+separated them, and the blank line above it stayed. Main has a single blank in
+all three places, so this was repair of our own conflict resolution, not drift
+inherited from main. `3eb244e` widens the column to its longest cell and
+collapses the three blank-line pairs, with no wording changed; `make
+markdownlint` then reports 34 files, 0 errors, and that is the state the gate
+evidence above is measured against.
+
+**The reconciliation, posted.** The row-by-row answer went to #464 as an issue
+comment
+([#issuecomment-5642414743](https://github.com/leynos/mdtablefix/pull/464#issuecomment-5642414743)),
+because the pre-merge table lives on the walkthrough issue comment rather than
+on a review, so a reply on a thread would not reach it. It names the three stale
+rows and the commits that discharged them, the two documentation rows and their
+commits, and the `Testing (Compile-Time / Ui)` rebuttal with the manifest-dir
+evidence, the measured compile error, and the fingerprinting defect that
+measurement found. The `Ignore` checkbox was deliberately left unticked.
+
+**Push.** The rebase rewrote the branch's history, so the push needed
+`--force-with-lease`: `52ea246...3eb244e` forced update, and the remote now
+matches the local head, which stands 44 commits ahead of `origin/main`.
