@@ -15,19 +15,22 @@ request #464 and carried by pull request #466. The prerequisite extraction of
 milestones — EP-M0's grammar measurement, EP-M1's selection tree, EP-M2's
 command-line surface, and EP-M3's documentation — are delivered. Every
 deterministic gate is green on the milestone tree, the six CodeRabbit rounds
-recorded under `Artefacts and notes` returned zero findings, and `Outcomes &
-retrospective` states what was delivered against what was planned and which
-pinned interfaces the implementation superseded.
+recorded under `Artefacts and notes` returned zero findings, both CI runs since
+the branch's conflict with its base was cleared are green on Linux and Windows,
+and `Outcomes & retrospective` states what was delivered against what was
+planned and which pinned interfaces the implementation superseded.
 
 One thing this plan still owes, recorded rather than implied away. The branch's
 first CI run was red on both jobs over five defects that are all in test code —
 a fixture identity the helper never supplied, exit-status and path text that
 holds only where the platform spells them the way Linux does, and a snapshot
 carrying the executable suffix — and `6384543` answers all five. Those answers
-are now measured on a second platform rather than promised: the first run the
-branch could obtain after its conflict was cleared, `34691011897`, concluded
-`success` with all six jobs green, so the CI verdict that this plan spent the
-longest waiting on is no longer outstanding. What remains outstanding is the one
+are now measured on a second platform rather than promised: the first two runs
+the branch could obtain after its conflict was cleared, `34691011897` and then
+`34691436697` on the pushed tip, each concluded `success` with all six jobs
+green, so the CI verdict that this plan spent the longest waiting on is no longer
+outstanding and the tip that carries it is the tip under review. What remains
+outstanding is the one
 verification no machine here can perform — the macOS and Windows half of the
 `canonicalize` case question behind INV-DEDUP — which is carried forward rather
 than discharged, with ADR 0010's known-risks section holding it and the fallback
@@ -2220,7 +2223,15 @@ plateau.
       base. `git diff --stat` restricted to `src`, `tests`, and the manifests is
       empty across the third rebase, so the verdict transfers to the rebased code
       rather than having to be re-earned by it — and the push after the third
-      rebase produces a run of its own, recorded here when it reports.
+      rebase produced a run of its own, so the transfer is checked rather than
+      assumed. [`34691436697`](https://github.com/leynos/mdtablefix/actions/runs/34691436697),
+      also `pull_request`, on `70919bc`, created 11:35:19Z, concluded **`success`**
+      at 11:41:47Z with all six jobs green again: `atomic write contract
+      (windows)`, `build-test`, and the four `binstall packaging` jobs. Both of
+      the branch's runs since its conflict was cleared are green — on `70d58ab`
+      and on `70919bc` — and no job in either has been anything but `success`.
+      Later commits here move the head again, but only inside this plan file, so
+      the shipped tree those two runs measured is the shipped tree under review.
 
 - [x] (2026-09-12) The base branch is still moving, and its own redness has
       since been fixed upstream. While this repair was being gated
@@ -2368,8 +2379,11 @@ plateau.
       nothing else, which is the measurement rather than the claim, and it is
       why the gates and the mutation record describe the same tree on either
       side of the third rebase: every file under `src/` and `tests/`, and every
-      manifest, is byte-identical across it. The branch now stands 0 behind and
-      32 ahead of `origin/check-option`, and the pre-third-rebase tip is tagged
+      manifest, is byte-identical across it. `origin/check-option` is an ancestor
+      of the tip and the branch stands 0 behind and 32 ahead of it as the rebase
+      finished, the 33rd commit being this record's own — a count stated rather
+      than implied because it is the kind of number a later reader measures and
+      finds off by one. The pre-third-rebase tip is tagged
       `backup/git-option-pre-third-rebase` so the superseded head is recoverable
       if a later reader wants it.
 - [x] (2026-09-12) CodeRabbit round six over the rebased tree, `EV-REBASE-CR`:
@@ -3507,12 +3521,20 @@ and the re-opening was observed rather than hoped for: run `34691011897`, event
 `success`, all six jobs green, `atomic write contract (windows)` among them in
 6m46s — so the five test-code defects the repair answers are now answered on
 Linux and on Windows, and the platform the first run was red on is the platform
-the repair was measured on. The one qualification is the head, not the content:
-the verdict describes `70d58ab`, and the third rebase moved the branch one base
-commit on, touching `docs/execplans/check-option.md` and no file this branch
-ships. What a reader should not take from it is that every later commit here is
-CI-verified — the push after the third rebase produces its own run, and only that
-one describes the pushed tip.
+the repair was measured on. The one qualification the first verdict carried was
+the head rather than the content: it described `70d58ab`, and the third rebase
+had moved the branch one base commit on, touching
+`docs/execplans/check-option.md` and no file this branch ships. That
+qualification is discharged rather than left standing: the push after the third
+rebase produced run `34691436697` on `70919bc`, concluded 11:41:47Z, `success`
+with all six jobs green again. The plan records both runs rather than the more
+convenient of the two, and states the residual precisely: recording them adds
+further commits, so the head moves past `70919bc` — but only inside
+`docs/execplans/git-option.md`, and a commit that changes no file the tool ships
+does not put the shipped code back under test. The honest form of the claim is
+therefore "every file this branch ships is CI-verified on Linux and Windows",
+not "the newest commit has a run", which is a different and more perishable
+statement.
 
 **What a reader should take from the record.** Three things were found by
 writing rather than by testing: a stale doc comment on the selection's order, a
@@ -4325,7 +4347,9 @@ CI verdict for the repaired test code, is closed, with
 `atomic write contract (windows)` among the jobs that passed. The verdict's own
 head is named where it is recorded, `70d58ab`, because the third rebase moved the
 branch one base commit past it while the run was in flight; the difference is the
-base's own plan document, and the run the push produces is its successor.
+base's own plan document, and the run the push produced is its successor — which
+also concluded `success`, on the pushed tip, so the qualification about the head
+is discharged rather than carried.
 
 Revised 2026-09-12, sixth pass, after a second rebase onto `origin/check-option`,
 whose tip had moved to `49a2d0a` while the first rebase's gates were running.
