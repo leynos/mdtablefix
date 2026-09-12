@@ -472,8 +472,8 @@ CON-SAFE-001 -> EP-M2 -> feature::"Never write through a symlink"
   stderr.
 - **REQ-GIT-008** — Selecting zero files is success: exit 0, no output, and
   **standard input is not read**.
-- **REQ-GIT-009** — When the repository is mid-merge, mid-rebase, or
-  mid-cherry-pick, any selected file containing conflict markers is excluded
+- **REQ-GIT-009** — When the repository is mid-merge, mid-rebase, mid-revert,
+  or mid-cherry-pick, any selected file containing conflict markers is excluded
   from rewriting and named on stderr. `--allow-conflicted` overrides.
 - **REQ-GIT-010** — `--list-files` prints the resolved selection, one path per
   line, to stdout and exits 0 without reading or writing any file content.
@@ -718,19 +718,25 @@ This plan's only obligation here is not to regress it: the `--git` path must
 route writes through `write_back` rather than calling `replace_file` directly.
 Verify by inspection at the EP-M2 conformance check.
 
-**INV-CONFLICT-GUARD** — when the repository is mid-merge, mid-rebase, or
-mid-cherry-pick, a selected file containing all three conflict-marker forms is
-excluded from rewriting unless `--allow-conflicted` is given.
+**INV-CONFLICT-GUARD** — when the repository is mid-merge, mid-rebase,
+mid-revert, or mid-cherry-pick, a selected file containing all three
+conflict-marker forms is excluded from rewriting unless `--allow-conflicted` is
+given.
 
 - Method: `rstest` over the marker-detection predicate, plus a scenario
   asserting a conflicted file is **byte-identical** after `--git --in-place`.
 - Rationale: reflowing across the `<<<<<<< HEAD`, `=======`, and `>>>>>>>`
   markers restructures text on both sides of the boundary. The user then
   resolves against corrupted content and commits it into a rewritten history,
-  where `git rebase --abort` is gone. Requiring all three marker forms, each at
-  line start with the exact seven-character run, keeps the false-positive rate
-  low for documents that discuss conflict markers; gating the scan on repository
-  state narrows it further; `--allow-conflicted` is the escape.
+  where `git rebase --abort` is gone. Requiring all three marker forms keeps
+  the false-positive rate low for documents that discuss conflict markers;
+  requiring a run of *at least* seven characters rather than *exactly* seven
+  errs towards refusing, because Git's `conflict-marker-size` attribute makes
+  the run whatever the repository configured and a longer marker read as
+  ordinary Markdown would be rewritten during the merge the guard exists for;
+  asking the Git directory at the write boundary, once per file that carries
+  markers, narrows it further by seeing an operation that begins mid-run;
+  `--allow-conflicted` is the escape.
 - Artefact: `src/select/conflict.rs` `mod tests` and the feature file.
 - Non-vacuity: include a document that mentions `<<<<<<< HEAD` inside a fenced
   block but has no `=======` or `>>>>>>>`, and assert it is **not** excluded.
@@ -1170,13 +1176,21 @@ impl PathProbe for AmbientPathProbe { /* ... */ }
 In `src/select/conflict.rs`:
 
 ```rust
-/// Reports whether the repository is mid-merge, mid-rebase, or
+/// Reports whether the repository is mid-merge, mid-rebase, mid-revert, or
 /// mid-cherry-pick, by testing for `MERGE_HEAD`, `rebase-merge`,
-/// `rebase-apply`, and `CHERRY_PICK_HEAD` under the Git directory.
-pub fn operation_in_progress(git_dir: &camino::Utf8Path) -> bool;
+/// `rebase-apply`, `CHERRY_PICK_HEAD`, and `REVERT_HEAD` under the Git
+/// directory.
+///
+/// # Errors
+///
+/// Returns an error if a marker cannot be tested for other than by being
+/// absent: an unanswered question is not a licence to write.
+pub fn operation_in_progress(
+    git_dir: &camino::Utf8Path,
+) -> Result<bool, RepositoryStateError>;
 
 /// Reports whether `content` carries all three conflict-marker forms, each at
-/// the start of a line with an exact seven-character run.
+/// the start of a line with a run of at least seven characters.
 #[must_use]
 pub fn has_conflict_markers(content: &str) -> bool;
 ```
@@ -2516,6 +2530,137 @@ plateau.
       the pull request with "larger than the review limit of 150,000 diff
       characters", which is a property of the diff's size and not a defect in
       it, and no round here treats that as an open item.
+- [x] (2026-09-12) **The three Codex findings and one CodeRabbit finding outside
+      the diff range were answered** (`262b396`), and all four hold against the
+      tree. Codex reviewed `8e4d734` at 12:11:47Z. A candidate reached through a
+      symlinked ancestor is no longer selected: `symlink_metadata` does not
+      follow a candidate's *final* component, but a tracked directory replaced
+      by a link makes that component a regular file, so with
+      `docs -> /tmp/external`, `--git --in-place` rewrote
+      `/tmp/external/guide.md`. `PathKind::OutsideRoot` is the new
+      classification, and the root is canonicalized too, so a working tree
+      reached through a link is not refused wholesale. The conflict-marker run
+      is a floor of seven rather than a measurement of seven, because Git's
+      `conflict-marker-size` attribute makes the run whatever the repository
+      configured and a twelve-character marker read as ordinary Markdown would
+      be rewritten during the very merge the guard exists for. `--list-files`
+      escapes the backslash, line feed, and carriage return that would
+      otherwise break its one-path-per-line contract.
+- [x] (2026-09-12) **The Observability row, and the two documentation warnings
+      with it, were actioned** (`6540874`) rather than rebutted: the row's
+      condition held — the new subprocess path had no span and the pre-run
+      failures returned before the run metric — so it was work, not noise.
+      `GitLsFiles::run` is now a traced wrapper around `invoke`: a `debug` span
+      named `git` carries `operation` (`ls_files` or `rev_parse`, drawn from the
+      `Operation` enum rather than from argv), `outcome`, and `elapsed_seconds`,
+      and one `debug` event beside it repeats those three plus `failure`, the
+      bounded category `GitListError::category` returns. Nothing traced is a
+      repository path or Git's own text, so a host can chart this path without
+      storing the tree a run was given. `main::failed_run` records exactly one
+      `mdtablefix_run_total{mode, outcome="error"}` before returning, and the
+      three pre-run failure arms — the working directory, the Git selection, and
+      `Inputs::resolve` — return through it. `src/select/git_output.rs` is new,
+      the pure half of what comes back from `git`, so `git_ls_files.rs` stays
+      inside the 400-line cap; its tests split by subject into
+      `git_output_tests.rs`, `git_output_relay_tests.rs`, and
+      `git_ls_files_git_tests.rs`, the last carrying the real-Git boundary and
+      the assertions that pin both the span's fields and the event's.
+      `docs/developers-guide.md` gains the `make mutants` subsection the
+      developer-documentation warning asks for, and
+      `docs/v0-6-0-migration-guide.md` the `--git` section the user-facing one
+      asks for, so both warnings are stale rather than outstanding.
+- [x] (2026-09-12) **Three documents the rebase's merge driver had mangled were
+      restored** (`9c21534`), found by the markdown gate rather than by reading
+      the diff: a duplicated `### The four file modes` section in
+      `docs/users-guide.md`, a duplicated `convert_footnotes` prose block and a
+      duplicated `## Footnotes` block in `docs/architecture.md`, and four
+      doubled blank lines across the three files. In `docs/architecture.md` the
+      driver also split the `Before:`/`After:` footnote example, giving the
+      `Before:` block the converted content and dropping the `After:` heading
+      and its fence. markdownlint reported twelve errors — MD024 by the
+      duplicate headings, MD051, MD053 and MD031 by the stray fence that then
+      swallowed the headings after it, MD040 by the unlabelled fence, MD022 by
+      the lost blank line — which is why the gate is run over the tree and not
+      over the diff alone. Each file is restored to its pre-rebase text plus the
+      base branch's own edits: the corrected exit-status paragraph, the
+      `src/command.rs` location, and the `googletest`/`pretty_assertions` note.
+- [x] (2026-09-12) **The conflict guard now asks the repository at the write
+      boundary, and watches for a revert** (`f5cec0a`), which discharges the
+      `operation_in_progress` half of the Unit Architecture row and both of the
+      round's remaining inline findings. Finding `3996185867` held that the
+      guard stored one run-wide verdict, read before any file was analysed, so a
+      merge or revert beginning while a long run was still analysing files would
+      be invisible to the writes that followed it; finding `3996187968` held
+      that `REVERT_HEAD` was missing, so a paused revert was an operation this
+      tool would rewrite inside. `ConflictGuard` is now `Unguarded` or
+      `Guarded(Utf8PathBuf)` — the guard carries the Git directory rather than a
+      verdict read from it, and `ConflictGuard::refuses` scans the content in
+      memory first, so a file carrying no markers never provokes the question
+      and an ordinary run still spawns no second `git` process, where a file
+      carrying them is judged against the repository as it is at that moment.
+      `IN_PROGRESS` gains `REVERT_HEAD`. The question is fallible:
+      `operation_in_progress` returns `RepositoryStateError` for any marker it
+      cannot test for other than by absence — a Git directory that is a regular
+      file produces `ENOTDIR` — and `driver::analyse` reports the file as an
+      error rather than rewriting it. The guard moved from `git_inputs::resolve`
+      into the write path, so `main::run_files` borrows it, which is also what
+      clippy asks for. The ADR's guard section, the users' guide's mid-merge
+      section, the migration guide's two sentences, and Figure 5 of the
+      architecture document now say the directory is consulted per written file
+      and name a revert beside the merge, rebase, and cherry-pick; the ADR's
+      measured transcript is updated to the wording the refusal now carries.
+- [x] (2026-09-12) **The pre-merge table was reconciled row by row** against the
+      tree, by defect rather than by row, before anything was actioned on it.
+      Three rows described work already landed and were confirmed stale against
+      the current tree: Observability (fixed by `6540874`, above), and the
+      User-Facing and Developer Documentation warnings (fixed by `6540874` and
+      `9c21534`). Unit Architecture was two requirements in one row: the
+      `operation_in_progress` half is discharged by `f5cec0a`, and the probe
+      half — `PathProbe::probe`, `select_files`, and `git_inputs::resolve`
+      returning errors instead of classifying every read failure away — is the
+      change recorded below. Testing (Overall) remains outstanding and is
+      scheduled as its own commit. Acting on the table as written would have
+      redone four items of finished work, which is the failure the reconcile
+      step exists to prevent: the table is generated from the commit the review
+      ran against and does not move when the work does.
+
+- [x] (2026-09-12) **A candidate the probe cannot classify now fails the
+      selection rather than being skipped** (`9486260`), which discharges the
+      probe half of the Unit Architecture row and the three inline findings
+      that asked for it. `PathProbe::probe` answers `PathKind` for every
+      question the filesystem answered and returns `ProbeError`, carrying the
+      path and the `io::Error` unchanged, for the one it did not: a
+      `symlink_metadata` or canonicalization failure other than absence.
+      Absence stays `PathKind::Missing` — a staged deletion is an answer the
+      policy has a rule for — while `PermissionDenied`, `NotADirectory`, and a
+      link loop among the ancestors are reported. `confined_to` draws the same
+      line for the root it canonicalizes, since a root that exists but cannot be
+      read leaves every candidate's confinement unwarranted, and `unnameable`
+      takes the error rather than its kind, so the cause survives into the
+      diagnostic. `select_files` returns the first such failure instead of the
+      candidates it managed to read, `git_inputs::resolve` returns
+      `GitInputsError` (`GitListError` or `ProbeError`, one `diagnostic` line
+      each), and `main::run` prints that line and exits `2` before any file is
+      analysed. The ADR's policy section and Known risks list, Figure 5 of the
+      architecture document, the users' guide, and the migration guide now say
+      so, and the feature file gains "Report a candidate that cannot be
+      classified". Gates over the tree: `make check-fmt`, `make typecheck`,
+      `make lint`, `make test` (2041 passed, 0 failed, 20 ignored, including 40
+      doc-tests), `make markdownlint` (36 files, 0 errors), `make nixie`, and
+      `make mutants` (78 mutants: 68 caught, 0 missed, 10 unviable; baseline
+      green in 19s build + 85s test). The run before it aborted at the
+      unmutated baseline on `cli_formatting_reaches_a_fixed_point`, the
+      pre-existing idempotence flake: nothing was wrong with this tree, and the
+      remedy is to re-run the gate rather than to weaken the test.
+- [x] (2026-09-12) Two failures a first gate run caught in this commit's own
+      edits, both mechanical: four rustfmt diffs the rewritten probe left behind
+      (`src/select/fs_probe.rs:44`, `:74`, `src/select/fs_probe_tests.rs:197`,
+      `:239`), fixed with `cargo fmt --all` — never `make fmt`, which also runs
+      `mdformat-all` over the whole repository; and four MD049 errors from
+      emphasis this round's ADR edit introduced, where the file's dominant style
+      is underscores and the edit used asterisks. Recording both here because
+      each is the kind of thing the deterministic gates exist to catch before a
+      review seat is spent on it.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
