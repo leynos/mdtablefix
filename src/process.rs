@@ -1,8 +1,12 @@
 //! High-level Markdown stream processing.
 
 mod buffer;
+#[cfg(test)]
+mod code_emphasis_tests;
+mod table_line_protection;
 
 use buffer::{ProcessBuffer, TableSubstitutions};
+use table_line_protection::{protect_table_lines, restore_table_lines};
 
 use crate::{
     ellipsis::replace_ellipsis,
@@ -134,12 +138,19 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     state.flush();
 
-    let mut out = state.into_out();
+    let (mut out, table_markers) = state.into_out();
+    let table_lines = out
+        .iter()
+        .zip(table_markers)
+        .filter_map(|(line, is_table_line)| is_table_line.then(|| line.clone()))
+        .collect::<Vec<_>>();
     if opts.headings {
         out = crate::headings::convert_setext_headings(&out);
     }
     if opts.code_emphasis {
-        out = crate::code_emphasis::fix_code_emphasis(&out);
+        let (protected_lines, protected) = protect_table_lines(out, &table_lines);
+        out = crate::code_emphasis::fix_code_emphasis(&protected_lines);
+        out = restore_table_lines(out, &protected);
     }
 
     // The ellipsis pass rewrites text, so it must run before the wrap measures
@@ -384,33 +395,5 @@ mod tests {
         assert!(!with_ellipsis.iter().any(|line| line.contains("...")));
         assert!(without_ellipsis.iter().any(|line| line.contains("...")));
         assert!(!without_ellipsis.iter().any(|line| line.contains('…')));
-    }
-
-    #[test]
-    fn process_stream_inner_applies_table_code_emphasis_before_reflow() {
-        let input = vec![
-            "| Name  | Notes                      |".to_string(),
-            "| ----- | -------------------------- |".to_string(),
-            "| alpha | Use *`cargo test`* to run. |".to_string(),
-        ];
-
-        let with_code_emphasis = process_stream_inner(
-            &input,
-            Options {
-                code_emphasis: true,
-                ..Default::default()
-            },
-        );
-        let without_code_emphasis = process_stream_inner(&input, Options::default());
-
-        assert_eq!(
-            with_code_emphasis,
-            vec![
-                "| Name  | Notes                    |",
-                "| ----- | ------------------------ |",
-                "| alpha | Use `cargo test` to run. |",
-            ],
-        );
-        assert_eq!(without_code_emphasis, input);
     }
 }

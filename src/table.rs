@@ -265,20 +265,24 @@ fn calculate_and_format(parsed: &ParsedTable, indent: &str) -> Option<Vec<String
 /// ```
 #[must_use]
 pub fn reflow_table(lines: &[String]) -> Vec<String> {
+    reflow_valid_table(lines).unwrap_or_else(|| lines.to_vec())
+}
+
+/// Returns whether `lines` form a table that can be reflowed.
+pub(crate) fn is_valid_table(lines: &[String]) -> bool { reflow_valid_table(lines).is_some() }
+
+fn reflow_valid_table(lines: &[String]) -> Option<Vec<String>> {
     if lines.is_empty() {
-        return Vec::new();
+        return Some(Vec::new());
     }
 
     let (indent, mut trimmed) = extract_indent_and_trim(lines);
     let sep_line = extract_separator_line(&mut trimmed);
 
-    let Some(parsed) = parse_and_validate(&trimmed, sep_line.as_ref()) else {
-        return lines.to_vec();
-    };
+    let parsed = parse_and_validate(&trimmed, sep_line.as_ref())?;
 
-    calculate_and_format(&parsed, &indent).unwrap_or_else(|| lines.to_vec())
+    calculate_and_format(&parsed, &indent)
 }
-
 #[cfg(test)]
 mod tests {
     //! Unit tests for table parsing and formatting.
