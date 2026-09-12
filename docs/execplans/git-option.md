@@ -1988,6 +1988,19 @@ plateau.
       every commit the plan produces. Recorded rather than assumed, because a
       reader checking the tolerance will reach for the branch diff and find it
       over on both counts.
+- [x] (2026-09-12) Rebase onto `origin/check-option` at `6a44a45`, which had
+      advanced four commits since the previous rebase. No conflict arose: every
+      file those commits touch — `src/report/delta.rs`, `src/report/render.rs`,
+      `src/io.rs`, `src/io/replace.rs`, `src/io_tests.rs`,
+      `tests/cli_check.rs`, `tests/cli_diff.rs`,
+      `tests/document_properties.rs`, and `docs/execplans/check-option.md` — is
+      one this branch leaves alone. Three of the four are test-only, and the
+      fourth adds a `#[cfg(test)]` re-export and a `pub(super)` on
+      `rewrite_with`, so no contract this branch consumes moved. Re-validated
+      on the rebased tree before republishing: `make check-fmt`, `make test`,
+      `make typecheck`, and `make lint` all exit 0, `make test` reporting
+      **1988 passed, 0 failed, 20 ignored**. The four upstream patterns were
+      assessed for adoption rather than passed over; see the Decision log.
 - [ ] EP-M3: write **ADR 0010** and update `README.md`, `docs/users-guide.md`,
       `docs/architecture.md`, `docs/developers-guide.md`, `docs/contents.md`.
 - [ ] Reconcile Decision log and Surprises with ADR 0010, then set Status.
@@ -2687,6 +2700,33 @@ is the durable record, and EP-M3 reconciles this log into it.
 - Decision: the roadmap instruction is **not applicable**.
   Rationale: see Conformance basis. Do not create a roadmap entry to tick off.
   Date/Author: 2026-09-09, requester.
+
+- Decision: adopt none of the four patterns `check-option` added in `44c718e`,
+  `565a697`, `4cfb2d6`, and `6a44a45`; record the assessment rather than the
+  port. Rationale, pattern by pattern. **Capability-`Dir` fixtures**
+  (`tests/document_properties.rs`) do not transfer: this branch's fixtures are
+  boundary fixtures, and the one thing a capability cannot carry is the host
+  path handed to a subprocess — which is exactly what that commit carves out,
+  and what `git` and the built binary are given here (`tests/cli_git.rs`,
+  `tests/steps/git_selection.rs`). The in-process fixtures under `src/select/`
+  have no subprocess, and already take whichever shape the code under test
+  takes. **`rewrite_with`'s `pub(super)`** exists so `src/io_tests.rs` can
+  drive a private boundary directly; this branch has no such boundary, because
+  its `#[path]` test modules are declared inside the module they test and name
+  private items already — which is why nothing under `src/select/**` needed a
+  visibility change. **Platform-sized closed-pipe fixtures** guard a Windows
+  `CreateProcess` command-line cap of 32 767 characters; the largest fixture
+  here passes six short arguments, so there is nothing to size, and the
+  pattern's own first form broke the Windows job until `4cfb2d6` fixed it. A
+  fixture a branch does not need is a liability rather than insurance. **A
+  closed-pipe test for `--list-files`**, the third instance of the per-mode
+  shape, was considered and declined on the same reasoning: that mode's payload
+  goes through `run_files`' one `BufWriter` over `stdout().lock()` and `main`'s
+  `is_broken_pipe` arm, the identical write path `tests/cli_check.rs` and
+  `tests/cli_diff.rs` already pin, so a third copy would re-test the same
+  statements rather than a new one. Recorded because the next reader will find
+  those four commits on the base branch and ask whether they were considered.
+  Date/Author: 2026-09-12, implementation agent, on the rebase.
 
 ## Outcomes & retrospective
 
