@@ -15,9 +15,15 @@ use renumber::renumber_footnotes;
 
 use crate::textproc::{Token, push_original_token, tokenize_markdown};
 
-/// Convert bare numeric footnote references to Markdown footnote syntax.
+/// Rewrite bare numeric references as Markdown footnote references.
+///
+/// This is the length-changing half of [`convert_footnotes`]: a reference such
+/// as `docs.1` grows into `docs.[^1]`, so any pass that measures text — the table
+/// reflow and the paragraph wrap — has to run after it rather than before. It is
+/// separate from the rest so the caller can place the two halves either side of
+/// those passes; see `process_stream_inner`.
 #[must_use]
-pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
+pub fn convert_inline_footnotes(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
 
     for line in lines {
@@ -35,9 +41,33 @@ pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
         }
     }
 
+    out
+}
+
+/// Fold a trailing ordered list into definitions and renumber the references.
+///
+/// This is the structural half of [`convert_footnotes`]. It reads the block
+/// structure around the trailing list — `convert_block` converts that list only
+/// when a second-level heading precedes it — so it runs after the heading pass
+/// has settled that structure, and it appends definition lines, so it runs after
+/// the passes that lay lines out.
+#[must_use]
+pub fn convert_footnote_definitions(lines: &[String]) -> Vec<String> {
+    let mut out = lines.to_vec();
     convert_block(&mut out);
     renumber_footnotes(&mut out);
     out
+}
+
+/// Convert bare numeric footnote references to Markdown footnote syntax.
+///
+/// Equivalent to running [`convert_inline_footnotes`] and then
+/// [`convert_footnote_definitions`]; the CLI splits the two around its layout
+/// passes, and this whole-document form stays for callers that need it in one
+/// step.
+#[must_use]
+pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
+    convert_footnote_definitions(&convert_inline_footnotes(lines))
 }
 
 #[cfg(test)]

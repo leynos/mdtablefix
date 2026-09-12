@@ -302,8 +302,16 @@ fn should_use_second_row_as_separator(sep_invalid: bool, rows: &[Vec<String>]) -
     sep_invalid && second_row_is_separator(rows)
 }
 
+/// Reports whether the row below the header is a delimiter row.
+///
+/// Each cell must carry a dash, as `row_parsing` requires: `SEP_RE` alone also
+/// matches an empty cell, so a row of nothing but pipes and spaces would
+/// otherwise be taken for the delimiter row.
 fn second_row_is_separator(rows: &[Vec<String>]) -> bool {
-    rows.len() > 1 && rows[1].iter().all(|c| SEP_RE.is_match(c))
+    rows.len() > 1
+        && rows[1]
+            .iter()
+            .all(|c| c.contains('-') && SEP_RE.is_match(c))
 }
 
 /// Replaces leading empty cells with a marker so continuation rows survive the

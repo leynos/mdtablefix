@@ -7,7 +7,7 @@ use buffer::ProcessBuffer;
 use crate::{
     ellipsis::replace_ellipsis,
     fences::{attach_orphan_specifiers, compress_fences},
-    footnotes::convert_footnotes,
+    footnotes::{convert_footnote_definitions, convert_inline_footnotes},
     frontmatter::split_leading_yaml_frontmatter,
     html::convert_html_tables,
     wrap::{FenceTracker, wrap_text},
@@ -102,6 +102,22 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     let pre = convert_html_tables(&lines);
 
+    // Footnote references rewrite text, so they must be rewritten before the
+    // passes that measure it. A reference such as `docs.1` grows into
+    // `docs.[^1]`, and the table pass below lays a cell out from the text it can
+    // see, so converting afterwards leaves the cell wider than the delimiter row
+    // that was measured from it: `| a | see docs.1 |` over `| --- | --- |`
+    // produced a delimiter row of ten dashes on the first pass and of thirteen
+    // on the second, and the two never agreed. Only the inline half runs here;
+    // the block half below reads the heading structure and appends definition
+    // lines, so it stays where the heading pass has settled and the layout is
+    // done. The ellipsis pass further down is placed by the same rule.
+    let pre = if opts.footnotes {
+        convert_inline_footnotes(&pre)
+    } else {
+        pre
+    };
+
     let mut state = ProcessBuffer::new(opts.ellipsis);
     // Track fences so subsequent logic respects shared semantics.
     let mut fence_tracker = FenceTracker::default();
@@ -144,13 +160,14 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         out = replace_ellipsis(&out);
     }
 
-    let mut out = if opts.wrap {
+    let out = if opts.wrap {
         wrap_text(&out, WRAP_COLS)
     } else {
         out
     };
+
     if opts.footnotes {
-        out = convert_footnotes(&out);
+        return convert_footnote_definitions(&out);
     }
 
     out
@@ -353,6 +370,34 @@ mod tests {
         assert_eq!(
             enabled,
             vec!["# Heading".to_string(), "Paragraph".to_string()]
+        );
+    }
+
+    #[test]
+    fn converts_footnote_references_before_the_table_is_measured() {
+        // `docs.1` grows into `docs.[^1]`, so the reference has to be rewritten
+        // before the table pass measures the cell it sits in. Converting
+        // afterwards left the delimiter row measured from the shorter text: ten
+        // dashes on the first pass and thirteen on the second, and the two never
+        // agreed.
+        let input = vec![
+            "| a | see docs.1 |".to_string(),
+            "| --- | --- |".to_string(),
+        ];
+        let out = process_stream_inner(
+            &input,
+            Options {
+                footnotes: true,
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            out,
+            vec![
+                "| a   | see docs.[^1] |".to_string(),
+                "| --- | ------------- |".to_string(),
+            ]
         );
     }
 

@@ -28,6 +28,12 @@
 //! prose between the delimiter row and the `---` still becomes a heading, so
 //! the class is the adjacency and not Setext conversion itself.
 //!
+//! `T7` is the same class one row further down, found by the widened generators
+//! of issue #493: the row above the `---` is the table's last body row rather
+//! than its delimiter row. Refusing only delimiter rows left that row to be
+//! consumed as a heading, which narrowed the rows above it on the next pass,
+//! so the screen covers table rows of every kind.
+//!
 //! Every case also records the structural expectation its fix must preserve, so
 //! a fix that reached a fixed point by consuming the break on the *first* pass
 //! fails rather than passing for the wrong reason.
@@ -65,6 +71,8 @@ enum Standalone {
     Literal(&'static str),
     /// A table delimiter row that must survive as table syntax.
     DelimiterRow,
+    /// A table row carrying `cell` that must survive as table syntax.
+    Row(&'static str),
 }
 
 impl Standalone {
@@ -77,6 +85,9 @@ impl Standalone {
             }
             Self::Literal(expected) => lines.iter().any(|line| line.as_str() == expected),
             Self::DelimiterRow => lines.iter().any(|line| is_delimiter_row(line)),
+            Self::Row(cell) => lines
+                .iter()
+                .any(|line| line.trim_start().starts_with('|') && line.contains(cell)),
         }
     }
 
@@ -86,6 +97,7 @@ impl Standalone {
             Self::NormalisedBreak => format!("{:?}", "_".repeat(THEMATIC_BREAK_LEN)),
             Self::Literal(expected) => format!("{expected:?}"),
             Self::DelimiterRow => "a table delimiter row".to_string(),
+            Self::Row(cell) => format!("a table row carrying {cell:?}"),
         }
     }
 }
@@ -218,6 +230,21 @@ const CASES: &[IdempotenceCase] = &[
         fixture: "T6_prose_between.dat",
         flags: HEADINGS_ONLY,
         expects: &[Standalone::DelimiterRow, Standalone::Literal("## Title")],
+    },
+    // The same adjacency one row further down. The table's last body row is its
+    // widest, so consuming that row as a heading leaves the rows above measured
+    // without it and they are padded a column narrower on the pass after: the
+    // row has to survive as table syntax, as `T1` to `T5` require of the row
+    // that carries the dashes.
+    IdempotenceCase {
+        id: "T7_body_row_then_break",
+        fixture: "T7_body_row_then_break.dat",
+        flags: HEADINGS_ONLY,
+        expects: &[
+            Standalone::DelimiterRow,
+            Standalone::Row("ccccc"),
+            Standalone::Literal("---"),
+        ],
     },
 ];
 

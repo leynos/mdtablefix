@@ -18,134 +18,96 @@
 //! file shares with it lives in `support/idempotence_harness.rs`. Elements here
 //! still draw on it, so a generated document may contain any of the three
 //! shapes.
+//!
+//! Issue #493 widened the document domain past the three-marker, perfectly
+//! balanced shapes the generators used to emit, because the longer openers,
+//! mismatched interior fences, multi-digit markers, sentinel-bearing cells, and
+//! hard breaks behind the recent defects were all outside it. The generators
+//! moved to `support/idempotence_generators.rs` to keep both files within the
+//! repository's 400-line cap; the properties and the reachability sweeps that
+//! hold them to account stay here.
 
-use proptest::{prelude::*, test_runner::Config as ProptestConfig};
+use std::collections::BTreeSet;
+
+use proptest::prelude::*;
+
+#[path = "support/idempotence_generators.rs"]
+mod idempotence_generators;
 
 #[path = "support/idempotence_harness.rs"]
 mod idempotence_harness;
+
+use idempotence_generators::{
+    MAX_FENCE_RUN,
+    MIN_FENCE_RUN,
+    WRAP_WIDTH,
+    document_strategy,
+    fenced_block_strategy,
+    hard_break_paragraph_strategy,
+    ordered_marker_strategy,
+    overlong_code_span_block_strategy,
+    overlong_code_span_paragraph_strategy,
+    table_cell_strategy,
+};
 use idempotence_harness::{
     BREAK_SPELLINGS,
     FLAG_POOL,
     SWEEP_DOCUMENTS,
-    adjacency_strategy,
+    TABLE_DELIMITER_ROWS,
     flags_for,
     format_twice,
-    prose_strategy,
+    proptest_config,
     sample,
 };
 
-/// Generates an inline code span shaped like a file path.
-fn code_span_strategy() -> impl Strategy<Value = String> {
-    proptest::collection::vec("[a-z]{2,6}", 1..=3)
-        .prop_map(|segments| format!("`{}`", segments.join("/")))
-}
-
-/// Generates the tail that follows a prefix marker.
+/// Number of values the domain-reachability sweeps draw.
 ///
-/// A parenthesised code span is the class B shape: the wrap's line breaking
-/// depends on that trailing token, so it decides whether the block reflows with
-/// the lines below it.
-fn tail_strategy() -> impl Strategy<Value = String> {
-    prop_oneof![
-        2 => Just(String::new()),
-        3 => prose_strategy().prop_map(|prose| format!(" {prose}")),
-        3 => prose_strategy().prop_map(|prose| format!(" ({prose})")),
-        3 => code_span_strategy().prop_map(|span| format!(" ({span})")),
-    ]
-}
+/// Those sweeps assert that a shape is *reachable*, so the count has to be high
+/// enough for the rare corners to appear rather than merely likely. The
+/// strategies are cheap to sample — no document is formatted and no process is
+/// spawned — and `sample` is seeded deterministically, so the count is chosen
+/// to make each assertion hold by construction rather than by luck.
+const DOMAIN_SWEEP: usize = 4096;
 
-/// Generates a prefixed line: a bullet, task, ordered, quote, or footnote line.
-fn prefixed_line_strategy() -> impl Strategy<Value = String> {
-    let marker = prop_oneof![
-        3 => Just("- "),
-        1 => Just("- [ ] "),
-        2 => Just("1. "),
-        2 => Just("> "),
-        1 => Just("[^1]: "),
-        1 => Just("  - "),
-    ];
-
-    (marker, prose_strategy(), tail_strategy())
-        .prop_map(|(marker, prose, tail)| format!("{marker}{prose}{tail}"))
-}
-
-/// Generates the line below a prefixed line: indented, lazy, code, or a quote.
-fn continuation_strategy() -> impl Strategy<Value = String> {
-    prop_oneof![
-        3 => prose_strategy().prop_map(|prose| format!("  {prose}")),
-        2 => prose_strategy(),
-        1 => prose_strategy().prop_map(|prose| format!("    {prose}")),
-        1 => prose_strategy().prop_map(|prose| format!("> {prose}")),
-        1 => Just(String::new()),
-    ]
-}
-
-/// Generates a prefixed block, sometimes with a continuation line below it.
-fn prefixed_block_strategy() -> impl Strategy<Value = String> {
-    (
-        prefixed_line_strategy(),
-        prop::option::of(continuation_strategy()),
-    )
-        .prop_map(|(line, continuation)| match continuation {
-            Some(continuation) => format!("{line}\n{continuation}"),
-            None => line,
-        })
-}
-
-/// Generates a prefixed block whose first line overflows the target width and
-/// ends with a parenthesised inline code span, plus a continuation line.
+/// Returns a fence block's marker family, opener run length, and whether the
+/// document ends inside the block.
 ///
-/// This is the class B shape: the first line spills past the wrap width, so the
-/// block is deferred and must reflow with the continuation below it. The prose
-/// is grown until the line exceeds the width, because a short line never
-/// reaches the deferral path.
-fn overlong_code_span_block_strategy() -> impl Strategy<Value = String> {
-    (
-        prose_strategy(),
-        code_span_strategy(),
-        continuation_strategy(),
-    )
-        .prop_map(|(prose, span, continuation)| {
-            let mut line = format!("- {prose}");
-            while line.len() + span.len() + 3 <= 80 {
-                line.push_str(" and more prose");
-            }
+/// The generator writes a closer as an exact copy of the opener, so a block
+/// whose last line is not its opener is one that was left unclosed.
+fn fence_opener(block: &str) -> (char, usize, bool) {
+    let mut lines = block.lines();
+    let opener = lines.next().expect("a generated fence block has an opener");
+    let marker = opener.chars().next().expect("a fence opener has a marker");
+    let opener_len = opener.chars().take_while(|ch| *ch == marker).count();
+    let is_unclosed = lines.next_back().is_none_or(|last| last != opener);
 
-            format!("{line} ({span})\n{continuation}")
-        })
+    (marker, opener_len, is_unclosed)
 }
 
-/// Generates a fenced code block with either fence spelling.
-fn fenced_block_strategy() -> impl Strategy<Value = String> {
-    let fence = prop_oneof![Just("```"), Just("~~~")];
+/// Returns whether `block` holds an interior line that is a run of the opener's
+/// own marker, strictly shorter than the opener and still fence-shaped.
+fn has_shorter_interior_run(block: &str) -> bool {
+    let (marker, opener_len, _) = fence_opener(block);
 
-    (fence, prose_strategy()).prop_map(|(fence, body)| format!("{fence}\n{body}\n{fence}"))
+    block.lines().skip(1).any(|line| {
+        let is_solid_run = line.chars().all(|ch| ch == marker);
+        let run_len = line.chars().count();
+
+        is_solid_run && (MIN_FENCE_RUN..opener_len).contains(&run_len)
+    })
 }
 
-/// Generates one element of a document; elements are joined by newlines.
-fn element_strategy() -> impl Strategy<Value = String> {
-    prop_oneof![
-        4 => prose_strategy(),
-        4 => prefixed_block_strategy(),
-        2 => proptest::sample::select(BREAK_SPELLINGS).prop_map(str::to_string),
-        2 => adjacency_strategy()
-            .prop_map(|(document, _, _)| document.trim_end_matches('\n').to_string()),
-        2 => fenced_block_strategy(),
-        1 => prose_strategy().prop_map(|title| format!("{title}\n-----")),
-        1 => Just("[1] and text... here".to_string()),
-        1 => Just("**bold**`code`".to_string()),
-        1 => Just(String::new()),
-    ]
-}
-
-/// Generates a whole document with a trailing newline.
-fn document_strategy() -> impl Strategy<Value = String> {
-    proptest::collection::vec(element_strategy(), 1..=10)
-        .prop_map(|elements| elements.join("\n") + "\n")
+/// Returns the length of the longest backtick-delimited run in `paragraph`.
+fn longest_code_span_len(paragraph: &str) -> usize {
+    paragraph
+        .split('`')
+        .map(str::len)
+        .max()
+        .expect("splitting on a delimiter always yields at least one piece")
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+    #![proptest_config(proptest_config())]
 
     /// Asserts the CLI formatter is a fixed point for generated documents.
     ///
@@ -299,4 +261,147 @@ fn generated_documents_are_line_terminated() {
             "generated document contains a carriage return: {document:?}",
         );
     }
+}
+
+/// Asserts the fence domain reaches long openers, shorter interior runs, and
+/// unclosed blocks.
+///
+/// Issue #480's counterexample needs all three at once: an opener longer than
+/// the run inside it, an interior run that a compressed opener would treat as a
+/// closer, and a block the document ends inside. Balanced three-marker fences
+/// alone cannot reach any of them, so the shape would stay untested however
+/// many cases the property ran.
+#[test]
+fn fence_domain_reaches_long_openers_shorter_interior_runs_and_unclosed_blocks() {
+    let blocks = sample(&fenced_block_strategy(), DOMAIN_SWEEP);
+    let openers: Vec<(char, usize, bool)> =
+        blocks.iter().map(|block| fence_opener(block)).collect();
+
+    let markers: BTreeSet<char> = openers.iter().map(|(marker, ..)| *marker).collect();
+    assert_eq!(
+        markers,
+        BTreeSet::from(['`', '~']),
+        "the fence generator did not reach both marker families",
+    );
+
+    let lengths: BTreeSet<usize> = openers.iter().map(|(_, len, _)| *len).collect();
+    assert_eq!(
+        lengths,
+        (MIN_FENCE_RUN..=MAX_FENCE_RUN).collect(),
+        "the fence generator did not reach every opener length",
+    );
+
+    assert!(
+        openers.iter().any(|(_, _, is_unclosed)| *is_unclosed),
+        "the fence generator never left a block unclosed, so the unmatched path is untested",
+    );
+    assert!(
+        blocks.iter().any(|block| has_shorter_interior_run(block)),
+        "no generated block put a fence-shaped run of the opener's own marker inside it",
+    );
+}
+
+/// Asserts the ordered-marker domain reaches multi-digit numbers, restarts, and
+/// nested depths.
+#[test]
+fn ordered_markers_reach_multi_digit_numbers_restarts_and_nesting() {
+    let markers = sample(&ordered_marker_strategy(), DOMAIN_SWEEP);
+    let numbers: Vec<u32> = markers
+        .iter()
+        .map(|marker| {
+            marker
+                .trim()
+                .trim_end_matches('.')
+                .parse()
+                .expect("a generated ordered marker ends with a decimal number and a dot")
+        })
+        .collect();
+
+    assert!(
+        numbers.iter().any(|number| *number >= 100),
+        "no ordered marker reached three digits",
+    );
+    assert!(numbers.contains(&1), "no ordered marker restarted at 1");
+    assert!(
+        markers.iter().any(|marker| marker.starts_with("    ")),
+        "no ordered marker reached a nested depth",
+    );
+}
+
+/// Asserts the table-cell domain reaches the escaped pipe and the two in-band
+/// sentinels the table parser and reflow helper substitute for it.
+///
+/// A cell carrying U+001F or U+001D literally collides with a placeholder,
+/// which is the corruption issue #482 reports. The in-crate generator filters
+/// both characters out, so this domain is the only one that can reach it.
+#[test]
+fn table_cells_reach_the_parser_sentinels() {
+    let cells = sample(&table_cell_strategy(), DOMAIN_SWEEP);
+
+    assert!(
+        cells.iter().any(|cell| cell.contains("\\|")),
+        "no generated cell carried an escaped pipe",
+    );
+    assert!(
+        cells.iter().any(|cell| cell.contains('\u{1f}')),
+        "no generated cell carried U+001F",
+    );
+    assert!(
+        cells.iter().any(|cell| cell.contains('\u{1d}')),
+        "no generated cell carried U+001D",
+    );
+}
+
+/// Asserts the paragraph domain reaches both hard-break markers and wraps
+/// around a code span longer than the target width.
+#[test]
+fn paragraphs_reach_hard_breaks_and_overlong_code_spans() {
+    let hard_breaks = sample(&hard_break_paragraph_strategy(), DOMAIN_SWEEP);
+    assert!(
+        hard_breaks
+            .iter()
+            .any(|paragraph| paragraph.lines().any(|line| line.ends_with("  "))),
+        "no generated paragraph carried a two-space hard break",
+    );
+    assert!(
+        hard_breaks
+            .iter()
+            .any(|paragraph| paragraph.lines().any(|line| line.ends_with('\\'))),
+        "no generated paragraph carried a backslash hard break",
+    );
+
+    let spans = sample(&overlong_code_span_paragraph_strategy(), DOMAIN_SWEEP);
+    let shortest = spans
+        .iter()
+        .map(|paragraph| longest_code_span_len(paragraph))
+        .min()
+        .expect("the sweep produced no paragraphs");
+    assert!(
+        shortest > WRAP_WIDTH,
+        "a generated code span was {shortest} characters, not longer than the {WRAP_WIDTH}-column \
+         wrap width",
+    );
+}
+
+/// Asserts generated documents carry the shapes the widened domain added.
+///
+/// The per-strategy sweeps above show each generator reaches its shapes; this
+/// one shows the element generator actually draws on them, so an arm dropped
+/// from `element_strategy` fails here rather than leaving the property vacuous.
+#[test]
+fn generated_documents_carry_the_widened_shapes() {
+    let documents = sample(&document_strategy(), SWEEP_DOCUMENTS);
+
+    assert!(
+        documents.iter().any(|document| TABLE_DELIMITER_ROWS
+            .iter()
+            .any(|row| document.contains(row))),
+        "no generated document contained a table",
+    );
+    assert!(
+        documents.iter().any(|document| document
+            .lines()
+            .any(|line| line.ends_with("  ") || line.ends_with('\\'))),
+        "no generated document contained a hard break",
+    );
 }
