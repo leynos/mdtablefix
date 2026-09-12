@@ -282,6 +282,45 @@ mod tests {
         assert_eq!(render_summary(changed, unchanged, errored), expected);
     }
 
+    /// An original whose last line has no terminator keeps the marker that
+    /// says so, and only on the deletions side.
+    ///
+    /// The formatter terminates every line it writes, so a marker beside an
+    /// added line would mean the renderer had marked the wrong side — or had
+    /// read the original's terminator as part of the line. Both halves are
+    /// asserted here because the second is invisible in the first: a run that
+    /// lost the marker and one that placed it wrongly print different bytes,
+    /// and this pins the bytes.
+    #[test]
+    fn an_unterminated_original_marks_the_deleted_line() {
+        let mut out = Vec::new();
+        write_unified_diff(
+            &mut out,
+            Utf8Path::new("ragged.md"),
+            "|A|B|\n|---|---|\n|1|2|",
+            "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n",
+            DiffOptions {
+                context_radius: 3,
+                patience_threshold: 1000,
+            },
+        )
+        .expect("writing to a Vec cannot fail");
+
+        assert_eq!(
+            String::from_utf8(out).expect("diff is UTF-8"),
+            "--- ragged.md\n\
+             +++ ragged.md\n\
+             @@ -1,3 +1,3 @@\n\
+             -|A|B|\n\
+             -|---|---|\n\
+             -|1|2|\n\
+             \\ No newline at end of file\n\
+             +| A   | B   |\n\
+             +| --- | --- |\n\
+             +| 1   | 2   |\n"
+        );
+    }
+
     /// Byte-equal texts render as nothing at all, headers included: `similar`
     /// writes the header alongside the first hunk, and equal texts have no
     /// hunk. A document that is already formatted therefore cannot render as

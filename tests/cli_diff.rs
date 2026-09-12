@@ -19,6 +19,9 @@ const RAGGED: &str = "|A|B|\n|---|---|\n|1|2|\n";
 /// A second ragged table, so two files' diffs are distinguishable.
 const ALT_RAGGED: &str = "|A|B|C|\n|---|---|---|\n|1|2|3|\n";
 
+/// [`RAGGED`] without its final terminator, which the formatter adds back.
+const UNTERMINATED: &str = "|A|B|\n|---|---|\n|1|2|";
+
 /// The same table already aligned, which no mode may change.
 ///
 /// These are the formatter's own bytes, not a hand-written approximation:
@@ -295,6 +298,37 @@ fn directory_snapshot_unchanged() {
         snapshot(dir.path()),
         before,
         "--diff must leave entry set, lengths, and modification times untouched"
+    );
+}
+
+/// A file whose last line carries no terminator is diffed with the marker that
+/// says so, on the deletions side.
+///
+/// The original is ragged as well as unterminated, so this is the diff a user
+/// would see rather than a single-line replacement: the marker sits between
+/// the deleted lines and the added ones, and the additions side carries none,
+/// because the formatter terminates every line it writes — see
+/// `write_unified_diff`'s contract.
+#[test]
+fn an_unterminated_original_is_marked() {
+    let dir = tempdir().expect("create temporary directory");
+    fs::write(dir.path().join("ragged.md"), UNTERMINATED).expect("write fixture");
+
+    let output = run_in(dir.path(), &["--diff", "ragged.md"]);
+
+    assert_eq!(status_of(&output), 1, "drift must exit 1");
+    assert_eq!(
+        stdout_of(&output),
+        "--- ragged.md\n\
+         +++ ragged.md\n\
+         @@ -1,3 +1,3 @@\n\
+         -|A|B|\n\
+         -|---|---|\n\
+         -|1|2|\n\
+         \\ No newline at end of file\n\
+         +| A   | B   |\n\
+         +| --- | --- |\n\
+         +| 1   | 2   |\n"
     );
 }
 
