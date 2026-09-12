@@ -15,30 +15,43 @@ use renumber::renumber_footnotes;
 
 use crate::textproc::{Token, push_original_token, tokenize_markdown};
 
-/// Convert bare numeric footnote references to Markdown footnote syntax.
-#[must_use]
-pub fn convert_footnotes(lines: &[String]) -> Vec<String> { convert_footnotes_inner(lines, None) }
-
-/// Converts footnotes while preserving valid Setext heading text.
+/// Rewrite bare numeric references as Markdown footnote references.
 ///
-/// `process_stream_inner` invokes this when it will subsequently convert
-/// Setext headings. Standalone callers retain the historical behaviour of
-/// [`convert_footnotes`], which has no heading-conversion context.
+/// This is the length-changing half of [`convert_footnotes`]: a reference such
+/// as `docs.1` grows into `docs.[^1]`, so any pass that measures text — the table
+/// reflow and the paragraph wrap — has to run after it rather than before. It is
+/// separate from the rest so the caller can place the two halves either side of
+/// those passes; see `process_stream_inner`.
 #[must_use]
-pub(crate) fn convert_footnotes_with_setext(
+pub fn convert_inline_footnotes(lines: &[String]) -> Vec<String> {
+    convert_inline_footnotes_inner(lines, None)
+}
+
+/// Rewrites bare numeric references while preserving Setext heading text.
+///
+/// `process_stream_inner` invokes this when it will subsequently convert Setext
+/// headings, so a line the heading pass will read as heading text keeps its bare
+/// references: `docs.1` above an underline is heading text, not a reference.
+/// Standalone callers keep the historical behaviour of
+/// [`convert_inline_footnotes`], which has no heading-conversion context.
+#[must_use]
+pub(crate) fn convert_inline_footnotes_with_setext(
     lines: &[String],
     headings_enabled: bool,
 ) -> Vec<String> {
     let setext_text_lines = headings_enabled.then(|| crate::headings::setext_text_lines(lines));
-    convert_footnotes_inner(lines, setext_text_lines.as_deref())
+    convert_inline_footnotes_inner(lines, setext_text_lines.as_deref())
 }
 
-/// Applies token-aware inline conversion, trailing-list promotion, and
-/// sequential renumbering while preserving protected heading text.
+/// Applies token-aware inline conversion while preserving protected heading
+/// text.
 ///
 /// `setext_text_lines` identifies lines whose numeric text will later become a
 /// Setext heading; those lines must pass through unchanged in this stage.
-fn convert_footnotes_inner(lines: &[String], setext_text_lines: Option<&[bool]>) -> Vec<String> {
+fn convert_inline_footnotes_inner(
+    lines: &[String],
+    setext_text_lines: Option<&[bool]>,
+) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
 
     for (index, line) in lines.iter().enumerate() {
@@ -58,9 +71,33 @@ fn convert_footnotes_inner(lines: &[String], setext_text_lines: Option<&[bool]>)
         }
     }
 
+    out
+}
+
+/// Fold a trailing ordered list into definitions and renumber the references.
+///
+/// This is the structural half of [`convert_footnotes`]. It reads the block
+/// structure around the trailing list — `convert_block` converts that list only
+/// when a second-level heading precedes it — so it runs after the heading pass
+/// has settled that structure, and it appends definition lines, so it runs after
+/// the passes that lay lines out.
+#[must_use]
+pub fn convert_footnote_definitions(lines: &[String]) -> Vec<String> {
+    let mut out = lines.to_vec();
     convert_block(&mut out);
     renumber_footnotes(&mut out);
     out
+}
+
+/// Convert bare numeric footnote references to Markdown footnote syntax.
+///
+/// Equivalent to running [`convert_inline_footnotes`] and then
+/// [`convert_footnote_definitions`]; the CLI splits the two around its layout
+/// passes, and this whole-document form stays for callers that need it in one
+/// step.
+#[must_use]
+pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
+    convert_footnote_definitions(&convert_inline_footnotes(lines))
 }
 
 #[cfg(test)]
