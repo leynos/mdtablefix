@@ -147,10 +147,10 @@ fn is_setext_text(text: &str, link_matcher: LinkReferenceMatcher) -> bool {
         );
         return false;
     }
-    if is_table_delimiter_row(text) {
+    if is_table_syntax(text) {
         trace!(
             payload_len = text.len(),
-            "refusing a Setext candidate that is a table delimiter row"
+            "refusing a Setext candidate that is table syntax"
         );
         return false;
     }
@@ -175,21 +175,41 @@ fn is_setext_text(text: &str, link_matcher: LinkReferenceMatcher) -> bool {
     }
 }
 
+/// Determine whether a stripped candidate is table syntax.
+///
+/// A table row is table syntax rather than paragraph text, so the `---` below
+/// it is a thematic break and not an underline for it. `| --- | --- |` above
+/// `---` was converted into the single line `## | --- | --- |`: the break was
+/// consumed, the table above lost its delimiter row, and the orphaned header row
+/// was then padded differently on the next pass, so the output never settled.
+/// A body row above a break fails the same way, one row further down, and is
+/// quieter about it: the row the Setext pass takes is often the table's widest,
+/// and once it is gone the table above is measured without it, so every
+/// remaining row is padded a column narrower than the pass before made it.
+/// `| a | b |` over `| --- | --- |` over `| ccccc | d |` over `---` reflowed to
+/// a five-column first row and a three-column one on the pass after.
+///
+/// Both spellings are ones the table pass itself recognizes. A line that starts
+/// with a pipe opens table mode in `ProcessBuffer::handle_table_line`, so a
+/// pipe-leading candidate is a row of the table that pass has just laid out. The
+/// delimiter row test is repeated for the rows that omit the leading pipe, such
+/// as `--- | ---`, which the table pass still reads as a delimiter row.
+///
+/// A paragraph that merely contains a pipe, such as `Text with > inside | here`,
+/// is not table syntax and still converts, and a bare `---` stays a thematic
+/// break, which [`classify_block`] already refuses.
+fn is_table_syntax(text: &str) -> bool { is_table_row(text) || is_table_delimiter_row(text) }
+
+/// Determine whether a stripped candidate is a row of a table.
+///
+/// The `|` is the marker the table pass enters table mode on, and it is
+/// required: a paragraph that merely contains a pipe still converts.
+fn is_table_row(text: &str) -> bool { text.starts_with('|') }
+
 /// Determine whether a stripped candidate is a table delimiter row.
 ///
-/// A delimiter row is table syntax rather than paragraph text, so the `---`
-/// below it is a thematic break and not an underline for it.
-/// `| --- | --- |` above `---` was converted into the single line
-/// `## | --- | --- |`: the break was consumed, the table above lost its
-/// delimiter row, and the orphaned header row was then padded differently on
-/// the next pass, so the output never settled.
-///
-/// The `|` is required. A bare `---` is a thematic break, which
-/// [`classify_block`] already refuses, and a break above another break must
-/// stay two breaks. Alignment markers and dashes alone are covered by the
-/// delimiter row's own pipe, so `|---|---|`, `| --- | --- |`, and `--- | ---`
-/// are all refused while a paragraph that merely contains a pipe, such as
-/// `Text with > inside | here`, still converts.
+/// Alignment markers and dashes alone are covered by the delimiter row's own
+/// pipe, so `|---|---|`, `| --- | --- |`, and `--- | ---` are all refused.
 ///
 /// The pattern is the one the table parser already uses to find the delimiter
 /// row, so the heading pass and the table pass agree on what one is.
