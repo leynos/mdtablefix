@@ -326,11 +326,11 @@ captured by `par_iter().enumerate()` in `src/main.rs`'s `run_files`, and
 `in_argument_order` restores the sequence explicitly. Because each index is
 unique, sorting on it is deterministic whatever order the workers produced.
 
-`tests/cli_check.rs`'s `reports_every_file_in_order` pins the sequence: its
-batch of eight files is in neither alphabetical nor size order, so a report
-list that came back sorted by file name, by file size, or by completion order
-is rejected rather than passing by luck. The plan records the reasoning as
-`AX-4`.
+`tests/cli_check/ordering.rs`'s `reports_every_file_in_order` pins the
+sequence: its batch of eight files is in neither alphabetical nor size order,
+so a report list that came back sorted by file name, by file size, or by
+completion order is rejected rather than passing by luck. The plan records
+the reasoning as `AX-4`.
 
 ## The binary's private driver
 
@@ -347,8 +347,12 @@ points and the report types (`mdtablefix::report` is public so a host can
 render a `FileReport` itself) and returns `std::io::Result` from its
 filesystem entry points rather than the binary's diagnostic error type.
 
-`src/driver_tests.rs` covers `exit_status`, `Inputs::resolve`,
-`in_argument_order`, and the read-only behaviour as unit tests. The same
+The unit tests live in three modules beside it: `src/driver_contract_tests.rs`
+covers the exit-status contract, `Inputs::resolve`, and `in_argument_order`;
+`src/driver_report_tests.rs` covers the assessment and both reporting renders;
+and `src/driver_in_place_tests.rs` covers the write-back. Their fixtures — the
+two tables, the identity and aligning formatters, and the capability-scoped
+temporary directory — are shared through `src/driver_test_support.rs`. The same
 contract is exercised end to end through the built binary by
 `tests/cli_check.rs`, `tests/cli_diff.rs`, and the BDD scenarios in
 `tests/features/`.
@@ -1085,7 +1089,7 @@ that echoes the file it reports echoes the same name in every snapshot. The
 is what keeps a reporting snapshot free to claim the file was not written.
 
 The base catalogue lives in
-[tests/cli_matrix/support.rs](../tests/cli_matrix/support.rs). It covers the
+[tests/cli_matrix/cases.rs](../tests/cli_matrix/cases.rs). It covers the
 seven non-wrap transform flags:
 
 - `--renumber`

@@ -10,21 +10,17 @@ use anyhow::{Context as _, Result};
 use assert_cmd::Command;
 use tempfile::tempdir;
 
+#[path = "cases.rs"]
+mod cases;
 #[path = "invariants.rs"]
 mod invariants;
 #[path = "reporting.rs"]
 mod reporting;
+#[path = "support_tests.rs"]
+mod support_tests;
 
+pub(crate) use cases::{ALL_FLAGS, BASE_MATRIX_CASES, STAGED_FILE};
 pub(crate) use reporting::{assert_reporting_invariants, check_counts, diff_counts};
-
-/// The name every matrix case stages its fixture under.
-///
-/// A reporting mode names the file it reports, and that name has to survive
-/// into a snapshot, so the command runs in the temporary directory and is given
-/// this relative name rather than a path the temporary directory invented. It
-/// carries the `.dat` extension every matrix fixture uses, which the harness's
-/// own self-test pins.
-pub(crate) const STAGED_FILE: &str = "input.dat";
 
 /// Represents a non-wrap CLI transform flag.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -168,113 +164,6 @@ pub(crate) struct RunResult {
     /// Bytes read from the temporary input file after execution.
     pub(crate) file_content: Vec<u8>,
 }
-
-/// Ordered slice of every non-wrap transform flag.
-pub(crate) const ALL_FLAGS: &[TransformFlag] = &[
-    TransformFlag::Renumber,
-    TransformFlag::Breaks,
-    TransformFlag::Ellipsis,
-    TransformFlag::Fences,
-    TransformFlag::Footnotes,
-    TransformFlag::CodeEmphasis,
-    TransformFlag::Headings,
-];
-
-/// The reporting modes a curated base row runs, in the order it runs them.
-const REPORTING_MODES: &[ExecutionMode] = &[ExecutionMode::Check, ExecutionMode::Diff];
-
-/// Curated pairwise base matrix rows.
-///
-/// Three rows join the reporting subset: `row_000` is the plain table case
-/// every user meets first, `row_010` is the one row whose unwrapped variant is
-/// already a fixed point (so the subset covers the no-drift branch as well as
-/// the drifting one), and `row_111` carries the frontmatter document boundary
-/// through both reporting modes.
-pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
-    BaseCase {
-        id: "row_000",
-        fixture: "table-prose.dat",
-        flags: &[],
-        reporting: REPORTING_MODES,
-    },
-    BaseCase {
-        id: "row_001",
-        fixture: "fences-ellipsis.dat",
-        flags: &[
-            TransformFlag::Ellipsis,
-            TransformFlag::Footnotes,
-            TransformFlag::CodeEmphasis,
-            TransformFlag::Headings,
-        ],
-        reporting: &[],
-    },
-    BaseCase {
-        id: "row_010",
-        fixture: "footnotes.dat",
-        flags: &[
-            TransformFlag::Breaks,
-            TransformFlag::Fences,
-            TransformFlag::CodeEmphasis,
-            TransformFlag::Headings,
-        ],
-        reporting: REPORTING_MODES,
-    },
-    BaseCase {
-        id: "row_011",
-        fixture: "frontmatter-breaks.dat",
-        flags: &[
-            TransformFlag::Breaks,
-            TransformFlag::Ellipsis,
-            TransformFlag::Fences,
-            TransformFlag::Footnotes,
-        ],
-        reporting: &[],
-    },
-    BaseCase {
-        id: "row_100",
-        fixture: "table-prose.dat",
-        flags: &[
-            TransformFlag::Renumber,
-            TransformFlag::Fences,
-            TransformFlag::Footnotes,
-            TransformFlag::Headings,
-        ],
-        reporting: &[],
-    },
-    BaseCase {
-        id: "row_101",
-        fixture: "fences-ellipsis.dat",
-        flags: &[
-            TransformFlag::Renumber,
-            TransformFlag::Ellipsis,
-            TransformFlag::Fences,
-            TransformFlag::CodeEmphasis,
-        ],
-        reporting: &[],
-    },
-    BaseCase {
-        id: "row_110",
-        fixture: "footnotes.dat",
-        flags: &[
-            TransformFlag::Renumber,
-            TransformFlag::Breaks,
-            TransformFlag::Footnotes,
-            TransformFlag::CodeEmphasis,
-        ],
-        reporting: &[],
-    },
-    BaseCase {
-        id: "row_111",
-        fixture: "frontmatter-breaks.dat",
-        flags: &[
-            TransformFlag::Renumber,
-            TransformFlag::Breaks,
-            TransformFlag::Ellipsis,
-            TransformFlag::Headings,
-        ],
-        reporting: REPORTING_MODES,
-    },
-];
 
 /// Renders a process status as the portable value every platform agrees on.
 ///
@@ -489,69 +378,3 @@ pub(crate) fn non_wrap_signature(fixture: &str, flags: &[TransformFlag]) -> Stri
 
 /// Returns whether a base row enables the given transform flag.
 pub(crate) fn has_flag(case: &BaseCase, flag: TransformFlag) -> bool { case.flags.contains(&flag) }
-
-#[cfg(test)]
-#[rustfmt::skip]
-mod tests {
-    //! Unit tests for CLI-matrix support helpers.
-
-    use super::{BaseCase, TransformFlag, has_flag, is_case_id, non_wrap_signature, status_text};
-    use assert_cmd::Command;
-    use rstest::rstest;
-    use std::process::ExitStatus;
-
-    #[cfg(unix)]
-    use std::os::unix::process::ExitStatusExt as _;
-
-    #[test]
-    fn status_text_renders_a_successful_exit_as_code_zero() {
-        // `ExitStatus::default()` is documented as "successful completion", and
-        // is the only success status std will hand out without spawning.
-        assert_eq!(status_text(ExitStatus::default()), "code: 0");
-    }
-
-    #[test]
-    fn status_text_renders_a_failing_exit_as_its_code() {
-        // An unknown argument is rejected before any work happens, which is the
-        // cheapest portable source of a real non-zero status.
-        let status = Command::cargo_bin("mdtablefix")
-            .expect("create mdtablefix test command")
-            .arg("--not-a-real-flag")
-            .output()
-            .expect("run mdtablefix with an unknown flag")
-            .status;
-        let code = status.code().expect("a rejected invocation exits normally");
-        assert_ne!(code, 0, "an unknown flag should be rejected");
-        assert_eq!(status_text(status), format!("code: {code}"));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn status_text_names_a_signal_terminated_status() {
-        // Raw wait status 15: killed by SIGTERM, with no core dump. The child
-        // never exited, so there is no code to report.
-        let status = ExitStatus::from_raw(15);
-        assert_eq!(status.code(), None);
-        assert_eq!(status_text(status), "no exit code");
-    }
-
-    #[rstest]
-    #[case("row_001", true)] #[case("row-001", true)] #[case("abc123", true)]
-    #[case("", false)] #[case("Row_001", false)] #[case("row 001", false)]
-    fn is_case_id_returns_expected_value(#[case] id: &str, #[case] expected: bool) {
-        assert_eq!(is_case_id(id), expected);
-    }
-
-    #[test] fn non_wrap_signature_ignores_wrap_variant() {
-        let flags = [TransformFlag::Renumber, TransformFlag::Fences]; let (unwrapped, wrapped) = (false, true);
-        assert_ne!(unwrapped, wrapped); assert_eq!(non_wrap_signature("fixture.dat", &flags), non_wrap_signature("fixture.dat", &flags)); }
-    #[test] fn non_wrap_signature_distinguishes_flag_lists() {
-        assert_ne!(non_wrap_signature("fixture.dat", &[TransformFlag::Renumber]), non_wrap_signature("fixture.dat", &[TransformFlag::Fences])); }
-
-    #[rstest]
-    #[case(TransformFlag::Renumber, true)] #[case(TransformFlag::Fences, false)]
-    fn has_flag_returns_expected_value(#[case] flag: TransformFlag, #[case] expected: bool) {
-        let case = BaseCase { id: "row_001", fixture: "fixture.dat", flags: &[TransformFlag::Renumber], reporting: &[] };
-        assert_eq!(has_flag(&case, flag), expected);
-    }
-}

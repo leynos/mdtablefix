@@ -367,5 +367,14 @@ pub fn report_line_endings(counts: LineEndingCounts, operation: &str, path: Opti
 }
 
 #[cfg(test)]
-#[path = "driver_tests.rs"]
-mod tests;
+#[path = "driver_contract_tests.rs"]
+mod contract_tests;
+#[cfg(test)]
+#[path = "driver_in_place_tests.rs"]
+mod in_place_tests;
+#[cfg(test)]
+#[path = "driver_report_tests.rs"]
+mod report_tests;
+#[cfg(test)]
+#[path = "driver_test_support.rs"]
+mod test_support;

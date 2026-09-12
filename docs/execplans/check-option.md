@@ -1129,6 +1129,12 @@ Hard invariants. Violating one requires escalation, not a workaround.
   live in their own `tests/cli_matrix/reporting.rs` because they are a distinct
   concern rather than because of the cap.
   Date/Author: 2026-09-11.
+  **Superseded 2026-09-12** by the review round recorded in `Revision 22`. The
+  rule is enforced on every file, test or not: the repository's other over-limit
+  test files are pre-existing debt this plan does not add to, and the review
+  asked for the split. The catalogue now lives in `tests/cli_matrix/cases.rs`
+  and the harness's unit tests in `tests/cli_matrix/support_tests.rs`, leaving
+  `support.rs` at 380 lines.
 
 - Decision: `EP-M6` is halted before its first command, and the mutation run is
   deferred until the `test` gate is green again.
@@ -1300,8 +1306,9 @@ What was delivered, against the obligations:
   `tests/document_properties.rs`, including the fenced-code homogenisation case
   and both recorded negative controls.
 - `INV-ORDER`, `INV-EXIT`, `INV-SUMMARY`, `INV-DETERMINISTIC`,
-  `INV-FRONTMATTER`: discharged in `src/driver_tests.rs`, `tests/cli_check.rs`,
-  and the BDD scenarios. `INV-DETERMINISTIC`'s negative control exposed a
+  `INV-FRONTMATTER`: discharged in the driver's unit test modules,
+  `tests/cli_check.rs`, and the BDD scenarios. `INV-DETERMINISTIC`'s negative
+  control exposed a
   blind spot in the method itself — the hazard sits on a transition band that
   a single fixed input cannot straddle — and the finding is recorded rather
   than papered over.
@@ -1385,7 +1392,7 @@ binary, so shared helpers are re-declared per binary with
 `tests/cli_matrix.rs` with `tests/cli_matrix/support.rs` implements a pairwise
 option matrix expanding curated base rows into wrap and no-wrap variants and
 then into standard-output and `--in-place` runs, snapshotting each with
-`insta`; `RunResult::envelope` at `tests/cli_matrix/support.rs:218` builds a
+`insta`; `RunResult::envelope` at `tests/cli_matrix/support.rs:191` builds a
 labelled block of case identifier, mode, arguments, exit status, standard
 output, standard error, and resulting file content. Snapshots live flat under
 `tests/snapshots/`. `tests/cli.rs` is at exactly the 400-line cap.
@@ -4070,9 +4077,9 @@ request that arrived, and in this plan's own terms:
 | Request | This plan's change | Evidence |
 | --- | --- | --- |
 | mode group requires an `inputs` group | `inputs` holds `files`; `mode.requires("inputs")` | `tests/cli_check.rs::mode_flags_require_an_input_source` |
-| an explicit input type, not an empty-list test | `driver::Inputs` with `Stdin` / `Files` | `src/driver_tests.rs::resolve_*`, `AX-6` |
+| an explicit input type, not an empty-list test | `driver::Inputs` with `Stdin` / `Files` | `src/driver_contract_tests.rs::resolve_*`, `AX-6` |
 | resolution errors reach `exit_status` | `run` prints and returns `exit_status(mode, false, true)` | `tests/cli_check.rs::a_non_utf8_path_argument_exits_error` |
-| `--in-place` is a no-op for clean files | the `Mode::InPlace` payload arm is guarded by `is_changed` | inode and modification-time assertions in `src/driver_tests.rs` and `tests/in_place_atomic.rs` |
+| `--in-place` is a no-op for clean files | the `Mode::InPlace` payload arm is guarded by `is_changed` | inode and modification-time assertions in `src/driver_in_place_tests.rs` and `tests/in_place_atomic.rs` |
 
 Measurements taken while implementing, all on the built binary:
 
@@ -5231,3 +5238,61 @@ motivated Revision 20, `--test cli_check` and `--test cli_diff` exiting 101 at
 the spawn, are gone, which is the reading the fixture-sizing fix needed and
 could not get locally. Nothing was changed to obtain it; this entry records the
 measurement, not a further edit.
+
+### Revision 22, 2026-09-12
+
+CodeRabbit's third review of pull request #464 returned twelve inline findings
+against `e8c5b7a`. Nine were valid and are fixed; three are rebutted on their
+threads with evidence. Seven of the nine were one-line corrections (an ADR
+hyphen, a shell qualification in the user's guide, a `-ize` spelling, two
+`rstest` conversions, a fixture's wrapping, a `driver.rs` intra-doc link), and
+are recorded by the commits rather than repeated here. The remaining two were
+structural and between them decided the shape of this revision.
+
+Both structural findings asked the same thing from different directions: every
+file stays inside the 400-line limit, and measured data lives in a module of
+its own. That is the boundary each split follows, so no module exists only to
+move lines — a split with no such justification would be the "module boundary
+that exists only to move lines" the superseded decision below rejected, and
+that rejection still stands as reasoning.
+
+| Before | After | Lines |
+| --- | --- | --- |
+| `src/driver_tests.rs` 485 | `src/driver_contract_tests.rs`, `src/driver_report_tests.rs`, `src/driver_in_place_tests.rs` | 107, 214, 115 |
+| the same file's fixtures | `src/driver_test_support.rs` | 83 |
+| `tests/cli_check.rs` 542 | root harness plus `tests/cli_check/{arguments,closed_pipe,exit_status,no_write,ordering}.rs` | 104 + 50, 96, 163, 62, 123 |
+| `tests/in_place_atomic.rs` 408 | root plus `tests/in_place_atomic/failure.rs` | 270 + 155 |
+| `tests/cli_matrix/support.rs` 557 | harness plus `cases.rs` (catalogue) and `support_tests.rs` (unit tests) | 380 + 125 + 84 |
+
+Three consequences are worth recording, because none is visible from the diff
+alone.
+
+The derived-file/type boundary is a privacy boundary, not a file boundary.
+`src/driver_test_support.rs` is the only module the three driver test modules
+share, so every item in it is `pub(super)`: the modules that use them are
+`super`'s descendants, and a wider visibility would publish test fixtures to
+the binary. Its `#[cfg(unix)]` on `use std::fs` is likewise load-bearing rather
+than stylistic — an ungated import is unused on Windows under `-D warnings`,
+because every `fs::` use in that module sits inside a `#[cfg(unix)]` test.
+
+The extraction changed formatting the reviewer did not ask about. The unit
+tests formerly sat behind `#[rustfmt::skip]` on an inline `mod tests`, and that
+attribute does not survive the move to an out-of-line module: rustfmt rewrote
+`tests/cli_matrix/support_tests.rs` into its own layout. The result is
+cosmetic, the assertions are untouched, and the attribute is gone rather than
+left in place doing nothing.
+
+Verification was by conservation rather than by eye. For each split, the check
+is the list of non-blank lines present in the original and absent from every
+new file; every such line has to be one of the deliberately changed ones (a
+module header, a renamed constant). Line counts are the weak check, since a
+slice off by one line still "looks" split.
+
+The round also cost a detour worth recording. Rebuilding
+`tests/cli_matrix/support.rs` after a compile probe, a `git checkout --` on the
+file — intended to drop the probe — restored the *tracked* version and
+discarded the split with it. The recovery was mechanical because the other two
+files of the split (`cases.rs`, `support_tests.rs`) were untracked and survived,
+and because the original is in Git; but the probe was unnecessary, and the
+compile check that preceded it had already read the file it was meant to prove
+(it failed on the probe, which is the proof).
