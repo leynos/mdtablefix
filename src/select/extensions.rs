@@ -81,14 +81,18 @@ impl std::fmt::Display for ExtensionFilter {
 /// Parses one extension, for use as a clap `value_parser`.
 ///
 /// Strips one optional leading dot, trims surrounding whitespace, and folds
-/// ASCII case. A trailing dot is kept: `mdc.` is a suffix a repository may
-/// genuinely use, and rejecting it would be this parser inventing a rule Git
-/// does not have.
+/// ASCII case. No dot may follow that one, because
+/// [`ExtensionFilter::matches`] compares this value with
+/// [`Utf8Path::extension`], which is the segment after the final dot: `mdc.`
+/// would match no path at all, and `tar.gz` would be compared against `gz`.
+/// A value that parsed and then selected nothing would be the worst of both,
+/// so it is refused where it is written rather than at the end of an empty run.
 ///
 /// # Errors
 ///
 /// Returns [`ExtensionSpecError`] for an empty or dot-only value, or one
-/// containing a path separator or a NUL byte.
+/// containing a dot after the optional leading one, a path separator, or a NUL
+/// byte.
 pub fn parse_extension(value: &str) -> Result<String, ExtensionSpecError> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -113,15 +117,22 @@ pub fn parse_extension(value: &str) -> Result<String, ExtensionSpecError> {
 
 /// The first reason `value` cannot be an extension, if any.
 ///
+/// `value` has already had its one optional leading dot stripped, so a dot
+/// found here is one [`ExtensionFilter::matches`] could never see.
+///
 /// A path separator is reported ahead of a NUL byte for `md/\0`, where either
-/// would do: the separator is the one a user is more likely to have meant.
+/// would do: the separator is the one a user is more likely to have meant. A
+/// dot is reported last because the other two make a value unusable rather than
+/// merely unmatchable, and because `mdc.` — a name a repository could plausibly
+/// spell — is the case this rule is about.
 fn invalid_character(value: &str) -> Option<InvalidCharacterKind> {
     let separator = value
         .find(['/', '\\'])
         .map(|_| InvalidCharacterKind::PathSeparator);
     let nul = value.find('\0').map(|_| InvalidCharacterKind::Nul);
+    let dot = value.find('.').map(|_| InvalidCharacterKind::Dot);
 
-    separator.or(nul)
+    separator.or(nul).or(dot)
 }
 
 /// The reason an extension value was rejected.
@@ -149,6 +160,10 @@ pub enum InvalidCharacterKind {
     /// A NUL byte, which cannot survive an `OsStr` round trip on all platforms.
     #[error("a NUL byte")]
     Nul,
+    /// A `.` after the optional leading one, which is never part of the
+    /// extension [`ExtensionFilter::matches`] compares against.
+    #[error("a dot")]
+    Dot,
 }
 
 #[cfg(test)]

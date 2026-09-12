@@ -142,6 +142,9 @@ selection, and one mode that reports it:
   commit, which is to say the untracked ones it does not ignore.
 - `--md-exts EXT[,EXT...]` replaces the default extension set, `md`, `mdc`, and
   `markdown`. A leading dot is optional and surrounding whitespace is ignored.
+  No further dot may appear: matching compares the value with the segment that
+  follows a path's final dot, so `mdc.` and `tar.gz` are refused as the command
+  line is parsed, where accepting them would select nothing.
 - `--allow-conflicted` rewrites files that the conflict guard would otherwise
   refuse.
 - `--list-files` prints the resolved selection, one path per line, and exits
@@ -285,15 +288,17 @@ hatch for the case where the verdict is wrong.
 
 Git's standard error is relayed, because a user reading a failure wants Git's
 own reason beside this tool's, but it is scrubbed on the way through. Every
-control character becomes a space, so an escape sequence chosen by a repository
-name cannot drive the terminal that reads the diagnostic; a multi-line message
-is folded to one line, so a repository cannot forge additional lines of this
-tool's standard error; bytes that are not UTF-8 become the replacement
-character, because the text is a diagnostic rather than a path and nothing acts
-on it; and the relayed run is capped at 1024 characters, with a visible
-ellipsis when it is cut, so a flood cannot bury the message it is supposed to
-support. The tool's own wording is the part a test asserts on, and Git's own
-text is relayed beside it rather than folded into it.
+character that can lay out a line becomes a space — the control characters, the
+line and paragraph separators, and the bidirectional formatting controls — so
+an escape sequence or a direction override written into a repository name
+cannot drive the terminal that reads the diagnostic; a multi-line message is
+folded to one line, so a repository cannot forge additional lines of this tool's
+standard error; bytes that are not UTF-8 become the replacement character,
+because the text is a diagnostic rather than a path and nothing acts on it; and
+the relayed run is capped at 1024 characters, with a visible ellipsis when it is
+cut, so a flood cannot bury the message it is supposed to support. The tool's
+own wording is the part a test asserts on, and Git's own text is relayed beside
+it rather than folded into it.
 
 A failure anywhere in the selection prints one line to standard error and exits
 `2`, with Git's diagnostic appended where Git supplied one. Measured outside
