@@ -316,7 +316,7 @@ fn parse_cells_leaves_non_continuation_rows_unmarked() {
 }
 
 #[test]
-fn clean_rows_restores_markers_and_discards_empty_rows() {
+fn clean_rows_restores_leading_empty_cells_and_discards_empty_rows() {
     let rows = vec![
         vec![
             Cell {

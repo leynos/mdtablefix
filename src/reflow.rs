@@ -19,9 +19,10 @@ pub(crate) struct Cell {
 
 /// Parses reflow input into rows while preserving continuation-cell boundaries.
 ///
-/// Leading empty cells are protected before each physical line is parsed so
-/// continuation rows keep their original column positions. Complete legacy
-/// rows concatenated on one line are recovered using the inferred table width.
+/// Leading empty cells are held in [`Cell::leading_empty`] while physical lines
+/// are parsed, so continuation rows keep their original column positions.
+/// Complete legacy rows concatenated on one line are recovered using the
+/// inferred table width.
 ///
 /// # Arguments
 ///
@@ -29,7 +30,7 @@ pub(crate) struct Cell {
 ///
 /// # Returns
 ///
-/// A tuple containing the parsed rows and a flag indicating whether the
+/// A tuple containing parsed [`Cell`] rows and a flag indicating whether the
 /// physical source line contained multiple complete logical rows.
 ///
 /// # Examples
@@ -92,7 +93,10 @@ fn retain_parsed_row(row_index: usize, row: &[Cell]) -> bool {
 /// # Examples
 ///
 /// ```rust,ignore
-/// let rows = vec![/* parsed `Cell` rows */];
+/// let rows = vec![vec![Cell {
+///     payload: String::new(),
+///     leading_empty: true,
+/// }]];
 /// let cleaned = mdtablefix::reflow::clean_rows(rows);
 ///
 /// assert_eq!(cleaned, vec![vec![String::new(), "value".to_string()]]);
