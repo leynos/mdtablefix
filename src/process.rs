@@ -2,7 +2,7 @@
 
 mod buffer;
 
-use buffer::ProcessBuffer;
+use buffer::{ProcessBuffer, TableSubstitutions};
 
 use crate::{
     ellipsis::replace_ellipsis,
@@ -102,7 +102,14 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     let pre = convert_html_tables(&lines);
 
-    let mut state = ProcessBuffer::new(opts.ellipsis);
+    // Code-emphasis and ellipsis both shorten table cells, so they must run
+    // before reflow measures column widths. Non-table text remains handled by
+    // the pipeline passes below.
+    let table_substitutions = TableSubstitutions {
+        ellipsis: opts.ellipsis,
+        code_emphasis: opts.code_emphasis,
+    };
+    let mut state = ProcessBuffer::new(&table_substitutions);
     // Track fences so subsequent logic respects shared semantics.
     let mut fence_tracker = FenceTracker::default();
 

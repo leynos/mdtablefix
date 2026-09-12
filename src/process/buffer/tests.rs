@@ -5,14 +5,14 @@ use rstest::rstest;
 
 use super::*;
 
-/// Builds a fresh, empty buffer with table reflow enabled and ellipsis
-/// replacement disabled (the default for these tests).
+/// Builds a fresh, empty buffer with table substitutions disabled.
 fn new_buffer() -> ProcessBuffer {
     ProcessBuffer {
         out: Vec::new(),
         buf: Vec::new(),
         in_table: false,
         ellipsis: false,
+        code_emphasis: false,
     }
 }
 

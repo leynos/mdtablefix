@@ -13,6 +13,12 @@ use crate::{
     wrap::{LinkReferenceMatcher, classify_block, leading_indent},
 };
 
+/// Substitutions that must precede table reflow so it measures final cell text.
+pub(super) struct TableSubstitutions {
+    pub(super) ellipsis: bool,
+    pub(super) code_emphasis: bool,
+}
+
 fn is_indented_content_line(line: &str) -> bool {
     let (indent_width, first_content_byte) = leading_indent(line);
     indent_width >= 4
@@ -40,17 +46,19 @@ pub(super) struct ProcessBuffer {
     buf: Vec<String>,
     in_table: bool,
     ellipsis: bool,
+    code_emphasis: bool,
 }
 
 impl ProcessBuffer {
-    /// Creates an empty buffer. `ellipsis` selects whether buffered table
-    /// cells have `...` replaced with `…` during [`flush`](Self::flush).
-    pub(super) fn new(ellipsis: bool) -> Self {
+    /// Creates an empty buffer with the substitutions needed before table
+    /// reflow during [`flush`](Self::flush).
+    pub(super) fn new(substitutions: &TableSubstitutions) -> Self {
         Self {
             out: Vec::new(),
             buf: Vec::new(),
             in_table: false,
-            ellipsis,
+            ellipsis: substitutions.ellipsis,
+            code_emphasis: substitutions.code_emphasis,
         }
     }
 
@@ -76,10 +84,15 @@ impl ProcessBuffer {
         }
         let buffered = std::mem::take(&mut self.buf);
         if self.in_table {
-            let table_lines = if self.ellipsis {
-                replace_ellipsis(&buffered)
+            let table_lines = if self.code_emphasis {
+                crate::code_emphasis::fix_code_emphasis(&buffered)
             } else {
                 buffered
+            };
+            let table_lines = if self.ellipsis {
+                replace_ellipsis(&table_lines)
+            } else {
+                table_lines
             };
             self.out.extend(reflow_table(&table_lines));
         } else {
