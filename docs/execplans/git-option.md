@@ -2822,6 +2822,16 @@ plateau.
       one subprocess site. `comenq put` then queued the next review (id
       `456aa531`) with an ETA of about an hour and a quarter.
 
+- [x] (2026-09-13) **Every pushed commit is green on CI**, checked on each one
+      independently of the review queue. `61c1221` — the policy-test split —
+      passed all six jobs of run 34722346822, `atomic write contract (windows)`
+      among them, which is the job that failed on `49a4f28` and the one the
+      ancestor walk of `19f5291` was written for. The two documentation commits
+      that followed, `3ddce8d` and `552f609`, passed all six jobs of runs
+      34722445223 and 34722532925 respectively. The branch tip is therefore
+      green on CI at the moment the next review was queued, so a finding in that
+      round is a finding about the code rather than a report of a red build.
+
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
 `cargo test --doc` to the `test` target; and implementing
