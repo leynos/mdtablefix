@@ -118,6 +118,21 @@ fn status_label(status: ExitStatus) -> &'static str {
     }
 }
 
+/// The `outcome` a single file's analysis was recorded under.
+///
+/// A fixed name per variant, for the same reason as [`mode_label`]: a label
+/// value is part of a metric's identity for every recorder that aggregates it,
+/// so a variant renamed later must not silently start a second series. The
+/// analysis's own error is not a variant here — its category labels the error
+/// counter instead — so the three arms stay distinct without naming files.
+fn file_outcome_label(outcome: &FileOutcome<'_>) -> &'static str {
+    match outcome {
+        FileOutcome::Changed => "changed",
+        FileOutcome::Unchanged => "unchanged",
+        FileOutcome::Failed(_) => "error",
+    }
+}
+
 /// Runs one file's analysis, timing it and recording what became of it.
 ///
 /// The closure is the work itself, so the duration measured is the analysis's
@@ -145,20 +160,19 @@ pub fn record_analysis(
 /// fails is visible in the distribution rather than missing from it, as the
 /// library's replacement metrics are.
 pub fn record_file(mode: Mode, outcome: &FileOutcome<'_>, elapsed: Duration) {
-    let outcome_label = match outcome {
-        FileOutcome::Changed => "changed",
-        FileOutcome::Unchanged => "unchanged",
-        FileOutcome::Failed(_) => "error",
-    };
+    // Both labels are bound once, so the two instruments below cannot be
+    // written with mismatched label sets.
+    let mode_label = mode_label(mode);
+    let outcome_label = file_outcome_label(outcome);
     counter!(
         "mdtablefix_file_total",
-        "mode" => mode_label(mode),
+        "mode" => mode_label,
         "outcome" => outcome_label
     )
     .increment(1);
     histogram!(
         "mdtablefix_file_duration_seconds",
-        "mode" => mode_label(mode),
+        "mode" => mode_label,
         "outcome" => outcome_label
     )
     .record(elapsed.as_secs_f64());
@@ -172,8 +186,10 @@ pub fn record_file(mode: Mode, outcome: &FileOutcome<'_>, elapsed: Duration) {
 ///
 /// Derived from the `io::ErrorKind` in the error's chain rather than from its
 /// message: a kind is a closed set, while a message names the file and the
-/// operating system's own wording. `declined` is this tool's own refusal — a
-/// path that is not UTF-8, or a symlink it will not replace — and `other` is
+/// operating system's own wording. `declined` is this tool's own refusal: the
+/// only `InvalidInput` a single file's analysis can produce is the rewrite
+/// boundary refusing to replace a symlink, because a path that is not UTF-8 is
+/// rejected at the command line before any file is analysed. `other` is
 /// everything else, including an error with no `io::Error` in its chain, so a
 /// new category cannot appear without the name changing.
 fn category(error: &Error) -> &'static str {

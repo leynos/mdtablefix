@@ -210,7 +210,7 @@ impl Inputs {
 /// Takes [`ReadOnlyDir`], so this function cannot write, and it emits nothing:
 /// the line-ending counts it measures travel on the returned [`Assessment`],
 /// and the boundary that acts on them reports them. `storage_key` is the bare
-/// file name within the capability, which is the name that report uses.
+/// file name within the capability, which is the name this function reads by.
 ///
 /// # Errors
 ///
@@ -256,9 +256,10 @@ pub fn write_back(
 /// This, not [`assess`], is where the line-ending decision is reported: the
 /// mode dispatched here is what acts on the assessment, whether by printing it,
 /// reporting it, or writing it back, so a subscriber hears only about files
-/// whose run reached the point of acting. The report names `storage_key`, the
-/// bare name within the capability, because the path the user typed is attached
-/// by the caller, which is the only place that knows it.
+/// whose run reached the point of acting. The report names `display_path`, the
+/// path as the user wrote it, rather than `storage_key`, the bare name the
+/// capability reads by: two files called `a.md` in different directories would
+/// otherwise share a `path` field, and a subscriber could not tell them apart.
 ///
 /// The assessment is dropped before this returns, so retained memory is
 /// proportional to the rendered payload rather than to twice the whole input.
@@ -282,7 +283,7 @@ pub fn analyse(
             .with_context(|| format!("duplicating the capability on {storage_key}"))?,
     );
     let assessment = assess(&readable, storage_key, format)?;
-    report_line_endings(assessment.counts, "file", Some(storage_key.as_str()));
+    report_line_endings(assessment.counts, "file", Some(display_path.as_str()));
     let is_changed = assessment.is_changed();
     // The counting diff is not asked to work on byte-equal texts: the byte
     // comparison above is what decides, so a clean tree costs no diff work.

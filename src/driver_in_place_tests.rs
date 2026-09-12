@@ -12,10 +12,15 @@ use std::os::unix::fs::MetadataExt;
 
 use camino::Utf8Path;
 
+// `identity` is used by an inode-observing test, which is Unix-only, so the
+// import has to be Unix-only as well: on Windows it would be an unused import,
+// and this repository's test targets deny warnings.
+#[cfg(unix)]
+use super::test_support::identity;
 use super::{
     Mode,
     analyse,
-    test_support::{ALIGNED, RAGGED, align, fixture, identity, read},
+    test_support::{ALIGNED, RAGGED, align, fixture, read},
 };
 
 /// `--in-place` is the one mode that writes, and its payload is empty: the

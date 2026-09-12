@@ -136,8 +136,8 @@ because a timeout would make the output depend on how fast the machine was.
 ## Consequences
 
 - `mdtablefix --check FILE...` is a gate: exit `0` when nothing would change,
-  `1` when something would, `2` when a file could not be read or rewritten. An
-  error outranks drift, so a partly unreadable run cannot report "clean".
+  `1` when something would, `2` when a file could not be read. An error outranks
+  drift, so a partly unreadable run cannot report "clean".
 - `mdtablefix --diff FILE...` shows what would change without changing it, and
   exits like `--check`.
 - A file that cannot be read is reported on standard error, counted, and the run

@@ -5,8 +5,6 @@
 //! without an ambient filesystem write apiece. Every item is `pub(super)`
 //! because the only modules that use them are `super`'s descendants.
 
-use std::fs;
-
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use mdtablefix::io::SourceDocument;
@@ -50,17 +48,26 @@ pub(super) fn align(document: &SourceDocument<'_>) -> String {
     )
 }
 
-/// Writes `content` as `name` in a fresh capability-scoped directory.
+/// Writes `content` as `name` in a fresh capability-scoped directory, creating
+/// the directory `name` names if it has one.
 ///
+/// The fixture is created through the capability rather than beside it, so a
+/// test's only view of the file is the one every mode under test is handed.
 /// The [`TempDir`] is returned so the caller keeps it alive for the length of
 /// the test; dropping it would delete the directory the capability names.
 pub(super) fn fixture(name: &str, content: &str) -> (TempDir, Dir) {
     let dir = tempdir().expect("create temporary directory");
-    fs::write(dir.path().join(name), content).expect("write fixture");
     let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
         .expect("the temporary directory path is UTF-8");
     let directory =
         Dir::open_ambient_dir(&path, ambient_authority()).expect("open directory capability");
+    let name = Utf8Path::new(name);
+    if let Some(parent) = name.parent().filter(|parent| !parent.as_str().is_empty()) {
+        directory
+            .create_dir_all(parent)
+            .expect("create the fixture's parent directory");
+    }
+    directory.write(name, content).expect("write fixture");
 
     (dir, directory)
 }

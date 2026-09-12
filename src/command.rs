@@ -78,7 +78,7 @@ pub struct FormatOpts {
     /// Replace "..." with the ellipsis character
     #[arg(long = "ellipsis")]
     pub ellipsis: bool,
-    /// Normalise fence delimiters to three backticks
+    /// Normalize fence delimiters to three backticks
     #[arg(long = "fences")]
     pub fences: bool,
     /// Convert bare numeric references and the final numbered list to

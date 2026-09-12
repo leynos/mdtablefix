@@ -52,16 +52,28 @@ fn is_case_id_returns_expected_value(#[case] id: &str, #[case] expected: bool) {
     assert_eq!(is_case_id(id), expected);
 }
 
+/// The signature is the fixture and the transform flags, spelled out, which is
+/// what lets `matrix_cases_expand_to_wrapped_and_unwrapped` group a wrapped row
+/// with its unwrapped twin: `wrap` is not a parameter, so it cannot appear in
+/// the key. The invariance itself is that test's assertion; this one pins the
+/// encoding it groups by, which a signature dropping a flag or the separator
+/// would otherwise satisfy while collapsing distinct rows together.
 #[test]
-fn non_wrap_signature_ignores_wrap_variant() {
-    let flags = [TransformFlag::Renumber, TransformFlag::Fences];
-    let (unwrapped, wrapped) = (false, true);
-    assert_ne!(unwrapped, wrapped);
+fn non_wrap_signature_encodes_the_fixture_and_flags() {
+    assert_eq!(non_wrap_signature("fixture.dat", &[]), "fixture.dat:");
     assert_eq!(
-        non_wrap_signature("fixture.dat", &flags),
-        non_wrap_signature("fixture.dat", &flags)
+        non_wrap_signature("fixture.dat", &[TransformFlag::Renumber]),
+        "fixture.dat:--renumber"
+    );
+    assert_eq!(
+        non_wrap_signature(
+            "fixture.dat",
+            &[TransformFlag::Renumber, TransformFlag::Fences]
+        ),
+        "fixture.dat:--renumber,--fences"
     );
 }
+
 #[test]
 fn non_wrap_signature_distinguishes_flag_lists() {
     assert_ne!(

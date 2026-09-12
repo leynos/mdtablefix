@@ -6,6 +6,7 @@
 
 use camino::Utf8Path;
 use mdtablefix::report::LineDelta;
+use tracing_test::traced_test;
 
 use super::{
     Mode,
@@ -113,6 +114,39 @@ fn check_reports_a_clean_file_with_no_payload() {
     assert!(!report.is_changed);
     assert_eq!(report.delta, LineDelta::default());
     assert_eq!(payload, "");
+}
+
+/// The line-ending report names the path the user wrote, not the bare name the
+/// capability reads by.
+///
+/// Two files called `a.md` in different directories would otherwise carry the
+/// same `path` field, and a subscriber could not tell them apart. The two names
+/// differ only for a nested file, which is what makes this discriminating: had
+/// they been equal, the assertion would hold whichever one the report used.
+#[test]
+#[traced_test]
+fn check_reports_the_path_the_user_wrote() {
+    // The capability is the file's parent, as `open_file_parent` makes it: the
+    // name the capability reads by is the bare `inner.md`, and the name the
+    // user wrote is the one with the directory in front of it.
+    let (_dir, directory) = fixture("nested/inner.md", RAGGED);
+    let nested = directory
+        .open_dir(Utf8Path::new("nested"))
+        .expect("open the nested directory");
+
+    let (_report, _payload) = analyse(
+        Mode::Check,
+        &nested,
+        Utf8Path::new("nested/inner.md"),
+        Utf8Path::new("inner.md"),
+        &align,
+    )
+    .expect("analyse fixture");
+
+    assert!(
+        logs_contain("nested/inner.md"),
+        "the line-ending report must name the path the user wrote"
+    );
 }
 
 /// Prefixes every line of `text` with `marker`, which is how a unified diff

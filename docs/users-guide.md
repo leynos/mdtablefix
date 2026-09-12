@@ -19,7 +19,7 @@ described in the sections that follow.
 | `--renumber`       | Renumber ordered lists sequentially.                      |
 | `--breaks`         | Rewrite thematic breaks as a line of 70 underscores.      |
 | `--ellipsis`       | Replace `...` with the ellipsis character.                |
-| `--fences`         | Normalise fenced code blocks where compression is safe.   |
+| `--fences`         | Normalize fenced code blocks where compression is safe.   |
 | `--footnotes`      | Convert bare numeric references into footnote links.      |
 | `--code-emphasis`  | Repair emphasis markers that adjoin inline code.          |
 | `--headings`       | Convert Setext headings to hash-prefixed headings.        |
