@@ -5772,3 +5772,9 @@ the row actioned, and the two rows left answered, and it no longer points a
 reader at `src/report/render.rs` for the renderer's tests. The row-by-row
 answer to the refreshed table is posted as an issue comment tagging
 `@coderabbitai`, with the `Ignore` checkbox left unticked.
+
+**The queue.** `4966887b` is queued for `leynos/mdtablefix#464`, posting at
+2026-09-12T11:05:41Z (it reported 22m03s at 10:43:38Z), so findings are expected
+from roughly 11:20Z and the next check-in is set for 11:25Z. The queue was
+empty when it was added, and the two entries before it — `590209f4` and
+`d5e31dc7` — are the rounds this revision and Revision 25 record.
