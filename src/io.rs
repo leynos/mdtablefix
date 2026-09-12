@@ -40,7 +40,13 @@ pub use line_endings::{
 use replace::{register_metrics, remove_failed_temporary_file};
 pub use replace::{replace_file, rewrite, rewrite_no_wrap};
 #[cfg(test)]
-use swap::{TEMP_FILE_ATTEMPTS, create_temporary_file, rename_failure_seam, temporary_path};
+use swap::{
+    TEMP_FILE_ATTEMPTS,
+    cleanup_failure_seam,
+    create_temporary_file,
+    rename_failure_seam,
+    temporary_path,
+};
 
 #[cfg(test)]
 #[path = "io_metrics_tests.rs"]

@@ -7,19 +7,11 @@
 
 use std::fs;
 
-use camino::Utf8Path;
-use cap_std::{ambient_authority, fs_utf8::Dir};
 use metrics::Unit;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
 use tempfile::tempdir;
 
-use super::{
-    TEMP_FILE_ATTEMPTS,
-    register_metrics,
-    remove_failed_temporary_file,
-    rewrite,
-    temporary_path,
-};
+use super::{TEMP_FILE_ATTEMPTS, register_metrics, rewrite, temporary_path};
 
 /// The outcome label's name.
 const OUTCOME_LABEL: &str = "outcome";
@@ -299,59 +291,13 @@ fn an_occupied_candidate_is_counted_as_a_collision() {
     );
 }
 
-#[test]
-fn an_exhausted_name_space_is_counted() {
-    let dir = tempdir().expect("create temporary directory");
-    let file = fixture(&dir);
-    for attempt in 0..TEMP_FILE_ATTEMPTS {
-        let candidate = temporary_path(camino::Utf8Path::new("sample.md"), attempt);
-        fs::write(
-            dir.path()
-                .join(candidate.file_name().expect("candidate name")),
-            "",
-        )
-        .expect("occupy the candidate name");
-    }
-
-    let (result, recorded) = recorded(|| rewrite(&file));
-
-    let error = result.expect_err("every candidate name is occupied");
-    assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
-    assert_labels_are_bounded(&recorded);
-    assert_eq!(
-        count(&recorded, COLLISIONS, &[]),
-        u64::from(TEMP_FILE_ATTEMPTS),
-        "every occupied candidate is a collision: {recorded:?}"
-    );
-    assert_eq!(
-        count(&recorded, EXHAUSTED, &[]),
-        1,
-        "exhausting the name space is counted once: {recorded:?}"
-    );
-    assert_eq!(
-        outcome_count(&recorded, "failure"),
-        1,
-        "an abandoned replacement is a failure: {recorded:?}"
-    );
-    assert_eq!(
-        outcome_samples(&recorded, "failure").len(),
-        1,
-        "a failed replacement is timed too, so stalls before failure are visible: {recorded:?}"
-    );
-    assert_eq!(
-        count(&recorded, CLEANUP_FAILURES, &[]),
-        0,
-        "a replacement abandoned before its temporary file existed has none to clean up: \
-         {recorded:?}"
-    );
-}
-
-/// Unix-only tests, with the constants they use, kept together so that the
-/// whole group is compiled out together on other targets: a symbol left at
-/// module level would be dead code, and therefore a denied warning, wherever
-/// its only test is removed.
 #[cfg(unix)]
 mod unix {
+    //! Unix-only tests, with the constants they use, kept together so that the
+    //! whole group is compiled out together on other targets: a symbol left at
+    //! module level would be dead code, and therefore a denied warning, wherever
+    //! its only test is removed.
+
     use super::*;
 
     /// The counter recording symbolic-link targets declined rather than
@@ -396,35 +342,6 @@ mod unix {
     }
 }
 
-/// A cleanup that does not complete is counted, because the failure that
-/// prompted it is the one the caller sees: the counter is the only signal that
-/// a stale temporary file was left beside the target.
-#[test]
-fn a_cleanup_that_cannot_remove_the_temporary_file_is_counted() {
-    let dir = tempdir().expect("create temporary directory");
-    let root = Utf8Path::from_path(dir.path()).expect("the temporary directory is UTF-8");
-    let directory =
-        Dir::open_ambient_dir(root, ambient_authority()).expect("open the directory capability");
-    // `std::fs::remove_file` is documented to fail when the path points to a
-    // directory, on every platform, so the cleanup fails without the test
-    // depending on a permission bit, which root would ignore.
-    fs::create_dir(dir.path().join("taken.tmp")).expect("create the unremovable entry");
-
-    let ((), recorded) =
-        recorded(|| remove_failed_temporary_file(&directory, Utf8Path::new("taken.tmp")));
-
-    assert_labels_are_bounded(&recorded);
-    assert_eq!(
-        count(&recorded, CLEANUP_FAILURES, &[]),
-        1,
-        "a cleanup that did not complete is counted once: {recorded:?}"
-    );
-    assert!(
-        is_described(&recorded, CLEANUP_FAILURES, &[]),
-        "the counter must carry a description: {recorded:?}"
-    );
-}
-
 /// The replacement path emits the metrics its own documentation and the host
 /// application's dashboards name, so a rename here must be deliberate.
 #[test]
@@ -444,3 +361,7 @@ fn emitted_metric_names_are_stable() {
         "only the outcome metrics are expected for an uncontended replacement"
     );
 }
+
+#[cfg(test)]
+#[path = "io_metrics_failure_tests.rs"]
+mod metrics_failure_tests;
