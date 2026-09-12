@@ -5296,3 +5296,90 @@ files of the split (`cases.rs`, `support_tests.rs`) were untracked and survived,
 and because the original is in Git; but the probe was unnecessary, and the
 compile check that preceded it had already read the file it was meant to prove
 (it failed on the probe, which is the proof).
+
+### Revision 23, 2026-09-12
+
+This revision closes the pre-merge round Revision 22 opened, and it lands on a
+rebased branch. `origin/main` had advanced one commit (`7855bca`, the 0.6
+migration guide's line-ending section, landed as #475), so the branch was
+replayed onto it before anything was measured: 42 commits, one conflict.
+
+The conflict was in `docs/v0-6-0-migration-guide.md`, where both sides had
+written a `Line-ending preservation` section. Main's text is the richer of the
+two — it names all five new public API items, and records that an
+already-formatted document whose endings are consistent is rewritten
+byte-identically — and it already carries the `-ize` spellings the replayed
+commit was making, so the resolution keeps main's section and that commit
+becomes a no-op for the file. Nothing the branch's own version claimed is
+absent from main's, so the "keep both intents" rule is satisfied by keeping
+one. The other three entities Weave merged into that file were auto-resolved
+and were checked for markers before the rebase continued.
+
+The round had four parts.
+
+**Inline comments.** All sixteen review threads on #464 are resolved, and
+CodeRabbit's review at 2026-09-12T00:40:19Z approved the branch, so no thread
+needed an answer. The sweep for unresolved threads carrying no reply of ours
+returns none.
+
+**Pre-merge checks.** Three of the rows the table reported as failing were
+already discharged by work this branch had landed and are stale rather than
+outstanding: `Testing (Overall)` by `c832beb` (the unit test and the CLI diff
+test over an unterminated original), `Unit Architecture` by `8c43328` (the
+counts travel on `Assessment`; only the boundaries report them), and
+`Observability` by `6362f1c` (bounded run and per-file metrics at the binary's
+boundaries). The three that were genuinely outstanding are discharged by:
+
+- `User-Facing Documentation` — `3a26c0f` adds two sections to the users'
+  guide's library API notes. `mdtablefix::report` is documented as the pure
+  half of `--check` and `--diff`: what `LineDelta::between` counts and why it
+  agrees with the rendered diff, how a report line is parsed, and the unified
+  diff's guarantees about headers, timestamps, colourization, and the
+  unterminated-original marker. `mdtablefix::io::SourceDocument` is documented
+  as the document boundary: mark and ending split off before formatting and
+  restored after, counting over the body rather than the whole input, and
+  rendering as a method so one document's style cannot be applied to another's
+  lines. Both sections carry a Rust example.
+- `Developer Documentation` — `996d701` states the build and test
+  requirements: `make test` is two invocations, the second not redundant
+  because `--doc` is the only way to run doc examples, and both deny warnings
+  so a warning in a test target or doctest fails the gate. It also records
+  `similar`'s part — the line tokenizer behind the delta counts and the
+  unified-diff engine — and that the requirement is the 2.x line, with both
+  call sites to re-check before a 3.x widening.
+- `Testing (Compile-Time / Ui)` — answered rather than actioned, and the answer
+  is worth recording because the row asks for something the tool cannot
+  express. A `trybuild` fixture cannot reach the strict scenario validation:
+  `#[scenario]` resolves its feature path against `CARGO_MANIFEST_DIR`, while
+  trybuild compiles fixtures in a synthetic project under
+  `target/tests/trybuild/` holding only `Cargo.toml`, `Cargo.lock`, and
+  `main.rs` — there is no feature file anywhere beneath it — and the
+  attribute's arguments (`path`, `index`, `name`, `tags`) offer no inline-text
+  escape. The validation such a fixture would pin is already a hard compile
+  error, which was measured rather than asserted: adding an undefined step to
+  `tests/features/check_mode.feature` fails the build with `error: No matching
+  step definition found for 'Then a step no one has defined'`, listing the
+  definitions that do exist and pointing at the binding that names the
+  scenario.
+
+That measurement turned up the round's only code change, and it is a defect
+worth the space. `#[scenario]` reads the feature file itself rather than
+through `include_str!`, so Cargo fingerprinted the test target by its bindings
+alone: editing a feature file on its own left the previously expanded binary in
+place, and the probe compiled cleanly until the bindings were touched by hand.
+Strict validation could therefore be missed in an incremental build while a
+clean build in CI still caught it. `96e4596` adds a `const _` array that
+`include_str!`s both specifications, which restores the missing dependency:
+after it, the same probe fails with no file other than the feature file
+touched, and all fourteen scenarios pass with the feature files restored.
+
+**A gate failure, taken as a finding.** The first gate pass over the round was
+red on `make lint`: `src/metrics.rs`'s `record_file` took `FileOutcome` by
+value, and Clippy's `needless_pass_by_value` rejected it because the body never
+consumes the enum — it matches on it, and for the failing case copies out the
+`&Error`. `12c4f7b` takes the outcome by reference, which is what the caller
+needs as well, the analysis's result outliving the recording of it. The
+`check-fmt` and `test` gates passed in that same pass, so the failure was one
+lint and nothing else.
+
+**Gate evidence.** To be recorded from the gate run over this revision.
