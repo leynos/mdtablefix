@@ -12,6 +12,13 @@
 //! say so rather than format the ones it could. See
 //! [`select_files`](crate::select::policy::select_files).
 //!
+//! The reads are the ambient filesystem's rather than a capability's, and
+//! deliberately: confinement is what this module decides, and a capability
+//! rooted at the working directory reports a candidate that escapes and one
+//! that cannot be read as the same `PermissionDenied`, which would leave
+//! [`PathKind::OutsideRoot`] unstatable. ADR 0010 states the rule; the Git
+//! directory the conflict guard opens is its one exception.
+//!
 //! Classification uses `symlink_metadata`, not `metadata`, because a link's
 //! extension says nothing about its target and rewriting through one escapes
 //! the selection. For the same reason the canonical path is confined to the

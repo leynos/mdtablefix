@@ -1,6 +1,6 @@
 //! The two predicates that make a mid-merge rewrite safe.
 //!
-//! Depends on `std::fs`, `std::io`, and `camino`. Both predicates are
+//! Depends on `cap_std::fs_utf8`, `std::io`, and `camino`. Both predicates are
 //! deliberately narrow: [`has_conflict_markers`] requires all three marker
 //! forms, each at the start of a line with a run of at least seven characters,
 //! so a document *discussing* conflict markers is not mistaken for a conflicted
@@ -21,6 +21,7 @@
 use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 
 /// The entries a Git directory holds only while an operation is paused, each
 /// named as `git rev-parse --git-path` would report it.
@@ -124,27 +125,61 @@ impl ConflictGuard {
 /// resolved by the caller, and this runs at the write boundary — once for each
 /// file that carries conflict markers — rather than once per candidate.
 ///
+/// The directory is opened as a capability and the markers are read as fixed
+/// relative entries of it. The names are this module's own constants, so no
+/// path a repository or a user wrote takes part in the resolution, and the
+/// capability is what makes a stored path unnecessary. It is the one place in
+/// the selection that opens a directory for itself; see ADR 0010 for why the
+/// probe, whose subject *is* the ambient tree, does not.
+///
 /// # Errors
 ///
-/// Returns an error if a marker cannot be tested for, other than by being
-/// absent. Absence is the ordinary answer and means only that this marker is
-/// not there; any other failure means the question went unanswered, and an
-/// unanswered question is not a licence to write.
+/// Returns an error if the Git directory cannot be opened, or if a marker
+/// cannot be tested for other than by being absent. Absence is the ordinary
+/// answer and means only that this marker is not there; any other failure —
+/// including a Git directory that has gone since it was resolved, which
+/// `open_ambient_dir` reports rather than passing on as an idle repository —
+/// means the question went unanswered, and an unanswered question is not a
+/// licence to write.
 pub fn operation_in_progress(git_dir: &Utf8Path) -> Result<bool, RepositoryStateError> {
+    let directory = Dir::open_ambient_dir(git_dir, ambient_authority()).map_err(|source| {
+        RepositoryStateError {
+            git_dir: git_dir.to_owned(),
+            source,
+        }
+    })?;
+
     for name in IN_PROGRESS {
-        match std::fs::symlink_metadata(git_dir.join(name)) {
-            Ok(_) => return Ok(true),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(source) => {
-                return Err(RepositoryStateError {
+        let present =
+            marker_present(directory.symlink_metadata(name).map(|_| ())).map_err(|source| {
+                RepositoryStateError {
                     git_dir: git_dir.to_owned(),
                     source,
-                });
-            }
+                }
+            })?;
+        if present {
+            return Ok(true);
         }
     }
 
     Ok(false)
+}
+
+/// Whether the marker just tested for is present, from the result of testing.
+///
+/// `Ok(true)` is a marker that is there, `Ok(false)` one that is not, and an
+/// error is a question that went unanswered rather than a marker that is
+/// absent. It is a function of the result rather than a match arm of the scan
+/// above, for the reason the probe's `unnameable` is one: the capability
+/// refuses a Git directory it cannot open before the loop begins, so no fixture
+/// reaches that arm through the filesystem — and reading an unreadable marker
+/// as an absent one is the mistake that would license a rewrite during a merge.
+fn marker_present(test: io::Result<()>) -> Result<bool, io::Error> {
+    match test {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
 /// The state of a Git directory could not be read.
@@ -157,7 +192,7 @@ pub fn operation_in_progress(git_dir: &Utf8Path) -> Result<bool, RepositoryState
 pub struct RepositoryStateError {
     /// The Git directory whose markers were being tested for.
     pub git_dir: Utf8PathBuf,
-    /// Why an entry of that directory could not be tested for.
+    /// Why the directory could not be opened, or an entry of it tested for.
     #[source]
     pub source: io::Error,
 }
