@@ -1389,6 +1389,50 @@ Conventions:
   `strict-compile-time-validation` feature that
   `rstest-bdd-macros` is pinned with in `Cargo.toml`.
 
+### 2.7. Build and test requirements
+
+`make test` is two `cargo test` invocations, both with `RUSTFLAGS` set so that
+warnings are errors:
+
+Table: The `make test` recipe, verbatim from the Makefile.
+
+| Step | Command                                                       |
+| ---- | ------------------------------------------------------------- |
+| 1    | `RUSTFLAGS="-D warnings" cargo test --all-targets --all-features` |
+| 2    | `RUSTFLAGS="-D warnings" cargo test --doc --all-features`      |
+
+The first step compiles and runs every test target — the unit tests in `src/`,
+the integration binaries under `tests/`, and the compile fixtures driven by
+`tests/compile.rs` — with every feature enabled. The second is not redundant:
+documentation tests are not part of `--all-targets`, so `--doc` is the only
+invocation that compiles and runs the examples in doc comments, including those
+on `mdtablefix::report` and `mdtablefix::io::SourceDocument`. Because both
+carry `-D warnings`, a warning raised while compiling a test target or a
+doctest fails the gate rather than scrolling past.
+
+The other two commit gates are `make check-fmt` (`cargo fmt --all -- --check`)
+and `make lint` (`cargo clippy --all-targets --all-features -- -D warnings`).
+All three run before a commit. `make markdownlint` covers the documentation
+changes that none of the Rust gates see.
+
+#### `similar`
+
+`similar` is a runtime dependency of the library, not a dev-dependency. It
+serves the reporting domain in `src/report/`: `LineDelta::between` counts
+insertions and deletions by iterating `TextDiff::from_lines`, and
+`write_unified_diff` renders a unified diff from a `TextDiff::configure()`
+value, choosing between Myers and Patience from the `DiffOptions` the caller
+supplied. The requirement is `similar = "2.7"` — a caret requirement, so the
+resolved version is at least 2.7 and below 3.0 — and both call sites are
+written against the 2.x API: the `ChangeTag` variants, the configured algorithm
+selection, and the `iter_all_changes` iterator. Widening the requirement to a
+3.x line means re-checking both.
+
+`DiffOptions` fields are this crate's own policy rather than `similar`'s. The
+context radius is fixed at three lines, matching `git diff`, and the patience
+threshold switches algorithm above a line count so that diffing a very large
+file stays bounded without a wall-clock cut-off.
+
 ## 3. Breaks module – Cow allocation strategy
 
 `format_breaks` in [src/breaks.rs](../src/breaks.rs) returns
