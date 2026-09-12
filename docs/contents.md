@@ -46,6 +46,9 @@
 - [Check and diff reporting](adrs/0009-check-and-diff-reporting.md): Accepted
   decision covering the read-only reporting modes, the shared assessment, and
   the exit-status contract.
+- [Git file selection](adrs/0010-git-file-selection.md): Accepted decision
+  covering `--git` selection through `git ls-files`, the conflict guard, and the
+  alternatives rejected in its favour.
 
 ## Reference material
 
@@ -77,6 +80,8 @@
   frontmatter handling.
 - [Check option](execplans/check-option.md): Plan for `--check`, `--diff`, the
   document boundary, and the exit-status contract.
+- [Git option](execplans/git-option.md): Plan for `--git` file selection, its
+  command-line surface, and the conflict guard.
 - [State-machine abstractions roadmap](state-machine-abstractions-roadmap.md):
   Roadmap turning ADR 0004 into implementation work for the parser and wrapping
   state machines.

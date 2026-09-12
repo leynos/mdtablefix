@@ -54,19 +54,39 @@ cargo install --path .
 ```bash
 mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
           [--footnotes] [--code-emphasis] [--headings]
-          [--in-place | --check | --diff] [FILE...]
+          [--in-place | --check | --diff | --list-files] [FILE...]
+          [--git [--include-untracked] [--md-exts EXT[,EXT...]]
+                 [--allow-conflicted]]
 ```
 
 One or more file paths are formatted and printed to standard output; with no
 file path at all, the document is read from standard input instead. The
 formatting flags are independent and may be combined.
 
-Three flags select what happens to the named files. `--in-place` rewrites each
-file through a temporary file and a rename, preserving its mode. `--check`
-reports every file that would be reformatted, and `--diff` prints a unified
-diff for each of them; neither writes anything. All modes exit `0` when no file
-would change, `--check` and `--diff` exit `1` when a file would, and every mode
-exits `2` when a file could not be read or rewritten.
+Four flags select what happens to the files. `--in-place` rewrites each file
+through a temporary file and a rename, preserving its mode. `--check` reports
+every file that would be reformatted, `--diff` prints a unified diff for each
+of them, and `--list-files` prints each selected path without opening it; none
+of the three writes anything. Every mode exits `0` when no file would change,
+`--check` and `--diff` exit `1` when a file would, and every mode exits `2`
+when a file could not be read or rewritten or the selection itself failed.
+
+With `--git`, the files are the ones Git reports beneath the current directory
+rather than the ones named on the command line: the tracked Markdown files in
+the index, plus the untracked ones with `--include-untracked`. The selection is
+sorted and deduplicated, and `--list-files` reports it without touching a file,
+so a repository-wide run is one invocation with one summary and one exit
+status:
+
+```bash
+mdtablefix --git --in-place --wrap
+```
+
+The files that Git reports but that cannot safely be rewritten — a symbolic
+link, or a document carrying conflict markers while a merge, rebase, or
+cherry-pick is in progress — are skipped or refused rather than rewritten. See
+[Git file selection](docs/architecture.md#git-file-selection) for how the
+selection is made.
 
 See the [user's guide](docs/users-guide.md#command-line-usage) for every flag,
 the exit-status contract, line-ending and byte-order-mark behaviour, and the
