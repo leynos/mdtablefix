@@ -11,7 +11,7 @@ stacked on pull request #464 and carried by pull request #466. The prerequisite
 extraction of `src/cli.rs` landed, Stage A is discharged, and all four
 milestones — EP-M0's grammar measurement, EP-M1's selection tree, EP-M2's
 command-line surface, and EP-M3's documentation — are delivered. Every
-deterministic gate is green on the milestone tree, the four CodeRabbit rounds
+deterministic gate is green on the milestone tree, the five CodeRabbit rounds
 recorded under `Artefacts and notes` returned zero findings, and `Outcomes &
 retrospective` states what was delivered against what was planned and which
 pinned interfaces the implementation superseded.
@@ -2180,14 +2180,30 @@ plateau.
       and the EP-M3 CodeRabbit round. The first trustworthy CI verdict still
       lies on the far side of resolving the stack. `EV-M4-CI-SILENCE` holds the
       run list and the limits of what it proves.
-- [x] (2026-09-12) The base branch is still moving and is itself partly red.
-      `origin/check-option` gained `530bdbd` (10:39Z) and `914e9ae` (10:43Z)
-      while this repair was being gated, and its own Windows job fails on
-      something that is not ours: `error: unused import: std::fs` at
-      `tests/cli_check/arguments.rs:3`, a file-scope import reached only from
-      inside a `#[cfg(unix)]` test with `RUSTFLAGS: -D warnings` in force on
-      the Windows runner. Its `build-test` job is green. Decision taken not to
-      rebase onto it — see the Decision log.
+- [x] (2026-09-12) The base branch is still moving, and its own redness has
+      since been fixed upstream. While this repair was being gated
+      `origin/check-option` gained `530bdbd` (10:39Z) and `914e9ae` (10:43Z),
+      and its Windows job was failing on something that was not ours:
+      `error: unused import: std::fs` at `tests/cli_check/arguments.rs:3`, a
+      file-scope import reached only from inside a `#[cfg(unix)]` test with
+      `RUSTFLAGS: -D warnings` in force on the Windows runner. It has since
+      gained `3737276` ("Gate the non-UTF-8 argument test's imports to Unix"),
+      which is that defect's fix, and `64117e4`, which records it — so the base
+      is repairing itself and needs no help from this branch. It has also moved
+      to `64117e4` (10:48Z), twenty commits past the merge-base `408c76a`.
+      Decision taken not to rebase onto it — see the Decision log, which this
+      strengthens: a base repairing its own failures is a base worth waiting
+      for rather than chasing.
+- [x] (2026-09-12) CI repair, `EV-M4-CR`: `coderabbit review --agent --base
+      check-option` through `scrutineer` at `0ee306b` — **completed, zero
+      findings** over 95 reviewed files, the fifth round on this branch and the
+      third consecutive one to cover a milestone's close. The reviewed set
+      matches `git diff --name-only origin/check-option...HEAD` exactly and the
+      run's own context line names the two branches, so the zero is about this
+      branch's diff rather than about a review that deferred to the pull
+      request — a distinction `EX-M4-CR-SCOPE` records, since a deferral and a
+      clean review both read as "no findings". No rate, seat, or quota limit, so
+      no wait was needed. Transcript in Artefacts and notes, `EV-M4-CR`.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
@@ -3083,10 +3099,10 @@ dependency check standing in for `requires = "git"`; seventeen behavioural
 scenarios, fifteen tests pinning the command-line surface, and unit and property
 tests for every selection module; a mutation run of 60 mutants with none missed
 once the oracle was widened; ADR 0010; and the user's guide, architecture,
-developer's guide, README, and documentation contents updated to match. Four
+developer's guide, README, and documentation contents updated to match. Five
 CodeRabbit rounds are recorded in Artefacts and notes — two at EP-M1 (the
-second after the mutation widening), one at EP-M2, and one at EP-M3 for this
-milestone — and every one returned zero findings.
+second after the mutation widening), one at EP-M2, one at EP-M3, and one for
+the CI repair — and every one returned zero findings.
 
 **Deviation from the plan's pinned interfaces, all recorded.** The composition
 root is `src/git_inputs.rs` rather than `src/main.rs`, and `resolve` returns
@@ -3771,10 +3787,64 @@ for the plan is unaffected either way: no run will appear for any of these
 commits until the conflict is resolved, so the missing red run must not be read
 as a green one.
 
+**EV-M4-CR** — CodeRabbit review of the CI repair and the plan reconciliation,
+run 2026-09-12 through `scrutineer` against the local branch at `0ee306b`, log
+at `/tmp/coderabbit-git-option.out` — the previous round's log having been moved
+aside to `/tmp/coderabbit-git-option-prev-round.out` before the intended
+overwrite. The base is the branch this one is stacked on, so the review is
+scoped to this branch's work rather than to pull request #464's:
+
+```plaintext
+coderabbit review --agent --base check-option
+```
+
+```plaintext
+{"type":"complete","status":"review_completed","findings":0,"reviewedFiles":[".cargo/mutants.toml","CHANGELOG.md", …]}
+```
+
+Ninety-five files were reviewed and the review reported **zero findings**. The
+round's context line gives `"reviewType":"all"` with `currentBranch` `git-option`
+and `baseBranch` `check-option`, and the reviewed set matches
+`git diff --name-only origin/check-option...HEAD` exactly at 95 paths, so the
+scope is verifiable rather than assumed.
+
+That 95 is a wider scope than the four earlier rounds, and the difference is
+worth a sentence because it changes what the zero means. `EP-M3-CR` reviewed 33
+files at `9a83339`; this round reviews the whole span from the merge-base
+`408c76a`, which includes the commits this branch and `check-option` both carry
+— `git cherry origin/check-option HEAD` classifies 31 as this branch's own and
+the rest as patch-equivalent upstream. So roughly two thirds of the 95 are the
+base's own work arriving under this review's eye rather than this branch's, and
+the zero findings cover that traffic too. It is a stronger result than the
+earlier rounds rather than a differently-measured one, and it is also a reminder
+that the review's file count tracks the merge-base rather than the branch, so a
+count that grows between rounds is not evidence of new work here.
+
+No rate, seat, quota, or deferral condition appears in the round's output;
+`coderabbit auth status` reports the Team plan, an assigned seat rather than a
+waiting room, and the CLI exited 0. The tool did not fall back to a
+pull-request-level review, which matters on a draft whose head conflicts with
+its base — `EX-M4-CR-SCOPE` records why that distinction is checked rather than
+assumed.
+
+**EX-M4-CR-SCOPE** — the check that the CodeRabbit round above reviewed this
+branch's diff rather than deferring to the pull request, kept as evidence
+because a deferral and a clean review are both "no findings" to a reader who
+does not look. Three conditions were verified: the run's own context line names
+`git-option` as `currentBranch` and `check-option` as `baseBranch`; the reviewed
+file list equals `git diff --name-only origin/check-option...HEAD` path for
+path, 95 in each; and `coderabbit auth status` reports an assigned seat rather
+than a waiting-room entry. The distinction is not academic here: the earlier
+`--base check-option` rounds on this same branch printed a 33-file list, so a
+file count that changed between rounds was a real signal to chase down rather
+than noise to ignore. It resolved to the merge-base, as described above, and not
+to a scope regression.
+
 ## Revision note
 
-Revised 2026-09-12, fourth pass, after the branch's first CI run came back red
-and its repair was gated.
+Revised 2026-09-12, fourth pass, after the branch's first CI run came back red,
+its repair was gated, the plan reconciliation was reviewed, and the base branch
+was observed repairing its own redness.
 
 What changed. The first CI run on the branch — `34661535150`, the only one it
 has — failed both its test jobs over five defects, all of them in the test
@@ -3786,7 +3856,20 @@ flattened: one of the six changes is a judgement rather than a finding, because
 another test's failure hid the assertion it repairs; and no CI run exists for
 the repair, nor for EP-M3's own two commits, because a conflicting pull request
 runs no `pull_request` workflows at all — so those commits are, as of this
-record, CI-untested.
+record, CI-untested. `EV-M4-CI-SILENCE` holds that, and the push that carried
+the entry supplied the control the entry had said was missing: a
+`pull_request_target` run on the same commit, with no `pull_request` run beside
+it.
+
+The round that reviewed all of this, `EV-M4-CR`, returned **zero findings over
+95 files** — a wider scope than the earlier rounds, because the reviewed set
+tracks the merge-base rather than the branch and roughly two thirds of it is the
+base's own traffic. `EX-M4-CR-SCOPE` records the three conditions that
+distinguish this from a review that quietly deferred to the pull request, since
+both read as "no findings" to anyone who does not look. The base branch, for its
+part, has fixed the Windows dead-import failure this plan had recorded against
+it, in `3737276`, and has moved twenty commits past the merge-base — which is
+the deferral decision's reasoning arriving as evidence.
 
 The Epic path itself is not reopened: the tool's behaviour was correct on both
 platforms and every defect was in the tests that observe it. What the pass adds
