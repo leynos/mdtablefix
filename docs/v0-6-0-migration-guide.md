@@ -148,7 +148,6 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   [user's guide](users-guide.md#command-line-usage) for the report line format
   and the exit-status contract.
 
-
 ## Selecting files from Git
 
 - **What changed:** `--git` selects the working tree's Markdown files from
