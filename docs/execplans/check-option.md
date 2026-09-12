@@ -5448,3 +5448,224 @@ round this revision closes is therefore complete: no inline thread is
 outstanding, the table has been reconciled and answered, and the six gates are
 green. What the queued review reports decides whether the loop continues or
 ends.
+
+### Revision 24, 2026-09-12 — the review round at `db64399`
+
+**Ten findings, one rebutted.** The review queued as `590209f4` arrived as
+`5184665530`, `CHANGES_REQUESTED` at 2026-09-12T01:43:18Z, with the inline
+count moving from 27 to 37: ten new top-level comments, every one anchored to
+the then-head `db64399` and every one with `reply_to=none`. Each was verified
+against the tree before anything was changed. Nine are valid and are fixed in
+`6238940`; the tenth rests on a premise that does not hold and is rebutted
+rather than actioned.
+
+**The display path, and a test that discriminates it.** The strongest finding
+was that the line-ending report named `storage_key` — the bare name a
+capability reads by — so `docs/a.md` and `examples/a.md` emitted the same
+`path="a.md"` field and a subscriber could not correlate them. `analyse` now
+reports `display_path`, which is what `main.rs` already carries for the report
+line and the diff headers, so all three agree. The pin is
+`check_reports_the_path_the_user_wrote` in `src/driver_report_tests.rs`, and it
+was checked in both directions: reverting the argument to `storage_key` makes
+it fail with "the line-ending report must name the path the user wrote", and
+restoring it makes it pass. The fixture is nested precisely so the two names
+differ — with equal names the assertion would hold whichever one the report
+used, which is the shape that made the old code look right.
+
+**The critical one, which only CI could confirm.** `identity` in
+`src/driver_in_place_tests.rs` is used by a single test, and that test is
+`#[cfg(unix)]` because it observes the write through the inode. The import was
+not, so on Windows it was an unused import under `-D warnings`. The finding's
+line numbers were verified against `db64399` before the fix (import at line 18,
+use at line 89, `#[cfg(unix)]` at line 77) rather than taken on trust. The group
+could not be gated whole: the other five names stay live on Windows through the
+ungated `in_place_writes_the_formatted_text`. There is no Windows host here, so
+the `atomic write contract (windows)` job is this fix's first reading.
+
+**Four more, all small.** The fixture builder wrote its file with `std::fs`
+beside the capability and so gave the test a different view of the file from
+the one the modes under test are handed; it now writes through the capability
+with `directory.write`, and creates the parent directory that the new nested
+fixture needs. `record_file` matched its outcome labels inline and called
+`mode_label` twice, once per instrument; both are bound once and the match
+moves to `file_outcome_label`, beside the two label helpers it now matches.
+`category`'s doc claimed `declined` covers a path that is not UTF-8, which
+`Inputs::resolve` rejects at the command line before `run_files` and which
+carries no `io::Error` for the chain walk to find in any case — the only
+`InvalidInput` a file's analysis produces is the rewrite boundary's symlink
+refusal. ADR 0009 said `--check` exits `2` when a file could not be "read or
+rewritten", and `--check` never rewrites.
+
+**Spelling, and one deliberate divergence.** `Normalise` becomes `Normalize`
+in the three descriptions of the one `--fences` flag — the clap help text, the
+users' guide row, and the `Options` doc — because `src/fences.rs` already used
+`-ize` and the policy requires it. The `normalise_event_lines` identifier and
+its many call sites are pre-existing and untouched, so the change stays
+proportionate to this feature's documentation.
+
+On the ADR wording the finding's remedy was not taken: it proposed "could not
+be assessed", and the sentence is a paraphrase of the error the mode emits,
+which `analyse_one` builds from `mode.verb()` — `"reading"` for `--check`,
+`--diff`, and the bare mode. "Assessed" would name the function rather than the
+operation the user sees. The reply says so explicitly rather than substituting
+silently.
+
+**The rebuttal.** The tenth finding claimed that an `--in-place` failure counts
+towards `errored` and is then reported by `render_summary` as "could not be
+read". The count is mode-independent, but the rendering is not:
+`src/main.rs:227` calls `render_summary` under `if mode.reports()`, and
+`Mode::reports` is
+`matches!(self, Self::Check | Self::Diff)`, so no summary is printed for
+`--in-place` or for a bare invocation. In the two modes that do print it, the
+read is the only step that can fail, because `analyse`'s `write_back` call sits
+on the `Mode::InPlace` arm alone. The suggested wording would therefore make the
+summary less precise for every mode that can display it.
+
+**The tautological test.** `non_wrap_signature_ignores_wrap_variant` asserted
+`f(x) == f(x)` over two local booleans that neither operand used, so it could
+not fail. It is replaced by `non_wrap_signature_encodes_the_fixture_and_flags`,
+which pins the exact string for three flag lists including the empty one. The
+wrap invariance its old name promised is not duplicated here: it is already
+asserted over the real matrix by
+`tests/cli_matrix.rs::matrix_cases_expand_to_wrapped_and_unwrapped`, which
+groups `logical_cases()` by this signature and requires every group to hold
+both wrap variants — a stronger statement than a hand-made pair of booleans.
+
+**The threads.** Every one of the ten carries a reply tagging `@coderabbitai`,
+nine naming `6238940` and the tenth stating the rebuttal with the call-site
+evidence. Two of the ten were still unresolved when the replies went out — the
+ADR wording, which the reply answers, and `src/main.rs:228`, which is the
+rebuttal — and a GraphQL sweep afterwards found all 26 threads on the pull
+request resolved, with none left unanswered.
+
+**Gates.** The full set was run through `scrutineer` over `6238940` with a clean
+worktree: `check-fmt` 2s, `lint` 4s, `typecheck` 0s, `test` 60s — 46 binaries,
+`1885 passed, 0 failed, 20 ignored`, one more than the previous run, which is
+the new tracing test — `markdownlint` 34 files and 0 errors, and `nixie` with
+every diagram validated. The one advisory is non-fatal: `nixie` logs
+`--> line 89: <unknown>` for `docs/architecture.md`, which was already the case
+before this round.
+
+### Revision 25, 2026-09-12 — the pre-merge checks at `6238940`
+
+**When the table may be read.** The walkthrough's check table is refreshed only
+when a review runs, and the comment carrying it is edited in place rather than
+re-posted, so it was read from the live body at
+`pre_merge_checks_walkthrough_start` rather than from an earlier round's copy.
+It reported `2 errors, 3 warnings` against the then-head `6238940`. Per the
+skill's ordering it was left alone until every inline thread had been answered,
+and every row was then reconciled against the current tree before anything was
+actioned — the table is generated from a commit that work has moved past, and
+two of these rows had already been answered once in an earlier round.
+
+**Five rows, three actioned.** Each was fixed in `be41510`, a commit whose only
+subject is the reconciliation.
+
+*Developer Documentation* (⚠️ Warning) held. `docs/developers-guide.md` headed a
+list "`src/main.rs` file-output functions:" while `format_lines` and
+`formatting_closure` had moved to `src/command.rs:131` and `src/command.rs:140`,
+a later bullet still placed `formatting_closure` in `src/main.rs`, and the guide
+documented the library's `mdtablefix_io_*` instruments but none of the binary's
+`mdtablefix_file_*` and `mdtablefix_run_*`. The headings now say what
+`src/command.rs` owns and what stays in `src/main.rs`, the line-ending bullet
+says the report names the display path, and a `#### Binary metrics` subsection
+documents the four instruments, their bounded label sets and error categories,
+and the analysis span.
+
+*Testing (Overall)* (❌ Error) held. The induced `--in-place` write failure was
+asserted as "any non-zero": `tests/in_place_atomic.rs` used `.failure()`, and
+the three Unix-only cases in `tests/in_place_atomic/failure.rs` used
+`!output.status.success()`. The three-valued exit contract this branch
+introduces was therefore unasserted exactly where a per-file failure is
+induced. All four now assert code `2`, and
+`in_place_reports_drift_and_a_write_failure_as_an_error` pins the combination
+the contract has to order: drift in one file plus a write failure in another
+exits `2` rather than `1`, while the drifted file is still rewritten. The
+byte-preservation and no-temporary-file assertions are kept.
+
+*Observability* (⚠️ Warning) held, and it was the round's one real gap.
+`AGENTS.md` asks for spans around work at the boundaries and the developer guide
+states that a target `path` appears only as a tracing span field;
+`src/io/replace.rs:163` had such a span and the binary's per-file analysis had
+none. `record_analysis` now opens a `debug` span carrying `mode` and the
+display `path` on entry, and records `outcome` and `elapsed_seconds` once the
+analysis has run, under the same names and values the counters use.
+
+**The span's missing half, and the statuses the row called unguarded.** Two
+follow-ups landed in `7455e9b`, both from re-reading a row's own words against
+the tree rather than from a new finding.
+
+The Observability row also asks for "a bounded error category and completion
+outcome" — and the bounded category existed only on
+`mdtablefix_file_error_total`, so a host filtering a trace could see that a file
+failed but not under which of the four names. `record_analysis` now emits
+`analysis failed` at debug level inside the span, carrying `error_category` from
+the same `category` function the counter labels with — derived from the
+`io::ErrorKind` in the error's chain, never from its message — so a span filter
+and a metric filter select the same failures by the same name. A successful
+analysis emits nothing, which is what lets a host filter on the event at all.
+`a_failed_analysis_names_its_category_in_the_trace` asserts the event and its
+category, and `a_successful_analysis_emits_no_failure` asserts its absence.
+
+The Testing (Overall) row's summary sentence was that "the changed exit-status
+contract is not fully guarded", and three per-file failure assertions were
+still written as "any non-zero": the declined-symlink case in
+`tests/in_place_atomic.rs`, and both missing-file cases in `tests/parallel.rs`.
+Each induces a failure the contract reserves `2` for, so each now requires
+exactly `2`. The suite's induced per-file failures are uniform — read-only
+directory, `ulimit -f 1`, occupied candidate names, declined symlink, and the
+two missing-file cases — and the guide records the event, so the metric, the
+trace, and the documentation name the same failures.
+
+**Two rows answered rather than actioned.**
+
+*Unit Architecture* (❌ Error) asks for "a fallible read-only assessment
+operation that reads through `ReadOnlyDir`, formats the document, and returns an
+`Assessment` without logging, metrics, rendering, or writes". That operation
+is `driver::assess(&ReadOnlyDir, storage_key, format) ->
+anyhow::Result<Assessment>` at `src/driver.rs:218`, which is exactly those
+things: it returns the counts on
+the assessment, emits nothing, and cannot write because `ReadOnlyDir` has no
+write method. `analyse` is the rendering half layered on top of it. Moving
+rendering out of `analyse` would contradict the property the design documents —
+retained memory is proportional to the rendered payload rather than to twice the
+whole input — so the reply points at the seam and asks for a concrete
+counter-proposal rather than performing a refactor the design argues against.
+
+*Testing (Compile-Time / Ui)* (⚠️ Warning) is the row the previous round already
+answered, and the answer has not changed: a trybuild fixture cannot compile a
+`#[scenario]` binding, for two structural reasons. The macro resolves the
+feature path against `CARGO_MANIFEST_DIR`, while trybuild compiles fixtures in a
+synthetic project under `target/tests/trybuild/` that contains no feature file
+anywhere beneath it; and `#[scenario]` accepts only `path`, `index`, `name`, and
+`tags`, so the feature text cannot be inlined in the fixture either. The
+validation such a fixture would pin is already a compile-time gate, and that was
+measured rather than argued: adding an undefined step makes the build fail,
+which is how the missing feature-file fingerprint dependency was found and
+fixed.
+
+**Gates.** Six gates green at `7455e9b`, run through `scrutineer` with a clean
+worktree: `check-fmt` 2s, `lint` 1s, `typecheck` 1s, `test` 50s — 46 result
+lines, `1888 passed, 0 failed, 20 ignored`, with `tests/in_place_atomic.rs` 11
+of 11 and `tests/parallel.rs` 4 of 4 — `markdownlint` 34 files and 0 errors, and
+`nixie` with every diagram validated. The tally moves from 1886 to 1888 because
+this round adds the two tracing tests for the failure event; a run over the same
+tree before the three assertion tightenings was green at the same tally, since
+tightening an assertion adds no test.
+
+**The reconciliation, and the push.** The row-by-row answer is posted as an
+issue comment on the pull request (`5642773695`), tagging `@coderabbitai`, with
+the `Ignore` checkbox deliberately unticked. `7455e9b` is pushed to
+`origin/check-option`, which stands 50 commits ahead of `origin/main`. A thread
+sweep before that found 26 threads and none unresolved; seven carry no reply of
+mine, of which six are outdated and one — `tests/cli_matrix/invariants.rs:79`,
+asking for `rstest` cases over `contains_table_delimiter` — was self-resolved by
+the bot's "addressed in commits" annotation, and the pinning test it asked for,
+`contains_table_delimiter_needs_a_pipe`, is in the tree at line 155.
+
+**Next review.** `d5e31dc7` is queued and posts in about 22 minutes, at
+2026-09-12T02:33Z, so findings are expected from roughly 02:48Z. A review is the
+only thing that refreshes the pre-merge table, and every row of this round has
+been either discharged or answered, so what it reports decides whether the loop
+continues or ends. The pull request description was brought level with the tree
+before the review was queued, because a review reads it.
