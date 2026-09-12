@@ -1,0 +1,6 @@
+---
+source: tests/html_snapshots.rs
+expression: output
+---
+| Name | Value |
+| ---- | ----- |

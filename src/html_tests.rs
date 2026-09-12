@@ -49,9 +49,51 @@ mod proptest_tests {
     //! These generated cases complement the parent test module by checking
     //! `HtmlTableState` behaviour across varied open and close sequences.
 
+    use std::rc::Rc;
+
+    use html5ever::{driver::ParseOpts, parse_document, tendril::TendrilSink};
+    use markup5ever_rcdom::{Handle, RcDom};
     use proptest::prelude::*;
 
-    use super::HtmlTableState;
+    use super::{HtmlTableState, collect_matching, is_element};
+
+    fn html_fragment_strategy() -> impl Strategy<Value = String> {
+        (
+            proptest::collection::vec(proptest::collection::vec(0usize..=4, 0..=6), 0..=4),
+            0usize..=4,
+        )
+            .prop_map(|(tables, nested_depth)| {
+                let nested_tables = (0..nested_depth).fold(String::new(), |nested, level| {
+                    format!("<table><tr><td>level-{level}{nested}</td></tr></table>")
+                });
+                let mut html = tables.into_iter().fold(String::new(), |mut html, rows| {
+                    html.push_str("<table>");
+                    for cell_count in rows {
+                        html.push_str("<tr>");
+                        for index in 0..cell_count {
+                            html.push_str("<td>cell-");
+                            html.push_str(&index.to_string());
+                            html.push_str("</td>");
+                        }
+                        html.push_str("</tr>");
+                    }
+                    html.push_str("</table>");
+                    html
+                });
+                html.push_str(&nested_tables);
+                html
+            })
+    }
+
+    fn parse_html(source: String) -> RcDom {
+        parse_document(RcDom::default(), ParseOpts::default()).one(source)
+    }
+
+    fn collect_tag(document: &Handle, tag: &'static str) -> Vec<Handle> {
+        let mut matches = Vec::new();
+        collect_matching(document, |node| is_element(node, tag), &mut matches);
+        matches
+    }
 
     proptest! {
         #[test]
@@ -91,6 +133,40 @@ mod proptest_tests {
             state.push_html_line("</table>", &mut out);
             prop_assert!(!state.in_html());
             prop_assert_eq!(state.depth, 0);
+        }
+
+        #[test]
+        fn collect_matching_count_equals_source_tag_count(
+            source in html_fragment_strategy(),
+            tag in prop_oneof![Just("table"), Just("tr"), Just("td")],
+        ) {
+            let expected_count = source.matches(&format!("<{tag}")).count();
+            let dom = parse_html(source);
+
+            prop_assert_eq!(collect_tag(&dom.document, tag).len(), expected_count);
+        }
+
+        #[test]
+        fn collect_matching_order_is_deterministic(
+            source in html_fragment_strategy(),
+            tag in prop_oneof![Just("table"), Just("tr"), Just("td")],
+        ) {
+            let dom = parse_html(source);
+            let first = collect_tag(&dom.document, tag);
+            let second = collect_tag(&dom.document, tag);
+
+            prop_assert_eq!(first.len(), second.len());
+            prop_assert!(first.iter().zip(&second).all(|(left, right)| Rc::ptr_eq(left, right)));
+        }
+
+        #[test]
+        fn collect_matching_returns_empty_for_non_matching_documents(
+            content in "[a-z ]{0,64}",
+            tag in prop_oneof![Just("table"), Just("tr"), Just("td")],
+        ) {
+            let dom = parse_html(format!("<main><p>{content}</p></main>"));
+
+            prop_assert!(collect_tag(&dom.document, tag).is_empty());
         }
     }
 }
