@@ -104,6 +104,10 @@ fn rewrite_tokens(text: &str, mapping: &HashMap<usize, usize>) -> String {
     rewritten
 }
 
+/// Collect first-seen reference numbers from prose outside fenced blocks.
+///
+/// For example, a reference after a matching outer fence closer is eligible,
+/// while a reference between the opener and closer remains literal.
 fn collect_reference_mapping(lines: &[String]) -> HashMap<usize, usize> {
     let mut mapping = HashMap::new();
     let mut next = 1;
@@ -168,6 +172,10 @@ fn footnote_definition_block_range(lines: &[String]) -> Option<(usize, usize)> {
     }
 }
 
+/// Rewrite eligible prose references while preserving definitions and fences.
+///
+/// For example, a reference after a blockquote fence ends is rewritten, while
+/// a reference within that fence remains unchanged.
 fn apply_mapping_to_lines(
     lines: &mut [String],
     mapping: &HashMap<usize, usize>,

@@ -184,6 +184,10 @@ pub(super) fn numeric_candidate_from_line(line: &str, index: usize) -> Option<Nu
     })
 }
 
+/// Collect eligible definitions and numeric candidates outside fenced blocks.
+///
+/// For example, a definition following a matching closer is collected, while
+/// a definition-shaped line within the fence remains literal payload.
 fn collect_scan_updates(lines: &[String], state: &mut DefinitionScanState<'_>) {
     let mut fences = FenceTracker::default();
 
