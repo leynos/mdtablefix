@@ -46,6 +46,12 @@ pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
         reporting: REPORTING_MODES,
     },
     BaseCase {
+        id: "row_000_code_emphasis",
+        fixture: "table-prose.dat",
+        flags: &[TransformFlag::CodeEmphasis],
+        reporting: &[],
+    },
+    BaseCase {
         id: "row_001",
         fixture: "fences-ellipsis.dat",
         flags: &[

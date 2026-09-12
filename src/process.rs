@@ -385,4 +385,32 @@ mod tests {
         assert!(without_ellipsis.iter().any(|line| line.contains("...")));
         assert!(!without_ellipsis.iter().any(|line| line.contains('…')));
     }
+
+    #[test]
+    fn process_stream_inner_applies_table_code_emphasis_before_reflow() {
+        let input = vec![
+            "| Name  | Notes                      |".to_string(),
+            "| ----- | -------------------------- |".to_string(),
+            "| alpha | Use *`cargo test`* to run. |".to_string(),
+        ];
+
+        let with_code_emphasis = process_stream_inner(
+            &input,
+            Options {
+                code_emphasis: true,
+                ..Default::default()
+            },
+        );
+        let without_code_emphasis = process_stream_inner(&input, Options::default());
+
+        assert_eq!(
+            with_code_emphasis,
+            vec![
+                "| Name  | Notes                    |",
+                "| ----- | ------------------------ |",
+                "| alpha | Use `cargo test` to run. |",
+            ],
+        );
+        assert_eq!(without_code_emphasis, input);
+    }
 }

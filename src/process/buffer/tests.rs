@@ -4,15 +4,19 @@
 use rstest::rstest;
 
 use super::*;
+use crate::code_emphasis::fix_code_emphasis;
 
 /// Builds a fresh, empty buffer with table substitutions disabled.
-fn new_buffer() -> ProcessBuffer {
+fn new_buffer() -> ProcessBuffer { new_buffer_with_code_emphasis(false) }
+
+/// Builds a fresh, empty buffer with the requested code-emphasis substitution.
+fn new_buffer_with_code_emphasis(code_emphasis: bool) -> ProcessBuffer {
     ProcessBuffer {
         out: Vec::new(),
         buf: Vec::new(),
         in_table: false,
         ellipsis: false,
-        code_emphasis: false,
+        code_emphasis,
     }
 }
 
@@ -139,6 +143,22 @@ fn flush_table_passes_lines_through_reflow() {
     assert_eq!(buffer.out, reflow_table(&input));
     assert_ne!(buffer.out, input, "reflow should normalise column widths");
     assert!(!buffer.in_table);
+}
+
+#[test]
+fn flush_table_applies_code_emphasis_before_reflow() {
+    let input = owned(&[
+        "| Name  | Notes                      |",
+        "| ----- | -------------------------- |",
+        "| alpha | Use *`cargo test`* to run. |",
+    ]);
+    let mut buffer = new_buffer_with_code_emphasis(true);
+    buffer.buf = input.clone();
+    buffer.in_table = true;
+
+    buffer.flush();
+
+    assert_eq!(buffer.out, reflow_table(&fix_code_emphasis(&input)));
 }
 
 #[test]
