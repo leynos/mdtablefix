@@ -159,11 +159,18 @@ fn rewrite_fence_line(cached: CachedLine, strategy: Strategy) -> String {
 }
 fn flush_unmatched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
     // The block never closed, so its interior lines are literal content of the
-    // unclosed fence: normalize only the opening delimiter and emit every
-    // interior line verbatim, so fence-like content is not rewritten.
+    // unclosed fence: rewrite only the opening delimiter and emit every
+    // interior line verbatim, so fence-like content is not rewritten. The
+    // opening delimiter takes the same rewrite as the matched path, because
+    // compressing an opener that contains a conflicting interior fence is
+    // self-defeating here too: it shortens, or changes the family of, the
+    // delimiter that made the interior line literal, and the next pass reads
+    // that line as the closer instead.
+    let rewrite = opening_rewrite(block.has_conflicting_interior_fence);
+
     for (index, cached) in block.lines.into_iter().enumerate() {
         let emitted = if index == 0 {
-            cached.compressed.unwrap_or(cached.line)
+            rewrite_fence_line(cached, rewrite)
         } else {
             cached.line
         };
@@ -306,9 +313,10 @@ fn advance_fence_block(
 /// structural.
 ///
 /// When input ends inside an unclosed fence, `compress_fences` uses
-/// `flush_unmatched_block`, which normalizes only the opening delimiter and
-/// emits every interior line verbatim, so fence-like content inside that
-/// unclosed block is preserved rather than rewritten.
+/// `flush_unmatched_block`, which rewrites only the opening delimiter, under
+/// the same preserved-delimiter rule, and emits every interior line verbatim,
+/// so fence-like content inside that unclosed block is preserved rather than
+/// rewritten.
 ///
 /// # Examples
 ///

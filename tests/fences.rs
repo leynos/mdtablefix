@@ -99,15 +99,18 @@ fn preserves_nested_or_spaced_fence_blocks(
 #[test]
 fn does_not_compress_mixed_fences() {
     // Each block is unclosed because the trailing delimiter uses a different
-    // marker character, so only the opening delimiter is normalized and the
-    // interior line is preserved verbatim.
+    // marker character, and that trailing delimiter is fence-shaped content of
+    // the unclosed fence. Rewriting the opener would change the family, or the
+    // length, that keeps it literal — the first block compressed to three
+    // backticks used to turn its trailing ``` into a closing delimiter — so the
+    // preserved-delimiter rule leaves both blocks untouched.
     let input = lines_vec!["~~~rust", "code", "```"];
     let out = compress_fences(&input);
-    assert_eq!(out, lines_vec!["```rust", "code", "```"]);
+    assert_eq!(out, input);
 
     let input2 = lines_vec!["```rust", "code", "~~~"];
     let out2 = compress_fences(&input2);
-    assert_eq!(out2, lines_vec!["```rust", "code", "~~~"]);
+    assert_eq!(out2, input2);
 }
 
 #[test]
@@ -334,22 +337,31 @@ fn compresses_null_language_to_empty(#[case] open: &str, #[case] close: &str) {
 }
 
 #[rstest]
-#[case("```null")]
-#[case("```NULL")]
-#[case("```Null")]
-#[case("```null  ")]
-#[case("```NULL  ")]
-#[case("```Null  ")]
-#[case("~~~~null")]
-#[case("~~~~NULL")]
-#[case("~~~~Null")]
-#[case("~~~~null  ")]
-#[case("~~~~NULL  ")]
-#[case("~~~~Null  ")]
-fn attaches_orphan_specifier_when_null_language(#[case] fence: &str) {
+#[case("```null", "```")]
+#[case("```NULL", "```")]
+#[case("```Null", "```")]
+#[case("```null  ", "```")]
+#[case("```NULL  ", "```")]
+#[case("```Null  ", "```")]
+#[case("~~~~null", "~~~~")]
+#[case("~~~~NULL", "~~~~")]
+#[case("~~~~Null", "~~~~")]
+#[case("~~~~null  ", "~~~~")]
+#[case("~~~~NULL  ", "~~~~")]
+#[case("~~~~Null  ", "~~~~")]
+fn attaches_orphan_specifier_when_null_language(#[case] fence: &str, #[case] opener: &str) {
+    // A backtick opener with the backtick delimiter below it closes, so that
+    // block is matched and both of its delimiters compress. A tilde opener with
+    // the same backtick delimiter below it never closes, and that delimiter is
+    // fence-shaped content of the unclosed block, so the opener keeps its own
+    // family and length. Either way the null language is dropped, which is what
+    // this test is about.
     let input = lines_vec!["Rust", fence, "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
+    assert_eq!(
+        out,
+        lines_vec![&format!("{opener}rust"), "fn main() {}", "```"]
+    );
 }
 
 #[test]
@@ -360,12 +372,17 @@ fn attaches_orphan_specifier_null_language_without_compression() {
 }
 
 #[rstest]
-#[case("```   ")]
-#[case("~~~~   ")]
-fn attaches_orphan_specifier_whitespace_language(#[case] fence: &str) {
+#[case("```   ", "```")]
+#[case("~~~~   ", "~~~~")]
+fn attaches_orphan_specifier_whitespace_language(#[case] fence: &str, #[case] opener: &str) {
+    // As above: the backtick block closes and compresses, the tilde block does
+    // not and keeps its opener, and the whitespace-only language is dropped.
     let input = lines_vec!["Rust", fence, "fn main() {}", "```"];
     let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(out, lines_vec!["```rust", "fn main() {}", "```"]);
+    assert_eq!(
+        out,
+        lines_vec![&format!("{opener}rust"), "fn main() {}", "```"]
+    );
 }
 
 #[test]
@@ -383,12 +400,38 @@ fn compresses_matched_fence_reusing_cached_opening_and_closing_rewrites() {
 #[test]
 fn unclosed_fence_rewrites_only_the_opening_delimiter() {
     // No closing delimiter matches the six-backtick opener, so the block is
-    // emitted through the unmatched fallback. Only the opening delimiter is
-    // normalized; the interior fence-like lines are literal content of the
-    // unclosed fence and are preserved verbatim.
-    let input = lines_vec!["``````rust", "````js", "~~~"];
+    // emitted through the unmatched fallback. Nothing inside the block is
+    // fence-shaped, so only the opening delimiter is rewritten and the interior
+    // lines are preserved verbatim.
+    let input = lines_vec!["``````rust", "plain text", "more text"];
     let out = compress_fences(&input);
-    assert_eq!(out, lines_vec!["```rust", "````js", "~~~"]);
+    assert_eq!(out, lines_vec!["```rust", "plain text", "more text"]);
+}
+
+#[test]
+fn unclosed_fence_keeps_the_opener_reported_for_an_interior_shorter_fence() {
+    // The four-backtick opener is what makes the three-backtick line below it
+    // literal content rather than a closing delimiter. Compressing the opener
+    // closed the block early, so the payload below moved out of the literal
+    // region and a later pass rewrote it — `--ellipsis` turned `literal...`
+    // into `literal…`. The opener keeps its four backticks and the payload
+    // stays inside the unclosed fence.
+    let input = lines_vec!["````", "```", "literal..."];
+    let out = compress_fences(&input);
+    assert_eq!(out, input);
+}
+
+#[test]
+fn unclosed_fence_keeps_the_opener_that_makes_its_interior_literal() {
+    // The interior run is fence-shaped and strictly shorter than the opener, so
+    // it is literal content only for as long as the opener stays six markers
+    // long. Rewriting the opener to three markers would promote that run to the
+    // closing delimiter and end the block a line early, then rewrite the
+    // remainder on the next pass, so the unmatched path applies the same
+    // preserved-delimiter rule as the matched one and the document round-trips.
+    let input = lines_vec!["``````rust", "````", "~~~"];
+    let out = compress_fences(&input);
+    assert_eq!(out, input);
 }
 
 #[rstest]

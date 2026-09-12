@@ -396,6 +396,14 @@ fn capability_directory(tempdir: &TempDir) -> (Dir, Utf8PathBuf) {
 #[case(&["--fences"], "Rust\n```\nfn main() {}\n```\n", "```rust\nfn main() {}\n```\n")]
 #[case(&["--footnotes"], include_str!("data/footnotes_input.txt"), include_str!("data/footnotes_expected.txt"))]
 #[case(&["--fences", "--footnotes"], include_str!("data/fences_footnotes_input.txt"), include_str!("data/fences_footnotes_expected.txt"))]
+#[case(
+    // The four-backtick opener makes the three-backtick line below it literal
+    // content, so the payload stays inside the unclosed fence and the ellipsis
+    // pass must not reach it.
+    &["--fences", "--ellipsis"],
+    "````\n```\nliteral...\n",
+    "````\n```\nliteral...\n"
+)]
 #[case(&["--wrap", "--footnotes"], include_str!("data/footnotes_input.txt"), include_str!("data/footnotes_wrap_expected.txt"))]
 #[case(&["--wrap", "--ellipsis"], include_str!("data/ellipsis_wrap_input.txt"), include_str!("data/ellipsis_wrap_expected.txt"))]
 #[case(&["--headings"], "Title\n=====\n", "# Title\n")]

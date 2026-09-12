@@ -395,8 +395,15 @@ selected for the branch.
   fence line structural. This covers same-marker inner fences and the
   cross-marker case where an inner backtick fence would become structural after
   an outer tilde fence is converted to backticks. If so, it preserves the
-  original outer delimiter width and marker family. Unmatched or malformed
-  delimiter runs fall through the legacy stateless normalization path.
+  original outer delimiter width and marker family. Matched fenced blocks
+  rewrite both delimiters; a block the document ends inside (no matching
+  closing delimiter, including a closer in the other marker family) rewrites
+  only the opening delimiter and emits every interior line verbatim. The
+  preserved-delimiter rule above applies to both, so an unclosed block whose
+  interior holds a fence-shaped line also keeps its original outer delimiter
+  width and marker family. Lines that are not fence delimiters at all are
+  still emitted with their stateless compressed rewrite, which is a no-op for
+  non-fence lines.
 - `attach_orphan_specifiers(lines: &[String]) -> Vec<String>` attaches a lone
   language identifier line to the following unlabelled fence, but only when the
   scanner is outside any active fenced block. It uses `FenceTracker` to skip
@@ -1104,8 +1111,10 @@ variants have the following effects:
   interior fence would otherwise become structural.
 
 All fence-marker rewriting must dispatch on `Strategy` through `rewrite_marker`.
-`flush_matched_block` selects the matched-block strategy, while
-`rewrite_fence_line` only dispatches it and falls back to the original line.
+Both `flush_matched_block` and `flush_unmatched_block` select the strategy from
+whether the block has a conflicting interior fence, while `rewrite_fence_line`
+only dispatches the chosen strategy and falls back to the original line when
+the line is not a normalization-compatible delimiter.
 
 ### Architecture
 
