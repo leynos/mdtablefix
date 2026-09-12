@@ -45,7 +45,6 @@ each formatting flag is described in the sections that follow.
 
 _Table 1: The command-line flags._
 
-
 ### The four file modes
 
 `--in-place`, `--check`, `--diff`, and `--list-files` act on the files a run

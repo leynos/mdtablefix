@@ -797,7 +797,6 @@ maps `analyse_one` over the paths with `rayon`; `analyse_one` calls
 in-place write through `replace_file`. The payloads return to `run_files` in
 argument order._
 
-
 ## Git file selection
 
 `--git` lets the tool choose its own inputs. `git_inputs::resolve` composes the

@@ -387,7 +387,6 @@ contract is exercised end to end through the built binary by
 `tests/cli_check.rs`, `tests/cli_diff.rs`, and the BDD scenarios in
 `tests/features/`.
 
-
 ### File selection is a second private tree
 
 `--git` adds two more modules to the binary and no library surface.
@@ -1611,7 +1610,6 @@ The other two commit gates are `make check-fmt` (`cargo fmt --all -- --check`)
 and `make lint` (`cargo clippy --all-targets --all-features -- -D warnings`).
 All three run before a commit. `make markdownlint` covers the documentation
 changes that none of the Rust gates see.
-
 
 #### `make mutants`
 
