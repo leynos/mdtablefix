@@ -2,7 +2,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Item, parse_macro_input};
+use syn::{Item, ItemFn, parse_macro_input, parse_quote};
 
 /// Allows `unused_braces` lint for fixture functions.
 ///
@@ -27,6 +27,41 @@ pub fn allow_fixture_expansion_lints(_attr: TokenStream, item: TokenStream) -> T
             )
         )]
         #parsed_item
+    }
+    .into()
+}
+
+/// Runs a traced test, healing the callsite interest cache after the
+/// subscriber is installed.
+///
+/// Use this in place of `tracing_test::traced_test`. `tracing-test` installs
+/// its global subscriber lazily, from whichever traced test the harness
+/// reaches first. `tracing` decides once, when a callsite is first used,
+/// whether that callsite can ever be dispatched, and a callsite first used
+/// before the install finds no subscriber to ask: it caches
+/// `Interest::never()` for the life of the process, because installing a
+/// global subscriber does not recompute the cache. The callsite then stays
+/// silent, so a test that asserts on its own log lines fails intermittently,
+/// on a schedule set by whichever tests the harness happens to run alongside
+/// it rather than by the code under test.
+///
+/// Rebuilding the cache once the subscriber is in place re-enables those
+/// callsites. Expansion order places the rebuild after the install: this macro
+/// prepends the rebuild to the function body and hands that body to
+/// `tracing_test::traced_test`, which prepends its own initialization to
+/// whatever body it is given.
+#[proc_macro_attribute]
+pub fn traced_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut function = parse_macro_input!(item as ItemFn);
+
+    function.block.stmts.insert(
+        0,
+        parse_quote!(::tracing::callsite::rebuild_interest_cache();),
+    );
+
+    quote! {
+        #[::tracing_test::traced_test]
+        #function
     }
     .into()
 }

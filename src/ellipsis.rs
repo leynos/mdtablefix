@@ -320,7 +320,8 @@ mod tests {
         assert_eq!(replace_ellipsis(&input), expected);
     }
 
-    #[tracing_test::traced_test]
+    // Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+    #[test_macros::traced_test]
     #[test]
     fn preservation_traces_omit_document_content() {
         let sensitive_line = "    private... payload".to_string();

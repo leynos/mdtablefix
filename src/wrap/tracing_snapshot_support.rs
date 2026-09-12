@@ -1,8 +1,9 @@
 //! Stable capture support for tracing-event snapshots.
 //!
-//! Call this helper inside a `#[traced_test]` function through its injected
-//! `logs_assert` closure. Copy the normalized result into an owned buffer
-//! before passing it to `insta::assert_snapshot!` after the closure returns.
+//! Call this helper inside a `test_macros::traced_test` function through its
+//! injected `logs_assert` closure. Copy the normalized result into an owned
+//! buffer before passing it to `insta::assert_snapshot!` after the closure
+//! returns.
 
 /// Normalizes captured tracing lines for a single event message.
 ///

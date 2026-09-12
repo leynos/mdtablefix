@@ -243,7 +243,8 @@ fn stdin_output_keeps_its_terminator_contract() {
 /// A file boundary reports the selected ending together with the counts
 /// that decided it, so a reformatted file's endings are traceable.
 #[rstest]
-#[tracing_test::traced_test]
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+#[test_macros::traced_test]
 fn file_boundary_reports_the_line_ending_counts(no_opts: FormatOpts) {
     let dir = tempdir().expect("create temporary directory");
     let directory = open_dir(dir.path()).expect("open directory capability");
@@ -269,7 +270,8 @@ fn file_boundary_reports_the_line_ending_counts(no_opts: FormatOpts) {
 /// It has no path to attach, so it names its own source rather than leaving
 /// the field absent, and one filter still finds both boundaries.
 #[rstest]
-#[tracing_test::traced_test]
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+#[test_macros::traced_test]
 fn stdin_boundary_reports_the_line_ending_counts(no_opts: FormatOpts) {
     let output = format_stdin("|A|B|\r\n|---|---|\r\n|1|2|\r\n", no_opts);
 

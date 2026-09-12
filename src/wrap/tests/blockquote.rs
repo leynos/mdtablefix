@@ -1,7 +1,8 @@
 //! Unit tests for semantic blockquote-prefix parsing.
 
 use rstest::rstest;
-use tracing_test::traced_test;
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+use test_macros::traced_test;
 
 use crate::wrap::BlockquotePrefix;
 

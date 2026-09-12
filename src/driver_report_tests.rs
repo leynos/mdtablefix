@@ -6,7 +6,8 @@
 
 use camino::Utf8Path;
 use mdtablefix::report::LineDelta;
-use tracing_test::traced_test;
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+use test_macros::traced_test;
 
 use super::{
     Mode,

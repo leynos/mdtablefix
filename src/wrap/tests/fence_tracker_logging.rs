@@ -6,7 +6,8 @@
 //! `fence_tracker` to keep each test module within the repository's file-size
 //! limit.
 
-use tracing_test::traced_test;
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+use test_macros::traced_test;
 
 use crate::wrap::FenceTracker;
 

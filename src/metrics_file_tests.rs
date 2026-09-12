@@ -10,7 +10,8 @@ use anyhow::Error;
 use camino::{Utf8Path, Utf8PathBuf};
 use mdtablefix::report::{FileReport, LineDelta};
 use rstest::rstest;
-use tracing_test::traced_test;
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+use test_macros::traced_test;
 
 use super::{
     FileOutcome,

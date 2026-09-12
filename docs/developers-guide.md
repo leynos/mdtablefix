@@ -773,9 +773,14 @@ replacing `LineBuffer` with `textwrap`.
 `tracing = "0.1"` and `metrics = "0.24"` are the runtime observability
 dependencies, used by the library and the executables. `tracing-test = "0.2"`
 and `metrics-util = "0.20"` are test-only dev-dependencies; use them only in
-tests (e.g. `#[traced_test]` or `DebuggingRecorder`). The crate does not
-install a global subscriber or metrics recorder. Executables and test harnesses
-that want log output must install their own subscriber (e.g.
+tests (e.g. `DebuggingRecorder`). Traced tests should use the in-repo
+`test_macros::traced_test` rather than `tracing_test::traced_test` directly,
+because it rebuilds the `tracing` interest cache after the subscriber is
+installed, so a callsite first used before that install cannot remain cached
+as `Interest::never()` and lose the test's log lines (see
+`test-macros/src/lib.rs` for the full rationale). The crate does not install a
+global subscriber or metrics recorder. Executables and test harnesses that want
+log output must install their own subscriber (e.g.
 `tracing_subscriber::fmt::init()` in `main`).
 
 ### Log levels
@@ -1009,8 +1014,8 @@ submodule so the snapshot test sits beside the code it pins while keeping the
 production module within the 400-line limit. The `.snap` fixtures live under the
 neighbouring `snapshots/` directory.
 
-A test captures events with `tracing-test`'s `#[traced_test]`, then normalizes
-the captured lines through the shared
+A test captures events with the in-repo `test_macros::traced_test` attribute,
+then normalizes the captured lines through the shared
 `crate::wrap::tracing_snapshot_support::normalise_event_lines` helper before
 asserting the snapshot.
 
@@ -1030,10 +1035,10 @@ Re-use policy for this helper:
   and gated behind `#[cfg(test)]`; it is `pub(crate)` test-support code, not part
   of any public or runtime API.
 - **Permitted call-sites.** Only tracing-event snapshot tests. Call it from
-  inside a `#[traced_test]` function through the injected `logs_assert` closure,
-  copying the normalized result into an owned buffer before asserting the
-  snapshot after the closure returns (see the modules listed above for the
-  canonical shape).
+  inside a `test_macros::traced_test` function through the injected
+  `logs_assert` closure, copying the normalized result into an owned buffer
+  before asserting the snapshot after the closure returns (see the modules
+  listed above for the canonical shape).
 - **Composition.** Do not layer additional normalization on top; if a new event
   needs different masking, extend the helper (and this section) rather than
   post-processing its output at the call-site, so every snapshot shares one
@@ -1361,6 +1366,32 @@ Apply it to any fixture function whose single-expression body triggers the lint:
 #[test_macros::allow_fixture_expansion_lints]
 #[rstest::fixture]
 pub fn broken_table() -> Vec<String> { … }
+```
+
+The same crate provides `test_macros::traced_test`, the attribute all traced
+tests in this repository use in place of `tracing_test::traced_test`. The
+wrapper exists because `tracing-test` installs its global subscriber lazily,
+from whichever traced test the harness reaches first. `tracing` decides once,
+when a callsite is first used, whether that callsite can ever be dispatched; a
+callsite first used before that install finds no subscriber to ask and caches
+`Interest::never()` for the life of the process, because installing a global
+subscriber does not recompute the cache. The callsite then stays silent, so a
+test that asserts on its own log lines fails intermittently, on a schedule set
+by which other tests the harness happens to run alongside it.
+
+The wrapper prepends `::tracing::callsite::rebuild_interest_cache();` to the
+function body and re-emits `#[::tracing_test::traced_test]`. `tracing-test`
+prepends its own initialization to whatever body it is given, so the rebuild
+always runs after the install. The ordering is therefore structural rather
+than dependent on the test author writing calls in the right order. The full
+rationale is in the macro's doc comment in `test-macros/src/lib.rs`.
+
+Apply it to any test that asserts on its own log lines:
+
+```rust
+#[test_macros::traced_test]
+#[test]
+fn a_traced_case() { … }
 ```
 
 ### 2.4. Inline unit-test modules
