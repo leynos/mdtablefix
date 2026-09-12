@@ -279,11 +279,11 @@ pub fn write_back(
 /// # Errors
 ///
 /// Returns an error if the file cannot be read; under [`Mode::InPlace`], if it
-/// carries conflict markers and `guard` refuses it, or if it cannot be
-/// rewritten.
+/// carries conflict markers and `guard` refuses it, if the repository's state
+/// cannot be read to decide that, or if the file cannot be rewritten.
 pub fn analyse(
     mode: Mode,
-    guard: ConflictGuard,
+    guard: &ConflictGuard,
     directory: &Dir,
     display_path: &Utf8Path,
     storage_key: &Utf8Path,
@@ -337,24 +337,27 @@ pub fn analyse(
         // nothing to refuse. Reflowing across a marker restructures text on
         // both sides of the boundary, so the user would resolve against
         // corrupted content and commit it into a rewritten history, where
-        // `git rebase --abort` is gone.
-        Mode::InPlace if is_changed && guard.refuses(&assessment.original) => {
-            return Err(anyhow!(
-                "refusing to rewrite {display_path}: it contains conflict markers and a merge, \
-                 rebase, or cherry-pick is in progress. Resolve it first, or pass \
-                 --allow-conflicted to rewrite it anyway."
-            ));
-        }
-        // A clean file is left alone byte for byte. The write would be
-        // invisible in the text but not in the file: `replace_file` renames a
-        // temporary over the target, so it would swap the inode and the
-        // modification time of a file it did not change, and `make`-style
-        // staleness checks would see a rebuild where there was nothing to
-        // rebuild.
+        // `git rebase --abort` is gone. The one arm holds both the refusal and
+        // the write because the guard's answer is itself a `Result`: a `match`
+        // guard cannot ask with `?`, and a write whose guard went unread is not
+        // a write this arm may make.
         Mode::InPlace if is_changed => {
+            if guard.refuses(&assessment.original)? {
+                return Err(anyhow!(
+                    "refusing to rewrite {display_path}: it contains conflict markers and a \
+                     merge, rebase, revert, or cherry-pick is in progress. Resolve it first, or \
+                     pass --allow-conflicted to rewrite it anyway."
+                ));
+            }
             write_back(directory, storage_key, &assessment)?;
             String::new()
         }
+        // A clean file is left alone byte for byte, and nothing consults the
+        // repository for it: the write would be invisible in the text but not
+        // in the file. `replace_file` renames a temporary over the target, so
+        // it would swap the inode and the modification time of a file it did
+        // not change, and `make`-style staleness checks would see a rebuild
+        // where there was nothing to rebuild.
         // Every remaining combination renders as nothing. `--list-files` is
         // named rather than matched by `_`, so that a sixth mode has to decide
         // what it prints instead of inheriting silence.

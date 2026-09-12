@@ -25,7 +25,7 @@ use crate::{
 fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
     let (_, output) = driver::analyse(
         Mode::Print,
-        ConflictGuard::unguarded(),
+        &ConflictGuard::unguarded(),
         directory,
         path,
         path,
@@ -39,7 +39,7 @@ fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyho
 fn rewrite_in_place(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<()> {
     driver::analyse(
         Mode::InPlace,
-        ConflictGuard::unguarded(),
+        &ConflictGuard::unguarded(),
         directory,
         path,
         path,

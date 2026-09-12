@@ -62,22 +62,44 @@ fn a_fenced_example_carrying_all_three_markers_still_counts() {
     assert!(has_conflict_markers(fenced));
 }
 
+/// The three states a guard can be in, as a case names them.
+#[derive(Debug, Clone, Copy)]
+enum Guarding {
+    /// Nothing to consult, which is also the guard an `--allow-conflicted` run
+    /// gets: the user has asked for the rewrite whatever the repository is
+    /// doing.
+    Nothing,
+    /// A repository that is not mid-operation.
+    Idle,
+    /// A repository that is mid-operation.
+    MidOperation,
+}
+
 /// The refusal is the conjunction of three facts, and each of them is load
 /// bearing: a rewrite that ignores the operation corrupts a resolution, one
 /// that ignores the markers rewrites an unresolved file, and one that ignores
 /// `--allow-conflicted` cannot be overridden by the user.
 #[rstest]
-#[case(false, false, true, false)]
-#[case(false, true, true, false)]
-#[case(true, false, true, true)]
-#[case(true, true, true, false)]
-#[case(true, false, false, false)]
+#[case(Guarding::Nothing, true, false)]
+#[case(Guarding::Nothing, false, false)]
+#[case(Guarding::Idle, true, false)]
+#[case(Guarding::Idle, false, false)]
+#[case(Guarding::MidOperation, true, true)]
+#[case(Guarding::MidOperation, false, false)]
 fn a_conflicted_file_is_refused_only_mid_operation_and_without_the_override(
-    #[case] in_progress: bool,
-    #[case] allowed: bool,
+    #[case] guarding: Guarding,
     #[case] conflicted: bool,
     #[case] expected: bool,
 ) {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let git_dir = Utf8Path::from_path(directory.path()).expect("a UTF-8 temporary directory");
+    if matches!(guarding, Guarding::MidOperation) {
+        std::fs::write(git_dir.join("MERGE_HEAD"), "").expect("create the marker");
+    }
+    let guard = match guarding {
+        Guarding::Nothing => ConflictGuard::unguarded(),
+        Guarding::Idle | Guarding::MidOperation => ConflictGuard::guarded(git_dir),
+    };
     let content = if conflicted {
         CONFLICTED
     } else {
@@ -85,18 +107,42 @@ fn a_conflicted_file_is_refused_only_mid_operation_and_without_the_override(
     };
 
     assert_eq!(
-        ConflictGuard::new(in_progress, allowed).refuses(content),
+        guard.refuses(content).expect("read the repository"),
         expected,
-        "in_progress={in_progress} allowed={allowed} conflicted={conflicted}"
+        "guarding={guarding:?} conflicted={conflicted}"
     );
 }
 
-/// A run that selected nothing from a repository never refuses: `--allow-conflicted`
-/// has nothing to permit, and no repository is consulted for a path the user
-/// named, which is what keeps an ordinary run from spawning `git`.
+/// A run with nothing to consult never refuses: there is no directory to ask,
+/// which is what keeps an ordinary run — and a run whose user passed
+/// `--allow-conflicted` — from spawning `git` for the guard.
 #[test]
 fn the_unguarded_run_refuses_nothing() {
-    assert!(!ConflictGuard::unguarded().refuses(CONFLICTED));
+    let refused = ConflictGuard::unguarded()
+        .refuses(CONFLICTED)
+        .expect("the unguarded guard asks nothing");
+
+    assert!(!refused);
+}
+
+/// The marker scan decides before the repository is consulted, so a document
+/// carrying none of the three markers never has its repository read.
+///
+/// The Git directory here is a regular file, which every marker test fails on:
+/// a clean document comes back unrefused anyway, which is only possible if the
+/// scan ran first. It is the ordering, rather than the answer, that this pins.
+#[test]
+fn a_document_without_markers_never_asks_the_repository() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let file = directory.path().join("not-a-directory");
+    std::fs::write(&file, "").expect("create a file where a Git directory was expected");
+    let git_dir = Utf8Path::from_path(&file).expect("a UTF-8 path");
+
+    let refused = ConflictGuard::guarded(git_dir)
+        .refuses("| A | B |\n")
+        .expect("a document without markers must not ask the repository");
+
+    assert!(!refused);
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -107,14 +153,17 @@ enum Marker {
 
 #[rstest]
 #[case(Marker::File("MERGE_HEAD"))]
+// The pseudoref `git revert` writes when it stops on a conflict: without it, a
+// paused revert is an operation this tool would rewrite inside.
+#[case(Marker::File("REVERT_HEAD"))]
+#[case(Marker::File("CHERRY_PICK_HEAD"))]
 #[case(Marker::Directory("rebase-merge"))]
 #[case(Marker::Directory("rebase-apply"))]
-#[case(Marker::File("CHERRY_PICK_HEAD"))]
 fn an_in_progress_operation_is_detected(#[case] marker: Marker) {
     let directory = tempfile::tempdir().expect("a temporary directory");
     let git_dir = Utf8Path::from_path(directory.path()).expect("a UTF-8 temporary directory");
     assert!(
-        !operation_in_progress(git_dir),
+        !operation_in_progress(git_dir).expect("read the idle fixture"),
         "the fixture must start idle"
     );
 
@@ -125,7 +174,7 @@ fn an_in_progress_operation_is_detected(#[case] marker: Marker) {
     .expect("create the marker");
 
     assert!(
-        operation_in_progress(git_dir),
+        operation_in_progress(git_dir).expect("read the marked fixture"),
         "{marker:?} must signal an operation in progress"
     );
 }
@@ -141,7 +190,34 @@ fn an_idle_git_directory_is_not_mid_operation() {
     }
 
     assert!(
-        !operation_in_progress(git_dir),
+        !operation_in_progress(git_dir).expect("read the idle repository"),
         "a directory holding the entries an idle repository holds is not mid-operation"
     );
+}
+
+/// A marker that cannot be tested for is an error, not an answer.
+///
+/// A `git_dir` that is a regular file is the cheapest way to stage this: a
+/// marker path *through* that file fails with `ENOTDIR`, and a run that read
+/// that as "no operation in progress" would rewrite a conflicted file on the
+/// strength of a question it never answered.
+#[test]
+fn an_unreadable_repository_is_an_error_rather_than_an_answer() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let file = directory.path().join("not-a-directory");
+    std::fs::write(&file, "").expect("create a file where a Git directory was expected");
+    let git_dir = Utf8Path::from_path(&file).expect("a UTF-8 path");
+
+    let error = operation_in_progress(git_dir).expect_err("a file is not a Git directory");
+
+    assert_eq!(error.git_dir, git_dir);
+    assert_ne!(
+        error.source.kind(),
+        std::io::ErrorKind::NotFound,
+        "an unanswered question must not be reported as absence"
+    );
+    // `ENOTDIR` is the Unix kind a path through a regular file produces; the
+    // portable claim above is the one this test is about.
+    #[cfg(unix)]
+    assert_eq!(error.source.kind(), std::io::ErrorKind::NotADirectory);
 }

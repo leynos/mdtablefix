@@ -40,7 +40,8 @@ each formatting flag is described in the sections that follow.
 | `--md-exts EXT[,EXT...]` | With `--git`, the extensions to select, replacing the    |
 |                          | default `md`, `mdc`, and `markdown`.                     |
 | `--allow-conflicted`     | With `--git --in-place`, rewrite files that carry        |
-|                          | conflict markers during a merge, rebase, or cherry-pick. |
+|                          | conflict markers during a merge, rebase, revert, or      |
+|                          | cherry-pick.                                             |
 | `--version`              | Print the version and exit.                              |
 
 _Table 1: The command-line flags._
@@ -115,10 +116,16 @@ read standard input.
 Rewriting a file that carries conflict markers restructures the text on both
 sides of the boundary, so a later resolution would be made against corrupted
 content. `--git --in-place` therefore refuses a selected file that carries
-conflict markers while a merge, rebase, or cherry-pick is paused in the
+conflict markers while a merge, rebase, revert, or cherry-pick is paused in the
 repository: the file is named on standard error, left untouched, and counted as
 a failure, so the run exits `2`. Every other selected file is still rewritten.
 `--allow-conflicted` overrides the refusal.
+
+The repository is asked immediately before each file is replaced rather than
+once per run, so an operation that begins while a long run is still analysing
+files is seen by the writes that follow it. A file that carries no conflict
+markers is never the reason for asking, so an ordinary repository is not
+consulted at all.
 
 The check is deliberately narrow. A file is refused only if it holds all three
 marker forms — a line of at least seven `<`, a line of at least seven `=`, and a
