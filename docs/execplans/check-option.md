@@ -5946,15 +5946,26 @@ for, and the Windows cross-check
 `RUSTFLAGS="-D warnings" cargo check --target x86_64-pc-windows-msvc
 --all-targets --all-features` exits 0 with no warnings.
 
-**The attribution this revision does not yet have.** The mechanism is measured
+**The attribution, and the reading that settled it.** The mechanism is measured
 in isolation, and the per-callsite symptom points at it; that the *specific*
-Windows interleaving reaches the window is an inference, and the honest test of
-it is the job itself, which is running on `9834fcb` as this is written. If the
-job goes green, the reading is that the rebuild heals whatever poisoned that
-callsite — the remedy is a superset of the diagnosis, since every traced test
-now recomputes the whole cache before emitting anything. If the job fails again
-on the same assertion, the inference was wrong and the next revision records
-what the failing interleaving actually does.
+Windows interleaving reached the poisoning window was an inference, and the job
+was the test of it. Run `34690495578` on `9834fcb` is green: `atomic write
+contract (windows)` passes in 6m29s with **both** steps succeeding — "Test the
+atomic write contract", the step that failed on `64117e4`, and "Test the whole
+suite", which that failure had skipped — and `build-test` and all four
+`binstall packaging` jobs pass with it. The job that failed twice on this branch
+now passes end to end, which is the reading this revision was waiting for.
+
+**What the green does and does not prove.** It proves the failure is gone from
+the head that carries the fix, which is what the round asked for. It does not
+prove the poisoning window was entered on Windows by the route reconstructed
+above: a rebuild at the start of every traced test heals *any* callsite that
+cached `never`, whichever window cached it, so the remedy is a superset of the
+diagnosis and a green job cannot separate the two. The claim the evidence
+supports is the one to keep: a traced test can lose its own log lines to a
+callsite whose dispatchability was decided before a dispatcher existed, and
+rebuilding the cache after the install removes that class of failure from every
+traced test, not just this assertion.
 
 **The review, meanwhile, was paused rather than answered.** Review `4966887b`
 posted at 11:05:41Z and then reported `Review paused`: "It looks like this
