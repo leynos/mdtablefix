@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: COMPLETE — 2026-09-12, at commit `9a83339`, on branch `git-option`,
+Status: COMPLETE — 2026-09-12, at commit `6384543`, on branch `git-option`,
 stacked on pull request #464 and carried by pull request #466. The prerequisite
 extraction of `src/cli.rs` landed, Stage A is discharged, and all four
 milestones — EP-M0's grammar measurement, EP-M1's selection tree, EP-M2's
@@ -14,10 +14,27 @@ command-line surface, and EP-M3's documentation — are delivered. Every
 deterministic gate is green on the milestone tree, the four CodeRabbit rounds
 recorded under `Artefacts and notes` returned zero findings, and `Outcomes &
 retrospective` states what was delivered against what was planned and which
-pinned interfaces the implementation superseded. The plan's remaining work is
-not this plan's: pull request #464 must merge before this one can. See
-`Progress`, `Outcomes & retrospective`, and `Conformance basis`, "Related
-work".
+pinned interfaces the implementation superseded.
+
+Three things this plan still owes, recorded rather than implied away. The
+branch's first CI run is red on both jobs over five defects that are all in
+test code — a fixture identity the helper never supplied, exit-status and path
+text that holds only where the platform spells them the way Linux does, and a
+snapshot carrying the executable suffix — and `6384543` answers all five. No
+CI run yet exists for that repair, and none exists for EP-M3's two commits
+either: the branch's newest run is `34661535150` at `573deb9`, and everything
+pushed since has been untested by CI, because pull request #466 stands in
+conflict with its base and GitHub documents that a conflicting pull request
+runs no `pull_request` workflows at all. The green those commits claim is
+therefore local gates and CodeRabbit alone. And the one verification no machine
+here can perform — the macOS and Windows half of the `canonicalize` case
+question behind INV-DEDUP — is carried forward rather than discharged, with
+ADR 0010's known-risks section holding it and the fallback named in this plan's
+`Verification plan`.
+
+The plan's remaining work is not this plan's: pull request #464 must merge
+before this one can. See `Progress`, `Outcomes & retrospective`, and
+`Conformance basis`, "Related work".
 
 ## Purpose / big picture
 
@@ -619,12 +636,21 @@ output.
 - Non-vacuity: each case asserts the collision was present in the input. The
   hard-link case is the negative control for the identity choice: an
   implementation keyed on `(st_dev, st_ino)` must fail it.
-- Residual gap: whether `std::fs::canonicalize` normalizes case on macOS APFS
-  and on Windows is asserted here from documentation, not measured — this
-  machine is Linux. EP-M1 must confirm it on the release matrix, both of which
-  are release targets as of commit `1f64236`. If it does not, fall back to
-  comparing `(st_dev, st_ino)` **plus** parent-directory identity, and record
-  the change here.
+- Residual gap — **carried forward, not discharged** (2026-09-12): whether
+  `std::fs::canonicalize` normalizes case on macOS APFS and on Windows is
+  asserted here from documentation, not measured — this machine is Linux. EP-M1
+  was to confirm it on the release matrix, both of which are release targets as
+  of commit `1f64236`, and no machine in this environment can: the branch's CI
+  runs the suites on Linux and Windows, its Windows job has no
+  case-insensitive-filesystem case to appeal to, and it has no macOS job at
+  all. The check therefore stands open. ADR 0010 records it among its known
+  risks rather than closing it, and this bullet stays as the plan's own record
+  that the milestone was completed with one verification unmet. If it does not
+  hold, fall back to comparing `(st_dev, st_ino)` **plus** parent-directory
+  identity, and record the change here. The consequence of being wrong is
+  bounded and is stated in the bullet above: a missed dedup formats one file
+  twice and the last write wins, which is correct content either way — never
+  data loss, and never a file reported clean that is not.
 
 **INV-ORDER-DET** — selection is a deterministic function of the candidate
 multiset: permuting the input does not change the output, and the output is
@@ -1930,7 +1956,17 @@ plateau.
       survivors; a review of the implementation alone would have passed a
       milestone whose acceptance criterion was still unmet.
 - [ ] EP-M1: confirm `std::fs::canonicalize` case behaviour on the macOS and
-      Windows release targets, per the INV-DEDUP residual gap.
+      Windows release targets, per the INV-DEDUP residual gap. **Carried
+      forward, 2026-09-12: no machine in this environment can perform it.** The
+      host is Linux; the branch's CI runs the suites on Linux and on Windows and
+      has no macOS job; and the Windows job has no case-insensitive filesystem
+      case that would exercise the question. `1f64236` made both platforms
+      release targets but gave neither a runner that answers this. ADR 0010
+      records the check among its known risks, the fallback is named in the
+      residual-gap bullet above, and the consequence of the assumption failing
+      is a redundant format with last-writer-wins content — never data loss. The
+      box stays unchecked because the verification it names has not happened;
+      ticking it would record a measurement nobody made.
 - [x] (2026-09-12) EP-M1, mutation testing: `.cargo/mutants.toml` and
       `make mutants` exist, and the run reports **40 mutants: 34 caught, 6
       unviable, 0 missed** — `missed.txt` empty, exit status 0, over the whole
@@ -2075,6 +2111,83 @@ plateau.
       COMPLETE, and `Outcomes & retrospective` records what was delivered
       against what was planned. Milestone work is finished; what remains is
       pull request #464's merge, which this stack waits on.
+- [x] (2026-09-12) CI, the branch's newest run `34661535150` at `573deb9`:
+      **failure on both test jobs**, over five defects that are all in test
+      code. `build-test` (ubuntu-latest) fails at "Test and Measure Coverage"
+      with one failure, `the_git_directory_is_resolved_through_git`:
+      `git ["commit", "-m", "initialise"] failed with exit status: 128: Author
+      identity unknown`, because the unit fixture's `git` helper inherited the
+      environment and a runner has no configured identity — the developer's own
+      machine has one, so the case is green locally and red on a runner.
+      `atomic write contract (windows)` fails at "Test the whole suite" over
+      four more, each a spelling that holds only where the platform spells
+      things the way Linux does: `ExitStatus`'s own rendering (`exit status:`
+      here, `exit code:` on Windows) pinned as text in
+      `a_directory_outside_a_repository_has_no_git_directory`; the canonical
+      path in `a_regular_file_is_identified_by_an_absolute_canonical_path`,
+      which Windows renders `\\?\C:\...\docs\guide.md` — the verbatim marker as
+      well as the other separator; the behavioural fixture keying its recorded
+      bytes by `to_string_lossy()`, which made all seven git-selection scenarios
+      read a `docs\guide.md` it had never written; and the `--help` snapshot
+      carrying `mdtablefix.exe`, which `clap` prints because it prints
+      `argv[0]`. Diagnosis from `gh run view 34661535150 --log-failed`, kept at
+      `/tmp/ci-34661535150-failed.log`. The four packaging jobs, including both
+      macOS rows, passed throughout — they build a binary and run it, and never
+      compile a test target.
+- [x] (2026-09-12) CI repair `6384543`: the five defects answered in four
+      files, +45/−5, all of it test code and none of it the crate. The unit
+      helper hardens its environment the way the integration fixtures already
+      did, supplying the identity through `GIT_AUTHOR_*`/`GIT_COMMITTER_*` and
+      removing the developer's configuration from the picture; the canonical
+      path assertion compares by components through `Utf8Path::ends_with`,
+      which is the platform's own spelling of the separator and, on Windows, of
+      the verbatim prefix a canonical path carries; the exit-status assertion
+      pins the prefix this crate words and leaves the status to the standard
+      library; the behavioural fixture joins components with `/`; and the help
+      snapshot normalises the executable suffix away. See Surprises &
+      discoveries; the general shape is that a defect living only in the test
+      tree is invisible to a developer machine that happens to spell things the
+      way the test does.
+
+  One repair beyond the five: the linked-worktree assertion in
+  `the_git_directory_is_resolved_through_git`, which compared a path as
+  `/`-spelled text, was changed to the same component-wise comparison. That
+  assertion **never fired** — its fixture calls `git commit` before reaching
+  it, so the identity failure panicked first and hid it — and the change is a
+  judgement about the same latent defect rather than a response to an
+  observation. It is recorded as such: had only the observed five been
+  repaired, that suite would have gone green on the identity fix alone and left
+  the assertion to fail on the next run in which it was reached with a Windows
+  path.
+- [x] (2026-09-12) CI repair re-gated locally, `EV-M4-GATES`: `make check-fmt`,
+      `make typecheck`, `make lint`, and `make test` all green on `6384543` at
+      the first attempt, strictly sequentially through `scrutineer`. `make
+      lint` clean under `-D warnings` confirms the two
+      `needless_borrows_for_generic_args` findings are gone; `make test` runs 48
+      binaries with 944 unit tests and every integration, behavioural, and
+      doctest suite reporting `0 failed`, and the two known-flaky idempotence
+      suites passed without needing an isolated re-run. Logs
+      `/tmp/gate-rerun-{check-fmt,typecheck,lint,test}-git-option.out`.
+- [ ] CI, a run for `6384543` or for EP-M3's `9a83339`/`5f294b7`: **none
+      exists, and none can exist while #466 conflicts.** The branch's newest run
+      is `34661535150` at `573deb9` (00:24:40Z); the three commits pushed after
+      it — `9a83339` at 00:38Z, `5f294b7` at 00:41Z, `6384543` at 10:43Z — have
+      no run between them, where every earlier push had one within seconds.
+      GitHub documents the cause: *"Workflows will not run on `pull_request`
+      activity if the pull request has a merge conflict"*, and #466 is
+      `CONFLICTING`/`DIRTY` against `check-option`. So EP-M3's own two commits
+      are untested by CI to this day, and their green rests on the local gates
+      and the EP-M3 CodeRabbit round. The first trustworthy CI verdict still
+      lies on the far side of resolving the stack. `EV-M4-CI-SILENCE` holds the
+      run list and the limits of what it proves.
+- [x] (2026-09-12) The base branch is still moving and is itself partly red.
+      `origin/check-option` gained `530bdbd` (10:39Z) and `914e9ae` (10:43Z)
+      while this repair was being gated, and its own Windows job fails on
+      something that is not ours: `error: unused import: std::fs` at
+      `tests/cli_check/arguments.rs:3`, a file-scope import reached only from
+      inside a `#[cfg(unix)]` test with `RUSTFLAGS: -D warnings` in force on
+      the Windows runner. Its `build-test` job is green. Decision taken not to
+      rebase onto it — see the Decision log.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
@@ -2525,6 +2638,63 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   can carry reflows it did not make, and the honest thing is to say so in the
   commit message rather than to leave the diff looking smaller than the change.
 
+- Observation: **the missing-identity lesson was learned in one fixture and not
+  applied to the second.** The Surprises entry above records
+  `GIT_CONFIG_GLOBAL=/dev/null` leaving the *behavioural* fixture with no
+  identity, and the four `GIT_AUTHOR_*`/`GIT_COMMITTER_*` variables as the
+  remedy. The *unit* fixture in `src/select/git_ls_files_tests.rs` had the same
+  gap and kept it, because it was written in the same milestone and its helper
+  inherited the environment rather than hardening it. Evidence: CI run
+  `34661535150`, `git ["commit", "-m", "initialise"] failed with exit status:
+  128: Author identity unknown`, in that file's helper on **both** jobs. Impact:
+  a lesson recorded in one place does not propagate itself, and the fixture that
+  most needs the hardening is the one written before the lesson was learned. The
+  two helpers now harden their environments identically, and the shared shape is
+  the reason the repair was mechanical once the failure was read.
+
+- Observation: **a green local gate is evidence about the local machine, not
+  about the code.** All four of the Windows defects came from the test tree
+  spelling a platform fact the way this Linux box spells it — a separator, an
+  `ExitStatus` rendering, an `argv[0]` suffix, a canonical path's verbatim
+  marker — and each test was green here every time it was run. Evidence: CI run
+  `34661535150`'s Windows job reports `124 passed; 3 failed` on the library,
+  `13 passed; 1 failed` on `cli_git`, and all seven git-selection scenarios
+  failing at one fixture line. Impact: the four are string and path assertions
+  rather than behaviour, so the tool itself was never wrong on either platform;
+  but the plan's own gates could not have caught them, and the *first* run of a
+  new test suite on a second platform is doing real work rather than confirming
+  local green. Where a fact is spelled by the standard library, the repair is to
+  assert the part this crate words and let the platform supply the rest — which
+  is also what makes the assertion survive the next platform.
+
+- Observation: **GitHub runs no `pull_request` workflows at all while the pull
+  request conflicts, so silence from CI is not agreement.** Evidence: the
+  branch's newest run is `34661535150` at `573deb9` (00:24:40Z), while
+  `9a83339` (00:38Z), `5f294b7` (00:41Z), and `6384543` (10:43Z) were each
+  pushed with no run between them; #466 is `CONFLICTING`/`DIRTY` against
+  `check-option`. The behaviour is documented rather than inferred — GitHub's
+  events reference states that workflows will not run on `pull_request`
+  activity if the pull request has a merge conflict, and that the conflict must
+  be resolved first. Impact: EP-M3's documentation commits have never been
+  tested by CI, and neither has this repair, so no CI verdict exists for either
+  and the plan must not read the absence of a red run as a green one. It also
+  means the rebase this plan defers is what re-opens the pipeline, which turns a
+  tidiness question into the precondition for CI evidence — see the Decision
+  log.
+
+- Observation: **a test can be unreachable behind another test's failure, and
+  the repair that hides it is the one that looks tidiest.** The linked-worktree
+  assertion compared a path as `/`-spelled text and was the same latent defect
+  as the canonical-path failure Windows did report; it never fired, because its
+  fixture calls `git commit` before reaching it and the missing identity
+  panicked first. Evidence: CI run `34661535150`'s Windows log shows that test
+  panicking at the helper's own assert (`git_ls_files_tests.rs:145`) and the
+  assertion below it never being reached. Impact: repairing only the five
+  observed defects would have left the suite green on the identity fix alone,
+  and the assertion would have failed later, on the next run that reached it
+  with a Windows path — a worse place to find it. It is recorded in `Progress`
+  as a judgement rather than as an observation, because that is what it is.
+
 ## Decision log
 
 Entries are pointers; the reasoning lives in the body sections named. ADR 0010
@@ -2874,9 +3044,27 @@ is the durable record, and EP-M3 reconciles this log into it.
   meets it before a repository-wide run rather than after. Date/Author:
   2026-09-12, EP-M3.
 
+- Decision: do **not** rebase `git-option` onto `origin/check-option` now, even
+  though the base has moved and the branch is in conflict. Rationale: the base
+  is being actively rewritten (`530bdbd` at 10:39Z and `914e9ae` at 10:43Z
+  arrived within minutes of each other, during this repair's own gate run), so a
+  rebase performed now would be against a moving target and would need repeating
+  before the stack merges; the base's own Windows job is red on an unused import
+  at `tests/cli_check/arguments.rs:3`, so a rebase would fold a failing job into
+  a branch that is otherwise explainable as red-for-its-own-reasons; and the
+  conflict is not blocking anything this branch can still do — the plan's stated
+  position is that the stack waits on #464's merge, at which point the base
+  stops moving and one rebase settles it. The cost is real and is recorded rather
+  than waved away: while the conflict stands, GitHub runs no `pull_request`
+  workflows at all, so the repairs in `6384543` and EP-M3's two commits have no
+  CI verdict and cannot get one until the conflict is resolved. The decision is
+  therefore to hold the correctness position and pay in delayed evidence, and to
+  re-open the pipeline as soon as the base settles. Date/Author: 2026-09-12,
+  EP-M4 (CI repair).
+
 ## Outcomes & retrospective
 
-Completed 2026-09-12, at commit `9a83339`. Every milestone is delivered: EP-M0's
+Completed 2026-09-12, at commit `6384543`. Every milestone is delivered: EP-M0's
 grammar measurement, EP-M1's selection tree with zero surviving mutants, EP-M2's
 command-line surface and end-to-end behaviour, and EP-M3's ADR 0010 and the five
 component documents. Every Surprise and Decision above is reconciled into ADR
@@ -2927,6 +3115,34 @@ section) is scoped by its own paragraph to the wrapper's handling of prefixed
 blocks. The residual is recorded where a reader of the design will meet it, in
 ADR 0010's "Known risks and limitations", with the blast radius the new
 repository-wide mode gives it.
+
+**What the second platform found.** The first CI run on the branch — run
+`34661535150` at `573deb9`, the only one the branch has — was red on both test
+jobs over five defects that are all in test code, and `6384543` answers them.
+Four are the test tree spelling a platform fact the way this Linux box spells
+it: a canonical path compared as text, `ExitStatus`'s own rendering pinned as
+this crate's wording, a fixture keyed by `to_string_lossy()`, and a `--help`
+snapshot carrying `argv[0]`'s `.exe`. The fifth is older and blunter: the unit
+fixture's `git` helper inherited its environment and a runner has no identity,
+which the same plan had already learned and fixed in the behavioural fixture
+without carrying it across. Nothing in the tool's behaviour was wrong on either
+platform, and no defect was reachable by any local gate — the four local gates
+were green before the run and green again after the repair, on the same machine
+that could not have found any of the five. The honest summary is that the first
+run of a new suite on a second platform is doing real work, and that a green
+gate is a statement about the machine it ran on. A sixth change, the
+linked-worktree assertion, was made on judgement rather than observation because
+another test's failure had hidden it; `Progress` says so rather than presenting
+it as a sixth finding.
+
+**The CI posture, stated plainly.** No CI run exists for `6384543`, and none
+exists for EP-M3's `9a83339` or `5f294b7` — the branch's newest run predates all
+three, because #466 is in conflict with its base and GitHub runs no
+`pull_request` workflows while a conflict stands. So the branch's two
+documentation commits and this repair are, as of this record, untested by CI;
+their green is the local gate set and the CodeRabbit rounds. Resolving the
+conflict is therefore not only the merge prerequisite but the precondition for
+every further CI verdict, and the deferred rebase is what pays for it.
 
 **What a reader should take from the record.** Three things were found by
 writing rather than by testing: a stale doc comment on the selection's order, a
@@ -3453,7 +3669,115 @@ diff against `check-option` at this commit is the eight files of `9a83339`.
 No rate, seat, or quota limit appears anywhere in the round's output, so no wait
 was needed.
 
+**EV-CI-1** — the branch's first CI run, `34661535150` at `573deb9`, read
+2026-09-12 from `gh run view 34661535150 --log-failed`, kept at
+`/tmp/ci-34661535150-failed.log`. Two of its six jobs failed and four passed:
+
+```plaintext
+build-test                              failure   Test and Measure Coverage
+atomic write contract (windows)         failure   Test the whole suite
+binstall packaging (x86_64-unknown-linux-gnu)  success
+binstall packaging (aarch64-apple-darwin)      success
+binstall packaging (x86_64-apple-darwin)       success
+binstall packaging (x86_64-pc-windows-msvc)    success
+```
+
+The Linux job reports one failure, and the Windows job four, every one of them
+a test rather than the crate. Quoted as the logs print them, with the Windows
+separator left as it arrived so the defect is legible in the evidence:
+
+```plaintext
+build-test:  git ["commit", "-m", "initialise"] failed with exit status: 128: Author identity unknown
+windows:     FileIdentity("\\\\?\\C:\\Users\\runneradmin\\AppData\\Local\\Temp\\.tmpV8mRZH\\docs\\guide.md")
+windows:     unexpected message: `git rev-parse` failed with exit code: 128
+windows:     test help_documents_the_git_flags ... FAILED        (13 passed; 1 failed)
+windows:     7 git-selection scenarios FAILED at tests\steps\git_selection.rs:198
+```
+
+The Windows library run's own tally is `124 passed; 3 failed; 0 ignored`, and
+the panics are at `src\select\fs_probe_tests.rs:45`,
+`src\select\git_ls_files_tests.rs:316`, and `src\select\git_ls_files_tests.rs:145`
+— the last of which is the helper's assert rather than the test body, which is
+what put the sixth, unreached assertion out of the log's reach. The four
+packaging jobs never compile a test target, which is why they pass on both
+platforms while the suites fail on one.
+
+**EV-M4-GATES** — the repair's gates, run 2026-09-12 through `scrutineer` over
+the committed tree at `6384543`, one log per gate under
+`/tmp/gate-rerun-<gate>-git-option.out`, strictly sequentially:
+
+```plaintext
+make check-fmt     exit 0    cargo fmt --all -- --check
+make typecheck     exit 0    cargo check --all-targets --all-features
+make lint          exit 0    cargo clippy --all-targets --all-features -- -D warnings
+make test          exit 0    1988 passed, 0 failed, 20 ignored
+```
+
+All four passed on the first run, with no retry. The change is test code in four
+files, so the documentation gates — `make markdownlint` and `make nixie` — are
+not in this set; they belong to the plan edit that follows it and are recorded
+with it. `make lint` clean under `-D warnings` is what closes the two
+`needless_borrows_for_generic_args` findings that a first attempt at the repair
+introduced, and `make check-fmt` clean is what closes the rustfmt layout it
+also wanted. The 1988/0/20 tally is identical to `EV-M3-DOCS`'s, which is the
+expected result: the repair changes assertions, not the number of tests.
+
+**EV-M4-CI-SILENCE** — measured 2026-09-12 from `gh run list --branch git-option`,
+read alongside GitHub's events reference. The branch's newest run is
+`34661535150` at `573deb9`, created 00:24:40Z; the three commits pushed after it
+have no run between them:
+
+```plaintext
+573deb9   run 34661535150   failure    2026-09-12T00:24:40Z
+9a83339   —                 no run     committed 00:38:40Z
+5f294b7   —                 no run     committed 00:41:44Z
+6384543   —                 no run     committed 10:43:16Z
+```
+
+The cause is not flakiness in the trigger. Pushes triggered promptly up to and
+including `573deb9`, whose run was created six seconds after the commit; then
+nothing. `gh pr view 466` reports `"mergeable":"CONFLICTING"` and
+`"mergeStateStatus":"DIRTY"`, and GitHub's events reference states that
+workflows will not run on `pull_request` activity if the pull request has a
+merge conflict, and that the conflict must be resolved first. The inference is
+that the branch went conflicting during the rebase whose pushes `8f75fdd`,
+`56b68de`, and `573deb9` were — `8f75fdd` is no longer an ancestor, which is
+what a force-pushed rebase leaves behind — and that every push since has been
+silently untested.
+
+One limit on the evidence, stated rather than papered over: the mergeable state
+is a present-tense query with no history behind it, so the run list is what
+dates the silence and the documented rule is what explains it. They agree, and
+the mechanism is documented rather than inferred, but the moment the branch
+went conflicting is not itself recorded anywhere this session can read. What
+follows for the plan is unaffected either way: no run will appear for any of the
+three commits until the conflict is resolved, so the missing red run must not be
+read as a green one.
+
 ## Revision note
+
+Revised 2026-09-12, fourth pass, after the branch's first CI run came back red
+and its repair was gated.
+
+What changed. The first CI run on the branch — `34661535150`, the only one it
+has — failed both its test jobs over five defects, all of them in the test
+tree: a unit fixture whose `git` helper had inherited an environment with no
+author identity, and four assertions that spelled a platform fact the way Linux
+spells it. `6384543` answers them, and `EV-M4-GATES` records the local gates
+green on the repair. Two things are recorded that a summary would have
+flattened: one of the six changes is a judgement rather than a finding, because
+another test's failure hid the assertion it repairs; and no CI run exists for
+the repair, nor for EP-M3's own two commits, because a conflicting pull request
+runs no `pull_request` workflows at all — so those commits are, as of this
+record, CI-untested.
+
+The Epic path itself is not reopened: the tool's behaviour was correct on both
+platforms and every defect was in the tests that observe it. What the pass adds
+is the evidence for that claim, the four Surprises entries the run taught, the
+Decision-log entry for deferring the rebase, and the one verification this
+environment cannot perform — EP-M1's macOS and Windows `canonicalize` case
+question — annotated as carried forward in `Progress` and in the INV-DEDUP
+residual gap rather than left as a bare unchecked box.
 
 Revised 2026-09-11, third pass, after rebasing onto `main` at `d0549d9` and
 studying the merged code.
