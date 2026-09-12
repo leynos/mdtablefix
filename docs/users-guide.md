@@ -225,6 +225,17 @@ passed through unchanged. For example, a GitHub compare destination containing
 `v1...v2` remains a valid URL even when it follows its reference label on the
 next line.
 
+
+## Code-emphasis handling
+
+The `--code-emphasis` flag repairs emphasis markers adjoining inline code
+spans. Inside buffered table cells, the repair runs before column widths are
+measured, so the reflow uses the final cell text and produces aligned output in
+the same pass.
+
+For non-table content, `--code-emphasis` retains its existing behaviour and
+repairs the same inline-code and emphasis-marker combinations as before.
+
 ## Paragraph wrapping
 
 Pass `--wrap` to reflow prose paragraphs so that every output line fits within

@@ -230,6 +230,17 @@ filesystem access themselves.
 
 `src/process/buffer.rs`:
 
+- `TableSubstitutions`: Carries only the `ellipsis` and `code_emphasis` flags
+  that must be applied before table reflow. The process module passes this
+  private subset to `ProcessBuffer::new`, keeping unrelated `Options` flags out
+  of the buffer's interface.
+- `ProcessBuffer::new(&TableSubstitutions)`: Creates the stream-processing
+  buffer and records the substitutions that `flush` applies to table lines.
+  For a table run, `flush` applies code-emphasis repair first, then ellipsis
+  replacement, and only then calls `reflow_table`, so width measurement sees
+  the final cell text in a deterministic order. The non-table branch emits
+  buffered lines unchanged; the parent pipeline retains the existing
+  post-processing path for those lines.
 - `ProcessBuffer`: Owns the stream-processing output buffer, the pending table
   run, and the table-mode state for `process_stream_inner`. The parent process
   module is responsible for orchestration; the buffer owns the boundary rules
