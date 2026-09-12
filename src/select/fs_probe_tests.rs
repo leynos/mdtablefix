@@ -42,8 +42,14 @@ fn a_regular_file_is_identified_by_an_absolute_canonical_path() {
         panic!("docs/guide.md is a regular file");
     };
     assert!(identity.as_path().is_absolute(), "{identity:?}");
+    // Compared by path components rather than as text, so the assertion holds
+    // where the platform spells the separator the other way round. A canonical
+    // path is also the platform's own spelling of the absolute path, which on
+    // Windows prefixes it with the verbatim marker.
     assert!(
-        identity.as_path().as_str().ends_with("docs/guide.md"),
+        identity
+            .as_path()
+            .ends_with(Utf8Path::new("docs").join("guide.md")),
         "{identity:?}"
     );
     assert_eq!(identity.as_path().file_name(), Some("guide.md"));

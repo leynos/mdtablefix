@@ -164,11 +164,17 @@ fn snapshot(root: &Path) -> Vec<(String, Vec<u8>)> {
             if name == OsStr::new(".git") {
                 continue;
             }
+            // The key is spelled with `/` on every platform, because that is
+            // how the feature file and the steps name their files; a Windows
+            // separator here would make every lookup miss and read as a fixture
+            // file that was never written.
             let relative = path
                 .strip_prefix(root)
                 .expect("every entry is beneath the root")
-                .to_string_lossy()
-                .into_owned();
+                .components()
+                .map(|part| part.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/");
             let metadata = fs::symlink_metadata(&path).expect("read fixture metadata");
             if metadata.file_type().is_symlink() {
                 let target = fs::read_link(&path).expect("read the link target");

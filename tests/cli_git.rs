@@ -319,6 +319,11 @@ fn help_documents_the_git_flags() {
     assert!(output.status.success(), "--help must succeed");
 
     let help = String::from_utf8(output.stdout).expect("the help text is UTF-8");
+    // Windows names the binary `mdtablefix.exe`, and clap prints the program
+    // as `argv[0]` spells it. The snapshot is about the flags and the whole
+    // rendering below them, so the platform's suffix is removed rather than
+    // recorded.
+    let help = help.replace("mdtablefix.exe", "mdtablefix");
     for flag in [
         "--git",
         "--include-untracked",
