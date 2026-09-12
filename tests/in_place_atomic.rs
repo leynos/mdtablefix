@@ -192,7 +192,9 @@ fn in_place_declines_symlinked_target() {
     // capability that the CLI opens for the link's parent.
     std::os::unix::fs::symlink("real.md", &link).expect("create symlink");
 
-    in_place(&link).failure().stderr(contains("symlink"));
+    // A declined rewrite is an error like any other: the exit contract reserves
+    // `2` for a file that could not be rewritten, so "non-zero" is too loose.
+    in_place(&link).code(2).stderr(contains("symlink"));
 
     assert_eq!(
         fs::read_to_string(&real).expect("read real file"),

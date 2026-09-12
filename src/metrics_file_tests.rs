@@ -7,13 +7,15 @@
 use std::{io, time::Duration};
 
 use anyhow::Error;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use mdtablefix::report::{FileReport, LineDelta};
 use rstest::rstest;
+use tracing_test::traced_test;
 
 use super::{
     FileOutcome,
     metrics_tests::{assert_labels_are_bounded, count_error, count_file, durations, recorded},
+    record_analysis,
     record_file,
 };
 use crate::driver::Mode;
@@ -113,4 +115,57 @@ fn the_outcome_follows_the_analysis() {
 
     let failed: anyhow::Result<(FileReport, String)> = Err(anyhow::anyhow!("unreadable"));
     assert!(matches!(FileOutcome::of(&failed), FileOutcome::Failed(_)));
+}
+
+/// A failure is named in the trace by the same bounded category the error
+/// counter labels with, so a span filter and a metric filter select the same
+/// failures.
+#[test]
+#[traced_test]
+fn a_failed_analysis_names_its_category_in_the_trace() {
+    // The same chain the driver builds, so the category is derived through it
+    // rather than from the outermost error alone.
+    let failing = || -> anyhow::Result<(FileReport, String)> {
+        Err(
+            Error::new(io::Error::new(io::ErrorKind::NotFound, "fixture"))
+                .context("reading missing.md"),
+        )
+    };
+
+    let result = record_analysis(Mode::Check, Utf8Path::new("missing.md"), failing);
+
+    assert!(result.is_err(), "the fixture's analysis fails");
+    assert!(
+        logs_contain("analysis failed"),
+        "a failed analysis must say so"
+    );
+    assert!(
+        logs_contain("not_found"),
+        "the trace must name the bounded category the counter labels with"
+    );
+}
+
+/// A successful analysis emits no error event, so a host filtering the trace
+/// for `analysis failed` sees only failures.
+#[test]
+#[traced_test]
+fn a_successful_analysis_emits_no_failure() {
+    let succeeding = || -> anyhow::Result<(FileReport, String)> {
+        Ok((
+            FileReport {
+                display_path: Utf8PathBuf::from("docs/a.md"),
+                is_changed: true,
+                delta: LineDelta::default(),
+            },
+            String::new(),
+        ))
+    };
+
+    let result = record_analysis(Mode::Check, Utf8Path::new("docs/a.md"), succeeding);
+
+    assert!(result.is_ok(), "the fixture's analysis succeeds");
+    assert!(
+        !logs_contain("analysis failed"),
+        "only a failure may emit the failure event"
+    );
 }

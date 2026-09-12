@@ -794,7 +794,8 @@ Blockquote and fence events additionally use `line_len`, `prefix_len`, `depth`,
 `inner_len`, `open_depth`, `marker_len`, `open_marker_len`, and `transition`.
 Line-ending events use `crlf_count`, `lone_lf_count`, and `selected_ending`,
 and every reporting boundary adds `operation` and, for a file, `path` (the
-library rewrite reports both; standard input has no path).
+library rewrite reports both; standard input has no path). The binary's
+per-file analysis span adds `mode`, `outcome`, and `elapsed_seconds`.
 These events are content-free: never include raw Markdown, blockquote
 prefixes, fence info strings, or other document content. Executables remain
 responsible for installing subscribers.
@@ -834,30 +835,44 @@ attribute had been cleared and whose original attribute could not be put back;
 that restoration is best effort, so a failure to restore never masks the reason
 the swap failed. None of these events carry file content.
 
+The binary's own boundary follows the same discipline. `record_analysis` in
+`src/metrics.rs` opens a `debug` span named after it around one file's
+analysis, carrying `mode` and the display `path` on entry, and `outcome` and
+`elapsed_seconds` recorded once the analysis has run — the same names and
+values the per-file counters use, so a trace and a metric select the same
+files, and a subscriber can tell a `--check` analysis from an `--in-place` one.
+A failed analysis also emits `analysis failed` (debug, with `error_category`
+from the same bounded `category` the error counter labels with: `not_found`,
+`permission_denied`, `declined`, or `other`). The `path` is the display path
+the user wrote and is span metadata rather than a metric label, so two files
+called `a.md` in different directories stay distinct in a trace and still cost
+no cardinality. The `operation` field already reaches the same trace: the
+line-ending report this analysis emits carries `"file"`.
+
 Table: Structured field names emitted by tracing instrumentation.
 
-| Field             | Type            | Used in                                       | Meaning                                                     |
-| ----------------- | --------------- | --------------------------------------------- | ----------------------------------------------------------- |
-| `token_length`    | `usize`         | fragment, link, footnote events               | Character count of the text that was classified or parsed   |
-| `kind`            | `?FragmentKind` | `fragment classified`                         | The computed fragment classification                        |
-| `start`           | `usize`         | span events                                   | Byte offset where the span begins                           |
-| `end`             | `usize`         | span events                                   | Byte offset where the span ends (exclusive)                 |
-| `width`           | `usize`         | span events                                   | Display-column width of the span                            |
-| `reason`          | `&str`          | rejected, unchanged, or fence-state decisions | Stable diagnostic category for any decision                 |
-| `is_image`        | `bool`          | `link or image parsed`                        | `true` when the link token is an image literal (`![]()`)    |
-| `row_index`       | `usize`         | table-row events                              | Zero-based index of the parsed logical row                  |
-| `cell_count`      | `usize`         | table-row events                              | Number of cells in the parsed logical row                   |
-| `error_category`  | `&str`, Debug   | declined, discarded, and replacement failures | Stable category or I/O error kind for a failure             |
-| `attempt`         | `u32`           | `replace_file` events                         | Zero-based index of the temporary-file creation attempt     |
-| `bytes`           | `usize`         | `replace_file` events                         | Byte length of the formatted replacement that was written   |
-| `line_len`        | `usize`         | blockquote-prefix events                      | Byte length of the examined source line                     |
-| `prefix_len`      | `usize`         | blockquote-prefix events                      | Byte length of the recognized blockquote prefix             |
-| `depth`           | `usize`         | blockquote and fence events                   | Current blockquote nesting depth                            |
-| `inner_len`       | `usize`         | blockquote-prefix events                      | Byte length after removing the blockquote prefix            |
-| `open_depth`      | `usize`         | fence-state events                            | Blockquote depth of the active fence opener                 |
-| `marker_len`      | `usize`         | fence-state events                            | Length of the currently recognized fence marker             |
-| `open_marker_len` | `usize`         | fence-state events                            | Length of the active opening fence marker                   |
-| `transition`      | `&str`          | fence-state events                            | Stable fence-state transition category                      |
+| Field             | Type            | Used in                                                 | Meaning                                                     |
+| ----------------- | --------------- | ------------------------------------------------------- | ----------------------------------------------------------- |
+| `token_length`    | `usize`         | fragment, link, footnote events                         | Character count of the text that was classified or parsed   |
+| `kind`            | `?FragmentKind` | `fragment classified`                                   | The computed fragment classification                        |
+| `start`           | `usize`         | span events                                             | Byte offset where the span begins                           |
+| `end`             | `usize`         | span events                                             | Byte offset where the span ends (exclusive)                 |
+| `width`           | `usize`         | span events                                             | Display-column width of the span                            |
+| `reason`          | `&str`          | rejected, unchanged, or fence-state decisions           | Stable diagnostic category for any decision                 |
+| `is_image`        | `bool`          | `link or image parsed`                                  | `true` when the link token is an image literal (`![]()`)    |
+| `row_index`       | `usize`         | table-row events                                        | Zero-based index of the parsed logical row                  |
+| `cell_count`      | `usize`         | table-row events                                        | Number of cells in the parsed logical row                   |
+| `error_category`  | `&str`, Debug   | declined, discarded, replacement, and analysis failures | Stable category or I/O error kind for a failure             |
+| `attempt`         | `u32`           | `replace_file` events                                   | Zero-based index of the temporary-file creation attempt     |
+| `bytes`           | `usize`         | `replace_file` events                                   | Byte length of the formatted replacement that was written   |
+| `line_len`        | `usize`         | blockquote-prefix events                                | Byte length of the examined source line                     |
+| `prefix_len`      | `usize`         | blockquote-prefix events                                | Byte length of the recognized blockquote prefix             |
+| `depth`           | `usize`         | blockquote and fence events                             | Current blockquote nesting depth                            |
+| `inner_len`       | `usize`         | blockquote-prefix events                                | Byte length after removing the blockquote prefix            |
+| `open_depth`      | `usize`         | fence-state events                                      | Blockquote depth of the active fence opener                 |
+| `marker_len`      | `usize`         | fence-state events                                      | Length of the currently recognized fence marker             |
+| `open_marker_len` | `usize`         | fence-state events                                      | Length of the active opening fence marker                   |
+| `transition`      | `&str`          | fence-state events                                      | Stable fence-state transition category                      |
 
 For example:
 
@@ -930,10 +945,8 @@ label.
 
 The changed-or-unchanged distinction is the byte comparison the analysis itself
 made, so the label a host aggregates and the exit status the run reports cannot
-disagree about whether a file drifted. `record_analysis` also opens a `debug`
-span named after it, whose `path` field is the display path the user wrote —
-the same field the replacement path uses, and not a label — with `mode` set on
-entry, and `outcome` and `elapsed_seconds` recorded once the analysis has run.
+disagree about whether a file drifted. `record_analysis` records the same
+distinction on the span it opens, described under field naming above.
 
 `src/metrics_tests.rs` and `src/metrics_file_tests.rs` install a local recorder
 through `metrics::with_local_recorder` and assert the declared names, units,

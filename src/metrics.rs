@@ -18,7 +18,7 @@ use anyhow::Error;
 use camino::Utf8Path;
 use mdtablefix::report::FileReport;
 use metrics::{Unit, counter, describe_counter, describe_histogram, histogram};
-use tracing::{Span, field};
+use tracing::{Span, debug, field};
 
 use crate::driver::{ExitStatus, Mode};
 
@@ -147,7 +147,9 @@ fn file_outcome_label(outcome: &FileOutcome<'_>) -> &'static str {
 /// the trace or from the metric. Its `path` is `display_path`, the path as the
 /// user wrote it: a span field is not a label, so naming the file here costs no
 /// cardinality, and two files called `a.md` in different directories stay
-/// distinct.
+/// distinct. A failed analysis also emits `analysis failed` with the same
+/// bounded `error_category` the error counter labels with, so a trace and a
+/// metric select the same failures by the same name.
 #[tracing::instrument(
     level = "debug",
     skip(analyse, mode, display_path),
@@ -174,6 +176,12 @@ pub fn record_analysis(
     let span = Span::current();
     span.record("outcome", file_outcome_label(&outcome));
     span.record("elapsed_seconds", elapsed.as_secs_f64());
+    // The category is the one the error counter carries, derived from the
+    // error's chain rather than from its message, so a trace and a metric name
+    // the same failure the same way. A successful analysis emits nothing.
+    if let FileOutcome::Failed(error) = &outcome {
+        debug!(error_category = category(error), "analysis failed");
+    }
     record_file(mode, &outcome, elapsed);
 
     result
