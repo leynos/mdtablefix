@@ -5669,3 +5669,106 @@ only thing that refreshes the pre-merge table, and every row of this round has
 been either discharged or answered, so what it reports decides whether the loop
 continues or ends. The pull request description was brought level with the tree
 before the review was queued, because a review reads it.
+
+### Revision 26, 2026-09-12 — the refreshed table, and a row it derived anew
+
+**The ask.** "Please ensure that the execplan has been updated with decisions,
+findings, observations and progress to reflect the current implementation
+status. Please also update the PR description to reflect the implementation."
+This revision is the first half of that; the description is the second, and it
+is rebuilt from the gate log by the same generator as before rather than by
+hand.
+
+**The queued review ran and said almost nothing.** `d5e31dc7` posted at
+2026-09-12T02:33:30Z as comment `5642894586` from `wafflecat-df12`. Its two
+replies — "Review triggered." at 02:33:36Z and "Review finished." at
+02:33:37Z — are one second apart, and the second carries the note that
+CodeRabbit is an incremental review system and does not re-review already
+reviewed commits. No inline comment has been posted since the ten of
+`5184665530` (01:59:21Z–01:59:37Z, ids `3994699930` to `3994701183`), so the
+inline phase closed in Revision 24 stays closed: 26 threads, none unresolved,
+and nothing new to answer.
+
+**The table refreshed at 02:39:34Z.** The pull request's walkthrough comment
+(`5603998327`, identified by its `updated_at`) was edited in place and now
+reports `2 errors, 1 warning`, a warning fewer than the `6238940` table.
+*Observability* and *Developer Documentation* have moved to the passed table:
+the span, its bounded event, the field table's `error_category` row and the
+`#### Binary metrics` section are the work they asked for. *Unit Architecture*
+and *Testing (Compile-Time / Ui)* are unchanged, and are the two rows the round
+at `7455e9b` answered rather than actioned.
+
+**A row that was re-derived, not inherited.** *Testing (Overall)* still fails,
+but it no longer says what it said. Its `6238940` explanation was that "the
+changed exit-status contract is not fully guarded"; the refreshed one is that
+`write_unified_diff` "documents that it returns output-writer errors, but no
+test supplies a failing `io::Write` implementation or asserts error
+propagation". The exit-status complaint is gone precisely because every
+induced per-file failure now requires code `2` — a change made in `7455e9b`,
+after the table that raised it. So the refresh was generated from the current
+tree rather than carried over, which settles how the two surviving rows should
+be read: they are the bot's position after seeing the fixes, not staleness.
+The answers posted to them at 02:10:40Z (`5642773695`) predate the refresh, so
+they cannot have moved it either way.
+
+**One row actioned, in `530bdbd`.** The renderer's writer-error row is valid
+and was genuinely unaddressed. `write_unified_diff`'s `# Errors` section
+promises the writer's failure is returned, and both direct renderer tests wrote
+into a `Vec`, which cannot fail.
+`a_failing_writer_error_reaches_the_caller` supplies a writer with a byte
+budget and asserts the returned error's kind. Two cases: a writer that is
+already closed (`budget = 0`) and one that fails inside the body, after the
+headers have been accepted (`budget = 16`). Both pass, which is itself the
+measurement — `similar`'s `to_writer` propagates the writer's own error
+unchanged rather than wrapping it. Asserting on the error's `kind` rather than
+on "some error" is what makes that a result: an implementation that replaced
+the writer's error with one of its own would fail the test.
+
+`src/report/render.rs` stood at 354 lines and the new test took it to 409, past
+the 400-line limit in `AGENTS.md`. The whole test module therefore moved to
+`src/report/render_tests.rs`, the sibling-file convention `src/metrics.rs`,
+`src/driver.rs` and `src/io.rs` already follow, leaving `render.rs` at 201
+lines and the test file at 209. The module path is unchanged, so the insta
+snapshot's directory and name are unchanged, and the snapshot test passing
+after the move is what shows it.
+
+**A correction to the previous segment's reading.** A CodeRabbit comment at
+04:22:47Z reading "Review skipped — Bot user detected. To trigger a single
+review, invoke the `@coderabbitai review` command" was taken to mean this pull
+request's automatic review had been skipped. It had not: resolving
+`5643426668`'s `issue_url` shows issue **#495**, a different pull request in
+the same repository. The mistake came from reading a repository-wide
+`issues/comments` query, which mixes every pull request's comments together.
+The walkthrough query has the same hazard in the other direction — several
+later comments in that list carry the walkthrough marker for other pull
+requests, so `last` alone picks the newest walkthrough in the repository rather
+than the one for this pull request. Resolve `issue_url`, or use the PR-scoped
+endpoint, before acting on a comment's body. No review was skipped here, and
+none of this round's work is a remedy for one.
+
+**The response, and the next review.** The row-by-row answer to the refreshed
+table is posted as an issue comment tagging `@coderabbitai`, with the `Ignore`
+checkbox left unticked, and `530bdbd` is pushed to `origin/check-option` once
+the gates below are green — the queue is only asked for a review after that,
+per the ordering the skill sets out. Every inline thread is answered, one row
+of the table is actioned and two are answered with reasons, so what the next
+review reports on those two decides whether the loop continues or ends.
+
+**Gates.** All six deterministic gates are green at `530bdbd`, run sequentially
+through `scrutineer` over a clean worktree: `check-fmt` 4s, `lint` 7s with the
+`check-static-regexes` prerequisite met, `typecheck` 2s, `test` 98s over its two
+cargo invocations, `markdownlint` 34 files and 0 errors, and `nixie` with every
+diagram validated. The tally is `1890 passed, 0 failed, 20 ignored` across 46
+result lines — two more than Revision 25's 1888, which is exactly the new
+test's two rstest cases, and the snapshot test's green after the module moved
+is what shows the insta path survived the split.
+
+**The push, the description, and the reply.** `530bdbd` is pushed to
+`origin/check-option` before the queue is asked for anything. The pull request
+description is rebuilt from that same gate log by the generator the previous
+rounds used, which refuses to publish a tally carrying a failure or fewer than
+1800 passes; it gains a "Third round" section recording the refreshed table,
+the row actioned, and the two rows left answered, and it no longer points a
+reader at `src/report/render.rs` for the renderer's tests. The row-by-row
+answer to the refreshed table is posted as an issue comment tagging
+`@coderabbitai`, with the `Ignore` checkbox left unticked.
