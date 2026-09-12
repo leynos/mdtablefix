@@ -7,7 +7,8 @@ This ExecPlan (execution plan) is a living document. The sections
 proceeds.
 
 Status: COMPLETE — 2026-09-12, at commit `6384543`, since rebased onto
-`origin/check-option` at `64117e4`, on branch `git-option`, stacked on pull
+`origin/check-option`, whose tip is `49a2d0a` after a second rebase the same
+day, on branch `git-option`, stacked on pull
 request #464 and carried by pull request #466. The prerequisite extraction of
 `Cli` and `FormatOpts` landed, in the base's `src/command.rs` rather than in a
 `src/cli.rs` of this branch's own, and Stage A is discharged. All four
@@ -2188,6 +2189,17 @@ plateau.
       recorded below is what clears the conflict, so this item stays open until
       the run it should produce has been read and recorded. `EV-M4-CI-SILENCE`
       holds the earlier run list and the limits of what it proves.
+      The silence is specific to the `pull_request` event rather than to the
+      branch, and three runs are what show it. The pushes at 10:50Z, 10:51Z, and
+      10:54Z each produced `34689669899`, `34689547517`, and `34689481906`,
+      every one `completed` with conclusion `skipped`, and every one the
+      `dependabot-automerge` workflow — whose trigger is `pull_request_target`,
+      an event GitHub still delivers to a conflicting pull request. So a
+      workflow that is not on `pull_request` did register on the same pushes
+      that produced no test run at all, which is what separates the event that
+      is blocked from the events that are not, and rules out "the branch stopped
+      receiving webhooks" as an explanation.
+
 - [x] (2026-09-12) The base branch is still moving, and its own redness has
       since been fixed upstream. While this repair was being gated
       `origin/check-option` gained `530bdbd` (10:39Z) and `914e9ae` (10:43Z),
@@ -2268,12 +2280,58 @@ plateau.
       `git diff 866a935 HEAD -- 'src/select/**'` is empty, so every file
       `EV-M2-MUTANTS` mutated is byte-identical on the rebased tree. The whole
       of this branch's diff against its pre-rebase tip outside the base's own
-      arrival is two lines — the `crate::cli` to `crate::command` import path in
-      `src/git_inputs.rs`, and the same rename in a doc link in `src/select.rs` —
-      neither of which is in the mutation scope, which `.cargo/mutants.toml`
+      arrival is two lines — the `crate::cli` to `crate::command` import path
+      in `src/git_inputs.rs`, and the same rename in a doc link in
+      `src/select.rs` — neither of which is in the mutation scope, and
+      `.cargo/mutants.toml`
       pins to `src/select/**`. So the 60 mutants, 53 caught and 7 unviable, still
       describe this tree, and `make mutants` was not re-run for that reason
       rather than by omission.
+- [x] (2026-09-12) **Rebased a second time, onto `origin/check-option` at
+      `49a2d0a`**, because the base moved while the first rebase was being
+      validated. Two commits landed in that window: `9834fcb` ("Heal the
+      callsite interest cache in every traced test", 13:13:29 +0200) and
+      `49a2d0a`, which records it. A rebase onto a base that has since moved is
+      a rebase whose claim to have cleared the conflict is already stale, so the
+      instruction was applied again rather than pushing what the first produced.
+      The second rebase was clean — no conflict — and left the branch 31 commits
+      past the base, at `eda86ca`, the extra one being this record's own commit.
+      Its diff against the base is 36 files, 8448 insertions and 144 deletions:
+      the earlier 8240 insertions plus the 208 this record adds.
+      `origin/check-option` is an ancestor of the tip, and the tree is clean.
+      The replay was clean for a reason worth stating rather than assuming. The
+      base's two edited test files, `src/driver_report_tests.rs` and
+      `src/main_tests.rs`, are edited on this branch as well, but the base's
+      hunks are the import line and the attribute positions while this branch's
+      are the `ConflictGuard::unguarded()` call sites, so the two sets do not
+      overlap. Reading the merged file is what confirms both survived: the
+      wrapper import sits at `src/driver_report_tests.rs:10`, the attribute at
+      line 131, and all nine guard call sites remain, six and three.
+- [x] (2026-09-12) The base's second new pattern, `test_macros::traced_test`,
+      **assessed rather than adopted, because this branch adds no traced test to
+      convert**. Every traced test in the repository now names the in-repo
+      wrapper rather than `tracing_test::traced_test`: the wrapper prepends
+      `::tracing::callsite::rebuild_interest_cache()` to the test body and hands
+      that body to `tracing_test::traced_test`, which prepends its own
+      subscriber install, so the rebuild always follows the install. The defect
+      it answers belongs in this record because it is general: `tracing` decides
+      once, when a callsite is first used, whether it can ever be dispatched, so
+      a callsite used before that lazy install caches `Interest::never()` for
+      the life of the process and stays silent — which is how the base's Windows
+      job saw 937 tests pass and one traced-snapshot test fail. This branch
+      introduces no traced test of its own, so it complies with the base's new
+      convention without a call-site change, and the measurement is a grep:
+      every `tracing_test::` mention left under `src/` is the wrapper's own
+      explanatory comment.
+- [x] (2026-09-12) A caution recorded rather than an item this plan owes: the
+      base can move again. A third rebase becomes necessary only if it does,
+      before #464 merges, and nothing else here depends on that timing.
+      `origin/check-option` is pull request #464, still open and still being
+      worked — the base's own CI for `9834fcb`,
+      [`34690495578`](https://github.com/leynos/mdtablefix/actions/runs/34690495578),
+      was still running while the second rebase was performed. So `49a2d0a` is
+      the tip this branch was rebased onto, not a tip that promises to hold
+      until #464 merges.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
@@ -2826,6 +2884,37 @@ whose every file the base carries in a fuller form.
   importing `std::borrow::Cow` for nothing, an unused import that `-D warnings`
   would have failed the build over.
 
+- Observation: **a base still under test moves while the rebase onto it is being
+  validated, so "rebased onto the base" is a statement about a commit rather
+  than about a branch.** Evidence: the first rebase onto `origin/check-option`
+  at `64117e4` was completed, its six gates ran green, and its record was
+  written; inside that window the base gained `9834fcb` (13:13:29 +0200) and its
+  record commit `49a2d0a`, so the tree that had just been measured was no longer
+  the tree on the base's tip. That the arrival was itself a CI-only repair — a
+  traced test that fails according to which tests the harness happens to run
+  alongside it, the same class as the five this branch had repaired — is the
+  part worth carrying: it says the failures CI reports are a property of the
+  stack rather than a debt this branch pays and is done with. Impact: the same
+  instruction was applied again rather than the first rebase being pushed, and
+  the record now names `49a2d0a` as the tip rebased onto while stating that a
+  third rebase becomes necessary only if the base moves once more.
+
+- Observation: **the Markdown line-length rule's exception is about the last
+  whitespace-delimited word, not about whether a line could be broken, and the
+  difference between the two readings is one column.** `MD013` shortens each
+  line before comparing it — it replaces the trailing run of non-whitespace with
+  a single character — so a line passes when its final word begins at or before
+  column 80 and fails when that word begins at column 81, even if the word is a
+  single em dash. Evidence: this plan's own Progress entry, reading "…in
+  `src/select.rs` —", was reported as `[Expected: 80; Actual: 81]` while eight
+  longer lines in the same file pass, because those carry a long code span after
+  their last space. The rule is in markdownlint's `md013.mjs`, which does the
+  shortening before the comparison, and the eight were re-derived under it
+  rather than assumed. Impact: a hand check that asks "is there whitespace past
+  column 80" answers a different question and will pass a line the gate fails;
+  "where does the final word begin" is the question that matches the
+  implementation, and it is the one this plan now uses.
+
 ## Decision log
 
 Entries are pointers; the reasoning lives in the body sections named. ADR 0010
@@ -3224,10 +3313,29 @@ is the durable record, and EP-M3 reconciles this log into it.
   base's text is the fuller one rather than a mechanical outcome. Date/Author:
   2026-09-12, EP-M4 (rebase).
 
+- Decision: rebase **a second time**, onto `origin/check-option`'s new tip
+  `49a2d0a`, rather than pushing the rebase onto `64117e4` that had just been
+  gated. Rationale: the first rebase's whole purpose was to stop conflicting
+  with the base and re-open the pipeline, and a base two commits further on
+  makes that claim stale at the moment it is made — the push would have
+  produced a pull request measured against a tip it no longer sits on, which is
+  the condition the exercise exists to clear. The cost was measured rather than
+  assumed: the base's two commits touch `src/driver_report_tests.rs` and
+  `src/main_tests.rs`, which this branch edits too, so a conflict was plausible;
+  the replay was in fact clean, because the base edits import lines and
+  attribute positions while this branch edits `ConflictGuard::unguarded()` call
+  sites, and reading the merged file is what confirms both survived. The new
+  base also carried a convention this branch had to be measured against rather
+  than mirrored — `test_macros::traced_test` for every traced test — and the
+  measurement is that this branch has none to convert, adding no traced test of
+  its own. Date/Author: 2026-09-12, EP-M4 (rebase).
+
 ## Outcomes & retrospective
 
 Completed 2026-09-12, at commit `6384543`, rebased the same day onto
-`origin/check-option` at `64117e4`. Every milestone is delivered: EP-M0's
+`origin/check-option` — first at `64117e4` and then again at `49a2d0a`, the base
+having moved while the first rebase's gates were running. Every milestone is
+delivered: EP-M0's
 grammar measurement, EP-M1's selection tree with zero surviving mutants, EP-M2's
 command-line surface and end-to-end behaviour, and EP-M3's ADR 0010 and the five
 component documents. Every Surprise and Decision above is reconciled into ADR
@@ -3308,8 +3416,9 @@ three, because #466 stood in conflict with its base and GitHub runs no
 `pull_request` workflows while a conflict stands. So the branch's two
 documentation commits and the CI repair were CI-untested when this record was
 written, their green resting on the local gate set and the CodeRabbit rounds.
-That conflict was resolved the same day by the rebase onto `64117e4`, and
-resolving it is what re-opens the pipeline: the run that follows is the one
+That conflict was resolved the same day by the rebase onto `64117e4`, and then
+by the second rebase onto `49a2d0a` after the base moved again, and resolving it
+is what re-opens the pipeline: the run that follows is the one
 verdict this plan has not yet read, and the only thing that can turn a local
 green into a green on a second platform.
 
@@ -4008,7 +4117,52 @@ feature. A reader meeting the `EV-M1-CR` or `EV-M2-CR` transcript, each of which
 lists `src/cli.rs` among its reviewed files, should read it as dated: it
 records a round run before the rebase, and the file is not on the branch now.
 
+**EX-REBASE-SECOND** — the second rebase onto `origin/check-option`, and the
+command form that performs any rebase on this machine at all. The base's tip was
+`49a2d0a`, the branch's pre-rebase tip was `5cb8425`, which
+`backup/git-option-post-rebase-64117e4` tags locally, and the replay left the
+branch 31 commits past the base, at `eda86ca`. The command is worth copying
+rather than reconstructing, because `core.attributesFile` has to be redirected
+for the rebase *and its children* — a `-c` flag is re-read away by every
+`--continue` and `--skip`, and the weave driver then re-engages with no marker
+to say so:
+
+```console
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.attributesFile \
+  GIT_CONFIG_VALUE_0=/dev/null git rebase origin/check-option
+```
+
+The replay was clean, and that is a fact about the two sides' hunks rather than
+about luck: the base's `9834fcb` edits the import line and the attribute
+positions in `src/driver_report_tests.rs` and `src/main_tests.rs`, while this
+branch's edits are the nine `ConflictGuard::unguarded()` call sites in the same
+two files, so the hunks do not overlap. Both survive at `eda86ca` — the wrapper
+import at `src/driver_report_tests.rs:10`, the attribute at line 131, and the
+guard call sites six and three.
+
 ## Revision note
+
+Revised 2026-09-12, sixth pass, after a second rebase onto `origin/check-option`,
+whose tip had moved to `49a2d0a` while the first rebase's gates were running.
+
+What changed. The base gained two commits inside that window — `9834fcb`, which
+heals the `tracing` callsite interest cache in every traced test, and `49a2d0a`,
+which records it — so the tip the first rebase had been measured against was no
+longer the base's tip, and the same instruction was applied again. The replay
+was clean, leaving thirty-one commits past the base at `eda86ca`, and why it was
+clean is recorded rather than assumed: the base's hunks and this branch's sit in
+different regions of the two test files that both of them edit. The base's new
+convention, `test_macros::traced_test` in place of `tracing_test::traced_test`
+for every traced test, is recorded in `Progress` as assessed rather than adopted,
+with the measurement that decides it: this branch adds no traced test to convert,
+and every `tracing_test::` mention left under `src/` is the wrapper's own
+explanatory comment. A Surprises entry states the general observation and a
+Decision-log entry states why the second rebase was performed rather than the
+first pushed.
+
+What this pass still does not do is claim a CI verdict, for the reason the fifth
+pass did not: the run the push should produce is a separate observation, and the
+plan leaves that item open rather than inferring it.
 
 Revised 2026-09-12, fifth pass, after rebasing onto `origin/check-option` at
 `64117e4` on the requester's instruction.
