@@ -80,7 +80,7 @@ fn a_cleanup_that_cannot_remove_the_temporary_file_is_counted() {
     // bit, which a run as root would ignore.
     directory
         .create_dir("taken.tmp")
-        .expect("create the entry the cleanup cannot remove");
+        .expect("create the unremovable entry");
 
     let ((), recorded) =
         recorded(|| remove_failed_temporary_file(&directory, Utf8Path::new("taken.tmp")));
