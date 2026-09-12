@@ -5,7 +5,7 @@ use std::io::{self, ErrorKind};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 
-use super::{AmbientPathProbe, confined_to, unnameable};
+use super::{AmbientPathProbe, Reading, confined_to, nearest_existing, unreadable};
 use crate::select::{
     extensions::ExtensionFilter,
     policy::{PathKind, PathProbe, select_files},
@@ -176,35 +176,89 @@ fn a_directory_is_neither_a_regular_file_nor_a_symlink() {
     assert_eq!(probe(&root, "docs"), PathKind::Other);
 }
 
-/// How a canonicalization failure is classified, as a function of the error
-/// kind rather than of a tree.
+/// How a failed read is classified, for the kinds that decide alone.
 ///
-/// A path `symlink_metadata` has already accepted can reach this decision again
-/// only by losing a race with the filesystem, so no fixture stages the arm that
-/// is not `NotFound`. `NotFound` is a candidate that is gone, or staged for
-/// deletion, and is reported as the absence the selection has a rule for; every
-/// other kind leaves the file present but unnameable, which the run is told
-/// about rather than left to infer.
+/// `NotFound` is not among these cases: what it means depends on the ancestors
+/// of the path it was reported for, and
+/// [`a_read_that_fails_under_a_file_is_not_an_absence`] stages that. Each kind
+/// here leaves the file present but unreadable — a permission failure, and the
+/// `ENOTDIR` Unix produces for a path through a file, which reaches the caller
+/// unchanged because it is already the answer the ancestor walk arrives at.
+///
+/// Stated as a function of the failure rather than through
+/// [`AmbientPathProbe::probe`], which no fixture can make report either of
+/// these: a path `symlink_metadata` has already accepted can reach this decision
+/// only by losing a race with the filesystem.
 #[rstest]
-#[case(ErrorKind::NotFound, true)]
-#[case(ErrorKind::PermissionDenied, false)]
-#[case(ErrorKind::NotADirectory, false)]
-fn a_canonicalization_failure_is_classified_by_its_kind(
-    #[case] kind: ErrorKind,
-    #[case] absent: bool,
-) {
+#[case(ErrorKind::PermissionDenied)]
+#[case(ErrorKind::NotADirectory)]
+fn a_failure_that_is_not_absence_is_reported_unchanged(#[case] kind: ErrorKind) {
     let path = at("/repo/docs/guide.md");
-    match (unnameable(path.clone(), io::Error::from(kind)), absent) {
-        (Ok(PathKind::Missing), true) => {}
-        (Err(error), false) => {
-            assert_eq!(
-                error.path, path,
-                "the failure names the path it could not read"
-            );
-            assert_eq!(error.source.kind(), kind, "the cause is reported unchanged");
-        }
-        (outcome, _) => panic!("{kind:?} was classified as {outcome:?}"),
+
+    let error = unreadable(path.clone(), io::Error::from(kind))
+        .expect_err("a file that is present but unreadable is not absent");
+
+    assert_eq!(
+        error.path, path,
+        "the failure names the path it could not read"
+    );
+    assert_eq!(error.source.kind(), kind, "the cause is reported unchanged");
+}
+
+/// Absence is answered for the whole path, not for the leaf that failed.
+///
+/// Two shapes look identical to a leaf's own failure, and only the ancestors
+/// tell them apart. A file that is gone from a directory that is there is the
+/// staged deletion the selection skips; a path that runs through a regular file
+/// cannot be there at all, and reading it as a deletion would skip a candidate
+/// the run was asked to consider. Windows reports both as `NOT_FOUND`, where
+/// Unix says `ENOTDIR`, so the second shape is staged here rather than left to
+/// a platform that never asks the question.
+#[rstest]
+#[case::gone("gone.md", true)]
+#[case::through_a_file("blocker/guide.md", false)]
+fn a_read_that_fails_under_a_file_is_not_an_absence(#[case] relative: &str, #[case] missing: bool) {
+    let (_guard, root) = temp_root();
+    write(&root, "blocker", "not a directory\n");
+    let path = root.join(relative);
+
+    let outcome = unreadable(path.clone(), io::Error::from(ErrorKind::NotFound));
+    if missing {
+        assert_eq!(
+            outcome.ok(),
+            Some(PathKind::Missing),
+            "{relative} is gone, and that is the answer the selection has a rule for"
+        );
+        return;
     }
+
+    let error = outcome.expect_err("a path through a file is not an absence");
+    assert_eq!(
+        error.path, path,
+        "the failure names the candidate it could not read"
+    );
+    assert_eq!(
+        error.source.kind(),
+        ErrorKind::NotADirectory,
+        "the kind Unix reports for it, reported on every platform"
+    );
+}
+
+/// A path no part of which is there is absent, not unreachable.
+///
+/// The walk stops at the first ancestor that exists, and here that is the root
+/// of the fixture: what is missing is a whole subtree, which is what a staged
+/// deletion of one looks like.
+#[test]
+fn a_read_that_fails_where_the_whole_path_is_gone_is_an_absence() {
+    let (_guard, root) = temp_root();
+    let path = root.join("gone/sub/guide.md");
+
+    assert_eq!(
+        unreadable(path, io::Error::from(ErrorKind::NotFound)).ok(),
+        Some(PathKind::Missing),
+        "a subtree that is gone is absent, not unreachable"
+    );
 }
 
 /// A root that does not exist confines nothing.
@@ -233,7 +287,10 @@ fn a_root_that_does_not_exist_confines_nothing() {
 /// absence is an answer the caller has a rule for, and any other failure is a
 /// question that went unasked. A root reached through a file is the staging
 /// that needs no permission trick, so this case holds for a privileged test
-/// runner as well as an unprivileged one.
+/// runner as well as an unprivileged one — and, because the classification asks
+/// the root's ancestors rather than its own failure alone, the kind asserted
+/// below is the same on every platform, including the one that reports it as
+/// absence.
 #[test]
 fn a_root_that_cannot_be_resolved_is_reported() {
     let (_guard, root) = temp_root();
@@ -246,9 +303,9 @@ fn a_root_that_cannot_be_resolved_is_reported() {
         error.path, unreachable,
         "the failure names the root it could not read"
     );
-    assert_ne!(
+    assert_eq!(
         error.source.kind(),
-        ErrorKind::NotFound,
+        ErrorKind::NotADirectory,
         "a root behind a file is present, not absent: {error:?}"
     );
 }
@@ -277,6 +334,41 @@ fn a_symbolic_link_loop_is_an_error_rather_than_a_missing_file() {
         error.source.kind(),
         ErrorKind::NotFound,
         "a loop must not be reported as a file that is merely gone: {error:?}"
+    );
+}
+
+/// A failure reading an ancestor stops the walk, and is reported as it arrived.
+///
+/// The arm this states is the walk's own, and no fixture stages it: a candidate
+/// reaches the walk only through a `NotFound` on its leaf, and the filesystem
+/// has answered for every ancestor above it by then. The walk takes its reader
+/// as a parameter for exactly this case, so the arm is a test's to cover —
+/// including the replacement that walks past it and calls the candidate absent.
+#[test]
+fn a_failure_reading_an_ancestor_is_reported_rather_than_walked_past() {
+    let docs = at("/repo/docs");
+    let mut read_paths = Vec::new();
+
+    let error = nearest_existing(Some(docs.as_path()), |ancestor| {
+        read_paths.push(ancestor.to_owned());
+        if ancestor == docs.as_path() {
+            Reading::Failed(io::Error::from(ErrorKind::PermissionDenied))
+        } else {
+            Reading::Directory
+        }
+    })
+    .expect("an ancestor that cannot be read is a failure, not an absence");
+
+    assert_eq!(
+        error.kind(),
+        ErrorKind::PermissionDenied,
+        "the cause is reported unchanged"
+    );
+    assert_eq!(
+        read_paths,
+        vec![docs],
+        "the walk stops at the ancestor it could not read rather than climbing to /repo, which is \
+         a directory and would answer that nothing is missing"
     );
 }
 

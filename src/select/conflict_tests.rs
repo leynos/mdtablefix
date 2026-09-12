@@ -11,7 +11,13 @@ use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::rstest;
 
-use super::{ConflictGuard, has_conflict_markers, marker_present, operation_in_progress};
+use super::{
+    ConflictGuard,
+    has_conflict_markers,
+    marker_present,
+    opened_directory,
+    operation_in_progress,
+};
 
 /// A temporary directory, its path, and the capability the scan reads it
 /// through.
@@ -223,10 +229,14 @@ fn an_idle_git_directory_is_not_mid_operation() {
 
 /// A marker that cannot be tested for is an error, not an answer.
 ///
-/// A `git_dir` that is a regular file is the cheapest way to stage this: the
-/// directory cannot be opened as a capability at all, and a run that read that
-/// as "no operation in progress" would rewrite a conflicted file on the
-/// strength of a question it never answered.
+/// A `git_dir` that is a regular file is the cheapest way to stage this, and the
+/// two platforms arrive at it differently: the capability refuses the file
+/// outright on Linux, and opens it on Windows, where the check on what was
+/// opened is what reports it. Both are
+/// [`std::io::ErrorKind::NotADirectory`] — the kind Unix reports for a path
+/// through a file — so the kind is asserted rather than merely distinguished
+/// from absence. A run that read the failure as "no operation in progress" would
+/// rewrite a conflicted file on the strength of a question it never answered.
 #[test]
 fn an_unreadable_repository_is_an_error_rather_than_an_answer() {
     let (_temporary, root, directory) = git_dir_fixture();
@@ -238,15 +248,43 @@ fn an_unreadable_repository_is_an_error_rather_than_an_answer() {
     let error = operation_in_progress(&git_dir).expect_err("a file is not a Git directory");
 
     assert_eq!(error.git_dir, git_dir);
-    assert_ne!(
+    assert_eq!(
         error.source.kind(),
-        std::io::ErrorKind::NotFound,
+        std::io::ErrorKind::NotADirectory,
         "an unanswered question must not be reported as absence"
     );
-    // `ENOTDIR` is the Unix kind opening a regular file as a directory
-    // produces; the portable claim above is the one this test is about.
-    #[cfg(unix)]
-    assert_eq!(error.source.kind(), std::io::ErrorKind::NotADirectory);
+}
+
+/// What was opened is asked what it is, before any marker is read beneath it.
+///
+/// The one arm Windows alone reaches: there `open_ambient_dir` accepts a regular
+/// file, and every marker read under it fails with the same `NOT_FOUND` as a
+/// marker that is not there — an unreadable repository read as an idle one.
+/// Stated as a function of the metadata rather than through
+/// [`operation_in_progress`], whose open refuses the same file on Linux before
+/// this check is reached, so that the decision is covered on both platforms.
+#[test]
+fn a_git_directory_that_is_not_a_directory_is_reported() {
+    let (_temporary, root, directory) = git_dir_fixture();
+    directory
+        .write("not-a-directory", "")
+        .expect("create a file where a Git directory was expected");
+    let git_dir = root.join("not-a-directory");
+    let metadata = directory
+        .metadata("not-a-directory")
+        .expect("read the fixture's metadata");
+
+    let error = opened_directory(&git_dir, &metadata).expect_err("a file is not a directory");
+
+    assert_eq!(
+        error.git_dir, git_dir,
+        "the failure names the directory it was asked about"
+    );
+    assert_eq!(
+        error.source.kind(),
+        std::io::ErrorKind::NotADirectory,
+        "the kind Unix reports for it, reported on every platform"
+    );
 }
 
 /// The three outcomes of testing for a marker, and which of them is an answer.
@@ -255,7 +293,7 @@ fn an_unreadable_repository_is_an_error_rather_than_an_answer() {
 /// capability refuses a Git directory it cannot open before the loop begins,
 /// and a marker name is entered in a directory that is already open. A function
 /// of the result is what keeps that arm covered anyway, and for the same reason
-/// the probe's `unnameable` is one.
+/// the probe's `unreadable` is one.
 #[rstest]
 #[case(Ok(()), Some(true))]
 #[case(Err(io::Error::from(io::ErrorKind::NotFound)), Some(false))]
