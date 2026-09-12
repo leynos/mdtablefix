@@ -6,9 +6,11 @@ This ExecPlan (execution plan) is a living document. The sections
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: COMPLETE — 2026-09-12, at commit `6384543`, on branch `git-option`,
-stacked on pull request #464 and carried by pull request #466. The prerequisite
-extraction of `src/cli.rs` landed, Stage A is discharged, and all four
+Status: COMPLETE — 2026-09-12, at commit `6384543`, since rebased onto
+`origin/check-option` at `64117e4`, on branch `git-option`, stacked on pull
+request #464 and carried by pull request #466. The prerequisite extraction of
+`Cli` and `FormatOpts` landed, in the base's `src/command.rs` rather than in a
+`src/cli.rs` of this branch's own, and Stage A is discharged. All four
 milestones — EP-M0's grammar measurement, EP-M1's selection tree, EP-M2's
 command-line surface, and EP-M3's documentation — are delivered. Every
 deterministic gate is green on the milestone tree, the five CodeRabbit rounds
@@ -17,20 +19,21 @@ retrospective` states what was delivered against what was planned and which
 pinned interfaces the implementation superseded.
 
 Three things this plan still owes, recorded rather than implied away. The
-branch's first CI run is red on both jobs over five defects that are all in
+branch's first CI run was red on both jobs over five defects that are all in
 test code — a fixture identity the helper never supplied, exit-status and path
 text that holds only where the platform spells them the way Linux does, and a
-snapshot carrying the executable suffix — and `6384543` answers all five. No
-CI run yet exists for that repair, and none exists for EP-M3's two commits
-either: the branch's newest run is `34661535150` at `573deb9`, and everything
-pushed since has been untested by CI, because pull request #466 stands in
-conflict with its base and GitHub documents that a conflicting pull request
-runs no `pull_request` workflows at all. The green those commits claim is
-therefore local gates and CodeRabbit alone. And the one verification no machine
-here can perform — the macOS and Windows half of the `canonicalize` case
-question behind INV-DEDUP — is carried forward rather than discharged, with
-ADR 0010's known-risks section holding it and the fallback named in this plan's
-`Verification plan`.
+snapshot carrying the executable suffix — and `6384543` answers all five. The
+branch's newest run, `34661535150` at `573deb9`, predates that repair and
+EP-M3's two commits, because pull request #466 stood in conflict with its base
+and GitHub documents that a conflicting pull request runs no `pull_request`
+workflows at all. The rebase recorded under `Progress` is what clears that
+conflict, so the pipeline re-opens on the rebased tip and the run it produces
+is the one piece of evidence this plan has not yet read; until it does, the
+green those commits claim is local gates and CodeRabbit alone. And the one
+verification no machine here can perform — the macOS and Windows half of the
+`canonicalize` case question behind INV-DEDUP — is carried forward rather than
+discharged, with ADR 0010's known-risks section holding it and the fallback
+named in this plan's `Verification plan`.
 
 The plan's remaining work is not this plan's: pull request #464 must merge
 before this one can. See `Progress`, `Outcomes & retrospective`, and
@@ -320,7 +323,9 @@ Stop and escalate when any of these is reached.
   `Cli` and `FormatOpts` declarations occupy roughly lines 38 to 120 of that
   file; extract them into a binary-private `src/cli.rs` declared by
   `main.rs`, which returns it to roughly 300 lines and leaves room for the
-  five new fields and the composition wiring. Do the extraction as its own
+  five new fields and the composition wiring. As delivered the module is the
+  base's `src/command.rs`, which does the same job and more — see
+  `EX-REBASE-STRUCTURE`. Do the extraction as its own
   commit, with no behaviour change, before EP-M2 adds anything. `src/driver.rs`
   at 369 lines has the same little headroom, so `--git` wiring must go in
   `src/select/`, not there.
@@ -1175,6 +1180,8 @@ against a 400-line cap. Extract the `Cli` and `FormatOpts` declarations into a
 binary-private `src/cli.rs`, declared from `main.rs`, as a separate
 behaviour-free commit before adding anything. That returns `main.rs` to roughly
 300 lines. Do not put `--git` wiring in `src/driver.rs`, which is 369 lines.
+As delivered, the base's `src/command.rs` is that module and this branch adds
+no `src/cli.rs` — see `EX-REBASE-STRUCTURE`.
 
 `Cli` gains `git` as a member of the existing `inputs` group, and four
 supporting flags. The `mode` group and `--in-place`, `--check`, and `--diff`
@@ -2169,17 +2176,18 @@ plateau.
       suites passed without needing an isolated re-run. Logs
       `/tmp/gate-rerun-{check-fmt,typecheck,lint,test}-git-option.out`.
 - [ ] CI, a run for `6384543` or for EP-M3's `9a83339`/`5f294b7`: **none
-      exists, and none can exist while #466 conflicts.** The branch's newest run
-      is `34661535150` at `573deb9` (00:24:40Z); the three commits pushed after
-      it — `9a83339` at 00:38Z, `5f294b7` at 00:41Z, `6384543` at 10:43Z — have
-      no run between them, where every earlier push had one within seconds.
+      exists, and none could exist while #466 conflicted.** The branch's newest
+      run is `34661535150` at `573deb9` (00:24:40Z); the three commits pushed
+      after it — `9a83339` at 00:38Z, `5f294b7` at 00:41Z, `6384543` at 10:43Z —
+      have no run between them, where every earlier push had one within seconds.
       GitHub documents the cause: *"Workflows will not run on `pull_request`
-      activity if the pull request has a merge conflict"*, and #466 is
-      `CONFLICTING`/`DIRTY` against `check-option`. So EP-M3's own two commits
-      are untested by CI to this day, and their green rests on the local gates
-      and the EP-M3 CodeRabbit round. The first trustworthy CI verdict still
-      lies on the far side of resolving the stack. `EV-M4-CI-SILENCE` holds the
-      run list and the limits of what it proves.
+      activity if the pull request has a merge conflict"*, and #466 was
+      `CONFLICTING`/`DIRTY` against `check-option`. So EP-M3's two commits and
+      the CI repair were CI-untested for as long as that conflict stood, and
+      their green was the local gates and the CodeRabbit rounds. The rebase
+      recorded below is what clears the conflict, so this item stays open until
+      the run it should produce has been read and recorded. `EV-M4-CI-SILENCE`
+      holds the earlier run list and the limits of what it proves.
 - [x] (2026-09-12) The base branch is still moving, and its own redness has
       since been fixed upstream. While this repair was being gated
       `origin/check-option` gained `530bdbd` (10:39Z) and `914e9ae` (10:43Z),
@@ -2190,10 +2198,13 @@ plateau.
       gained `3737276` ("Gate the non-UTF-8 argument test's imports to Unix"),
       which is that defect's fix, and `64117e4`, which records it — so the base
       is repairing itself and needs no help from this branch. It has also moved
-      to `64117e4` (10:48Z), twenty commits past the merge-base `408c76a`.
-      Decision taken not to rebase onto it — see the Decision log, which this
-      strengthens: a base repairing its own failures is a base worth waiting
-      for rather than chasing.
+      to `64117e4` (10:48Z), fifty-seven commits past the merge-base `408c76a`
+      — a distance recorded here as twenty when the entry was written, which was
+      simply wrong, and is corrected on re-measurement. Decision taken not to
+      rebase onto it — see the Decision log, which this strengthens: a base
+      repairing its own failures is a base worth waiting for rather than
+      chasing. That decision was **superseded** the same day by the requester's
+      instruction to rebase; see the rebase entry below.
 - [x] (2026-09-12) CI repair, `EV-M4-CR`: `coderabbit review --agent --base
       check-option` through `scrutineer` at `0ee306b` — **completed, zero
       findings** over 95 reviewed files, the fifth round on this branch and the
@@ -2204,11 +2215,73 @@ plateau.
       request — a distinction `EX-M4-CR-SCOPE` records, since a deferral and a
       clean review both read as "no findings". No rate, seat, or quota limit, so
       no wait was needed. Transcript in Artefacts and notes, `EV-M4-CR`.
+- [x] (2026-09-12) **Rebased onto `origin/check-option` at `64117e4`**, on the
+      requester's instruction, so the branch stops conflicting with its base and
+      the pipeline re-opens. The pre-rebase tip was `866a935`, which
+      `origin/git-option` still holds and
+      `backup/git-option-pre-check-option-rebase` tags locally; the rebase left
+      the branch 30 commits past the base, at `9af112c`, and this record's own
+      commit sits on top of that, so a later reader counts 31. Its diff against
+      the base is 36 files, 8240 insertions and 144 deletions as the rebase
+      finished. The count on top
+      is not the count replayed, so the arithmetic is worth stating: 62 commits
+      lay between the merge-base `408c76a` and the pre-rebase tip;
+      `origin/check-option` had already landed 30 of them verbatim, the base
+      being cut from the same work, and git 2.52's default
+      `--no-reapply-cherry-picks` dropped each of those; 32 were replayed; and 2
+      of the 32 were skipped by hand, leaving the 30 that stand. The two skipped
+      are the `src/cli.rs` extraction (`5789508`), superseded by the base's
+      own `src/command.rs`, and the EP-M7 documentation commit (`7b59154`), six
+      of whose twelve files are byte-identical to the base's and whose remaining
+      text the base's later, fuller version replaces. Nothing on the branch now
+      names `src/cli.rs`: the `EV-M1-CR` and `EV-M2-CR` transcripts under
+      Artefacts and notes each list it among their reviewed files, and they
+      record rounds run before this rebase, describing a file the rebased branch
+      does not carry.
+- [x] (2026-09-12) The rebase's one structural decision, `EX-REBASE-STRUCTURE`:
+      **`src/command.rs` is this branch's single command module, and the `--git`
+      additions to `Cli` are made there.** Both branches performed the same
+      extraction of `Cli` and `FormatOpts` out of `src/main.rs` — this one into
+      `src/cli.rs`, the base into a `src/command.rs` that also holds
+      `process_lines`, `format_lines`, and `formatting_closure` — and only one
+      can stand. Each declares `Cli` and `FormatOpts`, so keeping both would
+      leave `src/main.rs` choosing between two distinct `FormatOpts` types, and
+      the pipeline functions exist only in the base's module. `src/cli.rs` never
+      lands, and the base's module doc gained this branch's `--git`
+      dependencies rather than the reverse.
+- [x] (2026-09-12) The base's new patterns adopted, as the instruction to carry
+      over pertinent changes requires. Four, each a requirement rather than a
+      preference: `crate::command` is the path `src/git_inputs.rs` and
+      `src/main_tests.rs` import `Cli` and `FormatOpts` from; `Mode::ListFiles`
+      gained its arm in `src/metrics.rs`'s `mode_label` and its element in
+      `src/metrics_tests.rs`'s `MODES`, without which the base's new metrics
+      module does not compile at all; the base's split of `src/driver_tests.rs`
+      into `driver_report_tests.rs` and `driver_in_place_tests.rs` is taken as
+      the base has it, with this branch's nine `ConflictGuard::unguarded()` call
+      sites ported into the two halves (six and three) and the old file removed
+      by `git rm`; and the base's American spelling won the one wording conflict
+      — `--fences` normalizes rather than rewrites — which is propagated to
+      `tests/snapshots/cli_git_help.snap` so the snapshot and the help text
+      agree.
+- [x] (2026-09-12) The branch's mutation evidence carries across rather than
+      being re-earned, and the measurement is what says so:
+      `git diff 866a935 HEAD -- 'src/select/**'` is empty, so every file
+      `EV-M2-MUTANTS` mutated is byte-identical on the rebased tree. The whole
+      of this branch's diff against its pre-rebase tip outside the base's own
+      arrival is two lines — the `crate::cli` to `crate::command` import path in
+      `src/git_inputs.rs`, and the same rename in a doc link in `src/select.rs` —
+      neither of which is in the mutation scope, which `.cargo/mutants.toml`
+      pins to `src/select/**`. So the 60 mutants, 53 caught and 7 unviable, still
+      describe this tree, and `make mutants` was not re-run for that reason
+      rather than by omission.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
 `cargo test --doc` to the `test` target; and implementing
-INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
+INV-NOWRITE-UNCHANGED. Pull request #464 does all four. The rebase adds two more
+that this branch drops rather than carries: the `src/cli.rs` extraction, which
+the base's `src/command.rs` supersedes, and the EP-M7 documentation commit,
+whose every file the base carries in a fuller form.
 
 ## Surprises & discoveries
 
@@ -2713,6 +2786,46 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   with a Windows path — a worse place to find it. It is recorded in `Progress`
   as a judgement rather than as an observation, because that is what it is.
 
+- Observation: **a configured merge driver can exit 0 and still corrupt the
+  merge, so a rebase on a machine whose attributes name one has to run with that
+  driver bypassed.** Evidence: this machine's Ansible-managed
+  `~/.config/git/attributes` maps `*.rs merge=weave`, the driver itself defined
+  in `/home/leynos/.gitconfig` as
+  `merge.weave.driver = weave-driver %O %A %B %L %P`; the repository's own
+  `.gitattributes` names no merge rule, so the branch cannot opt out through
+  anything it tracks. With the driver engaged, `git rebase` reported success and
+  exited 0 while producing a tree that cannot compile: `src/main_tests.rs` with
+  its module doc and a `#[cfg(unix)]` block duplicated around the resolution,
+  `src/main.rs` garbled outside any conflict marker, and a HEAD declaring
+  `mod cli;` while importing `Cli` from `command`. Impact: "the rebase finished"
+  is a claim about git's exit status, and a merge driver is part of what decides
+  it, so the status is worth less than the compile. The corrupted resolution was
+  discarded rather than repaired, the pre-weave state was saved aside, and the
+  rebase was rerun with `core.attributesFile=/dev/null`. One further trap, which
+  cost a second abort: `-c core.attributesFile=/dev/null` on the starting command
+  does not survive `git rebase --skip` or `--continue`, because those are fresh
+  processes that re-read configuration — the bypass has to be inherited by
+  children, in the environment form
+  `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.attributesFile
+  GIT_CONFIG_VALUE_0=/dev/null`, or the driver re-engages mid-rebase with no
+  marker to warn that it did.
+
+- Observation: **lines that both sides agree on are not necessarily lines that
+  are right together, so a resolution is a reading of the whole region rather
+  than a per-hunk choice.** Evidence: in `src/main.rs`'s `run()`, this branch's
+  hunk introduced `let result = match inputs { … };` and the base's introduced
+  `let result = match result { … };` — separate hunks, so git merged both
+  without conflict — but the base's antecedent sat in the hunk above and this
+  branch's in the hunk below, leaving the text between them, which neither side
+  disputed, binding a name to nothing. Impact: an auto-merged region is not
+  evidence of a coherent region, and a dangling binding shows up only when the
+  hunks around it are read as one unit; the resolution rewrote the whole of
+  `run()` rather than the conflicting lines alone, and `cargo check` is what
+  confirmed it. The same pass caught the converse in the other direction:
+  leaving `process_lines` in `command.rs` would have left `src/main.rs`
+  importing `std::borrow::Cow` for nothing, an unused import that `-D warnings`
+  would have failed the build over.
+
 ## Decision log
 
 Entries are pointers; the reasoning lives in the body sections named. ADR 0010
@@ -3080,9 +3193,41 @@ is the durable record, and EP-M3 reconciles this log into it.
   re-open the pipeline as soon as the base settles. Date/Author: 2026-09-12,
   EP-M4 (CI repair).
 
+- Decision: **rebase onto `origin/check-option` now**, superseding the deferral
+  above, and make `src/command.rs` this branch's one command module.
+  Rationale: the deferral held that the base was moving and would stop once #464
+  merged, so one late rebase would settle the stack — and it recorded its cost
+  honestly, that while the conflict stood GitHub ran no `pull_request` workflows
+  at all, leaving the branch's newest commits without a CI verdict and with no
+  way to obtain one. Both halves of that cost are now payable. The base's own
+  Windows failure has been fixed upstream in `3737276`, so a rebase no longer
+  folds a red job into this branch; and the conflict is itself the reason no run
+  exists for `6384543` or for EP-M3's two commits, which makes resolving it the
+  precondition for the evidence rather than a tidiness question. The structural
+  half follows from what the base did: it extracted `Cli` and `FormatOpts` into
+  `src/command.rs` together with the pipeline functions this branch's
+  `src/cli.rs` never held, so keeping both modules would put two `Cli` types and
+  two `FormatOpts` types in one binary. Keeping the base's module and folding the
+  `--git` surface into it is the only arrangement that leaves one of each, and
+  the `--git` behaviour is untouched by it — the module is the outermost adapter
+  either way, and the mode it names is still passed inward unchanged. The base's
+  newer patterns were adopted rather than mirrored, on the rule that a pattern
+  the base introduces is the one a later reader will expect: `crate::command`
+  paths, `Mode::ListFiles` in `mode_label` and `MODES`, the split driver test
+  files, and the `--fences` "Normalize" wording; `Progress` lists them, and the
+  metrics one is a compile requirement rather than a preference. Cost: 30 of the
+  branch's 62 commits were dropped as patch-equivalent and never replayed, which
+  is invisible in the resulting tree but changes every hash on the branch; the
+  two transcripts that list `src/cli.rs` now describe a file the branch does not
+  carry, and the plan says so beside them; and one commit was
+  skipped by hand, the EP-M7 documentation merge, which is a judgement that the
+  base's text is the fuller one rather than a mechanical outcome. Date/Author:
+  2026-09-12, EP-M4 (rebase).
+
 ## Outcomes & retrospective
 
-Completed 2026-09-12, at commit `6384543`. Every milestone is delivered: EP-M0's
+Completed 2026-09-12, at commit `6384543`, rebased the same day onto
+`origin/check-option` at `64117e4`. Every milestone is delivered: EP-M0's
 grammar measurement, EP-M1's selection tree with zero surviving mutants, EP-M2's
 command-line surface and end-to-end behaviour, and EP-M3's ADR 0010 and the five
 component documents. Every Surprise and Decision above is reconciled into ADR
@@ -3104,7 +3249,11 @@ CodeRabbit rounds are recorded in Artefacts and notes — two at EP-M1 (the
 second after the mutation widening), one at EP-M2, one at EP-M3, and one for
 the CI repair — and every one returned zero findings.
 
-**Deviation from the plan's pinned interfaces, all recorded.** The composition
+**Deviation from the plan's pinned interfaces, all recorded.** The command
+module is the base's `src/command.rs` rather than the `src/cli.rs` this plan
+pins, because the base had performed the same extraction and given the module the
+pipeline functions as well; no `src/cli.rs` exists on the branch, and the
+`--git` surface is folded into the module that does. The composition
 root is `src/git_inputs.rs` rather than `src/main.rs`, and `resolve` returns
 `GitSelection { inputs, guard }` rather than `Inputs` alone, because the guard
 must travel beside the inputs and only a writable run should pay for it.
@@ -3155,12 +3304,14 @@ it as a sixth finding.
 
 **The CI posture, stated plainly.** No CI run exists for `6384543`, and none
 exists for EP-M3's `9a83339` or `5f294b7` — the branch's newest run predates all
-three, because #466 is in conflict with its base and GitHub runs no
+three, because #466 stood in conflict with its base and GitHub runs no
 `pull_request` workflows while a conflict stands. So the branch's two
-documentation commits and this repair are, as of this record, untested by CI;
-their green is the local gate set and the CodeRabbit rounds. Resolving the
-conflict is therefore not only the merge prerequisite but the precondition for
-every further CI verdict, and the deferred rebase is what pays for it.
+documentation commits and the CI repair were CI-untested when this record was
+written, their green resting on the local gate set and the CodeRabbit rounds.
+That conflict was resolved the same day by the rebase onto `64117e4`, and
+resolving it is what re-opens the pipeline: the run that follows is the one
+verdict this plan has not yet read, and the only thing that can turn a local
+green into a green on a second platform.
 
 **What a reader should take from the record.** Three things were found by
 writing rather than by testing: a stale doc comment on the selection's order, a
@@ -3840,7 +3991,61 @@ file count that changed between rounds was a real signal to chase down rather
 than noise to ignore. It resolved to the merge-base, as described above, and not
 to a scope regression.
 
+**EX-REBASE-STRUCTURE** — why the rebase's collision between `src/cli.rs` and
+`src/command.rs` was resolved by keeping the base's module. The two are one
+refactor performed twice: each declares `Cli` and `FormatOpts`, extracted from
+`src/main.rs`, and the base's `src/command.rs` additionally holds
+`process_lines`, `format_lines`, and `formatting_closure`, which this branch's
+extraction never moved — this branch's `src/main.rs` still calls them, and after
+the merge it reaches them through `command`. The evidence for the collision is
+in the rebase's own conflict labels, which name `HEAD:src/command.rs` against
+`parent:src/cli.rs` on the same hunks, and in the import list, which would
+otherwise hold two `FormatOpts` types. It is kept as a record because the choice
+looks reversible and is not: restoring `src/cli.rs` would mean moving the three
+pipeline functions back out of a module the base's `src/main.rs` already imports
+them from, which is a change to the base's design made for no gain to this
+feature. A reader meeting the `EV-M1-CR` or `EV-M2-CR` transcript, each of which
+lists `src/cli.rs` among its reviewed files, should read it as dated: it
+records a round run before the rebase, and the file is not on the branch now.
+
 ## Revision note
+
+Revised 2026-09-12, fifth pass, after rebasing onto `origin/check-option` at
+`64117e4` on the requester's instruction.
+
+What changed. The branch no longer conflicts with its base. Thirty commits now
+stand on `64117e4` where sixty-two had stood on the previous base: git dropped
+thirty of them as patch-equivalent, replayed thirty-two, and two of those were
+skipped by hand — the `src/cli.rs` extraction, superseded by the base's
+`src/command.rs`, and the EP-M7 documentation merge, whose text the base carries
+in a fuller form. The branch's one command module is therefore the base's
+`src/command.rs`, with the `--git` surface folded into it, and `src/cli.rs` never
+lands; `EX-REBASE-STRUCTURE` records why that is the only arrangement leaving one
+`Cli` and one `FormatOpts` in the binary. Four of the base's newer patterns were
+adopted, because they are now the shape a later reader will expect: the
+`crate::command` import paths, `Mode::ListFiles` in the metrics label and its
+test list, the split driver test files, and the `Normalize` help wording. The
+metrics one is a compile requirement rather than a preference — the base's new
+`mode_label` match is exhaustive over `Mode`, so it does not build without a
+`ListFiles` arm.
+
+Two entries were corrected rather than merely extended. The Progress record of
+the base's movement said `64117e4` stood twenty commits past the merge-base; the
+distance is fifty-seven, and the note is corrected in place with the correction
+stated rather than quietly overwritten. And the entry recording the decision not
+to rebase is now marked superseded, as is this section's reading of it, because
+the reason to wait — a base repairing its own failures — is a reason that expires
+when the repair lands, and `3737276` is that landing.
+
+What the pass deliberately does not do is claim a CI verdict. The rebase is what
+re-opens the pipeline, but the run it produces is a separate observation; the
+plan leaves that item open rather than inferring it, so until a run exists the
+rebased tip's green is the local gates and nothing more. Two Surprises entries
+were added for the rebase itself, and both are about trusting a tool's exit
+status: a globally configured `merge=weave` driver returned 0 for a merge that
+could not compile, and an auto-merged region between two conflict hunks bound a
+name to nothing, because lines both sides agree on are not necessarily lines that
+work together.
 
 Revised 2026-09-12, fourth pass, after the branch's first CI run came back red,
 its repair was gated, the plan reconciliation was reviewed, and the base branch
@@ -3868,8 +4073,11 @@ base's own traffic. `EX-M4-CR-SCOPE` records the three conditions that
 distinguish this from a review that quietly deferred to the pull request, since
 both read as "no findings" to anyone who does not look. The base branch, for its
 part, has fixed the Windows dead-import failure this plan had recorded against
-it, in `3737276`, and has moved twenty commits past the merge-base — which is
-the deferral decision's reasoning arriving as evidence.
+it, in `3737276`, and has moved fifty-seven commits past the merge-base — which
+was the deferral decision's reasoning arriving as evidence, until the requester's
+instruction to rebase superseded it the same day, as the fifth pass above
+records. The distance is given here as twenty in this pass's first writing and is
+corrected on re-measurement.
 
 The Epic path itself is not reopened: the tool's behaviour was correct on both
 platforms and every defect was in the tests that observe it. What the pass adds
