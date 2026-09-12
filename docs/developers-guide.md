@@ -363,6 +363,54 @@ contract is exercised end to end through the built binary by
 `tests/cli_check.rs`, `tests/cli_diff.rs`, and the BDD scenarios in
 `tests/features/`.
 
+
+### File selection is a second private tree
+
+`--git` adds two more modules to the binary and no library surface. `src/cli.rs`
+holds the clap surface, including the `ArgGroup`s and the post-parse check that
+the four git-only flags arrive with `--git`. `src/git_inputs.rs` is the
+composition root: it turns the command line into a selection question and the
+answer back into the paths `run_files` receives, and it is the one module that
+knows the whole selection tree at once. `src/select.rs` and its submodules
+state and answer that question.
+
+```text
+src/select.rs               the tree root: module list and dependency rule
+src/select/policy.rs        select_files, FileIdentity, PathKind, PathProbe
+src/select/extensions.rs    --md-exts parsing and matching
+src/select/fs_probe.rs      AmbientPathProbe, the working-tree adapter
+src/select/git_ls_files.rs  the git subprocess, its framing and diagnostics
+src/select/conflict.rs      operation_in_progress and ConflictGuard
+```
+
+Dependencies point inwards, in one direction only. `policy` names the
+`PathProbe` port and imports neither `std::fs`, `std::process`, nor `cap_std`,
+so the rule it states can be read and tested without a filesystem; the adapters
+and the composition root depend on the policy, never the reverse. Nothing in
+the tree holds a directory capability: the paths it returns are relative to the
+working directory, and `main` opens each file's parent as it does for a path the
+user typed, so a `--git` run reaches the same capability-scoped writer as every
+other run.
+
+The selection is tested at three levels. The sibling `*_tests.rs` files beside
+each module cover the policy and its adapters as unit tests, and the boundary
+test in `src/select/git_ls_files_tests.rs` runs the real `git`, because the
+framing the adapter depends on — NUL-terminated, unquoted, verbatim paths
+relative to the process working directory — is exactly the part a fake would
+assume. The scenarios in `tests/features/git_file_selection.feature`, bound by
+`tests/git_file_selection.rs` to the steps in `tests/steps/git_selection.rs`,
+build real repositories and drive the built binary as a user would.
+`tests/cli_git.rs` covers what a scenario cannot state as behaviour: the
+grammar of the flags, the `--help` rendering, and the properties a reader of a
+terminal depends on.
+
+Both fixture sets neutralise the ambient Git configuration
+(`GIT_CONFIG_NOSYSTEM`, `GIT_CONFIG_GLOBAL`, and `HOME`), so the developer's own
+`core.excludesFile` cannot change what is selected, and they supply the identity
+that `GIT_CONFIG_GLOBAL=/dev/null` would otherwise remove. No assertion quotes
+Git's own wording: this tool's text is the part under test, and Git's is relayed
+beside it rather than folded into it.
+
 ## HTML parser dependency coupling
 
 HTML table conversion uses `html5ever` for parsing and `markup5ever_rcdom` for

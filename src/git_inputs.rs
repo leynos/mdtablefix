@@ -28,7 +28,11 @@ use crate::{
 
 /// What `--git` resolved to: the paths to act on, and the guard governing them.
 pub struct GitSelection {
-    /// The selected paths, relative to the working directory, in Git's order.
+    /// The selected paths, relative to the working directory, sorted byte-wise.
+    ///
+    /// Not Git's order: [`select_files`] sorts, because `git ls-files` output is
+    /// not globally sorted and the order is user-visible through both
+    /// `--list-files` and the concatenated output of a print-mode run.
     pub inputs: Inputs,
     /// The guard a rewrite must consult before it writes anything.
     pub guard: ConflictGuard,

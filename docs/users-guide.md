@@ -5,61 +5,170 @@
 ```bash
 mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
           [--footnotes] [--code-emphasis] [--headings]
-          [--in-place | --check | --diff] [FILE...]
+          [--in-place | --check | --diff | --list-files] [FILE...]
+          [--git [--include-untracked] [--md-exts EXT[,EXT...]]
+                 [--allow-conflicted]]
 ```
 
 Every named file is formatted, and the result is printed to standard output. If
 no file is named, the document is read from standard input and the formatted
-text is written to standard output. The behaviour of each formatting flag is
-described in the sections that follow.
+text is written to standard output. Alternatively `--git` selects the files
+from the Git repository that contains the current directory. The behaviour of
+each formatting flag is described in the sections that follow.
 
-| Flag               | Effect                                                    |
-| ------------------ | --------------------------------------------------------- |
-| `--wrap`           | Reflow paragraphs and list items to 80 columns.           |
-| `--renumber`       | Renumber ordered lists sequentially.                      |
-| `--breaks`         | Rewrite thematic breaks as a line of 70 underscores.      |
-| `--ellipsis`       | Replace `...` with the ellipsis character.                |
-| `--fences`         | Normalize fenced code blocks where compression is safe.   |
-| `--footnotes`      | Convert bare numeric references into footnote links.      |
-| `--code-emphasis`  | Repair emphasis markers that adjoin inline code.          |
-| `--headings`       | Convert Setext headings to hash-prefixed headings.        |
-| `--in-place`       | Rewrite each named file instead of printing it.           |
-| `--check`          | Report each file that would be reformatted, without       |
-|                    | writing.                                                  |
-| `--diff`           | Print a unified diff for each file that would be          |
-|                    | reformatted.                                              |
-| `--version`        | Print the version and exit.                               |
+| Flag                     | Effect                                                   |
+| ------------------------ | -------------------------------------------------------- |
+| `--wrap`                 | Reflow paragraphs and list items to 80 columns.          |
+| `--renumber`             | Renumber ordered lists sequentially.                     |
+| `--breaks`               | Rewrite thematic breaks as a line of 70 underscores.     |
+| `--ellipsis`             | Replace `...` with the ellipsis character.               |
+| `--fences`               | Normalize fenced code blocks where compression is safe.  |
+| `--footnotes`            | Convert bare numeric references into footnote links.     |
+| `--code-emphasis`        | Repair emphasis markers that adjoin inline code.         |
+| `--headings`             | Convert Setext headings to hash-prefixed headings.       |
+| `--in-place`             | Rewrite each selected file instead of printing it.       |
+| `--check`                | Report each file that would be reformatted, without      |
+|                          | writing.                                                 |
+| `--diff`                 | Print a unified diff for each file that would be         |
+|                          | reformatted.                                             |
+| `--list-files`           | Print the paths a selection resolves to, without reading |
+|                          | or writing them.                                         |
+| `--git`                  | Select Markdown files tracked by Git beneath the current |
+|                          | directory.                                               |
+| `--include-untracked`    | With `--git`, also select untracked files Git does not   |
+|                          | ignore.                                                  |
+| `--md-exts EXT[,EXT...]` | With `--git`, the extensions to select, replacing the    |
+|                          | default `md`, `mdc`, and `markdown`.                     |
+| `--allow-conflicted`     | With `--git --in-place`, rewrite files that carry        |
+|                          | conflict markers during a merge, rebase, or cherry-pick. |
+| `--version`              | Print the version and exit.                              |
 
 _Table 1: The command-line flags._
 
-### The three file modes
 
-`--in-place`, `--check`, and `--diff` act on the files named on the command
-line, and at most one of them may be given. Each requires at least one file:
+### The four file modes
+
+`--in-place`, `--check`, `--diff`, and `--list-files` act on the files a run
+selected, and at most one of them may be given. Each requires a source of files:
 `mdtablefix --check` on its own is a usage error, because there is no file for
 the mode to act on. With no mode flag the tool prints the formatted text, which
 is what makes `mdtablefix FILE` and `cat FILE | mdtablefix` interchangeable.
 
 `--check` prints one line per file that would be reformatted, and `--diff`
 prints a unified diff per file that would be reformatted. Neither writes
-anything: a clean file prints nothing at all. `--in-place` rewrites only the
-files whose bytes would change, so a file that is already formatted keeps its
-inode and its modification time. See
-[In-place editing](#in-place-editing) for the replacement guarantees.
+anything: a clean file prints nothing at all. `--list-files` prints the paths
+themselves and nothing else, which is how a selection is inspected without
+being acted on. `--in-place` rewrites only the files whose bytes would change,
+so a file that is already formatted keeps its inode and its modification time.
+See [In-place editing](#in-place-editing) for the replacement guarantees.
 
 Standard output is the machine-readable half of the contract: report lines for
-`--check`, diffs for `--diff`, formatted text otherwise. The summary
-(`2 files would be reformatted, 1 file left unchanged.`) and every error go to
-standard error, so standard output can be piped or captured on its own.
+`--check`, diffs for `--diff`, paths for `--list-files`, formatted text
+otherwise. The summary (`2 files would be reformatted, 1 file left unchanged.`)
+and every error go to standard error, so standard output can be piped or
+captured on its own.
+
+
+### Selecting files from Git
+
+`--git` takes the file list from Git rather than from the command line. It may
+be combined with any of the four modes and with any formatting flag, and it may
+not be combined with file arguments: a run takes its files from one source or
+the other, never both. `--git --in-place` reformats a repository's Markdown in
+a single invocation, and `--git --check` is the matching gate for a pipeline.
+
+The candidate set is what `git ls-files --cached` reports, which is to say the
+index. `--include-untracked` adds the untracked files that Git does not ignore.
+Because Git answers the question, `.gitignore` is respected exactly as Git
+respects it, and a file added with `git add --force` is selected even though
+`.gitignore` names it. `--md-exts` replaces the default extension set, `md`,
+`mdc`, and `markdown`; a leading dot and surrounding whitespace are optional, so
+`--md-exts .markdown,.MD` selects both. A candidate matches on its last
+extension, which is folded to lower case before it is compared.
+
+Candidates that no longer exist in the working tree — a file deleted but not
+yet staged, for instance — and candidates that are not regular files, symbolic
+links among them, are skipped without comment. Each is an ordinary repository
+state rather than a mistake, and a link is skipped rather than followed for the
+reason given under [Symbolic links](#symbolic-links). A selected path that is
+not valid UTF-8 cannot be shown, so such paths are counted and the count is
+reported on standard error.
+
+The selection is ordered by path, byte-wise, so it does not follow Git's own
+order and does not change between runs. `--list-files` prints it, one path per
+line, and exits without reading or writing any file content: it is how a
+selection is inspected before it is acted on, and how the same set can be
+handed to another tool.
+
+```bash
+mdtablefix --git --list-files | xargs wc -l
+```
+
+Selecting nothing is a success. The run exits `0`, prints nothing, and does not
+read standard input.
+
+
+#### Mid-merge safety
+
+Rewriting a file that carries conflict markers restructures the text on both
+sides of the boundary, so a later resolution would be made against corrupted
+content. `--git --in-place` therefore refuses a selected file that carries
+conflict markers while a merge, rebase, or cherry-pick is paused in the
+repository: the file is named on standard error, left untouched, and counted as
+a failure, so the run exits `2`. Every other selected file is still rewritten.
+`--allow-conflicted` overrides the refusal.
+
+The check is deliberately narrow. A file is refused only if it holds all three
+marker forms — a line of exactly seven `<`, a line of exactly seven `=`, and a
+line of exactly seven `>` — and only while an operation is in progress. A
+document that merely discusses conflict markers inside a fenced example is
+therefore rewritten, while one that quotes all three forms during a real merge
+is refused; `--allow-conflicted` is the answer to that case. The guard is a
+heuristic, not a substitute for `git status`.
+
+Only `--in-place` consults the repository's state, because only `--in-place`
+writes. `--check`, `--diff`, and `--list-files` never pay for the second `git`
+process.
+
+
+#### When the selection fails
+
+Outside a repository, and whenever `git` cannot be run or exits non-zero, the
+run fails as a whole before any file is analysed, exits `2`, and prints one
+line to standard error: this tool's own wording with Git's diagnostic appended.
+The process is always `git ls-files`, run without a shell, so nothing a user
+typed is ever interpreted as a command.
+
+### The four file modes
+
+`--in-place`, `--check`, `--diff`, and `--list-files` act on the files a run
+selected, and at most one of them may be given. Each requires a source of files:
+`mdtablefix --check` on its own is a usage error, because there is no file for
+the mode to act on. With no mode flag the tool prints the formatted text, which
+is what makes `mdtablefix FILE` and `cat FILE | mdtablefix` interchangeable.
+
+`--check` prints one line per file that would be reformatted, and `--diff`
+prints a unified diff per file that would be reformatted. Neither writes
+anything: a clean file prints nothing at all. `--list-files` prints the paths
+themselves and nothing else, which is how a selection is inspected without
+being acted on. `--in-place` rewrites only the files whose bytes would change,
+so a file that is already formatted keeps its inode and its modification time.
+See [In-place editing](#in-place-editing) for the replacement guarantees.
+
+Standard output is the machine-readable half of the contract: report lines for
+`--check`, diffs for `--diff`, paths for `--list-files`, formatted text
+otherwise. The summary (`2 files would be reformatted, 1 file left unchanged.`)
+and every error go to standard error, so standard output can be piped or
+captured on its own.
 
 ### Exit status
 
-| Status | Meaning                                                            |
-| ------ | ------------------------------------------------------------------ |
-| `0`    | Every file was analysed, and no reporting mode found drift.        |
-| `1`    | `--check` or `--diff` found a file that would be reformatted.      |
-| `2`    | A file could not be read or rewritten, or the command line was     |
-|        | rejected.                                                          |
+| Status | Meaning                                                       |
+| ------ | ------------------------------------------------------------- |
+| `0`    | Every file was analysed, and no reporting mode found drift.   |
+| `1`    | `--check` or `--diff` found a file that would be reformatted. |
+| `2`    | A file could not be read or rewritten, the selection of files |
+|        | failed, or the command line was rejected.                     |
 
 _Table 2: The exit statuses._
 
@@ -95,7 +204,7 @@ when the file already has one. Both rules apply in every mode, so `--check`,
 `--diff`, and `--in-place` agree on the bytes a file would end up with. See
 [Line endings](#line-endings) for the detection rule and its tie-breaks.
 
-Two consequences are worth knowing before running the tool over a repository.
+Three consequences are worth knowing before running the tool over a repository.
 
 - Detection covers the whole document, including fenced code blocks. A
   predominantly CRLF document whose code samples use LF endings has those
@@ -103,6 +212,10 @@ Two consequences are worth knowing before running the tool over a repository.
   rather than to its formatting.
 - A lone carriage return is content, not a line ending. A file that separates
   its lines with `\r` alone is therefore treated as a single line.
+- Neither rule consults `.gitattributes`, because neither is Git's decision to
+  make: the extension decides selection and the document decides its ending. A
+  repository-wide `mdtablefix --git --in-place` therefore rewrites a mixed file
+  to whichever style dominates it, whatever a `text` or `eol` attribute says.
 
 ### Trailing newlines
 
@@ -113,16 +226,19 @@ terminator even when the input produces no lines; an empty file stays empty.
 
 ### Paths that match nothing
 
-`mdtablefix` takes file paths, not patterns, and does no discovery of its own.
-A shell expands a glob before the tool sees it, so `mdtablefix --check *.md` in
-a directory with no Markdown files passes the literal pattern `*.md`, which is
-then reported as an unreadable path and exits `2`. Shells differ in whether
-that happens: `sh` and `bash` pass an unmatched pattern through literally,
-while `zsh` — and `bash` under `failglob` — refuse to run the command at all,
-so the exit `2` above belongs to the shells that let the pattern through. The
-behaviour is deliberate either way: a run asked to check a set of files and
-checking none of them has not earned a clean tree. A gate should expand the
-list in a way that runs the tool only when there is something to check:
+A path named on the command line is a path and not a pattern, and `mdtablefix`
+does no discovery of its own unless `--git` is given (see
+[Selecting files from Git](#selecting-files-from-git)). A shell expands a glob
+before the tool sees it, so `mdtablefix --check *.md` in a directory with no
+Markdown files passes the literal pattern `*.md`, which is then reported as an
+unreadable path and exits `2`. Shells differ in whether that happens: `sh` and
+`bash` pass an unmatched pattern through literally, while `zsh` — and `bash`
+under `failglob` — refuse to run the command at all, so the exit `2` above
+belongs to the shells that let the pattern through. The behaviour is deliberate
+either way: a run asked to check a set of files and checking none of them has
+not earned a clean tree. A gate over a tree that is not a repository should
+expand the list in a way that runs the tool only when there is something to
+check:
 
 ```bash
 fd -e md -X mdtablefix --check
@@ -134,12 +250,16 @@ when there are no matches.
 
 ### Symbolic links
 
-A read follows a symbolic link, so `--check` and `--diff` report a link's target
-like any other file. A write declines the link rather than replacing it,
+A read follows a symbolic link, so `--check` and `--diff` report a link's
+target like any other file. A write declines the link rather than replacing it,
 because the rename would turn the link into a regular file; the run reports the
 declined link, fails that file, and exits `2`. A link to a file that needs no
 changes is not written at all, so it succeeds. See
 [In-place editing](#in-place-editing) for the full replacement contract.
+
+A `--git` selection never reaches either case for a link: a link is not a
+regular file, so it is skipped during selection, before it is analysed. See
+[Selecting files from Git](#selecting-files-from-git).
 
 ## Table reflow
 
@@ -259,9 +379,9 @@ further changes.
 Thematic breaks act as block boundaries. A line of three or more `-`, `*`, or
 `_` characters is passed through on its own line and never absorbed into the
 surrounding paragraph, with or without `--breaks`. This includes spaced runs
-such as `- - -` and the seventy-underscore line that `--breaks` writes. A
-table separator row such as `| --- | --- |` still contains pipes and is
-reflowed with its table rather than treated as a break.
+such as `- - -` and the seventy-underscore line that `--breaks` writes. A table
+separator row such as `| --- | --- |` still contains pipes and is reflowed with
+its table rather than treated as a break.
 
 When the first line of a prefixed block spills past the target width, the
 wrapper keeps that block open so its continuation and lazy continuation lines
@@ -522,7 +642,7 @@ fn main() {}
 
 ## In-place editing
 
-Pass `--in-place` to rewrite each named file with the formatted result. The
+Pass `--in-place` to rewrite each selected file with the formatted result. The
 formatted output is written to a temporary file in the same directory as the
 target and then renamed over it, so the replacement is atomic on POSIX
 filesystems: a reader sees either the whole original file or the whole
@@ -536,8 +656,9 @@ Stale files are named `<target>.mdtablefix-<pid>-<n>.tmp`. Delete them once no
 run is in progress.
 
 When an in-place rewrite fails, `mdtablefix` reports the full error chain on
-standard error: first the file context, naming the path exactly as given on the
-command line, then the underlying cause beneath a `Caused by:` heading. Every
+standard error: first the file context, naming the path as the run knows it —
+the path as given on the command line, or the relative path Git reported for a
+`--git` run — then the underlying cause beneath a `Caused by:` heading. Every
 failing file is reported this way, and the run then exits with a non-zero
 status. Scripts that match exact standard-error text should expect the chain
 and its multi-line form; matching the file name or the cause is more robust.
@@ -554,40 +675,40 @@ Windows needs one step more than that. There, read-only is a file attribute,
 `FILE_ATTRIBUTE_READONLY`, and the rename cannot replace a destination that
 carries it. `mdtablefix` therefore clears that attribute on the destination
 through its directory capability immediately before the rename. The temporary
-file still carries the original read-only attribute, so the file that takes over
-the target's name is read-only as soon as the rename lands. If the swap does not
-complete, the original attribute is put back on a best-effort basis: a run
-interrupted between those two steps, or a restoration that itself fails, can
-leave the target's read-only attribute cleared. The contents are unaffected,
-because a swap that does not complete leaves the original file byte-identical.
+file still carries the original read-only attribute, so the file that takes
+over the target's name is read-only as soon as the rename lands. If the swap
+does not complete, the original attribute is put back on a best-effort basis: a
+run interrupted between those two steps, or a restoration that itself fails,
+can leave the target's read-only attribute cleared. The contents are
+unaffected, because a swap that does not complete leaves the original file
+byte-identical.
 
-Symbolic links are declined rather than replaced. The read follows the link, but
-the rename swaps the link entry itself, which would turn the symlink into a
-regular file while leaving the real file untouched. The run reports the declined
-link on standard error; rewrite the link's target directly instead. A link whose
-target resolves outside the file's directory is refused by the directory
-capability before the rewrite begins.
+Symbolic links are declined rather than replaced. The read follows the link,
+but the rename swaps the link entry itself, which would turn the symlink into a
+regular file while leaving the real file untouched. The run reports the
+declined link on standard error; rewrite the link's target directly instead. A
+link whose target resolves outside the file's directory is refused by the
+directory capability before the rewrite begins.
 
 Two limitations apply. On Windows the replacement can fail if another process
 holds the destination open without delete sharing, because the rename cannot
 displace an open handle. Atomicity is also not durability: the new contents are
 flushed to storage before the rename, but the rename itself is not, so a power
-loss immediately afterwards can revert the directory entry to the original
-file.
+loss immediately afterwards can revert the directory entry to the original file.
 
 ## Library API notes
 
 ### Atomic in-place rewrites
 
 `rewrite(path)` and `rewrite_no_wrap(path)` give library callers the same
-guarantee as `--in-place`: the replacement is written to a temporary file beside
-the target, flushed, and renamed over it, with the original file mode preserved.
-The temporary file receives the target's permissions before the rename, so a
-read-only target is replaced by a read-only file rather than by a writable one.
-On Windows, where the destination's `FILE_ATTRIBUTE_READONLY` blocks the rename
-outright, that attribute is cleared immediately before the rename and put back
-if the swap does not complete. Symbolic links are declined, as described in
-[In-place editing](#in-place-editing).
+guarantee as `--in-place`: the replacement is written to a temporary file
+beside the target, flushed, and renamed over it, with the original file mode
+preserved. The temporary file receives the target's permissions before the
+rename, so a read-only target is replaced by a read-only file rather than by a
+writable one. On Windows, where the destination's `FILE_ATTRIBUTE_READONLY`
+blocks the rename outright, that attribute is cleared immediately before the
+rename and put back if the swap does not complete. Symbolic links are declined,
+as described in [In-place editing](#in-place-editing).
 
 Callers that already hold a `cap_std::fs_utf8::Dir` capability can use
 `mdtablefix::io::replace_file(directory, path, contents)` instead. It performs

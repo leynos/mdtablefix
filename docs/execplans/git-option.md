@@ -6,9 +6,13 @@ This ExecPlan (execution plan) is a living document. The sections
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS — rebased onto `check-option` and being implemented there,
-stacked on pull request #464. The prerequisite extraction of `src/cli.rs` has
-landed, Stage A is discharged, and EP-M0 to EP-M3 follow. See `Progress`,
+Status: IN PROGRESS — rebased onto `check-option` and implemented there, stacked
+on pull request #464. The prerequisite extraction of `src/cli.rs` has landed,
+Stage A is discharged, and EP-M0 through EP-M2 are complete. EP-M3's
+documentation — ADR 0010 and the five component documents — is written and
+reconciled with `Surprises & discoveries` and the Decision log; its `EV-M3-DOCS`
+gate run and the milestone's CodeRabbit review are outstanding, and Status
+becomes COMPLETE when both are recorded under `Progress`. See `Progress`,
 `Surprises & discoveries`, and `Conformance basis`, "Related work".
 
 ## Purpose / big picture
@@ -340,7 +344,7 @@ discoveries.
   and renames over it. It reads `symlink_metadata` and **declines a symbolic
   link** with `io::ErrorKind::InvalidInput`. Both the CLI's `rewrite_in_place`
   and the library's `rewrite_with` route through it. Documented in
-  `docs/architecture.md`, "Atomic in-place writes", with Figure 5.
+  `docs/architecture.md`, "Atomic in-place writes", with Figure 6.
 - **#469** (issue #451), line-ending preservation. `LineEnding`,
   `LineEndingCounts`, `count_line_endings`, `detect_line_ending`, and
   `serialize_lines` are now **public library API**, re-exported at the crate
@@ -2007,9 +2011,51 @@ plateau.
       `src/git_inputs.rs`, and the end-to-end tests; EP-M1's two rounds saw 19
       files. No rate or seat limit appeared, so no wait was needed. Transcript
       in Artefacts and notes, `EV-M2-CR`.
-- [ ] EP-M3: write **ADR 0010** and update `README.md`, `docs/users-guide.md`,
-      `docs/architecture.md`, `docs/developers-guide.md`, `docs/contents.md`.
-- [ ] Reconcile Decision log and Surprises with ADR 0010, then set Status.
+- [x] (2026-09-12) EP-M3, ADR 0010: `docs/adrs/0010-git-file-selection.md`
+      written — the context (the `git ls-files | xargs` idiom and its four
+      defects), the three non-negotiable properties, the six decision drivers,
+      the four options with their comparison table, the decision outcome in
+      five subsections, the consequences, and nine known risks. Two passages
+      come from measured runs rather than from drafting: a mid-merge refusal,
+      and a failure outside any repository. Both corrected the draft — the
+      refusal is an `anyhow` chain rather than one prefixed line, and its cause
+      line is 123 characters, past markdownlint's `code_block_line_length` of
+      120, so it is wrapped inside the fence with a note saying the wrap is the
+      page's rather than the tool's. The ADR is a wrap fixed point (a second
+      `--wrap` pass is byte-identical) and markdownlint-clean.
+- [x] (2026-09-12) EP-M3, user's guide: the synopsis, five new rows in the
+      flag table, "The three file modes" retitled to four with `--list-files`
+      named, a new "Selecting files from Git" section with "Mid-merge safety"
+      and "When the selection fails" beneath it, the exit-status row widened,
+      the `.gitattributes` consequence added to the line-ending section, and
+      three existing sections extended — paths that match nothing, symbolic
+      links, and the in-place error context. Wrap-normalised until a second
+      pass is byte-identical; three paragraphs outside the edits reflowed as a
+      consequence, investigated rather than reverted and kept — see Surprises
+      & discoveries.
+- [x] (2026-09-12) EP-M3, architecture and developer's guides: a new "Git file
+      selection" section in `docs/architecture.md` with a sequence diagram
+      tracing `main::run` through `git_inputs::resolve`, `git ls-files`,
+      `select_files`, and the guard, "three behaviours" corrected to four with
+      `--list-files` named, and the contents list extended. The diagram is
+      Figure 5, so the atomic-writes figure became Figure 6 and the plan's one
+      cross-reference to it above was updated with it.
+      `docs/developers-guide.md` gains "File selection is a second private
+      tree": the module map, the inward dependency rule, the three levels the
+      selection is tested at, and the fixture's neutralisation of the ambient
+      Git configuration.
+- [x] (2026-09-12) EP-M3, `README.md` and `docs/contents.md`: the README
+      synopsis brought into line with the user's guide's one grammar, "Three
+      flags select" replaced by the four modes plus a `--git` paragraph and an
+      example, and both ADR 0010 and this plan indexed in the contents list.
+- [x] (2026-09-12) EP-M3, this plan reconciled with ADR 0010: the Decision log
+      gains three entries (measured transcripts rather than transcribed prose;
+      the retained user's-guide reflows; the `.gitattributes` caveat recorded
+      in both documents) and the Surprises section gains three. One stale doc
+      comment fixed while drafting: `GitSelection::inputs` claimed Git's order
+      while `select_files` sorts.
+- [ ] EP-M3, `EV-M3-DOCS`: `make markdownlint` and `make nixie` over the
+      documentation diff, then the milestone's CodeRabbit review.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
@@ -2422,6 +2468,44 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   is therefore evidence about the tests as much as about the code, which is the
   argument for widening the oracle before believing a green run.
 
+- Observation: **writing the ADR found a stale doc comment that four gate runs
+  and two CodeRabbit passes had not.** `GitSelection::inputs` described its
+  paths as "in Git's order", while `git_inputs::resolve` hands them to
+  `select_files`, which sorts them byte-wise — the invariant INV-ORDER-DET
+  exists to guarantee. Impact: a record that states the design in prose is a
+  reading of the code from a direction no test takes, and it earns its keep
+  before it is published, not after. The comment now names the sort and the two
+  places the order is visible. It is not a correctness defect — the sort is what
+  runs — but a reader who trusted the comment would have expected a different
+  `--list-files`.
+
+- Observation: **markdownlint's line rule applies inside a `console` fence at
+  120 characters, and to a code span in prose at 80.** Evidence: the measured
+  failure line recorded in the ADR — this tool's wording, the command name, the
+  exit status, and Git's fatal message — is 123 characters, so it is wrapped
+  inside its fence; and the non-UTF-8 notice, at 203 characters on one line of
+  prose with an inline code span, is an error there too, which is why it is a
+  fenced transcript rather than a quoted span. Impact: a transcript is not
+  exempt from the line limit, and the two limits differ by more than half, so a
+  reader writing a long measured line should reach for the fence and check its
+  width. Both wrap points are marked in the ADR as the page's wrapping rather
+  than the tool's, because a reader may otherwise take a wrapped line for a
+  wrapped message, and the tool prints one cause on one line however long it
+  is.
+
+- Observation: **normalising one section of `docs/users-guide.md` to the wrap
+  fixed point reflowed three paragraphs the change never touched.** Evidence:
+  `git diff` shows the three hunks, and each is a pure re-wrap with no word
+  changed. Reverted or kept was a real choice, so it was decided on evidence
+  rather than on the tidiness of the diff: `make fmt`'s `mdformat-all` runs
+  exactly the flags used here, so these paragraphs were going to reflow the next
+  time anyone ran it, and `tests/idempotence_drift.rs` compares pass 1 against
+  pass 2 rather than committed input against pass 1 — so committed documentation
+  is not required to be a fixed point, and the drift gate says nothing either
+  way. Kept, and the file is now a fixed point. Impact: a documentation change
+  can carry reflows it did not make, and the honest thing is to say so in the
+  commit message rather than to leave the diff looking smaller than the change.
+
 ## Decision log
 
 Entries are pointers; the reasoning lives in the body sections named. ADR 0010
@@ -2733,6 +2817,43 @@ is the durable record, and EP-M3 reconciles this log into it.
   statements rather than a new one. Recorded because the next reader will find
   those four commits on the base branch and ask whether they were considered.
   Date/Author: 2026-09-12, implementation agent, on the rebase.
+
+- Decision: ADR 0010 quotes measured tool output, and a passage that could not
+  be measured was measured before being written. Rationale: the first draft of
+  the refusal passage read `mdtablefix: refusing to rewrite docs.md: ...` as one
+  line, which is not what the binary prints — the refusal is an `anyhow` chain,
+  so the tool's line is followed by a blank line, `Caused by:`, and an indented
+  cause. The draft was plausible and wrong, which is the failure mode a
+  decision record can least afford, because a reader checks a transcript against
+  the tool only when it disagrees with their expectation. Cost: two fixtures
+  built to measure rather than to test — a repository paused mid-merge with
+  `MERGE_HEAD` and conflict markers in the file, and a `--check` run outside any
+  repository — and a wrapping note under each fence, since the cause line is 123
+  characters and the fence's limit is 120. Date/Author: 2026-09-12, EP-M3.
+
+- Decision: keep the three incidental reflows in `docs/users-guide.md` rather
+  than reverting them or formatting the file in a mode that avoids them.
+  Rationale: `make fmt`'s `mdformat-all` runs exactly the flags used here, so
+  those paragraphs reflow the next time anyone runs it and the drift would be
+  rediscovered as a surprise; `tests/idempotence_drift.rs` compares pass 1
+  against pass 2, so a committed document is not required to be a fixed point
+  and the gate neither demands the change nor forbids it. The file is now a
+  fixed point. Cost: three hunks in the diff for words the change did not
+  author, named in the commit message and in Surprises & discoveries rather than
+  left for a reviewer to attribute. Date/Author: 2026-09-12, EP-M3.
+
+- Decision: `.gitattributes` is documented as a caveat rather than implemented.
+  Rationale: EP-M3's acceptance names a CRLF caveat, and the risk is real but
+  older than this feature — the tool has always chosen its line ending by the
+  document's majority, over the whole file and including fenced code. What
+  `--git` changes is the blast radius: a repository-wide run rewrites the LF
+  code samples of a predominantly CRLF document to CRLF, so the content of a
+  code block changes rather than its formatting. Implementing `text`/`eol`
+  attributes was out of scope and would be a second source of truth beside the
+  index. Cost: one known-risk bullet in ADR 0010 and one sentence in the user's
+  guide, placed before the sections that use line-ending behaviour so a reader
+  meets it before a repository-wide run rather than after. Date/Author:
+  2026-09-12, EP-M3.
 
 ## Outcomes & retrospective
 
