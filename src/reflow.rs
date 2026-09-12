@@ -11,6 +11,7 @@ mod row_parsing;
 
 use row_parsing::{cell_is_semantically_empty, split_physical_rows};
 
+/// A parsed cell with leading-empty state kept separately from its payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Cell {
     payload: String,
@@ -64,6 +65,7 @@ pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<Cell>>, bool) {
     (rows, split_within_line)
 }
 
+/// Reports whether a parsed row contains any meaningful cell content.
 fn retain_parsed_row(row_index: usize, row: &[Cell]) -> bool {
     if row.iter().all(cell_is_semantically_empty) {
         tracing::debug!(
@@ -93,10 +95,16 @@ fn retain_parsed_row(row_index: usize, row: &[Cell]) -> bool {
 /// # Examples
 ///
 /// ```rust,ignore
-/// let rows = vec![vec![Cell {
-///     payload: String::new(),
-///     leading_empty: true,
-/// }]];
+/// let rows = vec![vec![
+///     Cell {
+///         payload: String::new(),
+///         leading_empty: true,
+///     },
+///     Cell {
+///         payload: "value".to_string(),
+///         leading_empty: false,
+///     },
+/// ]];
 /// let cleaned = mdtablefix::reflow::clean_rows(rows);
 ///
 /// assert_eq!(cleaned, vec![vec![String::new(), "value".to_string()]]);
@@ -293,10 +301,12 @@ fn invalid_separator(sep_cells: Option<&Vec<String>>, max_cols: usize) -> bool {
     }
 }
 
+/// Reports whether an invalid explicit separator should promote the second row.
 fn should_use_second_row_as_separator(sep_invalid: bool, rows: &[Vec<Cell>]) -> bool {
     sep_invalid && second_row_is_separator(rows)
 }
 
+/// Reports whether the second parsed row consists entirely of separator cells.
 fn second_row_is_separator(rows: &[Vec<Cell>]) -> bool {
     rows.len() > 1 && rows[1].iter().all(|cell| SEP_RE.is_match(&cell.payload))
 }

@@ -27,7 +27,21 @@ use tracing::debug;
 /// ```
 #[must_use]
 pub fn split_cells(line: &str) -> Vec<String> {
-    let trimmed = line.trim().trim_start_matches('|').trim_end_matches('|');
+    let trimmed = line.trim().trim_start_matches('|');
+    let trimmed = match trimmed.strip_suffix('|') {
+        Some(without_pipe)
+            if without_pipe
+                .chars()
+                .rev()
+                .take_while(|character| *character == '\\')
+                .count()
+                % 2
+                == 0 =>
+        {
+            without_pipe
+        }
+        _ => trimmed,
+    };
     let mut cells = Vec::new();
     let mut cell = String::new();
     let mut characters = trimmed.chars().peekable();
@@ -273,23 +287,13 @@ mod tests {
 
     use super::*;
 
+    mod split_cells;
+
     #[test]
     fn sep_index_within_bounds() {
         assert_eq!(sep_index_within(Some(1), 3), Some(1));
         assert_eq!(sep_index_within(Some(3), 3), None);
         assert_eq!(sep_index_within(None, 3), None);
-    }
-
-    #[test]
-    fn split_cells_preserves_control_characters_escaped_pipes_and_backslashes() {
-        assert_eq!(
-            split_cells("| \u{1f} | middle \\| pipe | trailing\\ |"),
-            vec![
-                "\u{1f}".to_string(),
-                "middle | pipe".to_string(),
-                "trailing\\".to_string(),
-            ]
-        );
     }
 
     #[test]

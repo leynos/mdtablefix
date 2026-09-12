@@ -2,10 +2,12 @@
 
 use super::{Cell, SEP_RE};
 
+/// Reports whether a cell has no content after accounting for leading emptiness.
 pub(super) fn cell_is_semantically_empty(cell: &Cell) -> bool {
     cell.leading_empty || cell.payload.is_empty()
 }
 
+/// Splits physical rows that contain multiple logical rows and trims padding.
 pub(super) fn split_physical_rows(mut physical_rows: Vec<Vec<Cell>>) -> (Vec<Vec<Cell>>, bool) {
     let expected_width = infer_expected_width(&physical_rows);
     if let Some(first_row) = physical_rows.first_mut()
@@ -30,6 +32,7 @@ pub(super) fn split_physical_rows(mut physical_rows: Vec<Vec<Cell>>) -> (Vec<Vec
     (logical_rows, split_within_line)
 }
 
+/// Infers the logical table width from the first row and concatenation markers.
 fn infer_expected_width(rows: &[Vec<Cell>]) -> usize {
     let Some(first_row) = rows.first() else {
         return 0;
@@ -57,6 +60,7 @@ fn infer_expected_width(rows: &[Vec<Cell>]) -> usize {
     }
 }
 
+/// Reports whether a concatenated row contains an embedded separator row.
 fn has_embedded_separator_row(row: &[Cell], width: usize) -> bool {
     if !is_concatenated_rows(row, width) {
         return false;
@@ -70,6 +74,7 @@ fn has_embedded_separator_row(row: &[Cell], width: usize) -> bool {
     })
 }
 
+/// Reports whether a physical row encodes multiple logical rows.
 fn is_concatenated_rows(row: &[Cell], width: usize) -> bool {
     if width == 0 || row.len() <= width || !(row.len() + 1).is_multiple_of(width + 1) {
         return false;
@@ -85,6 +90,7 @@ fn is_concatenated_rows(row: &[Cell], width: usize) -> bool {
         })
 }
 
+/// Appends each logical row recovered from a concatenated physical row.
 fn append_concatenated_rows(logical_rows: &mut Vec<Vec<Cell>>, row: Vec<Cell>, width: usize) {
     let mut cells = row.into_iter();
     loop {
