@@ -1965,10 +1965,13 @@ plateau.
       both found by running the binary rather than by reading the declaration —
       see Surprises & discoveries. The `--help` snapshot is what caught the
       first: it is the whole rendering, not the flags this milestone added.
-- [ ] EP-M2: re-run `make mutants` with the widening in place — the config
-      change has landed (`.cargo/mutants.toml` no longer narrows the test set)
-      and the run is what remains, so that the behavioural scenarios are part
-      of the oracle rather than merely outside it.
+- [x] (2026-09-12) EP-M2, `make mutants` with the widening in place: **60
+      mutants: 53 caught, 7 unviable, 0 missed** — `missed.txt` empty and exit
+      status 0, so the behavioural scenarios are part of the oracle rather than
+      merely outside it. The first widened run reported **2 missed**, both in
+      `src/select/git_ls_files.rs` and both a test's blind spot rather than a
+      defect; two tests now kill them, and the run was repeated to confirm.
+      Transcript in Artefacts and notes, `EV-M2-MUTANTS`.
 - Measurement, 2026-09-12, against the Scope tolerance (more than 24 files
       touched, or more than 1600 net added lines): **EP-M2's own change is 16
       files — 13 modified and 3 new — with 669 insertions and 94 deletions in
@@ -2384,6 +2387,22 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   substring assertion on a message pins — the substring, and nothing else about
   the sentence around it.
 
+- Observation: **a mutation survivor can be a test's blind spot rather than a
+  defect, and the widened oracle found two of exactly that kind.** With the
+  whole suite killing mutants, the guard on an empty `stderr` in
+  `GitListError::diagnostic` and the `>` against `relayable`'s cap both
+  survived: the first because nothing asserted what a failure with no Git text
+  to relay shows a user, so a line ending in a dangling `": "` passed every
+  test, and the second because the existing test used a 4096-character flood,
+  which `>` and `>=` cut identically — only a run of exactly `RELAYED_LIMIT`
+  characters tells them apart. Evidence: the two `MISSED` lines in
+  `EV-M2-MUTANTS`. Impact: both are killed now by tests that pin the boundary
+  rather than the neighbourhood —
+  `a_failure_with_no_git_text_carries_our_wording_alone` compares the diagnostic
+  to `Display` exactly, and the cap has a test on either side of it. A survivor
+  is therefore evidence about the tests as much as about the code, which is the
+  argument for widening the oracle before believing a green run.
+
 ## Decision log
 
 Entries are pointers; the reasoning lives in the body sections named. ADR 0010
@@ -2471,6 +2490,19 @@ is the durable record, and EP-M3 reconciles this log into it.
   caught. Cost: the behavioural suite contributes nothing to the run yet, so the
   setting is a temporary narrowing and EP-M2 revisits it once that suite is
   green. Date/Author: 2026-09-12, implementation.
+
+- Decision: drop the narrowing at EP-M2, and re-run the whole suite as the
+  oracle, rather than leaving it until a review asked for it. Rationale: the
+  narrowing existed only because the baseline was red, and the milestone that
+  turns the baseline green is the earliest commit that can widen the run — a
+  mutation gate that excludes the behavioural scenarios cannot support a claim
+  about behaviour, and the criterion is zero survivors anywhere in
+  `src/select/**`, not zero survivors among the units. Cost: every mutant now
+  runs the whole suite, so 60 mutants take 5 to 6 minutes wall where 40 took 84
+  seconds. Outcome: the first widened run reported two survivors the narrowed
+  run could not have reached at all, both a test's blind spot rather than a
+  defect; both are killed now and the run is green. See `EV-M2-MUTANTS`.
+  Date/Author: 2026-09-12, implementation.
 
 - Decision: change the seam rather than exclude the mutants that could not be
   killed. Rationale: three mutants of `fs_probe`'s failed-canonicalization match
@@ -3039,10 +3071,15 @@ cargo test --test cli_git --test git_file_selection --bin mdtablefix
 ```
 
 ```plaintext
+test result: ok. 138 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
-test result: ok. 136 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out
 ```
+
+The lines are in the order the command reports them, which is not the order of
+its arguments. The binary's count is 138 rather than the 136 this milestone
+first measured: the two tests that kill the widened mutation run's survivors
+were added after it, and the run was repeated. `EV-M2-MUTANTS` is that pair.
 
 The second run is that command *without* `INSTA_UPDATE`, which is what makes the
 `--help` snapshot **accepted** rather than merely written: the first run created
@@ -3056,6 +3093,60 @@ The five transcripts under "Validation and acceptance" were re-measured on
 the commands shown there. Every exit status quoted in them is the measured one,
 including the `--check` transcript's exit 1 and the empty-selection case's exit
 0.
+
+**EV-M2-MUTANTS** — measured 2026-09-12, log at
+`/tmp/mutants-mdtablefix-git-option.out`. This is EP-M1's run repeated with the
+widening in place: the whole suite is the oracle, so the behavioural scenarios
+that were red through EP-M1 kill mutants now rather than being excluded from the
+run. The Makefile is what sets the scratch directory, so the command to
+reproduce it is `make mutants`, which runs:
+
+```plaintext
+TMPDIR=$HOME/.cache/mdtablefix/mutants/<worktree> cargo mutants -j 3
+```
+
+```plaintext
+Found 60 mutants to test
+ok       Unmutated baseline in 21s build + 87s test
+ INFO Auto-set test timeout to 440s
+60 mutants tested in 5m: 53 caught, 7 unviable
+```
+
+An empty `missed.txt` is again the whole of the acceptance criterion, and it is
+met: exit status 0, 53 caught, 7 unviable, none missed. The count is 60 rather
+than EP-M1's 40 because this milestone added production code inside
+`src/select/**` — the Git-directory query, the diagnostic relay and its cap, the
+conflict guard — and `cargo-mutants` mutates production code only.
+
+The run before the two tests below, same command:
+
+```plaintext
+Found 60 mutants to test
+ok       Unmutated baseline in 18s build + 76s test
+ INFO Auto-set test timeout to 384s
+MISSED   src/select/git_ls_files.rs:213:44: replace match guard !stderr.is_empty()
+MISSED   src/select/git_ls_files.rs:255:33: replace > with >= in relayable
+60 mutants tested in 6m: 2 missed, 51 caught, 7 unviable
+```
+
+Those two lines are cut at the mutator's own description and before the
+per-mutant timings, to stay inside the 120 columns markdownlint allows a code
+block; the log holds them whole. Both survivors were correct code that no test
+observed rather than code that was wrong — see Surprises & discoveries, and note
+that no gate short of this one could have said so.
+
+The seven unviable mutants are EP-M1's six with one more of a new type: each
+substitutes `Default::default()` for a return type that deliberately has no
+`Default` — `ConflictGuard::unguarded`, `invalid_character`,
+`AmbientPathProbe::probe`, `unnameable`, `GitLsFiles::with_program`,
+`GitLsFiles::run`, and `FileIdentity::from_canonical_path`.
+
+What the widening costs is legible in the baseline line: 87 seconds of test
+where the narrowed run reported 0, the build time being much the same. Each
+mutant pays that, so 60 mutants take 5 to 6 minutes wall at `-j 3` instead of
+84 seconds. That is the trade the milestone exists to make: a suite that
+includes the scenarios is what lets "0 missed" mean the behaviour is pinned and
+not merely the units.
 
 ## Revision note
 
