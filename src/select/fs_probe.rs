@@ -255,3 +255,7 @@ fn nearest_existing(
 #[cfg(test)]
 #[path = "fs_probe_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "fs_probe_failure_tests.rs"]
+mod failure_tests;
