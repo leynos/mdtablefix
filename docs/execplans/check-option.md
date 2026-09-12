@@ -5778,3 +5778,68 @@ answer to the refreshed table is posted as an issue comment tagging
 from roughly 11:20Z and the next check-in is set for 11:25Z. The queue was
 empty when it was added, and the two entries before it — `590209f4` and
 `d5e31dc7` — are the rounds this revision and Revision 25 record.
+
+### Revision 27, 2026-09-12 — the Windows job's dead imports
+
+**The finding, and it was real.** A blocking defect was reported against
+`tests/cli_check/arguments.rs`: lines 3–7 import `std::fs`, `tempfile::tempdir`
+and `super::{CLEAN, run_in_os, status_of, stderr_of, stdout_of}` without a
+platform gate, while the only consumer, `a_non_utf8_path_argument_exits_error`,
+is `#[cfg(unix)]`. That makes every one of them dead on a non-Unix target, and
+the repository's Windows job sets `RUSTFLAGS: "-D warnings"`, so dead imports
+are errors there. The report also quoted GitHub's own state: `build-test`
+success, `atomic write contract (windows)` failure, merge state `UNSTABLE`.
+
+**Verified against the tree and against CI, not taken on trust.** The CI log
+was fetched rather than inferred. Run `34667046126` failed in the Windows job
+with exactly those three errors — `tests\cli_check\arguments.rs:3:5`, `:5:5`
+and `:7:13`, the third naming all five helpers — and `Process completed with
+exit code 101`. That run also shows why the failure is easy to misread: the
+job's first step runs the library tests and two named suites and passes with
+936 + 2 + 2 tests green, and the failure lands in the second step, when the
+whole suite is compiled and `cli_check` is built for the first time.
+
+**The local instrument.** There is no Windows host here, and this class of
+defect is invisible to the Linux gates by construction: on Unix the test runs,
+so its imports are used, and only a build *for another target* can see them as
+dead. The Windows target is installed in this environment, so the job's own
+configuration can be reproduced locally except for the running of the tests:
+`RUSTFLAGS="-D warnings" cargo check --target x86_64-pc-windows-msvc
+--all-targets --all-features`. It fails with those same three errors before the
+change and exits 0 with no warnings after it. `--all-targets` is the part that
+matters — the defect lives in a test binary, which a default `cargo check`
+would not build.
+
+**The fix, in `3737276`.** The three imports are gated with `#[cfg(unix)]`
+rather than the module declaration being gated in `tests/cli_check.rs`. The
+sibling module is the precedent: `tests/cli_check/closed_pipe.rs` also gates
+inside the file, keeping a `#[cfg(not(unix))]` arm beside the Unix one, so a
+platform's cases can live next to a portable neighbour. Gating the declaration
+would make the whole file vanish on other platforms, and a later portable case
+added to it would silently not compile there.
+
+**This is the second instance of one pattern, which is the part worth
+recording.** Revision 24 fixed an identical defect: `identity` in
+`src/driver_in_place_tests.rs` was imported ungated and used by a single
+`#[cfg(unix)]` test, so it was dead under `-D warnings` on Windows. Both were
+introduced by a *refactor* — that one by a test split, this one by `ba84de9`,
+which carves four test files out of one and moved the non-UTF-8 case into a
+file whose header imports what only it needs. Neither the Linux gate nor the
+review could see it; only a build for the other target can. If a third
+instance appears, the cross-check above belongs in the Makefile as a gate
+rather than in a plan revision as a command, because the failure mode is
+silent everywhere else. It is not added here: the CI job already runs it on
+every push, it needs a target that a fresh checkout has not installed, and this
+round's request was to fix the defect and re-run the gates.
+
+**Gates.** All six are green at `3737276` over a clean worktree, run
+sequentially through `scrutineer`: `check-fmt` 2s, `lint` 1s, `typecheck`
+under a second, `test` 51s — 46 result lines, `1890 passed, 0 failed,
+20 ignored` — `markdownlint` 34 files and 0 errors, and `nixie` with every
+diagram validated. The tally is unchanged from `530bdbd`, which is what this
+commit should do: it gates three imports and adds no test.
+
+**What confirms it, and what cannot.** The cross-check above is the compile
+half of the Windows job and nothing more; no test can be run for another
+target from here. The push starts the real job, and its conclusion is the
+next reading this revision will carry.
