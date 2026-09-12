@@ -11,9 +11,7 @@
 //! disagree with `--in-place` about what the formatter would write.
 
 use std::{
-    borrow::Cow,
     io::{self, Read, Write},
-    path::PathBuf,
     process::ExitCode,
 };
 
@@ -22,120 +20,18 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use clap::Parser;
 use mdtablefix::{
-    Options,
-    format_breaks,
     io::SourceDocument,
-    process::{process_stream_inner, process_with_frontmatter},
-    renumber_lists,
     report::{FileReport, render_summary},
 };
 use rayon::prelude::*;
 
+mod command;
 mod driver;
+mod metrics;
 
+use command::{Cli, FormatOpts, format_lines, formatting_closure};
 use driver::{ExitStatus, Formatter, Inputs, Mode, analyse, exit_status, in_argument_order};
-
-#[derive(Parser)]
-#[command(version, about = "Reflow broken markdown tables")]
-#[command(group(clap::ArgGroup::new("inputs").args(["files"])))]
-#[command(group(clap::ArgGroup::new("mode").multiple(false).requires("inputs")))]
-struct Cli {
-    /// Rewrite files in place
-    #[arg(long = "in-place", group = "mode")]
-    in_place: bool,
-    /// Report which files would be reformatted, and by how many lines
-    #[arg(long = "check", group = "mode")]
-    check: bool,
-    /// Print a unified diff for each file that would be reformatted
-    #[arg(long = "diff", group = "mode")]
-    diff: bool,
-    #[command(flatten)]
-    opts: FormatOpts,
-    /// Markdown files to fix
-    files: Vec<PathBuf>,
-}
-
-impl Cli {
-    /// The mode the flags select.
-    ///
-    /// The `mode` argument group already guarantees that at most one flag is
-    /// set, and its `requires("inputs")` guarantees that any flag at all comes
-    /// with a file argument, so these branches cannot disagree with the parser:
-    /// they only name the decision it made.
-    fn mode(&self) -> Mode {
-        if self.in_place {
-            Mode::InPlace
-        } else if self.check {
-            Mode::Check
-        } else if self.diff {
-            Mode::Diff
-        } else {
-            Mode::Print
-        }
-    }
-}
-
-#[derive(clap::Args, Clone, Copy)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "CLI exposes independent flags via separate switches"
-)]
-struct FormatOpts {
-    /// Wrap paragraphs and list items to 80 columns
-    #[arg(long = "wrap")]
-    wrap: bool,
-    /// Renumber ordered list items
-    #[arg(long = "renumber")]
-    renumber: bool,
-    /// Reformat thematic breaks as underscores
-    #[arg(long = "breaks")]
-    breaks: bool,
-    /// Replace "..." with the ellipsis character
-    #[arg(long = "ellipsis")]
-    ellipsis: bool,
-    /// Normalise fence delimiters to three backticks
-    #[arg(long = "fences")]
-    fences: bool,
-    /// Convert bare numeric references and the final numbered list to
-    /// Markdown footnote links
-    #[arg(long = "footnotes")]
-    footnotes: bool,
-    /// Fix emphasis markers adjacent to inline code
-    #[arg(long = "code-emphasis")]
-    code_emphasis: bool,
-    /// Convert Setext-style headings to hash-prefixed headings
-    #[arg(long = "headings")]
-    headings: bool,
-}
-
-impl From<FormatOpts> for Options {
-    fn from(opts: FormatOpts) -> Self {
-        Self {
-            wrap: opts.wrap,
-            ellipsis: opts.ellipsis,
-            fences: opts.fences,
-            footnotes: opts.footnotes,
-            code_emphasis: opts.code_emphasis,
-            headings: opts.headings,
-        }
-    }
-}
-
-fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
-    process_with_frontmatter(lines, |body| {
-        let mut out = process_stream_inner(body, opts.into());
-        if opts.renumber {
-            out = renumber_lists(&out);
-        }
-        if opts.breaks {
-            out = format_breaks(&out)
-                .into_iter()
-                .map(Cow::into_owned)
-                .collect();
-        }
-        out
-    })
-}
+use metrics::{record_analysis, record_run};
 
 /// Opens a file's parent directory and returns its relative UTF-8 path.
 ///
@@ -174,24 +70,6 @@ fn render_stdin_output(document: &SourceDocument<'_>, fixed: &[String]) -> Strin
     } else {
         document.render(fixed)
     }
-}
-
-/// Formats `content` into output lines, leaving the terminator to the caller.
-///
-/// This is the pure half of both command boundaries: it neither reads an input
-/// nor selects a line ending, so each boundary parses its document, reports the
-/// decision, and only then renders these lines with the style it chose.
-fn format_lines(content: &str, opts: FormatOpts) -> Vec<String> {
-    let lines: Vec<String> = content.lines().map(str::to_string).collect();
-    process_lines(&lines, opts)
-}
-
-/// The formatting closure every mode shares.
-///
-/// Built once and passed by reference, so the modes cannot diverge: this is
-/// the same function a reporting mode assesses and `--in-place` writes.
-fn formatting_closure(opts: FormatOpts) -> impl Fn(&SourceDocument<'_>) -> String + Sync {
-    move |document| document.render(&format_lines(document.body(), opts))
 }
 
 /// Formats standard input and renders it for standard output.
@@ -244,30 +122,44 @@ fn is_broken_pipe(error: &anyhow::Error) -> bool {
     })
 }
 
-/// Runs the requested mode and returns the documented exit status.
+/// Runs the mode the command line selects, records the run, and returns its
+/// status.
 ///
 /// Resolution comes first, so a command line that cannot name its inputs fails
 /// as a whole — through [`exit_status`], like every other operational failure —
-/// rather than being discovered file by file. The only errors propagated out of
-/// here are infrastructure failures of standard input or standard output. A
-/// file that cannot be read or rewritten is reported as it is encountered,
-/// counted in the summary, and folded into [`ExitStatus::Error`], so one
-/// unreadable file does not abandon the rest.
+/// rather than being discovered file by file. A file that cannot be read or
+/// rewritten is reported as it is encountered, counted in the summary, and
+/// folded into [`ExitStatus::Error`], so one unreadable file does not abandon
+/// the rest.
+///
+/// The run is recorded here, at the boundary that decides the status and under
+/// the very status this process is about to exit with, so the metric a host
+/// aggregates and the exit code cannot disagree. A closed pipe is an ordinary
+/// early exit, as in `mdtablefix --check *.md | head`: the reader stopped
+/// early, which says nothing about this run, so the run is recorded as the
+/// success it is. Rust ignores `SIGPIPE`, so the write reports `EPIPE` instead,
+/// and `print!` would turn that into the undocumented status `101`. Such an
+/// infrastructure failure of standard input or output is the only error that
+/// leaves here, and it is recorded before it is returned.
 fn run() -> anyhow::Result<ExitStatus> {
     let cli = Cli::parse();
     let mode = cli.mode();
-    let inputs = match Inputs::resolve(cli.files) {
-        Ok(inputs) => inputs,
+    metrics::describe_metrics();
+    let result = match Inputs::resolve(cli.files) {
+        Ok(Inputs::Stdin) => run_stdin(cli.opts),
+        Ok(Inputs::Files(files)) => run_files(mode, &files, cli.opts),
         Err(error) => {
             eprintln!("{error:?}");
-            return Ok(exit_status(mode, false, true));
+            Ok(exit_status(mode, false, true))
         }
     };
+    let result = match result {
+        Err(error) if is_broken_pipe(&error) => Ok(ExitStatus::Success),
+        settled => settled,
+    };
+    record_run(mode, result.as_ref().copied().unwrap_or(ExitStatus::Error));
 
-    match inputs {
-        Inputs::Stdin => run_stdin(cli.opts),
-        Inputs::Files(files) => run_files(mode, &files, cli.opts),
-    }
+    result
 }
 
 /// Formats standard input and writes the result to standard output.
@@ -294,7 +186,12 @@ fn run_files(mode: Mode, files: &[Utf8PathBuf], opts: FormatOpts) -> anyhow::Res
         files
             .par_iter()
             .enumerate()
-            .map(|(index, path)| (index, analyse_one(mode, path, &format)))
+            .map(|(index, path)| {
+                (
+                    index,
+                    record_analysis(mode, || analyse_one(mode, path, &format)),
+                )
+            })
             .collect(),
     );
 
@@ -368,12 +265,6 @@ fn run_files(mode: Mode, files: &[Utf8PathBuf], opts: FormatOpts) -> anyhow::Res
 fn main() -> ExitCode {
     match run() {
         Ok(status) => status.code(),
-        // A closed pipe is an ordinary early exit, as in
-        // `mdtablefix --check *.md | head`: the reader stopped early, which
-        // says nothing about this run. Rust ignores `SIGPIPE`, so the write
-        // reports `EPIPE` instead, and `print!` would turn that into the
-        // undocumented status `101`.
-        Err(error) if is_broken_pipe(&error) => ExitStatus::Success.code(),
         Err(error) => {
             eprintln!("{error:?}");
             ExitStatus::Error.code()

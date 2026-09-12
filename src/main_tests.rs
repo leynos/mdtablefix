@@ -12,14 +12,8 @@ use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
-use super::{
-    FormatOpts,
-    driver,
-    format_stdin,
-    formatting_closure,
-    open_file_parent,
-    render_stdin_output,
-};
+use super::{driver, format_stdin, open_file_parent, render_stdin_output};
+use crate::command::{FormatOpts, formatting_closure};
 
 /// Formats a capability-scoped file without modifying it.
 ///

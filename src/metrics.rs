@@ -1,0 +1,193 @@
+//! The metrics the binary's boundaries emit.
+//!
+//! The binary is a separate crate from the library, so it cannot share the
+//! declarations in `mdtablefix::io`; it declares its own under the same
+//! convention. Every name and label value is fixed, so a recorder's cardinality
+//! stays bounded: no path, file name, or error text is ever a label. The binary
+//! installs no recorder, exactly as the library installs none — a host that
+//! wants these numbers installs one — and the tests install a local recorder to
+//! assert the names, labels, and declared descriptions.
+
+use std::{
+    io,
+    sync::OnceLock,
+    time::{Duration, Instant},
+};
+
+use anyhow::Error;
+use mdtablefix::report::FileReport;
+use metrics::{Unit, counter, describe_counter, describe_histogram, histogram};
+
+use crate::driver::{ExitStatus, Mode};
+
+/// Declares the descriptions of every metric the binary emits.
+///
+/// Called once, before the first run, so the names, units, and descriptions a
+/// host would collect are registered even for a run that analyses nothing.
+pub fn describe_metrics() {
+    static DESCRIPTIONS: OnceLock<()> = OnceLock::new();
+    DESCRIPTIONS.get_or_init(register_metrics);
+}
+
+/// Registers the descriptions of every metric the binary emits.
+///
+/// Split from [`describe_metrics`] so the tests can call it directly and assert
+/// the declared unit and description without depending on which test warmed the
+/// `OnceLock`, as the library's metrics seam does.
+pub(super) fn register_metrics() {
+    describe_counter!(
+        "mdtablefix_run_total",
+        "Runs of the tool, by mode and outcome"
+    );
+    describe_counter!(
+        "mdtablefix_file_total",
+        "Files analysed by a run, by mode and outcome"
+    );
+    describe_histogram!(
+        "mdtablefix_file_duration_seconds",
+        Unit::Seconds,
+        "Duration of one file's analysis, by mode and outcome"
+    );
+    describe_counter!(
+        "mdtablefix_file_error_total",
+        "Files that could not be analysed, by error category"
+    );
+}
+
+/// What became of one file's analysis.
+pub enum FileOutcome<'a> {
+    /// The formatter would write different bytes.
+    Changed,
+    /// The file is already formatted.
+    Unchanged,
+    /// The file could not be read, or could not be written back.
+    Failed(&'a Error),
+}
+
+impl<'a> FileOutcome<'a> {
+    /// Reads the outcome off one file's completed analysis.
+    ///
+    /// The distinction between changed and unchanged is the byte comparison the
+    /// analysis itself made, so the label a host aggregates and the exit status
+    /// the run reports cannot disagree about whether a file drifted.
+    #[must_use]
+    pub fn of(result: &'a anyhow::Result<(FileReport, String)>) -> Self {
+        match result {
+            Ok((report, _)) if report.is_changed => Self::Changed,
+            Ok(_) => Self::Unchanged,
+            Err(error) => Self::Failed(error),
+        }
+    }
+}
+
+/// Records one completed run, or one that failed before it finished.
+///
+/// The status is the run's outcome as a user sees it: `success`, `drift`, or
+/// `error`. A run that failed at the process boundary is recorded as `error`
+/// rather than left out, so a host counts runs rather than successful runs.
+pub fn record_run(mode: Mode, status: ExitStatus) {
+    counter!(
+        "mdtablefix_run_total",
+        "mode" => mode_label(mode),
+        "outcome" => status_label(status)
+    )
+    .increment(1);
+}
+
+/// The `mode` a metric was recorded under.
+///
+/// A fixed name per variant, spelled here beside the names it labels rather
+/// than derived from `Debug`: a label value is part of a metric's identity for
+/// every recorder that aggregates it, so a variant renamed later must not
+/// silently start a second series.
+fn mode_label(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Print => "print",
+        Mode::InPlace => "in_place",
+        Mode::Check => "check",
+        Mode::Diff => "diff",
+    }
+}
+
+/// The `outcome` a run was recorded under: the status as a user sees it.
+fn status_label(status: ExitStatus) -> &'static str {
+    match status {
+        ExitStatus::Success => "success",
+        ExitStatus::Drift => "drift",
+        ExitStatus::Error => "error",
+    }
+}
+
+/// Runs one file's analysis, timing it and recording what became of it.
+///
+/// The closure is the work itself, so the duration measured is the analysis's
+/// and not the time the file waited to be reported: files are analysed in
+/// parallel and reported in argument order, and those are not the same order.
+pub fn record_analysis(
+    mode: Mode,
+    analyse: impl FnOnce() -> anyhow::Result<(FileReport, String)>,
+) -> anyhow::Result<(FileReport, String)> {
+    let started = Instant::now();
+    let result = analyse();
+    record_file(mode, FileOutcome::of(&result), started.elapsed());
+
+    result
+}
+
+/// Records one file's analysis, whatever became of it.
+///
+/// The duration is recorded for failures too, so a file that stalls before it
+/// fails is visible in the distribution rather than missing from it, as the
+/// library's replacement metrics are.
+pub fn record_file(mode: Mode, outcome: FileOutcome<'_>, elapsed: Duration) {
+    let outcome_label = match outcome {
+        FileOutcome::Changed => "changed",
+        FileOutcome::Unchanged => "unchanged",
+        FileOutcome::Failed(_) => "error",
+    };
+    counter!(
+        "mdtablefix_file_total",
+        "mode" => mode_label(mode),
+        "outcome" => outcome_label
+    )
+    .increment(1);
+    histogram!(
+        "mdtablefix_file_duration_seconds",
+        "mode" => mode_label(mode),
+        "outcome" => outcome_label
+    )
+    .record(elapsed.as_secs_f64());
+
+    if let FileOutcome::Failed(error) = outcome {
+        counter!("mdtablefix_file_error_total", "category" => category(error)).increment(1);
+    }
+}
+
+/// The bounded category of a failed analysis.
+///
+/// Derived from the `io::ErrorKind` in the error's chain rather than from its
+/// message: a kind is a closed set, while a message names the file and the
+/// operating system's own wording. `declined` is this tool's own refusal — a
+/// path that is not UTF-8, or a symlink it will not replace — and `other` is
+/// everything else, including an error with no `io::Error` in its chain, so a
+/// new category cannot appear without the name changing.
+fn category(error: &Error) -> &'static str {
+    match error
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<io::Error>())
+        .map(io::Error::kind)
+    {
+        Some(io::ErrorKind::NotFound) => "not_found",
+        Some(io::ErrorKind::PermissionDenied) => "permission_denied",
+        Some(io::ErrorKind::InvalidInput) => "declined",
+        Some(_) | None => "other",
+    }
+}
+
+#[cfg(test)]
+#[path = "metrics_tests.rs"]
+mod metrics_tests;
+
+#[cfg(test)]
+#[path = "metrics_file_tests.rs"]
+mod metrics_file_tests;
