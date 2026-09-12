@@ -462,7 +462,7 @@ classDiagram
     footnotes --> footnotes_renumber_definitions
     footnotes_renumber_definitions --> footnotes_renumber_reorder : final definition block
     footnotes_renumber_reorder --> footnotes_renumber_definitions : DefinitionLine, definition_segment_end
-    footnotes ..> wrap : uses tokenize_markdown
+    footnotes ..> wrap : uses tokenize_markdown, FenceTracker
     footnotes ..> textproc : uses push_original_token
     io ..> process : uses process_stream, process_stream_no_wrap
     driver ..> io : uses SourceDocument, replace_file
@@ -533,6 +533,9 @@ The `footnotes::renumber::definitions` submodule owns definition scanning and
 rewriting. `DefinitionScanState` coordinates the number mapping, collects
 already-parsed definitions, and stages numeric candidates for later conversion
 without cluttering the top-level renumber flow.
+The three footnote passes call `FenceTracker::observe_source_line`, so they
+share marker-family compatibility, run-length, blank-info-closer, and
+blockquote-depth rules with the wrapping pipeline.
 
 The sibling `footnotes::renumber::reorder` submodule consumes the
 `DefinitionLine` rewrite plan once scanning is complete, then reorders the
