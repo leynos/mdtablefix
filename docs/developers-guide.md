@@ -366,13 +366,13 @@ contract is exercised end to end through the built binary by
 
 ### File selection is a second private tree
 
-`--git` adds two more modules to the binary and no library surface. `src/cli.rs`
-holds the clap surface, including the `ArgGroup`s and the post-parse check that
-the four git-only flags arrive with `--git`. `src/git_inputs.rs` is the
-composition root: it turns the command line into a selection question and the
-answer back into the paths `run_files` receives, and it is the one module that
-knows the whole selection tree at once. `src/select.rs` and its submodules
-state and answer that question.
+`--git` adds two more modules to the binary and no library surface.
+`src/command.rs` holds the clap surface, including the `ArgGroup`s and the
+post-parse check that the four git-only flags arrive with `--git`.
+`src/git_inputs.rs` is the composition root: it turns the command line into a
+selection question and the answer back into the paths `run_files` receives,
+and it is the one module that knows the whole selection tree at once.
+`src/select.rs` and its submodules state and answer that question.
 
 ```text
 src/select.rs               the tree root: module list and dependency rule
@@ -1556,6 +1556,52 @@ The other two commit gates are `make check-fmt` (`cargo fmt --all -- --check`)
 and `make lint` (`cargo clippy --all-targets --all-features -- -D warnings`).
 All three run before a commit. `make markdownlint` covers the documentation
 changes that none of the Rust gates see.
+
+
+#### `make mutants`
+
+`make mutants` runs mutation testing over the selection tree with
+`cargo-mutants`, which is not a manifest dependency: install it as a Cargo
+subcommand before the target can run, for example with
+`cargo install cargo-mutants`. The run reads `.cargo/mutants.toml` from this
+checkout:
+
+- `examine_globs = ["src/select/**"]` restricts mutation to the selection
+  tree, which the configuration chooses because its correctness rests on
+  properties rather than on a transcript.
+- `all_features = true` builds each mutant as `make test` does, with every
+  feature enabled. The crate declares no features today; the setting means a
+  feature added later cannot quietly narrow the run.
+- No `additional_cargo_test_args` is set, so the whole suite is the oracle,
+  exactly as `make test` runs it.
+- `output = "target"` puts the results in `target/mutants.out`, under the
+  already-ignored `target/` directory rather than at the repository root.
+- `copy_target = false` rebuilds the scratch tree from source rather than
+  copying the `target/` directory, which the configuration records as 15 GB
+  here. The scratch tree is reused within a run, so the cold dependency build
+  is paid once rather than once per mutant.
+
+Two Makefile variables can be overridden on the command line:
+
+- `MUTANTS_JOBS`, default `3`, is passed to `cargo-mutants` as `-j`.
+- `MUTANTS_TMPDIR`, default
+  `$(HOME)/.cache/mdtablefix/mutants/$(notdir $(CURDIR))`, is created and
+  exported as `TMPDIR` for the run. The default is absolute and outside the
+  tree under test, and it names the worktree so two runs cannot collide:
+  `cargo-mutants`' child processes run inside the scratch copy, where a
+  relative path would not resolve, and a suite whose temporary directories
+  landed inside this repository would fail the `--git` scenarios that assert
+  on being outside one.
+
+The tool reports each mutant as caught, missed, or unviable. A `caught` mutant
+is one that made the suite fail, which is the wanted outcome. A `missed` mutant
+compiled and survived the suite: the tests do not observe the behaviour the
+mutation changed, and the mutant is listed in
+`target/mutants.out/missed.txt`. An `unviable` mutant did not build, so no
+test could have caught it; the tool counts those apart from the survivors
+rather than among them. The selection tree's acceptance criterion is an empty
+`missed.txt`: a surviving mutant in `src/select/**` is a gate failure, not a
+warning.
 
 #### `similar`
 

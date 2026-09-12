@@ -3,20 +3,33 @@
 //! Depends on `std::process` and `camino`. It is the only place in the tree
 //! that spawns `git`, and it deliberately knows nothing about extensions or
 //! identity: it reports what the index holds and where the Git directory is,
-//! and [`crate::select::policy`] decides what that means.
+//! and [`crate::select::policy`] decides what that means. What comes back is
+//! parsed and made safe in [`super::git_output`].
 //!
 //! `git`'s own diagnostics are relayed, never asserted on: they are localised
 //! and version-dependent. Every message this module shows a user is a `Display`
 //! impl this repository owns, and the relayed text is one line of it, scrubbed
-//! by [`relayable`].
+//! by [`relayable`](super::git_output::relayable).
+//!
+//! Every invocation is also traced, because it crosses a process boundary: a
+//! `debug` span names the operation ([`Operation::name`]), and one `debug` event
+//! per invocation carries that name, the outcome, the elapsed time, and — for a
+//! failure — the bounded category [`GitListError::category`] returns. Nothing
+//! traced is a path or Git's own text: a span field is not a metric label, but
+//! the same discipline is kept, so a host can chart this path without storing
+//! the tree a run was given.
 
 use std::{
     ffi::OsString,
     io,
     process::{Command, ExitStatus},
+    time::Instant,
 };
 
 use camino::{Utf8Path, Utf8PathBuf};
+use tracing::{Span, debug, field};
+
+use super::git_output::{CandidateListing, relayable, split_nul_delimited};
 
 /// The program every invocation runs unless a caller names another.
 const PROGRAM: &str = "git";
@@ -46,6 +59,39 @@ const ABSOLUTE_GIT_DIR: &str = "--absolute-git-dir";
 /// What `--include-untracked` adds: the files Git would commit, and nothing
 /// it is told to ignore.
 const UNTRACKED: [&str; 2] = ["--others", "--exclude-standard"];
+
+/// One `git` invocation this module makes.
+///
+/// A closed set, because its two renderings both leave this process: the
+/// subcommand is argv, and the name is a tracing field. A field drawn from a
+/// type with two values cannot carry a path, and cannot grow to carry one
+/// without the enum growing first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Operation {
+    /// The candidate listing, `git ls-files`.
+    LsFiles,
+    /// The Git directory query, `git rev-parse`.
+    RevParse,
+}
+
+impl Operation {
+    /// The subcommand, as passed to the program and named in a diagnostic.
+    const fn subcommand(self) -> &'static str {
+        match self {
+            Self::LsFiles => SUBCOMMAND,
+            Self::RevParse => REV_PARSE,
+        }
+    }
+
+    /// The tracing name. Distinct from the subcommand only in being our
+    /// spelling rather than Git's, and never a field a host has to escape.
+    const fn name(self) -> &'static str {
+        match self {
+            Self::LsFiles => "ls_files",
+            Self::RevParse => "rev_parse",
+        }
+    }
+}
 
 /// Lists candidates by running `git ls-files`.
 #[derive(Debug, Clone)]
@@ -78,7 +124,7 @@ impl GitLsFiles {
         if self.include_untracked {
             args.extend_from_slice(&UNTRACKED);
         }
-        let output = self.run(SUBCOMMAND, &args, dir)?;
+        let output = self.run(Operation::LsFiles, &args, dir)?;
 
         Ok(split_nul_delimited(&output.stdout))
     }
@@ -91,33 +137,87 @@ impl GitLsFiles {
     /// guard has nowhere to look without it, so a caller that needs the guard
     /// fails the run rather than proceeding unguarded.
     pub fn resolve_git_dir(&self, dir: &Utf8Path) -> Result<Utf8PathBuf, GitListError> {
-        let output = self.run(REV_PARSE, &[REV_PARSE, ABSOLUTE_GIT_DIR], dir)?;
+        let output = self.run(Operation::RevParse, &[REV_PARSE, ABSOLUTE_GIT_DIR], dir)?;
 
         // Only the line terminator is trimmed, never path characters: a
         // directory name may legitimately end in a space, and trimming that
         // would send the guard looking somewhere else entirely.
         let reported = std::str::from_utf8(&output.stdout)
             .map_err(|_| GitListError::NoGitDir {
-                command: self.label(REV_PARSE),
+                command: self.label(Operation::RevParse),
             })?
             .trim_end_matches('\n')
             .trim_end_matches('\r');
         if reported.is_empty() {
             return Err(GitListError::NoGitDir {
-                command: self.label(REV_PARSE),
+                command: self.label(Operation::RevParse),
             });
         }
 
         Ok(Utf8PathBuf::from(reported))
     }
 
-    /// How `subcommand` is named in a diagnostic.
+    /// How `operation` is named in a diagnostic.
     ///
     /// The program is spelled as the caller supplied it, so a test that drives
     /// the failure paths with another program reads as that program's failure
     /// rather than as `git`'s.
-    fn label(&self, subcommand: &str) -> String {
-        format!("{} {subcommand}", self.program.to_string_lossy())
+    fn label(&self, operation: Operation) -> String {
+        format!(
+            "{} {}",
+            self.program.to_string_lossy(),
+            operation.subcommand()
+        )
+    }
+
+    /// Runs `git subcommand` with `args` in `dir`, tracing the invocation and
+    /// mapping every failure.
+    ///
+    /// The span is named for the operation and carries the outcome and the
+    /// elapsed time once the process has been reaped. The event beside it says
+    /// the same, because a span is not a line: tracing-test does not rebuild a
+    /// span's fields into an event, so a test asserting what happened reads the
+    /// event, and a host drawing a timeline reads the span.
+    #[tracing::instrument(
+        level = "debug",
+        name = "git",
+        skip(self, args, dir),
+        fields(
+            operation = operation.name(),
+            outcome = field::Empty,
+            elapsed_seconds = field::Empty
+        )
+    )]
+    fn run(
+        &self,
+        operation: Operation,
+        args: &[&str],
+        dir: &Utf8Path,
+    ) -> Result<std::process::Output, GitListError> {
+        let started = Instant::now();
+        let result = self.invoke(operation, args, dir);
+        let elapsed_seconds = started.elapsed().as_secs_f64();
+
+        let span = Span::current();
+        span.record("outcome", outcome_label(&result));
+        span.record("elapsed_seconds", elapsed_seconds);
+        match &result {
+            Ok(_) => debug!(
+                operation = operation.name(),
+                outcome = outcome_label(&result),
+                elapsed_seconds,
+                "git invocation completed"
+            ),
+            Err(error) => debug!(
+                operation = operation.name(),
+                outcome = outcome_label(&result),
+                elapsed_seconds,
+                failure = error.category(),
+                "git invocation failed"
+            ),
+        }
+
+        result
     }
 
     /// Runs `git subcommand` with `args` in `dir`, mapping every failure.
@@ -125,9 +225,9 @@ impl GitLsFiles {
     /// `output()`, not `spawn()` plus a hand-rolled read: `output()` drains
     /// both pipes concurrently and cannot deadlock, where a "streaming"
     /// variant does once Git's output exceeds the pipe capacity.
-    fn run(
+    fn invoke(
         &self,
-        subcommand: &str,
+        operation: Operation,
         args: &[&str],
         dir: &Utf8Path,
     ) -> Result<std::process::Output, GitListError> {
@@ -141,7 +241,7 @@ impl GitLsFiles {
                     GitListError::ProgramNotFound { program }
                 } else {
                     GitListError::Spawn {
-                        command: self.label(subcommand),
+                        command: self.label(operation),
                         source,
                     }
                 }
@@ -149,7 +249,7 @@ impl GitLsFiles {
 
         if !output.status.success() {
             return Err(GitListError::Failed {
-                command: self.label(subcommand),
+                command: self.label(operation),
                 status: output.status,
                 // Scrubbed here, at the one boundary where another program's
                 // bytes enter this tool's output.
@@ -161,12 +261,12 @@ impl GitLsFiles {
     }
 }
 
-/// Candidate paths, with a count of paths that were not valid UTF-8.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct CandidateListing {
-    pub paths: Vec<Utf8PathBuf>,
-    pub skipped_non_utf8: usize,
+/// How an invocation's result is labelled, success or failure.
+///
+/// Two values, and no third: a run that could not classify its outcome would
+/// make the field grow with the errors it might carry.
+fn outcome_label<T, E>(result: &Result<T, E>) -> &'static str {
+    if result.is_ok() { "success" } else { "error" }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -189,7 +289,8 @@ pub enum GitListError {
         /// The command as it would be typed, e.g. `git ls-files`.
         command: String,
         status: ExitStatus,
-        /// Git's own diagnostic, relayed through [`relayable`].
+        /// Git's own diagnostic, relayed through
+        /// [`relayable`](super::git_output::relayable).
         stderr: String,
     },
     #[error("`{command}` did not report a usable Git directory")]
@@ -214,81 +315,25 @@ impl GitListError {
             _ => self.to_string(),
         }
     }
-}
 
-/// The longest run of Git's own diagnostic that is relayed before it is cut.
-///
-/// A cap rather than a promise: a repository name is not this tool's to trust,
-/// and a diagnostic that arrives in kilobytes would bury the message it is
-/// supposed to support.
-const RELAYED_LIMIT: usize = 1024;
-
-/// Renders `bytes` as one line that is safe to write to a terminal.
-///
-/// Git's text is the one part of this tool's output that this repository does
-/// not author, so it is scrubbed on the way through: a newline would forge a
-/// second line of stderr, and a control character — an escape, say — would let
-/// a path in the repository drive the terminal reading the diagnostic. Each run
-/// of them becomes a single space, so a message written as several lines stays
-/// readable as one, and a run at either end disappears rather than becoming a
-/// gap. Bytes that are not UTF-8 become the replacement character rather than
-/// being dropped, because the text is a diagnostic, not a path: nothing acts
-/// on it.
-fn relayable(bytes: &[u8]) -> String {
-    let text = String::from_utf8_lossy(bytes);
-    let mut scrubbed = String::with_capacity(text.len());
-    let mut pending_space = false;
-    for character in text.chars() {
-        if character.is_control() {
-            // Not `scrubbed.is_empty()`: a control character before any text
-            // marks no space, or the message would begin with one.
-            pending_space = !scrubbed.is_empty();
-        } else {
-            if pending_space {
-                scrubbed.push(' ');
-                pending_space = false;
-            }
-            scrubbed.push(character);
+    /// The bounded class this failure belongs to.
+    ///
+    /// What a tracing field may carry where [`diagnostic`](Self::diagnostic)
+    /// carries prose: a closed set of four, none of which is a path, a status
+    /// code, or anything Git wrote. `ExitStatus` is deliberately not reported
+    /// as itself — the class of a failure is what a host aggregates, and the
+    /// number of a failing exit code is a detail of Git's, not of ours.
+    #[must_use]
+    pub const fn category(&self) -> &'static str {
+        match self {
+            Self::ProgramNotFound { .. } => "program_not_found",
+            Self::Spawn { .. } => "spawn",
+            Self::Failed { .. } => "nonzero_exit",
+            Self::NoGitDir { .. } => "no_git_dir",
         }
     }
-
-    if scrubbed.chars().count() > RELAYED_LIMIT {
-        let cut = scrubbed
-            .char_indices()
-            .nth(RELAYED_LIMIT)
-            .map_or(scrubbed.len(), |(index, _)| index);
-        scrubbed.truncate(cut);
-        scrubbed.push('…');
-    }
-
-    scrubbed
-}
-
-/// Splits a NUL-terminated byte stream, counting entries that are not UTF-8.
-///
-/// An empty segment is skipped rather than reported as an empty path, so empty
-/// input yields an empty listing. Git terminates even the last path, so the
-/// only empty segments are the one after the final NUL and those in input this
-/// tool was handed rather than input Git wrote; neither names a file.
-///
-/// A path that is not UTF-8 is counted, not dropped silently: it cannot be
-/// reported as a [`Utf8PathBuf`], and a caller that acts on the listing must be
-/// able to say how many files it could not consider.
-pub(crate) fn split_nul_delimited(bytes: &[u8]) -> CandidateListing {
-    let mut listing = CandidateListing::default();
-    for segment in bytes.split(|byte| *byte == 0) {
-        if segment.is_empty() {
-            continue;
-        }
-        match std::str::from_utf8(segment) {
-            Ok(path) => listing.paths.push(Utf8PathBuf::from(path)),
-            Err(_) => listing.skipped_non_utf8 += 1,
-        }
-    }
-
-    listing
 }
 
 #[cfg(test)]
-#[path = "git_ls_files_tests.rs"]
-mod tests;
+#[path = "git_ls_files_git_tests.rs"]
+mod git_tests;

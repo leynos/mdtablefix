@@ -236,6 +236,34 @@ fn a_run_is_counted_by_mode_and_outcome() {
     assert_labels_are_bounded(&recorded);
 }
 
+/// A run that fails while naming its inputs is counted like any other run.
+///
+/// The three resolution failures — a working directory that cannot be read, a
+/// repository that cannot be listed, and a path argument that cannot be
+/// resolved — return before any file is analysed, so this is the only path that
+/// reaches `mdtablefix_run_total` for them. A host charting the failure rate of
+/// a scheduled `--git` run depends on it, and would otherwise see an exit code
+/// of 2 recorded nowhere.
+#[test]
+fn a_failed_run_is_counted_once() {
+    for (mode, label) in [
+        (Mode::Print, "print"),
+        (Mode::Check, "check"),
+        (Mode::ListFiles, "list_files"),
+    ] {
+        let (status, recorded) = recorded(|| crate::failed_run(mode));
+
+        assert_eq!(status, ExitStatus::Error);
+        assert_eq!(count_run(&recorded, label, "error"), 1, "{label}");
+        assert_eq!(
+            count_run(&recorded, label, "success") + count_run(&recorded, label, "drift"),
+            0,
+            "one failed run, one outcome: {label}"
+        );
+        assert_labels_are_bounded(&recorded);
+    }
+}
+
 /// The status and mode labels are the declared sets, not `Debug`'s rendering of
 /// the enums, which a variant rename would change.
 #[test]

@@ -1,118 +1,25 @@
-//! Tests for the `git ls-files` adapter.
+//! Boundary tests for the `git` invocations themselves.
 //!
-//! The boundary test runs the real `git`, because the framing it depends on —
-//! NUL-terminated, unquoted, verbatim paths relative to the process working
-//! directory — is exactly the part a fake would assume. It inherits the ambient
-//! Git configuration, as the adapter does; the fixture pins the branch name and
-//! commits nothing, so the settings that could perturb it are not in play, and
-//! the assertion is on the whole listing rather than on a subset, so a
+//! These run a real program, because what they pin is exactly the part a fake
+//! would assume: NUL-terminated, unquoted, verbatim paths relative to the
+//! process working directory, and the failure Git reports when it is handed a
+//! directory that no repository governs. The fixture inherits the ambient Git
+//! configuration, as the adapter does; it pins the branch name and commits
+//! nothing, so the settings that could perturb it are not in play, and the
+//! listing assertions are on the whole listing rather than on a subset, so a
 //! perturbation would be loud.
+//!
+//! The tracing assertions at the end read the events the adapter emits. They
+//! belong to the binary's test target rather than to `tests/`, because a
+//! tracing subscriber is process-global and the install happens per test.
 
-use std::cell::Cell;
+use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use proptest::{collection::vec, prelude::*, test_runner::TestRunner};
 use rstest::rstest;
 
-use super::{
-    CandidateListing,
-    GitListError,
-    GitLsFiles,
-    RELAYED_LIMIT,
-    relayable,
-    split_nul_delimited,
-};
-
-/// Printable ASCII, the common case for a repository path.
-fn ascii_text() -> impl Strategy<Value = Vec<u8>> { vec(0x20u8..=0x7e, 1..=40) }
-
-/// Arbitrary bytes that are not NUL and so can be a path in Git's framing.
-fn raw_bytes() -> impl Strategy<Value = Vec<u8>> {
-    vec(
-        any::<u8>().prop_filter("a path holds no NUL byte", |byte| *byte != 0),
-        1..=40,
-    )
-}
-
-/// A path-shaped byte string that is sometimes not valid UTF-8.
-fn segment() -> impl Strategy<Value = Vec<u8>> { prop_oneof![3 => ascii_text(), 1 => raw_bytes()] }
-
-/// INV-NUL-SPLIT: splitting is a faithful inverse of Git's framing.
-#[test]
-fn splitting_is_a_faithful_inverse_of_nul_framing() {
-    let mut runner = TestRunner::default();
-    let saw_non_utf8 = Cell::new(false);
-    let saw_empty_input = Cell::new(false);
-
-    runner
-        .run(&vec(segment(), 0..=20), |segments| {
-            let mut framed = Vec::new();
-            for segment in &segments {
-                framed.extend_from_slice(segment);
-                framed.push(0);
-            }
-
-            let listing = split_nul_delimited(&framed);
-            let textual: Vec<&str> = segments
-                .iter()
-                .filter_map(|segment| std::str::from_utf8(segment).ok())
-                .collect();
-
-            prop_assert_eq!(listing.skipped_non_utf8, segments.len() - textual.len());
-            prop_assert_eq!(
-                listing
-                    .paths
-                    .iter()
-                    .map(|path| path.as_str())
-                    .collect::<Vec<_>>(),
-                textual
-            );
-
-            if listing.skipped_non_utf8 > 0 {
-                saw_non_utf8.set(true);
-            }
-            if segments.is_empty() {
-                saw_empty_input.set(true);
-                prop_assert!(
-                    listing.paths.is_empty(),
-                    "empty input must yield an empty list, not a list holding one empty path"
-                );
-            }
-            Ok(())
-        })
-        .expect("splitting is a faithful inverse of NUL framing");
-
-    assert!(
-        saw_non_utf8.get(),
-        "the generator must reach the drop-and-count path, or that path is untested"
-    );
-    assert!(
-        saw_empty_input.get(),
-        "the empty-input case must be generated and asserted, not assumed"
-    );
-}
-
-#[rstest]
-#[case(b"", &[], 0)]
-#[case(b"\0", &[], 0)]
-#[case(b"a.md\0", &["a.md"], 0)]
-#[case(b"a.md\0b.md\0", &["a.md", "b.md"], 0)]
-// Git always terminates the last path, but a truncated stream must not invent
-// one either way: the final entry is returned, and no empty path is.
-#[case(b"a.md", &["a.md"], 0)]
-#[case(b"a.md\0\xff\xfe.md\0b.md\0", &["a.md", "b.md"], 1)]
-fn splitting_cases(#[case] input: &[u8], #[case] expected: &[&str], #[case] skipped: usize) {
-    let listing = split_nul_delimited(input);
-    assert_eq!(
-        listing.paths,
-        expected
-            .iter()
-            .copied()
-            .map(Utf8PathBuf::from)
-            .collect::<Vec<_>>()
-    );
-    assert_eq!(listing.skipped_non_utf8, skipped);
-}
+use super::{GitListError, GitLsFiles};
+use crate::select::git_output::CandidateListing;
 
 /// The listing's paths as sorted text, so the assertion is about membership
 /// rather than about Git's output order, which INV-ORDER-DET exists because it
@@ -166,6 +73,17 @@ fn git(directory: &Utf8Path, args: &[&str]) {
     );
 }
 
+/// Initialises a repository in a fresh temporary directory.
+fn repository() -> (tempfile::TempDir, Utf8PathBuf) {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let root = Utf8Path::from_path(directory.path())
+        .expect("a UTF-8 temporary directory")
+        .to_owned();
+    git(&root, &["init", "--quiet", "-b", "main"]);
+
+    (directory, root)
+}
+
 /// AX-GIT-LSFILES at the boundary: the framing, the index-only default, and the
 /// untracked extension, against the `git` on this machine.
 ///
@@ -173,21 +91,19 @@ fn git(directory: &Utf8Path, args: &[&str]) {
 /// like a Markdown file, and it must not be listed.
 #[test]
 fn lists_the_index_and_the_untracked_files_on_request() {
-    let directory = tempfile::tempdir().expect("a temporary directory");
-    let root = Utf8Path::from_path(directory.path()).expect("a UTF-8 temporary directory");
-    git(root, &["init", "--quiet", "-b", "main"]);
-    write(root, ".gitignore", "build/\n");
-    write(root, "docs/guide.md", "|A|B|\n");
-    write(root, "src/lib.rs", "fn main() {}\n");
-    write(root, "notes.md", "|C|D|\n");
-    write(root, "build/out.md", "|E|F|\n");
+    let (_directory, root) = repository();
+    write(&root, ".gitignore", "build/\n");
+    write(&root, "docs/guide.md", "|A|B|\n");
+    write(&root, "src/lib.rs", "fn main() {}\n");
+    write(&root, "notes.md", "|C|D|\n");
+    write(&root, "build/out.md", "|E|F|\n");
     git(
-        root,
+        &root,
         &["add", "--", ".gitignore", "docs/guide.md", "src/lib.rs"],
     );
 
     let tracked = GitLsFiles::new(false)
-        .list_candidates(root)
+        .list_candidates(&root)
         .expect("git ls-files");
     assert_eq!(
         names(&tracked),
@@ -197,7 +113,7 @@ fn lists_the_index_and_the_untracked_files_on_request() {
     assert_eq!(tracked.skipped_non_utf8, 0);
 
     let untracked = GitLsFiles::new(true)
-        .list_candidates(root)
+        .list_candidates(&root)
         .expect("git ls-files");
     assert_eq!(
         names(&untracked),
@@ -284,15 +200,13 @@ fn a_failure_with_no_git_text_carries_our_wording_alone() {
 /// administrative area, so the guard would look for `MERGE_HEAD` in a file.
 #[test]
 fn the_git_directory_is_resolved_through_git() {
-    let directory = tempfile::tempdir().expect("a temporary directory");
-    let root = Utf8Path::from_path(directory.path()).expect("a UTF-8 temporary directory");
-    git(root, &["init", "--quiet", "-b", "main"]);
-    write(root, "docs/guide.md", "|A|B|\n");
-    git(root, &["add", "--", "docs/guide.md"]);
-    git(root, &["commit", "-m", "initialise"]);
+    let (_directory, root) = repository();
+    write(&root, "docs/guide.md", "|A|B|\n");
+    git(&root, &["add", "--", "docs/guide.md"]);
+    git(&root, &["commit", "-m", "initialise"]);
     let worktree = root.join("linked");
     git(
-        root,
+        &root,
         &[
             "worktree",
             "add",
@@ -363,52 +277,99 @@ fn the_repository_query_reports_an_absent_program_as_such() {
     );
 }
 
-/// `relayable`: Git's text is scrubbed into one line before it is shown.
-#[rstest]
-#[case(b"", "")]
-#[case(b"fatal: bad revision\n", "fatal: bad revision")]
-// A message that is several lines is shown as one, so a repository cannot
-// forge additional lines of this tool's stderr.
-#[case(b"fatal: bad\nusage: git ls-files\n", "fatal: bad usage: git ls-files")]
-#[case(b"a\r\nb\rc", "a b c")]
-// A run at either end disappears rather than becoming a gap.
-#[case(b"\n\nfatal\n\n", "fatal")]
-// An escape sequence loses its escape character, so the rest is inert text
-// rather than a terminal instruction a path in the repository chose.
-#[case(b"\x1b[31mfatal\x1b[0m", "[31mfatal [0m")]
-#[case(b"a\x07b", "a b")]
-// Bytes that are not UTF-8 become the replacement character: this is a
-// diagnostic, not a path, and nothing acts on it.
-#[case(b"bad \xff byte", "bad \u{fffd} byte")]
-fn relayed_diagnostics_are_scrubbed_into_one_line(#[case] input: &[u8], #[case] expected: &str) {
-    assert_eq!(relayable(input), expected);
-}
-
-/// A diagnostic long enough to bury the message it supports is cut, and the
-/// cut is visible rather than silent.
+/// The category of each failure that needs no process to reach.
 ///
-/// The cap falls at the limit rather than one side of it: a run of exactly
-/// [`RELAYED_LIMIT`] characters is relayed whole, so the shortening of a
-/// longer one is never mistaken for git having said that much.
-#[test]
-fn a_diagnostic_of_exactly_the_limit_is_relayed_whole() {
-    let at_limit = "x".repeat(RELAYED_LIMIT);
-
-    assert_eq!(relayable(at_limit.as_bytes()), at_limit);
+/// A closed set of four, so a host aggregating failures cannot be handed a
+/// value that grows with the trees a run was given. The nonzero exit is driven
+/// for real in the traced test below, because an `ExitStatus` cannot be built
+/// portably without a process to produce one.
+#[rstest]
+#[case(
+    GitListError::ProgramNotFound { program: "git".to_string() },
+    "program_not_found"
+)]
+#[case(
+    GitListError::Spawn {
+        command: "git ls-files".to_string(),
+        source: io::Error::new(io::ErrorKind::PermissionDenied, "fixture"),
+    },
+    "spawn"
+)]
+#[case(
+    GitListError::NoGitDir { command: "git rev-parse".to_string() },
+    "no_git_dir"
+)]
+fn a_category_names_the_class_a_host_may_aggregate(
+    #[case] error: GitListError,
+    #[case] expected: &str,
+) {
+    assert_eq!(error.category(), expected);
 }
 
-/// The character past the limit is what costs the last one its place, and the
-/// ellipsis is what says so.
+/// A successful invocation is traced with its operation, its outcome, and how
+/// long the process took.
+///
+/// The elapsed time is asserted only to be present: what a test could pin is a
+/// number no assertion should depend on. The operation name is pinned instead,
+/// because that is the field a host groups by.
+#[test_macros::traced_test]
 #[test]
-fn a_diagnostic_past_the_limit_is_cut() {
-    let flood = "x".repeat(4096);
+fn a_successful_listing_is_traced_with_its_operation_and_outcome() {
+    let (_directory, root) = repository();
 
-    let relayed = relayable(flood.as_bytes());
+    GitLsFiles::new(false)
+        .list_candidates(&root)
+        .expect("git ls-files");
 
-    assert_eq!(relayed.chars().count(), RELAYED_LIMIT + 1, "{relayed:?}");
-    assert!(relayed.ends_with('…'), "{relayed:?}");
-    assert!(
-        relayed.starts_with(&"x".repeat(RELAYED_LIMIT)),
-        "the cap must keep a prefix, not drop the message: {relayed:?}"
-    );
+    // The span carries the same fields, so a host reading a timeline sees the
+    // outcome and the duration against the operation rather than only a line.
+    assert!(logs_contain(
+        "git{operation=\"ls_files\" outcome=\"success\""
+    ));
+    assert!(logs_contain(
+        "git invocation completed operation=\"ls_files\" outcome=\"success\""
+    ));
+    assert!(logs_contain("elapsed_seconds="));
+}
+
+/// The two invocations are told apart by name: the Git directory query is
+/// traced as its own operation rather than as the listing.
+#[test_macros::traced_test]
+#[test]
+fn the_repository_query_is_traced_under_its_own_operation() {
+    let (_directory, root) = repository();
+
+    GitLsFiles::new(false)
+        .resolve_git_dir(&root)
+        .expect("git rev-parse --absolute-git-dir");
+
+    assert!(logs_contain(
+        "git{operation=\"rev_parse\" outcome=\"success\""
+    ));
+    assert!(logs_contain(
+        "git invocation completed operation=\"rev_parse\" outcome=\"success\""
+    ));
+}
+
+/// The failure half of the contract: the outcome says the invocation did not
+/// succeed, and the category says which of the four classes it failed in.
+///
+/// Git's own text is deliberately absent. It is relayed to a user by
+/// [`GitListError::diagnostic`], but a telemetry field is not a place for
+/// another program's bytes.
+#[cfg(unix)]
+#[test_macros::traced_test]
+#[test]
+fn a_failed_invocation_is_traced_with_its_bounded_category() {
+    let error = GitLsFiles::with_program("/bin/false", false)
+        .list_candidates(Utf8Path::new("."))
+        .expect_err("`false` always fails");
+    assert_eq!(error.category(), "nonzero_exit");
+
+    assert!(logs_contain("git{operation=\"ls_files\" outcome=\"error\""));
+    assert!(logs_contain(
+        "git invocation failed operation=\"ls_files\" outcome=\"error\""
+    ));
+    assert!(logs_contain("failure=\"nonzero_exit\""));
+    assert!(logs_contain("elapsed_seconds="));
 }

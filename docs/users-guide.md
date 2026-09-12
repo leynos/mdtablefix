@@ -174,7 +174,8 @@ captured on its own.
 
 | Status | Meaning                                                       |
 | ------ | ------------------------------------------------------------- |
-| `0`    | Every file was analysed, and no reporting mode found drift.   |
+| `0`    | The selection and any required processing succeeded, and no   |
+|        | reporting mode found drift.                                   |
 | `1`    | `--check` or `--diff` found a file that would be reformatted. |
 | `2`    | A file could not be read or rewritten, the selection of files |
 |        | failed, or the command line was rejected.                     |
