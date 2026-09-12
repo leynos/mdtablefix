@@ -6156,3 +6156,28 @@ suite, the trybuild fixtures including the new one
 ignored` doctests — `markdownlint` (34 files, 0 errors) and `nixie`. The
 Windows job executes the same fixture, so the cross-check is the CI run on the
 pushed head rather than a local claim.
+
+### Revision 31, 2026-09-12 — the round closed
+
+The five-row reconciliation was posted to the walkthrough as issue comment
+5648099585, carrying the mandatory `@coderabbitai` mention. It names the three
+rows the round quoted — Testing (Overall), Unit Architecture and Testing
+(Compile-Time / Ui) — as a subset of the five the live table carries, so the
+round's reading and the current table are answered in one place rather than two.
+
+**Sweep.** `reviewThreads` reports 27 threads on the pull request and every one
+of them is resolved; none is unresolved with no reply of mine. No inline comment
+has arrived since `r3997160743`, so nothing is left to answer inline, and the
+table reconciliation is posted on that basis.
+
+**The last commit's gates.** `2e95a8a` adds only prose to this plan, so the
+change surface is Markdown and the narrowed scope is the two Markdown gates:
+`make markdownlint` — 34 files, `Summary: 0 error(s)` — and `make nixie` — all
+diagrams validated, this file included. Logs:
+`/tmp/markdownlint-mdtablefix-check-option-rev30.out` and
+`/tmp/nixie-mdtablefix-check-option-rev30.out`. The full six gates were green
+two commits earlier at `9b08edc` (Revision 30) and no code has changed since.
+
+**Pushed.** `6be1a76..2e95a8a` on `origin/check-option`. The table refreshes
+only when CodeRabbit next reviews, so its rows keep their old status until then;
+the next review's reading is the check, not a re-queue for its own sake.
