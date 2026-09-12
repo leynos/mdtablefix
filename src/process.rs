@@ -380,7 +380,10 @@ mod tests {
         // afterwards left the delimiter row measured from the shorter text: ten
         // dashes on the first pass and thirteen on the second, and the two never
         // agreed.
-        let input = vec!["| a | see docs.1 |".to_string(), "| --- | --- |".to_string()];
+        let input = vec![
+            "| a | see docs.1 |".to_string(),
+            "| --- | --- |".to_string(),
+        ];
         let out = process_stream_inner(
             &input,
             Options {
