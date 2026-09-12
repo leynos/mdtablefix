@@ -129,17 +129,22 @@ pub fn record_analysis(
 ) -> anyhow::Result<(FileReport, String)> {
     let started = Instant::now();
     let result = analyse();
-    record_file(mode, FileOutcome::of(&result), started.elapsed());
+    let outcome = FileOutcome::of(&result);
+    record_file(mode, &outcome, started.elapsed());
 
     result
 }
 
 /// Records one file's analysis, whatever became of it.
 ///
+/// The outcome is borrowed rather than taken, because the analysis's result
+/// outlives the recording of it: the caller still has to print the payload or
+/// report the failure.
+///
 /// The duration is recorded for failures too, so a file that stalls before it
 /// fails is visible in the distribution rather than missing from it, as the
 /// library's replacement metrics are.
-pub fn record_file(mode: Mode, outcome: FileOutcome<'_>, elapsed: Duration) {
+pub fn record_file(mode: Mode, outcome: &FileOutcome<'_>, elapsed: Duration) {
     let outcome_label = match outcome {
         FileOutcome::Changed => "changed",
         FileOutcome::Unchanged => "unchanged",

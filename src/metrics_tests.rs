@@ -254,10 +254,10 @@ fn run_labels_take_the_declared_names() {
 fn every_metric_is_described() {
     let ((), recorded) = recorded(|| {
         record_run(Mode::Check, ExitStatus::Drift);
-        record_file(Mode::Check, FileOutcome::Changed, Duration::from_millis(1));
+        record_file(Mode::Check, &FileOutcome::Changed, Duration::from_millis(1));
         record_file(
             Mode::Check,
-            FileOutcome::Failed(&Error::new(io::Error::new(
+            &FileOutcome::Failed(&Error::new(io::Error::new(
                 io::ErrorKind::NotFound,
                 "fixture",
             ))),

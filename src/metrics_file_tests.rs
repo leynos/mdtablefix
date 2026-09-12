@@ -22,7 +22,7 @@ use crate::driver::Mode;
 #[test]
 fn a_changed_file_is_counted_with_its_duration() {
     let elapsed = Duration::from_millis(250);
-    let ((), recorded) = recorded(|| record_file(Mode::Check, FileOutcome::Changed, elapsed));
+    let ((), recorded) = recorded(|| record_file(Mode::Check, &FileOutcome::Changed, elapsed));
 
     assert_eq!(count_file(&recorded, "check", "changed"), 1);
     assert_eq!(
@@ -43,7 +43,7 @@ fn a_changed_file_is_counted_with_its_duration() {
 #[test]
 fn an_unchanged_file_is_counted_with_its_duration() {
     let elapsed = Duration::from_millis(2);
-    let ((), recorded) = recorded(|| record_file(Mode::Diff, FileOutcome::Unchanged, elapsed));
+    let ((), recorded) = recorded(|| record_file(Mode::Diff, &FileOutcome::Unchanged, elapsed));
 
     assert_eq!(count_file(&recorded, "diff", "unchanged"), 1);
     assert_eq!(durations(&recorded, "diff", "unchanged"), [0.002]);
@@ -63,7 +63,7 @@ fn a_failed_file_is_counted_by_its_category(#[case] kind: io::ErrorKind, #[case]
     // through the chain rather than from the outermost error alone.
     let error = Error::new(io::Error::new(kind, "fixture")).context("reading file.md");
     let ((), recorded) =
-        recorded(|| record_file(Mode::InPlace, FileOutcome::Failed(&error), elapsed));
+        recorded(|| record_file(Mode::InPlace, &FileOutcome::Failed(&error), elapsed));
 
     assert_eq!(count_file(&recorded, "in_place", "error"), 1);
     assert_eq!(count_error(&recorded, category), 1);
@@ -81,7 +81,7 @@ fn a_failed_file_is_counted_by_its_category(#[case] kind: io::ErrorKind, #[case]
 fn an_error_without_an_io_cause_is_other() {
     let error = anyhow::anyhow!("no io error in this chain");
     let ((), recorded) = recorded(|| {
-        record_file(Mode::Print, FileOutcome::Failed(&error), Duration::ZERO);
+        record_file(Mode::Print, &FileOutcome::Failed(&error), Duration::ZERO);
     });
 
     assert_eq!(count_error(&recorded, "other"), 1);
