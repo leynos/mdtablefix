@@ -7,13 +7,14 @@ This ExecPlan (execution plan) is a living document. The sections
 proceeds.
 
 Status: COMPLETE — 2026-09-12, at commit `6384543`, since rebased onto
-`origin/check-option`, whose tip stood at `49a2d0a` for two rebases the same
-day and at `e462b97` for a third, on branch `git-option`, stacked on pull
-request #464 and carried by pull request #466. The prerequisite extraction of
-`Cli` and `FormatOpts` landed, in the base's `src/command.rs` rather than in a
-`src/cli.rs` of this branch's own, and Stage A is discharged. All four
-milestones — EP-M0's grammar measurement, EP-M1's selection tree, EP-M2's
-command-line surface, and EP-M3's documentation — are delivered. Every
+`origin/check-option` four times the same day as the base kept moving — onto
+`64117e4`, then `49a2d0a`, then `e462b97`, and finally `6be1a76`, each recorded
+in `Progress` with the measurement of what it moved — on branch `git-option`,
+stacked on pull request #464 and carried by pull request #466. The prerequisite
+extraction of `Cli` and `FormatOpts` landed, in the base's `src/command.rs`
+rather than in a `src/cli.rs` of this branch's own, and Stage A is discharged.
+All four milestones — EP-M0's grammar measurement, EP-M1's selection tree,
+EP-M2's command-line surface, and EP-M3's documentation — are delivered. Every
 deterministic gate is green on the milestone tree, the six CodeRabbit rounds
 recorded under `Artefacts and notes` returned zero findings, both CI runs since
 the branch's conflict with its base was cleared are green on Linux and Windows,
@@ -29,7 +30,9 @@ are now measured on a second platform rather than promised: the first two runs
 the branch could obtain after its conflict was cleared, `34691011897` and then
 `34691436697` on the pushed tip, each concluded `success` with all six jobs
 green, so the CI verdict that this plan spent the longest waiting on is no longer
-outstanding and the tip that carries it is the tip under review. What remains
+outstanding, and the claim that carries it is about the shipped tree rather
+than the head — every file this branch ships is CI-verified on Linux and Windows.
+What remains
 outstanding is the one
 verification no machine here can perform — the macOS and Windows half of the
 `canonicalize` case question behind INV-DEDUP — which is carried forward rather
@@ -2386,6 +2389,22 @@ plateau.
       finds off by one. The pre-third-rebase tip is tagged
       `backup/git-option-pre-third-rebase` so the superseded head is recoverable
       if a later reader wants it.
+- [x] (2026-09-12) **Rebased a fourth time, onto `origin/check-option` at
+      `6be1a76`**, because the base moved once more — three commits in this
+      window, opening with `80f80d1` ("Assert the failing writer's message, not
+      only its error kind", 13:36:01 +0200) and closing with its plan record
+      `6be1a76` at 13:44:52. This one is worth distinguishing from the third
+      rather than filing as one more of the same. `e462b97` moved only the
+      base's prose; `80f80d1` moves `src/report/render_tests.rs`, a test file
+      that is part of this branch's tree even though this branch never edits it.
+      So the replay was clean for the ordinary reason — the file is untouched on
+      this side, and `git diff --stat d1d10d4 HEAD` names exactly the base's two
+      files and nothing else, `docs/execplans/check-option.md` at +71 and
+      `src/report/render_tests.rs` at +26/-5 — but the tree the gates measure is
+      **not** byte-identical across this rebase, which is what separates it from
+      the third and is why the full gate set was re-run rather than the Markdown
+      one. The branch stands 0 behind and 34 ahead, and the pre-fourth-rebase
+      tip is tagged `backup/git-option-pre-fourth-rebase`.
 - [x] (2026-09-12) CodeRabbit round six over the rebased tree, `EV-REBASE-CR`:
       `coderabbit review --agent --base check-option` through `scrutineer` —
       **`review_completed`, zero findings** over 36 reviewed files, the round
@@ -3428,12 +3447,42 @@ is the durable record, and EP-M3 reconciles this log into it.
   second rebase already declined to join. Date/Author: 2026-09-12, EP-M4
   (rebase).
 
+- Decision: rebase **a fourth time**, onto `origin/check-option` at `6be1a76`,
+  and with it a rule for a branch stacked on a branch that is still being worked
+  on rather than a case-by-case judgement. The rule: absorb the base whenever it
+  moves, but measure first what the replay actually moves, because that
+  measurement is what says which gates the rebase has invalidated. Only one of
+  the four moved the base's prose alone — the third, whose replay touched
+  nothing but `docs/execplans/check-option.md`, and it is therefore the one case
+  where the Markdown gate was the only gate that had to be re-run. The other
+  three each absorbed base commits that reach code, and each was followed by the
+  full set: the first took the base's own refactor into this tree across 45
+  files, splitting `src/cli.rs` into `src/command.rs` and giving the reporting
+  tests and the check suite their own modules; the second absorbed `9834fcb`,
+  the traced-callsite fix, which edits 17 files under `src/`; and this one moved
+  `src/report/render_tests.rs`. The alternative considered was to stop at the
+  third rebase and let later base commits sit unabsorbed until #464 merges, on
+  the argument that the pull request's diff and its CI verdict are unaffected
+  either way. Rejected because it is not true of the verdict in the long run —
+  the base's new test file joins this branch's tree the moment it is absorbed,
+  and a reader should know which run measured the tree they are looking at —
+  and because the stopping condition it implies is "whenever the base happens
+  to settle", which is unbounded while another session is actively pushing to
+  it. The rate is measured rather than asserted: six base commits landed in the
+  fifty minutes from the tip tagged before the first rebase to the fourth
+  arrival, three of them inside the nine minutes from 13:13:29 to 13:22:35,
+  which is a rate rather than an accident. Cost: each rebase rewrites every
+  hash on the branch and so re-points the review and run verdicts at a
+  superseded commit, which is a real loss of traceability mitigated only by the
+  `backup/git-option-pre-*` tags and by the plan naming the commit each verdict
+  describes. Date/Author: 2026-09-12, EP-M4 (rebase).
+
 ## Outcomes & retrospective
 
 Completed 2026-09-12, at commit `6384543`, rebased the same day onto
-`origin/check-option` — first at `64117e4`, again at `49a2d0a`, and once more at
-`e462b97`, the base having moved three times while this branch was being
-measured against it. Every milestone is
+`origin/check-option` — first at `64117e4`, again at `49a2d0a`, again at
+`e462b97`, and once more at `6be1a76`, the base having moved four times while
+this branch was being measured against it. Every milestone is
 delivered: EP-M0's
 grammar measurement, EP-M1's selection tree with zero surviving mutants, EP-M2's
 command-line surface and end-to-end behaviour, and EP-M3's ADR 0010 and the five
@@ -4323,6 +4372,37 @@ than a better reading of this one. The zero stands as recorded, with that limit
 named.
 
 ## Revision note
+
+Revised 2026-09-12, eighth pass, after a fourth rebase onto
+`origin/check-option`, whose tip had moved to `6be1a76`, and after the full gate
+set was re-run because this rebase moved more than prose.
+
+What changed. The base gained three commits in this window — `80f80d1`, which
+hardens a writer-error test in `src/report/render_tests.rs`, and its two plan
+records `69bc8ea` and `6be1a76` — so the same instruction was applied again,
+making four rebases in one day. The rule this pass records is the one the three
+earlier rebases had been deciding case by case: absorb the base whenever it
+moves, but measure what the replay actually moved before deciding which gates
+the rebase invalidated. The measurement is `git diff --stat d1d10d4 HEAD`, which
+names the base's plan document (+71) and `src/report/render_tests.rs` (+26/-5)
+and nothing else. Where the third rebase left the tree byte-identical and needed
+only the Markdown gate, this one does not, so all six gates were re-run over the
+frozen tree: `make check-fmt`, `make typecheck`, `make lint`,
+`make markdownlint` (36 files, 0 errors), `make nixie`, and `make test` — 2014
+passed, 0 failed, 20 ignored, across 48 suites.
+
+Two figures in this pass's first draft were corrected against measurement rather
+than written down as they stood, and they are recorded because the same mistake
+is easy to make again. The draft claimed that three of the four rebases had
+moved only the base's prose; `git diff --stat` over the tips on either side of
+each says otherwise — the first moved 45 files, the second absorbed a commit
+editing 17 files under `src/`, and only the third moved prose alone. It also
+gave the interval from the first rebase to the third base arrival as four and a
+quarter hours; the base's own commit dates give fifty minutes to the fourth
+arrival, with six moves in that window and three of them inside nine minutes.
+The lesson is the plan's own rule applied to itself: a figure that can be
+measured against the repository should be measured before it is recorded, and a
+long session's memory is exactly where an unmeasured figure gets in.
 
 Revised 2026-09-12, seventh pass, after a third rebase onto
 `origin/check-option`, whose tip had moved to `e462b97` while the second
