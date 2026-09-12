@@ -10,6 +10,9 @@
 //! - a table delimiter row, which must keep the break below it and must itself stay a delimiter
 //!   row.
 //!
+//! A fourth shape chains all three in one document, because the guard for each
+//! boundary has to hold where its neighbours are themselves guard cases.
+//!
 //! The generator and the CLI harness are shared with
 //! `tests/idempotence_properties.rs` through `support/idempotence_harness.rs`.
 //! This file holds the adjacency material alone, so the guard for one shape can
@@ -17,7 +20,7 @@
 //! coverage sweep over block-start and delimiter-row classes, and the per-shape
 //! behaviour check all sit together.
 
-use proptest::{prelude::*, test_runner::Config as ProptestConfig};
+use proptest::prelude::*;
 
 #[path = "support/idempotence_harness.rs"]
 mod idempotence_harness;
@@ -29,6 +32,7 @@ use idempotence_harness::{
     adjacency_strategy,
     flags_for,
     format_twice,
+    proptest_config,
     sample,
 };
 
@@ -53,7 +57,7 @@ fn is_delimiter_row(line: &str) -> bool {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+    #![proptest_config(proptest_config())]
 
     /// Asserts structural adjacencies are a fixed point with `--headings` on.
     ///
@@ -129,6 +133,7 @@ fn generated_structural_adjacencies_reach_every_shape() {
     let mut converting = 0_usize;
     let mut refusing = 0_usize;
     let mut delimiter_rows = 0_usize;
+    let mut combined = 0_usize;
 
     for (document, shape, break_line) in &adjacencies {
         let (once, twice) = format_twice(document, &flags_for(HEADINGS));
@@ -156,6 +161,21 @@ fn generated_structural_adjacencies_reach_every_shape() {
                     "the delimiter row was consumed in {document:?}: {lines:?}",
                 );
             }
+            // The chain holds a converting boundary, a thematic break below it,
+            // a table, and a delimiter row above the trailing break, so it
+            // carries the obligations of the other shapes at once rather than
+            // depending on a document that isolates one of them.
+            Shape::CombinedAdjacency => {
+                combined += 1;
+                assert!(
+                    lines.iter().any(|line| line.starts_with('#')),
+                    "the paragraph above a break did not convert: {lines:?}",
+                );
+                assert!(
+                    lines.iter().any(|line| is_delimiter_row(line)),
+                    "the delimiter row was consumed in {document:?}: {lines:?}",
+                );
+            }
         }
     }
 
@@ -171,5 +191,10 @@ fn generated_structural_adjacencies_reach_every_shape() {
         delimiter_rows > 0,
         "the generator never produced a table-delimiter adjacency, so the delimiter-row guard is \
          not exercised by this sweep",
+    );
+    assert!(
+        combined > 0,
+        "the generator never produced a combined adjacency, so the shapes are only ever exercised \
+         one boundary at a time",
     );
 }

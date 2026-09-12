@@ -14,8 +14,15 @@
 use std::fs;
 
 use assert_cmd::Command;
-use proptest::{prelude::*, strategy::ValueTree, test_runner::TestRunner};
+use proptest::{
+    prelude::*,
+    strategy::ValueTree,
+    test_runner::{Config, TestRunner},
+};
 use tempfile::TempDir;
+
+/// The case count the idempotence suites run when `PROPTEST_CASES` is unset.
+const DEFAULT_CASES: u32 = 48;
 
 /// The eight transform flags the CLI exposes, in help order.
 pub const FLAG_POOL: &[&str] = &[
@@ -67,6 +74,37 @@ pub const TABLE_DELIMITER_ROWS: &[&str] = &["| --- | --- |", "|---|---|", "|:--|
 
 /// Number of documents the non-vacuity sweeps generate.
 pub const SWEEP_DOCUMENTS: usize = 64;
+
+/// Returns the configuration the idempotence suites run their properties under.
+///
+/// `PROPTEST_CASES` is the knob that widens the search: the tracking issue runs
+/// these generators over many more cases than a commit gate can afford, and the
+/// seed sweeps raise it without a recompile. The count therefore comes from the
+/// environment and falls back to [`DEFAULT_CASES`] only when the variable is
+/// unset or unparseable. The `Config::with_cases(48)` this replaces pinned the
+/// count outright, so raising `PROPTEST_CASES` had no effect on either suite.
+/// Every other field keeps the default that [`Config::default`] contextualizes
+/// from the environment.
+pub fn proptest_config() -> Config {
+    Config {
+        cases: case_count(),
+        ..Config::default()
+    }
+}
+
+/// Returns `PROPTEST_CASES` as a case count, or [`DEFAULT_CASES`] when it is
+/// unset or unparseable.
+fn case_count() -> u32 { parse_case_count(std::env::var("PROPTEST_CASES").ok().as_deref()) }
+
+/// Parses a `PROPTEST_CASES` value, falling back to [`DEFAULT_CASES`].
+///
+/// Split out from the environment read so the fallback is testable without
+/// mutating the environment.
+fn parse_case_count(value: Option<&str>) -> u32 {
+    value
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(DEFAULT_CASES)
+}
 
 /// Returns the flags selected by `mask`, a bitmask over [`FLAG_POOL`].
 pub fn flags_for(mask: u16) -> Vec<&'static str> {
@@ -121,6 +159,10 @@ pub enum Shape {
     /// A table delimiter row, which must keep the line below it and stay a
     /// delimiter row.
     TableDelimiterRow,
+    /// All three of the above in one document, so the Setext pass has to reach
+    /// the right verdict for each boundary of a single chain rather than for
+    /// one pair in isolation.
+    CombinedAdjacency,
 }
 
 /// A generated structural adjacency: its document (newline terminated), the
@@ -135,14 +177,16 @@ pub type Adjacency = (String, Shape, String);
 
 /// Generates a line directly above a break, with an optional tail below it.
 ///
-/// Three shapes reach the Setext pass. A paragraph above its own set of dashes
+/// Four shapes reach the Setext pass. A paragraph above its own set of dashes
 /// is the conversion the flag exists for, and here it sits immediately above a
 /// thematic break, as in the reported `aa` / `-----` / `---`. A line that is
 /// itself a block start above a hyphen line must keep that line: before the
 /// guard, `## aa` above `---` became `## ## aa` and the break was lost. A table
 /// delimiter row above a hyphen line must keep that line too, and must itself
 /// stay a delimiter row: before its guard, `| --- | --- |` above `---` became
-/// `## | --- | --- |` and the table above it kept drifting.
+/// `## | --- | --- |` and the table above it kept drifting. The fourth shape
+/// chains all three, because the structural lemma is about how the verdicts
+/// compose rather than about each boundary on its own.
 pub fn adjacency_strategy() -> impl Strategy<Value = Adjacency> {
     let fragment = prop_oneof![
         2 => (prose_strategy(), proptest::sample::select(BREAK_SPELLINGS)).prop_map(
@@ -178,6 +222,20 @@ pub fn adjacency_strategy() -> impl Strategy<Value = Adjacency> {
                 "---".to_string(),
             )
         }),
+        // All three above in one chain, so a verdict that holds for one pair in
+        // isolation is still exercised where its neighbours are themselves
+        // guard cases: the paragraph converts under its own dashes, the
+        // canonical `***` break below that conversion must survive, and the
+        // delimiter row above the trailing `---` must survive as table syntax.
+        2 => (prose_strategy(), proptest::sample::select(TABLE_DELIMITER_ROWS)).prop_map(
+            |(title, row)| {
+                (
+                    format!("{title}\n-----\n***\n| a | b |\n{row}\n---"),
+                    Shape::CombinedAdjacency,
+                    "---".to_string(),
+                )
+            },
+        ),
     ];
 
     (fragment, prop::option::of(prose_strategy())).prop_map(
@@ -209,4 +267,26 @@ pub fn sample<V>(strategy: &impl Strategy<Value = V>, count: usize) -> Vec<V> {
     }
 
     values
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::{DEFAULT_CASES, parse_case_count};
+
+    /// Asserts the case count comes from `PROPTEST_CASES` when it parses and
+    /// from the default when it does not.
+    #[rstest]
+    #[case(Some("1234"), 1234)]
+    #[case(Some("1"), 1)]
+    #[case(Some("not-a-number"), DEFAULT_CASES)]
+    #[case(Some(""), DEFAULT_CASES)]
+    #[case(None, DEFAULT_CASES)]
+    fn proptest_cases_overrides_the_default_case_count(
+        #[case] value: Option<&str>,
+        #[case] expected: u32,
+    ) {
+        assert_eq!(parse_case_count(value), expected);
+    }
 }
