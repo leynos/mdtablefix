@@ -136,9 +136,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         state.push_out(line);
     }
 
-    state.flush();
-
-    let (mut out, table_markers) = state.into_out();
+    let (mut out, table_markers) = state.finish();
     let table_lines = out
         .iter()
         .zip(table_markers)
