@@ -22,6 +22,8 @@
 
 - [Architecture](architecture.md): Current design for the Markdown parsing,
   wrapping, table reflow, and processing pipeline.
+- [Verification claim ledger](verification.md): Scope and limitations of each
+  locally verified correctness claim.
 
 ## Decision records
 
