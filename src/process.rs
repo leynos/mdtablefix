@@ -142,7 +142,8 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     let table_lines = out
         .iter()
         .zip(table_markers)
-        .filter_map(|(line, is_table_line)| is_table_line.then(|| line.clone()))
+        .filter(|(_, is_table_line)| *is_table_line)
+        .map(|(line, _)| line.clone())
         .collect::<Vec<_>>();
     if opts.headings {
         out = crate::headings::convert_setext_headings(&out);

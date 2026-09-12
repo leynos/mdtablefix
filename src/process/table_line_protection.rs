@@ -26,7 +26,9 @@ pub(super) fn protect_table_lines(
 
     let mut table_line_counts: HashMap<&str, usize> = HashMap::new();
     for table_line in table_lines {
-        *table_line_counts.entry(table_line.as_str()).or_insert(0_usize) += 1;
+        *table_line_counts
+            .entry(table_line.as_str())
+            .or_insert(0_usize) += 1;
     }
 
     let mut replacements = HashMap::new();
