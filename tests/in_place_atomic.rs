@@ -3,16 +3,24 @@
 //! Each test drives the real binary and asserts on the observable contract: a
 //! successful rewrite preserves the target's mode and leaves no temporary file
 //! behind, a failed rewrite leaves the original byte-identical, and a symlinked
-//! target is declined rather than replaced by a regular file.
+//! target is declined rather than replaced by a regular file. A file that is
+//! already formatted is not rewritten at all, so a symlink to one is not
+//! declined — there is nothing to decline.
 
 use std::fs;
 #[cfg(unix)]
-use std::{fmt::Write as _, os::unix::fs::PermissionsExt};
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
 use assert_cmd::Command;
 #[cfg(unix)]
 use predicates::str::contains;
 use tempfile::tempdir;
+
+// The failure paths live in a Unix-only module: each induces its failure
+// through a Unix facility, so on other platforms there is nothing to run.
+#[cfg(unix)]
+#[path = "in_place_atomic/failure.rs"]
+mod failure;
 
 /// A table that needs reflowing.
 const BROKEN: &str = "|A|B|\n|1|2|\n";
@@ -21,12 +29,17 @@ const BROKEN: &str = "|A|B|\n|1|2|\n";
 const FIXED: &str = "| A | B |\n| 1 | 2 |\n";
 
 /// Runs `mdtablefix --in-place` on `path`.
-fn in_place(path: &std::path::Path) -> assert_cmd::assert::Assert {
-    Command::cargo_bin("mdtablefix")
-        .expect("failed to create cargo command for mdtablefix")
-        .arg("--in-place")
-        .arg(path)
-        .assert()
+fn in_place(path: &std::path::Path) -> assert_cmd::assert::Assert { in_place_all(&[path]) }
+
+/// Runs `mdtablefix --in-place` on several paths, in argument order.
+fn in_place_all(paths: &[&std::path::Path]) -> assert_cmd::assert::Assert {
+    let mut command =
+        Command::cargo_bin("mdtablefix").expect("failed to create cargo command for mdtablefix");
+    command.arg("--in-place");
+    for path in paths {
+        command.arg(path);
+    }
+    command.assert()
 }
 
 /// Lists the sorted names of the entries in `path`.
@@ -135,147 +148,6 @@ fn in_place_replaces_read_only_file() {
 
 #[cfg(unix)]
 #[test]
-fn in_place_failure_leaves_original_byte_identical() {
-    let dir = tempdir().expect("create temporary directory");
-    let target = dir.path().join("sample.md");
-    fs::write(&target, BROKEN).expect("write fixture");
-    let root = dir.path().to_path_buf();
-    // A read-only directory denies the temporary file while leaving the target
-    // itself readable.
-    fs::set_permissions(&root, fs::Permissions::from_mode(0o555)).expect("make read-only");
-
-    let assert = in_place(&target);
-
-    fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).expect("restore mode");
-    // SAFETY: `geteuid()` has no side effects and is safe to call in tests.
-    if unsafe { libc::geteuid() } == 0 {
-        // Root ignores directory permission bits, so the failure path cannot
-        // be induced and the assertions below would be vacuous.
-        return;
-    }
-    assert.failure().stderr(contains("sample.md"));
-    assert_eq!(
-        fs::read_to_string(&target).expect("read target"),
-        BROKEN,
-        "a failed rewrite must leave the original byte-identical"
-    );
-    assert_eq!(
-        entry_names(&root),
-        vec!["sample.md"],
-        "a failed rewrite must leave no temporary file behind"
-    );
-}
-
-/// A table whose rewrite is far larger than the file-size cap the write-failure
-/// test imposes on the child.
-#[cfg(unix)]
-fn large_table() -> String {
-    let mut text = String::from("|Name|Value|\n|--|--|\n");
-    for row in 0..200 {
-        let _ = writeln!(text, "|name-{row}|value-{row}|");
-    }
-    text
-}
-
-#[cfg(unix)]
-#[test]
-fn in_place_write_failure_leaves_original_byte_identical() {
-    let dir = tempdir().expect("create temporary directory");
-    let target = dir.path().join("sample.md");
-    let original = large_table();
-    fs::write(&target, &original).expect("write fixture");
-    // `ulimit -f` caps regular-file writes for the shell and everything it
-    // execs; the ignored `SIGXFSZ` turns the overrun into `EFBIG` rather than
-    // killing the process. Both are set before `exec`, so nothing runs between
-    // fork and exec but `exec` itself. `LLVM_PROFILE_FILE` sends the child's
-    // coverage profile to the null device: the profile outgrows the cap, and a
-    // truncated profile fails `cargo llvm-cov`'s merge instead of this test.
-    let output = std::process::Command::new("sh")
-        .arg("-c")
-        .arg("trap '' XFSZ; ulimit -f 1; exec \"$1\" --in-place \"$2\"")
-        .arg("sh")
-        .arg(env!("CARGO_BIN_EXE_mdtablefix"))
-        .arg(&target)
-        .env("LLVM_PROFILE_FILE", "/dev/null")
-        .output()
-        .expect("run mdtablefix through sh");
-
-    assert!(
-        !output.status.success(),
-        "a failed write must exit non-zero: {output:?}"
-    );
-    assert_eq!(
-        fs::read_to_string(&target).expect("read target"),
-        original,
-        "a failed write must leave the original byte-identical"
-    );
-    assert_eq!(
-        entry_names(dir.path()),
-        vec!["sample.md"],
-        "a failed write must leave no temporary file behind"
-    );
-}
-
-#[cfg(unix)]
-#[test]
-fn in_place_fails_when_every_candidate_name_is_occupied() {
-    let dir = tempdir().expect("create temporary directory");
-    let target_dir = dir.path().join("sub");
-    fs::create_dir(&target_dir).expect("create target directory");
-    let target = target_dir.join("sample.md");
-    fs::write(&target, BROKEN).expect("write fixture");
-    // Every candidate name in the target's own directory is occupied, while
-    // the working directory holds none. A run that allocated its temporary
-    // file anywhere else — the working directory, or the system temporary
-    // directory — would succeed, so the failure proves the candidates are
-    // probed in the target's directory. `$$` is the pid that `exec` hands to
-    // the binary, so the shell can predict the names it must occupy.
-    let script = concat!(
-        "n=0; while [ $n -le 15 ]; do ",
-        ": > \"sub/sample.md.mdtablefix-$$-$n.tmp\"; ",
-        "n=$((n + 1)); done; ",
-        "exec \"$1\" --in-place sub/sample.md",
-    );
-    let output = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(script)
-        .arg("sh")
-        .arg(env!("CARGO_BIN_EXE_mdtablefix"))
-        .current_dir(dir.path())
-        .output()
-        .expect("run mdtablefix through sh");
-
-    assert!(
-        !output.status.success(),
-        "an occupied candidate name must not divert the temporary file: {output:?}"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("writing sub/sample.md"),
-        "the file context must name the path as the user wrote it: {output:?}"
-    );
-    assert!(
-        stderr.contains("Caused by:"),
-        "the whole error chain must be reported, not only the file context: {output:?}"
-    );
-    assert!(
-        stderr.contains("no free temporary file name beside sample.md"),
-        "the underlying cause must reach the user: {output:?}"
-    );
-    assert_eq!(
-        fs::read_to_string(&target).expect("read target"),
-        BROKEN,
-        "a failed rewrite must leave the original byte-identical"
-    );
-    assert_eq!(
-        entry_names(&target_dir).len(),
-        17,
-        "the target and the occupied names must survive untouched"
-    );
-}
-
-#[cfg(unix)]
-#[test]
 fn in_place_retries_past_a_stale_temporary_file() {
     let dir = tempdir().expect("create temporary directory");
     let target = dir.path().join("sample.md");
@@ -320,13 +192,80 @@ fn in_place_declines_symlinked_target() {
     // capability that the CLI opens for the link's parent.
     std::os::unix::fs::symlink("real.md", &link).expect("create symlink");
 
-    in_place(&link).failure().stderr(contains("symlink"));
+    // A declined rewrite is an error like any other: the exit contract reserves
+    // `2` for a file that could not be rewritten, so "non-zero" is too loose.
+    in_place(&link).code(2).stderr(contains("symlink"));
 
     assert_eq!(
         fs::read_to_string(&real).expect("read real file"),
         BROKEN,
         "declining a symlink must leave its target untouched"
     );
+    assert!(
+        fs::symlink_metadata(&link)
+            .expect("read link metadata")
+            .file_type()
+            .is_symlink(),
+        "the symlink itself must survive"
+    );
+    assert_eq!(entry_names(dir.path()), vec!["link.md", "real.md"]);
+}
+
+/// A file that is already formatted is not rewritten.
+///
+/// The bytes written would be the bytes already there, but the file would not
+/// be the same file: the replacement renames a temporary over the target, so an
+/// unconditional write would swap the inode and move the modification time. A
+/// build system watching this file would see a change where there was none.
+#[cfg(unix)]
+#[test]
+fn in_place_leaves_a_clean_file_untouched() {
+    let dir = tempdir().expect("create temporary directory");
+    let target = dir.path().join("clean.md");
+    fs::write(&target, FIXED).expect("write fixture");
+    let before = fs::metadata(&target).expect("read metadata before");
+
+    in_place(&target).success();
+
+    let after = fs::metadata(&target).expect("read metadata after");
+    assert_eq!(
+        before.ino(),
+        after.ino(),
+        "a clean file must not be replaced through a temporary"
+    );
+    assert_eq!(
+        before.mtime(),
+        after.mtime(),
+        "a clean file's modification time must not move"
+    );
+    assert_eq!(
+        before.mtime_nsec(),
+        after.mtime_nsec(),
+        "a clean file's modification time must not move"
+    );
+    assert_eq!(fs::read_to_string(&target).expect("read fixture"), FIXED);
+    assert_eq!(entry_names(dir.path()), vec!["clean.md"]);
+}
+
+/// A clean file is not written, so a symlink to one is not declined.
+///
+/// Declining a symlinked target is a property of the replacement, not of the
+/// run: with nothing to write there is nothing to decline, and the run succeeds
+/// without touching the link or its target.
+/// [`in_place_declines_symlinked_target`] pins the other half, where the target
+/// does need rewriting.
+#[cfg(unix)]
+#[test]
+fn in_place_accepts_a_symlink_to_a_clean_file() {
+    let dir = tempdir().expect("create temporary directory");
+    let real = dir.path().join("real.md");
+    let link = dir.path().join("link.md");
+    fs::write(&real, FIXED).expect("write fixture");
+    std::os::unix::fs::symlink("real.md", &link).expect("create symlink");
+
+    in_place(&link).success();
+
+    assert_eq!(fs::read_to_string(&real).expect("read real file"), FIXED);
     assert!(
         fs::symlink_metadata(&link)
             .expect("read link metadata")

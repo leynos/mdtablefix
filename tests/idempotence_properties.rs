@@ -11,102 +11,28 @@
 //! The companion `idempotence.rs` test pins the issue's reproduction corpus.
 //! This file covers the same ground for generated documents, so a regression in
 //! a shape the corpus does not spell out still fails the suite.
+//!
+//! Issue #474 added a table delimiter row directly above a break as a third
+//! structural adjacency. That adjacency, and the Setext pass's other two, are
+//! covered in full by `tests/idempotence_adjacencies.rs`; the generator this
+//! file shares with it lives in `support/idempotence_harness.rs`. Elements here
+//! still draw on it, so a generated document may contain any of the three
+//! shapes.
 
-use std::fs;
+use proptest::{prelude::*, test_runner::Config as ProptestConfig};
 
-use assert_cmd::Command;
-use proptest::{
-    prelude::*,
-    strategy::ValueTree,
-    test_runner::{Config as ProptestConfig, TestRunner},
+#[path = "support/idempotence_harness.rs"]
+mod idempotence_harness;
+use idempotence_harness::{
+    BREAK_SPELLINGS,
+    FLAG_POOL,
+    SWEEP_DOCUMENTS,
+    adjacency_strategy,
+    flags_for,
+    format_twice,
+    prose_strategy,
+    sample,
 };
-use tempfile::TempDir;
-
-/// The eight transform flags the CLI exposes, in help order.
-const FLAG_POOL: &[&str] = &[
-    "--wrap",
-    "--renumber",
-    "--breaks",
-    "--ellipsis",
-    "--fences",
-    "--footnotes",
-    "--code-emphasis",
-    "--headings",
-];
-
-/// Thematic break spellings; each must survive as a standalone line.
-const BREAK_SPELLINGS: &[&str] = &["---", "***", "___", "- - -", "* * *", "_ _ _"];
-
-/// Candidate lines that must never be consumed as Setext text.
-///
-/// Each one is a block start under the formatter's grammar. Fence markers are
-/// absent because the fence tracker skips them before the Setext pass runs;
-/// they are covered by the payload table in `src/headings.rs`. HTML blocks are
-/// outside the formatter's grammar and are not screened at all.
-const NON_PARAGRAPH_STARTERS: &[&str] = &[
-    "## atx heading",
-    "# top level heading",
-    "###### deepest heading ######",
-    "---",
-    "***",
-    "___",
-    "- - -",
-    "- item",
-    "1. item",
-    "> quote",
-    "[^1]: note",
-    "[label]: https://example.com",
-    "<!-- markdownlint-disable MD013 -->",
-];
-
-/// Flag mask selecting `--headings`, the flag that enables the Setext pass.
-const HEADINGS: u16 = 1 << 7;
-
-/// Number of documents the non-vacuity sweep generates.
-const SWEEP_DOCUMENTS: usize = 64;
-
-/// Returns the flags selected by `mask`, a bitmask over [`FLAG_POOL`].
-fn flags_for(mask: u16) -> Vec<&'static str> {
-    FLAG_POOL
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| mask & (1 << index) != 0)
-        .map(|(_, flag)| *flag)
-        .collect()
-}
-
-/// Formats `text` once with `flags` through the real binary, returning the bytes.
-fn format_bytes(directory: &TempDir, text: &[u8], flags: &[&str]) -> Vec<u8> {
-    let path = directory.path().join("case.md");
-    fs::write(&path, text).expect("writing the case file");
-
-    Command::cargo_bin("mdtablefix")
-        .expect("locating the mdtablefix binary")
-        .args(flags)
-        .arg("--in-place")
-        .arg(&path)
-        .assert()
-        .success();
-
-    fs::read(&path).expect("reading the formatted case")
-}
-
-/// Formats `document` twice with `flags`, returning both passes as strings.
-fn format_twice(document: &str, flags: &[&str]) -> (String, String) {
-    let directory = TempDir::new().expect("creating a temporary directory");
-    let once = format_bytes(&directory, document.as_bytes(), flags);
-    let twice = format_bytes(&directory, &once, flags);
-
-    (
-        String::from_utf8_lossy(&once).into_owned(),
-        String::from_utf8_lossy(&twice).into_owned(),
-    )
-}
-
-/// Generates a lower-case word sequence of one to ten words.
-fn prose_strategy() -> impl Strategy<Value = String> {
-    proptest::collection::vec("[a-z]{2,8}", 1..=10).prop_map(|words| words.join(" "))
-}
 
 /// Generates an inline code span shaped like a file path.
 fn code_span_strategy() -> impl Strategy<Value = String> {
@@ -202,7 +128,8 @@ fn element_strategy() -> impl Strategy<Value = String> {
         4 => prose_strategy(),
         4 => prefixed_block_strategy(),
         2 => proptest::sample::select(BREAK_SPELLINGS).prop_map(str::to_string),
-        2 => adjacency_strategy().prop_map(|adjacency| adjacency.element()),
+        2 => adjacency_strategy()
+            .prop_map(|(document, _, _)| document.trim_end_matches('\n').to_string()),
         2 => fenced_block_strategy(),
         1 => prose_strategy().prop_map(|title| format!("{title}\n-----")),
         1 => Just("[1] and text... here".to_string()),
@@ -215,76 +142,6 @@ fn element_strategy() -> impl Strategy<Value = String> {
 fn document_strategy() -> impl Strategy<Value = String> {
     proptest::collection::vec(element_strategy(), 1..=10)
         .prop_map(|elements| elements.join("\n") + "\n")
-}
-
-/// A generated structural adjacency and the behaviour it must show.
-#[derive(Clone, Debug)]
-struct Adjacency {
-    /// The document, newline terminated.
-    document: String,
-    /// Whether the first line must become an ATX heading.
-    converts: bool,
-    /// Thematic break that must survive as a standalone line.
-    break_line: String,
-}
-
-impl Adjacency {
-    /// Returns the generated fragment without its trailing newline.
-    fn element(&self) -> String { self.document.trim_end_matches('\n').to_string() }
-}
-
-/// Generates a line directly above a break, with an optional tail below it.
-///
-/// Two shapes reach the Setext pass. A paragraph above its own set of dashes is
-/// the conversion the flag exists for, and here it sits immediately above a
-/// thematic break, as in the reported `aa` / `-----` / `---`. A line that is
-/// itself a block start above a hyphen line must keep that line: before the
-/// guard, `## aa` above `---` became `## ## aa` and the break was lost.
-fn adjacency_strategy() -> impl Strategy<Value = Adjacency> {
-    let fragment = prop_oneof![
-        2 => (prose_strategy(), proptest::sample::select(BREAK_SPELLINGS)).prop_map(
-            |(title, break_line)| {
-                (
-                    format!("{title}\n-----\n{break_line}"),
-                    true,
-                    break_line.to_string(),
-                )
-            },
-        ),
-        4 => proptest::sample::select(NON_PARAGRAPH_STARTERS).prop_map(|starter| {
-            (format!("{starter}\n---"), false, "---".to_string())
-        }),
-    ];
-
-    (fragment, prop::option::of(prose_strategy())).prop_map(
-        |((fragment, converts, break_line), tail)| Adjacency {
-            document: match tail {
-                Some(tail) => format!("{fragment}\n{tail}\n"),
-                None => format!("{fragment}\n"),
-            },
-            converts,
-            break_line,
-        },
-    )
-}
-
-/// Samples `count` values from `strategy` with a deterministic runner.
-///
-/// The seed is fixed, so a coverage gap or a drifting document reproduces on
-/// every run instead of appearing only on some machines.
-fn sample<V>(strategy: &impl Strategy<Value = V>, count: usize) -> Vec<V> {
-    let mut runner = TestRunner::deterministic();
-    let mut values = Vec::with_capacity(count);
-
-    for _ in 0..count {
-        let value = strategy
-            .new_tree(&mut runner)
-            .expect("building a generated value")
-            .current();
-        values.push(value);
-    }
-
-    values
 }
 
 proptest! {
@@ -309,31 +166,6 @@ proptest! {
             "formatting is not a fixed point for flags {:?}\ninput:\n{}\npass 1:\n{}\npass 2:\n{}",
             flags,
             document,
-            once,
-            twice,
-        );
-    }
-
-    /// Asserts structural adjacencies are a fixed point with `--headings` on.
-    ///
-    /// The flag is forced on so every case exercises the Setext pass, which the
-    /// mask does not guarantee; the mask then varies the other seven flags, so
-    /// the reproduction's own set (`--footnotes --code-emphasis --headings`) is
-    /// among the combinations covered.
-    #[test]
-    fn structural_adjacencies_reach_a_fixed_point(
-        adjacency in adjacency_strategy(),
-        mask in 0u16..=255u16,
-    ) {
-        let flags = flags_for(mask | HEADINGS);
-        let (once, twice) = format_twice(&adjacency.document, &flags);
-
-        prop_assert_eq!(
-            &twice,
-            &once,
-            "an adjacency is not a fixed point for flags {:?}\ninput:\n{}\npass 1:\n{}\npass 2:\n{}",
-            flags,
-            adjacency.document,
             once,
             twice,
         );
@@ -451,73 +283,6 @@ fn generated_corpus_reaches_both_defect_classes() {
     assert!(
         spans > 0,
         "the generator never produced a prefixed line with a code span and a continuation",
-    );
-}
-
-/// Asserts the adjacency generator reaches both shapes, and that both behave.
-///
-/// A corpus of block starts alone would pass even if Setext conversion had been
-/// disabled outright, and a corpus of paragraphs alone would never exercise the
-/// guard. Each block-start case additionally asserts that the break below the
-/// candidate survives, which is the loss the guard prevents.
-#[test]
-fn generated_structural_adjacencies_reach_both_shapes() {
-    assert_eq!(
-        flags_for(HEADINGS),
-        vec!["--headings"],
-        "the forced flag mask must select --headings",
-    );
-
-    let starters: std::collections::BTreeSet<&str> = sample(
-        &proptest::sample::select(NON_PARAGRAPH_STARTERS),
-        SWEEP_DOCUMENTS,
-    )
-    .into_iter()
-    .collect();
-    assert_eq!(
-        starters.len(),
-        NON_PARAGRAPH_STARTERS.len(),
-        "the generator did not reach every block-start class",
-    );
-
-    let adjacencies = sample(&adjacency_strategy(), SWEEP_DOCUMENTS);
-    let mut converting = 0_usize;
-    let mut refusing = 0_usize;
-
-    for adjacency in &adjacencies {
-        let (once, twice) = format_twice(&adjacency.document, &flags_for(HEADINGS));
-        assert_eq!(
-            twice, once,
-            "the adjacency drifted: {:?}",
-            adjacency.document,
-        );
-
-        let lines: Vec<&str> = once.lines().collect();
-        assert!(
-            lines.iter().any(|line| *line == adjacency.break_line),
-            "the {:?} break was consumed in {:?}: {lines:?}",
-            adjacency.break_line,
-            adjacency.document,
-        );
-
-        if adjacency.converts {
-            converting += 1;
-            assert!(
-                lines.iter().any(|line| line.starts_with('#')),
-                "the paragraph above a break did not convert: {lines:?}",
-            );
-        } else {
-            refusing += 1;
-        }
-    }
-
-    assert!(
-        converting > 0,
-        "the generator never produced a converting adjacency",
-    );
-    assert!(
-        refusing > 0,
-        "the generator never produced a block-start adjacency",
     );
 }
 

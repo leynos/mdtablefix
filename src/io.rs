@@ -8,6 +8,9 @@
 //!
 //! The module is split by concern, and each part is a child module here:
 //!
+//! - `document` owns the document boundary — the byte-order mark a document may begin with, held
+//!   together with the terminator its output is written with, so the mark is split off before
+//!   formatting and restored afterwards.
 //! - `line_endings` owns the policy — which terminator an output document is written with, and how
 //!   the majority style is counted out of the input.
 //! - `replace` owns the replacement entry points, including the boundary that selects a document's
@@ -23,10 +26,12 @@
 //! The rationale, the rejected alternatives and the known limitations are
 //! recorded in `docs/adrs/0007-line-ending-detection.md`.
 
+pub mod document;
 mod line_endings;
 mod replace;
 mod swap;
 
+pub use document::SourceDocument;
 pub use line_endings::{
     LineEnding,
     LineEndingCounts,
@@ -37,7 +42,7 @@ pub use line_endings::{
 /// Re-exposes the internals the unit tests drive directly, so that a test
 /// module reaches them without naming the child module they live in.
 #[cfg(test)]
-use replace::{register_metrics, remove_failed_temporary_file};
+use replace::{register_metrics, remove_failed_temporary_file, rewrite_with};
 pub use replace::{replace_file, rewrite, rewrite_no_wrap};
 #[cfg(test)]
 use swap::{

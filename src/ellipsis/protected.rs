@@ -163,7 +163,8 @@ mod tests {
     //! Tests for detecting ellipsis-protected Markdown spans.
 
     use proptest::prelude::*;
-    use tracing_test::traced_test;
+    // Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+    use test_macros::traced_test;
 
     use super::*;
 

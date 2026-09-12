@@ -9,7 +9,7 @@
 inputs reachable under the `make fmt` flag set (`--wrap`, `--renumber`,
 `--breaks`, `--ellipsis`, `--fences`), and for further inputs once `--headings`
 was added, so a check-after-fix gate could never converge: one `--in-place` pass
-left a file that the next pass rewrote again. Five defect classes contributed:
+left a file that the next pass rewrote again. Six defect classes contributed:
 
 - A normalized thematic break was absorbed into the following paragraph
   instead of passed through on its own line.
@@ -25,11 +25,19 @@ left a file that the next pass rewrote again. Five defect classes contributed:
   block of its own. `## aa` above `---` became the single line `## ## aa`, and
   because the first pass left the break behind and the second pass consumed it,
   the output never settled.
+- Setext conversion also consumed the break below a table delimiter row. A
+  table whose delimiter row is the last line before a thematic break was
+  restructured on every pass: the delimiter row `| --- | --- |` above `---` was
+  rewritten as `## | --- | --- |`, which left the table above it without a
+  delimiter row, and the orphaned header row was then padded to the minimal
+  width on the next pass. The class was found by the property suite after the
+  fifth class was fixed, and is reachable under `--headings`, which the
+  `make fmt` flag set does not enable.
 
 ## Decision
 
 The formatter is a fixed point: `format(format(x)) == format(x)` for every flag
-set the CLI exposes. Five rules enforce the invariant:
+set the CLI exposes. Six rules enforce the invariant:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
   `src/wrap/block.rs` recognizes a break with
@@ -77,6 +85,17 @@ set the CLI exposes. Five rules enforce the invariant:
   the grammar this formatter supports and is not a CommonMark block parser:
   HTML blocks other than the `<table>` conversion in `src/html.rs` remain
   outside it.
+- Table delimiter rows are refused separately from the block kinds.
+  `is_table_delimiter_row` in `src/headings.rs` refuses a candidate that
+  carries a `|` and matches `crate::table::SEP_RE`, the pattern the table
+  parser already uses to find the delimiter row, so the heading pass and the
+  table pass agree on what one is. A delimiter row is table syntax rather than
+  paragraph text, and `BlockKind` does not model it: `classify_block` reports
+  `None` for a pipe-prefixed line, because such a line is part of a table. The
+  `|` is required, so a bare `---` stays a thematic break and a break above
+  another break stays two breaks, while a paragraph that merely contains a pipe
+  still converts. Refusing the candidate keeps the `---` below it as a thematic
+  break, which is what the no-flags run already produces.
 
 ## Consequences
 
@@ -84,12 +103,22 @@ set the CLI exposes. Five rules enforce the invariant:
   check-after-fix gate cannot report drift indefinitely on the same file.
 - Changed output is confined to thematic breaks that are now preserved instead
   of consumed, to prefixed blocks that now reflow with their continuation lines
-  in one pass, and to candidates that are themselves block starts, which no
-  longer convert, so the line below them survives as a block of its own.
+  in one pass, and to candidates that are themselves block starts or table
+  delimiter rows, which no longer convert, so the line below them survives as a
+  block of its own.
 - `tests/idempotence.rs` formats the fixture corpus under
   `tests/data/idempotence/` twice through the real binary and asserts
-  byte-identical output; `tests/idempotence_properties.rs` is a `proptest!`
-  property over generated documents and a sampled eight-flag powerset, and
-  generates structural adjacencies — a candidate directly above a thematic
-  break — with `--headings` forced on, since the `make fmt` flag set does not
-  enable it. Together they guard the invariant against regression.
+  byte-identical output; the class `T` fixtures pin the delimiter-row
+  adjacency and assert that the row survives as table syntax. Its
+  repository-wide drift sweeps live in `tests/idempotence_drift.rs`.
+  `tests/idempotence_properties.rs` is a `proptest!` property over generated
+  documents and a sampled eight-flag powerset, while
+  `tests/idempotence_adjacencies.rs` holds the structural-adjacency property
+  and its coverage sweep; the generator both suites share lives in
+  `tests/support/idempotence_harness.rs`. The property generates structural
+  adjacencies — a candidate directly above a thematic break — with `--headings`
+  forced on, since the `make fmt` flag set does not enable it. The delimiter
+  row is generated both alone and below a header row, and a deterministic sweep
+  asserts the shape is reached and its row survives, so removing the generator
+  branch fails the sweep rather than leaving the guard unexercised. Together
+  they guard the invariant against regression.

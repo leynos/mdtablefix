@@ -1,0 +1,17 @@
+---
+source: tests/cli_matrix.rs
+expression: result.envelope(&case)
+---
+case: row_111_wrap
+mode: check
+args: --wrap --renumber --breaks --ellipsis --headings --check
+status: code: 1
+
+[stdout]
+input.dat +3 -4
+
+[stderr]
+1 file would be reformatted.
+
+[file]
+<not applicable>

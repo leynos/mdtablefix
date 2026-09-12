@@ -1,0 +1,31 @@
+---
+source: tests/cli_matrix.rs
+expression: result.envelope(&case)
+---
+case: row_111_wrap
+mode: diff
+args: --wrap --renumber --breaks --ellipsis --headings --diff
+status: code: 1
+
+[stdout]
+--- input.dat
++++ input.dat
+@@ -2,9 +2,8 @@
+ title: Matrix
+ ---
+ 
+-Heading
+------
++## Heading
+ 
+----
++______________________________________________________________________
+ 
+-Text... after break.
++Text… after break.
+
+[stderr]
+1 file would be reformatted.
+
+[file]
+<not applicable>

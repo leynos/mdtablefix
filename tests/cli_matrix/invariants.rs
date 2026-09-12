@@ -51,6 +51,33 @@ pub(crate) fn assert_transform_invariants(logical: &LogicalCase, stdout: &[u8]) 
     Ok(())
 }
 
+/// Reads a matrix fixture and reports whether it contains a table delimiter.
+pub(crate) fn fixture_has_table(file_name: &str) -> Result<bool> {
+    let path = fixture_path(file_name);
+    let fixture = fs::read_to_string(&path)
+        .with_context(|| format!("read matrix fixture '{}'", path.display()))?;
+
+    Ok(contains_table_delimiter(&fixture))
+}
+
+/// Whether `fixture` contains the delimiter run that makes a line a table row.
+///
+/// A delimiter cell is made only of dashes and colons, and it has to sit in a
+/// line that carries pipes: a Setext heading underline is the same run of
+/// dashes on a line that carries none.
+fn contains_table_delimiter(fixture: &str) -> bool {
+    fixture.lines().any(|line| {
+        line.contains('|')
+            && line.split('|').any(|cell| {
+                let cell = cell.trim();
+                !cell.is_empty()
+                    && cell
+                        .chars()
+                        .all(|character| character == '-' || character == ':')
+            })
+    })
+}
+
 fn fixture_has_fence_candidate(fixture: &str) -> bool {
     fixture.lines().any(|line| {
         line.trim_start().starts_with("```")
@@ -102,7 +129,32 @@ fn ordered_marker(line: &str) -> Option<OrderedMarker> {
 mod tests {
     //! Unit tests for generated CLI-matrix invariants.
 
-    use super::{fixture_has_fence_candidate, ordered_marker, unordered_fixture_markers};
+    use rstest::rstest;
+
+    use super::{
+        contains_table_delimiter,
+        fixture_has_fence_candidate,
+        ordered_marker,
+        unordered_fixture_markers,
+    };
+
+    /// A delimiter cell is a dash-and-colon run, and it only counts on a line
+    /// that carries a pipe, so a Setext heading underline is not a table row.
+    ///
+    /// The negative cases are what make the predicate worth testing: the one
+    /// caller asserts only that a fixture has *a* table, which a predicate
+    /// accepting every dash run would satisfy just as well.
+    #[rstest]
+    #[case::delimiter_row("| --- | --- |", true)]
+    #[case::colon_aligned_row("|:---|:---:|", true)]
+    #[case::single_cell_with_a_pipe("| --- |", true)]
+    #[case::setext_underline("Title\n---\n", false)]
+    #[case::pipes_without_a_delimiter_cell("| A | B |", false)]
+    #[case::empty_cells("| | |", false)]
+    #[case::prose("plain prose", false)]
+    fn contains_table_delimiter_needs_a_pipe(#[case] fixture: &str, #[case] expected: bool) {
+        assert_eq!(contains_table_delimiter(fixture), expected);
+    }
 
     #[test]
     fn ordered_marker_returns_none_for_plain_prose() {

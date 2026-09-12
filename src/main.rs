@@ -1,14 +1,18 @@
 //! Binary entry point for `mdtablefix`.
 //!
 //! Parses command-line arguments and coordinates Markdown formatting. When
-//! file paths are supplied, processing occurs in parallel and files may be
-//! rewritten in place. Without paths the tool reads from standard input and
-//! prints results to stdout while preserving the input order.
+//! file paths are supplied, they are analysed in parallel and reported in
+//! argument order: each file may be printed, rewritten in place, checked for
+//! drift, or shown as a unified diff. Without paths the tool reads from
+//! standard input and prints results to stdout while preserving the input
+//! order.
+//!
+//! Every mode shares one formatting closure, built once, so `--check` cannot
+//! disagree with `--in-place` about what the formatter would write.
 
 use std::{
-    borrow::Cow,
-    io::{self, Read},
-    path::{Path, PathBuf},
+    io::{self, Read, Write},
+    process::ExitCode,
 };
 
 use anyhow::Context;
@@ -16,101 +20,28 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use clap::Parser;
 use mdtablefix::{
-    LineEnding,
-    LineEndingCounts,
-    Options,
-    count_line_endings,
-    format_breaks,
-    io::replace_file,
-    process::{process_stream_inner, process_with_frontmatter},
-    renumber_lists,
-    serialize_lines,
+    io::SourceDocument,
+    report::{FileReport, render_summary},
 };
 use rayon::prelude::*;
-use tracing::debug;
 
-#[derive(Parser)]
-#[command(version, about = "Reflow broken markdown tables")]
-struct Cli {
-    /// Rewrite files in place
-    #[arg(long = "in-place", requires = "files")]
-    in_place: bool,
-    #[command(flatten)]
-    opts: FormatOpts,
-    /// Markdown files to fix
-    files: Vec<PathBuf>,
-}
+mod command;
+mod driver;
+mod metrics;
 
-#[derive(clap::Args, Clone, Copy)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "CLI exposes independent flags via separate switches"
-)]
-struct FormatOpts {
-    /// Wrap paragraphs and list items to 80 columns
-    #[arg(long = "wrap")]
-    wrap: bool,
-    /// Renumber ordered list items
-    #[arg(long = "renumber")]
-    renumber: bool,
-    /// Reformat thematic breaks as underscores
-    #[arg(long = "breaks")]
-    breaks: bool,
-    /// Replace "..." with the ellipsis character
-    #[arg(long = "ellipsis")]
-    ellipsis: bool,
-    /// Normalise fence delimiters to three backticks
-    #[arg(long = "fences")]
-    fences: bool,
-    /// Convert bare numeric references and the final numbered list to
-    /// Markdown footnote links
-    #[arg(long = "footnotes")]
-    footnotes: bool,
-    /// Fix emphasis markers adjacent to inline code
-    #[arg(long = "code-emphasis")]
-    code_emphasis: bool,
-    /// Convert Setext-style headings to hash-prefixed headings
-    #[arg(long = "headings")]
-    headings: bool,
-}
-
-impl From<FormatOpts> for Options {
-    fn from(opts: FormatOpts) -> Self {
-        Self {
-            wrap: opts.wrap,
-            ellipsis: opts.ellipsis,
-            fences: opts.fences,
-            footnotes: opts.footnotes,
-            code_emphasis: opts.code_emphasis,
-            headings: opts.headings,
-        }
-    }
-}
-
-fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
-    process_with_frontmatter(lines, |body| {
-        let mut out = process_stream_inner(body, opts.into());
-        if opts.renumber {
-            out = renumber_lists(&out);
-        }
-        if opts.breaks {
-            out = format_breaks(&out)
-                .into_iter()
-                .map(Cow::into_owned)
-                .collect();
-        }
-        out
-    })
-}
+use command::{Cli, FormatOpts, format_lines, formatting_closure};
+use driver::{ExitStatus, Formatter, Inputs, Mode, analyse, exit_status, in_argument_order};
+use metrics::{record_analysis, record_run};
 
 /// Opens a file's parent directory and returns its relative UTF-8 path.
 ///
 /// This is the only ambient filesystem boundary for CLI file processing. The
 /// returned directory capability restricts subsequent handler I/O to the
 /// selected file's parent directory.
-fn open_file_parent(path: &Path) -> anyhow::Result<(Dir, Utf8PathBuf)> {
-    let path = Utf8Path::from_path(path)
-        .with_context(|| format!("converting {} to a UTF-8 path", path.display()))?;
+///
+/// The path is already UTF-8, because [`Inputs::resolve`] converts every
+/// positional argument once, before any file is analysed.
+fn open_file_parent(path: &Utf8Path) -> anyhow::Result<(Dir, Utf8PathBuf)> {
     let parent = path
         .parent()
         .filter(|parent| !parent.as_str().is_empty())
@@ -129,122 +60,189 @@ fn open_file_parent(path: &Path) -> anyhow::Result<(Dir, Utf8PathBuf)> {
 /// Standard input keeps its historical contract of printing one terminator
 /// even when it produces no lines, whereas an empty file produces empty
 /// output. `tests/parallel.rs` pins that difference.
-fn render_stdin_output(fixed: &[String], ending: LineEnding) -> String {
+///
+/// An input that produces no lines prints the bare terminator and nothing
+/// else, so a byte-order mark on a mark-only input is not echoed. Nothing is
+/// written back to a file on this path, so the mark cannot be lost.
+fn render_stdin_output(document: &SourceDocument<'_>, fixed: &[String]) -> String {
     if fixed.is_empty() {
-        ending.as_str().to_string()
+        document.ending().as_str().to_string()
     } else {
-        serialize_lines(fixed, ending)
+        document.render(fixed)
     }
-}
-
-/// Reports the line-ending decision at the command boundary that made it.
-///
-/// The library keeps the same report for its own entry points, but the binary
-/// is a separate crate and cannot share it, so the message is repeated here with
-/// the same fields: one filter finds every boundary. `operation` names the
-/// boundary — `"file"` when formatting a file for stdout, `"stdin"` when
-/// reading standard input — and `path` names the file being formatted, or is
-/// `None` for standard input, which is reported as its own source rather than
-/// left nameless.
-///
-/// This stays private, and takes the counts the pure [`count_line_endings`]
-/// query already produced, so no query emits events and only the boundary that
-/// acts on the answer logs it.
-fn report_line_endings(counts: LineEndingCounts, operation: &str, path: Option<&str>) {
-    debug!(
-        operation,
-        path = %path.unwrap_or("<stdin>"),
-        crlf_count = counts.crlf_count,
-        lone_lf_count = counts.lone_lf_count,
-        selected_ending = counts.ending.as_str(),
-        "selected the majority line ending"
-    );
-}
-
-/// Formats `content` into output lines, leaving the terminator to the caller.
-///
-/// This is the pure half of both command boundaries: it neither reads an input
-/// nor selects a line ending, so each boundary counts the endings, reports its
-/// decision, and only then renders these lines with the style it chose.
-fn format_lines(content: &str, opts: FormatOpts) -> Vec<String> {
-    let lines: Vec<String> = content.lines().map(str::to_string).collect();
-    process_lines(&lines, opts)
-}
-
-/// Reads and formats a capability-scoped file without modifying it.
-///
-/// The majority line-ending style of the file is detected before formatting
-/// and used to terminate the returned lines, so a CRLF file is not reported as
-/// wholly changed.
-fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
-    let content = directory.read_to_string(path)?;
-    let counts = count_line_endings(&content);
-    report_line_endings(counts, "file", Some(path.as_str()));
-    // Keep file output newline-terminated, matching the CLI stdout contract.
-    Ok(serialize_lines(
-        &format_lines(&content, opts),
-        counts.ending,
-    ))
 }
 
 /// Formats standard input and renders it for standard output.
 ///
 /// Standard input is the boundary with no path to name, so its report says so
-/// rather than omitting the field. The majority style of the input otherwise
-/// decides the terminators exactly as it does for a file.
+/// rather than omitting the field. The document boundary is otherwise taken
+/// exactly as it is for a file: the body carries no byte-order mark, and the
+/// majority style of the input decides the terminators.
 fn format_stdin(input: &str, opts: FormatOpts) -> String {
-    let counts = count_line_endings(input);
-    report_line_endings(counts, "stdin", None);
-    render_stdin_output(&format_lines(input, opts), counts.ending)
+    let document = SourceDocument::parse(input);
+    driver::report_line_endings(document.counts(), "stdin", None);
+    render_stdin_output(&document, &format_lines(document.body(), opts))
 }
 
-/// Reads, formats, and atomically replaces a capability-scoped file in place.
+/// Analyses one command-line path, naming it in any error.
 ///
-/// The formatted output is written to a temporary file beside the target and
-/// renamed over it, so a failure before the rename leaves the original file
-/// byte-identical rather than truncated. The replacement runs through the same
-/// directory capability as the read, so the filesystem boundary is unchanged.
-fn rewrite_in_place(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<()> {
-    let output = format_to_string(directory, path, opts)?;
-    replace_file(directory, path, &output)?;
+/// The context encloses opening the parent directory as well as the analysis,
+/// so an error from either names the file as the user wrote it rather than
+/// only its parent. The mode's verb says which operation failed: `--in-place`
+/// writes, and every other mode reads.
+fn analyse_one(
+    mode: Mode,
+    path: &Utf8Path,
+    format: &Formatter,
+) -> anyhow::Result<(FileReport, String)> {
+    open_file_parent(path)
+        .and_then(|(directory, storage_key)| analyse(mode, &directory, path, &storage_key, format))
+        .with_context(|| format!("{} {}", mode.verb(), path))
+}
+
+/// Writes `text` to standard output.
+///
+/// Standard output is written through an explicit handle rather than `print!`,
+/// which panics on a write failure. A closed pipe is a normal early exit, and a
+/// panic here would exit `101`, a status this tool does not document.
+fn write_stdout(text: &str) -> anyhow::Result<()> {
+    let mut stdout = io::stdout().lock();
+    stdout.write_all(text.as_bytes())?;
+    stdout.flush()?;
+
     Ok(())
 }
 
-fn report_results<T, F>(results: Vec<anyhow::Result<T>>, mut on_ok: F) -> anyhow::Result<()>
-where
-    F: FnMut(T),
-{
-    let mut first_err: Option<anyhow::Error> = None;
-    for res in results {
-        match res {
-            Ok(val) => on_ok(val),
-            Err(e) => {
+/// Whether any cause in the chain is a write to a closed pipe.
+fn is_broken_pipe(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<io::Error>()
+            .is_some_and(|error| error.kind() == io::ErrorKind::BrokenPipe)
+    })
+}
+
+/// Runs the mode the command line selects, records the run, and returns its
+/// status.
+///
+/// Resolution comes first, so a command line that cannot name its inputs fails
+/// as a whole — through [`exit_status`], like every other operational failure —
+/// rather than being discovered file by file. A file that cannot be read or
+/// rewritten is reported as it is encountered, counted in the summary, and
+/// folded into [`ExitStatus::Error`], so one unreadable file does not abandon
+/// the rest.
+///
+/// The run is recorded here, at the boundary that decides the status and under
+/// the very status this process is about to exit with, so the metric a host
+/// aggregates and the exit code cannot disagree. A closed pipe is an ordinary
+/// early exit, as in `mdtablefix --check *.md | head`: the reader stopped
+/// early, which says nothing about this run, so the run is recorded as the
+/// success it is. Rust ignores `SIGPIPE`, so the write reports `EPIPE` instead,
+/// and `print!` would turn that into the undocumented status `101`. Such an
+/// infrastructure failure of standard input or output is the only error that
+/// leaves here, and it is recorded before it is returned.
+fn run() -> anyhow::Result<ExitStatus> {
+    let cli = Cli::parse();
+    let mode = cli.mode();
+    metrics::describe_metrics();
+    let result = match Inputs::resolve(cli.files) {
+        Ok(Inputs::Stdin) => run_stdin(cli.opts),
+        Ok(Inputs::Files(files)) => run_files(mode, &files, cli.opts),
+        Err(error) => {
+            eprintln!("{error:?}");
+            Ok(exit_status(mode, false, true))
+        }
+    };
+    let result = match result {
+        Err(error) if is_broken_pipe(&error) => Ok(ExitStatus::Success),
+        settled => settled,
+    };
+    record_run(mode, result.as_ref().copied().unwrap_or(ExitStatus::Error));
+
+    result
+}
+
+/// Formats standard input and writes the result to standard output.
+///
+/// The destination is standard output whatever the mode, because there is no
+/// file for a mode flag to act on: the parser's `inputs` group is what
+/// guarantees a mode flag arrives with a file argument instead.
+fn run_stdin(opts: FormatOpts) -> anyhow::Result<ExitStatus> {
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input)?;
+    write_stdout(&format_stdin(&input, opts))?;
+
+    Ok(ExitStatus::Success)
+}
+
+/// Analyses the named files under `mode`, in argument order.
+///
+/// The only errors returned here are writes to standard output; a file that
+/// cannot be read or rewritten is reported and counted instead, and decides the
+/// status along with the drift the reporting modes found.
+fn run_files(mode: Mode, files: &[Utf8PathBuf], opts: FormatOpts) -> anyhow::Result<ExitStatus> {
+    let format = formatting_closure(opts);
+    let results = in_argument_order(
+        files
+            .par_iter()
+            .enumerate()
+            .map(|(index, path)| {
+                (
+                    index,
+                    record_analysis(mode, path, || analyse_one(mode, path, &format)),
+                )
+            })
+            .collect(),
+    );
+
+    let mut changed = 0;
+    let mut unchanged = 0;
+    let mut errored = 0;
+    let mut stdout = io::stdout().lock();
+    for result in results {
+        match result {
+            Ok((report, payload)) => {
+                if report.is_changed {
+                    changed += 1;
+                } else {
+                    unchanged += 1;
+                }
+                // A closed pipe surfaces here, and `main` treats it as the
+                // early exit it is rather than as a failure to report.
+                stdout.write_all(payload.as_bytes())?;
+            }
+            Err(error) => {
                 // The chain matters: the outer context names the file, and the
                 // cause explains the failure, such as a declined symlink.
-                eprintln!("{e:?}");
-                if first_err.is_none() {
-                    first_err = Some(e);
-                }
+                eprintln!("{error:?}");
+                errored += 1;
             }
         }
     }
-    if let Some(err) = first_err {
-        Err(err)
-    } else {
-        Ok(())
+    stdout.flush()?;
+
+    // The summary describes what was found, so it belongs to the modes that
+    // report rather than print; the read-only modes keep standard output a
+    // machine contract by putting it on standard error.
+    if mode.reports() {
+        eprintln!("{}", render_summary(changed, unchanged, errored));
     }
+
+    Ok(exit_status(mode, changed > 0, errored > 0))
 }
 
 /// Entry point for the command-line tool that reflows broken markdown tables.
 ///
-/// Parses command-line arguments to determine whether to process files in place, print fixed output
-/// to standard output, or read from standard input. Handles file I/O and error propagation as
-/// needed.
+/// Parses command-line arguments to determine whether to process files in
+/// place, check them for drift, show what would change, print fixed output to
+/// standard output, or read from standard input. Handles file I/O, the
+/// summary, and the exit status.
 ///
 /// # Returns
 ///
-/// Returns `Ok(())` if all operations complete successfully; otherwise, returns an error if
-/// argument validation or file processing fails.
+/// `0` when every file was analysed and no reporting mode found drift, `1` when
+/// a reporting mode did find drift, and `2` when a file could not be read or
+/// rewritten.
 ///
 /// # Examples
 ///
@@ -255,53 +253,23 @@ where
 /// # Fix tables in place
 /// mdtablefix --in-place myfile.md
 ///
+/// # Report which files would be reformatted, without writing
+/// mdtablefix --check myfile.md
+///
+/// # Show what would change, without writing
+/// mdtablefix --diff myfile.md
+///
 /// # Fix tables from standard input
 /// cat myfile.md | mdtablefix
 /// ```
-fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
-
-    if cli.files.is_empty() {
-        let mut input = String::new();
-        io::stdin().read_to_string(&mut input)?;
-        print!("{}", format_stdin(&input, cli.opts));
-        return Ok(());
+fn main() -> ExitCode {
+    match run() {
+        Ok(status) => status.code(),
+        Err(error) => {
+            eprintln!("{error:?}");
+            ExitStatus::Error.code()
+        }
     }
-
-    if cli.in_place {
-        let results: Vec<anyhow::Result<()>> = cli
-            .files
-            .par_iter()
-            .map(|path| {
-                // The context encloses opening the parent as well as the
-                // rewrite, so an error from either operation names the file as
-                // the user wrote it rather than only its parent directory.
-                open_file_parent(path)
-                    .and_then(|(directory, file_name)| {
-                        rewrite_in_place(&directory, &file_name, cli.opts)
-                    })
-                    .with_context(|| format!("writing {}", path.display()))
-            })
-            .collect();
-        report_results(results, |()| {})?;
-    } else {
-        let results: Vec<anyhow::Result<String>> = cli
-            .files
-            .par_iter()
-            .map(|path| {
-                // As above: the read context names the file even when opening
-                // its parent directory is what fails.
-                open_file_parent(path)
-                    .and_then(|(directory, file_name)| {
-                        format_to_string(&directory, &file_name, cli.opts)
-                    })
-                    .with_context(|| format!("reading {}", path.display()))
-            })
-            .collect();
-        report_results(results, |out| print!("{out}"))?;
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
