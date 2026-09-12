@@ -2,7 +2,7 @@
 //!
 //! Depends on `std::fs` and `camino`. Both predicates are deliberately narrow:
 //! [`has_conflict_markers`] requires all three marker forms, each at the start
-//! of a line with an exact seven-character run, so a document *discussing*
+//! of a line with a run of at least seven characters, so a document *discussing*
 //! conflict markers is not mistaken for a conflicted one; and
 //! [`operation_in_progress`] narrows the scan further, to a repository actually
 //! mid-merge, mid-rebase, or mid-cherry-pick.
@@ -30,12 +30,15 @@ const IN_PROGRESS: [&str; 4] = [
 /// them: the first side, the separator, and the second side.
 const MARKERS: [char; 3] = ['<', '=', '>'];
 
-/// The length of the run that begins a marker line.
+/// The shortest run that begins a marker line.
 ///
-/// Git writes exactly seven. A longer run is some other construct — eight `<`
-/// is Markdown emphasis, and a setext heading underline is seven `=` at the
-/// start of a line — so the run is checked for exactness rather than merely
-/// counted up to.
+/// Seven is Git's default, and not its only length: a repository that sets
+/// `conflict-marker-size` in `.gitattributes` gets runs of exactly the
+/// configured length, so the run is required to reach seven rather than to end
+/// there. Querying the attribute instead would mean resolving it per path, and
+/// guessing low is the failure that matters — a run of eight read as ordinary
+/// Markdown is a resolution rewritten by this tool — while guessing high costs
+/// only a refusal `--allow-conflicted` overrides.
 const MARKER_LEN: usize = 7;
 
 /// Whether a rewrite must refuse a file that carries conflict markers.
@@ -106,7 +109,7 @@ pub fn operation_in_progress(git_dir: &Utf8Path) -> bool {
 }
 
 /// Reports whether `content` carries all three conflict-marker forms, each at
-/// the start of a line with an exact seven-character run.
+/// the start of a line with a run of at least seven characters.
 ///
 /// All three are required because any one of them alone is ordinary Markdown:
 /// `=======` underlines a setext heading, and prose or a fenced example may
@@ -123,11 +126,12 @@ pub fn has_conflict_markers(content: &str) -> bool {
     })
 }
 
-/// Whether `line` begins with exactly [`MARKER_LEN`] copies of `marker`.
+/// Whether `line` begins with a run of at least [`MARKER_LEN`] copies of
+/// `marker`.
 fn starts_with_marker(line: &str, marker: char) -> bool {
     let mut characters = line.chars();
 
-    (0..MARKER_LEN).all(|_| characters.next() == Some(marker)) && characters.next() != Some(marker)
+    (0..MARKER_LEN).all(|_| characters.next() == Some(marker))
 }
 
 #[cfg(test)]

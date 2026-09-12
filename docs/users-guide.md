@@ -68,7 +68,6 @@ otherwise. The summary (`2 files would be reformatted, 1 file left unchanged.`)
 and every error go to standard error, so standard output can be piped or
 captured on its own.
 
-
 ### Selecting files from Git
 
 `--git` takes the file list from Git rather than from the command line. It may
@@ -98,7 +97,12 @@ The selection is ordered by path, byte-wise, so it does not follow Git's own
 order and does not change between runs. `--list-files` prints it, one path per
 line, and exits without reading or writing any file content: it is how a
 selection is inspected before it is acted on, and how the same set can be
-handed to another tool.
+handed to another tool. A selected path that itself holds a line terminator, or
+a backslash, cannot be printed as it stands without becoming two lines, so
+`--list-files` writes `\n`, `\r`, and `\\` for the line feed, the carriage
+return, and the backslash itself (literally backslash-n, backslash-r, and
+backslash-backslash in the output); every other path is printed unchanged, so
+the one-line-per-path contract holds for every name Git's index can hold.
 
 ```bash
 mdtablefix --git --list-files | xargs wc -l
@@ -106,7 +110,6 @@ mdtablefix --git --list-files | xargs wc -l
 
 Selecting nothing is a success. The run exits `0`, prints nothing, and does not
 read standard input.
-
 
 #### Mid-merge safety
 
@@ -119,17 +122,23 @@ a failure, so the run exits `2`. Every other selected file is still rewritten.
 `--allow-conflicted` overrides the refusal.
 
 The check is deliberately narrow. A file is refused only if it holds all three
-marker forms — a line of exactly seven `<`, a line of exactly seven `=`, and a
-line of exactly seven `>` — and only while an operation is in progress. A
-document that merely discusses conflict markers inside a fenced example is
-therefore rewritten, while one that quotes all three forms during a real merge
-is refused; `--allow-conflicted` is the answer to that case. The guard is a
+marker forms — a line of at least seven `<`, a line of at least seven `=`, and a
+line of at least seven `>` — and only while an operation is in progress. Seven
+is Git's default marker length rather than its only one: the
+`conflict-marker-size` attribute makes Git write a run of exactly the configured
+length, and the guard does not read `.gitattributes`, so it accepts any run of
+seven or more. The cost is a false positive on a line of eight or more marker
+characters, which refuses a rewrite that `--allow-conflicted` overrides, and
+that is the safer direction: a guard that demanded exactly seven would read a
+longer marker as ordinary Markdown and rewrite an unresolved file. A document
+that merely discusses conflict markers inside a fenced example is therefore
+rewritten, while one that quotes all three forms during a real merge is
+refused; `--allow-conflicted` is the answer to that case. The guard is a
 heuristic, not a substitute for `git status`.
 
 Only `--in-place` consults the repository's state, because only `--in-place`
 writes. `--check`, `--diff`, and `--list-files` never pay for the second `git`
 process.
-
 
 #### When the selection fails
 
@@ -241,12 +250,14 @@ expand the list in a way that runs the tool only when there is something to
 check:
 
 ```bash
-fd -e md -X mdtablefix --check
-find . -name '*.md' -print0 | xargs -0 -r mdtablefix --check
+fd -e md -e mdc -e markdown -X mdtablefix --check
+find . \( -name '*.md' -o -name '*.mdc' -o -name '*.markdown' \) -print0 | xargs -0 -r mdtablefix --check
 ```
 
 Both run the tool once with every match, and run nothing at all — exiting `0` —
-when there are no matches.
+when there are no matches. Both name the same three extensions the default
+`--git` selection covers, so a gate outside a repository checks the file types
+a `--git` run would.
 
 ### Symbolic links
 
@@ -258,8 +269,11 @@ changes is not written at all, so it succeeds. See
 [In-place editing](#in-place-editing) for the full replacement contract.
 
 A `--git` selection never reaches either case for a link: a link is not a
-regular file, so it is skipped during selection, before it is analysed. See
-[Selecting files from Git](#selecting-files-from-git).
+regular file, so it is skipped during selection, before it is analysed. The same
+skip covers a candidate reached through a symlinked directory, so if `docs` is a
+link to a directory outside the working tree, `docs/guide.md` is a regular file
+but not one inside the selection, and it is skipped rather than written through
+the link. See [Selecting files from Git](#selecting-files-from-git).
 
 ## Table reflow
 

@@ -6,6 +6,7 @@
 
 use camino::Utf8Path;
 use mdtablefix::report::LineDelta;
+use rstest::rstest;
 // Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
 use test_macros::traced_test;
 
@@ -238,6 +239,41 @@ fn print_reports_the_formatted_text_without_writing() {
 
     assert_eq!(payload, ALIGNED);
     assert_eq!(read(&directory, "ragged.md"), RAGGED);
+}
+
+/// `REQ-GIT-010`: a listing is a list of paths, one per line, and it stays one
+/// per line for a name Git's index may hold but a line cannot.
+///
+/// The NUL framing that lists the candidates is what admits a name holding a
+/// line terminator, so the mode that prints names has to be the place that
+/// keeps the two apart: the last four cases would each be two lines, or a
+/// truncated one, if the path were printed as it stands.
+#[rstest]
+#[case("docs/guide.md", "docs/guide.md\n")]
+#[case("docs/a b.md", "docs/a b.md\n")]
+// Rust spellings: the name holds one backslash, the printed line two.
+#[case("odd\\name.md", "odd\\\\name.md\n")]
+#[case("two\nlines.md", "two\\nlines.md\n")]
+#[case("carriage\rreturn.md", "carriage\\rreturn.md\n")]
+fn list_files_prints_one_line_per_selected_path(#[case] name: &str, #[case] expected: &str) {
+    let (_dir, directory) = fixture("clean.md", ALIGNED);
+    let display_path = Utf8Path::new(name);
+
+    let (report, payload) = analyse(
+        Mode::ListFiles,
+        ConflictGuard::unguarded(),
+        &directory,
+        display_path,
+        display_path,
+        &identity,
+    )
+    .expect("list a path");
+
+    assert_eq!(payload, expected);
+    // The report names the path as the user wrote it, escaping and all: the
+    // escaping belongs to the line a reader parses, not to the name itself.
+    assert_eq!(report.display_path, display_path);
+    assert!(!report.is_changed, "a listing assesses no content");
 }
 
 /// The capability names a file inside it, so a path outside the capability is

@@ -404,7 +404,7 @@ build real repositories and drive the built binary as a user would.
 grammar of the flags, the `--help` rendering, and the properties a reader of a
 terminal depends on.
 
-Both fixture sets neutralise the ambient Git configuration
+Both fixture sets neutralize the ambient Git configuration
 (`GIT_CONFIG_NOSYSTEM`, `GIT_CONFIG_GLOBAL`, and `HOME`), so the developer's own
 `core.excludesFile` cannot change what is selected, and they supply the identity
 that `GIT_CONFIG_GLOBAL=/dev/null` would otherwise remove. No assertion quotes

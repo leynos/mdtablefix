@@ -138,7 +138,9 @@ selection, and one mode that reports it:
 - `--allow-conflicted` rewrites files that the conflict guard would otherwise
   refuse.
 - `--list-files` prints the resolved selection, one path per line, and exits
-  without reading or writing any file content.
+  without reading or writing any file content. A path holding a line terminator
+  or a backslash is printed with `\n`, `\r`, and `\\` escapes, so one line is
+  always one path.
 
 `src/git_inputs.rs` is the composition root: it turns the command line into
 that question, and the answer back into paths. The selection itself lives in
@@ -154,7 +156,7 @@ an extension, a repository name — is ever handed to the child or parsed by a
 shell, because `Command::new` is used rather than a shell string. This is the
 first half of the security stance; the second half concerns Git's output, below.
 
-`-z` is mandatory rather than an optimisation. Without it, Git C-quotes a path
+`-z` is mandatory rather than an optimization. Without it, Git C-quotes a path
 containing a space, a quote, or a non-ASCII byte, and the quoted form is not a
 path this tool should attempt to unquote. `--deduplicate` collapses the three
 listings an unresolved merge produces — one per index stage — and the domain
@@ -171,9 +173,12 @@ argument order.
 The policy is a pure function of a candidate list and a `PathProbe`. A
 candidate is kept only if its last extension is in the configured set — matched
 ASCII case-insensitively, with a leading dot accepted — and the probe reports a
-regular file. An absent candidate (a staged deletion), a symbolic link, and
-anything else are skipped silently, because each is an ordinary repository
-state rather than a user error. The probe's answer carries a `FileIdentity`,
+regular file. An absent candidate (a staged deletion), a symbolic link, a
+candidate whose canonical path leaves the working directory — what a symlinked
+ancestor produces — and anything else are skipped silently, because each is an
+ordinary repository state rather than a user error, and writing a candidate that
+leaves the working directory would write outside the tree the selection was made
+in. The probe's answer carries a `FileIdentity`,
 which is the canonicalized path: two names for one file collapse, and two hard
 links to one inode do not. Keying identity on `(st_dev, st_ino)` would be the
 opposite mistake, because `--in-place` replaces a file through a temporary file
@@ -236,15 +241,19 @@ _The tool's own line is wrapped here to fit this page: one cause is printed on
 one line, however long it is._
 
 The refusal is per file, so every other selected file is still rewritten.
-Marker detection requires all three forms — a line of seven `<`, a line of seven
-`=`, and a line of seven `>` — each with an exact seven-character run, so a
-document that merely discusses conflict markers is not mistaken for a
-conflicted one, and a setext heading underline is not read as a separator. All
-three are scanned only while an operation is in progress, because a fenced
-example quoting all three is otherwise indistinguishable from a conflict, and
-refusing to rewrite it would be a false alarm about a file nothing is merging.
-`--allow-conflicted` is the escape hatch for the case where the verdict is
-wrong.
+Marker detection requires all three forms — a line of at least seven `<`, a line
+of at least seven `=`, and a line of at least seven `>` — each with a run of at
+least seven characters, so a document that merely discusses conflict markers is
+not mistaken for a conflicted one, and a setext heading underline is not read as
+a separator. Seven is Git's default marker length rather than its only one:
+`conflict-marker-size` lengthens the run Git writes, and the guard does not read
+`.gitattributes`, so a guard that demanded exactly seven would read a longer
+marker as ordinary Markdown. The longer run instead costs a false positive that
+`--allow-conflicted` overrides. All three are scanned only while an operation is
+in progress, because a fenced example quoting all three is otherwise
+indistinguishable from a conflict, and refusing to rewrite it would be a false
+alarm about a file nothing is merging. `--allow-conflicted` is the escape
+hatch for the case where the verdict is wrong.
 
 ### Git's diagnostics are untrusted input
 
@@ -327,6 +336,10 @@ otherwise meet a line that is not a path.
   repository that keeps its Markdown behind links selects nothing from them.
   This is the same refusal `--in-place` makes for a positional path, moved to
   selection, where it can no longer fail a run.
+- A candidate reached through a symlinked directory is skipped once its
+  canonical path leaves the working tree, so a repository that keeps its
+  Markdown behind such links selects nothing from them. Writing it would write
+  outside the tree the selection was made in.
 - The conflict guard is a heuristic in both directions. It refuses a document
   that quotes all three marker forms inside a fence during a real operation,
   and it does not detect conflict markers left behind by an operation that has

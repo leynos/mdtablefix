@@ -21,8 +21,14 @@ const CONFLICTED: &str = "<<<<<<< HEAD\n| A | B |\n=======\n| A | C |\n>>>>>>> s
 #[case("<<<<<<< HEAD\n| A |\n=======\n| B |\n", false)]
 #[case("<<<<<<< HEAD\n| A |\n>>>>>>> side\n", false)]
 #[case("| A |\n=======\n| B |\n>>>>>>> side\n", false)]
-// An exact seven-character run, at the start of a line.
-#[case("<<<<<<<< HEAD\n=======\n>>>>>>> side\n", false)]
+// Seven, Git's default length, at the start of a line.
+// A longer run is the same marker at a configured `conflict-marker-size`, so
+// the length is a floor rather than a measurement: eight `<` is emphasis in
+// general prose, and is not one during an operation this scan is gated on.
+#[case("<<<<<<<< HEAD\n=======\n>>>>>>> side\n", true)]
+#[case("<<<<<<<<<<<< HEAD\n============\n>>>>>>>>>>>> side\n", true)]
+// Not at the start of a line, which is where a run is a setext heading
+// underline or emphasis rather than a marker.
 #[case("  <<<<<<< HEAD\n=======\n>>>>>>> side\n", false)]
 #[case("<<<<<<< HEAD\n =======\n>>>>>>> side\n", false)]
 // A fenced example that mentions one marker, which is what prose about
@@ -35,9 +41,9 @@ fn all_three_markers_are_required_at_the_start_of_a_line(
     assert_eq!(has_conflict_markers(content), expected, "{content:?}");
 }
 
-/// The case the exactness buys: a setext heading underline is seven `=`
-/// characters at the start of a line, and prose can name the other two markers
-/// without writing them at the start of a line.
+/// What requiring all three forms buys: prose can name a marker without
+/// writing one at the start of a line, so a setext heading underline supplies
+/// the separator and nothing else.
 #[test]
 fn a_document_about_conflict_markers_is_not_a_conflicted_one() {
     let prose = "Resolving conflicts\n=======\n\nGit writes `<<<<<<< HEAD` where the first side \

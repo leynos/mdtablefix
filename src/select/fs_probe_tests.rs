@@ -75,6 +75,77 @@ fn a_symlink_is_a_link_even_when_its_target_is_a_regular_file() {
     assert_eq!(probe(&root, "alias.md"), PathKind::Symlink);
 }
 
+/// The escape a symlinked directory makes possible, and the reason the probe
+/// compares canonical paths.
+///
+/// `symlink_metadata` does not follow the final component, but it does follow
+/// an ancestor, so a tracked `docs/guide.md` whose `docs` is now a link out of
+/// the tree is reported as a regular file. Selecting it would write through the
+/// link, to a file the selection never named.
+#[cfg(unix)]
+#[test]
+fn a_candidate_behind_a_symlinked_directory_is_outside_the_root() {
+    let (_guard, root) = temp_root();
+    let (_outside_guard, outside) = temp_root();
+    write(&outside, "guide.md", "|A|B|\n");
+    std::os::unix::fs::symlink(&outside, root.join("docs")).expect("link the fixture directory");
+
+    // The premise: the candidate is a regular file where the link points, so
+    // this case fails for an implementation that never leaves `root`.
+    assert!(
+        outside.join("guide.md").is_file(),
+        "the link must point at a regular file, or the case proves nothing"
+    );
+    assert_eq!(probe(&root, "docs/guide.md"), PathKind::OutsideRoot);
+
+    let selected = select_files(
+        &[at("docs/guide.md")],
+        &root,
+        &ExtensionFilter::default(),
+        &AmbientPathProbe,
+    );
+    assert!(
+        selected.is_empty(),
+        "a candidate that leaves the tree is not selected, got {selected:?}"
+    );
+}
+
+/// The other side of the same rule: a link among a candidate's ancestors is not
+/// itself the problem, so a link that stays inside the tree selects as usual.
+///
+/// Confinement is what the rule tests, rather than the absence of links, which
+/// is why this case is not a link the probe may ignore.
+#[cfg(unix)]
+#[test]
+fn a_candidate_behind_an_in_tree_link_is_confined() {
+    let (_guard, root) = temp_root();
+    write(&root, "real/guide.md", "|A|B|\n");
+    std::os::unix::fs::symlink("real", root.join("docs")).expect("link the fixture directory");
+
+    assert!(
+        matches!(probe(&root, "docs/guide.md"), PathKind::RegularFile(_)),
+        "a link to a directory inside the tree is still inside the tree"
+    );
+}
+
+/// A tree may itself be reached through a link, so both sides of the comparison
+/// are canonicalized rather than only the candidate.
+#[cfg(unix)]
+#[test]
+fn a_root_reached_through_a_link_still_confines_its_candidates() {
+    let (_guard, base) = temp_root();
+    write(&base, "real/docs/guide.md", "|A|B|\n");
+    std::os::unix::fs::symlink("real", base.join("link")).expect("link the fixture root");
+
+    assert!(
+        matches!(
+            probe(&base.join("link"), "docs/guide.md"),
+            PathKind::RegularFile(_)
+        ),
+        "a root named through a link is the same tree as the one it names"
+    );
+}
+
 #[test]
 fn an_absent_path_is_missing() {
     let (_guard, root) = temp_root();
