@@ -5395,6 +5395,16 @@ green:
   scenarios.
 - `make nixie` — every diagram validated.
 
+Because that run's only red gate was a markdown one that the tree then moved
+past, the whole set was run again over the pushed head `cdcec23`, with fresh
+logs at `/tmp/<gate>-regated-mdtablefix-check-option.out` so nothing could
+overwrite the earlier evidence. All six are green there: `check-fmt` 2s, `lint`
+0s (warm), `typecheck` 1s, `test` 46s over both invocations — 45 test binaries
+plus the doc-test suite, 1884 passed, 0 failed, 20 ignored, all of the ignored
+in the doctest run — `markdownlint` 34 files and 0 errors, and `nixie` with
+every Mermaid diagram validated. That is the record the queued review will be
+judged against.
+
 **A second gate failure, taken as a finding.** `make markdownlint` was red over
 the same tree — 5 errors across 34 files — and both causes were this round's own
 documentation work rather than anything pre-existing. The build-and-test table
