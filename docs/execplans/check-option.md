@@ -5984,3 +5984,69 @@ nothing in this commit changes either position. No thread is unresolved and
 none is unanswered. `@coderabbitai resume` is the documented way out of the
 pause, and it is worth asking for once the branch is quiet rather than now,
 while commits are still landing.
+
+### Revision 29, 2026-09-12 — the writer's message, not just its kind
+
+**The requested test was already there.** The round asked for a focused unit test
+of output-writer error propagation from `write_unified_diff`: a test-only
+`io::Write` that fails with a known `BrokenPipe` and a flush that succeeds,
+called with different original and formatted input, asserting the error comes
+back with the injected kind. All of that landed in `530bdbd` as `FailingWriter`
+(`src/report/render_tests.rs:23`) and
+`a_failing_writer_error_reaches_the_caller` (`:191`). It lives in
+`src/report/render_tests.rs` rather than `src/report/render.rs` because the
+module at `src/report/render.rs:199` is a `#[path]` include of that file, which
+is the repository's test layout for this component. A second, near-identical
+test would have been a duplicate, so the round's one real gap became the work.
+
+**The gap: the kind was pinned, the message was not.** The test asserted
+`error.kind() == io::ErrorKind::BrokenPipe` and stopped there, with a comment
+claiming this showed the writer's own error reached the caller. The claim was
+stronger than the assertion: a renderer that re-wrapped the failure as
+`io::Error::new(BrokenPipe, "diff failed")` keeps the kind and loses the message,
+and the test would still pass. Revision 28 repeated that overclaim when it
+described the row as asserting "the returned error's kind so a substituted error
+fails the test".
+
+**`80f80d1` closes it.** The injected message is named once, as
+`WRITER_FAILURE_MESSAGE` (`:16`), used by the writer and by the assertion, and
+the test now checks `error.to_string()` against it as well as the kind
+(`:206`). The message is what separates passing an error through from
+manufacturing one; a string literal written twice would have matched the
+substitution and passed, which is why the constant earns its place. Both `budget`
+arms assert it — the one that fails before any byte is written and the one that
+fails inside the rendered body — and the four existing byte-output and snapshot
+tests are untouched.
+
+**Why the message is stable here.** `similar` 2.7.0's `UnifiedDiff::to_writer`
+(`src/udiff.rs:181`) writes with `writeln!` and `write!`, so the bytes pass
+through `io::Write::write_fmt`. That adapter does not turn the writer's failure
+into a `fmt::Error`: it saves the underlying `io::Error` and returns it
+unchanged, and `write_all` propagates `Err(e)` as-is. The message reaching the
+caller is the writer's own. This is observed rather than assumed — the assertion
+held on both arms first time.
+
+**Gates.** `cargo fmt --check` exits 0, after one reflow that rustfmt asked for.
+The smallest relevant target,
+`RUSTFLAGS="-D warnings" cargo test --lib -- report::render::tests`, passes 32
+tests with both `a_failing_writer_error_reaches_the_caller` cases `ok`. The full
+set at `80f80d1` was run sequentially through `scrutineer`: `check-fmt` 2s, `lint`
+4s with `check-static-regexes` met, `typecheck` 1s, and
+`RUSTFLAGS="-D warnings" cargo test --all-features --no-fail-fast` 107s over 46
+binaries — `1890 passed, 0 failed, 20 ignored`, both changed cases `ok` — plus
+`markdownlint` and `nixie`. The nominated test command is the commit gate here in
+place of `make test`, because this crate has no `benches/` or `examples/`
+directory and no explicit `[[bench]]`, `[[example]]`, or `[[test]]` sections, so
+it already covers the library, the binary, every `tests/*` integration suite and
+the doc tests that `make test` runs as its two lines; the equivalence was checked
+rather than assumed. The Windows cross-check
+`RUSTFLAGS="-D warnings" cargo check --target x86_64-pc-windows-msvc
+--all-targets --all-features` exits 0 with no warnings, so the new code is
+portable and the hazard of Revision 27 does not repeat.
+
+**The test tally did not move.** 1890 passed at `9834fcb` and 1890 here: this
+commit changes what an existing test asserts, not how many tests exist.
+
+**Review status.** `6388d9a7` is queued for PR #464 and has not posted; the
+branch's head is now `80f80d1`, so the review will read a diff that includes this
+commit. No inline thread is outstanding from the paused round.
