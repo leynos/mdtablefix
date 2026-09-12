@@ -18,6 +18,21 @@ use rstest_bdd_macros::scenario;
 
 use crate::steps::ReportingState;
 
+/// References each specification so Cargo recompiles this target when one
+/// changes.
+///
+/// Cargo fingerprints a test target by its source and by every file it
+/// `include_str!`s, but `#[scenario]` reads the feature file itself. Without
+/// these references a feature file edited on its own leaves the previously
+/// expanded binary in place, and a local `make test` can pass scenarios that no
+/// longer parse — which is precisely the compile-time validation the strict
+/// mode exists to provide. Touching the bindings by hand is not required of
+/// anyone who edits a feature file.
+const _: [&str; 2] = [
+    include_str!("features/check_mode.feature"),
+    include_str!("features/diff_mode.feature"),
+];
+
 /// The per-scenario state every generated test builds for itself.
 #[test_macros::allow_fixture_expansion_lints]
 #[rstest::fixture]
