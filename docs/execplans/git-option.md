@@ -10,9 +10,11 @@ Status: COMPLETE — 2026-09-12, at commit `6384543`, since rebased onto
 `origin/check-option` four times the same day as the base kept moving — onto
 `64117e4`, then `49a2d0a`, then `e462b97`, and finally `6be1a76`, each recorded
 in `Progress` with the measurement of what it moved — on branch `git-option`,
-stacked on pull request #464 and carried by pull request #466. The prerequisite
-extraction of `Cli` and `FormatOpts` landed, in the base's `src/command.rs`
-rather than in a `src/cli.rs` of this branch's own, and Stage A is discharged.
+stacked on pull request #464 and carried by pull request #466, which was marked
+ready for review the same day while its base #464 remained open. The
+prerequisite extraction of `Cli` and `FormatOpts` landed, in the base's
+`src/command.rs` rather than in a `src/cli.rs` of this branch's own, and Stage A
+is discharged.
 All four milestones — EP-M0's grammar measurement, EP-M1's selection tree,
 EP-M2's command-line surface, and EP-M3's documentation — are delivered. Every
 deterministic gate is green on the milestone tree, the six CodeRabbit rounds
@@ -2435,6 +2437,51 @@ plateau.
       request, which is the distinction `EX-M4-CR-SCOPE` records because a
       deferral and a clean review both read as "no findings". No rate, seat, or
       quota limit was reported, so no wait was needed.
+- [x] (2026-09-12) **The rebase instruction was re-issued and measured a
+      no-op**, which is a result rather than a step skipped. `origin/check-option`
+      has not moved since the fourth rebase: `git ls-remote origin
+      refs/heads/check-option` returns
+      `6be1a76af63045837205cff7fcbeafffa1b746b1`, the commit this branch was
+      rebased onto, `git merge-base --is-ancestor origin/check-option HEAD`
+      succeeds, and `git rev-list --left-right --count
+      origin/check-option...HEAD` reads `0 36`. Nothing was replayed and no
+      conflict arose, so there was nothing to resolve and no recovery path to
+      exercise; the branch already stood on the rebased tree rather than
+      awaiting one. Replaying the rebase here would have rewritten 36 commits
+      to arrive at the tree they already stood on, and that is the cost the
+      measurement avoids.
+- [x] (2026-09-12) **An entity-level reading of the branch's diff, taken with
+      `sem`**, as a second view beside `git diff --stat` rather than instead of
+      it: 36 files, 460 entity changes — 306 added, 129 modified, 2 renamed, 22
+      orphan, and one chunk reported as deleted. Each flagged item is accounted
+      for by the line diff, which is what the reading is for: the two renames
+      are the user guide's heading retitled from three file modes to four and a
+      `Cargo.lock` chunk whose boundaries moved, the deleted chunk is the
+      `Makefile`'s `.PHONY` line rewritten to list the new `mutants` target
+      (`git diff --numstat` gives that file 15 insertions and 1 deletion, and
+      the deletion is that line), and the orphans are prose and test-support
+      entities outside the summariser's reference set. A summariser printing
+      "renamed" is not itself evidence of a rename, so the reading is recorded
+      with its reconciliation rather than as a finding.
+- [x] (2026-09-12) The four gates the re-issued instruction names were run over
+      the pushed tree through `scrutineer`, sequentially, and all four are
+      green at `8e4d734`: `make check-fmt` (exit 0, no diff),
+      `make typecheck` (exit 0), `make lint` (exit 0 — `check-static-regexes`
+      clean and clippy under `-D warnings` reporting zero warnings), and
+      `make test` (exit 0 — 2014 passed, 0 failed, 20 ignored across 48 result
+      lines, the largest binaries reporting 947, 244, and 152 passing, with 40
+      doctests passing). Logs:
+      `/tmp/gate5-{check-fmt,typecheck,lint,test}-git-option.out`.
+- [x] (2026-09-12) **Pull request #466 was marked ready for review**, ending
+      the draft posture it had carried since it was opened. The draft was
+      deliberate — a stack's upper pull request is normally held while the
+      lower one is unmerged, so that a reviewer reads a diff whose base is
+      fixed — and `gh pr view 464` gives `state OPEN` with `mergedAt null`, so
+      the reason had not expired when the instruction superseded it. The
+      Decision log records the reversal, the cost it carries (comments may
+      land on a base that can still move, at one rebase per move), and the
+      mitigation this plan already practises: each rebase is recorded beside
+      the commit each verdict describes.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
@@ -3523,6 +3570,23 @@ is the durable record, and EP-M3 reconciles this log into it.
   `4de8a7d`, nothing here prevents it, and the branch's diff against its base is
   36 files, 8891 insertions, and 144 deletions. Date/Author: 2026-09-12, EP-M4
   (review).
+
+- Decision: **mark pull request #466 ready for review while its base is
+  unmerged**, on the requester's instruction, which reverses the draft posture
+  the pull request has carried since it was opened. The draft was deliberate
+  rather than incidental: this branch is stacked on #464, and a stack's upper
+  pull request is normally held until the lower one merges, so that a reviewer
+  reads a diff whose base is fixed. `gh pr view 464` gives `state OPEN` and
+  `mergedAt null`, so the base has not merged and that reason has not expired —
+  it is superseded by the instruction rather than satisfied, and the difference
+  is worth keeping. Cost, stated here rather than discovered later: review
+  comments may arrive against a base that can still move, and each move costs a
+  rebase, four of which are already recorded above with the measurement of what
+  each moved, so a comment anchored to a line a later rebase renumbers is
+  possible. The mitigation is the practice this plan already follows: every
+  rebase is recorded beside the commit each verdict describes, and the branch's
+  own files are measured as unchanged across the moves rather than assumed to
+  be. Date/Author: 2026-09-12, EP-M4 (review).
 
 ## Outcomes & retrospective
 
