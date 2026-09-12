@@ -42,6 +42,12 @@ fn extend_the_selection_to_untracked_files(#[from(state)] _state: GitSelectionSt
 )]
 fn list_the_selection_without_acting(#[from(state)] _state: GitSelectionState) {}
 
+#[scenario(
+    path = "tests/features/git_file_selection.feature",
+    name = "Print the formatted documents instead of writing them"
+)]
+fn print_the_formatted_documents(#[from(state)] _state: GitSelectionState) {}
+
 #[cfg(unix)]
 #[scenario(
     path = "tests/features/git_file_selection.feature",
@@ -90,6 +96,12 @@ fn rewrite_a_conflicted_file_when_allowed(#[from(state)] _state: GitSelectionSta
     name = "Report drift across the repository without changing it"
 )]
 fn report_drift_across_the_repository(#[from(state)] _state: GitSelectionState) {}
+
+#[scenario(
+    path = "tests/features/git_file_selection.feature",
+    name = "Report a diff across the repository without changing it"
+)]
+fn report_a_diff_across_the_repository(#[from(state)] _state: GitSelectionState) {}
 
 #[scenario(
     path = "tests/features/git_file_selection.feature",

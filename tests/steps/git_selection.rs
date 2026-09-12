@@ -5,213 +5,39 @@
 //! contract rather than a reimplementation of it. The bindings themselves are
 //! in `tests/git_file_selection.rs`, which must declare this module before
 //! them: step registration happens at macro-expansion time, so a binding
-//! expanded first would not yet see these definitions.
-//!
-//! Two pieces of the environment are neutralised rather than inherited. The
-//! fixture repository sets `GIT_CONFIG_NOSYSTEM`, `GIT_CONFIG_GLOBAL`, and
-//! `HOME`, because the developer's own `core.excludesFile` would otherwise leak
-//! into the selection the scenarios assert on — which is exactly the ambient
-//! input CON-SAFE-001 exists to control. And `git commit` needs an identity,
-//! which `GIT_CONFIG_GLOBAL=/dev/null` removes, so the fixture supplies one
-//! through the environment instead of a configuration file it would then have
-//! to clean up.
+//! expanded first would not yet see these definitions. The fixture repository
+//! and the helpers are in [`fixture`].
 //!
 //! Nothing here asserts on git's own message text: the only diagnostic the
 //! scenarios read is this tool's wrapper wording, per AX-GIT-NLS.
 
-use std::{
-    ffi::OsStr,
-    fs,
-    path::{Path, PathBuf},
-    process::Command as ProcessCommand,
+use std::{ffi::OsStr, fs};
+
+use rstest_bdd_macros::{given, then, when};
+
+// The path is stated because this module is itself loaded through a `#[path]`
+// attribute, which leaves Rust looking for a child module beside this file
+// rather than in a directory named after it.
+#[path = "git_selection/fixture.rs"]
+mod fixture;
+
+// Re-exported because the scenario bindings name the state type, and they live
+// in the test crate's root module rather than beside the steps.
+pub use fixture::GitSelectionState;
+use fixture::{
+    CLEAN,
+    RAGGED,
+    before_bytes,
+    commit_file,
+    git,
+    git_raw,
+    last_run,
+    repo_path,
+    run_directory,
+    run_once,
+    snapshot,
+    write_fixture,
 };
-
-use assert_cmd::Command;
-use rstest_bdd::Slot;
-use rstest_bdd_macros::{ScenarioState, given, then, when};
-use tempfile::TempDir;
-
-/// A ragged table, which every mode must agree needs reformatting.
-pub const RAGGED: &str = "|A|B|\n|---|---|\n|1|2|\n";
-
-/// The same table already aligned, which no mode may change.
-///
-/// These are the formatter's own bytes: cells are padded to the delimiter row's
-/// width, so `| A | B |` would itself be drift.
-pub const CLEAN: &str = "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n";
-
-/// The name and address the fixture commits under.
-///
-/// `GIT_CONFIG_GLOBAL=/dev/null` leaves `git commit` with no `user.name`, and
-/// the fixture must not write a configuration file the selection could then
-/// read.
-const IDENTITY_NAME: &str = "mdtablefix tests";
-const IDENTITY_EMAIL: &str = "tests@example.invalid";
-
-/// What one run of the binary produced.
-#[derive(Clone, Debug)]
-pub struct Run {
-    /// The process exit status, or `-1` when the process was signalled.
-    pub status: i32,
-    /// Standard output as text.
-    pub stdout: String,
-    /// Standard error as text.
-    pub stderr: String,
-}
-
-/// The state one scenario accumulates.
-///
-/// Each field is a `Slot`, so a step borrows the whole state immutably and
-/// fills one slot, which is what lets `Given`, `When`, and `Then` share data
-/// without a mutable borrow crossing a step boundary.
-#[derive(Default, ScenarioState)]
-pub struct GitSelectionState {
-    /// The fixture repository, created by the first `Given`.
-    repo: Slot<TempDir>,
-    /// A directory outside any repository, for the scenario that needs one.
-    elsewhere: Slot<TempDir>,
-    /// The directory the command runs in, when it is not the repository root.
-    run_dir: Slot<PathBuf>,
-    /// Every fixture file's bytes immediately before the run.
-    before: Slot<Vec<(String, Vec<u8>)>>,
-    /// The most recent run.
-    run: Slot<Run>,
-}
-
-/// The fixture repository's root, created on first use.
-///
-/// The directory is created lazily rather than by a dedicated step so that the
-/// first `Given` in a scenario decides what kind of repository it is: that step
-/// writes the ignore file and runs `git init` into the directory this returns.
-/// A `Slot` is filled through `get_or_insert_with` because `get` requires
-/// `T: Clone`, which `TempDir` is not.
-fn repo_path(state: &GitSelectionState) -> PathBuf {
-    state
-        .repo
-        .get_or_insert_with(|| tempfile::tempdir().expect("create temporary directory"))
-        .path()
-        .to_path_buf()
-}
-
-/// The directory the command runs in, which is the repository root unless a
-/// step moved it.
-fn run_directory(state: &GitSelectionState) -> PathBuf {
-    state.run_dir.get().unwrap_or_else(|| repo_path(state))
-}
-
-/// Runs `git` in `directory` with the fixture's hardened environment, returning
-/// the raw output without judging it.
-///
-/// A failed `git` is a legitimate result here: the fixture's merge is expected
-/// to conflict, and that is how the conflict is created rather than mocked.
-fn git_raw(directory: &Path, args: &[&str]) -> std::process::Output {
-    ProcessCommand::new("git")
-        .current_dir(directory)
-        .args(args)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("HOME", directory)
-        .env("LC_ALL", "C")
-        .env("LANGUAGE", "")
-        .env("GIT_AUTHOR_NAME", IDENTITY_NAME)
-        .env("GIT_AUTHOR_EMAIL", IDENTITY_EMAIL)
-        .env("GIT_COMMITTER_NAME", IDENTITY_NAME)
-        .env("GIT_COMMITTER_EMAIL", IDENTITY_EMAIL)
-        .output()
-        .expect("run git; the fixture needs it on PATH")
-}
-
-/// Runs `git` in `directory`, requiring it to succeed.
-fn git(directory: &Path, args: &[&str]) {
-    let output = git_raw(directory, args);
-    assert!(
-        output.status.success(),
-        "git {args:?} failed with {}: {}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-/// Creates the parent directories of `path` and writes `content` there.
-fn write_fixture(path: &Path, content: &str) {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).expect("create the fixture's directory");
-    }
-    fs::write(path, content).expect("write a fixture");
-}
-
-/// Writes `name` with a broken table, stages it, and commits it.
-fn commit_file(state: &GitSelectionState, name: &str, content: &str) {
-    let repo = repo_path(state);
-    write_fixture(&repo.join(name), content);
-    git(&repo, &["add", "--", name]);
-    git(&repo, &["commit", "-m", &format!("add {name}")]);
-}
-
-/// Every fixture file under `root`, excluding `.git`, as a relative path paired
-/// with its bytes.
-///
-/// A symbolic link is recorded as its target's text rather than followed, so a
-/// rewrite through a link would show up twice: as a content change at the
-/// target, and as a type change here. `.git` is excluded because `git ls-files`
-/// may refresh the index it holds, which is not a change this tool made.
-fn snapshot(root: &Path) -> Vec<(String, Vec<u8>)> {
-    fn walk(root: &Path, directory: &Path, entries: &mut Vec<(String, Vec<u8>)>) {
-        for entry in fs::read_dir(directory).expect("read the fixture directory") {
-            let entry = entry.expect("read a fixture directory entry");
-            let path = entry.path();
-            let name = entry.file_name();
-            if name == OsStr::new(".git") {
-                continue;
-            }
-            // The key is spelled with `/` on every platform, because that is
-            // how the feature file and the steps name their files; a Windows
-            // separator here would make every lookup miss and read as a fixture
-            // file that was never written.
-            let relative = path
-                .strip_prefix(root)
-                .expect("every entry is beneath the root")
-                .components()
-                .map(|part| part.as_os_str().to_string_lossy().into_owned())
-                .collect::<Vec<_>>()
-                .join("/");
-            let metadata = fs::symlink_metadata(&path).expect("read fixture metadata");
-            if metadata.file_type().is_symlink() {
-                let target = fs::read_link(&path).expect("read the link target");
-                entries.push((relative, target.to_string_lossy().into_owned().into_bytes()));
-            } else if metadata.is_dir() {
-                walk(root, &path, entries);
-            } else {
-                entries.push((relative, fs::read(&path).expect("read a fixture")));
-            }
-        }
-    }
-
-    let mut entries = Vec::new();
-    walk(root, root, &mut entries);
-    entries.sort();
-    entries
-}
-
-/// The bytes the fixture recorded for `name` before the run.
-fn before_bytes(state: &GitSelectionState, name: &str) -> Vec<u8> {
-    state
-        .before
-        .get()
-        .expect("the run must capture the fixture's bytes first")
-        .into_iter()
-        .find(|(path, _)| path == name)
-        .unwrap_or_else(|| panic!("{name} was not part of the fixture before the run"))
-        .1
-}
-
-/// The most recent run, which every `Then` step reads.
-fn last_run(state: &GitSelectionState) -> Run {
-    state
-        .run
-        .get()
-        .expect("the scenario must run mdtablefix before asserting on it")
-}
 
 #[given("a Git repository containing a committed file {name:string} with a broken table")]
 fn repository_with_committed_file(state: &GitSelectionState, name: String) {
@@ -295,6 +121,10 @@ fn directory_replaced_by_a_file(state: &GitSelectionState, name: String) {
 /// of `name` differently, and `git merge` is allowed to fail, which is how
 /// `MERGE_HEAD` comes to exist. The conflicted file therefore carries the three
 /// marker forms because git wrote them, not because the fixture did.
+///
+/// Both sides are ragged rather than formatted, so that a permitted rewrite is
+/// observable in the file's bytes: a fixture of already-formatted content would
+/// make the scenario pass whether or not anything was written.
 #[given("an unresolved merge conflict in the tracked file {name:string}")]
 fn unresolved_merge_conflict(state: &GitSelectionState, name: String) {
     let repo = repo_path(state);
@@ -357,31 +187,6 @@ fn outside_a_repository(state: &GitSelectionState) {
         .elsewhere
         .get_or_insert_with(|| tempfile::tempdir().expect("create temporary directory"));
     state.run_dir.set(elsewhere.path().to_path_buf());
-}
-
-/// Runs the binary once in `directory`, without recording it.
-fn run_once(directory: &Path, flags: &str) -> Run {
-    let output = Command::cargo_bin("mdtablefix")
-        .expect("cargo binary")
-        .current_dir(directory)
-        .args(flags.split_whitespace())
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("HOME", directory)
-        .env("LC_ALL", "C")
-        .env("LANGUAGE", "")
-        // Standard input carries a document the tool would print had it read
-        // it, which is what makes "standard input was not read" observable
-        // rather than assumed: the assertion is that standard output is empty.
-        .write_stdin(RAGGED)
-        .output()
-        .expect("run mdtablefix");
-
-    Run {
-        status: output.status.code().unwrap_or(-1),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    }
 }
 
 #[when("I run mdtablefix with {flags:string}")]
@@ -456,6 +261,22 @@ fn stdout_names(state: &GitSelectionState, name: String) {
     );
 }
 
+/// Standard output carries `text`, without pinning the rest of it.
+///
+/// Separate from [`stdout_names`] and from the exact rendering because the two
+/// reporting modes that use it print a whole document or a diff: the assertion
+/// is about the payload being there, and the surrounding framing is not this
+/// step's subject.
+#[then("stdout contains {text:string}")]
+fn stdout_contains(state: &GitSelectionState, text: String) {
+    let run = last_run(state);
+    assert!(
+        run.stdout.contains(&text),
+        "standard output must contain {text:?}: {:?}",
+        run.stdout
+    );
+}
+
 #[then("stderr contains {text:string}")]
 fn stderr_contains(state: &GitSelectionState, text: String) {
     let run = last_run(state);
@@ -494,6 +315,34 @@ fn file_has_a_reflowed_table(state: &GitSelectionState, name: String) {
         before_bytes(state, &name).as_slice(),
         "{name} must actually have changed, or the assertion is vacuous"
     );
+}
+
+/// The rewrite a permitted conflict leaves, markers and all.
+///
+/// Both halves are needed, and neither alone would do: a refusal satisfies the
+/// marker assertion, and a rewrite that discarded the markers satisfies the
+/// byte comparison, so the scenario would pass for two implementations that
+/// are not the one it specifies. The markers are counted rather than merely
+/// found, because a marker run shorter than the seven characters the guard
+/// reads is no longer a conflict marker at all.
+#[then("the file {name:string} is rewritten with its conflict markers intact")]
+fn rewritten_with_markers(state: &GitSelectionState, name: String) {
+    let path = repo_path(state).join(&name);
+    let content = fs::read(&path).expect("read the rewritten fixture");
+    assert_ne!(
+        content,
+        before_bytes(state, &name),
+        "{name} must actually have been rewritten, or the scenario proves nothing"
+    );
+
+    let text = String::from_utf8(content).expect("the rewritten fixture is UTF-8");
+    for marker in ["<<<<<<<", "=======", ">>>>>>>"] {
+        let lines = text.lines().filter(|line| line.starts_with(marker)).count();
+        assert_eq!(
+            lines, 1,
+            "{name} must still carry exactly one {marker} line: {text:?}"
+        );
+    }
 }
 
 #[then("the file {name:string} is unchanged")]

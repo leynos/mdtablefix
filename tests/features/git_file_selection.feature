@@ -31,6 +31,12 @@ Feature: Select files from a Git repository
     And stdout is exactly "docs/guide.md"
     And the file "docs/guide.md" is unchanged
 
+  Scenario: Print the formatted documents instead of writing them
+    When I run mdtablefix with "--git"
+    Then the command succeeds
+    And stdout contains "| A   | B   |"
+    And the file "docs/guide.md" is unchanged
+
   Scenario: Never write through a symlink
     Given a committed symlink "docs/alias.md" pointing at "../src/lib.rs"
     When I run mdtablefix with "--git --in-place"
@@ -76,11 +82,19 @@ Feature: Select files from a Git repository
     Given an unresolved merge conflict in the tracked file "docs/guide.md"
     When I run mdtablefix with "--git --in-place --allow-conflicted"
     Then the command succeeds
+    And the file "docs/guide.md" is rewritten with its conflict markers intact
 
   Scenario: Report drift across the repository without changing it
     When I run mdtablefix with "--git --check"
     Then the exit status is 1
     And stdout names "docs/guide.md"
+    And the file "docs/guide.md" is unchanged
+
+  Scenario: Report a diff across the repository without changing it
+    When I run mdtablefix with "--git --diff"
+    Then the exit status is 1
+    And stdout contains "--- docs/guide.md"
+    And stdout contains "| A   | B   |"
     And the file "docs/guide.md" is unchanged
 
   Scenario: Report a clean repository
