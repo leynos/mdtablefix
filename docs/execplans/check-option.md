@@ -325,8 +325,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
       temporary local mutations, each was rejected, and each was reverted; see
       `Artefacts and notes → EP-M2 green transcripts`.
 - [x] EP-M3 Driver, read-only capability, `--check`, exit-status contract.
-      Complete. `src/driver.rs` and `src/driver_tests.rs` are new, `src/main.rs`
-      is now an adapter over `driver::analyse`, and
+      Complete. `src/driver.rs` and `src/driver_tests.rs` are new (that test
+      file was later split into the three modules named in Revision 22; the
+      path stands here as the milestone's own record). `src/main.rs` is now an
+      adapter over `driver::analyse`, and
       `tests/features/check_mode.feature` with `tests/steps/reporting.rs` and
       `tests/bdd_reporting.rs` drive the real binary. All gates pass, and the
       post-gates CodeRabbit pass returned `review_completed` with zero findings
@@ -341,8 +343,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
       `--in-place` about what would be written. Covered by
       `tests/features/diff_mode.feature` (six scenarios),
       `tests/bdd_reporting.rs`, `tests/cli_diff.rs` (five tests), the `Mode::Diff`
-      cells of the `src/driver_tests.rs` exit-status cross product, and the fourth
-      mode in `tests/cli_check.rs`'s matrix. The `INV-DETERMINISTIC` negative
+      cells of the exit-status cross product now split across the three driver
+      test modules named in Revision 22, and the fourth mode in
+      `tests/cli_check.rs`'s matrix. The `INV-DETERMINISTIC` negative
       control was applied and removed; it confirmed the hazard on the transition
       band and exposed a blind spot in the method, both recorded in
       `Artefacts and notes → INV-DETERMINISTIC negative control`. All six gates
