@@ -1,9 +1,15 @@
 //! Arguments that fail resolution, before any file is analysed.
 
+// The only case here builds its argument from a raw byte vector, which has no
+// portable spelling, so on other platforms the imports have nothing to serve
+// and would be dead under `-D warnings`.
+#[cfg(unix)]
 use std::fs;
 
+#[cfg(unix)]
 use tempfile::tempdir;
 
+#[cfg(unix)]
 use super::{CLEAN, run_in_os, status_of, stderr_of, stdout_of};
 
 /// A path that is not valid UTF-8 fails the whole run, not just that one file.
