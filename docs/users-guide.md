@@ -670,9 +670,10 @@ assert!(serialize_lines(&[], ending).is_empty());
 ### Reporting: line deltas and unified diffs
 
 `mdtablefix::report` is the pure half of `--check` and `--diff`. Nothing in it
-opens a path, writes to a stream, or defines an error type: it counts what
-changed and renders it, so a library caller produces exactly what the command
-line reports without restating the counting rule.
+opens a path, chooses an output stream, or defines an error type: it counts
+what changed and renders it into a writer the caller supplies, so a library
+caller produces exactly what the command line reports without restating the
+counting rule.
 
 `LineDelta::between(original, formatted)` counts the lines that turning
 `original` into `formatted` would insert and delete. A modified line counts as

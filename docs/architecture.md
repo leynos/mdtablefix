@@ -735,16 +735,17 @@ replaces each file atomically and both modes report errors on stderr._
 The CLI's mode flags select three behaviours besides the default printing.
 `--check` reports one line per drifting file, `--diff` reports a unified diff
 per drifting file, and `--in-place` rewrites drifting files. The two reporting
-modes exit `1` when they find drift, `2` when a file cannot be read or
-rewritten, and `0` otherwise; `--in-place` over drifting files exits `0`.
+modes exit `1` when they find drift, `2` when a file cannot be read, and `0`
+otherwise; `--in-place` exits `0` over drifting files and `2` when a file
+cannot be read or rewritten.
 
 Every mode shares one assessment. `driver::analyse` reads the file once through
 a `ReadOnlyDir`, parses it with `SourceDocument::parse`, and formats it once
 with the single `Formatter` closure built by `formatting_closure` in
-`src/main.rs`. The changed-or-unchanged decision is a byte comparison,
-`Assessment::is_changed`, and this one shared assessment is what stops a
-reporting mode disagreeing with `--in-place` about what the formatter would
-write.
+`src/command.rs`, constructed once at the call site in `src/main.rs`. The
+changed-or-unchanged decision is a byte comparison, `Assessment::is_changed`,
+and this one shared assessment is what stops a reporting mode disagreeing with
+`--in-place` about what the formatter would write.
 
 The read-only guarantee is by type, not convention: `ReadOnlyDir` is a newtype
 over the directory capability that exposes only `read`, so a reporting mode

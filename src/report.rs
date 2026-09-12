@@ -1,8 +1,9 @@
 //! Pure reporting: line deltas and their rendering.
 //!
-//! Nothing here performs input or output, opens a path, or defines an error
-//! type. The module is named `report` rather than `check` because it serves
-//! `--check` and `--diff` equally.
+//! Nothing here opens a path, reads a file of its own accord, or defines an
+//! error type: a writer's failure is the caller's own `std::io::Error`,
+//! returned untouched. The module is named `report` rather than `check`
+//! because it serves `--check` and `--diff` equally.
 
 pub mod delta;
 pub mod render;

@@ -783,6 +783,14 @@ global subscriber or metrics recorder. Executables and test harnesses that want
 log output must install their own subscriber (e.g.
 `tracing_subscriber::fmt::init()` in `main`).
 
+`Cargo.toml` also declares `googletest = "0.14"` and `pretty_assertions = "1"`
+as dev-dependencies, though neither has a use site in the tree today. They are
+retained because the ExecPlan's Decision log records them as accepted on
+explicit owner instruction, with the narrowing of `EP-M5` as the mitigation
+rather than removal (see `docs/execplans/check-option.md`, the "keep
+`googletest`, `pretty_assertions`, and `rstest-bdd` despite the review's
+objection" entry).
+
 ### Log levels
 
 Use `debug!` for high-value classification outcomes: fragment kind, parsed
