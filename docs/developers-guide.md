@@ -1396,10 +1396,10 @@ warnings are errors:
 
 Table: The `make test` recipe, verbatim from the Makefile.
 
-| Step | Command                                                       |
-| ---- | ------------------------------------------------------------- |
+| Step | Command                                                           |
+| ---- | ----------------------------------------------------------------- |
 | 1    | `RUSTFLAGS="-D warnings" cargo test --all-targets --all-features` |
-| 2    | `RUSTFLAGS="-D warnings" cargo test --doc --all-features`      |
+| 2    | `RUSTFLAGS="-D warnings" cargo test --doc --all-features`         |
 
 The first step compiles and runs every test target — the unit tests in `src/`,
 the integration binaries under `tests/`, and the compile fixtures driven by

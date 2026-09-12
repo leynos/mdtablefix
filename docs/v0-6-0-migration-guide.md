@@ -111,7 +111,6 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 - **Migration action:** Update scripts that match exact standard-error text
   where the added detail breaks an assertion.
 
-
 ## Exit status for operational errors
 
 - **What changed:** A run that cannot read or rewrite a file now exits `2`,
@@ -126,7 +125,6 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   operational failure in every mode. An error outranks drift, so `2` is the
   status to alert on.
 
-
 ## Unchanged files are not rewritten
 
 - **What changed:** `--in-place` writes only the files whose bytes would
@@ -136,7 +134,6 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 - **Who is affected:** Build systems that use modification time for staleness
   checks, and anyone who watches inodes to detect rewrites.
 - **Migration action:** None. A clean tree no longer looks modified.
-
 
 ## Read-only reporting modes
 
