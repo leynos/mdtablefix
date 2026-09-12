@@ -335,6 +335,35 @@ fn calculate_widths_uses_unicode_display_width(
     assert_eq!(calculate_widths(&rows, expected.len()), expected);
 }
 
+/// Builds a parsed row from cell payloads that carry no leading-empty state.
+fn parsed_row(payloads: &[&str]) -> Vec<Cell> {
+    payloads
+        .iter()
+        .map(|payload| Cell {
+            payload: (*payload).to_string(),
+            leading_empty: false,
+        })
+        .collect()
+}
+
+#[test]
+fn second_row_is_not_a_separator_when_its_cells_carry_no_dash() {
+    // `SEP_RE` matches a cell that is empty, so neither the row below a header
+    // nor the row below it may be promoted to the delimiter row without a dash
+    // in every cell; `row_parsing` requires the dash for the same reason. A row
+    // of nothing but pipes and spaces was otherwise taken for the delimiter row,
+    // which demoted the real one to a data row.
+    let empty_cells = vec![
+        parsed_row(&["head", "cells"]),
+        parsed_row(&["", ""]),
+        parsed_row(&["body", "cells"]),
+    ];
+    let delimiter = vec![parsed_row(&["head", "cells"]), parsed_row(&["---", "---"])];
+
+    assert!(!second_row_is_separator(&empty_cells));
+    assert!(second_row_is_separator(&delimiter));
+}
+
 #[test]
 fn format_rows_reescapes_literal_pipes_in_emitted_cells() {
     let rows = vec![vec![String::new(), "keep | literal".to_string()]];
