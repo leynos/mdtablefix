@@ -2482,6 +2482,21 @@ plateau.
       land on a base that can still move, at one rebase per move), and the
       mitigation this plan already practises: each rebase is recorded beside
       the commit each verdict describes.
+- [x] (2026-09-12) **A CodeRabbit review was requested on the pull request
+      itself**, which reverses the omission the Decision log records, because
+      the requester asked for one and the omission was written down as
+      reversible by asking. Queued through `comenq` on this host — `hostname
+      -f` gives `rohga.df12.net`, the daemon's own host, so the command was run
+      locally and a review for this pull request needed no SSH wrapper:
+      `comenq put leynos/mdtablefix 466 "@coderabbitai review"` returned
+      identifier `fa732d8c` with an ETA of about 1h 02m, queued behind two
+      other repositories' comments. `comenq list` was read before queueing and
+      `comenq hist -n 15` contains no earlier entry for #466, so this is a
+      first request rather than a double-queue. This is a different instrument
+      from the six `coderabbit review --agent` rounds: it asks the hosted
+      service to review the pull request, which is what the ready-for-review
+      state makes available, where a queued review on a draft is skipped and
+      spends the seat hour for nothing.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
@@ -3568,8 +3583,12 @@ is the durable record, and EP-M3 reconciles this log into it.
   and its round was the first over a diff GitHub was willing to test. This
   omission is reversible by asking — if a reader wants a seventh round over
   `4de8a7d`, nothing here prevents it, and the branch's diff against its base is
-  36 files, 8891 insertions, and 144 deletions. Date/Author: 2026-09-12, EP-M4
-  (review).
+  36 files, 8891 insertions, and 144 deletions. The omission was reversed the
+  same day, on the requester's instruction: a review was queued through `comenq`
+  as `fa732d8c`. That is the hosted service reviewing the pull request rather
+  than a seventh `--agent` round, and the omission was recorded as reversible
+  precisely so that asking would be a decision to take rather than a rule to
+  argue with. Date/Author: 2026-09-12, EP-M4 (review).
 
 - Decision: **mark pull request #466 ready for review while its base is
   unmerged**, on the requester's instruction, which reverses the draft posture
