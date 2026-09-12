@@ -127,6 +127,22 @@ fn is_broken_pipe(error: &anyhow::Error) -> bool {
     })
 }
 
+/// Ends a run that failed before any file was processed, and records it.
+///
+/// A failure to name the inputs never reaches the loop that analyses them, so
+/// without this it would be the one class of failure a host could not count: a
+/// missing working directory, a repository that cannot be listed, or a path
+/// argument that cannot be resolved would each exit non-zero having recorded
+/// nothing. The caller reports the failure; this decides the status and records
+/// it, so every way a run can end is counted once and the metric cannot
+/// disagree with the exit code.
+fn failed_run(mode: Mode) -> ExitStatus {
+    let status = exit_status(mode, false, true);
+    record_run(mode, status);
+
+    status
+}
+
 /// Runs the mode the command line selects, records the run, and returns its
 /// status.
 ///
@@ -139,8 +155,10 @@ fn is_broken_pipe(error: &anyhow::Error) -> bool {
 ///
 /// The run is recorded here, at the boundary that decides the status and under
 /// the very status this process is about to exit with, so the metric a host
-/// aggregates and the exit code cannot disagree. A closed pipe is an ordinary
-/// early exit, as in `mdtablefix --check *.md | head`: the reader stopped
+/// aggregates and the exit code cannot disagree. A resolution failure returns
+/// through [`failed_run`] instead, which records it the same way. A closed
+/// pipe is an ordinary early exit, as in `mdtablefix --check *.md | head`: the
+/// reader stopped
 /// early, which says nothing about this run, so the run is recorded as the
 /// success it is. Rust ignores `SIGPIPE`, so the write reports `EPIPE` instead,
 /// and `print!` would turn that into the undocumented status `101`. Such an
@@ -156,14 +174,20 @@ fn run() -> anyhow::Result<ExitStatus> {
         // the selection is reported relative to it, and the repository that
         // governs it is the one whose in-progress operation the guard looks
         // for.
-        let working_directory = git_inputs::working_directory()?;
+        let working_directory = match git_inputs::working_directory() {
+            Ok(working_directory) => working_directory,
+            Err(error) => {
+                eprintln!("{error:?}");
+                return Ok(failed_run(mode));
+            }
+        };
         match git_inputs::resolve(&cli, mode, &working_directory) {
             Ok(selection) => (selection.inputs, selection.guard),
             Err(error) => {
                 // One deliberate line: this tool's own wording, with git's
                 // diagnostic relayed beside it. See `GitListError::diagnostic`.
                 eprintln!("mdtablefix: {}", error.diagnostic());
-                return Ok(exit_status(mode, false, true));
+                return Ok(failed_run(mode));
             }
         }
     } else {
@@ -171,7 +195,7 @@ fn run() -> anyhow::Result<ExitStatus> {
             Ok(inputs) => (inputs, ConflictGuard::unguarded()),
             Err(error) => {
                 eprintln!("{error:?}");
-                return Ok(exit_status(mode, false, true));
+                return Ok(failed_run(mode));
             }
         }
     };
