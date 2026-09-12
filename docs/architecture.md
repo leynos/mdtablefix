@@ -289,15 +289,17 @@ Text.
 
 ## Footnotes
 
- [^1]: First note
+ 1. First note
 
- [^2]: Second note
+ 2. Second note
 
-[^10]: Final note
+10. Final note
 ```
 
-`convert_footnotes` only processes the final contiguous numeric list that
-immediately follows an H2 heading when these conditions are met.
+After:
+
+```markdown
+Text.
 
 ## Footnotes
 
@@ -801,7 +803,6 @@ maps `analyse_one` over the paths with `rayon`; `analyse_one` calls
 `Mode` selects — the formatted text, a report line, a unified diff, or an
 in-place write through `replace_file`. The payloads return to `run_files` in
 argument order._
-
 
 ## Git file selection
 

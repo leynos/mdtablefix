@@ -45,7 +45,6 @@ each formatting flag is described in the sections that follow.
 
 _Table 1: The command-line flags._
 
-
 ### The four file modes
 
 `--in-place`, `--check`, `--diff`, and `--list-files` act on the files a run
@@ -147,28 +146,6 @@ run fails as a whole before any file is analysed, exits `2`, and prints one
 line to standard error: this tool's own wording with Git's diagnostic appended.
 The process is always `git ls-files`, run without a shell, so nothing a user
 typed is ever interpreted as a command.
-
-### The four file modes
-
-`--in-place`, `--check`, `--diff`, and `--list-files` act on the files a run
-selected, and at most one of them may be given. Each requires a source of files:
-`mdtablefix --check` on its own is a usage error, because there is no file for
-the mode to act on. With no mode flag the tool prints the formatted text, which
-is what makes `mdtablefix FILE` and `cat FILE | mdtablefix` interchangeable.
-
-`--check` prints one line per file that would be reformatted, and `--diff`
-prints a unified diff per file that would be reformatted. Neither writes
-anything: a clean file prints nothing at all. `--list-files` prints the paths
-themselves and nothing else, which is how a selection is inspected without
-being acted on. `--in-place` rewrites only the files whose bytes would change,
-so a file that is already formatted keeps its inode and its modification time.
-See [In-place editing](#in-place-editing) for the replacement guarantees.
-
-Standard output is the machine-readable half of the contract: report lines for
-`--check`, diffs for `--diff`, paths for `--list-files`, formatted text
-otherwise. The summary (`2 files would be reformatted, 1 file left unchanged.`)
-and every error go to standard error, so standard output can be piped or
-captured on its own.
 
 ### Exit status
 
