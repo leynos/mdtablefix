@@ -6,19 +6,43 @@ use std::os::unix::fs::PermissionsExt;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use mdtablefix::{LineEnding, io::replace_file};
+use driver::Mode;
+use mdtablefix::io::{SourceDocument, replace_file};
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
-use super::{
-    FormatOpts,
-    format_stdin,
-    format_to_string,
-    open_file_parent,
-    render_stdin_output,
-    rewrite_in_place,
-};
+use super::{driver, format_stdin, open_file_parent, render_stdin_output};
+use crate::command::{FormatOpts, formatting_closure};
+
+/// Formats a capability-scoped file without modifying it.
+///
+/// The CLI reaches this same analysis through `driver::analyse`; fixing the
+/// mode here keeps the fixtures readable while taking the identical path.
+fn format_to_string(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<String> {
+    let (_, output) = driver::analyse(
+        Mode::Print,
+        directory,
+        path,
+        path,
+        &formatting_closure(opts),
+    )?;
+
+    Ok(output)
+}
+
+/// Reads, formats, and atomically replaces a capability-scoped file in place.
+fn rewrite_in_place(directory: &Dir, path: &Utf8Path, opts: FormatOpts) -> anyhow::Result<()> {
+    driver::analyse(
+        Mode::InPlace,
+        directory,
+        path,
+        path,
+        &formatting_closure(opts),
+    )?;
+
+    Ok(())
+}
 
 /// Format options with every transformation disabled.
 #[fixture]
@@ -41,6 +65,15 @@ fn open_dir(path: &std::path::Path) -> std::io::Result<Dir> {
     let utf8 = Utf8PathBuf::from_path_buf(path.to_path_buf())
         .map_err(|path| std::io::Error::other(format!("non-UTF-8 path: {}", path.display())))?;
     Dir::open_ambient_dir(&utf8, ambient_authority())
+}
+
+/// An ambient path as the UTF-8 path the command line would have supplied.
+///
+/// `Inputs::resolve` converts every positional argument once, before any file
+/// is analysed, so a path reaching the CLI's parent-directory boundary is
+/// already UTF-8.
+fn as_utf8(path: &std::path::Path) -> &Utf8Path {
+    Utf8Path::from_path(path).expect("the temporary directory path is UTF-8")
 }
 
 /// Lists the sorted names of the entries in `path`.
@@ -147,7 +180,8 @@ fn rewrite_in_place_declines_symlinked_target(no_opts: FormatOpts) {
     fs::write(&real, original).expect("write fixture");
     // A relative target keeps the link resolvable inside the capability.
     std::os::unix::fs::symlink("real.md", &link).expect("create symlink");
-    let (directory, name) = open_file_parent(&link).expect("open the CLI's directory capability");
+    let (directory, name) =
+        open_file_parent(as_utf8(&link)).expect("open the CLI's directory capability");
 
     let err = rewrite_in_place(&directory, &name, no_opts).expect_err("symlink must be declined");
 
@@ -173,7 +207,8 @@ fn capability_scoped_failure_removes_temporary_file() {
     let dir = tempdir().expect("create temporary directory");
     let target = dir.path().join("target.md");
     fs::create_dir(&target).expect("create target directory");
-    let (directory, name) = open_file_parent(&target).expect("open the CLI's directory capability");
+    let (directory, name) =
+        open_file_parent(as_utf8(&target)).expect("open the CLI's directory capability");
 
     // The temporary file is created, written and synced, and only then does
     // the final rename fail, because a file cannot replace a directory.
@@ -193,19 +228,23 @@ fn capability_scoped_failure_removes_temporary_file() {
 
 #[test]
 fn stdin_output_keeps_its_terminator_contract() {
-    assert_eq!(render_stdin_output(&[], LineEnding::Lf), "\n");
-    assert_eq!(render_stdin_output(&[], LineEnding::Crlf), "\r\n");
+    let unix = SourceDocument::parse("");
+    let windows = SourceDocument::parse("a\r\nb\r\n");
+    assert_eq!(render_stdin_output(&unix, &[]), "\n");
+    assert_eq!(render_stdin_output(&windows, &[]), "\r\n");
     let lines = vec!["| A | B |".to_string()];
     assert_eq!(
-        render_stdin_output(&lines, LineEnding::Crlf),
-        "| A | B |\r\n"
+        render_stdin_output(&windows, &lines),
+        "| A | B |\r\n",
+        "non-empty stdin output takes the document's ending"
     );
 }
 
 /// A file boundary reports the selected ending together with the counts
 /// that decided it, so a reformatted file's endings are traceable.
 #[rstest]
-#[tracing_test::traced_test]
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+#[test_macros::traced_test]
 fn file_boundary_reports_the_line_ending_counts(no_opts: FormatOpts) {
     let dir = tempdir().expect("create temporary directory");
     let directory = open_dir(dir.path()).expect("open directory capability");
@@ -231,7 +270,8 @@ fn file_boundary_reports_the_line_ending_counts(no_opts: FormatOpts) {
 /// It has no path to attach, so it names its own source rather than leaving
 /// the field absent, and one filter still finds both boundaries.
 #[rstest]
-#[tracing_test::traced_test]
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+#[test_macros::traced_test]
 fn stdin_boundary_reports_the_line_ending_counts(no_opts: FormatOpts) {
     let output = format_stdin("|A|B|\r\n|---|---|\r\n|1|2|\r\n", no_opts);
 

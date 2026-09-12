@@ -1,0 +1,16 @@
+---
+source: tests/cli_matrix.rs
+expression: result.envelope(&case)
+---
+case: row_010_nowrap
+mode: diff
+args: --breaks --fences --code-emphasis --headings --diff
+status: code: 0
+
+[stdout]
+
+[stderr]
+1 file left unchanged.
+
+[file]
+<not applicable>

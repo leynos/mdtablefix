@@ -1,0 +1,26 @@
+---
+source: tests/cli_matrix.rs
+expression: result.envelope(&case)
+---
+case: row_000_nowrap
+mode: diff
+args: --diff
+status: code: 1
+
+[stdout]
+--- input.dat
++++ input.dat
+@@ -1,4 +1,6 @@
+-| Name | Notes | |---|---| | alpha | Use *`cargo test`* before merging... |
++| Name  | Notes                                |
++| ----- | ------------------------------------ |
++| alpha | Use *`cargo test`* before merging... |
+ 
+ 1. first item
+ 3. second item with enough text to wrap around the configured column width when wrapping is enabled for the matrix harness.
+
+[stderr]
+1 file would be reformatted.
+
+[file]
+<not applicable>

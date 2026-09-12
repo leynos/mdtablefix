@@ -1,0 +1,25 @@
+---
+source: tests/cli_matrix.rs
+expression: result.envelope(&case)
+---
+case: row_010_wrap
+mode: diff
+args: --wrap --breaks --fences --code-emphasis --headings --diff
+status: code: 1
+
+[stdout]
+--- input.dat
++++ input.dat
+@@ -1,4 +1,5 @@
+-This paragraph references item 1 and uses enough words to demonstrate wrapping behaviour when the wrap variant is enabled.
++This paragraph references item 1 and uses enough words to demonstrate wrapping
++behaviour when the wrap variant is enabled.
+ 
+ 1. https://example.com/alpha
+ 3. https://example.com/beta
+
+[stderr]
+1 file would be reformatted.
+
+[file]
+<not applicable>

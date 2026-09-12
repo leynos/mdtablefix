@@ -70,12 +70,14 @@ fn test_cli_parallel_missing_file_error() {
     let expected = mdtablefix::reflow_table(&table).join("\n") + "\n";
     let missing = dir.path().join("missing.md");
 
+    // A file that could not be read is an operational error, not drift: the
+    // exit contract reserves `2` for it, and the good file is still printed.
     Command::cargo_bin("mdtablefix")
         .expect("failed to create command")
         .arg(&good)
         .arg(&missing)
         .assert()
-        .failure()
+        .code(2)
         .stdout(expected)
         .stderr(predicates::str::contains("missing.md"));
 }
@@ -97,7 +99,7 @@ fn test_cli_parallel_missing_file_in_place(
     let good_str = good.to_str().expect("path is not valid UTF-8");
     let missing_str = missing.to_str().expect("path is not valid UTF-8");
     run_cli_with_args(&["--in-place", good_str, missing_str])?
-        .failure()
+        .code(2)
         .stderr(predicates::str::contains("missing.md"));
     Ok(())
 }

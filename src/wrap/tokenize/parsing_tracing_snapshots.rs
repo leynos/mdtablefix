@@ -2,7 +2,8 @@
 
 use std::cell::RefCell;
 
-use tracing_test::traced_test;
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+use test_macros::traced_test;
 
 use super::parse_link_or_image;
 use crate::wrap::tracing_snapshot_support::normalise_event_lines;

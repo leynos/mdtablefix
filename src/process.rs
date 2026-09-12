@@ -45,7 +45,7 @@ pub struct Options {
     pub wrap: bool,
     /// Replace `...` with `…`.
     pub ellipsis: bool,
-    /// Normalise code block fences.
+    /// Normalize code block fences.
     pub fences: bool,
     /// Convert bare numeric references into GitHub-flavoured footnote links (default: `false`).
     pub footnotes: bool,

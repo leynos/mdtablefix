@@ -1,16 +1,18 @@
-//! Unit tests for the line-ending policy, and for the event the rewrite
-//! boundary emits when it applies that policy.
+//! Unit tests for the line-ending policy, and for the rewrite boundary that
+//! applies it.
 //!
 //! The policy is pure, so most of these tests drive `detect_line_ending` and
 //! `count_line_endings` directly; the boundary tests drive a real rewrite and
-//! assert what it reported.
+//! assert what it reported and what it left alone — including the byte-order
+//! mark and the terminator the document boundary normalizes.
 
 use std::{fs, path::Path};
 
 use proptest::prelude::*;
 use rstest::rstest;
 use tempfile::tempdir;
-use tracing_test::traced_test;
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+use test_macros::traced_test;
 
 use super::*;
 
@@ -220,4 +222,42 @@ fn rewrite_reports_the_selected_ending() {
             _ => Err(format!("unexpected line-ending report: {lines:?}")),
         }
     });
+}
+
+/// `rewrite_with` hands its transform the document's body and writes the
+/// result back through the boundary, so an identity transform is a byte-for-byte
+/// round trip for every shape whose endings are already uniform and which ends
+/// with a terminator.
+///
+/// The `no_final_newline` case is the deliberate exception, and it is why the
+/// expectation is a case value rather than the input repeated by fiat: a
+/// non-empty document that does not end with a terminator gains one. That is
+/// the formatter's contract, not a defect here — ADR 0007's "unterminated
+/// non-empty file gains one terminator", and the users' guide's "is
+/// unterminated gains a terminator and is reported as drift, as `+1 -1`" — so
+/// asserting byte-identity there would pin the wrong contract.
+///
+/// This is the only test that reaches the boundary with no content transform in
+/// the way, which is what lets it speak about the mark, the endings, and the
+/// terminator rather than about a transform's output.
+#[rstest]
+#[case::crlf("|A|B|\r\n|1|2|\r\n", "|A|B|\r\n|1|2|\r\n")]
+#[case::byte_order_mark("\u{FEFF}|A|B|\n|1|2|\n", "\u{FEFF}|A|B|\n|1|2|\n")]
+#[case::no_final_newline("|A|B|\n|1|2|", "|A|B|\n|1|2|\n")]
+fn rewrite_with_identity_transform_restores_the_document_boundary(
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    let dir = tempdir().expect("temporary directory");
+    let file = dir.path().join("identity.md");
+    fs::write(&file, input).expect("write fixture");
+
+    rewrite_with(&file, "identity", |lines: &[String]| lines.to_vec())
+        .expect("rewrite with an identity transform");
+
+    assert_eq!(
+        fs::read(&file).expect("read result"),
+        expected.as_bytes(),
+        "an identity transform must change nothing but what the boundary normalizes"
+    );
 }

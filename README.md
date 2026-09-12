@@ -52,62 +52,25 @@ cargo install --path .
 ## Command-line usage
 
 ```bash
-mdtablefix [--version] [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
-          [--footnotes] [--code-emphasis] [--headings] [--in-place] [FILE...]
+mdtablefix [--wrap] [--renumber] [--breaks] [--ellipsis] [--fences]
+          [--footnotes] [--code-emphasis] [--headings]
+          [--in-place | --check | --diff] [FILE...]
 ```
 
-- When one or more file paths are provided, the corrected tables are printed to
-  stdout.
+One or more file paths are formatted and printed to standard output; with no
+file path at all, the document is read from standard input instead. The
+formatting flags are independent and may be combined.
 
-- Use `--version` to print the current version and exit.
+Three flags select what happens to the named files. `--in-place` rewrites each
+file through a temporary file and a rename, preserving its mode. `--check`
+reports every file that would be reformatted, and `--diff` prints a unified
+diff for each of them; neither writes anything. All modes exit `0` when no file
+would change, `--check` and `--diff` exit `1` when a file would, and every mode
+exits `2` when a file could not be read or rewritten.
 
-- Use `--wrap` to reflow paragraphs and list items to 80 columns. Task list
-  items (`- [ ]`/`- [x]`) are indented correctly.
-
-- Use `--renumber` to rewrite ordered lists with consistent sequential
-  numbering. The renumbering logic correctly handles nested lists by tracking
-  indentation (tabs are interpreted as four spaces) and restarts numbering
-  after a list is interrupted by other content, such as a paragraph at a lower
-  indentation level, a thematic break, or a heading. Blank lines between items
-  are ignored, so numbering continues uninterrupted.
-
-- Use `--breaks` to standardize thematic breaks to a line of 70 underscores
-  (configurable via the `THEMATIC_BREAK_LEN` constant).
-
-- Use `--ellipsis` to replace groups of three dots (`...`) with the ellipsis
-  character (`…`). Longer runs are processed left-to-right, so any leftover
-  dots are preserved.
-
-- Use `--fences` to normalize fenced code blocks by reducing delimiter runs to
-  three backticks where safe. Same-marker nested fence content keeps the outer
-  delimiter width when compression would make the nested content structural.
-  Indentation and language identifiers are preserved, and orphan language
-  specifiers attach to the following unlabelled opening fence while dropping
-  any intervening blank lines on successful attachment.
-
-- Use `--footnotes` to convert bare numeric references and the final numbered
-  list into GitHub-flavoured footnote links.
-
-  A bare numeric reference is a trailing number after punctuation, like
-  `An example.1`.
-
-- Use `--code-emphasis` to fix emphasis markers that directly adjoin inline
-  code without spaces, ensuring the code span remains intact.
-
-- Use `--headings` to convert Setext headings that use underline markers into
-  hash-prefixed headings. The underline must contain at least three matching
-  `=` or `-` characters, so the converter can distinguish headings from
-  thematic breaks and list markers.
-
-- Use `--in-place` to modify files in-place. The replacement is written beside
-  the target and renamed over it, so an interrupted run leaves the original
-  intact, the original file mode is preserved, and a read-only target is
-  replaced and stays read-only. Windows blocks such a rename, so the
-  destination's read-only attribute is cleared immediately beforehand; see
-  [Library usage](#library-usage) for the full sequence.
-
-- If no files are specified, input is read from stdin and output is written to
-  stdout.
+See the [user's guide](docs/users-guide.md#command-line-usage) for every flag,
+the exit-status contract, line-ending and byte-order-mark behaviour, and the
+limitations worth knowing before running the tool over a repository.
 
 ## YAML frontmatter
 

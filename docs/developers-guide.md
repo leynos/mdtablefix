@@ -96,19 +96,29 @@ restores the separator row with widths derived from the final table body.
   crate-private `leading_indent`, which recognizes only spaces and tabs and
   returns both column width and byte offset.
 
+`src/command.rs` command-line surface and formatting:
+
+- `Cli` and `FormatOpts` are the parsed command line and the formatting
+  switches it carries; `process_lines(lines, opts)` runs the shared pipeline
+  over them.
+- `formatting_closure(opts) -> impl Fn(&SourceDocument<'_>) -> String + Sync`
+  builds the one formatter every mode shares. It renders the document's body
+  through the pipeline and re-attaches the mark and the selected line ending,
+  so standard output, `--check`, `--diff`, and `--in-place` agree byte for
+  byte.
+- `format_lines(content, opts) -> Vec<String>` is the pure half of the
+  boundary: it splits the body into lines and runs the transforms, leaving the
+  terminator to the caller.
+
 `src/main.rs` file-output functions:
 
 - `open_file_parent(path) -> anyhow::Result<(Dir, Utf8PathBuf)>` is the CLI's
   sole ambient filesystem boundary. It opens the selected file's parent
   directory and returns a relative UTF-8 path for capability-scoped handling.
-- `format_to_string(directory, path, opts) -> anyhow::Result<String>` reads and
-  formats a file through `cap_std::fs_utf8::Dir` without modifying it. Its
-  returned text uses the same trailing-newline convention as a rewritten file,
-  and it terminates every line with the majority line-ending style detected in
-  that file, so standard output and `--in-place` agree byte-for-byte.
-- `rewrite_in_place(directory, path, opts) -> anyhow::Result<()>` reads and
-  formats a capability-scoped file, then replaces it through the same directory
-  capability with `mdtablefix::io::replace_file`.
+- `analyse_one(mode, path, format)` names the file in any error and delegates
+  the work to `driver::analyse` through the capability `open_file_parent`
+  returned. `run_stdin` and `run_files` are the two command boundaries built on
+  those pieces.
 
 `src/io/line_endings.rs` line-ending policy:
 
@@ -128,11 +138,12 @@ restores the separator row with widths derived from the final table body.
   boundary that acts on it: a private `report_line_endings(counts, operation,
   path)` in `src/io/replace.rs`, called by `rewrite_with` with an `operation` of
   `"rewrite"` or `"rewrite_no_wrap"` and always with the file's path; and,
-  because the binary is a separate crate, a repeated private helper in
-  `src/main.rs`, called by `format_to_string` with `operation = "file"` and the
-  file's path, and by `format_stdin` with `operation = "stdin"` and the path
-  reported as `<stdin>`. The message shape is identical across boundaries, so
-  one filter finds them all.
+  because the binary is a separate crate and cannot reach that private helper,
+  `driver::report_line_endings(counts, operation, path)` in `src/driver.rs`,
+  called by `driver::analyse` with `"file"` and the display path — the path the
+  user wrote, not the bare name the capability reads by — and by `format_stdin`
+  with `"stdin"` and `None`, which the report renders as `<stdin>`. The message
+  shape is identical across boundaries, so one filter finds them all.
 - `serialize_lines(lines, ending) -> String` joins lines with the selected
   terminator and appends one further terminator, yielding an empty string for
   no lines.
@@ -143,19 +154,20 @@ restores the separator row with widths derived from the final table body.
   side-effecting.
 
 Detection runs on the raw document at each input boundary: `rewrite_with` in
-`src/io/replace.rs`, and `format_to_string` and `format_stdin` in `src/main.rs`,
-with each boundary reporting through its own private `report_line_endings`
-helper. The internal pipeline stays LF-only —
+`src/io/replace.rs`, `driver::analyse` in `src/driver.rs`, and `format_stdin`
+in `src/main.rs`, each reporting through its own `report_line_endings` with the
+same message shape. The internal pipeline stays LF-only —
 `str::lines` strips each line's terminator before a transform sees it — and
 only the serializer re-applies the detected style. Standard input keeps its
 historical contract of printing one terminator even when it produces no lines,
 which `tests/parallel.rs` pins.
 
-Callers select the function that matches their intent rather than passing a
-Boolean mode flag. This keeps stdout and in-place contracts explicit while
-allowing both paths to share the exact formatting result. New file-output call
-sites must receive a directory capability and relative `camino::Utf8Path`
-rather than performing ambient filesystem access themselves.
+The mode selects behaviour rather than a formatting variant: every mode shares
+the one closure `formatting_closure` builds, and `driver::analyse` chooses what
+to do with its result, so standard output and `--in-place` cannot disagree
+about the formatted text. New file-output call sites must receive a directory
+capability and relative `camino::Utf8Path` rather than performing ambient
+filesystem access themselves.
 
 `src/io/replace.rs`:
 
@@ -254,6 +266,102 @@ refactoring audit covering issues `#357`–`#367` in PR `#368`.
   punctuation) and contains a corresponding closing fence, with or without a
   trailing inflectional suffix. Used by `classify_fragment` and `inline.rs` to
   identify combined code+suffix tokens as atomic inline code.
+
+## CLI driver and reporting architecture
+
+### Read-only by type
+
+`ReadOnlyDir` in `src/driver.rs` is a newtype over `cap_std::fs_utf8::Dir`. It
+exposes only `new` and `read`, so the reporting modes receive a capability that
+cannot write: read-only access is a property of the type rather than of a
+convention or of a test double that declines to write.
+
+Re-use policy:
+
+- `driver::analyse` clones the caller's writable `Dir` capability with
+  `try_clone` and wraps the clone as a `ReadOnlyDir`, so every mode reads
+  through one type and only `Mode::InPlace` holds a capability that can write.
+  The clone is how the same directory handle serves both the read and the
+  write.
+- Keep the read-only view on the type system. A convention can be broken by a
+  later edit that never read the convention, and a runtime flag records a
+  decision that a wrong branch can still make; a type with no write method
+  cannot. A test double proves only that the double declined, not that the
+  production path cannot write.
+
+### One formatter, built once
+
+`Formatter` in `src/driver.rs` is:
+
+```rust
+pub type Formatter = dyn Fn(&SourceDocument<'_>) -> String + Sync;
+```
+
+`formatting_closure(opts)` in `src/command.rs` builds the closure once per run,
+and `run_files` passes it by reference to every file and every mode. `assess`
+is the only place it is called. A mode that built its own formatting path is
+the defect this design exists to prevent.
+
+One closure behind both reporting modes and the writer is what makes `--check`
+and `--in-place` structurally unable to disagree: they assess the same bytes
+with the same formatter, so neither can report drift the other would not
+write, or leave a file the other reported. A mode with a second formatting
+route would drift from the writer by edits rather than by construction, which
+is the divergence the shared closure removes. See
+`docs/adrs/0009-check-and-diff-reporting.md`.
+
+The structure is necessary but not sufficient, and it is tested as well as
+argued. `tests/check_prediction.rs` runs the reporting and writing modes over
+byte-identical copies of one document and compares the report against the
+writer's bytes. Those two runs alone would be vacuous, because both modes
+consult one shared change decision: a decision that answered wrongly would move
+them together and the comparison would still agree. Each case therefore runs
+the document a third time in print mode, which renders the formatter's output
+without consulting that decision, and measures both sides against it. Its
+sixteen-document corpus is in `tests/check_prediction/corpus.rs`, one document
+per transform flag, each measured to drift under the flag it is paired with.
+
+### Explicit argument order
+
+`driver::in_argument_order(Vec<(usize, T)>) -> Vec<T>` sorts indexed results
+by their recorded index. `rayon`'s `ParallelIterator::collect` into a `Vec` is
+not documented to preserve input order, so a report list that relied on it
+could follow completion order instead of argument order, and the difference
+would be invisible on a machine that happened to finish in order. The index is
+captured by `par_iter().enumerate()` in `src/main.rs`'s `run_files`, and
+`in_argument_order` restores the sequence explicitly. Because each index is
+unique, sorting on it is deterministic whatever order the workers produced.
+
+`tests/cli_check/ordering.rs`'s `reports_every_file_in_order` pins the
+sequence: its batch of eight files is in neither alphabetical nor size order,
+so a report list that came back sorted by file name, by file size, or by
+completion order is rejected rather than passing by luck. The plan records
+the reasoning as `AX-4`.
+
+## The binary's private driver
+
+`src/driver.rs` is declared `mod driver;` in `src/main.rs`, so it is not part
+of the published library. The library's entry points stay infallible and free
+of filesystem policy, while the CLI's exit-status contract, its directory
+capabilities, and its `Mode`, `Inputs`, and `ExitStatus` types live in the
+binary.
+
+This placement is why the module can hold `anyhow` error types: its callers
+are the binary's own, so the module fails with context-rich errors and reports
+them at the command boundary. The public library keeps the formatting entry
+points and the report types (`mdtablefix::report` is public so a host can
+render a `FileReport` itself) and returns `std::io::Result` from its
+filesystem entry points rather than the binary's diagnostic error type.
+
+The unit tests live in three modules beside it: `src/driver_contract_tests.rs`
+covers the exit-status contract, `Inputs::resolve`, and `in_argument_order`;
+`src/driver_report_tests.rs` covers the assessment and both reporting renders;
+and `src/driver_in_place_tests.rs` covers the write-back. Their fixtures — the
+two tables, the identity and aligning formatters, and the capability-scoped
+temporary directory — are shared through `src/driver_test_support.rs`. The same
+contract is exercised end to end through the built binary by
+`tests/cli_check.rs`, `tests/cli_diff.rs`, and the BDD scenarios in
+`tests/features/`.
 
 ## HTML parser dependency coupling
 
@@ -665,10 +773,23 @@ replacing `LineBuffer` with `textwrap`.
 `tracing = "0.1"` and `metrics = "0.24"` are the runtime observability
 dependencies, used by the library and the executables. `tracing-test = "0.2"`
 and `metrics-util = "0.20"` are test-only dev-dependencies; use them only in
-tests (e.g. `#[traced_test]` or `DebuggingRecorder`). The crate does not
-install a global subscriber or metrics recorder. Executables and test harnesses
-that want log output must install their own subscriber (e.g.
+tests (e.g. `DebuggingRecorder`). Traced tests should use the in-repo
+`test_macros::traced_test` rather than `tracing_test::traced_test` directly,
+because it rebuilds the `tracing` interest cache after the subscriber is
+installed, so a callsite first used before that install cannot remain cached
+as `Interest::never()` and lose the test's log lines (see
+`test-macros/src/lib.rs` for the full rationale). The crate does not install a
+global subscriber or metrics recorder. Executables and test harnesses that want
+log output must install their own subscriber (e.g.
 `tracing_subscriber::fmt::init()` in `main`).
+
+`Cargo.toml` also declares `googletest = "0.14"` and `pretty_assertions = "1"`
+as dev-dependencies, though neither has a use site in the tree today. They are
+retained because the ExecPlan's Decision log records them as accepted on
+explicit owner instruction, with the narrowing of `EP-M5` as the mitigation
+rather than removal (see `docs/execplans/check-option.md`, the "keep
+`googletest`, `pretty_assertions`, and `rstest-bdd` despite the review's
+objection" entry).
 
 ### Log levels
 
@@ -686,7 +807,8 @@ Blockquote and fence events additionally use `line_len`, `prefix_len`, `depth`,
 `inner_len`, `open_depth`, `marker_len`, `open_marker_len`, and `transition`.
 Line-ending events use `crlf_count`, `lone_lf_count`, and `selected_ending`,
 and every reporting boundary adds `operation` and, for a file, `path` (the
-library rewrite reports both; standard input has no path).
+library rewrite reports both; standard input has no path). The binary's
+per-file analysis span adds `mode`, `outcome`, and `elapsed_seconds`.
 These events are content-free: never include raw Markdown, blockquote
 prefixes, fence info strings, or other document content. Executables remain
 responsible for installing subscribers.
@@ -726,30 +848,44 @@ attribute had been cleared and whose original attribute could not be put back;
 that restoration is best effort, so a failure to restore never masks the reason
 the swap failed. None of these events carry file content.
 
+The binary's own boundary follows the same discipline. `record_analysis` in
+`src/metrics.rs` opens a `debug` span named after it around one file's
+analysis, carrying `mode` and the display `path` on entry, and `outcome` and
+`elapsed_seconds` recorded once the analysis has run — the same names and
+values the per-file counters use, so a trace and a metric select the same
+files, and a subscriber can tell a `--check` analysis from an `--in-place` one.
+A failed analysis also emits `analysis failed` (debug, with `error_category`
+from the same bounded `category` the error counter labels with: `not_found`,
+`permission_denied`, `declined`, or `other`). The `path` is the display path
+the user wrote and is span metadata rather than a metric label, so two files
+called `a.md` in different directories stay distinct in a trace and still cost
+no cardinality. The `operation` field already reaches the same trace: the
+line-ending report this analysis emits carries `"file"`.
+
 Table: Structured field names emitted by tracing instrumentation.
 
-| Field             | Type            | Used in                                       | Meaning                                                     |
-| ----------------- | --------------- | --------------------------------------------- | ----------------------------------------------------------- |
-| `token_length`    | `usize`         | fragment, link, footnote events               | Character count of the text that was classified or parsed   |
-| `kind`            | `?FragmentKind` | `fragment classified`                         | The computed fragment classification                        |
-| `start`           | `usize`         | span events                                   | Byte offset where the span begins                           |
-| `end`             | `usize`         | span events                                   | Byte offset where the span ends (exclusive)                 |
-| `width`           | `usize`         | span events                                   | Display-column width of the span                            |
-| `reason`          | `&str`          | rejected, unchanged, or fence-state decisions | Stable diagnostic category for any decision                 |
-| `is_image`        | `bool`          | `link or image parsed`                        | `true` when the link token is an image literal (`![]()`)    |
-| `row_index`       | `usize`         | table-row events                              | Zero-based index of the parsed logical row                  |
-| `cell_count`      | `usize`         | table-row events                              | Number of cells in the parsed logical row                   |
-| `error_category`  | `&str`, Debug   | declined, discarded, and replacement failures | Stable category or I/O error kind for a failure             |
-| `attempt`         | `u32`           | `replace_file` events                         | Zero-based index of the temporary-file creation attempt     |
-| `bytes`           | `usize`         | `replace_file` events                         | Byte length of the formatted replacement that was written   |
-| `line_len`        | `usize`         | blockquote-prefix events                      | Byte length of the examined source line                     |
-| `prefix_len`      | `usize`         | blockquote-prefix events                      | Byte length of the recognized blockquote prefix             |
-| `depth`           | `usize`         | blockquote and fence events                   | Current blockquote nesting depth                            |
-| `inner_len`       | `usize`         | blockquote-prefix events                      | Byte length after removing the blockquote prefix            |
-| `open_depth`      | `usize`         | fence-state events                            | Blockquote depth of the active fence opener                 |
-| `marker_len`      | `usize`         | fence-state events                            | Length of the currently recognized fence marker             |
-| `open_marker_len` | `usize`         | fence-state events                            | Length of the active opening fence marker                   |
-| `transition`      | `&str`          | fence-state events                            | Stable fence-state transition category                      |
+| Field             | Type            | Used in                                                 | Meaning                                                     |
+| ----------------- | --------------- | ------------------------------------------------------- | ----------------------------------------------------------- |
+| `token_length`    | `usize`         | fragment, link, footnote events                         | Character count of the text that was classified or parsed   |
+| `kind`            | `?FragmentKind` | `fragment classified`                                   | The computed fragment classification                        |
+| `start`           | `usize`         | span events                                             | Byte offset where the span begins                           |
+| `end`             | `usize`         | span events                                             | Byte offset where the span ends (exclusive)                 |
+| `width`           | `usize`         | span events                                             | Display-column width of the span                            |
+| `reason`          | `&str`          | rejected, unchanged, or fence-state decisions           | Stable diagnostic category for any decision                 |
+| `is_image`        | `bool`          | `link or image parsed`                                  | `true` when the link token is an image literal (`![]()`)    |
+| `row_index`       | `usize`         | table-row events                                        | Zero-based index of the parsed logical row                  |
+| `cell_count`      | `usize`         | table-row events                                        | Number of cells in the parsed logical row                   |
+| `error_category`  | `&str`, Debug   | declined, discarded, replacement, and analysis failures | Stable category or I/O error kind for a failure             |
+| `attempt`         | `u32`           | `replace_file` events                                   | Zero-based index of the temporary-file creation attempt     |
+| `bytes`           | `usize`         | `replace_file` events                                   | Byte length of the formatted replacement that was written   |
+| `line_len`        | `usize`         | blockquote-prefix events                                | Byte length of the examined source line                     |
+| `prefix_len`      | `usize`         | blockquote-prefix events                                | Byte length of the recognized blockquote prefix             |
+| `depth`           | `usize`         | blockquote and fence events                             | Current blockquote nesting depth                            |
+| `inner_len`       | `usize`         | blockquote-prefix events                                | Byte length after removing the blockquote prefix            |
+| `open_depth`      | `usize`         | fence-state events                                      | Blockquote depth of the active fence opener                 |
+| `marker_len`      | `usize`         | fence-state events                                      | Length of the currently recognized fence marker             |
+| `open_marker_len` | `usize`         | fence-state events                                      | Length of the active opening fence marker                   |
+| `transition`      | `&str`          | fence-state events                                      | Stable fence-state transition category                      |
 
 For example:
 
@@ -795,6 +931,40 @@ name, and for an exhausted name space, plus the bounded label set: only the
 assert that the histogram's declared unit is seconds and that exactly one
 sample is recorded per replacement for both the `success` and `failure`
 outcomes.
+
+#### Binary metrics
+
+The binary is a separate crate, so it cannot reuse the library's declarations;
+`src/metrics.rs` declares its own under the same convention. The names describe
+what a run did rather than what one replacement did, and the label set stays
+bounded for the same reason: `mode` is one of `print`, `in_place`, `check`, or
+`diff`, `outcome` is one of a fixed set per instrument, and no path is ever a
+label.
+
+- `mdtablefix_run_total` counts runs by `mode` and `outcome`, where the outcome
+  is the exit status as a user sees it: `success`, `drift`, or `error`.
+- `mdtablefix_file_total` counts analysed files by `mode` and `outcome`, where
+  the outcome is `changed`, `unchanged`, or `error`.
+- `mdtablefix_file_duration_seconds` is a histogram of one file's analysis in
+  seconds, with the unit declared by `metrics::Unit::Seconds`, carrying the
+  same two labels. The duration is measured around the analysis alone, so a
+  file that waited behind another on the parallel analysis pool does not carry
+  that wait in the distribution.
+- `mdtablefix_file_error_total` counts failed analyses by `category`, a fixed
+  name derived from the `io::ErrorKind` in the chain — `not_found`,
+  `permission_denied`, `declined` for this tool's own refusal to replace a
+  symlink, and `other` for everything else, including an error with no
+  `io::Error` at all.
+
+The changed-or-unchanged distinction is the byte comparison the analysis itself
+made, so the label a host aggregates and the exit status the run reports cannot
+disagree about whether a file drifted. `record_analysis` records the same
+distinction on the span it opens, described under field naming above.
+
+`src/metrics_tests.rs` and `src/metrics_file_tests.rs` install a local recorder
+through `metrics::with_local_recorder` and assert the declared names, units,
+and descriptions, the label sets, and the counts for each outcome; the runner
+tests do the same for `mdtablefix_run_total`.
 
 ### Performance discipline
 
@@ -852,8 +1022,8 @@ submodule so the snapshot test sits beside the code it pins while keeping the
 production module within the 400-line limit. The `.snap` fixtures live under the
 neighbouring `snapshots/` directory.
 
-A test captures events with `tracing-test`'s `#[traced_test]`, then normalizes
-the captured lines through the shared
+A test captures events with the in-repo `test_macros::traced_test` attribute,
+then normalizes the captured lines through the shared
 `crate::wrap::tracing_snapshot_support::normalise_event_lines` helper before
 asserting the snapshot.
 
@@ -873,10 +1043,10 @@ Re-use policy for this helper:
   and gated behind `#[cfg(test)]`; it is `pub(crate)` test-support code, not part
   of any public or runtime API.
 - **Permitted call-sites.** Only tracing-event snapshot tests. Call it from
-  inside a `#[traced_test]` function through the injected `logs_assert` closure,
-  copying the normalized result into an owned buffer before asserting the
-  snapshot after the closure returns (see the modules listed above for the
-  canonical shape).
+  inside a `test_macros::traced_test` function through the injected
+  `logs_assert` closure, copying the normalized result into an owned buffer
+  before asserting the snapshot after the closure returns (see the modules
+  listed above for the canonical shape).
 - **Composition.** Do not layer additional normalization on top; if a new event
   needs different masking, extend the helper (and this section) rather than
   post-processing its output at the call-site, so every snapshot shares one
@@ -980,10 +1150,14 @@ The CLI matrix harness in [tests/cli_matrix.rs](../tests/cli_matrix.rs) checks
 that important option combinations keep working through the real `mdtablefix`
 binary. It uses `assert_cmd` to run the command and `insta` to snapshot a
 labelled envelope containing the case identifier, execution mode, arguments,
-exit status, stdout, stderr, and rewritten file content where relevant.
+exit status, stdout, stderr, and rewritten file content. Every case runs in a
+fresh temporary directory with its fixture staged as `input.dat`, so a mode
+that echoes the file it reports echoes the same name in every snapshot. The
+`[file]` block is recorded as `<not applicable>` for the read-only modes, which
+is what keeps a reporting snapshot free to claim the file was not written.
 
 The base catalogue lives in
-[tests/cli_matrix/support.rs](../tests/cli_matrix/support.rs). It covers the
+[tests/cli_matrix/cases.rs](../tests/cli_matrix/cases.rs). It covers the
 seven non-wrap transform flags:
 
 - `--renumber`
@@ -995,15 +1169,41 @@ seven non-wrap transform flags:
 - `--headings`
 
 The harness expands every base row into both `--wrap` and no-`--wrap` variants.
-It then runs each logical variant twice: once as file-to-stdout formatting and
-once with `--in-place` against an equivalent temporary file. The snapshot test
-also asserts that stdout output and the `--in-place` rewritten file are
-identical for the same logical case.
+It then runs each logical variant as file-to-stdout formatting and with
+`--in-place` against an equivalent temporary file. The snapshot test also
+asserts that stdout output and the `--in-place` rewritten file are identical
+for the same logical case.
+
+### Curated reporting coverage
+
+`--check` and `--diff` report what the printing mode would write, so the
+harness exercises them over a curated subset of base rows rather than doubling
+every snapshot. A row that joins the subset declares both reporting modes and
+therefore runs them in both wrap variants; the self-test
+`matrix_reporting_rows_are_curated` holds that declaration to those rules, and
+`matrix_cases_expand_to_their_declared_modes` checks that every logical case
+runs exactly the modes it declares. The subset is `row_000` (the plain table
+case), `row_010` (whose unwrapped variant is already a fixed point, so the
+subset covers a file that needs no change as well as one that drifts), and
+`row_111` (the frontmatter document boundary).
+
+The reporting modes are measured against the printing mode's own output for the
+same document rather than against counts written into the test. Each reporting
+run must leave the file unwritten, exit `0` when the printed document already
+matches the file and `1` when it does not, and report exactly the edit that
+status implies: `--check` prints one `<path> +<n> -<m>` line, and `--diff`
+prints a unified diff whose marked lines are those same counts.
+`matrix_reporting_modes_agree` additionally requires the two modes to agree on
+the counts for the same document. The diff body itself is checked by applying
+its hunks to the file, copying the lines no hunk covers as a patch would, and
+asserting that the result is exactly the printed document.
 
 Matrix input fixtures live under `tests/data/cli-matrix/` and must use the
 `.dat` extension. Do not use `.md` or `.txt` for these fixtures because
 `make fmt` runs Markdown formatting and must not rewrite matrix inputs. The
-harness has a self-test that rejects non-`.dat` fixtures.
+harness has a self-test that rejects non-`.dat` fixtures, and the staging name
+above is why: a reporting mode echoes the name the file was given, so only a
+`.dat` fixture keeps that name stable in a snapshot.
 
 `make typecheck` runs `cargo check --all-targets --all-features` to verify
 type-correctness without running tests. Use it for rapid feedback during
@@ -1013,9 +1213,11 @@ Before changing snapshots, run the harness self-tests:
 
 ```bash
 cargo test --test cli_matrix matrix_case_ids_are_unique
-cargo test --test cli_matrix matrix_cases_expand_to_stdout_and_in_place
+cargo test --test cli_matrix matrix_cases_expand_to_their_declared_modes
 cargo test --test cli_matrix matrix_cases_expand_to_wrapped_and_unwrapped
 cargo test --test cli_matrix matrix_cases_cover_all_transform_pairs
+cargo test --test cli_matrix matrix_reporting_rows_are_curated
+cargo test --test cli_matrix matrix_reporting_modes_agree
 ```
 
 Create or update snapshots only when the behaviour change is intentional:
@@ -1174,6 +1376,32 @@ Apply it to any fixture function whose single-expression body triggers the lint:
 pub fn broken_table() -> Vec<String> { … }
 ```
 
+The same crate provides `test_macros::traced_test`, the attribute all traced
+tests in this repository use in place of `tracing_test::traced_test`. The
+wrapper exists because `tracing-test` installs its global subscriber lazily,
+from whichever traced test the harness reaches first. `tracing` decides once,
+when a callsite is first used, whether that callsite can ever be dispatched; a
+callsite first used before that install finds no subscriber to ask and caches
+`Interest::never()` for the life of the process, because installing a global
+subscriber does not recompute the cache. The callsite then stays silent, so a
+test that asserts on its own log lines fails intermittently, on a schedule set
+by which other tests the harness happens to run alongside it.
+
+The wrapper prepends `::tracing::callsite::rebuild_interest_cache();` to the
+function body and re-emits `#[::tracing_test::traced_test]`. `tracing-test`
+prepends its own initialization to whatever body it is given, so the rebuild
+always runs after the install. The ordering is therefore structural rather
+than dependent on the test author writing calls in the right order. The full
+rationale is in the macro's doc comment in `test-macros/src/lib.rs`.
+
+Apply it to any test that asserts on its own log lines:
+
+```rust
+#[test_macros::traced_test]
+#[test]
+fn a_traced_case() { … }
+```
+
 ### 2.4. Inline unit-test modules
 
 AGENTS.md caps a source file at 400 lines, so a `#[cfg(test)] mod tests` block
@@ -1207,8 +1435,9 @@ envelope records a process-result *value*, not diagnostic wording:
 for a process that was killed by a signal. `ExitStatus`'s own `Display` is not
 portable — an ordinary exit reads `exit status: 0` on Unix and `exit code: 0`
 on Windows — so snapshotting it directly would make every envelope a
-Windows-only failure. The committed snapshots under `tests/snapshots/` therefore
-carry `status: code: 0`.
+Windows-only failure. The committed snapshots under `tests/snapshots/`
+therefore carry `status: code: 0`, or `status: code: 1` where a reporting mode
+is asked about a file that drifts.
 
 `tests/static_regex_lint.rs` is gated whole-file with `#![cfg(unix)]`. The guard
 it drives is a `bash` script that shells out to ripgrep, and the tests stand in
@@ -1216,6 +1445,87 @@ for ripgrep with stub scripts that have to carry the executable bit; on Windows
 the target compiles to an empty binary rather than failing. Nothing goes
 unguarded on that account: the Linux lint job runs the same script over the same
 sources through the `check-static-regexes` Makefile target.
+
+### 2.6. Behaviour-driven scenario tests
+
+`rstest-bdd` features live in `tests/features/`. The scenario bindings are in
+`tests/bdd_reporting.rs`, which is its own test binary, and the step
+definitions are in `tests/steps/reporting.rs`, declared by the bindings as a
+`#[path]` submodule.
+
+Conventions:
+
+- The step definitions must be declared before the bindings. The step registry
+  is populated as macros expand, so a binding that expanded first would not
+  yet see them, and `strict-compile-time-validation` would report every step
+  as missing.
+- Both feature files share one set of steps because they describe one analysis
+  with two renderings. A step that differed between them would be exactly the
+  place the two modes could silently diverge.
+- Each scenario has its own `ReportingState` fixture, built by the `state`
+  fixture in `tests/bdd_reporting.rs` and injected through `#[from(state)]`.
+  The state holds `Slot` fields, so a step borrows the whole state immutably
+  and fills one slot, which is what lets `Given`, `When`, and `Then` share
+  data without a mutable borrow crossing a step boundary. The state covers the
+  scenario's temporary directory, the files as named in argument order, and the
+  directory fingerprint from before a run through to the most recent `Run`, or
+  the outputs when a scenario repeats the run.
+- Every step drives the real binary through `assert_cmd`'s
+  `Command::cargo_bin`, so the features specify the command-line contract
+  rather than a reimplementation of it. There is no external fixture-file
+  directory: the steps create their fixtures on demand with `std::fs::write`
+  inside a `tempfile::tempdir()`, writing the ragged or already-formatted
+  content and recording the name in argument order. The read-only scenarios
+  capture a fingerprint of entry names, bytes, and modification times before
+  the run and compare it afterwards.
+- [docs/rstest-bdd-users-guide.md](rstest-bdd-users-guide.md) is vendored in
+  this repository. It records the framework conventions and the
+  `strict-compile-time-validation` feature that
+  `rstest-bdd-macros` is pinned with in `Cargo.toml`.
+
+### 2.7. Build and test requirements
+
+`make test` is two `cargo test` invocations, both with `RUSTFLAGS` set so that
+warnings are errors:
+
+Table: The `make test` recipe, verbatim from the Makefile.
+
+| Step | Command                                                           |
+| ---- | ----------------------------------------------------------------- |
+| 1    | `RUSTFLAGS="-D warnings" cargo test --all-targets --all-features` |
+| 2    | `RUSTFLAGS="-D warnings" cargo test --doc --all-features`         |
+
+The first step compiles and runs every test target — the unit tests in `src/`,
+the integration binaries under `tests/`, and the compile fixtures driven by
+`tests/compile.rs` — with every feature enabled. The second is not redundant:
+documentation tests are not part of `--all-targets`, so `--doc` is the only
+invocation that compiles and runs the examples in doc comments, including those
+on `mdtablefix::report` and `mdtablefix::io::SourceDocument`. Because both
+carry `-D warnings`, a warning raised while compiling a test target or a
+doctest fails the gate rather than scrolling past.
+
+The other two commit gates are `make check-fmt` (`cargo fmt --all -- --check`)
+and `make lint` (`cargo clippy --all-targets --all-features -- -D warnings`).
+All three run before a commit. `make markdownlint` covers the documentation
+changes that none of the Rust gates see.
+
+#### `similar`
+
+`similar` is a runtime dependency of the library, not a dev-dependency. It
+serves the reporting domain in `src/report/`: `LineDelta::between` counts
+insertions and deletions by iterating `TextDiff::from_lines`, and
+`write_unified_diff` renders a unified diff from a `TextDiff::configure()`
+value, choosing between Myers and Patience from the `DiffOptions` the caller
+supplied. The requirement is `similar = "2.7"` — a caret requirement, so the
+resolved version is at least 2.7 and below 3.0 — and both call sites are
+written against the 2.x API: the `ChangeTag` variants, the configured algorithm
+selection, and the `iter_all_changes` iterator. Widening the requirement to a
+3.x line means re-checking both.
+
+`DiffOptions` fields are this crate's own policy rather than `similar`'s. The
+context radius is fixed at three lines, matching `git diff`, and the patience
+threshold switches algorithm above a line count so that diffing a very large
+file stays bounded without a wall-clock cut-off.
 
 ## 3. Breaks module – Cow allocation strategy
 

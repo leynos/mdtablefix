@@ -8,8 +8,11 @@
 - [HTML table support](#html-table-support-in-mdtablefix)
 - [Module relationships](#module-relationships)
 - [Concurrency with `rayon`](#concurrency-with-rayon)
+- [Check and diff reporting](#check-and-diff-reporting)
 - [Atomic in-place writes](#atomic-in-place-writes)
 - [Unicode width handling](#unicode-width-handling)
+- [Link punctuation handling](#link-punctuation-handling)
+- [Inline code punctuation handling](#inline-code-punctuation-handling)
 
 ## Markdown stream processor
 
@@ -414,6 +417,25 @@ classDiagram
         +detect_line_ending()
         +serialize_lines()
         +LineEnding
+        +SourceDocument
+    }
+    class report {
+        <<module>>
+        +FileReport
+        +LineDelta
+        +DiffOptions
+        +render_report_line()
+        +render_summary()
+        +write_unified_diff()
+    }
+    class driver {
+        <<module>>
+        +Formatter
+        +ReadOnlyDir
+        +analyse()
+        +assess()
+        +write_back()
+        +in_argument_order()
     }
     lib --> html
     lib --> table
@@ -424,6 +446,7 @@ classDiagram
     lib --> fences
     lib --> process
     lib --> io
+    lib --> report
     html ..> wrap : uses is_fence
     table ..> reflow : uses parse_rows, etc.
     lists ..> wrap : uses is_fence
@@ -442,6 +465,8 @@ classDiagram
     footnotes ..> wrap : uses tokenize_markdown
     footnotes ..> textproc : uses push_original_token
     io ..> process : uses process_stream, process_stream_no_wrap
+    driver ..> io : uses SourceDocument, replace_file
+    driver ..> report : uses FileReport, DiffOptions, render_report_line
 ```
 
 The `lib` module is re-exported as the public API from the other modules. The
@@ -458,6 +483,11 @@ holding the majority of a document's line endings and re-emits the formatted
 lines with that style, so a carriage return and line feed (CRLF) document stays
 CRLF while the transform pipeline itself remains line-ending agnostic. The
 rationale is recorded in [ADR 0007](adrs/0007-line-ending-detection.md).
+
+The `driver` module is binary-private by design: it is declared as `mod
+driver;` in the binary rather than part of the library, so the library's entry
+points stay infallible and free of filesystem policy while the CLI's
+exit-status contract lives in the driver.
 
 ### Stateful helpers
 
@@ -665,28 +695,30 @@ results in the input order.
 sequenceDiagram
     participant User as actor User
     participant CLI as CLI Main
-    participant Formatter as format_to_string
-    participant Rewriter as rewrite_in_place
+    participant Analyser as driver::analyse
+    participant Rewriter as driver::write_back
     participant Stdout as Stdout
     participant Stderr as Stderr
 
     User->>CLI: Run CLI with multiple files
     alt Stdout mode
-        CLI->>Formatter: format_to_string(file1)
-        CLI->>Formatter: format_to_string(file2)
-        CLI->>Formatter: format_to_string(file3)
-        Note over CLI,Formatter: Files processed in parallel
-        Formatter-->>CLI: Result<String> or Err(error)
+        CLI->>Analyser: analyse(file1, Print)
+        CLI->>Analyser: analyse(file2, Print)
+        CLI->>Analyser: analyse(file3, Print)
+        Note over CLI,Analyser: Files processed in parallel
+        Analyser-->>CLI: Result<(FileReport, String)> or Err(error)
         loop For each file in input order
             CLI->>Stdout: Print text (if Ok)
             CLI->>Stderr: Print error (if Err)
         end
     else In-place mode
-        CLI->>Rewriter: rewrite_in_place(file1)
-        CLI->>Rewriter: rewrite_in_place(file2)
-        CLI->>Rewriter: rewrite_in_place(file3)
-        Note over CLI,Rewriter: Files processed in parallel
-        Rewriter-->>CLI: Result<()> or Err(error)
+        CLI->>Analyser: analyse(file1, InPlace)
+        CLI->>Analyser: analyse(file2, InPlace)
+        CLI->>Analyser: analyse(file3, InPlace)
+        Note over CLI,Analyser: Files processed in parallel
+        Analyser->>Rewriter: write_back(file1)
+        Rewriter-->>Analyser: Result<()> or Err(error)
+        Analyser-->>CLI: Result<(FileReport, String)> or Err(error)
         loop For each file in input order
             CLI->>Stderr: Print error (if Err)
         end
@@ -694,13 +726,86 @@ sequenceDiagram
     CLI-->>User: Exit (with error if any file errored)
 ```
 
-_Figure 4: The CLI processes file inputs in parallel, then reports results in
+_Figure 3: The CLI processes file inputs in parallel, then reports results in
 their original order: formatted text goes to stdout, while in-place processing
 replaces each file atomically and both modes report errors on stderr._
 
+## Check and diff reporting
+
+The CLI's mode flags select three behaviours besides the default printing.
+`--check` reports one line per drifting file, `--diff` reports a unified diff
+per drifting file, and `--in-place` rewrites drifting files. The two reporting
+modes exit `1` when they find drift, `2` when a file cannot be read, and `0`
+otherwise; `--in-place` exits `0` over drifting files and `2` when a file
+cannot be read or rewritten.
+
+Every mode shares one assessment. `driver::analyse` reads the file once through
+a `ReadOnlyDir`, parses it with `SourceDocument::parse`, and formats it once
+with the single `Formatter` closure built by `formatting_closure` in
+`src/command.rs`, constructed once at the call site in `src/main.rs`. The
+changed-or-unchanged decision is a byte comparison, `Assessment::is_changed`,
+and this one shared assessment is what stops a reporting mode disagreeing with
+`--in-place` about what the formatter would write.
+
+The read-only guarantee is by type, not convention: `ReadOnlyDir` is a newtype
+over the directory capability that exposes only `read`, so a reporting mode
+cannot write even if the match arm that selected it is wrong.
+
+Each mode renders the same assessment differently inside `analyse`'s match.
+`render_report_line` renders the check line, `write_unified_diff` renders the
+diff under `DIFF_OPTIONS` (three lines of context, and a switch from Myers to
+Patience above 1,000 lines on either side — a line count rather than a time
+budget, so output does not depend on machine speed), and `write_back` performs
+the in-place write. A file that has not changed produces an empty payload in
+the reporting and in-place modes.
+
+Report lines and diffs go to standard output, so they compose in a pipeline.
+The summary line and every error go to standard error, which keeps standard
+output a machine contract for the read-only modes. Argument order is restored
+by `driver::in_argument_order` from explicit `(index, result)` pairs; the
+parallel collection's own order is not a documented guarantee.
+
+The diagram traces one file through that path.
+
+```mermaid
+sequenceDiagram
+    participant RF as main::run_files
+    participant RM as rayon map
+    participant AO as main::analyse_one
+    participant DA as driver::analyse
+    participant ASSESS as assess
+    participant PL as mode payload
+    participant WB as write_back
+    participant RP as replace_file
+
+    RF->>RM: par_iter over file paths
+    RM->>AO: analyse_one per file
+    AO->>DA: analyse
+    DA->>ASSESS: assess
+    ASSESS-->>DA: Assessment
+    alt Mode::Print
+        DA-->>PL: formatted text
+    else Mode::Check and changed
+        DA-->>PL: render_report_line
+    else Mode::Diff and changed
+        DA-->>PL: write_unified_diff
+    else Mode::InPlace and changed
+        DA->>WB: write_back
+        WB->>RP: replace_file
+    end
+    PL-->>RF: payloads in argument order
+```
+
+_Figure 4: The path of one file through check and diff reporting. `run_files`
+maps `analyse_one` over the paths with `rayon`; `analyse_one` calls
+`driver::analyse`, which assesses the file and then renders the payload its
+`Mode` selects — the formatted text, a report line, a unified diff, or an
+in-place write through `replace_file`. The payloads return to `run_files` in
+argument order._
+
 ## Atomic in-place writes
 
-Both the CLI's `rewrite_in_place` and the library's `rewrite_with` replace a
+Both the CLI's `driver::write_back` and the library's `rewrite_with` replace a
 file by writing the formatted output to a temporary file in the same directory
 and renaming it over the target. Both call the single implementation in
 `mdtablefix::io::replace_file`, which takes a `cap_std::fs_utf8::Dir`
@@ -733,7 +838,7 @@ sequenceDiagram
     participant TempFile
     participant Target
 
-    Caller->>Rewriter: rewrite_in_place / rewrite
+    Caller->>Rewriter: write_back / rewrite
     Rewriter->>Directory: metadata(target)
     Rewriter->>Directory: create_temporary_file(target)
     Directory-->>TempFile: create_new(same directory)
