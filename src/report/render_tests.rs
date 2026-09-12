@@ -7,6 +7,14 @@ use rstest::rstest;
 
 use super::{DiffOptions, render_summary, write_unified_diff};
 
+/// The message [`FailingWriter`] injects and the caller must receive.
+///
+/// Named rather than written twice: the renderer's contract is that the
+/// *writer's* error reaches the caller, so an error re-wrapped downstream
+/// with the same kind but a message of its own has to fail the test below.
+/// A repeated literal would match that substitution and pass.
+const WRITER_FAILURE_MESSAGE: &str = "closed";
+
 /// A writer that accepts `budget` bytes and then fails every write.
 ///
 /// The budget makes the failure land at a chosen point in the stream, so
@@ -19,7 +27,10 @@ struct FailingWriter {
 impl io::Write for FailingWriter {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         if buffer.len() > self.budget {
-            return Err(io::Error::new(io::ErrorKind::BrokenPipe, "closed"));
+            return Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                WRITER_FAILURE_MESSAGE,
+            ));
         }
         self.budget -= buffer.len();
         Ok(buffer.len())
@@ -165,10 +176,15 @@ fn equal_texts_render_nothing() {
 ///
 /// The doc comment promises that a failure to write is returned, and this
 /// is the only test that can show it: every other renderer test writes
-/// into a `Vec`, which cannot fail. The assertion is on the error's kind,
-/// so a `to_writer` that replaced the writer's error with one of its own
-/// would fail here. `budget` places the failure before any byte is written
-/// and inside the rendered body, after the headers have been accepted.
+/// into a `Vec`, which cannot fail. `budget` places the failure before any
+/// byte is written and inside the rendered body, after the headers have
+/// been accepted.
+///
+/// The message is asserted as well as the kind, because the kind alone is
+/// a weaker claim than it looks: a `to_writer` that re-wrapped the writer's
+/// failure as `io::Error::new(BrokenPipe, "diff failed")` would keep the
+/// kind and still lose what the writer said. The message is what separates
+/// passing an error through from manufacturing one.
 #[rstest]
 #[case(0)]
 #[case(16)]
@@ -190,6 +206,11 @@ fn a_failing_writer_error_reaches_the_caller(#[case] budget: usize) {
         error.kind(),
         io::ErrorKind::BrokenPipe,
         "the writer's own error must reach the caller: {error}"
+    );
+    assert_eq!(
+        error.to_string(),
+        WRITER_FAILURE_MESSAGE,
+        "the writer's own message must survive, not just its kind: {error}"
     );
 }
 
