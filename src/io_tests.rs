@@ -65,7 +65,7 @@ fn rewrite_with_identity_transform_restores_the_document_boundary(
     assert_eq!(
         fs::read(&file).expect("read result"),
         expected.as_bytes(),
-        "an identity transform must change nothing but what the boundary normalises"
+        "an identity transform must change nothing but what the boundary normalizes"
     );
 }
 

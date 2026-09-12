@@ -96,51 +96,44 @@ impl LineDelta {
 mod tests {
     //! Unit tests for line counting.
 
+    use rstest::rstest;
+
     use super::LineDelta;
 
-    #[test]
-    fn pure_insertion_counts_only_insertions() {
-        let delta = LineDelta::between("alpha\n", "alpha\nbeta\n");
-        assert_eq!((delta.insertions(), delta.deletions()), (1, 0));
-        assert!(delta.has_changes(), "an insertion alone is a change");
-    }
+    /// Each pair of texts, the counts it produces, and whether it is a change.
+    ///
+    /// The flag is asserted beside the counts rather than derived from them:
+    /// a pure insertion and a pure deletion each already produce the counts
+    /// that a wrong comparison in [`LineDelta::has_changes`] would satisfy, so
+    /// this column is what rejects it. The cases are named rather than
+    /// positional so a failure says which shape it was.
+    #[rstest]
+    #[case::pure_insertion("alpha\n", "alpha\nbeta\n", 1, 0, true)]
+    #[case::pure_deletion("alpha\nbeta\n", "alpha\n", 0, 1, true)]
+    #[case::replacement("alpha\n", "beta\n", 1, 1, true)]
+    #[case::identical("alpha\nbeta\n", "alpha\nbeta\n", 0, 0, false)]
+    // Rewriting a document's endings replaces every line, because the
+    // tokenizer treats `\r\n` and `\n` as different terminators. That is what
+    // `git diff --numstat` reports too. A file whose endings are already
+    // uniform never reaches here: the caller compares bytes first.
+    #[case::line_ending_change("alpha\n", "alpha\r\n", 1, 1, true)]
+    // A lone carriage return is a terminator to the tokenizer, so the counts
+    // follow the lines the unified diff would render rather than the lines
+    // `str::lines` would yield.
+    #[case::lone_carriage_return("alpha\rbeta\n", "alpha\rgamma\n", 1, 1, true)]
+    fn between_counts_lines(
+        #[case] original: &str,
+        #[case] formatted: &str,
+        #[case] insertions: usize,
+        #[case] deletions: usize,
+        #[case] changes: bool,
+    ) {
+        let delta = LineDelta::between(original, formatted);
 
-    #[test]
-    fn pure_deletion_counts_only_deletions() {
-        let delta = LineDelta::between("alpha\nbeta\n", "alpha\n");
-        assert_eq!((delta.insertions(), delta.deletions()), (0, 1));
-        assert!(delta.has_changes(), "a deletion alone is a change");
-    }
-
-    #[test]
-    fn replacement_counts_both_sides() {
-        let delta = LineDelta::between("alpha\n", "beta\n");
-        assert_eq!((delta.insertions(), delta.deletions()), (1, 1));
-    }
-
-    #[test]
-    fn identical_texts_have_no_changes() {
-        let delta = LineDelta::between("alpha\nbeta\n", "alpha\nbeta\n");
-        assert_eq!((delta.insertions(), delta.deletions()), (0, 0));
-        assert!(!delta.has_changes());
-    }
-
-    /// Rewriting a document's endings replaces every line, because the
-    /// tokenizer treats `\r\n` and `\n` as different terminators. That is what
-    /// `git diff --numstat` reports too. A file whose endings are already
-    /// uniform never reaches here: the caller compares bytes first.
-    #[test]
-    fn a_line_ending_change_is_a_full_line_change() {
-        let delta = LineDelta::between("alpha\n", "alpha\r\n");
-        assert_eq!((delta.insertions(), delta.deletions()), (1, 1));
-    }
-
-    /// A lone carriage return is a terminator to the tokenizer, so the counts
-    /// follow the lines the unified diff would render rather than the lines
-    /// [`str::lines`] would yield.
-    #[test]
-    fn a_lone_carriage_return_separates_lines() {
-        let delta = LineDelta::between("alpha\rbeta\n", "alpha\rgamma\n");
-        assert_eq!((delta.insertions(), delta.deletions()), (1, 1));
+        assert_eq!(
+            (delta.insertions(), delta.deletions()),
+            (insertions, deletions)
+        );
+        assert_eq!(delta.has_changes(), changes);
     }
 }

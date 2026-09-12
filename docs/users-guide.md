@@ -116,10 +116,13 @@ terminator even when the input produces no lines; an empty file stays empty.
 `mdtablefix` takes file paths, not patterns, and does no discovery of its own.
 A shell expands a glob before the tool sees it, so `mdtablefix --check *.md` in
 a directory with no Markdown files passes the literal pattern `*.md`, which is
-then reported as an unreadable path and exits `2`. That is deliberate: a run
-asked to check a set of files and checking none of them has not earned a clean
-tree. A gate should expand the list in a way that runs the tool only when there
-is something to check:
+then reported as an unreadable path and exits `2`. Shells differ in whether
+that happens: `sh` and `bash` pass an unmatched pattern through literally,
+while `zsh` — and `bash` under `failglob` — refuse to run the command at all,
+so the exit `2` above belongs to the shells that let the pattern through. The
+behaviour is deliberate either way: a run asked to check a set of files and
+checking none of them has not earned a clean tree. A gate should expand the
+list in a way that runs the tool only when there is something to check:
 
 ```bash
 fd -e md -X mdtablefix --check

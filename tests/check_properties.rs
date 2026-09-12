@@ -38,7 +38,10 @@ const FLAGS: [&str; 8] = [
 /// assertion cannot pass vacuously.
 const CORPUS: &[(&str, &str)] = &[
     ("ragged_table", "|A|B|\n|---|---|\n|1|2|\n"),
-    ("clean_table", "| A | B |\n| --- | --- |\n| 1 | 2 |\n"),
+    (
+        "clean_table",
+        "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n",
+    ),
     (
         "prose",
         "one two three four five six seven eight nine ten eleven twelve\n",

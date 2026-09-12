@@ -152,7 +152,7 @@ pub fn write_unified_diff(
     } else {
         Algorithm::Myers
     };
-    // Separators are normalised rather than taken from `display_path` as
+    // Separators are normalized rather than taken from `display_path` as
     // written, so a path rendered on Windows still names one file to the tools
     // that consume unified diffs.
     let header = display_path.as_str().replace('\\', "/");

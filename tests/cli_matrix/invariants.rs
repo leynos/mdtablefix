@@ -129,7 +129,32 @@ fn ordered_marker(line: &str) -> Option<OrderedMarker> {
 mod tests {
     //! Unit tests for generated CLI-matrix invariants.
 
-    use super::{fixture_has_fence_candidate, ordered_marker, unordered_fixture_markers};
+    use rstest::rstest;
+
+    use super::{
+        contains_table_delimiter,
+        fixture_has_fence_candidate,
+        ordered_marker,
+        unordered_fixture_markers,
+    };
+
+    /// A delimiter cell is a dash-and-colon run, and it only counts on a line
+    /// that carries a pipe, so a Setext heading underline is not a table row.
+    ///
+    /// The negative cases are what make the predicate worth testing: the one
+    /// caller asserts only that a fixture has *a* table, which a predicate
+    /// accepting every dash run would satisfy just as well.
+    #[rstest]
+    #[case::delimiter_row("| --- | --- |", true)]
+    #[case::colon_aligned_row("|:---|:---:|", true)]
+    #[case::single_cell_with_a_pipe("| --- |", true)]
+    #[case::setext_underline("Title\n---\n", false)]
+    #[case::pipes_without_a_delimiter_cell("| A | B |", false)]
+    #[case::empty_cells("| | |", false)]
+    #[case::prose("plain prose", false)]
+    fn contains_table_delimiter_needs_a_pipe(#[case] fixture: &str, #[case] expected: bool) {
+        assert_eq!(contains_table_delimiter(fixture), expected);
+    }
 
     #[test]
     fn ordered_marker_returns_none_for_plain_prose() {

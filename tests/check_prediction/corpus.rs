@@ -64,7 +64,11 @@ pub const CORPUS: &[Fixture] = &[
     ),
     fixture("setext_heading", "Title\n=====\n", Some("--headings")),
     fixture("ragged_table", "|A|B|\n|---|---|\n|1|2|\n", None),
-    fixture("clean_table", "| A | B |\n| --- | --- |\n| 1 | 2 |\n", None),
+    fixture(
+        "clean_table",
+        "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n",
+        None,
+    ),
     fixture("crlf_table", "|A|B|\r\n|---|---|\r\n|1|2|\r\n", None),
     fixture("bom_table", "\u{FEFF}|A|B|\n|---|---|\n|1|2|\n", None),
     fixture("unterminated_table", "|A|B|\n|---|---|\n|1|2|", None),

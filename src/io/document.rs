@@ -221,10 +221,10 @@ mod tests {
 
     #[rstest]
     // A document with no strict majority is written with line feeds, so it is
-    // deliberately not a round trip: `alpha\r\nbeta\n` is normalised.
+    // deliberately not a round trip: `alpha\r\nbeta\n` is normalized.
     #[case::tie_prefers_line_feeds("alpha\r\nbeta\n", "alpha\nbeta\n")]
     #[case::missing_trailing_newline("alpha\nbeta", "alpha\nbeta\n")]
-    fn parse_then_render_normalises(#[case] content: &str, #[case] expected: &str) {
+    fn parse_then_render_normalizes(#[case] content: &str, #[case] expected: &str) {
         let document = SourceDocument::parse(content);
 
         assert_eq!(document.render(&lines(document.body())), expected);

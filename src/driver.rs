@@ -282,7 +282,9 @@ pub fn analyse(
     // `is_changed` guards are what carry that, which is why the unchanged arms
     // are written last.
     let payload = match mode {
-        Mode::Print => assessment.formatted.clone(),
+        // The move is the last use of the assessment on this arm; the arms
+        // below borrow it, and cannot run beside this one.
+        Mode::Print => assessment.formatted,
         Mode::Check if is_changed => format!("{}\n", render_report_line(display_path, delta)),
         Mode::Diff if is_changed => render_diff(display_path, &assessment)?,
         // A clean file is left alone byte for byte. The write would be
