@@ -37,6 +37,80 @@ fn renumber_footnotes_rewrites_definitions(
     assert_eq!(input, expected);
 }
 
+#[rstest]
+#[case::mismatched_markers(
+    strings(&[
+        "First reference[^7].",
+        "```",
+        "~~~",
+        "Fenced reference[^8].",
+        "```",
+        "Second reference[^8].",
+        "[^7]: First definition",
+        "[^8]: Second definition",
+    ]),
+)]
+#[case::shorter_interior_fence(
+    strings(&[
+        "First reference[^7].",
+        "````",
+        "```",
+        "Fenced reference[^8].",
+        "````",
+        "Second reference[^8].",
+        "[^7]: First definition",
+        "[^8]: Second definition",
+    ]),
+)]
+#[case::info_string_closer(
+    strings(&[
+        "First reference[^7].",
+        "```rust",
+        "```not-a-closer",
+        "Fenced reference[^8].",
+        "```",
+        "Second reference[^8].",
+        "[^7]: First definition",
+        "[^8]: Second definition",
+    ]),
+)]
+fn renumber_footnotes_preserves_references_in_shared_fence_regions(#[case] mut input: Vec<String>) {
+    let expected = strings(&[
+        "First reference[^1].",
+        input[1].as_str(),
+        input[2].as_str(),
+        "Fenced reference[^8].",
+        input[4].as_str(),
+        "Second reference[^2].",
+        "[^1]: First definition",
+        "[^2]: Second definition",
+    ]);
+
+    renumber_footnotes(&mut input);
+
+    assert_eq!(input, expected);
+}
+
+#[test]
+fn renumber_footnotes_rewrites_prose_after_blockquote_fence_depth_exit() {
+    let mut input = strings(&[
+        "> ```rust",
+        "> Fenced reference[^8].",
+        "Prose reference[^7].",
+        "[^7]: Prose definition",
+    ]);
+    let expected = strings(&[
+        "> ```rust",
+        "> Fenced reference[^8].",
+        "Prose reference[^1].",
+        "[^1]: Prose definition",
+    ]);
+
+    renumber_footnotes(&mut input);
+
+    assert_eq!(input, expected);
+}
+
 mod proptest_tests {
     //! Property tests for footnote renumbering.
     //!

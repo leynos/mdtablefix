@@ -141,6 +141,16 @@ declined link, fails that file, and exits `2`. A link to a file that needs no
 changes is not written at all, so it succeeds. See
 [In-place editing](#in-place-editing) for the full replacement contract.
 
+## Footnote conversion
+
+`mdtablefix --footnotes` converts eligible prose outside fenced code blocks,
+including bare numeric candidates and the final numbered list, into Markdown
+footnote links. Footnote references (`[^n]`), definitions (`[^n]:`), and
+numeric candidates inside fenced code blocks remain unchanged. Fenced regions
+are recognised using matching marker characters and run lengths; a closer must
+also have no info string. A fence opened inside a blockquote ends when the
+blockquote depth drops below its opening depth.
+
 ## Table reflow
 
 `mdtablefix` reformats Markdown pipe tables so each column is aligned to a

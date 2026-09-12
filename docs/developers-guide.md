@@ -1324,6 +1324,14 @@ finalized at the end via `finalize_numeric_candidates`, which drains the buffer
 in reverse, so the assigned numbers reflect bottom-up ordering rather than the
 order in which the candidates were discovered.
 
+Footnote reference collection, definition scanning, and reference rewriting
+classify each source line with `FenceTracker::observe_source_line`. The shared
+tracker requires matching marker characters and an equal-or-longer closing run;
+a closing marker must have only blank information after it. A fence also closes
+implicitly when the blockquote depth drops below its opening depth. This keeps
+references, definitions, and numeric candidates inside fenced code blocks
+unchanged while prose outside those blocks remains eligible for renumbering.
+
 ### 1.5. `ListState` (`src/lists.rs`)
 
 `ListState` maintains an indent stack and a per-indent counter map for
