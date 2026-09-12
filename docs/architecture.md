@@ -14,6 +14,7 @@
 - [Unicode width handling](#unicode-width-handling)
 - [Link punctuation handling](#link-punctuation-handling)
 - [Inline code punctuation handling](#inline-code-punctuation-handling)
+- [Verification strategy](#verification-strategy)
 
 ## Markdown stream processor
 
@@ -1044,3 +1045,13 @@ classified as atomic by `has_inline_code_structure` in
 `` `VarGuard`s ``, `` `class`'s ``, `` `fetch`ed ``, or `` `run`ning `` — as
 an unbreakable unit. No line break is inserted between the closing backtick and
 the following letters.
+
+
+## Verification strategy
+
+The [verification ledger](verification.md) records each claimed Verus result,
+the production function it verifies, and every contract it trusts at an
+external boundary. [ADR 0008](adrs/0008-verified-normalization-core.md)
+restricts proofs to narrow production-used kernels, so property tests continue
+to cover broad formatter behaviour while proofs establish their stated
+unbounded invariants.

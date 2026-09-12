@@ -22,6 +22,8 @@
 
 - [Architecture](architecture.md): Current design for the Markdown parsing,
   wrapping, table reflow, and processing pipeline.
+- [Verification ledger](verification.md): Proof claims, trusted boundaries,
+  and result classes for maintainers reviewing verified formatter kernels.
 
 ## Decision records
 
@@ -40,6 +42,8 @@
 - [Majority line-ending preservation](adrs/0007-line-ending-detection.md):
   Accepted decision covering how the formatter selects the output line-ending
   style.
+- [Verified normalization core](adrs/0008-verified-normalization-core.md):
+  Accepted decision covering production-used Verus kernels and their ledger.
 - [Byte-order-mark preservation](adrs/0008-byte-order-mark-preservation.md):
   Accepted decision covering how a leading byte-order mark is split from the
   document body and restored on render.

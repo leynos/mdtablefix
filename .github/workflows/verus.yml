@@ -1,0 +1,29 @@
+name: Verus
+
+'on':
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VERUS_VERSION: 0.2025.04.19.1b16620
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6b5cdc2d4c0bb72cafd5a66d24d248ac25827db9
+      - name: Cache Verus
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: .verus/${{ env.VERUS_VERSION }}
+          key: verus-${{ runner.os }}-${{ runner.arch }}-${{ env.VERUS_VERSION }}
+      - name: Verify proofs
+        run: make verus
+      - name: Verify the harness rejects false proofs
+        run: make verus-selftest
