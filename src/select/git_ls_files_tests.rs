@@ -136,10 +136,26 @@ fn write(root: &Utf8Path, name: &str, content: &str) {
 }
 
 /// Runs `git` in `directory`, requiring it to succeed.
+///
+/// The environment is hardened rather than inherited, as the integration
+/// fixtures harden theirs. `GIT_CONFIG_GLOBAL=/dev/null` removes the
+/// developer's configuration along with their identity, so the fixture supplies
+/// the identity through the environment, and neither a machine-wide commit hook
+/// nor a signing key can change what the fixture commits. A runner with no
+/// configured identity would otherwise fail at the first `git commit`.
 fn git(directory: &Utf8Path, args: &[&str]) {
     let output = std::process::Command::new("git")
         .current_dir(directory)
         .args(args)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("HOME", directory)
+        .env("LC_ALL", "C")
+        .env("LANGUAGE", "")
+        .env("GIT_AUTHOR_NAME", "mdtablefix tests")
+        .env("GIT_AUTHOR_EMAIL", "tests@example.invalid")
+        .env("GIT_COMMITTER_NAME", "mdtablefix tests")
+        .env("GIT_COMMITTER_EMAIL", "tests@example.invalid")
         .output()
         .expect("git on PATH; the boundary test needs a real one");
     assert!(
@@ -291,8 +307,12 @@ fn the_git_directory_is_resolved_through_git() {
         .resolve_git_dir(&worktree)
         .expect("git rev-parse --absolute-git-dir");
 
+    // Compared by path components rather than as text, so the assertion holds
+    // where the platform spells the separator the other way round.
     assert!(
-        resolved.as_str().ends_with("worktrees/linked"),
+        resolved
+            .as_path()
+            .ends_with(Utf8Path::new("worktrees").join("linked")),
         "a linked worktree's Git directory is not the main repository's: {resolved}"
     );
     assert!(
@@ -313,8 +333,11 @@ fn a_directory_outside_a_repository_has_no_git_directory() {
         .expect_err("no repository governs a fresh temporary directory");
 
     let message = error.to_string();
+    // `ExitStatus`'s own rendering is "exit status: 128" on Unix and
+    // "exit code: 128" on Windows, so the assertion pins the part this crate
+    // words and leaves the status to the standard library.
     assert!(
-        message.starts_with("`git rev-parse` failed with exit status"),
+        message.starts_with("`git rev-parse` failed with exit "),
         "unexpected message: {message}"
     );
     let diagnostic = error.diagnostic();
