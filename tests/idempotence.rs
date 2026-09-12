@@ -43,6 +43,10 @@ use tempfile::TempDir;
 
 /// Flag set recorded for the class B, `--wrap`-only cases.
 const WRAP: &[&str] = &["--wrap"];
+/// Flag set for fixtures where footnotes must be final before wrapping.
+const WRAP_FOOTNOTES: &[&str] = &["--wrap", "--footnotes"];
+/// Flag set for fixtures where list markers must be final before wrapping.
+const WRAP_RENUMBER: &[&str] = &["--wrap", "--renumber"];
 /// Flag set recorded for the class A cases that need break normalisation.
 const WRAP_BREAKS: &[&str] = &["--wrap", "--breaks"];
 /// Flag set `make fmt` runs through `mdformat-all`.
@@ -175,6 +179,18 @@ const CASES: &[IdempotenceCase] = &[
         fixture: "H1_atx_heading_above_break.dat",
         flags: HEADINGS,
         expects: &[Standalone::Literal("---")],
+    },
+    IdempotenceCase {
+        id: "L1_footnote_width_boundary",
+        fixture: "issue_484_footnotes_wrap.dat",
+        flags: WRAP_FOOTNOTES,
+        expects: &[],
+    },
+    IdempotenceCase {
+        id: "L2_renumber_width_boundary",
+        fixture: "issue_484_renumber_wrap.dat",
+        flags: WRAP_RENUMBER,
+        expects: &[],
     },
     // Class `T`: a delimiter row directly above a thematic break must keep the
     // break and stay a delimiter row. `T1` has no trailing newline and `T2` does,
