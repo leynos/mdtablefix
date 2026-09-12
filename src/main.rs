@@ -11,14 +11,13 @@
 //! disagree with `--in-place` about what the formatter would write.
 
 use std::{
-    io::{self, Read, Write},
+    io::{self, BufWriter, Read, Write},
     process::ExitCode,
 };
 
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use clap::Parser;
 use mdtablefix::{
     io::SourceDocument,
     report::{FileReport, render_summary},
@@ -27,11 +26,14 @@ use rayon::prelude::*;
 
 mod command;
 mod driver;
+mod git_inputs;
 mod metrics;
+mod select;
 
 use command::{Cli, FormatOpts, format_lines, formatting_closure};
 use driver::{ExitStatus, Formatter, Inputs, Mode, analyse, exit_status, in_argument_order};
 use metrics::{record_analysis, record_run};
+use select::conflict::ConflictGuard;
 
 /// Opens a file's parent directory and returns its relative UTF-8 path.
 ///
@@ -92,11 +94,14 @@ fn format_stdin(input: &str, opts: FormatOpts) -> String {
 /// writes, and every other mode reads.
 fn analyse_one(
     mode: Mode,
+    guard: &ConflictGuard,
     path: &Utf8Path,
     format: &Formatter,
 ) -> anyhow::Result<(FileReport, String)> {
     open_file_parent(path)
-        .and_then(|(directory, storage_key)| analyse(mode, &directory, path, &storage_key, format))
+        .and_then(|(directory, storage_key)| {
+            analyse(mode, guard, &directory, path, &storage_key, format)
+        })
         .with_context(|| format!("{} {}", mode.verb(), path))
 }
 
@@ -122,6 +127,22 @@ fn is_broken_pipe(error: &anyhow::Error) -> bool {
     })
 }
 
+/// Ends a run that failed before any file was processed, and records it.
+///
+/// A failure to name the inputs never reaches the loop that analyses them, so
+/// without this it would be the one class of failure a host could not count: a
+/// missing working directory, a repository that cannot be listed, or a path
+/// argument that cannot be resolved would each exit non-zero having recorded
+/// nothing. The caller reports the failure; this decides the status and records
+/// it, so every way a run can end is counted once and the metric cannot
+/// disagree with the exit code.
+fn failed_run(mode: Mode) -> ExitStatus {
+    let status = exit_status(mode, false, true);
+    record_run(mode, status);
+
+    status
+}
+
 /// Runs the mode the command line selects, records the run, and returns its
 /// status.
 ///
@@ -134,24 +155,54 @@ fn is_broken_pipe(error: &anyhow::Error) -> bool {
 ///
 /// The run is recorded here, at the boundary that decides the status and under
 /// the very status this process is about to exit with, so the metric a host
-/// aggregates and the exit code cannot disagree. A closed pipe is an ordinary
-/// early exit, as in `mdtablefix --check *.md | head`: the reader stopped
+/// aggregates and the exit code cannot disagree. A resolution failure returns
+/// through [`failed_run`] instead, which records it the same way. A closed
+/// pipe is an ordinary early exit, as in `mdtablefix --check *.md | head`: the
+/// reader stopped
 /// early, which says nothing about this run, so the run is recorded as the
 /// success it is. Rust ignores `SIGPIPE`, so the write reports `EPIPE` instead,
 /// and `print!` would turn that into the undocumented status `101`. Such an
 /// infrastructure failure of standard input or output is the only error that
 /// leaves here, and it is recorded before it is returned.
 fn run() -> anyhow::Result<ExitStatus> {
-    let cli = Cli::parse();
+    let cli = Cli::parse_validated();
     let mode = cli.mode();
     metrics::describe_metrics();
-    let result = match Inputs::resolve(cli.files) {
-        Ok(Inputs::Stdin) => run_stdin(cli.opts),
-        Ok(Inputs::Files(files)) => run_files(mode, &files, cli.opts),
-        Err(error) => {
-            eprintln!("{error:?}");
-            Ok(exit_status(mode, false, true))
+    let (inputs, guard) = if cli.selects_from_git() {
+        // The working directory is resolved before anything is selected,
+        // because it is what `--git` is relative to: `git ls-files` runs in it,
+        // the selection is reported relative to it, and the repository that
+        // governs it is the one whose in-progress operation the guard looks
+        // for.
+        let working_directory = match git_inputs::working_directory() {
+            Ok(working_directory) => working_directory,
+            Err(error) => {
+                eprintln!("{error:?}");
+                return Ok(failed_run(mode));
+            }
+        };
+        match git_inputs::resolve(&cli, mode, &working_directory) {
+            Ok(selection) => (selection.inputs, selection.guard),
+            Err(error) => {
+                // One deliberate line: this tool's own wording, with the
+                // underlying reason relayed beside it. See
+                // `GitInputsError::diagnostic`.
+                eprintln!("mdtablefix: {}", error.diagnostic());
+                return Ok(failed_run(mode));
+            }
         }
+    } else {
+        match Inputs::resolve(cli.files) {
+            Ok(inputs) => (inputs, ConflictGuard::unguarded()),
+            Err(error) => {
+                eprintln!("{error:?}");
+                return Ok(failed_run(mode));
+            }
+        }
+    };
+    let result = match inputs {
+        Inputs::Stdin => run_stdin(cli.opts),
+        Inputs::Files(files) => run_files(mode, &guard, &files, cli.opts),
     };
     let result = match result {
         Err(error) if is_broken_pipe(&error) => Ok(ExitStatus::Success),
@@ -175,47 +226,67 @@ fn run_stdin(opts: FormatOpts) -> anyhow::Result<ExitStatus> {
     Ok(ExitStatus::Success)
 }
 
+/// The number of files analysed in one parallel batch.
+///
+/// A selection can be an entire repository, so the results are drained in
+/// chunks rather than in one pass: the retained payloads are then one chunk's
+/// rather than the whole tree's, and the ordering stage below is what makes the
+/// chunking unobservable — the output is argument order either way. 256 is a
+/// compromise between the parallel fan-out each chunk buys and that bound.
+const ANALYSIS_CHUNK: usize = 256;
+
 /// Analyses the named files under `mode`, in argument order.
 ///
 /// The only errors returned here are writes to standard output; a file that
 /// cannot be read or rewritten is reported and counted instead, and decides the
 /// status along with the drift the reporting modes found.
-fn run_files(mode: Mode, files: &[Utf8PathBuf], opts: FormatOpts) -> anyhow::Result<ExitStatus> {
+fn run_files(
+    mode: Mode,
+    guard: &ConflictGuard,
+    files: &[Utf8PathBuf],
+    opts: FormatOpts,
+) -> anyhow::Result<ExitStatus> {
     let format = formatting_closure(opts);
-    let results = in_argument_order(
-        files
-            .par_iter()
-            .enumerate()
-            .map(|(index, path)| {
-                (
-                    index,
-                    record_analysis(mode, path, || analyse_one(mode, path, &format)),
-                )
-            })
-            .collect(),
-    );
-
     let mut changed = 0;
     let mut unchanged = 0;
     let mut errored = 0;
-    let mut stdout = io::stdout().lock();
-    for result in results {
-        match result {
-            Ok((report, payload)) => {
-                if report.is_changed {
-                    changed += 1;
-                } else {
-                    unchanged += 1;
+    // One lock and one buffer for the run, not one per file: the results are
+    // already assembled in memory, so the only question is how many syscalls
+    // they cost.
+    let mut stdout = BufWriter::new(io::stdout().lock());
+    for chunk in files.chunks(ANALYSIS_CHUNK) {
+        let results = in_argument_order(
+            chunk
+                .par_iter()
+                .enumerate()
+                .map(|(index, path)| {
+                    (
+                        index,
+                        record_analysis(mode, path, || analyse_one(mode, guard, path, &format)),
+                    )
+                })
+                .collect(),
+        );
+
+        for result in results {
+            match result {
+                Ok((report, payload)) => {
+                    if report.is_changed {
+                        changed += 1;
+                    } else {
+                        unchanged += 1;
+                    }
+                    // A closed pipe surfaces here, and `main` treats it as the
+                    // early exit it is rather than as a failure to report.
+                    stdout.write_all(payload.as_bytes())?;
                 }
-                // A closed pipe surfaces here, and `main` treats it as the
-                // early exit it is rather than as a failure to report.
-                stdout.write_all(payload.as_bytes())?;
-            }
-            Err(error) => {
-                // The chain matters: the outer context names the file, and the
-                // cause explains the failure, such as a declined symlink.
-                eprintln!("{error:?}");
-                errored += 1;
+                Err(error) => {
+                    // The chain matters: the outer context names the file, and
+                    // the cause explains the failure, such as a declined
+                    // symlink or a refused conflicted file.
+                    eprintln!("{error:?}");
+                    errored += 1;
+                }
             }
         }
     }
@@ -261,6 +332,12 @@ fn run_files(mode: Mode, files: &[Utf8PathBuf], opts: FormatOpts) -> anyhow::Res
 ///
 /// # Fix tables from standard input
 /// cat myfile.md | mdtablefix
+///
+/// # Reformat the repository's tracked Markdown in place
+/// mdtablefix --git --in-place
+///
+/// # List the files --git would act on, without reading any of them
+/// mdtablefix --git --list-files
 /// ```
 fn main() -> ExitCode {
     match run() {

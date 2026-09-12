@@ -9,6 +9,7 @@
 - [Module relationships](#module-relationships)
 - [Concurrency with `rayon`](#concurrency-with-rayon)
 - [Check and diff reporting](#check-and-diff-reporting)
+- [Git file selection](#git-file-selection)
 - [Atomic in-place writes](#atomic-in-place-writes)
 - [Unicode width handling](#unicode-width-handling)
 - [Link punctuation handling](#link-punctuation-handling)
@@ -732,12 +733,12 @@ replaces each file atomically and both modes report errors on stderr._
 
 ## Check and diff reporting
 
-The CLI's mode flags select three behaviours besides the default printing.
+The CLI's mode flags select four behaviours besides the default printing.
 `--check` reports one line per drifting file, `--diff` reports a unified diff
-per drifting file, and `--in-place` rewrites drifting files. The two reporting
-modes exit `1` when they find drift, `2` when a file cannot be read, and `0`
-otherwise; `--in-place` exits `0` over drifting files and `2` when a file
-cannot be read or rewritten.
+per drifting file, `--in-place` rewrites drifting files, and `--list-files`
+prints each selected path and stops. The two reporting modes exit `1` when they
+find drift, `2` when a file cannot be read, and `0` otherwise; `--in-place`
+exits `0` over drifting files and `2` when a file cannot be read or rewritten.
 
 Every mode shares one assessment. `driver::analyse` reads the file once through
 a `ReadOnlyDir`, parses it with `SourceDocument::parse`, and formats it once
@@ -803,6 +804,105 @@ maps `analyse_one` over the paths with `rayon`; `analyse_one` calls
 in-place write through `replace_file`. The payloads return to `run_files` in
 argument order._
 
+## Git file selection
+
+`--git` lets the tool choose its own inputs. `git_inputs::resolve` composes the
+selection from four parts — the candidate source, the policy, the working-tree
+probe, and the conflict guard — and returns the same `Inputs::Files` that
+positional arguments resolve to, so everything after it is the path
+[Check and diff reporting](#check-and-diff-reporting) describes. The selection
+is binary-private: `src/lib.rs` does not name it, so no public API follows from
+it. The decision, and the alternatives that were rejected, are recorded in
+[ADR 0010](adrs/0010-git-file-selection.md).
+
+The candidate set is the output of one process: `git ls-files -z --deduplicate
+--cached`, with `--others --exclude-standard` appended by
+`--include-untracked`, run in the working directory. The policy is a pure
+function of that listing, the working directory, an extension set, and a
+`PathProbe`. It keeps a candidate when the extension filter accepts it and the
+probe reports a regular file; an absent path, a symbolic link, and anything
+else are skipped, because each is an ordinary repository state rather than a
+user error. A candidate the probe cannot classify — a permission failure, a
+link loop among the ancestors — is not a fourth such state: the selection stops
+and the run fails, naming the path, because an unclassifiable candidate leaves
+the run unable to say which files it would have formatted. The extension is
+tested before the filesystem is consulted, so a run probes one path per distinct
+Markdown candidate and never looks at a `.rs` file. Selection reads metadata
+only — it never opens a file — and its result is sorted byte-wise, so a
+selection is a function of repository state rather than of the order in which
+Git happened to emit its listing.
+
+`PathProbe` is the one driven port of the selection, and the policy depends on
+it and on nothing else; the adapter and the composition root depend on the
+policy, never the reverse. `AmbientPathProbe` is that adapter, and the only
+place in the selection that touches the filesystem. The conflict guard sits on
+a second, narrower path: the Git directory is resolved only when the mode can
+write and the user has not passed `--allow-conflicted`, so `--check`, `--diff`,
+and `--list-files` cost one subprocess rather than two, and a mode that cannot
+corrupt a resolution never asks the repository whether one is in progress.
+What the guard carries is that directory rather than a verdict read from it, so
+the repository is asked again immediately before each file is replaced: a merge
+or revert that begins while a long run is still analysing files is seen by the
+writes that follow it. A file whose content carries no conflict markers never
+provokes the question, so the marker scan — not the filesystem — decides how
+much the guard costs.
+
+Nothing in the selection holds a directory capability. The paths it returns are
+relative to the working directory, and `main` opens each file's parent as it
+does for a path the user typed, so a `--git` run reaches the same
+capability-scoped writer as every other run. Listing short-circuits before that
+write path opens anything: `--list-files` renders the path and stops, so it
+reports a document it could not have parsed, including one whose bytes are not
+UTF-8.
+
+For screen readers: The following sequence diagram traces a `--git` run from
+the command line to the paths handed to `run_files`, including the point at
+which the selection becomes policy, the point at which a writable run resolves
+the conflict guard, and the point at which each write consults it.
+
+```mermaid
+sequenceDiagram
+    participant R as main::run
+    participant GI as git_inputs::resolve
+    participant GL as GitLsFiles
+    participant GP as git process
+    participant SP as select_files
+    participant AP as AmbientPathProbe
+    participant GR as conflict guard
+    participant RF as main::run_files
+
+    R->>GI: resolve(cli, mode, working_directory)
+    GI->>GL: list_candidates(working_directory)
+    GL->>GP: git ls-files -z --deduplicate --cached
+    GP-->>GL: NUL-terminated paths
+    GL-->>GI: candidate listing
+    GI->>SP: select_files(paths, extensions, probe)
+    SP->>SP: extension filter, no filesystem access
+    loop each surviving candidate
+        SP->>AP: symlink_metadata(candidate)
+        AP-->>SP: PathKind and FileIdentity, or a read failure
+    end
+    SP-->>GI: sorted, deduplicated paths, or the first read failure
+    opt Mode::InPlace and not --allow-conflicted
+        GI->>GR: resolve_git_dir
+    end
+    GI-->>R: Inputs::Files and ConflictGuard
+    R->>RF: run_files(mode, guard, paths, opts)
+    loop each changed file
+        RF->>GR: refuses(content)
+        GR->>GR: scan markers, then test the Git directory for one
+    end
+```
+
+_Figure 5: The path of a `--git` run through file selection.
+`git_inputs::resolve` asks `git ls-files` for the candidates, hands them to the
+policy, which tests each extension before probing the file itself and returns a
+sorted list; a candidate the probe cannot classify stops the selection and is
+reported before any file is analysed, because the run cannot then say which set
+it would have formatted. Only a run that can write resolves the Git directory
+for the conflict guard, and that directory is then consulted per written file.
+The paths join `run_files` exactly as positional paths do._
+
 ## Atomic in-place writes
 
 Both the CLI's `driver::write_back` and the library's `rewrite_with` replace a
@@ -860,7 +960,7 @@ sequenceDiagram
     end
 ```
 
-_Figure 5: Atomic in-place rewrite. The rewriter reads the target metadata,
+_Figure 6: Atomic in-place rewrite. The rewriter reads the target metadata,
 creates a temporary file in the same directory, writes, flushes and syncs the
 formatted contents, applies the target's permissions to the temporary file, and
 renames it over the target. Windows records read-only as an attribute that

@@ -1,8 +1,11 @@
-.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes markdownlint nixie
+.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes markdownlint nixie mutants
 
 APP ?= mdtablefix
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
 BUILD_JOBS ?=
+MUTANTS_JOBS ?= 3
+# Where `cargo-mutants` builds. Per worktree, so two runs cannot collide.
+MUTANTS_TMPDIR ?= $(HOME)/.cache/mdtablefix/mutants/$(notdir $(CURDIR))
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= $(or $(shell command -v markdownlint-cli2 2>/dev/null),$(HOME)/.bun/bin/markdownlint-cli2)
 NIXIE ?= nixie
@@ -50,6 +53,17 @@ markdownlint: ## Lint Markdown files
 
 nixie: ## Validate Mermaid diagrams
 	nixie --no-sandbox
+
+mutants: ## Run mutation testing over the selection module
+	@# Absolute, and outside the tree under test. Absolute because the tool's
+	@# own child processes run inside the scratch copy of the tree, where a
+	@# relative path does not exist. Outside because those children inherit
+	@# TMPDIR, and a test suite whose temporary directories land inside this
+	@# repository would fail the `--git` scenarios that assert on being outside
+	@# one. `$HOME/.cache` is neither `/tmp`, which is not a build target here,
+	@# nor inside the worktree.
+	@mkdir -p $(MUTANTS_TMPDIR)
+	TMPDIR=$(MUTANTS_TMPDIR) $(CARGO) mutants -j $(MUTANTS_JOBS)
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

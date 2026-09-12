@@ -22,6 +22,8 @@ use mdtablefix::{
 };
 use tracing::debug;
 
+use crate::select::conflict::ConflictGuard;
+
 /// The formatting function every mode shares.
 ///
 /// One closure, built once and passed by reference, is what stops a reporting
@@ -84,6 +86,12 @@ pub enum Mode {
     Check,
     /// `--diff`: show what would change, and fail on drift.
     Diff,
+    /// `--list-files`: print the selected paths, and read none of them.
+    ///
+    /// A mode rather than a flag on the selection, because the group it belongs
+    /// to already forbids combining it with the other three, and because the
+    /// selection is asked for paths under every mode.
+    ListFiles,
 }
 
 impl Mode {
@@ -94,6 +102,9 @@ impl Mode {
     /// The check and diff modes differ only in how they render what they
     /// found, so a mode added here without a matching failure would be a mode
     /// that describes a drift it does not report.
+    ///
+    /// `--list-files` is not among them: it reports paths, not drift, and it
+    /// must exit `0` for a tree full of drift it was never asked to assess.
     #[must_use]
     pub const fn reports(self) -> bool { matches!(self, Self::Check | Self::Diff) }
 
@@ -102,6 +113,7 @@ impl Mode {
     pub const fn verb(self) -> &'static str {
         match self {
             Self::InPlace => "writing",
+            Self::ListFiles => "listing",
             Self::Print | Self::Check | Self::Diff => "reading",
         }
     }
@@ -266,15 +278,32 @@ pub fn write_back(
 ///
 /// # Errors
 ///
-/// Returns an error if the file cannot be read, or — under [`Mode::InPlace`] —
-/// cannot be rewritten.
+/// Returns an error if the file cannot be read; under [`Mode::InPlace`], if it
+/// carries conflict markers and `guard` refuses it, if the repository's state
+/// cannot be read to decide that, or if the file cannot be rewritten.
 pub fn analyse(
     mode: Mode,
+    guard: &ConflictGuard,
     directory: &Dir,
     display_path: &Utf8Path,
     storage_key: &Utf8Path,
     format: &Formatter,
 ) -> anyhow::Result<(FileReport, String)> {
+    // Listing comes first, and reads nothing. The path *is* the report, so
+    // there is nothing an assessment could add, and opening the file would
+    // make the mode fail on a document it was never asked to look inside —
+    // including one whose bytes are not UTF-8. See `REQ-GIT-010`.
+    if mode == Mode::ListFiles {
+        return Ok((
+            FileReport {
+                display_path: display_path.to_owned(),
+                is_changed: false,
+                delta: LineDelta::default(),
+            },
+            listed(display_path),
+        ));
+    }
+
     // The read capability is derived from the caller's, so every mode reads
     // through one type and only `--in-place` holds a capability that can write.
     let readable = ReadOnlyDir::new(
@@ -303,17 +332,36 @@ pub fn analyse(
         Mode::Print => assessment.formatted,
         Mode::Check if is_changed => format!("{}\n", render_report_line(display_path, delta)),
         Mode::Diff if is_changed => render_diff(display_path, &assessment)?,
-        // A clean file is left alone byte for byte. The write would be
-        // invisible in the text but not in the file: `replace_file` renames a
-        // temporary over the target, so it would swap the inode and the
-        // modification time of a file it did not change, and `make`-style
-        // staleness checks would see a rebuild where there was nothing to
-        // rebuild.
+        // A conflicted file is refused where the write would happen, and the
+        // refusal is `is_changed`-gated: a file this run would not write has
+        // nothing to refuse. Reflowing across a marker restructures text on
+        // both sides of the boundary, so the user would resolve against
+        // corrupted content and commit it into a rewritten history, where
+        // `git rebase --abort` is gone. The one arm holds both the refusal and
+        // the write because the guard's answer is itself a `Result`: a `match`
+        // guard cannot ask with `?`, and a write whose guard went unread is not
+        // a write this arm may make.
         Mode::InPlace if is_changed => {
+            if guard.refuses(&assessment.original)? {
+                return Err(anyhow!(
+                    "refusing to rewrite {display_path}: it contains conflict markers and a \
+                     merge, rebase, revert, or cherry-pick is in progress. Resolve it first, or \
+                     pass --allow-conflicted to rewrite it anyway."
+                ));
+            }
             write_back(directory, storage_key, &assessment)?;
             String::new()
         }
-        Mode::InPlace | Mode::Check | Mode::Diff => String::new(),
+        // A clean file is left alone byte for byte, and nothing consults the
+        // repository for it: the write would be invisible in the text but not
+        // in the file. `replace_file` renames a temporary over the target, so
+        // it would swap the inode and the modification time of a file it did
+        // not change, and `make`-style staleness checks would see a rebuild
+        // where there was nothing to rebuild.
+        // Every remaining combination renders as nothing. `--list-files` is
+        // named rather than matched by `_`, so that a sixth mode has to decide
+        // what it prints instead of inheriting silence.
+        Mode::InPlace | Mode::Check | Mode::Diff | Mode::ListFiles => String::new(),
     };
 
     Ok((
@@ -324,6 +372,27 @@ pub fn analyse(
         },
         payload,
     ))
+}
+
+/// Renders one selected path as the single line `--list-files` prints for it.
+///
+/// A path is one line only while it holds no line terminator, and Git's index
+/// may hold one that does: the NUL framing that lists the candidates is what
+/// lets such a name through the selection in the first place. The terminator,
+/// and the backslash that escapes it, are therefore written as `\n`, `\r`, and
+/// `\\`, so that one printed line is one selected path and a reader can
+/// recover the name from it. Every other character is printed as itself, so a
+/// path that holds none of the three is unchanged.
+fn listed(display_path: &Utf8Path) -> String {
+    // The backslash first: escaping it after the others would escape the
+    // escapes they introduced.
+    let escaped = display_path
+        .as_str()
+        .replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r");
+
+    format!("{escaped}\n")
 }
 
 /// Renders the unified diff for one changed file.

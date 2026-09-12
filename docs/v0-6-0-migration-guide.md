@@ -148,6 +148,51 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   [user's guide](users-guide.md#command-line-usage) for the report line format
   and the exit-status contract.
 
+## Selecting files from Git
+
+- **What changed:** `--git` selects the working tree's Markdown files from
+  Git's index (`git ls-files --cached`) rather than from the command line.
+  `--include-untracked` adds the untracked files that Git does not ignore.
+  `--md-exts EXT[,EXT...]` replaces the default extension set, `md`, `mdc`,
+  and `markdown`. `--allow-conflicted` lets `--in-place` rewrite a selected
+  file that carries conflict markers while a merge, rebase, revert, or
+  cherry-pick is paused. `--list-files` prints the selected paths, one per
+  line, and exits without reading or writing them. All five flags are new, so
+  no existing invocation changes meaning, and each of the other four is
+  rejected without `--git`.
+- **Who is affected:** Only users who opt in with `--git`. Every existing
+  invocation keeps its behaviour and exit status, including the exit `2` a
+  plain run reports for an unmatched glob the shell passed through as a
+  literal path.
+- **Legal combinations:** File arguments and `--git` are alternatives, never
+  both, and either satisfies the requirement that a mode carry a source of
+  files. At most one of `--in-place`, `--check`, `--diff`, and `--list-files`
+  may be given. `--include-untracked`, `--md-exts`, `--allow-conflicted`, and
+  `--list-files` each require `--git`.
+- **Selection and exit status:** A `--git` run that selects nothing succeeds:
+  it exits `0`, prints nothing, and does not read standard input. A
+  `--git --in-place` run refuses a selected file that carries conflict markers
+  while a merge, rebase, revert, or cherry-pick is paused: the file is named on
+  standard error, left untouched, and counted as a failure, so the run exits
+  `2` unless `--allow-conflicted` is given, and every other selected file is
+  still rewritten. A candidate whose classification cannot be read at all — one
+  behind a directory the run may not traverse, for instance — stops the
+  selection: the path is named on standard error, the run exits `2`, and no file
+  is formatted, because it cannot say which set it would have formatted.
+  `--list-files` exits `0` and reads no file content.
+- **Migration action:** None is required, because the surface is additive.
+  Adopt it by replacing a shell-expanded file list with `--git`, and inspect
+  the selection before acting on it:
+
+  ```bash
+  mdtablefix --git --list-files
+  mdtablefix --git --check
+  ```
+
+  The selection rules, including which candidates are skipped and how paths
+  are ordered, are under
+  [Selecting files from Git](users-guide.md#selecting-files-from-git).
+
 ## New library entry point
 
 - **What changed:** `mdtablefix::io::replace_file` atomically replaces a target
