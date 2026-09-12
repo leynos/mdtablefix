@@ -308,16 +308,8 @@ mod tests {
 
         assert_eq!(
             String::from_utf8(out).expect("diff is UTF-8"),
-            "--- ragged.md\n\
-             +++ ragged.md\n\
-             @@ -1,3 +1,3 @@\n\
-             -|A|B|\n\
-             -|---|---|\n\
-             -|1|2|\n\
-             \\ No newline at end of file\n\
-             +| A   | B   |\n\
-             +| --- | --- |\n\
-             +| 1   | 2   |\n"
+            "--- ragged.md\n+++ ragged.md\n@@ -1,3 +1,3 @@\n-|A|B|\n-|---|---|\n-|1|2|\n\\ No \
+             newline at end of file\n+| A   | B   |\n+| --- | --- |\n+| 1   | 2   |\n"
         );
     }
 

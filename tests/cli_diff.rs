@@ -319,16 +319,8 @@ fn an_unterminated_original_is_marked() {
     assert_eq!(status_of(&output), 1, "drift must exit 1");
     assert_eq!(
         stdout_of(&output),
-        "--- ragged.md\n\
-         +++ ragged.md\n\
-         @@ -1,3 +1,3 @@\n\
-         -|A|B|\n\
-         -|---|---|\n\
-         -|1|2|\n\
-         \\ No newline at end of file\n\
-         +| A   | B   |\n\
-         +| --- | --- |\n\
-         +| 1   | 2   |\n"
+        "--- ragged.md\n+++ ragged.md\n@@ -1,3 +1,3 @@\n-|A|B|\n-|---|---|\n-|1|2|\n\\ No newline \
+         at end of file\n+| A   | B   |\n+| --- | --- |\n+| 1   | 2   |\n"
     );
 }
 
