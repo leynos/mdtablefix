@@ -56,6 +56,12 @@ pub struct Assessment {
     original: String,
     /// What the shared formatter would write instead.
     formatted: String,
+    /// The line-ending counts the input was measured with.
+    ///
+    /// Carried rather than re-read so the boundary that acts on the answer can
+    /// report it: the read-only query that produced the assessment emits
+    /// nothing, and the counts are not computed twice.
+    counts: LineEndingCounts,
 }
 
 impl Assessment {
@@ -201,10 +207,10 @@ impl Inputs {
 
 /// Reads a file and pairs its text with the formatted result.
 ///
-/// Takes [`ReadOnlyDir`], so this function cannot write. `storage_key` is the
-/// bare file name within the capability, and is also what the line-ending
-/// report names: the path the user typed is attached by the caller, which is
-/// the only place that knows it.
+/// Takes [`ReadOnlyDir`], so this function cannot write, and it emits nothing:
+/// the line-ending counts it measures travel on the returned [`Assessment`],
+/// and the boundary that acts on them reports them. `storage_key` is the bare
+/// file name within the capability, which is the name that report uses.
 ///
 /// # Errors
 ///
@@ -216,12 +222,13 @@ pub fn assess(
 ) -> anyhow::Result<Assessment> {
     let original = directory.read(storage_key)?;
     let document = SourceDocument::parse(&original);
-    report_line_endings(document.counts(), "file", Some(storage_key.as_str()));
+    let counts = document.counts();
     let formatted = format(&document);
 
     Ok(Assessment {
         original,
         formatted,
+        counts,
     })
 }
 
@@ -246,6 +253,13 @@ pub fn write_back(
 
 /// Analyses one file under `mode`, returning its report and stdout payload.
 ///
+/// This, not [`assess`], is where the line-ending decision is reported: the
+/// mode dispatched here is what acts on the assessment, whether by printing it,
+/// reporting it, or writing it back, so a subscriber hears only about files
+/// whose run reached the point of acting. The report names `storage_key`, the
+/// bare name within the capability, because the path the user typed is attached
+/// by the caller, which is the only place that knows it.
+///
 /// The assessment is dropped before this returns, so retained memory is
 /// proportional to the rendered payload rather than to twice the whole input.
 ///
@@ -268,6 +282,7 @@ pub fn analyse(
             .with_context(|| format!("duplicating the capability on {storage_key}"))?,
     );
     let assessment = assess(&readable, storage_key, format)?;
+    report_line_endings(assessment.counts, "file", Some(storage_key.as_str()));
     let is_changed = assessment.is_changed();
     // The counting diff is not asked to work on byte-equal texts: the byte
     // comparison above is what decides, so a clean tree costs no diff work.
@@ -352,9 +367,11 @@ pub fn in_argument_order<T>(results: Vec<(usize, T)>) -> Vec<T> {
 /// input — and `path` names the file being formatted, or is `None` for standard
 /// input, which is reported as its own source rather than left nameless.
 ///
-/// This stays private, and takes the counts the pure `count_line_endings` query
-/// already produced, so no query emits events and only the boundary that acts on
-/// the answer logs it.
+/// It takes the counts the pure `count_line_endings` query already produced, so
+/// no query emits events and only the boundary that acts on the answer logs it:
+/// [`analyse`] for a file, and `format_stdin` for standard input. It is `pub`
+/// because the crate root is not a descendant of this module and cannot see a
+/// private item, not because the library exposes it.
 pub fn report_line_endings(counts: LineEndingCounts, operation: &str, path: Option<&str>) {
     debug!(
         operation,
