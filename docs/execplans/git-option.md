@@ -2799,6 +2799,29 @@ plateau.
       calling `probe` on a fake needs the trait in scope. Both files are under
       the cap.
 
+- [x] (2026-09-13) **Every outstanding review thread is answered, and the next
+      round is queued.** The GraphQL sweep over the pull request's sixteen review
+      threads returns none unresolved that `coderabbitai` opened. The `temp_root`
+      finding (`3996187979`) is answered at `91b2264`, saying why the derived
+      fixture it suggests cannot exist under rstest's by-value injection; the
+      step-module thread (`3996185893`) at `8d4bcfb`, noting that its "addressed"
+      annotation named `ab53f9c..db64bb8`, which carried no split, while the file
+      was still 521 lines; and the conflict-capability thread (`3996185869`) with
+      the Windows regular-file case that `19f5291` closes. Each reply names the
+      commit that discharged it and mentions `@coderabbitai`, which is what
+      routes it to the bot and what keeps the finding from recurring. The three
+      threads still open are chatgpt-codex-connector's, answered in the previous
+      round and not addressed to CodeRabbit, so no `@coderabbitai` mention
+      applies to them. The pre-merge table is then reconciled by defect rather
+      than by row in an issue comment: the *Testing* error names the work
+      `8d4bcfb` did, and *Unit Architecture*, *User-Facing Documentation*,
+      *Developer Documentation*, and *Observability* each describe work that has
+      already landed, whose file and line the reply gives — `PathProbe::probe`'s
+      `Result` return, the migration guide's Git-selection section, the
+      developers' guide's `make mutants` section, and the `git` span around the
+      one subprocess site. `comenq put` then queued the next review (id
+      `456aa531`) with an ETA of about an hour and a quarter.
+
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
 `cargo test --doc` to the `test` target; and implementing
