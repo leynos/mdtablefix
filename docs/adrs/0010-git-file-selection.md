@@ -52,7 +52,14 @@ architectural decision rather than a feature request.
   binary flows through the directory capability that `open_file_parent`
   returns. A selection that opened files by its own route would be a second,
   unguarded path to the filesystem, inside the code whose entire purpose is to
-  decide what may be written.
+  decide what may be written. Classification is the one part outside that rule,
+  and it stays on the ambient filesystem deliberately: _whether_ a candidate is
+  inside the working tree is the question it answers, and through a capability
+  rooted at the working directory a candidate that escapes and one that cannot
+  be read are the same `PermissionDenied`, so the policy's rule for the first —
+  skip it silently — could not be stated at all. The selection opens one
+  directory for itself, the Git directory, whose entries are this tool's own
+  constant file names.
 
 ## Decision drivers
 
@@ -229,7 +236,11 @@ most likely to be paused.
 
 The question is asked at the write boundary rather than once per run: the guard
 holds the Git directory, and each file that carries conflict markers has that
-directory tested immediately before the file is replaced. A merge or revert
+directory tested immediately before the file is replaced. The directory is
+opened as a capability — `cap_std::fs_utf8::Dir`, with the marker names as
+fixed relative entries of it — so nothing a repository wrote takes part in the
+resolution, and a Git directory that has gone since it was resolved is reported
+rather than read as an idle repository. A merge or revert
 that begins while a long run is still analysing files is therefore seen by the
 writes that follow it, where a run-wide snapshot would have let exactly that
 run rewrite the conflict it started inside. A file whose content carries no
