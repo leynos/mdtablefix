@@ -7,9 +7,6 @@
 use regex::Regex;
 use tracing::debug;
 
-static ESCAPED_PIPE_RE: std::sync::LazyLock<Regex> =
-    lazy_regex!(r"\\\|", "escaped table pipe pattern should compile");
-
 /// Split a Markdown table row into individual cell strings.
 ///
 /// Escaped pipe characters (`\|`) are treated as literals and whitespace
@@ -30,13 +27,41 @@ static ESCAPED_PIPE_RE: std::sync::LazyLock<Regex> =
 /// ```
 #[must_use]
 pub fn split_cells(line: &str) -> Vec<String> {
-    let trimmed = line.trim().trim_start_matches('|').trim_end_matches('|');
-    let placeholder = '\u{1f}';
-    let replaced = ESCAPED_PIPE_RE.replace_all(trimmed, &placeholder.to_string());
-    replaced
-        .split('|')
-        .map(|cell| cell.trim().replace(placeholder, "|"))
-        .collect()
+    let trimmed = line.trim().trim_start_matches('|');
+    let trimmed = match trimmed.strip_suffix('|') {
+        Some(without_pipe)
+            if without_pipe
+                .chars()
+                .rev()
+                .take_while(|character| *character == '\\')
+                .count()
+                % 2
+                == 0 =>
+        {
+            without_pipe
+        }
+        _ => trimmed,
+    };
+    let mut cells = Vec::new();
+    let mut cell = String::new();
+    let mut characters = trimmed.chars().peekable();
+
+    while let Some(character) = characters.next() {
+        match character {
+            '\\' if characters.peek() == Some(&'|') => {
+                let _pipe = characters.next();
+                cell.push('|');
+            }
+            '|' => {
+                cells.push(cell.trim().to_string());
+                cell.clear();
+            }
+            _ => cell.push(character),
+        }
+    }
+
+    cells.push(cell.trim().to_string());
+    cells
 }
 
 /// Formats separator cells so they match the computed table widths.
@@ -262,11 +287,49 @@ mod tests {
 
     use super::*;
 
+    mod split_cells;
+
     #[test]
     fn sep_index_within_bounds() {
         assert_eq!(sep_index_within(Some(1), 3), Some(1));
         assert_eq!(sep_index_within(Some(3), 3), None);
         assert_eq!(sep_index_within(None, 3), None);
+    }
+
+    #[test]
+    fn reflow_table_preserves_leading_empty_marker_character_as_payload() {
+        let lines = vec![
+            "| Header |".to_string(),
+            "| --- |".to_string(),
+            "| \u{1d} |".to_string(),
+        ];
+
+        assert_eq!(
+            reflow_table(&lines),
+            vec![
+                "| Header |".to_string(),
+                "| ------ |".to_string(),
+                "| \u{1d}      |".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn reflow_table_preserves_escaped_pipe_sentinel_character_as_payload() {
+        let lines = vec![
+            "| Header | Value |".to_string(),
+            "| --- | --- |".to_string(),
+            "| \u{1f} | data |".to_string(),
+        ];
+
+        assert_eq!(
+            reflow_table(&lines),
+            vec![
+                "| Header | Value |".to_string(),
+                "| ------ | ----- |".to_string(),
+                "| \u{1f}      | data  |".to_string(),
+            ]
+        );
     }
 
     #[test]

@@ -184,6 +184,9 @@ Literal pipe characters inside cells must be written as `\|`. `mdtablefix`
 preserves that escaping during reflow, so a literal pipe remains part of the
 cell content rather than being interpreted as a column boundary.
 
+Table-cell payloads preserve arbitrary Unicode characters, including U+001D and
+U+001F, during reflow.
+
 ## YAML frontmatter
 
 When a document begins with a valid YAML frontmatter block, `mdtablefix`
