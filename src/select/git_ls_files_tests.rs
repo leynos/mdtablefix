@@ -14,7 +14,14 @@ use camino::{Utf8Path, Utf8PathBuf};
 use proptest::{collection::vec, prelude::*, test_runner::TestRunner};
 use rstest::rstest;
 
-use super::{CandidateListing, GitListError, GitLsFiles, relayable, split_nul_delimited};
+use super::{
+    CandidateListing,
+    GitListError,
+    GitLsFiles,
+    RELAYED_LIMIT,
+    relayable,
+    split_nul_delimited,
+};
 
 /// Printable ASCII, the common case for a repository path.
 fn ascii_text() -> impl Strategy<Value = Vec<u8>> { vec(0x20u8..=0x7e, 1..=40) }
@@ -233,6 +240,27 @@ fn a_failure_names_the_command_with_the_program_that_ran() {
     );
 }
 
+/// A failure with nothing of Git's to relay is this tool's own wording alone.
+///
+/// The guard on the empty `stderr` is load bearing rather than cosmetic: drop
+/// it and the line ends with the separator and nothing after it, which reads as
+/// a diagnostic that was truncated rather than as a failure that had none.
+#[cfg(unix)]
+#[test]
+fn a_failure_with_no_git_text_carries_our_wording_alone() {
+    let error = GitLsFiles::with_program("/bin/false", false)
+        .list_candidates(Utf8Path::new("."))
+        .expect_err("`false` always fails");
+
+    let diagnostic = error.diagnostic();
+
+    assert_eq!(diagnostic, error.to_string());
+    assert!(
+        !diagnostic.ends_with(": "),
+        "a dangling separator reads as a truncated diagnostic: {diagnostic:?}"
+    );
+}
+
 /// The Git directory is asked of Git, not guessed from a `.git` entry.
 ///
 /// Run against a linked worktree, which is the case a directory walk gets
@@ -335,16 +363,29 @@ fn relayed_diagnostics_are_scrubbed_into_one_line(#[case] input: &[u8], #[case] 
 
 /// A diagnostic long enough to bury the message it supports is cut, and the
 /// cut is visible rather than silent.
+///
+/// The cap falls at the limit rather than one side of it: a run of exactly
+/// [`RELAYED_LIMIT`] characters is relayed whole, so the shortening of a
+/// longer one is never mistaken for git having said that much.
 #[test]
-fn a_relayed_diagnostic_is_capped() {
+fn a_diagnostic_of_exactly_the_limit_is_relayed_whole() {
+    let at_limit = "x".repeat(RELAYED_LIMIT);
+
+    assert_eq!(relayable(at_limit.as_bytes()), at_limit);
+}
+
+/// The character past the limit is what costs the last one its place, and the
+/// ellipsis is what says so.
+#[test]
+fn a_diagnostic_past_the_limit_is_cut() {
     let flood = "x".repeat(4096);
 
     let relayed = relayable(flood.as_bytes());
 
-    assert_eq!(relayed.chars().count(), 1025, "{relayed:?}");
+    assert_eq!(relayed.chars().count(), RELAYED_LIMIT + 1, "{relayed:?}");
     assert!(relayed.ends_with('…'), "{relayed:?}");
     assert!(
-        relayed.starts_with(&"x".repeat(1024)),
+        relayed.starts_with(&"x".repeat(RELAYED_LIMIT)),
         "the cap must keep a prefix, not drop the message: {relayed:?}"
     );
 }
