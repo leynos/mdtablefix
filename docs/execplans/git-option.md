@@ -7,34 +7,33 @@ This ExecPlan (execution plan) is a living document. The sections
 proceeds.
 
 Status: COMPLETE — 2026-09-12, at commit `6384543`, since rebased onto
-`origin/check-option`, whose tip is `49a2d0a` after a second rebase the same
-day, on branch `git-option`, stacked on pull
+`origin/check-option`, whose tip stood at `49a2d0a` for two rebases the same
+day and at `e462b97` for a third, on branch `git-option`, stacked on pull
 request #464 and carried by pull request #466. The prerequisite extraction of
 `Cli` and `FormatOpts` landed, in the base's `src/command.rs` rather than in a
 `src/cli.rs` of this branch's own, and Stage A is discharged. All four
 milestones — EP-M0's grammar measurement, EP-M1's selection tree, EP-M2's
 command-line surface, and EP-M3's documentation — are delivered. Every
-deterministic gate is green on the milestone tree, the five CodeRabbit rounds
+deterministic gate is green on the milestone tree, the six CodeRabbit rounds
 recorded under `Artefacts and notes` returned zero findings, and `Outcomes &
 retrospective` states what was delivered against what was planned and which
 pinned interfaces the implementation superseded.
 
-Three things this plan still owes, recorded rather than implied away. The
-branch's first CI run was red on both jobs over five defects that are all in
-test code — a fixture identity the helper never supplied, exit-status and path
-text that holds only where the platform spells them the way Linux does, and a
-snapshot carrying the executable suffix — and `6384543` answers all five. The
-branch's newest run, `34661535150` at `573deb9`, predates that repair and
-EP-M3's two commits, because pull request #466 stood in conflict with its base
-and GitHub documents that a conflicting pull request runs no `pull_request`
-workflows at all. The rebase recorded under `Progress` is what clears that
-conflict, so the pipeline re-opens on the rebased tip and the run it produces
-is the one piece of evidence this plan has not yet read; until it does, the
-green those commits claim is local gates and CodeRabbit alone. And the one
+One thing this plan still owes, recorded rather than implied away. The branch's
+first CI run was red on both jobs over five defects that are all in test code —
+a fixture identity the helper never supplied, exit-status and path text that
+holds only where the platform spells them the way Linux does, and a snapshot
+carrying the executable suffix — and `6384543` answers all five. Those answers
+are now measured on a second platform rather than promised: the first run the
+branch could obtain after its conflict was cleared, `34691011897`, concluded
+`success` with all six jobs green, so the CI verdict that this plan spent the
+longest waiting on is no longer outstanding. What remains outstanding is the one
 verification no machine here can perform — the macOS and Windows half of the
-`canonicalize` case question behind INV-DEDUP — is carried forward rather than
-discharged, with ADR 0010's known-risks section holding it and the fallback
-named in this plan's `Verification plan`.
+`canonicalize` case question behind INV-DEDUP — which is carried forward rather
+than discharged, with ADR 0010's known-risks section holding it and the fallback
+named in this plan's `Verification plan`. That one is not a gap in the work: it
+is a limit of the platform, and the fallback is named so a reader meeting it
+knows what to do rather than only what is unproven.
 
 The plan's remaining work is not this plan's: pull request #464 must merge
 before this one can. See `Progress`, `Outcomes & retrospective`, and
@@ -2185,9 +2184,7 @@ plateau.
       activity if the pull request has a merge conflict"*, and #466 was
       `CONFLICTING`/`DIRTY` against `check-option`. So EP-M3's two commits and
       the CI repair were CI-untested for as long as that conflict stood, and
-      their green was the local gates and the CodeRabbit rounds. The rebase
-      recorded below is what clears the conflict, so this item stays open until
-      the run it should produce has been read and recorded. `EV-M4-CI-SILENCE`
+      their green was the local gates and the CodeRabbit rounds. `EV-M4-CI-SILENCE`
       holds the earlier run list and the limits of what it proves.
       The silence is specific to the `pull_request` event rather than to the
       branch, and three runs are what show it. The pushes at 10:50Z, 10:51Z, and
@@ -2199,6 +2196,31 @@ plateau.
       that produced no test run at all, which is what separates the event that
       is blocked from the events that are not, and rules out "the branch stopped
       receiving webhooks" as an explanation.
+- [x] (2026-09-12) **The conflict is cleared, the pipeline has re-opened, and
+      its verdict is green**, which is the one thing the entry above could not do
+      for itself. The second rebase's push produced run
+      [`34691011897`](https://github.com/leynos/mdtablefix/actions/runs/34691011897),
+      event `pull_request`, head `70d58ab1`, created 11:25:22Z — the branch's
+      first `pull_request` run since `34661535150`, and the first that can carry
+      EP-M3's two commits and the CI repair. That is the conflict hypothesis
+      confirmed by the thing it predicted rather than by the absence it
+      explained: no run while `CONFLICTING`, a run within seconds of the rebase,
+      with nothing else about the branch changed except its parent. It concluded
+      **`success`** at 11:32:11Z, all six jobs green: `build-test` in 4m11s,
+      `atomic write contract (windows)` in 6m46s — including "Test the whole
+      suite", the step the branch's own red run never reached — and all four
+      `binstall packaging` jobs, `x86_64-unknown-linux-gnu` first at 1m01s and
+      `aarch64-apple-darwin` last at 1m19s. So the five test-code defects
+      `6384543` repairs are repaired on Linux and on Windows both, and the
+      branch's first green CI run is also its first on two platforms; the tool's
+      behaviour was never the red part, and it is green where it is now measured.
+      What the verdict describes is worth stating precisely, because the head
+      has moved since: it is the tree at `70d58ab`, whose only difference from
+      the pushed tip is `docs/execplans/check-option.md`, a file belonging to the
+      base. `git diff --stat` restricted to `src`, `tests`, and the manifests is
+      empty across the third rebase, so the verdict transfers to the rebased code
+      rather than having to be re-earned by it — and the push after the third
+      rebase produces a run of its own, recorded here when it reports.
 
 - [x] (2026-09-12) The base branch is still moving, and its own redness has
       since been fixed upstream. While this repair was being gated
@@ -2331,7 +2353,37 @@ plateau.
       [`34690495578`](https://github.com/leynos/mdtablefix/actions/runs/34690495578),
       was still running while the second rebase was performed. So `49a2d0a` is
       the tip this branch was rebased onto, not a tip that promises to hold
-      until #464 merges.
+      until #464 merges. **It moved once more, and the caution was answered
+      rather than merely restated; see the third rebase below.**
+- [x] (2026-09-12) **Rebased a third time, onto `origin/check-option` at
+      `e462b97`**, which is the caution above being cashed: the base gained
+      "Record the green Windows job against the seam fix" at 13:22:35 +0200,
+      three minutes before the second rebase's push landed, so the branch that
+      rebase produced was one commit behind the tip the instruction names. The
+      arithmetic is small enough to state rather than argue about: one base
+      commit to absorb, 32 to replay, and the replay was clean. What moved is
+      exactly what that base commit touched — 27 lines, 19 insertions and 8
+      deletions, all inside `docs/execplans/check-option.md`, a file this branch
+      never touches. `git diff --stat 70d58ab HEAD` names that one file and
+      nothing else, which is the measurement rather than the claim, and it is
+      why the gates and the mutation record describe the same tree on either
+      side of the third rebase: every file under `src/` and `tests/`, and every
+      manifest, is byte-identical across it. The branch now stands 0 behind and
+      32 ahead of `origin/check-option`, and the pre-third-rebase tip is tagged
+      `backup/git-option-pre-third-rebase` so the superseded head is recoverable
+      if a later reader wants it.
+- [x] (2026-09-12) CodeRabbit round six over the rebased tree, `EV-REBASE-CR`:
+      `coderabbit review --agent --base check-option` through `scrutineer` —
+      **`review_completed`, zero findings** over 36 reviewed files, the round
+      requested after the rebase. Checked the way every round on this branch is
+      checked: the reviewed set equals
+      `git diff --name-only origin/check-option...HEAD` path for path, 36 to 36,
+      with no file in one set and not the other, and the run's own context line
+      names `git-option` against `check-option`. So the zero is about this
+      branch's diff rather than about a review that deferred to the pull
+      request, which is the distinction `EX-M4-CR-SCOPE` records because a
+      deferral and a clean review both read as "no findings". No rate, seat, or
+      quota limit was reported, so no wait was needed.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
@@ -2898,6 +2950,19 @@ whose every file the base carries in a fuller form.
   instruction was applied again rather than the first rebase being pushed, and
   the record now names `49a2d0a` as the tip rebased onto while stating that a
   third rebase becomes necessary only if the base moves once more.
+  **It did, and the shape of the second instance is what makes the observation
+  worth keeping rather than a footnote.** `e462b97` landed at 13:22:35 +0200 and
+  the second rebase's push at 11:25:22Z, three minutes apart, with the second
+  rebase measured, gated, and pushed in between; so this is not one unlucky
+  window but the ordinary state of a branch stacked on a branch that is still
+  being worked. The two instances also differ in a way that matters: the first
+  arrival was a code change that touched files this branch edits, and the second
+  is 27 lines of the base's own plan document that this branch never touches.
+  The rule that falls out is the one now applied — absorb the base, then
+  measure what actually moved with `git diff --stat` against the superseded tip
+  rather than assuming the replay changed anything — and the reason to state it
+  is that the assumption would have been right here by luck and wrong the time
+  before.
 
 - Observation: **the Markdown line-length rule's exception is about the last
   whitespace-delimited word, not about whether a line could be broken, and the
@@ -3330,11 +3395,31 @@ is the durable record, and EP-M3 reconciles this log into it.
   measurement is that this branch has none to convert, adding no traced test of
   its own. Date/Author: 2026-09-12, EP-M4 (rebase).
 
+- Decision: rebase **a third time**, onto `origin/check-option`'s tip
+  `e462b97`, rather than holding the second rebase and recording the base's
+  third move as an observation. Rationale: the instruction is to rebase onto
+  `origin/check-option`, and a branch one commit behind the tip it names has not
+  discharged it — the same reasoning as the second rebase, applied to the same
+  condition, so treating this instance differently would need a reason and there
+  is none. The cost was measured before the decision rather than after: one base
+  commit to absorb, 32 to replay, and `e462b97` touches exactly one file,
+  `docs/execplans/check-option.md`, which this branch never touches. What the
+  third rebase cost in evidence is worth stating honestly: it supersedes the
+  head the in-flight run `34691011897` was launched against, so a verdict
+  arrives on `70d58ab` while the branch tips at a new commit whose only
+  difference from it is the base's own plan file. The alternative considered and
+  rejected was to hold `70d58ab` until `34691011897` reported, then rebase and
+  re-push; rejected because it makes the branch's correctness posture contingent
+  on the timing of a base still being pushed to, which is the treadmill the
+  second rebase already declined to join. Date/Author: 2026-09-12, EP-M4
+  (rebase).
+
 ## Outcomes & retrospective
 
 Completed 2026-09-12, at commit `6384543`, rebased the same day onto
-`origin/check-option` — first at `64117e4` and then again at `49a2d0a`, the base
-having moved while the first rebase's gates were running. Every milestone is
+`origin/check-option` — first at `64117e4`, again at `49a2d0a`, and once more at
+`e462b97`, the base having moved three times while this branch was being
+measured against it. Every milestone is
 delivered: EP-M0's
 grammar measurement, EP-M1's selection tree with zero surviving mutants, EP-M2's
 command-line surface and end-to-end behaviour, and EP-M3's ADR 0010 and the five
@@ -3410,17 +3495,24 @@ linked-worktree assertion, was made on judgement rather than observation because
 another test's failure had hidden it; `Progress` says so rather than presenting
 it as a sixth finding.
 
-**The CI posture, stated plainly.** No CI run exists for `6384543`, and none
-exists for EP-M3's `9a83339` or `5f294b7` — the branch's newest run predates all
-three, because #466 stood in conflict with its base and GitHub runs no
-`pull_request` workflows while a conflict stands. So the branch's two
-documentation commits and the CI repair were CI-untested when this record was
-written, their green resting on the local gate set and the CodeRabbit rounds.
-That conflict was resolved the same day by the rebase onto `64117e4`, and then
-by the second rebase onto `49a2d0a` after the base moved again, and resolving it
-is what re-opens the pipeline: the run that follows is the one
-verdict this plan has not yet read, and the only thing that can turn a local
-green into a green on a second platform.
+**The CI posture, stated plainly.** No CI run existed for `6384543`, nor for
+EP-M3's `9a83339` or `5f294b7`, because #466 stood in conflict with its base and
+GitHub runs no `pull_request` workflows while a conflict stands — so at the time
+those commits were written, their green rested on the local gate set and the
+CodeRabbit rounds, and nothing else. That conflict was resolved the same day by
+the rebase onto `64117e4`, then by the second rebase onto `49a2d0a` and the third
+onto `e462b97` as the base moved twice more. Resolving it re-opened the pipeline,
+and the re-opening was observed rather than hoped for: run `34691011897`, event
+`pull_request`, on `70d58ab1`, created within seconds of the push. It concluded
+`success`, all six jobs green, `atomic write contract (windows)` among them in
+6m46s — so the five test-code defects the repair answers are now answered on
+Linux and on Windows, and the platform the first run was red on is the platform
+the repair was measured on. The one qualification is the head, not the content:
+the verdict describes `70d58ab`, and the third rebase moved the branch one base
+commit on, touching `docs/execplans/check-option.md` and no file this branch
+ships. What a reader should not take from it is that every later commit here is
+CI-verified — the push after the third rebase produces its own run, and only that
+one describes the pushed tip.
 
 **What a reader should take from the record.** Three things were found by
 writing rather than by testing: a stale doc comment on the selection's order, a
@@ -4140,7 +4232,100 @@ two files, so the hunks do not overlap. Both survive at `eda86ca` — the wrappe
 import at `src/driver_report_tests.rs:10`, the attribute at line 131, and the
 guard call sites six and three.
 
+**EX-REBASE-THIRD** — the third rebase onto `origin/check-option`, onto
+`e462b97`, and the measurement that decides whether a rebase like it needs any
+gate run of its own. The base's one new commit is
+`docs/execplans/check-option.md` and nothing else, so the whole question is what
+moved across the replay:
+
+```console
+git diff --stat 70d58ab HEAD -- src tests Cargo.toml Cargo.lock Makefile
+```
+
+That prints nothing, and the unrestricted form of the same command names one
+file and one file only:
+
+```plaintext
+ docs/execplans/check-option.md | 27 +++++++++++++++++++--------
+ 1 file changed, 19 insertions(+), 8 deletions(-)
+```
+
+So the third rebase is the second rebase's counterpart in kind but not in
+consequence: there, the base changed code this branch also edits and the merged
+file had to be read to know both sides survived; here, no file under `src/`,
+`tests/`, or the manifests differs at all, so the deterministic gates and the
+mutation record describe the same bytes before and after. That is the reason the
+gates were re-run over the frozen tree anyway — the instruction asks for them
+over the rebase, and "the measurement says nothing changed" is a claim to verify
+rather than a licence to skip. The gates' verdict is recorded under `Progress`,
+and the artefact worth keeping is the rule: absorb the base, then ask `git diff`
+what actually moved, because the answer has been "nothing but the base's own
+prose" once and "two test files this branch edits" once.
+
+**EV-REBASE-CR** — CodeRabbit round six, over the rebased tree, run 2026-09-12
+through `scrutineer` with the log at
+`/tmp/coderabbit-mdtablefix-git-option-rebase.out`:
+
+```plaintext
+coderabbit review --agent --base check-option
+```
+
+```plaintext
+{"type":"review_context","reviewType":"all","currentBranch":"git-option","baseBranch":"check-option"}
+{"type":"complete","status":"review_completed","findings":0,"reviewedFiles":[".cargo/mutants.toml", …]}
+```
+
+Thirty-six files were reviewed and the round reported **zero findings**, with
+the reviewed set equal to `git diff --name-only origin/check-option...HEAD` path
+for path at 36 each, so the scope is checked rather than assumed — the same
+check `EX-M4-CR-SCOPE` describes, applied to a round whose count is much lower
+than the previous one's 95 for the reason recorded there, that the count tracks
+the merge-base rather than the branch. That drop is itself worth one sentence,
+since the earlier entry warns that a changing count is a signal: the base
+landed the commits both branches had been carrying separately, so the set this
+review sees is this branch's own work alone. No rate, seat, quota, or deferral
+condition appears in the output.
+
+**One qualifier, kept because it is the kind of thing a clean result is tempted
+to drop.** The round took 45 seconds, which is fast for a full review, so the
+possibility of a service-side cached result was raised against it. What argues
+against that reading is the shape of the transcript rather than its speed: the
+run emitted the whole phase sequence — `connecting_to_review_service`,
+`setting_up`, `preparing_sandbox`, `summarizing`, `tools_completed`,
+`reviewing` — and returned a concrete 36-file set that matches the diff exactly,
+where a review that had short-circuited or deferred to the pull request would
+present as an empty or absent set, which is the signature `EX-M4-CR-SCOPE` exists
+to catch. What the client log cannot exclude is a service-side cache, and that is
+stated rather than argued away: excluding it would take a fresh re-run rather
+than a better reading of this one. The zero stands as recorded, with that limit
+named.
+
 ## Revision note
+
+Revised 2026-09-12, seventh pass, after a third rebase onto
+`origin/check-option`, whose tip had moved to `e462b97` while the second
+rebase's push was landing, and after the CodeRabbit round over the rebased tree
+returned zero findings.
+
+What changed. The base gained one further commit, `e462b97`, which records its
+green Windows job; it touches `docs/execplans/check-option.md` and nothing else,
+so the branch was rebased again and the third rebase is recorded with the
+measurement that says what moved — `git diff --stat 70d58ab HEAD` names that one
+file, and the same command restricted to `src`, `tests`, and the manifests
+prints nothing, which is why the gates' verdict and the mutation record carry
+across unchanged while the gates were re-run over the frozen tree all the same.
+`EX-REBASE-THIRD` holds the command and the rule, `EV-REBASE-CR` the round's
+transcript and its scope check, and a Decision-log entry states why the third
+rebase was performed rather than the second held. What this pass adds beyond the
+rebase is the end of the conflict's silence and of the wait it caused: the push
+produced run `34691011897` on `pull_request` within seconds, which is the
+pipeline re-opening as the conflict hypothesis predicted, and that run concluded
+`success` with all six jobs green — so the plan's longest-standing open item, a
+CI verdict for the repaired test code, is closed, with
+`atomic write contract (windows)` among the jobs that passed. The verdict's own
+head is named where it is recorded, `70d58ab`, because the third rebase moved the
+branch one base commit past it while the run was in flight; the difference is the
+base's own plan document, and the run the push produces is its successor.
 
 Revised 2026-09-12, sixth pass, after a second rebase onto `origin/check-option`,
 whose tip had moved to `49a2d0a` while the first rebase's gates were running.
