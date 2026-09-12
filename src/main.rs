@@ -184,8 +184,9 @@ fn run() -> anyhow::Result<ExitStatus> {
         match git_inputs::resolve(&cli, mode, &working_directory) {
             Ok(selection) => (selection.inputs, selection.guard),
             Err(error) => {
-                // One deliberate line: this tool's own wording, with git's
-                // diagnostic relayed beside it. See `GitListError::diagnostic`.
+                // One deliberate line: this tool's own wording, with the
+                // underlying reason relayed beside it. See
+                // `GitInputsError::diagnostic`.
                 eprintln!("mdtablefix: {}", error.diagnostic());
                 return Ok(failed_run(mode));
             }

@@ -175,7 +175,11 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   while a merge, rebase, revert, or cherry-pick is paused: the file is named on
   standard error, left untouched, and counted as a failure, so the run exits
   `2` unless `--allow-conflicted` is given, and every other selected file is
-  still rewritten. `--list-files` exits `0` and reads no file content.
+  still rewritten. A candidate whose classification cannot be read at all — one
+  behind a directory the run may not traverse, for instance — stops the
+  selection: the path is named on standard error, the run exits `2`, and no file
+  is formatted, because it cannot say which set it would have formatted.
+  `--list-files` exits `0` and reads no file content.
 - **Migration action:** None is required, because the surface is additive.
   Adopt it by replacing a shell-expanded file list with `--git`, and inspect
   the selection before acting on it:

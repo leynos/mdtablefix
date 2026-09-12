@@ -5,6 +5,13 @@
 //! never opens a file, so a path this module reports as a regular file is not
 //! thereby readable, and the writer still decides what to do about that.
 //!
+//! Absence is a classification, because the selection has a rule for a
+//! candidate that is gone. Every other failure to read one is returned as a
+//! [`ProbeError`]: a permission failure or a path through a file is not a
+//! verdict about the file, and a run that could not classify a candidate must
+//! say so rather than format the ones it could. See
+//! [`select_files`](crate::select::policy::select_files).
+//!
 //! Classification uses `symlink_metadata`, not `metadata`, because a link's
 //! extension says nothing about its target and rewriting through one escapes
 //! the selection. For the same reason the canonical path is confined to the
@@ -13,11 +20,11 @@
 //! as a regular file even when `docs` is a link to a directory outside the
 //! working tree. See [`PathKind::OutsideRoot`].
 
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use super::policy::{FileIdentity, PathKind, PathProbe};
+use super::policy::{FileIdentity, PathKind, PathProbe, ProbeError};
 
 /// Probes the real working tree using `std::fs::symlink_metadata`.
 ///
@@ -26,27 +33,40 @@ use super::policy::{FileIdentity, PathKind, PathProbe};
 pub struct AmbientPathProbe;
 
 impl PathProbe for AmbientPathProbe {
-    fn probe(&self, root: &Utf8Path, path: &Utf8Path) -> PathKind {
+    fn probe(&self, root: &Utf8Path, path: &Utf8Path) -> Result<PathKind, ProbeError> {
         // `join` replaces rather than appends when `path` is already absolute,
         // so a candidate a caller resolved itself is asked about where it
         // actually points.
         let absolute = root.join(path);
-        let Ok(metadata) = std::fs::symlink_metadata(&absolute) else {
-            return PathKind::Missing;
+        let metadata = match std::fs::symlink_metadata(&absolute) {
+            Ok(metadata) => metadata,
+            // Absence is the one failure the selection has a rule for — a
+            // staged deletion, or a file removed since Git listed it. Every
+            // other kind leaves the question unasked rather than answered.
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(PathKind::Missing),
+            Err(source) => {
+                return Err(ProbeError {
+                    path: absolute,
+                    source,
+                });
+            }
         };
         if metadata.is_symlink() {
-            return PathKind::Symlink;
+            return Ok(PathKind::Symlink);
         }
         if !metadata.is_file() {
-            return PathKind::Other;
+            return Ok(PathKind::Other);
         }
 
-        // An identity is only useful if it is the one true name, so a path that
-        // cannot be canonicalized is not reported as a regular file.
+        // An identity is only useful if it is the one true name, so a canonical
+        // path that cannot be spelled — or that fails to resolve — is not
+        // reported as a regular file.
         match std::fs::canonicalize(&absolute) {
-            Ok(canonical) => Utf8PathBuf::from_path_buf(canonical)
-                .map_or(PathKind::Other, |canonical| identify(root, canonical)),
-            Err(error) => unnameable(error.kind()),
+            Ok(canonical) => match Utf8PathBuf::from_path_buf(canonical) {
+                Ok(canonical) => identify(root, canonical),
+                Err(_) => Ok(PathKind::Other),
+            },
+            Err(error) => unnameable(absolute, error),
         }
     }
 }
@@ -57,11 +77,13 @@ impl PathProbe for AmbientPathProbe {
 /// reaching through a symlinked ancestor: a candidate is what its real path
 /// says it is, and a real path that leaves `root` is not a file this selection
 /// may name.
-fn identify(root: &Utf8Path, canonical: Utf8PathBuf) -> PathKind {
-    if confined_to(root, &canonical) {
-        PathKind::RegularFile(FileIdentity::from_canonical_path(canonical))
+fn identify(root: &Utf8Path, canonical: Utf8PathBuf) -> Result<PathKind, ProbeError> {
+    if confined_to(root, &canonical)? {
+        Ok(PathKind::RegularFile(FileIdentity::from_canonical_path(
+            canonical,
+        )))
     } else {
-        PathKind::OutsideRoot
+        Ok(PathKind::OutsideRoot)
     }
 }
 
@@ -69,14 +91,30 @@ fn identify(root: &Utf8Path, canonical: Utf8PathBuf) -> PathKind {
 ///
 /// Both sides are canonicalized. A root reached through a link — `/tmp` on a
 /// system where it is one — would otherwise disagree with every path beneath
-/// it, and refuse the whole tree. A root that cannot be canonicalized confines
-/// nothing: containment cannot be established, and assuming it held is exactly
-/// the escape this rule exists to stop.
-fn confined_to(root: &Utf8Path, canonical: &Utf8Path) -> bool {
-    std::fs::canonicalize(root)
-        .ok()
-        .and_then(|root| Utf8PathBuf::from_path_buf(root).ok())
-        .is_some_and(|root| canonical.starts_with(root))
+/// it, and refuse the whole tree. A root that does not exist confines nothing:
+/// containment cannot be established, and assuming it held is exactly the escape
+/// this rule exists to stop.
+///
+/// # Errors
+///
+/// Returns a [`ProbeError`] if the root exists but cannot be read. A root that
+/// cannot be resolved leaves every candidate's classification unwarranted, and
+/// the selection does not report a confinement it could not establish.
+fn confined_to(root: &Utf8Path, canonical: &Utf8Path) -> Result<bool, ProbeError> {
+    let root = match std::fs::canonicalize(root) {
+        Ok(root) => root,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(false),
+        Err(source) => {
+            return Err(ProbeError {
+                path: root.to_owned(),
+                source,
+            });
+        }
+    };
+
+    // A root that cannot be spelled confines nothing, for the same reason a
+    // candidate that cannot be spelled is not a regular file.
+    Ok(Utf8PathBuf::from_path_buf(root).is_ok_and(|root| canonical.starts_with(root)))
 }
 
 /// Classifies a failed canonicalization by the kind of failure.
@@ -84,17 +122,21 @@ fn confined_to(root: &Utf8Path, canonical: &Utf8Path) -> bool {
 /// Absence is reported as absence, because it is the one cause the caller can
 /// act on: a candidate staged for deletion, or one removed between the metadata
 /// read in [`PathProbe::probe`] and this call's own. Every other kind leaves the
-/// file present but unnameable, which is [`PathKind::Other`].
+/// file present but unnameable, which the run is told about rather than
+/// silently skipping.
 ///
-/// The reason this is a function of the error kind rather than a pair of match
-/// arms in the probe above: a path `symlink_metadata` has already accepted can
-/// reach the second arm only by losing a race with the filesystem, so no
-/// fixture can stage it. Here, both arms are a test's to cover.
-fn unnameable(kind: ErrorKind) -> PathKind {
-    if kind == ErrorKind::NotFound {
-        PathKind::Missing
+/// The reason this is a function of the error rather than a pair of match arms
+/// in the probe above: a path `symlink_metadata` has already accepted can reach
+/// the second arm only by losing a race with the filesystem, so no fixture can
+/// stage it. Here, both arms are a test's to cover.
+fn unnameable(path: Utf8PathBuf, error: io::Error) -> Result<PathKind, ProbeError> {
+    if error.kind() == ErrorKind::NotFound {
+        Ok(PathKind::Missing)
     } else {
-        PathKind::Other
+        Err(ProbeError {
+            path,
+            source: error,
+        })
     }
 }
 

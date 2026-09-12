@@ -1,11 +1,11 @@
 //! Tests for the working-tree probe, against a real temporary tree.
 
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 
-use super::{AmbientPathProbe, unnameable};
+use super::{AmbientPathProbe, confined_to, unnameable};
 use crate::select::{
     extensions::ExtensionFilter,
     policy::{PathKind, PathProbe, select_files},
@@ -29,8 +29,25 @@ fn write(root: &Utf8Path, name: &str, content: &str) {
     std::fs::write(&path, content).expect("write a fixture");
 }
 
+/// The probe's verdict for the fixtures that have one.
+///
+/// The cases that exercise a *failure* call [`AmbientPathProbe::probe`]
+/// directly, since a helper that panics cannot report the error they assert on.
 fn probe(root: &Utf8Path, path: &str) -> PathKind {
-    AmbientPathProbe.probe(root, Utf8Path::new(path))
+    AmbientPathProbe
+        .probe(root, Utf8Path::new(path))
+        .expect("every fixture path is one the probe can read")
+}
+
+/// The selection over `candidates` in `root`, with the ambient probe.
+fn selected_in(root: &Utf8Path, candidates: &[Utf8PathBuf]) -> Vec<Utf8PathBuf> {
+    select_files(
+        candidates,
+        root,
+        &ExtensionFilter::default(),
+        &AmbientPathProbe,
+    )
+    .expect("every fixture candidate is one the probe can read")
 }
 
 #[test]
@@ -98,12 +115,7 @@ fn a_candidate_behind_a_symlinked_directory_is_outside_the_root() {
     );
     assert_eq!(probe(&root, "docs/guide.md"), PathKind::OutsideRoot);
 
-    let selected = select_files(
-        &[at("docs/guide.md")],
-        &root,
-        &ExtensionFilter::default(),
-        &AmbientPathProbe,
-    );
+    let selected = selected_in(&root, &[at("docs/guide.md")]);
     assert!(
         selected.is_empty(),
         "a candidate that leaves the tree is not selected, got {selected:?}"
@@ -168,17 +180,104 @@ fn a_directory_is_neither_a_regular_file_nor_a_symlink() {
 /// kind rather than of a tree.
 ///
 /// A path `symlink_metadata` has already accepted can reach this decision again
-/// only by losing a race with the filesystem, so the second arm has no fixture
-/// that stages it. `NotFound` is a candidate that is gone, or staged for
-/// deletion; every other kind is a file present but unnameable.
+/// only by losing a race with the filesystem, so no fixture stages the arm that
+/// is not `NotFound`. `NotFound` is a candidate that is gone, or staged for
+/// deletion, and is reported as the absence the selection has a rule for; every
+/// other kind leaves the file present but unnameable, which the run is told
+/// about rather than left to infer.
 #[rstest]
-#[case(ErrorKind::NotFound, PathKind::Missing)]
-#[case(ErrorKind::PermissionDenied, PathKind::Other)]
+#[case(ErrorKind::NotFound, true)]
+#[case(ErrorKind::PermissionDenied, false)]
+#[case(ErrorKind::NotADirectory, false)]
 fn a_canonicalization_failure_is_classified_by_its_kind(
     #[case] kind: ErrorKind,
-    #[case] expected: PathKind,
+    #[case] absent: bool,
 ) {
-    assert_eq!(unnameable(kind), expected);
+    let path = at("/repo/docs/guide.md");
+    match (unnameable(path.clone(), io::Error::from(kind)), absent) {
+        (Ok(PathKind::Missing), true) => {}
+        (Err(error), false) => {
+            assert_eq!(
+                error.path, path,
+                "the failure names the path it could not read"
+            );
+            assert_eq!(error.source.kind(), kind, "the cause is reported unchanged");
+        }
+        (outcome, _) => panic!("{kind:?} was classified as {outcome:?}"),
+    }
+}
+
+/// A root that does not exist confines nothing.
+///
+/// Stated against the predicate rather than staged through
+/// [`AmbientPathProbe::probe`], which answers `Missing` for every candidate
+/// before the root is ever asked about: a working directory removed mid-run is
+/// the only way to arrive here, and that is a race no fixture should have to
+/// win. Confinement that could not be established must not be reported as
+/// confinement, and a selection over a tree that is not there names nothing.
+#[test]
+fn a_root_that_does_not_exist_confines_nothing() {
+    let (_guard, root) = temp_root();
+    let gone = root.join("gone");
+
+    assert!(
+        !confined_to(&gone, &at("/canonical/guide.md"))
+            .expect("an absent root is not a failure to read it"),
+        "a root that cannot be resolved confines nothing"
+    );
+}
+
+/// A root that exists but cannot be resolved is reported, not answered.
+///
+/// The distinction this draws is the same one the probe draws for a candidate:
+/// absence is an answer the caller has a rule for, and any other failure is a
+/// question that went unasked. A root reached through a file is the staging
+/// that needs no permission trick, so this case holds for a privileged test
+/// runner as well as an unprivileged one.
+#[test]
+fn a_root_that_cannot_be_resolved_is_reported() {
+    let (_guard, root) = temp_root();
+    write(&root, "blocker", "not a directory\n");
+    let unreachable = root.join("blocker/sub");
+
+    let error = confined_to(&unreachable, &at("/canonical/guide.md"))
+        .expect_err("a root that cannot be resolved is a failure, not confinement");
+    assert_eq!(
+        error.path, unreachable,
+        "the failure names the root it could not read"
+    );
+    assert_ne!(
+        error.source.kind(),
+        ErrorKind::NotFound,
+        "a root behind a file is present, not absent: {error:?}"
+    );
+}
+
+/// A loop among a candidate's ancestors is a question the probe could not ask,
+/// not an absence.
+///
+/// Stated as "not `NotFound`" rather than as a specific kind: the kernel reports
+/// the loop, and which [`ErrorKind`] the platform maps it to is not this tool's
+/// to pin — on this project's pinned toolchain the loop kind is still unstable.
+#[cfg(unix)]
+#[test]
+fn a_symbolic_link_loop_is_an_error_rather_than_a_missing_file() {
+    let (_guard, root) = temp_root();
+    // A loop between ancestors, not in the final component: the probe reads
+    // `symlink_metadata`, so a candidate that *is* a link is classified as one
+    // without the kernel ever resolving it.
+    std::os::unix::fs::symlink("b", root.join("a")).expect("create the fixture symlink");
+    std::os::unix::fs::symlink("a", root.join("b")).expect("create the fixture symlink");
+
+    let error = AmbientPathProbe
+        .probe(&root, Utf8Path::new("a/guide.md"))
+        .expect_err("a link loop is not an absence, and not an answer");
+    assert_eq!(error.path, root.join("a/guide.md"));
+    assert_ne!(
+        error.source.kind(),
+        ErrorKind::NotFound,
+        "a loop must not be reported as a file that is merely gone: {error:?}"
+    );
 }
 
 #[test]
@@ -200,16 +299,14 @@ fn selection_over_a_real_tree_takes_regular_files_alone() {
     std::fs::create_dir_all(root.join("docs/subdir.md"))
         .expect("create a directory named like a document");
 
-    let selected = select_files(
+    let selected = selected_in(
+        &root,
         &[
             at("docs/guide.md"),
             at("docs/subdir.md"),
             at("docs/gone.md"),
             at("draft.markdown"),
         ],
-        &root,
-        &ExtensionFilter::default(),
-        &AmbientPathProbe,
     );
     assert_eq!(
         selected,
@@ -251,12 +348,7 @@ fn two_hard_links_are_two_identities_and_neither_is_dropped() {
         "two directory entries must keep two identities"
     );
 
-    let selected = select_files(
-        &[at("a.md"), at("b.md")],
-        &root,
-        &ExtensionFilter::default(),
-        &AmbientPathProbe,
-    );
+    let selected = selected_in(&root, &[at("a.md"), at("b.md")]);
     assert_eq!(
         selected,
         vec![at("a.md"), at("b.md")],

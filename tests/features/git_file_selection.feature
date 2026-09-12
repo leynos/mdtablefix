@@ -57,6 +57,14 @@ Feature: Select files from a Git repository
     Then the command succeeds
     And the file "other.md" has a reflowed table
 
+  Scenario: Report a candidate that cannot be classified
+    Given the directory "docs" is replaced by a regular file
+    When I run mdtablefix with "--git --list-files"
+    Then the command exits with status 2
+    And stdout is empty
+    And stderr contains "guide.md"
+    And stderr contains "while selecting files"
+
   Scenario: Refuse to rewrite a conflicted file mid-merge
     Given an unresolved merge conflict in the tracked file "docs/guide.md"
     When I run mdtablefix with "--git --in-place"

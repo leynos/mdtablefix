@@ -375,7 +375,7 @@ and it is the one module that knows the whole selection tree at once.
 
 ```text
 src/select.rs               the tree root: module list and dependency rule
-src/select/policy.rs        select_files, FileIdentity, PathKind, PathProbe
+src/select/policy.rs        select_files, FileIdentity, PathKind, PathProbe, ProbeError
 src/select/extensions.rs    --md-exts parsing and matching
 src/select/fs_probe.rs      AmbientPathProbe, the working-tree adapter
 src/select/git_ls_files.rs  the git subprocess, its framing and diagnostics

@@ -822,11 +822,15 @@ function of that listing, the working directory, an extension set, and a
 `PathProbe`. It keeps a candidate when the extension filter accepts it and the
 probe reports a regular file; an absent path, a symbolic link, and anything
 else are skipped, because each is an ordinary repository state rather than a
-user error. The extension is tested before the filesystem is consulted, so a
-run probes one path per distinct Markdown candidate and never looks at a `.rs`
-file. Selection reads metadata only — it never opens a file — and its result is
-sorted byte-wise, so a selection is a function of repository state rather than
-of the order in which Git happened to emit its listing.
+user error. A candidate the probe cannot classify — a permission failure, a
+link loop among the ancestors — is not a fourth such state: the selection stops
+and the run fails, naming the path, because an unclassifiable candidate leaves
+the run unable to say which files it would have formatted. The extension is
+tested before the filesystem is consulted, so a run probes one path per distinct
+Markdown candidate and never looks at a `.rs` file. Selection reads metadata
+only — it never opens a file — and its result is sorted byte-wise, so a
+selection is a function of repository state rather than of the order in which
+Git happened to emit its listing.
 
 `PathProbe` is the one driven port of the selection, and the policy depends on
 it and on nothing else; the adapter and the composition root depend on the
@@ -876,9 +880,9 @@ sequenceDiagram
     SP->>SP: extension filter, no filesystem access
     loop each surviving candidate
         SP->>AP: symlink_metadata(candidate)
-        AP-->>SP: PathKind and FileIdentity
+        AP-->>SP: PathKind and FileIdentity, or a read failure
     end
-    SP-->>GI: sorted, deduplicated paths
+    SP-->>GI: sorted, deduplicated paths, or the first read failure
     opt Mode::InPlace and not --allow-conflicted
         GI->>GR: resolve_git_dir
     end
@@ -893,9 +897,11 @@ sequenceDiagram
 _Figure 5: The path of a `--git` run through file selection.
 `git_inputs::resolve` asks `git ls-files` for the candidates, hands them to the
 policy, which tests each extension before probing the file itself and returns a
-sorted list; only a run that can write resolves the Git directory for the
-conflict guard, and that directory is then consulted per written file. The
-paths join `run_files` exactly as positional paths do._
+sorted list; a candidate the probe cannot classify stops the selection and is
+reported before any file is analysed, because the run cannot then say which set
+it would have formatted. Only a run that can write resolves the Git directory
+for the conflict guard, and that directory is then consulted per written file.
+The paths join `run_files` exactly as positional paths do._
 
 ## Atomic in-place writes
 
