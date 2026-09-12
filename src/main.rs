@@ -94,7 +94,7 @@ fn format_stdin(input: &str, opts: FormatOpts) -> String {
 /// writes, and every other mode reads.
 fn analyse_one(
     mode: Mode,
-    guard: ConflictGuard,
+    guard: &ConflictGuard,
     path: &Utf8Path,
     format: &Formatter,
 ) -> anyhow::Result<(FileReport, String)> {
@@ -201,7 +201,7 @@ fn run() -> anyhow::Result<ExitStatus> {
     };
     let result = match inputs {
         Inputs::Stdin => run_stdin(cli.opts),
-        Inputs::Files(files) => run_files(mode, guard, &files, cli.opts),
+        Inputs::Files(files) => run_files(mode, &guard, &files, cli.opts),
     };
     let result = match result {
         Err(error) if is_broken_pipe(&error) => Ok(ExitStatus::Success),
@@ -241,7 +241,7 @@ const ANALYSIS_CHUNK: usize = 256;
 /// status along with the drift the reporting modes found.
 fn run_files(
     mode: Mode,
-    guard: ConflictGuard,
+    guard: &ConflictGuard,
     files: &[Utf8PathBuf],
     opts: FormatOpts,
 ) -> anyhow::Result<ExitStatus> {

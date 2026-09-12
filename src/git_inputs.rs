@@ -19,7 +19,7 @@ use crate::{
     command::Cli,
     driver::{Inputs, Mode},
     select::{
-        conflict::{ConflictGuard, operation_in_progress},
+        conflict::ConflictGuard,
         fs_probe::AmbientPathProbe,
         git_ls_files::{GitListError, GitLsFiles},
         policy::select_files,
@@ -78,15 +78,21 @@ pub fn resolve(
 
 /// The guard a `--git` run must consult before it rewrites anything.
 ///
-/// The inert guard unless this run can write and the user has not overridden
-/// the refusal, so the Git directory is asked for only when the answer can
+/// The unguarded one unless this run can write and the user has not overridden
+/// the refusal, so the Git directory is resolved only when the answer can
 /// change what happens: `--check`, `--diff`, and `--list-files` never pay for
-/// the second `git` process.
+/// the second `git` process, and neither does an `--in-place` run the user has
+/// told to rewrite a conflicted file anyway.
+///
+/// What the guard receives is the directory, not a verdict read from it: the
+/// repository is asked again immediately before each file is replaced, so a
+/// merge or revert that begins mid-run is seen. See
+/// [`ConflictGuard::refuses`](crate::select::conflict::ConflictGuard::refuses).
 ///
 /// # Errors
 ///
-/// Fails rather than returning the inert guard when the Git directory cannot be
-/// resolved: a rewrite whose safety cannot be checked is not a rewrite this
+/// Fails rather than returning the unguarded one when the Git directory cannot
+/// be resolved: a rewrite whose safety cannot be checked is not a rewrite this
 /// tool performs unguarded. The failure is reported like any other operational
 /// failure, per [`crate::driver::exit_status`].
 fn guard(
@@ -94,15 +100,13 @@ fn guard(
     mode: Mode,
     working_directory: &Utf8Path,
 ) -> Result<ConflictGuard, GitListError> {
-    let overridden = cli.allows_conflicted();
-    if mode != Mode::InPlace || overridden {
+    if mode != Mode::InPlace || cli.allows_conflicted() {
         return Ok(ConflictGuard::unguarded());
     }
 
     let git_dir = GitLsFiles::new(cli.includes_untracked()).resolve_git_dir(working_directory)?;
-    let in_progress = operation_in_progress(&git_dir);
 
-    Ok(ConflictGuard::new(in_progress, overridden))
+    Ok(ConflictGuard::guarded(git_dir))
 }
 
 /// Reports, once, that some candidates could not be represented as paths.

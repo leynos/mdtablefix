@@ -1,29 +1,41 @@
 //! The two predicates that make a mid-merge rewrite safe.
 //!
-//! Depends on `std::fs` and `camino`. Both predicates are deliberately narrow:
-//! [`has_conflict_markers`] requires all three marker forms, each at the start
-//! of a line with a run of at least seven characters, so a document *discussing*
-//! conflict markers is not mistaken for a conflicted one; and
-//! [`operation_in_progress`] narrows the scan further, to a repository actually
-//! mid-merge, mid-rebase, or mid-cherry-pick.
+//! Depends on `std::fs`, `std::io`, and `camino`. Both predicates are
+//! deliberately narrow: [`has_conflict_markers`] requires all three marker
+//! forms, each at the start of a line with a run of at least seven characters,
+//! so a document *discussing* conflict markers is not mistaken for a conflicted
+//! one; and [`operation_in_progress`] narrows the question further, to a
+//! repository actually mid-merge, mid-rebase, mid-revert, or mid-cherry-pick.
+//!
+//! The repository is asked at the write boundary rather than once per run: a
+//! merge, rebase, or revert can begin while a long run is still analysing
+//! files, and a run-wide snapshot would let exactly that run rewrite the
+//! conflict it started inside. [`ConflictGuard::refuses`] is therefore the one
+//! caller of [`operation_in_progress`], and it asks only about a file whose
+//! markers have already been found.
 //!
 //! Reflowing across the markers restructures text on both sides of the
 //! boundary, so the user would resolve against corrupted content and commit it
 //! into a rewritten history, where `git rebase --abort` is gone.
 
-use camino::Utf8Path;
+use std::io;
+
+use camino::{Utf8Path, Utf8PathBuf};
 
 /// The entries a Git directory holds only while an operation is paused, each
 /// named as `git rev-parse --git-path` would report it.
 ///
-/// `ORIG_HEAD`, `SQUASH_MSG`, and `COMMIT_EDITMSG` also appear under a Git
-/// directory and are deliberately absent: an idle repository holds them, so
-/// they say nothing about an operation in progress.
-const IN_PROGRESS: [&str; 4] = [
+/// `REVERT_HEAD` is the pseudoref `git revert` writes when it stops on a
+/// conflict, and it is the reason a revert is named beside the other three in
+/// this module's own prose. `ORIG_HEAD`, `SQUASH_MSG`, and `COMMIT_EDITMSG`
+/// also appear under a Git directory and are deliberately absent: an idle
+/// repository holds them, so they say nothing about an operation in progress.
+const IN_PROGRESS: [&str; 5] = [
     "MERGE_HEAD",
     "rebase-merge",
     "rebase-apply",
     "CHERRY_PICK_HEAD",
+    "REVERT_HEAD",
 ];
 
 /// The three marker forms a conflicted hunk carries, in the order Git writes
@@ -43,69 +55,111 @@ const MARKER_LEN: usize = 7;
 
 /// Whether a rewrite must refuse a file that carries conflict markers.
 ///
-/// The two facts it holds are decided once per run — whether an operation is in
-/// progress, and whether the user overrode the refusal — so the per-file
-/// question is the marker scan alone. Both are consulted together rather than
-/// by the caller, because a refusal that forgets one of them either corrupts a
-/// conflict resolution or ignores `--allow-conflicted`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ConflictGuard {
-    /// Whether a merge, rebase, or cherry-pick is paused in this repository.
-    in_progress: bool,
-    /// Whether `--allow-conflicted` was given.
-    allowed: bool,
+/// The guard holds where the repository is, not what it said: the answer is
+/// read at the moment a file is about to be replaced, so a run that spans the
+/// start of a merge cannot act on the state the run began under. See
+/// [`Self::refuses`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConflictGuard {
+    /// Nothing to consult.
+    ///
+    /// A run that cannot write — `--print`, `--check`, `--diff`, `--list-files`
+    /// — and a run whose user passed `--allow-conflicted`. The first has no
+    /// rewrite to refuse; the second has asked for the rewrite whatever the
+    /// repository is doing. Neither pays for a second `git` process, which is
+    /// also what keeps an ordinary run from spawning `git` at all.
+    Unguarded,
+    /// The Git directory to consult immediately before each rewrite.
+    Guarded(Utf8PathBuf),
 }
 
 impl ConflictGuard {
-    /// The guard for a run that is not selecting from a Git repository.
+    /// The guard for a run with no repository to consult.
     ///
     /// A path the user named on the command line is not a selection this tool
-    /// made, so it is not this tool's to refuse; and no repository is consulted
-    /// for one, which is what keeps an ordinary run from spawning `git`.
+    /// made, so it is not this tool's to refuse, and no repository is consulted
+    /// for one.
     #[must_use]
-    pub const fn unguarded() -> Self {
-        Self {
-            in_progress: false,
-            allowed: false,
-        }
-    }
+    pub const fn unguarded() -> Self { Self::Unguarded }
 
-    /// The guard for a run whose repository may be mid-operation.
+    /// The guard for a run that must ask this Git directory before it writes.
     #[must_use]
-    pub const fn new(in_progress: bool, allowed: bool) -> Self {
-        Self {
-            in_progress,
-            allowed,
-        }
-    }
+    pub fn guarded(git_dir: impl Into<Utf8PathBuf>) -> Self { Self::Guarded(git_dir.into()) }
 
-    /// Whether `content` must not be rewritten.
+    /// Whether `content` must not be rewritten, asking the repository now.
     ///
-    /// Takes `self` by value, as `clippy::trivially_copy_pass_by_ref` requires
-    /// of a two-byte `Copy` type: the guard is two `bool`s and copying it is
-    /// cheaper than the reference.
+    /// The marker scan comes first because it is in memory and the repository
+    /// is not: a file that does not carry all three markers cannot be refused
+    /// whatever the repository is doing, so the filesystem is read for a file a
+    /// refusal could be about and for no other. This is also what keeps the
+    /// false positive contained — a document that quotes all three markers
+    /// inside a fenced block is indistinguishable from a conflicted one, and
+    /// refusing to rewrite it would be a false alarm about a file nothing is
+    /// merging.
     ///
-    /// The marker scan runs only while an operation is in progress: a document
-    /// that quotes all three markers inside a fenced block is otherwise
-    /// indistinguishable from a conflicted one, and refusing to rewrite it
-    /// would be a false alarm about a file nothing is merging.
-    #[must_use]
-    pub fn refuses(self, content: &str) -> bool {
-        self.in_progress && !self.allowed && has_conflict_markers(content)
+    /// # Errors
+    ///
+    /// Returns an error if `content` carries conflict markers and the state of
+    /// the Git directory cannot be read. A rewrite whose safety cannot be
+    /// established is not a rewrite this tool performs: the caller reports the
+    /// file as an error rather than writing it.
+    pub fn refuses(&self, content: &str) -> Result<bool, RepositoryStateError> {
+        let Self::Guarded(git_dir) = self else {
+            return Ok(false);
+        };
+        if !has_conflict_markers(content) {
+            return Ok(false);
+        }
+
+        operation_in_progress(git_dir)
     }
 }
 
-/// Reports whether the repository is mid-merge, mid-rebase, or
+/// Reports whether the repository is mid-merge, mid-rebase, mid-revert, or
 /// mid-cherry-pick, by testing for `MERGE_HEAD`, `rebase-merge`,
-/// `rebase-apply`, and `CHERRY_PICK_HEAD` under the Git directory.
+/// `rebase-apply`, `CHERRY_PICK_HEAD`, and `REVERT_HEAD` under the Git
+/// directory.
 ///
 /// A presence test rather than a Git subprocess: the Git directory is already
-/// resolved by the caller, and this runs once per `--git` invocation, not
-/// once per candidate.
-pub fn operation_in_progress(git_dir: &Utf8Path) -> bool {
-    IN_PROGRESS
-        .iter()
-        .any(|name| std::fs::symlink_metadata(git_dir.join(name)).is_ok())
+/// resolved by the caller, and this runs at the write boundary — once for each
+/// file that carries conflict markers — rather than once per candidate.
+///
+/// # Errors
+///
+/// Returns an error if a marker cannot be tested for, other than by being
+/// absent. Absence is the ordinary answer and means only that this marker is
+/// not there; any other failure means the question went unanswered, and an
+/// unanswered question is not a licence to write.
+pub fn operation_in_progress(git_dir: &Utf8Path) -> Result<bool, RepositoryStateError> {
+    for name in IN_PROGRESS {
+        match std::fs::symlink_metadata(git_dir.join(name)) {
+            Ok(_) => return Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(source) => {
+                return Err(RepositoryStateError {
+                    git_dir: git_dir.to_owned(),
+                    source,
+                });
+            }
+        }
+    }
+
+    Ok(false)
+}
+
+/// The state of a Git directory could not be read.
+///
+/// Carries the directory, because a marker that cannot be tested for is only
+/// actionable with its location: the caller prints one line, and a bare
+/// `Permission denied` would name neither what failed nor where.
+#[derive(Debug, thiserror::Error)]
+#[error("reading the state of the Git directory `{git_dir}`")]
+pub struct RepositoryStateError {
+    /// The Git directory whose markers were being tested for.
+    pub git_dir: Utf8PathBuf,
+    /// Why an entry of that directory could not be tested for.
+    #[source]
+    pub source: io::Error,
 }
 
 /// Reports whether `content` carries all three conflict-marker forms, each at
@@ -114,9 +168,9 @@ pub fn operation_in_progress(git_dir: &Utf8Path) -> bool {
 /// All three are required because any one of them alone is ordinary Markdown:
 /// `=======` underlines a setext heading, and prose or a fenced example may
 /// name the other two. This is not a Markdown parser, so a fenced example
-/// carrying all three is indistinguishable from a conflict — one reason the
-/// scan is gated on [`operation_in_progress`], and the reason
-/// `--allow-conflicted` exists.
+/// carrying all three is indistinguishable from a conflict — one reason
+/// [`ConflictGuard::refuses`] asks the repository and the content together
+/// rather than the content alone, and the reason `--allow-conflicted` exists.
 #[must_use]
 pub fn has_conflict_markers(content: &str) -> bool {
     MARKERS.iter().all(|marker| {

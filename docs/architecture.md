@@ -836,6 +836,12 @@ a second, narrower path: the Git directory is resolved only when the mode can
 write and the user has not passed `--allow-conflicted`, so `--check`, `--diff`,
 and `--list-files` cost one subprocess rather than two, and a mode that cannot
 corrupt a resolution never asks the repository whether one is in progress.
+What the guard carries is that directory rather than a verdict read from it, so
+the repository is asked again immediately before each file is replaced: a merge
+or revert that begins while a long run is still analysing files is seen by the
+writes that follow it. A file whose content carries no conflict markers never
+provokes the question, so the marker scan — not the filesystem — decides how
+much the guard costs.
 
 Nothing in the selection holds a directory capability. The paths it returns are
 relative to the working directory, and `main` opens each file's parent as it
@@ -847,8 +853,8 @@ UTF-8.
 
 For screen readers: The following sequence diagram traces a `--git` run from
 the command line to the paths handed to `run_files`, including the point at
-which the selection becomes policy, and the point at which a writable run
-resolves the conflict guard.
+which the selection becomes policy, the point at which a writable run resolves
+the conflict guard, and the point at which each write consults it.
 
 ```mermaid
 sequenceDiagram
@@ -874,18 +880,22 @@ sequenceDiagram
     end
     SP-->>GI: sorted, deduplicated paths
     opt Mode::InPlace and not --allow-conflicted
-        GI->>GR: resolve_git_dir, operation_in_progress
+        GI->>GR: resolve_git_dir
     end
     GI-->>R: Inputs::Files and ConflictGuard
     R->>RF: run_files(mode, guard, paths, opts)
+    loop each changed file
+        RF->>GR: refuses(content)
+        GR->>GR: scan markers, then test the Git directory for one
+    end
 ```
 
 _Figure 5: The path of a `--git` run through file selection.
 `git_inputs::resolve` asks `git ls-files` for the candidates, hands them to the
 policy, which tests each extension before probing the file itself and returns a
 sorted list; only a run that can write resolves the Git directory for the
-conflict guard. The paths then join `run_files` exactly as positional paths
-do._
+conflict guard, and that directory is then consulted per written file. The
+paths join `run_files` exactly as positional paths do._
 
 ## Atomic in-place writes
 

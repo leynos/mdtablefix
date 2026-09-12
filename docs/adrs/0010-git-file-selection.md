@@ -221,9 +221,18 @@ looking for a `.git` entry: a linked worktree and a submodule both hold a
 a search would misresolve exactly the repositories in which an operation is
 most likely to be paused.
 
-If the repository is mid-merge, mid-rebase, or mid-cherry-pick, a selected file
-carrying conflict markers is refused and named on standard error. Measured on a
-repository paused mid-merge:
+The question is asked at the write boundary rather than once per run: the guard
+holds the Git directory, and each file that carries conflict markers has that
+directory tested immediately before the file is replaced. A merge or revert
+that begins while a long run is still analysing files is therefore seen by the
+writes that follow it, where a run-wide snapshot would have let exactly that
+run rewrite the conflict it started inside. A file whose content carries no
+markers never provokes the question, so the scan — not the filesystem —
+decides what the guard costs.
+
+If the repository is mid-merge, mid-rebase, mid-revert, or mid-cherry-pick, a
+selected file carrying conflict markers is refused and named on standard error.
+Measured on a repository paused mid-merge:
 
 ```console
 $ mdtablefix --git --in-place
@@ -231,7 +240,7 @@ writing docs.md
 
 Caused by:
     refusing to rewrite docs.md: it contains conflict markers and a merge,
-    rebase, or cherry-pick is in progress. Resolve it first, or pass
+    rebase, revert, or cherry-pick is in progress. Resolve it first, or pass
     --allow-conflicted to rewrite it anyway.
 $ echo $?
 2

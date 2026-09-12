@@ -32,7 +32,7 @@ fn in_place_writes_the_formatted_text() {
 
     let (_report, payload) = analyse(
         Mode::InPlace,
-        ConflictGuard::unguarded(),
+        &ConflictGuard::unguarded(),
         &directory,
         Utf8Path::new("ragged.md"),
         Utf8Path::new("ragged.md"),
@@ -59,7 +59,7 @@ fn in_place_replaces_a_drifting_file() {
 
     analyse(
         Mode::InPlace,
-        ConflictGuard::unguarded(),
+        &ConflictGuard::unguarded(),
         &directory,
         Utf8Path::new("ragged.md"),
         Utf8Path::new("ragged.md"),
@@ -91,7 +91,7 @@ fn in_place_leaves_a_clean_file_untouched() {
 
     let (report, payload) = analyse(
         Mode::InPlace,
-        ConflictGuard::unguarded(),
+        &ConflictGuard::unguarded(),
         &directory,
         Utf8Path::new("clean.md"),
         Utf8Path::new("clean.md"),
