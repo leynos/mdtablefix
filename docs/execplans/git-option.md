@@ -2496,7 +2496,20 @@ plateau.
       from the six `coderabbit review --agent` rounds: it asks the hosted
       service to review the pull request, which is what the ready-for-review
       state makes available, where a queued review on a draft is skipped and
-      spends the seat hour for nothing.
+      spends the seat hour for nothing. Reading the pull request before queueing
+      turned up a fact the queue alone would have hidden: CodeRabbit was already
+      reviewing. Its walkthrough comment — one comment, edited in place each
+      round, which is why it carries a creation date of 2026-09-09 — was last
+      updated at 12:09:11Z with the range `6be1a76af63045837205cff7fcbeafffa1b746b1`
+      through `9f187a270ba94e5042aec94e4cee81b5e0827826`, 34 files selected and
+      `Cargo.lock` and the `--help` snapshot excluded by path filters. So the
+      queued comment is a second request and not the first thing to arrive; the
+      push itself had already asked, and the seat cooldown is what gates it
+      either way. The same reading found a third reviewer's verdict worth
+      recording because it is a limit rather than a finding: Sourcery declined
+      the pull request with "larger than the review limit of 150,000 diff
+      characters", which is a property of the diff's size and not a defect in
+      it, and no round here treats that as an open item.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
