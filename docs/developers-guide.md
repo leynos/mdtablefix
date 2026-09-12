@@ -172,6 +172,13 @@ rather than performing ambient filesystem access themselves.
   only ambient filesystem boundary. It opens a directory capability for the
   target's parent and returns the target's file name relative to that
   capability.
+- `remove_failed_temporary_file(directory, temp_path)` is the `pub(super)`
+  helper `replace_file_inner` calls after a failed swap to remove the
+  leftover temporary file via `remove_temporary_file`. Best effort: it
+  traces a removal that succeeds, and counts and traces one that fails as
+  `mdtablefix_io_temporary_cleanup_failures_total` instead of returning it,
+  so the caller still sees the original failure; the `#[cfg(test)]` re-export
+  in `src/io.rs` lets `src/io_metrics_failure_tests.rs` drive it directly.
 
 `src/reflow.rs`:
 
