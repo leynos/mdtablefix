@@ -21,7 +21,10 @@
 use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, Metadata},
+};
 
 /// The entries a Git directory holds only while an operation is paused, each
 /// named as `git rev-parse --git-path` would report it.
@@ -132,15 +135,20 @@ impl ConflictGuard {
 /// the selection that opens a directory for itself; see ADR 0010 for why the
 /// probe, whose subject *is* the ambient tree, does not.
 ///
+/// What was opened is asked what it is before any marker is read beneath it: on
+/// Windows a regular file opens as a directory, and every marker under it then
+/// fails with the same `NOT_FOUND` as a marker that is not there. See
+/// [`opened_directory`].
+///
 /// # Errors
 ///
-/// Returns an error if the Git directory cannot be opened, or if a marker
-/// cannot be tested for other than by being absent. Absence is the ordinary
-/// answer and means only that this marker is not there; any other failure —
-/// including a Git directory that has gone since it was resolved, which
-/// `open_ambient_dir` reports rather than passing on as an idle repository —
-/// means the question went unanswered, and an unanswered question is not a
-/// licence to write.
+/// Returns an error if the Git directory cannot be opened, if what was opened
+/// cannot be shown to be a directory, or if a marker cannot be tested for other
+/// than by being absent. Absence is the ordinary answer and means only that this
+/// marker is not there; any other failure — including a Git directory that has
+/// gone since it was resolved, which `open_ambient_dir` reports rather than
+/// passing on as an idle repository — means the question went unanswered, and an
+/// unanswered question is not a licence to write.
 pub fn operation_in_progress(git_dir: &Utf8Path) -> Result<bool, RepositoryStateError> {
     let directory = Dir::open_ambient_dir(git_dir, ambient_authority()).map_err(|source| {
         RepositoryStateError {
@@ -148,6 +156,13 @@ pub fn operation_in_progress(git_dir: &Utf8Path) -> Result<bool, RepositoryState
             source,
         }
     })?;
+    let opened = directory
+        .dir_metadata()
+        .map_err(|source| RepositoryStateError {
+            git_dir: git_dir.to_owned(),
+            source,
+        })?;
+    opened_directory(git_dir, &opened)?;
 
     for name in IN_PROGRESS {
         let present =
@@ -165,12 +180,43 @@ pub fn operation_in_progress(git_dir: &Utf8Path) -> Result<bool, RepositoryState
     Ok(false)
 }
 
+/// Whether what was opened is a directory, from its metadata.
+///
+/// Opening a path as a directory does not establish that it is one: on Windows
+/// `open_ambient_dir` succeeds on a regular file, and every marker read beneath
+/// it then fails with the same `NOT_FOUND` as a marker that is not there — an
+/// unreadable repository read as an idle one, which is the one answer this guard
+/// must never invent. What was opened is therefore asked what it is, and a file
+/// is reported rather than answered for.
+///
+/// [`io::ErrorKind::NotADirectory`] is the kind Unix reports for a path through
+/// a file, so the failure is the same on both platforms: one refuses the file at
+/// the open itself, and the other accepts it and is caught here.
+///
+/// It is a function of the metadata rather than a match arm of the open above,
+/// for the reason [`marker_present`] is a function of the test's result: on
+/// Linux the open refuses a regular file before this check is reached, so no
+/// fixture stages it through the filesystem.
+fn opened_directory(git_dir: &Utf8Path, metadata: &Metadata) -> Result<(), RepositoryStateError> {
+    if metadata.is_dir() {
+        return Ok(());
+    }
+
+    Err(RepositoryStateError {
+        git_dir: git_dir.to_owned(),
+        source: io::Error::new(
+            io::ErrorKind::NotADirectory,
+            format!("`{git_dir}` is not a directory"),
+        ),
+    })
+}
+
 /// Whether the marker just tested for is present, from the result of testing.
 ///
 /// `Ok(true)` is a marker that is there, `Ok(false)` one that is not, and an
 /// error is a question that went unanswered rather than a marker that is
 /// absent. It is a function of the result rather than a match arm of the scan
-/// above, for the reason the probe's `unnameable` is one: the capability
+/// above, for the reason the probe's `unreadable` is one: the capability
 /// refuses a Git directory it cannot open before the loop begins, so no fixture
 /// reaches that arm through the filesystem — and reading an unreadable marker
 /// as an absent one is the mistake that would license a rewrite during a merge.
@@ -192,7 +238,8 @@ fn marker_present(test: io::Result<()>) -> Result<bool, io::Error> {
 pub struct RepositoryStateError {
     /// The Git directory whose markers were being tested for.
     pub git_dir: Utf8PathBuf,
-    /// Why the directory could not be opened, or an entry of it tested for.
+    /// Why the directory could not be opened, what was opened could not be
+    /// shown to be a directory, or an entry of it tested for.
     #[source]
     pub source: io::Error,
 }

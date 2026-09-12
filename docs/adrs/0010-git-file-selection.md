@@ -194,7 +194,13 @@ permission failure, a path whose ancestor is a file, a symbolic-link loop among
 the ancestors — is a question that went unasked, and the selection stops with
 the path named rather than returning the candidates it did manage to read: a run
 that cannot classify one candidate cannot say which set it is about to format.
-The probe's answer carries a `FileIdentity`,
+Telling an absence from a failure to classify is not a matter of reading the
+failure: Windows reports a path beneath a regular file with the same `NOT_FOUND`
+as a path that is gone, where Unix reports `ENOTDIR`, so the probe asks the
+candidate's nearest existing ancestor rather than trusting the leaf's own error.
+A path that stops at something other than a directory is `NotADirectory` on
+either platform, and a path no part of which exists is the absence the selection
+skips. The probe's answer carries a `FileIdentity`,
 which is the canonicalized path: two names for one file collapse, and two hard
 links to one inode do not. Keying identity on `(st_dev, st_ino)` would be the
 opposite mistake, because `--in-place` replaces a file through a temporary file
@@ -242,11 +248,13 @@ holds the Git directory, and each file that carries conflict markers has that
 directory tested immediately before the file is replaced. The directory is
 opened as a capability — `cap_std::fs_utf8::Dir`, with the marker names as
 fixed relative entries of it — so nothing a repository wrote takes part in the
-resolution, and a Git directory that has gone since it was resolved is reported
-rather than read as an idle repository. A merge or revert
-that begins while a long run is still analysing files is therefore seen by the
-writes that follow it, where a run-wide snapshot would have let exactly that
-run rewrite the conflict it started inside. A file whose content carries no
+resolution, a Git directory that has gone since it was resolved is reported
+rather than read as an idle repository, and what was opened is asked what it is
+before any marker is read beneath it: on Windows a regular file opens as a
+directory, and every marker under it would otherwise read as absent. A merge or
+revert that begins while a long run is still analysing files is therefore seen
+by the writes that follow it, where a run-wide snapshot would have let exactly
+that run rewrite the conflict it started inside. A file whose content carries no
 markers never provokes the question, so the scan — not the filesystem —
 decides what the guard costs.
 
