@@ -6047,6 +6047,11 @@ portable and the hazard of Revision 27 does not repeat.
 **The test tally did not move.** 1890 passed at `9834fcb` and 1890 here: this
 commit changes what an existing test asserts, not how many tests exist.
 
+**The job that runs this test is green.** Run `34691506030` on `69bc8ea`
+succeeds end to end, `atomic write contract (windows)` included — the job that
+failed twice on this branch, and the only one that executes the edited file on a
+non-Unix target. `build-test` and all four `binstall packaging` jobs pass with it.
+
 **Review status.** `6388d9a7` is queued for PR #464 and has not posted; the
 branch's head is now `80f80d1`, so the review will read a diff that includes this
 commit. No inline thread is outstanding from the paused round.
