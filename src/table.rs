@@ -148,8 +148,16 @@ fn extract_indent_and_trim(lines: &[String]) -> (String, Vec<String>) {
 }
 
 /// Removes and returns the first separator line detected in `lines`.
+///
+/// The dash is required, as it is in `reflow::row_parsing`, because `SEP_RE`
+/// alone also matches a row whose cells are all empty: `|  |  |` is made only of
+/// pipes and spaces, so a table whose header row is empty had that header taken
+/// for the delimiter row, which demoted the real delimiter row to a data row
+/// and left two delimiter-shaped rows for later passes to consume in turn.
 fn extract_separator_line(lines: &mut Vec<String>) -> Option<String> {
-    let sep_idx = lines.iter().position(|l| SEP_RE.is_match(l));
+    let sep_idx = lines
+        .iter()
+        .position(|l| l.contains('-') && SEP_RE.is_match(l));
     sep_idx.map(|idx| lines.remove(idx))
 }
 
@@ -321,6 +329,24 @@ mod tests {
         let lines = vec!["| tee /tmp/test.log".to_string()];
 
         assert_eq!(reflow_table(&lines), lines);
+    }
+
+    #[test]
+    fn reflow_table_keeps_the_delimiter_row_of_a_table_with_an_empty_header() {
+        // `|  |  |` is made only of pipes and spaces, so `SEP_RE` matches it.
+        // Taking the empty header for the delimiter row demoted the real
+        // delimiter row to a data row and left two delimiter-shaped rows for
+        // later passes to consume in turn, so the table never settled.
+        let lines = vec![
+            "|  |  |".to_string(),
+            "| --- | --- |".to_string(),
+            "| a |  |".to_string(),
+        ];
+
+        assert_eq!(
+            reflow_table(&lines),
+            vec!["| a   |     |".to_string(), "| --- | --- |".to_string()]
+        );
     }
 
     #[test]
