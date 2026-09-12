@@ -31,6 +31,10 @@ const COLLISIONS: &str = "mdtablefix_io_temporary_name_collisions_total";
 /// The counter recording exhausted temporary name spaces.
 const EXHAUSTED: &str = "mdtablefix_io_temporary_name_exhausted_total";
 
+/// The counter recording temporary files a failed replacement could not
+/// remove.
+const CLEANUP_FAILURES: &str = "mdtablefix_io_temporary_cleanup_failures_total";
+
 /// What a recorded metric carried.
 #[derive(Debug)]
 enum Value {
@@ -137,6 +141,14 @@ fn samples<'a>(recorded: &'a [Recorded], name: &str, labels: &[(&str, &str)]) ->
     }
 }
 
+/// Reports whether the metric `name`, under exactly `labels`, carries a
+/// non-empty description.
+fn is_described(recorded: &[Recorded], name: &str, labels: &[(&str, &str)]) -> bool {
+    find(recorded, name, labels)
+        .and_then(|metric| metric.description.as_deref())
+        .is_some_and(|text| !text.is_empty())
+}
+
 /// Returns the unit declared for `name`, if the metric was recorded at all.
 fn unit(recorded: &[Recorded], name: &str) -> Option<Unit> {
     recorded
@@ -233,14 +245,9 @@ fn replacement_duration_is_recorded() {
         Some(Unit::Seconds),
         "the duration must be declared in seconds: {recorded:?}"
     );
-    let described = find(&recorded, REPLACE_DURATION, &[(OUTCOME_LABEL, "success")])
-        .expect("the histogram is recorded under the outcome label");
     assert!(
-        described
-            .description
-            .as_deref()
-            .is_some_and(|text| !text.is_empty()),
-        "the histogram must carry a description: {described:?}"
+        is_described(&recorded, REPLACE_DURATION, &[(OUTCOME_LABEL, "success")]),
+        "the histogram must carry a description: {recorded:?}"
     );
     let durations = outcome_samples(&recorded, "success");
     assert_eq!(
@@ -284,45 +291,55 @@ fn an_occupied_candidate_is_counted_as_a_collision() {
     );
 }
 
-#[test]
-fn an_exhausted_name_space_is_counted() {
-    let dir = tempdir().expect("create temporary directory");
-    let file = fixture(&dir);
-    for attempt in 0..TEMP_FILE_ATTEMPTS {
-        let candidate = temporary_path(camino::Utf8Path::new("sample.md"), attempt);
-        fs::write(
-            dir.path()
-                .join(candidate.file_name().expect("candidate name")),
-            "",
-        )
-        .expect("occupy the candidate name");
+#[cfg(unix)]
+mod unix {
+    //! Unix-only tests, with the constants they use, kept together so that the
+    //! whole group is compiled out together on other targets: a symbol left at
+    //! module level would be dead code, and therefore a denied warning, wherever
+    //! its only test is removed.
+
+    use super::*;
+
+    /// The counter recording symbolic-link targets declined rather than
+    /// replaced.
+    const SYMLINK_DECLINED: &str = "mdtablefix_io_symlink_declined_total";
+
+    /// A declined symbolic link is counted as its own event as well as a
+    /// failure, so an operator can tell "the target is a symlink" from "the
+    /// replacement failed" without reading the log.
+    #[test]
+    fn a_declined_symlink_is_counted() {
+        let dir = tempdir().expect("create temporary directory");
+        fixture(&dir);
+        let link = dir.path().join("link.md");
+        // A relative target keeps the link resolvable inside the capability.
+        std::os::unix::fs::symlink("sample.md", &link).expect("create the symlink");
+
+        let (result, recorded) = recorded(|| rewrite(&link));
+
+        let error = result.expect_err("a symlink target must be declined");
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_labels_are_bounded(&recorded);
+        assert_eq!(
+            count(&recorded, SYMLINK_DECLINED, &[]),
+            1,
+            "a declined symlink is counted once: {recorded:?}"
+        );
+        assert!(
+            is_described(&recorded, SYMLINK_DECLINED, &[]),
+            "the counter must carry a description: {recorded:?}"
+        );
+        assert_eq!(
+            outcome_count(&recorded, "failure"),
+            1,
+            "a declined symlink is a replacement that did not happen: {recorded:?}"
+        );
+        assert_eq!(
+            count(&recorded, CLEANUP_FAILURES, &[]),
+            0,
+            "a declined symlink never created a temporary file: {recorded:?}"
+        );
     }
-
-    let (result, recorded) = recorded(|| rewrite(&file));
-
-    let error = result.expect_err("every candidate name is occupied");
-    assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
-    assert_labels_are_bounded(&recorded);
-    assert_eq!(
-        count(&recorded, COLLISIONS, &[]),
-        u64::from(TEMP_FILE_ATTEMPTS),
-        "every occupied candidate is a collision: {recorded:?}"
-    );
-    assert_eq!(
-        count(&recorded, EXHAUSTED, &[]),
-        1,
-        "exhausting the name space is counted once: {recorded:?}"
-    );
-    assert_eq!(
-        outcome_count(&recorded, "failure"),
-        1,
-        "an abandoned replacement is a failure: {recorded:?}"
-    );
-    assert_eq!(
-        outcome_samples(&recorded, "failure").len(),
-        1,
-        "a failed replacement is timed too, so stalls before failure are visible: {recorded:?}"
-    );
 }
 
 /// The replacement path emits the metrics its own documentation and the host
@@ -344,3 +361,7 @@ fn emitted_metric_names_are_stable() {
         "only the outcome metrics are expected for an uncontended replacement"
     );
 }
+
+#[cfg(test)]
+#[path = "io_metrics_failure_tests.rs"]
+mod metrics_failure_tests;

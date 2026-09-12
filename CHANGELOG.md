@@ -31,9 +31,13 @@
   ([#346](https://github.com/leynos/mdtablefix/issues/346))
 - The in-place replacement path emits bounded `metrics` counters and a
   `mdtablefix_io_replace_duration_seconds` histogram, so a host application
-  that installs a recorder can watch replacements, their outcomes, and how long
-  they take. The crate installs no recorder itself.
-  ([#465](https://github.com/leynos/mdtablefix/issues/465))
+  that installs a recorder can watch replacements, their outcomes, how long
+  they take, how often a temporary name is already taken or the name space is
+  exhausted, temporary files a failed replacement could not remove, and
+  symbolic-link targets declined rather than replaced. The crate installs no
+  recorder itself.
+  ([#465](https://github.com/leynos/mdtablefix/issues/465),
+  [#471](https://github.com/leynos/mdtablefix/issues/471))
 - Add the line-ending helpers `LineEnding`, `LineEndingCounts`,
   `count_line_endings`, `detect_line_ending`, and `serialize_lines`, so a
   caller can select and apply the majority line-ending style of an input

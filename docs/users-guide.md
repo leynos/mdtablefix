@@ -595,6 +595,34 @@ the same temporary-file-and-rename sequence relative to the supplied directory,
 so no ambient filesystem access is needed. The CLI and the two path helpers all
 call it, so the sequence has one implementation.
 
+### Replacement metrics
+
+The library emits six metrics for its replacement path: five counters and one
+histogram. It installs no recorder or subscriber of its own; a host
+application installs one to collect these metrics, and a host that installs
+none sees no behavioural change.
+
+- `mdtablefix_io_replace_total` — replacements attempted, labelled by
+  `outcome` (`success` or `failure`).
+- `mdtablefix_io_replace_duration_seconds` — histogram of replacement
+  durations in seconds, labelled by `outcome`.
+- `mdtablefix_io_temporary_name_collisions_total` — candidate temporary names
+  rejected because they were already taken.
+- `mdtablefix_io_temporary_name_exhausted_total` — replacements abandoned
+  because every candidate temporary name was taken.
+- `mdtablefix_io_temporary_cleanup_failures_total` — temporary files a failed
+  replacement could not remove.
+- `mdtablefix_io_symlink_declined_total` — symbolic-link targets declined with
+  `InvalidInput` rather than replaced.
+
+Cleanup is best effort, so the caller still sees the failure that prompted it;
+the cleanup counter is the only signal that a stale temporary file was left
+beside the target. No temporary file is created for a declined link.
+
+Metric names are stable, and labels are bounded: `outcome` is the only label
+key, carried only by the two replacement metrics above. No path, file name, or
+error text is ever used as a label, so a recorder's cardinality stays bounded.
+
 ### `format_breaks` return type
 
 `format_breaks` returns `Vec<Cow<'_, str>>` rather than `Vec<String>`. Lines

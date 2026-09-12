@@ -184,6 +184,16 @@ filesystem access themselves.
   only ambient filesystem boundary. It opens a directory capability for the
   target's parent and returns the target's file name relative to that
   capability.
+- `remove_failed_temporary_file(directory, temp_path)` is the `pub(super)`
+  helper `replace_file_inner` calls after any `write_and_swap` failure — a
+  write, flush or sync failure, or a failure inside the swap itself, not only
+  a failed rename — to remove the leftover temporary file via
+  `remove_temporary_file`. Best effort: it traces a removal that succeeds
+  (`trace!`); a removal that fails is logged at `debug` level and increments
+  `mdtablefix_io_temporary_cleanup_failures_total`, and is not returned, so
+  the caller still sees the original replacement failure; the `#[cfg(test)]`
+  re-export in `src/io.rs` lets `src/io_metrics_failure_tests.rs` drive it
+  directly.
 
 `src/reflow.rs`:
 
@@ -895,7 +905,7 @@ debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified"
 
 ### Metrics
 
-The in-place replacement in `src/io/replace.rs` emits three counters and one
+The in-place replacement in `src/io/replace.rs` emits five counters and one
 histogram through the `metrics` façade. `describe_metrics` registers their
 descriptions exactly once per process behind a `std::sync::OnceLock`.
 
@@ -911,6 +921,16 @@ descriptions exactly once per process behind a `std::sync::OnceLock`.
   temporary name rejected because it was already taken. It carries no labels.
 - `mdtablefix_io_temporary_name_exhausted_total` counts each replacement
   abandoned when all 16 candidate names are taken. It carries no labels.
+- `mdtablefix_io_temporary_cleanup_failures_total` counts each temporary file
+  a failed replacement could not remove. It carries no labels: the replacement
+  is already reported as a `failure` by `mdtablefix_io_replace_total`. The
+  cleanup is best effort, so a failure to clean up never masks the reason the
+  replacement failed, and the count is the only signal that a stale temporary
+  file was left beside the target.
+- `mdtablefix_io_symlink_declined_total` counts each symbolic-link target
+  declined with `InvalidInput` before any temporary file was created. It
+  carries no labels, and separates that decline from the other ways a
+  replacement can fail.
 
 Metric cardinality is bounded by construction: every metric name and every
 label value is a compile-time constant. Target paths, file names, and error
@@ -926,11 +946,13 @@ unless a host wires one in.
 `src/io_metrics_tests.rs` uses `metrics_util::debugging::DebuggingRecorder`
 through `metrics::with_local_recorder` on the test thread and asserts the
 emitted metric names, the counts for a success, for an occupied candidate
-name, and for an exhausted name space, plus the bounded label set: only the
-`outcome` key, with only the values `success` and `failure`. The tests also
-assert that the histogram's declared unit is seconds and that exactly one
-sample is recorded per replacement for both the `success` and `failure`
-outcomes.
+name, for an exhausted name space, for a declined symbolic link, and for a
+temporary file the cleanup could not remove, plus the bounded label set: only
+the `outcome` key, with only the values `success` and `failure`. The tests
+also assert that each counter carries a description, that the histogram's
+declared unit is seconds, and that exactly one sample is recorded per
+replacement for both the `success` and `failure` outcomes. The symbolic-link
+case is Unix-only, like the repository's other symlink tests.
 
 #### Binary metrics
 
@@ -1446,6 +1468,17 @@ the target compiles to an empty binary rather than failing. Nothing goes
 unguarded on that account: the Linux lint job runs the same script over the same
 sources through the `check-static-regexes` Makefile target.
 
+A narrower gate follows the same reasoning one item down. `#[cfg(unix)]` on a
+test removes that test from a Windows build, so it has to own every symbol that
+only it reads: a constant, helper or import left at module level beside tests
+every target compiles is dead code once its only reader is gone, and the
+`RUSTFLAGS: "-D warnings"` the `atomic write contract (windows)` job sets turns
+that into a build failure before any test runs. Such items live inside the same
+`#[cfg(...)]` scope as the test, as the inline `mod unix` in
+[src/io_metrics_tests.rs](../src/io_metrics_tests.rs) does. The scope is the
+enforcement, so no lint rule stands in for it: the Windows job already compiles
+the whole suite with warnings denied.
+
 ### 2.6. Behaviour-driven scenario tests
 
 `rstest-bdd` features live in `tests/features/`. The scenario bindings are in
@@ -1526,6 +1559,35 @@ selection, and the `iter_all_changes` iterator. Widening the requirement to a
 context radius is fixed at three lines, matching `git diff`, and the patience
 threshold switches algorithm above a line count so that diffing a very large
 file stays bounded without a wall-clock cut-off.
+
+### 2.6. Deterministic failure seams
+
+The replacement tests drive two `#[cfg(test)]`-only, per-thread seams defined
+in `src/io/swap.rs`:
+
+- `rename_failure_seam` fails the rename half of the swap.
+- `cleanup_failure_seam` fails the removal of the temporary file a failed
+  replacement left behind.
+
+Each seam is a `thread_local!` flag with an `arm()` that sets it and returns
+an RAII guard, and a `take()` that consumes the arming and reports whether
+this call must fail. Dropping the guard disarms the seam, so a failing
+assertion cannot leave the failure armed for whatever runs next on that
+thread; because `take()` clears the flag, arming fails exactly one call.
+
+They exist because the failures they stand in for cannot be forced
+deterministically on every platform. A rename a test can make fail for real
+fails before the destination is prepared, so the rollback in `swap_into_place`
+would otherwise be unreachable. A permission bit that denies the removal is
+ignored by a run as root, and an occupied temporary name is simply retried
+past: candidate names are a pure function of the target, the process id and
+the attempt, so `create_temporary_file` advances to the next one.
+
+The seams are re-exported under `#[cfg(test)]` in `src/io.rs`.
+`src/io_metrics_failure_tests.rs` arms both and drives `rewrite`, so the
+replacement boundary itself, not just the helper, is exercised and the cleanup
+counter is asserted. `src/io_tests.rs` uses the rename seam to assert the
+destination is restored after a failed swap.
 
 ## 3. Breaks module – Cow allocation strategy
 
