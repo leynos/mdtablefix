@@ -2,6 +2,7 @@
 
 use mdtablefix::wrap::wrap_text;
 use rstest::rstest;
+use tracing_test::traced_test;
 
 /// Keep the pre-split snapshot layout: file names live in `tests/snapshots/`
 /// and use the legacy `wrap_unit__<name>` prefix without the module
@@ -50,6 +51,22 @@ fn wrap_text_preserves_inline_footnote_references(#[case] marker: &str) {
             .iter()
             .any(|line| line.contains(&format!(".{marker}")))
     );
+}
+
+/// Confirms the inline-classification instrumentation is reachable through the
+/// public `wrap_text` API, not just via the internal helpers exercised in
+/// `src/wrap`. Drives a footnote reference through the wrapping pipeline and
+/// asserts the DEBUG `fragment classified` event fires with the `FootnoteRef`
+/// kind.
+#[traced_test]
+#[test]
+fn wrap_text_emits_fragment_classification_for_footnote_reference() {
+    let input = lines_vec!["Some text.[^1]"];
+
+    let _ = wrap_text(&input, 80);
+
+    assert!(logs_contain("fragment classified"));
+    assert!(logs_contain("kind=FootnoteRef"));
 }
 
 #[test]
