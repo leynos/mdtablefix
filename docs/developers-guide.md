@@ -96,11 +96,11 @@ restores the separator row with widths derived from the final table body.
   crate-private `leading_indent`, which recognizes only spaces and tabs and
   returns both column width and byte offset.
 
-`src/main.rs` file-output functions:
+`src/command.rs` command-line surface and formatting:
 
-- `open_file_parent(path) -> anyhow::Result<(Dir, Utf8PathBuf)>` is the CLI's
-  sole ambient filesystem boundary. It opens the selected file's parent
-  directory and returns a relative UTF-8 path for capability-scoped handling.
+- `Cli` and `FormatOpts` are the parsed command line and the formatting
+  switches it carries; `process_lines(lines, opts)` runs the shared pipeline
+  over them.
 - `formatting_closure(opts) -> impl Fn(&SourceDocument<'_>) -> String + Sync`
   builds the one formatter every mode shares. It renders the document's body
   through the pipeline and re-attaches the mark and the selected line ending,
@@ -109,6 +109,12 @@ restores the separator row with widths derived from the final table body.
 - `format_lines(content, opts) -> Vec<String>` is the pure half of the
   boundary: it splits the body into lines and runs the transforms, leaving the
   terminator to the caller.
+
+`src/main.rs` file-output functions:
+
+- `open_file_parent(path) -> anyhow::Result<(Dir, Utf8PathBuf)>` is the CLI's
+  sole ambient filesystem boundary. It opens the selected file's parent
+  directory and returns a relative UTF-8 path for capability-scoped handling.
 - `analyse_one(mode, path, format)` names the file in any error and delegates
   the work to `driver::analyse` through the capability `open_file_parent`
   returned. `run_stdin` and `run_files` are the two command boundaries built on
@@ -134,10 +140,10 @@ restores the separator row with widths derived from the final table body.
   `"rewrite"` or `"rewrite_no_wrap"` and always with the file's path; and,
   because the binary is a separate crate and cannot reach that private helper,
   `driver::report_line_endings(counts, operation, path)` in `src/driver.rs`,
-  called by `driver::analyse` with `"file"` and the file's path, and by
-  `format_stdin` with `"stdin"` and `None`, which the report renders as
-  `<stdin>`. The message shape is identical across boundaries, so one filter
-  finds them all.
+  called by `driver::analyse` with `"file"` and the display path — the path the
+  user wrote, not the bare name the capability reads by — and by `format_stdin`
+  with `"stdin"` and `None`, which the report renders as `<stdin>`. The message
+  shape is identical across boundaries, so one filter finds them all.
 - `serialize_lines(lines, ending) -> String` joins lines with the selected
   terminator and appends one further terminator, yielding an empty string for
   no lines.
@@ -291,7 +297,7 @@ Re-use policy:
 pub type Formatter = dyn Fn(&SourceDocument<'_>) -> String + Sync;
 ```
 
-`formatting_closure(opts)` in `src/main.rs` builds the closure once per run,
+`formatting_closure(opts)` in `src/command.rs` builds the closure once per run,
 and `run_files` passes it by reference to every file and every mode. `assess`
 is the only place it is called. A mode that built its own formatting path is
 the defect this design exists to prevent.
@@ -897,6 +903,42 @@ name, and for an exhausted name space, plus the bounded label set: only the
 assert that the histogram's declared unit is seconds and that exactly one
 sample is recorded per replacement for both the `success` and `failure`
 outcomes.
+
+#### Binary metrics
+
+The binary is a separate crate, so it cannot reuse the library's declarations;
+`src/metrics.rs` declares its own under the same convention. The names describe
+what a run did rather than what one replacement did, and the label set stays
+bounded for the same reason: `mode` is one of `print`, `in_place`, `check`, or
+`diff`, `outcome` is one of a fixed set per instrument, and no path is ever a
+label.
+
+- `mdtablefix_run_total` counts runs by `mode` and `outcome`, where the outcome
+  is the exit status as a user sees it: `success`, `drift`, or `error`.
+- `mdtablefix_file_total` counts analysed files by `mode` and `outcome`, where
+  the outcome is `changed`, `unchanged`, or `error`.
+- `mdtablefix_file_duration_seconds` is a histogram of one file's analysis in
+  seconds, with the unit declared by `metrics::Unit::Seconds`, carrying the
+  same two labels. The duration is measured around the analysis alone, so a
+  file that waited behind another on the parallel analysis pool does not carry
+  that wait in the distribution.
+- `mdtablefix_file_error_total` counts failed analyses by `category`, a fixed
+  name derived from the `io::ErrorKind` in the chain — `not_found`,
+  `permission_denied`, `declined` for this tool's own refusal to replace a
+  symlink, and `other` for everything else, including an error with no
+  `io::Error` at all.
+
+The changed-or-unchanged distinction is the byte comparison the analysis itself
+made, so the label a host aggregates and the exit status the run reports cannot
+disagree about whether a file drifted. `record_analysis` also opens a `debug`
+span named after it, whose `path` field is the display path the user wrote —
+the same field the replacement path uses, and not a label — with `mode` set on
+entry, and `outcome` and `elapsed_seconds` recorded once the analysis has run.
+
+`src/metrics_tests.rs` and `src/metrics_file_tests.rs` install a local recorder
+through `metrics::with_local_recorder` and assert the declared names, units,
+and descriptions, the label sets, and the counts for each outcome; the runner
+tests do the same for `mdtablefix_run_total`.
 
 ### Performance discipline
 

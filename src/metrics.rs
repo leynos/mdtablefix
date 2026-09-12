@@ -15,8 +15,10 @@ use std::{
 };
 
 use anyhow::Error;
+use camino::Utf8Path;
 use mdtablefix::report::FileReport;
 use metrics::{Unit, counter, describe_counter, describe_histogram, histogram};
+use tracing::{Span, field};
 
 use crate::driver::{ExitStatus, Mode};
 
@@ -133,19 +135,46 @@ fn file_outcome_label(outcome: &FileOutcome<'_>) -> &'static str {
     }
 }
 
-/// Runs one file's analysis, timing it and recording what became of it.
+/// Runs one file's analysis under a `debug` span, timing it and recording what
+/// became of it.
 ///
 /// The closure is the work itself, so the duration measured is the analysis's
 /// and not the time the file waited to be reported: files are analysed in
 /// parallel and reported in argument order, and those are not the same order.
+///
+/// The span carries `mode` and `outcome` under the same names and values the
+/// counters use, so one filter finds a file's analysis whether it is read from
+/// the trace or from the metric. Its `path` is `display_path`, the path as the
+/// user wrote it: a span field is not a label, so naming the file here costs no
+/// cardinality, and two files called `a.md` in different directories stay
+/// distinct.
+#[tracing::instrument(
+    level = "debug",
+    skip(analyse, mode, display_path),
+    fields(
+        mode = mode_label(mode),
+        path = %display_path,
+        outcome = field::Empty,
+        elapsed_seconds = field::Empty
+    )
+)]
 pub fn record_analysis(
     mode: Mode,
+    display_path: &Utf8Path,
     analyse: impl FnOnce() -> anyhow::Result<(FileReport, String)>,
 ) -> anyhow::Result<(FileReport, String)> {
     let started = Instant::now();
     let result = analyse();
     let outcome = FileOutcome::of(&result);
-    record_file(mode, &outcome, started.elapsed());
+    let elapsed = started.elapsed();
+    // The outcome and the duration are known only once the work has run, so
+    // they are recorded on the span the attribute declared rather than set by
+    // it. `Span::current()` is that span: the attribute enters it for the
+    // body.
+    let span = Span::current();
+    span.record("outcome", file_outcome_label(&outcome));
+    span.record("elapsed_seconds", elapsed.as_secs_f64());
+    record_file(mode, &outcome, elapsed);
 
     result
 }

@@ -189,7 +189,7 @@ fn run_files(mode: Mode, files: &[Utf8PathBuf], opts: FormatOpts) -> anyhow::Res
             .map(|(index, path)| {
                 (
                     index,
-                    record_analysis(mode, || analyse_one(mode, path, &format)),
+                    record_analysis(mode, path, || analyse_one(mode, path, &format)),
                 )
             })
             .collect(),

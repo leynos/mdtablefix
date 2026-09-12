@@ -29,12 +29,17 @@ const BROKEN: &str = "|A|B|\n|1|2|\n";
 const FIXED: &str = "| A | B |\n| 1 | 2 |\n";
 
 /// Runs `mdtablefix --in-place` on `path`.
-fn in_place(path: &std::path::Path) -> assert_cmd::assert::Assert {
-    Command::cargo_bin("mdtablefix")
-        .expect("failed to create cargo command for mdtablefix")
-        .arg("--in-place")
-        .arg(path)
-        .assert()
+fn in_place(path: &std::path::Path) -> assert_cmd::assert::Assert { in_place_all(&[path]) }
+
+/// Runs `mdtablefix --in-place` on several paths, in argument order.
+fn in_place_all(paths: &[&std::path::Path]) -> assert_cmd::assert::Assert {
+    let mut command =
+        Command::cargo_bin("mdtablefix").expect("failed to create cargo command for mdtablefix");
+    command.arg("--in-place");
+    for path in paths {
+        command.arg(path);
+    }
+    command.assert()
 }
 
 /// Lists the sorted names of the entries in `path`.
