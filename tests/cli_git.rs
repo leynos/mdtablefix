@@ -156,6 +156,32 @@ fn md_exts_replaces_the_default_set(#[case] exts: Option<&str>, #[case] expected
     assert_eq!(run.stdout, expected, "with --md-exts {exts:?}");
 }
 
+/// A value that could never match is refused as the command line is parsed.
+///
+/// `mdc.` and `tar.gz` are compared against the segment after a path's final
+/// dot, which for `guide.mdc.` is nothing at all and for `notes.tar.gz` is
+/// `gz`, so accepting either would end in an empty selection the user had no
+/// way to explain from the flag they wrote.
+#[rstest]
+#[case("mdc.")]
+#[case("tar.gz")]
+fn a_dotted_extension_is_rejected(#[case] exts: &str) {
+    let fixture = Fixture::new();
+    fixture.track("docs/guide.md", RAGGED);
+    fixture.track("rules.mdc", RAGGED);
+
+    let run = fixture.run(&["--git", "--list-files", "--md-exts", exts]);
+
+    assert_eq!(run.status, 2, "stderr: {}", run.stderr);
+    assert!(run.stdout.is_empty(), "stdout: {:?}", run.stdout);
+    assert!(
+        run.stderr
+            .contains(&format!("extension \"{exts}\" contains a dot")),
+        "the rejection must name the value and the reason: {}",
+        run.stderr
+    );
+}
+
 /// REQ-GIT-004: `--git` and positional file arguments are mutually exclusive,
 /// and the rejection is a `clap` error rather than a run-time one.
 #[test]

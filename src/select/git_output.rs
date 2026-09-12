@@ -35,12 +35,16 @@ const RELAYED_LIMIT: usize = 1024;
 /// gap. Bytes that are not UTF-8 become the replacement character rather than
 /// being dropped, because the text is a diagnostic, not a path: nothing acts
 /// on it.
+///
+/// What is scrubbed is [`is_display_control`] rather than
+/// [`char::is_control`] alone: the characters that lay a line out are not all
+/// in the control category.
 pub(crate) fn relayable(bytes: &[u8]) -> String {
     let text = String::from_utf8_lossy(bytes);
     let mut scrubbed = String::with_capacity(text.len());
     let mut pending_space = false;
     for character in text.chars() {
-        if character.is_control() {
+        if is_display_control(character) {
             // Not `scrubbed.is_empty()`: a control character before any text
             // marks no space, or the message would begin with one.
             pending_space = !scrubbed.is_empty();
@@ -63,6 +67,24 @@ pub(crate) fn relayable(bytes: &[u8]) -> String {
     }
 
     scrubbed
+}
+
+/// Whether `character` is one that must not reach a terminal as text.
+///
+/// [`char::is_control`] covers the Unicode `Cc` category, which is where an
+/// escape lives. The line separator, the paragraph separator, and the
+/// bidirectional formatting controls are not control characters, and they do
+/// the same work to a relayed diagnostic: a path in the repository that carries
+/// one can give the reader a line break this tool did not write, or reverse the
+/// direction of the text beside it. Scrubbing them is what makes "one line, and
+/// safe to show" true of every byte Git can hand back, rather than of the
+/// characters that happen to be in `Cc`.
+fn is_display_control(character: char) -> bool {
+    character.is_control()
+        || matches!(
+            character,
+            '\u{2028}' | '\u{2029}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
+        )
 }
 
 /// Splits a NUL-terminated byte stream, counting entries that are not UTF-8.

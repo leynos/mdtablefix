@@ -83,7 +83,9 @@ respects it, and a file added with `git add --force` is selected even though
 `.gitignore` names it. `--md-exts` replaces the default extension set, `md`,
 `mdc`, and `markdown`; a leading dot and surrounding whitespace are optional, so
 `--md-exts .markdown,.MD` selects both. A candidate matches on its last
-extension, which is folded to lower case before it is compared.
+extension, which is folded to lower case before it is compared, so a value
+carrying any further dot — `mdc.` or `tar.gz` — is refused where the command
+line is parsed rather than accepted and matching nothing.
 
 Candidates that no longer exist in the working tree — a file deleted but not
 yet staged, for instance — and candidates that are not regular files, symbolic

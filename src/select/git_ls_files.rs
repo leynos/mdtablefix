@@ -139,15 +139,10 @@ impl GitLsFiles {
     pub fn resolve_git_dir(&self, dir: &Utf8Path) -> Result<Utf8PathBuf, GitListError> {
         let output = self.run(Operation::RevParse, &[REV_PARSE, ABSOLUTE_GIT_DIR], dir)?;
 
-        // Only the line terminator is trimmed, never path characters: a
-        // directory name may legitimately end in a space, and trimming that
-        // would send the guard looking somewhere else entirely.
-        let reported = std::str::from_utf8(&output.stdout)
-            .map_err(|_| GitListError::NoGitDir {
-                command: self.label(Operation::RevParse),
-            })?
-            .trim_end_matches('\n')
-            .trim_end_matches('\r');
+        let reported = std::str::from_utf8(&output.stdout).map_err(|_| GitListError::NoGitDir {
+            command: self.label(Operation::RevParse),
+        })?;
+        let reported = without_line_terminator(reported);
         if reported.is_empty() {
             return Err(GitListError::NoGitDir {
                 command: self.label(Operation::RevParse),
@@ -261,6 +256,29 @@ impl GitLsFiles {
     }
 }
 
+/// What `rev-parse` reported, without the one line terminator it wrote after
+/// the path.
+///
+/// Exactly one, and never path characters: a directory name may legitimately
+/// end in a space or a newline, and the terminator is the only thing Git added
+/// to whatever that name is, so anything further back belongs to the name. A
+/// terminator stripped twice would send the conflict guard to `repo` for a
+/// directory called `repo\n`, where it would find no marker and answer that no
+/// operation is in progress.
+///
+/// Every trailing character is deliberately not the rule here, and neither is
+/// a bare `\r`: `trim_end_matches` removes every occurrence, which is the same
+/// mistake at a different scale. The text is a parameter rather than an
+/// expression in the caller so that a test can hand it both terminator forms,
+/// because only one of them is reachable through a Git built for this
+/// platform.
+fn without_line_terminator(reported: &str) -> &str {
+    match reported.strip_suffix('\n') {
+        Some(line) => line.strip_suffix('\r').unwrap_or(line),
+        None => reported,
+    }
+}
+
 /// How an invocation's result is labelled, success or failure.
 ///
 /// Two values, and no third: a run that could not classify its outcome would
@@ -333,6 +351,10 @@ impl GitListError {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "git_ls_files_tests.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "git_ls_files_git_tests.rs"]

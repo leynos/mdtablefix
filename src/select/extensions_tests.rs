@@ -23,7 +23,6 @@ fn the_default_set_is_the_three_markdown_extensions() {
 #[case(".MD", "md")]
 #[case("  .Markdown  ", "markdown")]
 #[case("MDC", "mdc")]
-#[case("mdc.", "mdc.")]
 fn one_extension_is_trimmed_unfolded_and_dedotted(#[case] value: &str, #[case] expected: &str) {
     assert_eq!(
         parse_extension(value).expect("a usable extension"),
@@ -55,6 +54,30 @@ fn one_extension_is_trimmed_unfolded_and_dedotted(#[case] value: &str, #[case] e
     ExtensionSpecError::InvalidCharacter {
         value: "md\0".to_owned(),
         kind: InvalidCharacterKind::Nul,
+    }
+)]
+// A dot after the optional leading one, which no path's extension can equal.
+#[case(
+    "mdc.",
+    ExtensionSpecError::InvalidCharacter {
+        value: "mdc.".to_owned(),
+        kind: InvalidCharacterKind::Dot,
+    }
+)]
+#[case(
+    "tar.gz",
+    ExtensionSpecError::InvalidCharacter {
+        value: "tar.gz".to_owned(),
+        kind: InvalidCharacterKind::Dot,
+    }
+)]
+// The leading dot is stripped before the check, so this is the same refusal as
+// `mdc.` and is reported against the value as written.
+#[case(
+    ".md.",
+    ExtensionSpecError::InvalidCharacter {
+        value: ".md.".to_owned(),
+        kind: InvalidCharacterKind::Dot,
     }
 )]
 fn an_unusable_extension_is_rejected_with_its_reason(
@@ -100,6 +123,30 @@ fn an_invalid_character_names_the_reason_and_the_value() {
 fn only_the_last_extension_counts_and_case_is_folded(#[case] path: &str, #[case] expected: bool) {
     let filter = ExtensionFilter::default();
     assert_eq!(filter.matches(Utf8Path::new(path)), expected, "{path}");
+}
+
+/// Why a configured dot is refused, stated as the fact the refusal rests on.
+///
+/// An extension is the segment after the *final* dot, so a value carrying one
+/// is compared against something it can never equal. `a.mdc.` reports the empty
+/// extension, because the segment after its final dot is nothing, and no
+/// accepted value is empty — `--md-exts ""` is refused as surely as `mdc.` is.
+/// The extension of `archive.tar.gz` is `gz`, which the value `tar.gz` never
+/// equals, so a user who meant `gz` writes that and no more. Pinned here
+/// because the parser's rule is only as durable as this behaviour, and because
+/// this is what a reviewer should check the rule against.
+#[rstest]
+// Measured against `std::path::Path`, which `Utf8Path` delegates to.
+#[case("a.mdc.", Some(""))]
+#[case("a.b.c", Some("c"))]
+#[case("archive.tar.gz", Some("gz"))]
+#[case("docs/guide.md", Some("md"))]
+#[case(".gitignore", None)]
+fn a_paths_extension_is_the_segment_after_its_last_dot(
+    #[case] path: &str,
+    #[case] extension: Option<&str>,
+) {
+    assert_eq!(Utf8Path::new(path).extension(), extension, "{path}");
 }
 
 #[test]
