@@ -48,6 +48,12 @@ pub enum PathKind {
     /// Present but neither a regular file nor a symlink, for example a
     /// submodule gitlink.
     Other,
+    /// A regular file whose canonical path lies outside `root`, which is what a
+    /// candidate reached through a symlinked ancestor produces: `docs/guide.md`
+    /// is a regular file even when `docs` is a link to a directory elsewhere.
+    /// Never selected, because writing it would write outside the tree the
+    /// selection was made in. See [`crate::select::fs_probe`].
+    OutsideRoot,
 }
 
 /// Reports what a candidate path actually is. Implemented by adapters.

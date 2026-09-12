@@ -7,7 +7,11 @@
 //!
 //! Classification uses `symlink_metadata`, not `metadata`, because a link's
 //! extension says nothing about its target and rewriting through one escapes
-//! the selection.
+//! the selection. For the same reason the canonical path is confined to the
+//! tree: `symlink_metadata` does not follow a candidate's *final* component,
+//! but it does see through a symlinked ancestor, so `docs/guide.md` is reported
+//! as a regular file even when `docs` is a link to a directory outside the
+//! working tree. See [`PathKind::OutsideRoot`].
 
 use std::io::ErrorKind;
 
@@ -41,12 +45,38 @@ impl PathProbe for AmbientPathProbe {
         // cannot be canonicalized is not reported as a regular file.
         match std::fs::canonicalize(&absolute) {
             Ok(canonical) => Utf8PathBuf::from_path_buf(canonical)
-                .map_or(PathKind::Other, |canonical| {
-                    PathKind::RegularFile(FileIdentity::from_canonical_path(canonical))
-                }),
+                .map_or(PathKind::Other, |canonical| identify(root, canonical)),
             Err(error) => unnameable(error.kind()),
         }
     }
+}
+
+/// Names a canonical path, unless it lies outside the tree `root` names.
+///
+/// The last decision the probe makes, and the one that keeps a selection from
+/// reaching through a symlinked ancestor: a candidate is what its real path
+/// says it is, and a real path that leaves `root` is not a file this selection
+/// may name.
+fn identify(root: &Utf8Path, canonical: Utf8PathBuf) -> PathKind {
+    if confined_to(root, &canonical) {
+        PathKind::RegularFile(FileIdentity::from_canonical_path(canonical))
+    } else {
+        PathKind::OutsideRoot
+    }
+}
+
+/// Whether `canonical` lies within the tree `root` names.
+///
+/// Both sides are canonicalized. A root reached through a link — `/tmp` on a
+/// system where it is one — would otherwise disagree with every path beneath
+/// it, and refuse the whole tree. A root that cannot be canonicalized confines
+/// nothing: containment cannot be established, and assuming it held is exactly
+/// the escape this rule exists to stop.
+fn confined_to(root: &Utf8Path, canonical: &Utf8Path) -> bool {
+    std::fs::canonicalize(root)
+        .ok()
+        .and_then(|root| Utf8PathBuf::from_path_buf(root).ok())
+        .is_some_and(|root| canonical.starts_with(root))
 }
 
 /// Classifies a failed canonicalization by the kind of failure.

@@ -300,7 +300,7 @@ pub fn analyse(
                 is_changed: false,
                 delta: LineDelta::default(),
             },
-            format!("{display_path}\n"),
+            listed(display_path),
         ));
     }
 
@@ -369,6 +369,27 @@ pub fn analyse(
         },
         payload,
     ))
+}
+
+/// Renders one selected path as the single line `--list-files` prints for it.
+///
+/// A path is one line only while it holds no line terminator, and Git's index
+/// may hold one that does: the NUL framing that lists the candidates is what
+/// lets such a name through the selection in the first place. The terminator,
+/// and the backslash that escapes it, are therefore written as `\n`, `\r`, and
+/// `\\`, so that one printed line is one selected path and a reader can
+/// recover the name from it. Every other character is printed as itself, so a
+/// path that holds none of the three is unchanged.
+fn listed(display_path: &Utf8Path) -> String {
+    // The backslash first: escaping it after the others would escape the
+    // escapes they introduced.
+    let escaped = display_path
+        .as_str()
+        .replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r");
+
+    format!("{escaped}\n")
 }
 
 /// Renders the unified diff for one changed file.
