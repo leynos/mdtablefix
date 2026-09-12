@@ -5421,4 +5421,20 @@ measurement found. The `Ignore` checkbox was deliberately left unticked.
 
 **Push.** The rebase rewrote the branch's history, so the push needed
 `--force-with-lease`: `52ea246...3eb244e` forced update, and the remote now
-matches the local head, which stands 44 commits ahead of `origin/main`.
+matches the local head, which stands 44 commits ahead of `origin/main`. Two
+further commits followed — the markdownlint fix and this record — and both went
+up on the normal path.
+
+**The pull request description** was brought level with the tree before the next
+review was queued, because a review reads it: the rebase bullet now names the
+base the branch actually sits on, and the test tally in `Gates` is the measured
+`1884 passed, 0 failed, 20 ignored across 46 test binaries` plus the separate
+`--doc` run. A `Pre-merge checks` section records the reconciliation above.
+
+**Next review.** One is queued against the current head — `590209f4`, posting
+in about 22 minutes — because a new review is the only thing that refreshes the
+pre-merge table, and every row has now been either discharged or answered. The
+round this revision closes is therefore complete: no inline thread is
+outstanding, the table has been reconciled and answered, and the six gates are
+green. What the queued review reports decides whether the loop continues or
+ends.
