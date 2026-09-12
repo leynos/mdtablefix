@@ -140,3 +140,7 @@ where
 #[cfg(test)]
 #[path = "policy_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "policy_property_tests.rs"]
+mod property_tests;
