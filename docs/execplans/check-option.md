@@ -6058,3 +6058,101 @@ non-Unix target. `build-test` and all four `binstall packaging` jobs pass with i
 **Review status.** `6388d9a7` is queued for PR #464 and has not posted; the
 branch's head is now `80f80d1`, so the review will read a diff that includes this
 commit. No inline thread is outstanding from the paused round.
+
+### Revision 30, 2026-09-12 — the refreshed table's five rows
+
+The round quoted a table of 2 errors and 1 warning. The live walkthrough no
+longer carries that table: it now reads 2 errors and 3 warnings, and the
+difference is the reading that matters. `Testing (Overall)` has moved to the
+passed table — the writer-error test that row asked for exists, and Revision 29
+is where it gained the message assertion — while three rows the round could not
+see are failing: Module-Level Documentation, Developer Documentation and Domain
+Architecture. Rows are reconciled by defect rather than by row, so the two rows
+both tables carry — Unit Architecture and Testing (Compile-Time / Ui) — were
+answered once, and the latter's first ask was actioned in this round.
+
+**Actioned.**
+
+- *Module-Level Documentation* (Error, `f9a5453`): `test-macros/src/lib.rs:1`
+  described only `allow_fixture_expansion_lints`, which is all the crate held
+  before `9834fcb` added `traced_test`. The header now names both macros,
+  states the callsite-interest-cache reason the wrapper exists, and records
+  that the crate is a test-only dev-dependency. The recheck the row asked for
+  found no further gap: every module this branch adds already carries `//!`
+  documentation.
+- *Developer Documentation* (Warning, `0af5a07`, `9b08edc`): three sub-claims
+  fixed. `docs/architecture.md` now names `src/command.rs` as the owner of
+  `formatting_closure` — defined at `src/command.rs:140`, called once from
+  `src/main.rs:184` — and its exit-status sentence no longer gives "cannot be
+  read or rewritten" to the reporting modes, which hold only a `ReadOnlyDir`.
+  The EP-M3 and EP-M4 progress entries now point at the three modules that
+  Revision 22 split `src/driver_tests.rs` into, keeping the entries as the
+  milestone records they are. The fourth claim — that `googletest` and
+  `pretty_assertions` are unused and undocumented — is accurate, and it is
+  answered rather than removed: the Decision log keeps them on explicit owner
+  instruction with scope rather than removal as the mitigation
+  (`docs/execplans/check-option.md:963-972`), so deleting them would reverse a
+  recorded decision. They are documented instead: the developer's guide's
+  dependency section now says plainly that neither has a use site in the tree
+  today and names the entry that retains them.
+- *Testing (Compile-Time / Ui)* (Warning, `09e7fad`): the row asks for three
+  things and the first is now actioned. `tests/ui/traced_test_pass.rs` applies
+  `#[test_macros::traced_test]` to a function that logs after the injected
+  rebuild, and `tests/compile.rs` runs it as a pass case beside
+  `allow_fixture_expansion_lints_pass.rs`. trybuild hands its synthetic project
+  the parent's dependencies, which is what makes both generated paths resolve,
+  and the fixture is run as well as compiled: the captured
+  `DEBUG traced_test_expands: trybuild000: a callsite the rebuilt cache can
+  reach` line shows the wrapper's whole purpose working rather than merely
+  type-checking.
+- *Domain Architecture* (Warning, `0af5a07`): one part taken. `src/report.rs`
+  claimed the module "performs no input or output", which
+  `write_unified_diff`'s caller-supplied `impl io::Write` contradicts; the
+  header and the same overclaim in `docs/users-guide.md` now say what is true —
+  no path opened, no file read, no error type defined, and a writer's failure
+  returned to the caller untouched.
+
+**Declined, with the reason recorded.**
+
+- *Testing (Compile-Time / Ui)*, the other two asks. A compile-fail case with
+  an expected `.stderr` would pin diagnostics in a form this repository has
+  never reviewed — all six original cases in `tests/compile.rs` are pass cases
+  — and `traced_test`'s invalid input is a `parse_macro_input!` panic rather
+  than a documented diagnostic contract. A `#[scenario]` fixture cannot be
+  built at all: trybuild compiles in a synthetic project that contains no
+  feature file, and the macro resolves `path` against `CARGO_MANIFEST_DIR`
+  while accepting only `path`, `index`, `name` and `tags`, so the feature text
+  cannot be inlined either.
+- *Unit Architecture* (Error): the standing answer, unchanged for a third
+  round. `assess(&ReadOnlyDir, …) -> anyhow::Result<Assessment>` at
+  `src/driver.rs:218` already is the fallible, read-only, silent query the row
+  asks for. The rest of it — rendering and the line-ending event moved out of
+  `analyse`, and `run_files` orchestrating modes instead — would take the event
+  away from the point where the mode acts on the assessment
+  (`src/driver.rs:246-250`), keep the assessment alive across an orchestration
+  layer (`src/driver.rs:252-258`), and spread the one-assessment invariant this
+  branch exists to hold across call sites. A concrete counter-proposal would be
+  actioned; the refactor as described would regress documented properties.
+- *Domain Architecture*, the rest. The exposure is the design: the Decision log
+  places the driver in the binary and gives the library only the pure modules
+  `document` and `report` (`docs/execplans/check-option.md:855-866`), and the
+  developer's guide states why a host is given the surface —
+  "`mdtablefix::report` is public so a host can render a `FileReport` itself"
+  (`docs/developers-guide.md:349-354`). No rule in this repository requires a
+  domain-neutral public API, and `camino` paths and `std::io::Result` are
+  already the house style on the public `mdtablefix::io` surface
+  (`src/io/replace.rs:164`).
+
+**Inline findings.** The round's only new inline finding — use `concat!()` for
+the expected diff rather than a backslash-continued literal — is fixed in
+`d3b3b19` and answered at `r3997160084`, and the fix was measured rather than
+assumed: the fragments reproduce the same bytes, the `\ No newline at end of
+file` marker included.
+
+**Gate evidence.** All six gates pass at `9b08edc`, run sequentially:
+`check-fmt`, `lint`, `typecheck`, `test` — 947 unit tests, every integration
+suite, the trybuild fixtures including the new one
+(`/tmp/test-mdtablefix-check-option.out:1335`) and `40 passed; 0 failed; 20
+ignored` doctests — `markdownlint` (34 files, 0 errors) and `nixie`. The
+Windows job executes the same fixture, so the cross-check is the CI run on the
+pushed head rather than a local claim.
