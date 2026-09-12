@@ -666,3 +666,127 @@ let lines = vec!["| A |".to_string(), "| 1 |".to_string()];
 assert_eq!(serialize_lines(&lines, ending), "| A |\r\n| 1 |\r\n");
 assert!(serialize_lines(&[], ending).is_empty());
 ```
+
+### Reporting: line deltas and unified diffs
+
+`mdtablefix::report` is the pure half of `--check` and `--diff`. Nothing in it
+opens a path, writes to a stream, or defines an error type: it counts what
+changed and renders it, so a library caller produces exactly what the command
+line reports without restating the counting rule.
+
+`LineDelta::between(original, formatted)` counts the lines that turning
+`original` into `formatted` would insert and delete. A modified line counts as
+one insertion and one deletion, matching `git diff --numstat`, and the counts
+are read back with `insertions()`, `deletions()`, and `has_changes()`. The
+count comes from the same tokenizer that renders the diff, so the two cannot
+disagree about where a line ends. Callers compare bytes first: equal texts need
+no diff work, and `between` is not written to be called on them.
+
+`render_report_line(display_path, delta)` renders `--check`'s one-line form,
+for example `docs/a.md +12 -8`. Consumers parse it by taking the final two
+whitespace-separated fields as the counts and everything before them as the
+path, as [Reading a report line](#reading-a-report-line) describes.
+`render_summary(changed, unchanged, errored)` renders the trailing summary, for
+example `2 files would be reformatted, 1 file left unchanged.`; it belongs on
+standard error, so standard output stays a machine contract.
+
+`write_unified_diff(out, display_path, original, formatted, options)` streams
+`--diff`'s output to any `io::Write`. Both headers name `display_path` with
+directory separators normalized to `/` and carry no timestamps, so the same
+input renders the same bytes on every platform. The
+`\ No newline at end of file` marker is preserved, and can only appear on the
+`-` side because the formatter always terminates the lines it emits. Output is
+never colourized. `DiffOptions` fixes the context radius and the line count
+above which rendering switches from Myers to Patience, so diffing a very large
+file stays bounded without a wall-clock cut-off.
+
+`FileReport` is one file's analysis as a value — its display path, whether the
+formatter would change it, and its `LineDelta` — so a caller can render or
+aggregate it rather than parsing rendered text back apart.
+
+<!-- markdownlint-disable-next-line MD046 -->
+```rust
+use camino::Utf8Path;
+use mdtablefix::report::{
+    DiffOptions, LineDelta, render_report_line, write_unified_diff,
+};
+
+let original = "|A|B|\n";
+let formatted = "| A | B |\n";
+
+let delta = LineDelta::between(original, formatted);
+assert_eq!((delta.insertions(), delta.deletions()), (1, 1));
+assert!(delta.has_changes());
+assert_eq!(
+    render_report_line(Utf8Path::new("ragged.md"), delta),
+    "ragged.md +1 -1"
+);
+
+let options = DiffOptions {
+    context_radius: 3,
+    patience_threshold: 1000,
+};
+let mut diff = Vec::new();
+write_unified_diff(
+    &mut diff,
+    Utf8Path::new("ragged.md"),
+    original,
+    formatted,
+    options,
+)
+.expect("writing to a Vec cannot fail");
+assert_eq!(
+    String::from_utf8(diff).expect("the diff is UTF-8"),
+    "--- ragged.md\n+++ ragged.md\n@@ -1 +1 @@\n-|A|B|\n+| A | B |\n"
+);
+```
+
+### Byte-order marks and the document boundary
+
+`mdtablefix::io::SourceDocument` binds a document's boundary concerns to the
+text they were read from. A byte-order mark and the line-ending style are
+boundary concerns rather than content concerns: both are split off before
+formatting and restored afterwards, so every content transform sees the same
+lines however the file was authored, and a Windows-authored file is not
+silently rewritten to line feeds.
+
+`SourceDocument::parse(content)` strips one leading `U+FEFF` and counts the
+line endings of what remains. Splitting the mark off matters beyond fidelity:
+left attached to the first line it defeats every content transform, which would
+make `--check` report a ragged file as clean. Counting over the body rather
+than over the whole input is deliberate — the mark is not a line ending, and on
+a document that is only a mark it would otherwise be the sole reason a majority
+existed.
+
+`body()` borrows that text: the mark gone, the endings intact. It is what a
+content transform is given. `counts()` returns the `LineEndingCounts` that
+decided the style, and `ending()` returns the selection alone, so a caller that
+reports the vote and a caller that only needs the terminator read the same
+answer.
+
+`render(lines)` writes `lines` back with the mark and the selected terminator.
+It is a method rather than a free function so a caller cannot render one
+document's lines with another document's style. An empty slice renders the mark
+alone, or nothing when the document had none, so a document that formats to no
+lines stays byte-identical to its input: `--check` remains a fixed point and
+`--in-place` cannot destroy the mark.
+
+<!-- markdownlint-disable-next-line MD046 -->
+```rust
+use mdtablefix::io::SourceDocument;
+
+let document = SourceDocument::parse("\u{FEFF}|A|B|\r\n|1|2|\r\n");
+assert_eq!(document.body(), "|A|B|\r\n|1|2|\r\n");
+assert_eq!(document.ending().as_str(), "\r\n");
+assert_eq!(document.counts().crlf_count, 2);
+
+let formatted = ["| A   | B   |".to_string(), "| --- | --- |".to_string()];
+assert_eq!(
+    document.render(&formatted),
+    "\u{FEFF}| A   | B   |\r\n| --- | --- |\r\n"
+);
+
+// A document that formats to no lines renders as nothing, not as a bare
+// terminator, so a mark-only document survives unchanged.
+assert!(SourceDocument::parse("").render(&[]).is_empty());
+```
