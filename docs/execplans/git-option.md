@@ -16,10 +16,10 @@ rather than in a `src/cli.rs` of this branch's own, and Stage A is discharged.
 All four milestones — EP-M0's grammar measurement, EP-M1's selection tree,
 EP-M2's command-line surface, and EP-M3's documentation — are delivered. Every
 deterministic gate is green on the milestone tree, the six CodeRabbit rounds
-recorded under `Artefacts and notes` returned zero findings, both CI runs since
-the branch's conflict with its base was cleared are green on Linux and Windows,
-and `Outcomes & retrospective` states what was delivered against what was
-planned and which pinned interfaces the implementation superseded.
+recorded under `Artefacts and notes` returned zero findings, all four CI runs
+since the branch's conflict with its base was cleared are green on Linux and
+Windows, and `Outcomes & retrospective` states what was delivered against what
+was planned and which pinned interfaces the implementation superseded.
 
 One thing this plan still owes, recorded rather than implied away. The branch's
 first CI run was red on both jobs over five defects that are all in test code —
@@ -2405,6 +2405,24 @@ plateau.
       the third and is why the full gate set was re-run rather than the Markdown
       one. The branch stands 0 behind and 34 ahead, and the pre-fourth-rebase
       tip is tagged `backup/git-option-pre-fourth-rebase`.
+- [x] (2026-09-12) **The fourth rebase's push is green on both platforms**, and
+      so is the push before it. Run
+      [`34692137192`](https://github.com/leynos/mdtablefix/actions/runs/34692137192),
+      `pull_request` on `4de8a7d`, created 11:51:41Z, concluded **`success`** at
+      11:58:28Z with all six jobs green: `atomic write contract (windows)` in
+      6m44s, `build-test` in 3m25s, and the four `binstall packaging` jobs, the
+      longest of them at 1m56s. The run it superseded,
+      [`34691869670`](https://github.com/leynos/mdtablefix/actions/runs/34691869670),
+      on `d1d10d4`, the third rebase's record push, also concluded `success`.
+      That makes four `pull_request` runs since the branch's conflict with its
+      base was cleared — on `70d58ab`, `70919bc`, `d1d10d4`, and `4de8a7d` —
+      every one of them green on Linux and Windows, with no job in any of them
+      anything but `success`. What that buys is the claim this plan makes rather
+      than a stronger one: every file the branch ships has now been measured on
+      both platforms. "The newest commit has a run" would be false again the
+      moment a record commit moves the head, and it does not need to be true,
+      because a commit that changes only this plan puts no shipped file back
+      under test.
 - [x] (2026-09-12) CodeRabbit round six over the rebased tree, `EV-REBASE-CR`:
       `coderabbit review --agent --base check-option` through `scrutineer` —
       **`review_completed`, zero findings** over 36 reviewed files, the round
@@ -3477,6 +3495,35 @@ is the durable record, and EP-M3 reconciles this log into it.
   `backup/git-option-pre-*` tags and by the plan naming the commit each verdict
   describes. Date/Author: 2026-09-12, EP-M4 (rebase).
 
+- Decision: **no seventh CodeRabbit round** over the fourth rebase, with the
+  reasoning recorded rather than the omission left silent. The round would
+  review a diff this branch has not changed: `git diff --stat 70d58ab HEAD`,
+  over the tree round six reviewed, names three files — the base's own
+  `src/report/render_tests.rs` and `docs/execplans/check-option.md`, and this
+  plan's prose — so every file this branch authors is byte-identical to the tree
+  round six returned zero findings on, and the only new code in the tree arrives
+  from the base, where the base's own pull request is what reviews it. The
+  mutation record is carried by a stronger measurement than that diffstat:
+  `git rev-parse <tag>:src/select` returns
+  `dd44c4b496878fa4ced57448b1dfada0ed94ee27` at every checkpoint from
+  `backup/git-option-pre-check-option-rebase` (12:54) through the fourth rebase
+  (13:51) and at `4de8a7d`, so the 60 mutants over the selection module describe
+  the same bytes on every side of all four rebases and `make mutants` was not
+  re-run. Against
+  that, a round consumes one of the reviews the service rate-limits, and this
+  branch's six rounds have each returned zero findings, so the expected yield of
+  a seventh over an unchanged diff is a repeat of the sixth at the price of a
+  wait that would fall on whoever needs a round next. The alternative considered
+  and rejected was to run it anyway for symmetry with the third rebase, on the
+  argument that a review of the pushed tree is cheap insurance. Rejected because
+  the third rebase's round was not symmetric: that rebase cleared the conflict,
+  moved the branch from a tree the pipeline had never measured to one it could,
+  and its round was the first over a diff GitHub was willing to test. This
+  omission is reversible by asking — if a reader wants a seventh round over
+  `4de8a7d`, nothing here prevents it, and the branch's diff against its base is
+  36 files, 8891 insertions, and 144 deletions. Date/Author: 2026-09-12, EP-M4
+  (review).
+
 ## Outcomes & retrospective
 
 Completed 2026-09-12, at commit `6384543`, rebased the same day onto
@@ -3500,10 +3547,13 @@ dependency check standing in for `requires = "git"`; seventeen behavioural
 scenarios, fifteen tests pinning the command-line surface, and unit and property
 tests for every selection module; a mutation run of 60 mutants with none missed
 once the oracle was widened; ADR 0010; and the user's guide, architecture,
-developer's guide, README, and documentation contents updated to match. Five
+developer's guide, README, and documentation contents updated to match. Six
 CodeRabbit rounds are recorded in Artefacts and notes — two at EP-M1 (the
-second after the mutation widening), one at EP-M2, one at EP-M3, and one for
-the CI repair — and every one returned zero findings.
+second after the mutation widening), one at EP-M2, one at EP-M3, one for the
+CI repair, and one over the rebased tree — and every one returned zero findings.
+A seventh, over the fourth rebase, was deliberately not requested, and the
+Decision log records the measurement behind that rather than leaving it an
+omission.
 
 **Deviation from the plan's pinned interfaces, all recorded.** The command
 module is the base's `src/command.rs` rather than the `src/cli.rs` this plan
@@ -3580,10 +3630,12 @@ with all six jobs green again. The plan records both runs rather than the more
 convenient of the two, and states the residual precisely: recording them adds
 further commits, so the head moves past `70919bc` — but only inside
 `docs/execplans/git-option.md`, and a commit that changes no file the tool ships
-does not put the shipped code back under test. The honest form of the claim is
-therefore "every file this branch ships is CI-verified on Linux and Windows",
-not "the newest commit has a run", which is a different and more perishable
-statement.
+does not put the shipped code back under test. Two later pushes produced two
+more runs, `34691869670` on `d1d10d4` and `34692137192` on `4de8a7d`, both
+`success` with all six jobs green, so the pattern held rather than having to be
+argued. The honest form of the claim is therefore "every file this branch ships
+is CI-verified on Linux and Windows", not "the newest commit has a run", which
+is a different and more perishable statement.
 
 **What a reader should take from the record.** Three things were found by
 writing rather than by testing: a stale doc comment on the selection's order, a
@@ -4403,6 +4455,17 @@ arrival, with six moves in that window and three of them inside nine minutes.
 The lesson is the plan's own rule applied to itself: a figure that can be
 measured against the repository should be measured before it is recorded, and a
 long session's memory is exactly where an unmeasured figure gets in.
+
+Recorded with the rebase is the push it produced: run `34692137192` on
+`4de8a7d`, `pull_request`, created 11:51:41Z and concluded `success` at
+11:58:28Z with all six jobs green, preceded by `34691869670` on `d1d10d4`, also
+`success` — four green runs since the branch's conflict was cleared, so the
+Status header's "both CI runs" becomes "all four". One omission is recorded
+rather than left silent: no seventh CodeRabbit round was requested over
+`4de8a7d`, because `git diff --stat 70d58ab HEAD` names only the base's own test
+file and plan record plus this plan's prose, so every file this branch authors
+is byte-identical to the tree round six cleared. The Decision log carries that
+reasoning, and the omission can be reversed by asking for the round.
 
 Revised 2026-09-12, seventh pass, after a third rebase onto
 `origin/check-option`, whose tip had moved to `e462b97` while the second
