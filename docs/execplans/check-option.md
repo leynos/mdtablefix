@@ -5843,3 +5843,133 @@ commit should do: it gates three imports and adds no test.
 half of the Windows job and nothing more; no test can be run for another
 target from here. The push starts the real job, and its conclusion is the
 next reading this revision will carry.
+
+### Revision 28, 2026-09-12 — the callsite that went silent
+
+**The compile fix worked; the job failed somewhere else.** Run `34689423901` on
+`64117e4` gets past compilation — the dead-import errors of Revision 27 are
+gone, and every job in the matrix but one is green, `build-test` included. The
+`atomic write contract (windows)` job fails in its **first** step, "Test the
+atomic write contract", with:
+
+```text
+src\wrap\tests\fence_tracker_logging.rs:37:5:
+assertion failed: logs_contain("transition=\"matching_close\"")
+test result: FAILED. 937 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+`Test the whole suite` is skipped, and the two named suites after the library
+binary pass (2 + 2). So one test assertion is the whole of the remaining
+failure, and it is a *missing log line*, not a wrong one.
+
+**Three of its siblings passed, which is what identifies the cause.** The four
+tests in `fence_tracker_logging` are the same shape, run in the same binary,
+within the same second, and share one production function: `FenceTracker::
+observe_parsed`, which holds five separate `debug!`/`trace!` invocations —
+`implicit_close`, `matching_close`, `unchanged` twice, and `open`
+(`src/wrap/fence.rs:177,209,224,235,246`). The run reads:
+
+```text
+10:51:04.015  fence_opening_logs_content_free_transition ... ok
+10:51:04.093  depth_decrease_logs_content_free_implicit_closure ... ok
+10:51:04.164  incompatible_marker_logs_content_free_unchanged_transition ... ok
+10:51:04.318  matching_fence_closure_logs_content_free_transition ... FAILED
+```
+
+`fence_opening` asserts on the `open` callsite, `depth_decrease` on
+`implicit_close`, `incompatible_marker` on the second `unchanged`, and all three
+passed. A span, buffer, or thread-locality fault would affect these four
+identically — same macro, same span name mechanism, same global mutex buffer.
+The only thing that distinguishes the failing test is *which callsite* it
+asserts on. That is what an interest cache keyed per callsite does, and it is
+why the mechanism below is the one worth measuring.
+
+**The mechanism, from the primary sources.** `tracing-test` installs its
+subscriber lazily, in the first traced test the harness reaches
+(`INITIALIZED.call_once` in `tracing-test-0.2.6/src/internal.rs`). `tracing`
+decides once, when a callsite is first used, whether that callsite can ever be
+dispatched, and caches the answer in the callsite's own static. The dangerous
+answer is `Interest::never()`, and `tracing-core-0.1.36` produces it whenever
+the dispatcher set cannot be consulted: `DISPATCHERS.rebuilder()` yields
+`JustOne`, which calls `dispatcher::get_default()`, which returns `&NONE` while
+`GLOBAL_INIT` is not `INITIALIZED`. `dispatcher::set_global_default`
+(`dispatcher.rs:299`) never recomputes the cache: it sets `INITIALIZING`,
+swaps in `GLOBAL_DISPATCH`, stores `INITIALIZED`, and returns. `Interest::and`
+does not rescue it either — `never` combined with anything is `never`. So a
+callsite that is first used while no global dispatcher is installable caches
+`never` permanently, and `event!`'s gate — `level_enabled! && { let interest =
+__CALLSITE.interest(); !interest.is_never() && … }` — silently drops every
+event from that site thereafter, for the life of the process.
+
+**Measured, not inferred.** Before any test code was touched, the hypothesis was
+handed to `alchemist` for falsification, with a minimal probe at
+`/home/leynos/scratch/callsite-probe/`. Its one test registers a callsite with
+no dispatcher in place, installs one, and prints the subscriber's event count at
+each step: `before_install=0 after_install=0 after_rebuild=1`. Verdict:
+**not falsified**. The install does not heal the callsite; the documented remedy
+`tracing_core::callsite::rebuild_interest_cache()` (`callsite.rs:222`) does.
+The probe uses the same `tracing` 0.1.44 / `tracing-core` 0.1.36 pair this
+crate resolves to, and `tracing-test` 0.2.6 is the newest release, so there is
+no upstream fix to take.
+
+**The fix, in `9834fcb`.** A `traced_test` attribute in the existing
+`test-macros` dev-dependency prepends
+`::tracing::callsite::rebuild_interest_cache();` to the function body and
+re-emits `#[::tracing_test::traced_test]`. `tracing-test` prepends its own
+initialization to whatever body it is handed, so the rebuild always runs *after*
+the install — the ordering is structural, not a matter of which statement the
+test author writes first. All 16 traced sites use it: 13 `use
+tracing_test::traced_test;` imports swapped for `use test_macros::traced_test;`,
+and the three fully qualified sites (`src/ellipsis.rs:324`,
+`src/main_tests.rs:247`, `:274`) rewritten as `#[test_macros::traced_test]`.
+Each site carries a one-line pointer to `test_macros` rather than the full
+rationale, which lives in the macro's doc comment and in the `§2.3
+test-macros` section of the developer's guide.
+
+**Alternatives considered and dropped.** Bumping `tracing-test` is not
+available (0.2.6 is current). A `#[ctor]`-style pre-main install would add a
+dependency and reach for `doc(hidden)` internals for the same effect. Writing
+the heal call into each test body by hand is what the wrapper exists to avoid,
+since it puts the ordering back in the author's hands. `--test-threads=1` hides
+the race without addressing it, and would slow every gate. The wrapper adds no
+dependency, changes no production code, and is scoped to test infrastructure.
+
+**Gates.** All six are green at `9834fcb` over the worktree, run sequentially
+through `scrutineer`: `check-fmt` 2s, `lint` 5s with `check-static-regexes`
+met, `typecheck` 4s, `test` 67s — 46 result lines, `1890 passed, 0 failed,
+20 ignored`, the same tally as `530bdbd` because this commit adds no test —
+`markdownlint` 34 files and 0 errors, and `nixie` with every diagram validated.
+Two extras were run because the change reaches past the root package:
+`cargo fmt --manifest-path test-macros/Cargo.toml -- --check` exits 0, since
+`cargo fmt --all` does not cover a crate the root package has no `[workspace]`
+for, and the Windows cross-check
+`RUSTFLAGS="-D warnings" cargo check --target x86_64-pc-windows-msvc
+--all-targets --all-features` exits 0 with no warnings.
+
+**The attribution this revision does not yet have.** The mechanism is measured
+in isolation, and the per-callsite symptom points at it; that the *specific*
+Windows interleaving reaches the window is an inference, and the honest test of
+it is the job itself, which is running on `9834fcb` as this is written. If the
+job goes green, the reading is that the rebuild heals whatever poisoned that
+callsite — the remedy is a superset of the diagnosis, since every traced test
+now recomputes the whole cache before emitting anything. If the job fails again
+on the same assertion, the inference was wrong and the next revision records
+what the failing interleaving actually does.
+
+**The review, meanwhile, was paused rather than answered.** Review `4966887b`
+posted at 11:05:41Z and then reported `Review paused`: "It looks like this
+branch is under active development", which is CodeRabbit's own throttle on
+commit volume, not a finding. It posted no inline comment — the newest is still
+`3994701183` at 01:59:37Z — and it did not regenerate the pre-merge table, whose
+`updated_at` moved to 11:06:02Z only because the pause notice was appended to
+the same comment. The table's three rows are the ones Revision 26 recorded, and
+each was reconciled against the tree again: *Testing (Overall)* is the row
+`530bdbd` actioned, and the work is present
+(`src/report/render_tests.rs:15` defines `FailingWriter`, `:175` is
+`a_failing_writer_error_reaches_the_caller`, asserting the returned error's kind
+so a substituted error fails the test); *Unit Architecture* and *Testing
+(Compile-Time / Ui)* are the two rows answered with reasons at `7455e9b`, and
+nothing in this commit changes either position. No thread is unresolved and
+none is unanswered. `@coderabbitai resume` is the documented way out of the
+pause, and it is worth asking for once the branch is quiet rather than now,
+while commits are still landing.
