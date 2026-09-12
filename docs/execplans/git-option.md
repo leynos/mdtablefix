@@ -2662,6 +2662,143 @@ plateau.
       each is the kind of thing the deterministic gates exist to catch before a
       review seat is spent on it.
 
+- [x] (2026-09-12) **The conflict guard reads its markers through a capability,
+      and the arm no fixture could reach became a function with a table test**
+      (`b910b5c`). `operation_in_progress` opens the Git directory with
+      `cap_std::fs_utf8::Dir::open_ambient_dir`, so no path a repository or a
+      user wrote takes part in resolving the marker names, and a Git directory
+      that has gone since it was resolved is reported rather than read as an
+      idle repository. The probe stays on the ambient filesystem, and the module
+      doc and ADR 0010 now say why: through a capability rooted at the working
+      directory a candidate that escapes and one that cannot be read are the
+      same `PermissionDenied`, which would leave `PathKind::OutsideRoot`'s
+      silent skip (REQ-GIT-006) unstatable. The Git directory is the one
+      directory the selection opens for itself, because its entries are this
+      module's own constant names. `open_ambient_dir` refuses an unusable Git
+      directory before the loop begins, so the arm that read a marker failure as
+      absence lost its only fixture; the decision moved into `marker_present`, a
+      function of the test's result with a table test over all three outcomes,
+      which is the pattern the probe's `unnameable` already sets. That function
+      is also what closes the mutant the rewrite left alive, whose replacement
+      guard read every unreadable marker as an absent one — the mistake that
+      would license a rewrite during a merge.
+- [x] (2026-09-12) **The fourth review round's three findings are fixed at the
+      selection's edges** (`49a4f28`). `--md-exts` refuses any dot after the
+      optional leading one: an extension is the segment after a path's final
+      dot, measured against `std::path::Path`, so `a.mdc.` reports the empty
+      extension and `tar.gz` is compared against `gz`, and a value that parses
+      and then matches no path is refused where it is written rather than at the
+      end of an empty run — `InvalidCharacterKind::Dot`, with `mdc.`, `tar.gz`,
+      and `.md.` added to the rejected table and a test pinning `a.b.c` → `c`.
+      `relayable` widens from `char::is_control` to every character that can lay
+      out a line: the line and paragraph separators and the bidirectional
+      formatting controls become a space beside the control characters, each
+      named in its own case so the class is stated rather than sampled.
+      `resolve_git_dir` strips exactly one line terminator, `\n` or `\r\n`,
+      through `without_line_terminator`, where trimming every trailing
+      whitespace character would send the guard to `repo` for a directory named
+      `repo\n` and have it answer that no operation is in progress. The
+      `a.mdc.` case's expected value was wrong as first written, and a
+      `make mutants` run is what found it: the baseline aborted on the assertion
+      before a single mutant was tested, which is the gate doing the job it is
+      there for.
+- [x] (2026-09-12) **A path through a regular file is no longer read as an
+      absence, which is the defect the Windows CI job found** (`19f5291`, the
+      amended `a3ce437`). The
+      `atomic write contract (windows)` job failed on `49a4f28` with exactly two
+      tests — `select::fs_probe::tests::a_root_that_cannot_be_resolved_is_reported`
+      and the `report_a_candidate_that_cannot_be_classified` scenario, the
+      latter comparing 0 against 2 — while the other five jobs of that run were
+      green. The cause is shared with the platform: Windows reports a path
+      beneath a regular file with the same `NOT_FOUND` a path that is gone
+      produces, where Unix reports `ENOTDIR`, so the probe classified the first
+      as the absence the selection skips and returned a candidate set it had not
+      established. Classification now walks the candidate's ancestors — the
+      nearest one that exists decides, a path that stops at something other than
+      a directory is `NotADirectory` on either platform, and only a path no part
+      of which is there is the absence. The same conflation reached the conflict
+      guard from the other side: `open_ambient_dir` accepts a regular file on
+      Windows, and every marker read beneath it fails `NOT_FOUND`, which the
+      guard read as an idle repository — the one answer it must never invent —
+      so what was opened is asked what it is through `dir_metadata` before any
+      marker is read. Both decisions no Linux fixture can stage are now
+      functions of their inputs with tests of their own: the leaf's own
+      `NotFound` in `unreadable`/`absent`/`unreachable`, and the kind of what was
+      opened in `opened_directory`. ADR 0010 states the ancestor rule and the
+      check that follows the open. The compile half of that job is reproducible
+      here with `cargo check --target x86_64-pc-windows-msvc --all-targets`,
+      which is how the repair was checked before it was pushed. CI run
+      34720184169 on the pushed commit is green on all six jobs, the Windows
+      pair among them, which is the repair confirmed rather than argued.
+- [x] (2026-09-12) **The gate run on that commit found the third decision
+      unstated, and the commit was amended to state it** (`19f5291`). `make
+      mutants` reported exactly one survivor of 88:
+      `src/select/fs_probe.rs:204:27` — *replace match guard `error.kind() ==
+      ErrorKind::NotFound` with `true` in `unreachable`* — which walks past an
+      unreadable ancestor and reports the candidate as absent. The arm is one no
+      fixture reaches: a candidate enters the walk only through a `NotFound` on
+      its leaf, by which time every ancestor has already answered, so a
+      non-`NotFound` ancestor error needs a race with the filesystem. The walk is
+      now `nearest_existing(ancestor, read)` — its reader injected, `Reading`
+      being what the walk needs to know rather than the `Metadata` no test can
+      fabricate — with `read_ancestor` doing the real read, and a test supplies
+      the failure the walk must stop at. The kill was verified before the gate
+      was spent: with the guard hand-replaced by `true` the focused run fails
+      exactly at the new test, and reverting restores it to nineteen passing. The
+      rerun over the amended tree is green on all seven gates, with 91 mutants
+      tested in 7m: 78 caught, 13 unviable, none missed.
+- [x] (2026-09-12) **The step module is split, and the two Git-backed scenarios
+      the pre-merge Testing check asked for are added** (`8d4bcfb`).
+      `tests/steps/git_selection.rs` keeps the step definitions (366 lines) and
+      everything fixture-shaped — the scenario state, the repository helpers,
+      and the run helper — moves to `tests/steps/git_selection/fixture.rs` (235
+      lines), declared by the steps module. The path in that declaration is
+      stated because the steps module is itself loaded through a `#[path]`
+      attribute, which leaves Rust looking for a child beside the file rather
+      than in a directory named after it; rustc's own resolution error named the
+      alternative it wanted, and the module doc now records why.
+      Three scenarios changed or arrived:
+      "Rewrite a conflicted file when explicitly allowed" now captures each
+      fixture file's bytes before the run, asserts the target was rewritten
+      (`assert_ne!` against the captured bytes), and counts exactly one line
+      starting with each of the three conflict markers; a plain `--git` scenario
+      asserts the formatted rows; and a `--git --diff` scenario asserts the
+      unified diff headed `--- docs/guide.md`. Each asserts the tree is
+      unchanged where the mode promises it. This is also the Testing row of the
+      pre-merge table, the one row of the five that still described outstanding
+      work. All seven gates are green and CI run 34721030513 is green on all six
+      jobs.
+- [x] (2026-09-13) **The probe's tests take their temporary tree from a fixture,
+      and the classification cases move to a sibling file** (`91b2264`), which
+      discharges the `temp_root` finding (`3996187979`) and takes both files
+      under the 400-line cap. `temp_root` is an `#[rstest::fixture]` returning
+      the `TempDir`, and each test takes the guard as an argument and derives
+      the path with `as_path`, so the guard is owned by the binding the fixture
+      machinery generates for the test body and no test destructures a tuple.
+      The derived-fixture shape the finding's wording suggests cannot be used,
+      and the fixture's doc says why: rstest injects a fixture's dependencies by
+      value, so `fn root(temp_root: &TempDir)` does not compile and
+      `fn root(temp_root: TempDir)` would delete the tree as it returned. The
+      fixtures carry `#[test_macros::allow_fixture_expansion_lints]`, the
+      attribute the suite already uses because rstest's expansion of a
+      single-expression body under `fn_single_line = true` trips
+      `unused_braces`. The symlinked-directory case takes its second tree from
+      its own `elsewhere_root` fixture, `#[cfg(unix)]` because only that case
+      asserts a candidate escapes. The six classification cases are in
+      `src/select/fs_probe_failure_tests.rs` (206 lines), each file keeping the
+      fixture it needs, and `fs_probe_tests.rs` is 307. All seven gates green,
+      with the mutant profile unchanged from the parent.
+- [x] (2026-09-13) **The policy tests are split into examples and properties**
+      (`61c1221`, the other half of `3996185893`). `src/select/policy_tests.rs`
+      keeps the fakes, the constructors, and the example cases (202 lines);
+      `src/select/policy_property_tests.rs` holds the two invariants —
+      INV-EXT-SOUND/COMPLETE and INV-ORDER-DET — with their generated pools and
+      the vacuity assertions each makes for itself (242 lines). No case is lost:
+      the seven entry points are the seven the file had. The shared items become
+      `pub(super)`, and the property file imports `PathProbe` as well, since
+      calling `probe` on a fake needs the trait in scope. Both files are under
+      the cap.
+
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
 `cargo test --doc` to the `test` target; and implementing
