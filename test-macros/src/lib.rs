@@ -1,4 +1,16 @@
-//! Proc-macros for test fixtures that suppress lints triggered by macro expansion.
+//! Test-only proc-macros used by this repository's test suite through the
+//! `test-macros` dev-dependency.
+//!
+//! `allow_fixture_expansion_lints` suppresses the `unused_braces` lint that
+//! `rstest` fixture expansion triggers, combined with `fn_single_line = true`.
+//!
+//! `traced_test` wraps `tracing_test::traced_test`, prepending
+//! `::tracing::callsite::rebuild_interest_cache();` to the body so the rebuild
+//! runs after `tracing-test` installs its subscriber, which prepends its own
+//! initialisation to the body it is handed. Without it, a callsite first used
+//! before the install caches `Interest::never()` for the process lifetime and
+//! stays silent, so a test asserting on its own log lines passes or fails
+//! according to which tests ran first.
 
 use proc_macro::TokenStream;
 use quote::quote;
