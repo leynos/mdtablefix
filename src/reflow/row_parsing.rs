@@ -1,18 +1,18 @@
 //! Provenance-aware recovery of logical table rows from physical source lines.
 
-use super::{LEADING_EMPTY_CELL_MARKER, SEP_RE};
+use super::{Cell, SEP_RE};
 
-pub(super) fn cell_is_semantically_empty(cell: &str) -> bool {
-    cell.is_empty() || cell == LEADING_EMPTY_CELL_MARKER
+pub(super) fn cell_is_semantically_empty(cell: &Cell) -> bool {
+    cell.leading_empty || cell.payload.is_empty()
 }
 
-pub(super) fn split_physical_rows(mut physical_rows: Vec<Vec<String>>) -> (Vec<Vec<String>>, bool) {
+pub(super) fn split_physical_rows(mut physical_rows: Vec<Vec<Cell>>) -> (Vec<Vec<Cell>>, bool) {
     let expected_width = infer_expected_width(&physical_rows);
     if let Some(first_row) = physical_rows.first_mut()
         && expected_width < first_row.len()
         && first_row[expected_width..]
             .iter()
-            .all(|cell| cell_is_semantically_empty(cell))
+            .all(cell_is_semantically_empty)
     {
         first_row.truncate(expected_width);
     }
@@ -30,7 +30,7 @@ pub(super) fn split_physical_rows(mut physical_rows: Vec<Vec<String>>) -> (Vec<V
     (logical_rows, split_within_line)
 }
 
-fn infer_expected_width(rows: &[Vec<String>]) -> usize {
+fn infer_expected_width(rows: &[Vec<Cell>]) -> usize {
     let Some(first_row) = rows.first() else {
         return 0;
     };
@@ -57,7 +57,7 @@ fn infer_expected_width(rows: &[Vec<String>]) -> usize {
     }
 }
 
-fn has_embedded_separator_row(row: &[String], width: usize) -> bool {
+fn has_embedded_separator_row(row: &[Cell], width: usize) -> bool {
     if !is_concatenated_rows(row, width) {
         return false;
     }
@@ -66,11 +66,11 @@ fn has_embedded_separator_row(row: &[String], width: usize) -> bool {
         let start = index * (width + 1);
         row[start..start + width]
             .iter()
-            .all(|cell| cell.contains('-') && SEP_RE.is_match(cell))
+            .all(|cell| cell.payload.contains('-') && SEP_RE.is_match(&cell.payload))
     })
 }
 
-fn is_concatenated_rows(row: &[String], width: usize) -> bool {
+fn is_concatenated_rows(row: &[Cell], width: usize) -> bool {
     if width == 0 || row.len() <= width || !(row.len() + 1).is_multiple_of(width + 1) {
         return false;
     }
@@ -85,7 +85,7 @@ fn is_concatenated_rows(row: &[String], width: usize) -> bool {
         })
 }
 
-fn append_concatenated_rows(logical_rows: &mut Vec<Vec<String>>, row: Vec<String>, width: usize) {
+fn append_concatenated_rows(logical_rows: &mut Vec<Vec<Cell>>, row: Vec<Cell>, width: usize) {
     let mut cells = row.into_iter();
     loop {
         let logical_row = cells.by_ref().take(width).collect::<Vec<_>>();

@@ -149,11 +149,11 @@ returns the updated stream for writing to disk or further manipulation.
 
 1. `extract_indent_and_trim` records any leading indentation and removes table
    escape lines such as `\-`.
-2. `parse_rows` preserves physical source-line boundaries. When a row starts
-   with empty cells, `protect_leading_empty_cells` replaces those cells with a
-   private marker. The parser uses the inferred table width to recover only
-   complete legacy rows concatenated on one line, so row boundaries remain
-   structural and cannot collide with cell data.
+2. `parse_rows` preserves physical source-line boundaries in private `Cell`
+   values. Each value carries a payload and leading-empty state, while
+   `split_cells` scans escapes directly. The parser uses the inferred table
+   width to recover only complete legacy rows concatenated on one line, so row
+   boundaries and escapes cannot collide with cell data.
 3. `clean_rows`, `detect_separator`, and `calculate_widths` rebuild the logical
    table. Explicit separator lines are preferred, but the second parsed row can
    be promoted when the source embeds the separator in the body. Widths are
@@ -164,10 +164,9 @@ returns the updated stream for writing to disk or further manipulation.
    preserve alignment markers, and each separator column is widened to at least
    three dashes to keep Markdown linters satisfied.
 
-Continuation-row protection has one extra constraint: once the protected row is
-rebuilt, literal pipe characters inside the non-leading cells are re-escaped as
-`\|`. Without that step, a second parse would treat the restored pipe as a new
-column delimiter and split the row incorrectly.
+The parse stage converts `Cell` values to strings only after structural row
+recovery. Formatting then uses `emitted_cell_width`, which measures the escaped
+text it emits. No U+001D or U+001F sentinel is stored in payload text.
 
 When `process_stream_inner` flushes a buffered table with `Options::ellipsis`
 enabled, it applies ellipsis replacement before calling `reflow_table`. This

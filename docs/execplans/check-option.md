@@ -5982,8 +5982,8 @@ each was reconciled against the tree again: *Testing (Overall)* is the row
 (`src/report/render_tests.rs:15` defines `FailingWriter`, `:175` is
 `a_failing_writer_error_reaches_the_caller`, asserting the returned error's kind
 so a substituted error fails the test); *Unit Architecture* and *Testing
-(Compile-Time / Ui)* are the two rows answered with reasons at `7455e9b`, and
-nothing in this commit changes either position. No thread is unresolved and
+(Compile-Time / Ui)* are the two rows answered with reasons at `7455e9b`.
+Nothing in this commit changes either position. No thread is unresolved and
 none is unanswered. `@coderabbitai resume` is the documented way out of the
 pause, and it is worth asking for once the branch is quiet rather than now,
 while commits are still landing.

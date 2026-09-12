@@ -11,7 +11,11 @@ mod row_parsing;
 
 use row_parsing::{cell_is_semantically_empty, split_physical_rows};
 
-const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct Cell {
+    payload: String,
+    leading_empty: bool,
+}
 
 /// Parses reflow input into rows while preserving continuation-cell boundaries.
 ///
@@ -44,14 +48,10 @@ const LEADING_EMPTY_CELL_MARKER: &str = "\u{1d}";
 /// assert!(!split_within_line);
 /// ```
 #[tracing::instrument(level = "trace", skip(trimmed))]
-pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
-    let protected = trimmed
+pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<Cell>>, bool) {
+    let physical_rows = trimmed
         .iter()
-        .map(|line| protect_leading_empty_cells(line))
-        .collect::<Vec<_>>();
-    let physical_rows = protected
-        .iter()
-        .map(|line| split_cells(line))
+        .map(|line| parse_cells(line))
         .collect::<Vec<_>>();
     let (parsed_rows, split_within_line) = split_physical_rows(physical_rows);
     let rows = parsed_rows
@@ -63,8 +63,8 @@ pub(crate) fn parse_rows(trimmed: &[String]) -> (Vec<Vec<String>>, bool) {
     (rows, split_within_line)
 }
 
-fn retain_parsed_row(row_index: usize, row: &[String]) -> bool {
-    if row.iter().all(|cell| cell_is_semantically_empty(cell)) {
+fn retain_parsed_row(row_index: usize, row: &[Cell]) -> bool {
+    if row.iter().all(cell_is_semantically_empty) {
         tracing::debug!(
             row_index,
             cell_count = row.len(),
@@ -78,39 +78,30 @@ fn retain_parsed_row(row_index: usize, row: &[String]) -> bool {
     }
 }
 
-/// Restores parser markers and removes rows that contain only empty cells.
+/// Converts parsed cells to payload strings and removes fully empty rows.
 ///
 /// # Arguments
 ///
-/// - `rows`: Parsed rows that may still contain continuation markers.
+/// - `rows`: Parsed rows that may contain leading-empty state.
 ///
 /// # Returns
 ///
-/// Rows with marker cells restored to empty strings and fully empty rows
+/// Rows with leading-empty cells restored to empty strings and fully empty rows
 /// removed.
 ///
 /// # Examples
 ///
 /// ```rust,ignore
-/// let rows = vec![
-///     vec!["\u{1d}".to_string(), "value".to_string()],
-///     vec![String::new(), String::new()],
-/// ];
+/// let rows = vec![/* parsed `Cell` rows */];
 /// let cleaned = mdtablefix::reflow::clean_rows(rows);
 ///
 /// assert_eq!(cleaned, vec![vec![String::new(), "value".to_string()]]);
 /// ```
-pub(crate) fn clean_rows(rows: Vec<Vec<String>>) -> Vec<Vec<String>> {
+pub(crate) fn clean_rows(rows: Vec<Vec<Cell>>) -> Vec<Vec<String>> {
     rows.into_iter()
         .map(|row| {
             row.into_iter()
-                .map(|cell| {
-                    if cell == LEADING_EMPTY_CELL_MARKER {
-                        String::new()
-                    } else {
-                        cell
-                    }
-                })
+                .map(|cell| cell.leading_empty.then(String::new).unwrap_or(cell.payload))
                 .collect::<Vec<_>>()
         })
         .filter(|row| row.iter().any(|cell| !cell.is_empty()))
@@ -276,7 +267,7 @@ pub(crate) fn insert_separator(
 /// ```
 pub(crate) fn detect_separator(
     sep_line: Option<&String>,
-    rows: &[Vec<String>],
+    rows: &[Vec<Cell>],
     max_cols: usize,
 ) -> (Option<Vec<String>>, Option<usize>) {
     let mut sep_cells: Option<Vec<String>> = sep_line.map(|l| split_cells(l));
@@ -284,7 +275,7 @@ pub(crate) fn detect_separator(
 
     let sep_invalid = invalid_separator(sep_cells.as_ref(), max_cols);
     if should_use_second_row_as_separator(sep_invalid, rows) {
-        sep_cells = Some(rows[1].clone());
+        sep_cells = Some(rows[1].iter().map(|cell| cell.payload.clone()).collect());
         sep_row_idx = Some(1);
     }
 
@@ -298,36 +289,26 @@ fn invalid_separator(sep_cells: Option<&Vec<String>>, max_cols: usize) -> bool {
     }
 }
 
-fn should_use_second_row_as_separator(sep_invalid: bool, rows: &[Vec<String>]) -> bool {
+fn should_use_second_row_as_separator(sep_invalid: bool, rows: &[Vec<Cell>]) -> bool {
     sep_invalid && second_row_is_separator(rows)
 }
 
-fn second_row_is_separator(rows: &[Vec<String>]) -> bool {
-    rows.len() > 1 && rows[1].iter().all(|c| SEP_RE.is_match(c))
+fn second_row_is_separator(rows: &[Vec<Cell>]) -> bool {
+    rows.len() > 1 && rows[1].iter().all(|cell| SEP_RE.is_match(&cell.payload))
 }
 
-/// Replaces leading empty cells with a marker so continuation rows survive the
-/// global row-splitting pass.
-fn protect_leading_empty_cells(line: &str) -> String {
+/// Parses one physical source line and keeps its leading-empty cells structural.
+fn parse_cells(line: &str) -> Vec<Cell> {
     let cells = split_cells(line);
     let leading_empty_cells = cells.iter().take_while(|cell| cell.is_empty()).count();
-    if leading_empty_cells == 0 {
-        return line.to_string();
-    }
-
-    let protected_cells = cells
+    cells
         .into_iter()
         .enumerate()
-        .map(|(idx, cell)| {
-            if idx < leading_empty_cells {
-                LEADING_EMPTY_CELL_MARKER.to_string()
-            } else {
-                escape_literal_pipes(&cell)
-            }
+        .map(|(index, payload)| Cell {
+            payload,
+            leading_empty: index < leading_empty_cells,
         })
-        .collect::<Vec<_>>();
-
-    format!("| {} |", protected_cells.join(" | "))
+        .collect()
 }
 
 fn pad_cell_to_width(cell: &str, width: usize) -> String {

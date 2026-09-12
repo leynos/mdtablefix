@@ -9,7 +9,7 @@ use super::*;
 
 fn single_line_character_strategy() -> impl Strategy<Value = char> {
     any::<char>().prop_filter("table cells must remain on one source line", |character| {
-        !matches!(character, '\r' | '\n' | '\u{1d}' | '\u{1f}')
+        !matches!(character, '\r' | '\n')
     })
 }
 
@@ -93,21 +93,21 @@ fn render_legacy_concatenated_rows(rows: &[Vec<String>]) -> String {
     render_table_row(&cells)
 }
 
-fn normalize_markers(rows: &[Vec<String>]) -> Vec<Vec<String>> {
+fn normalize_cells(rows: &[Vec<Cell>]) -> Vec<Vec<String>> {
     rows.iter()
         .map(|row| {
             let mut has_seen_content = false;
             row.iter()
                 .map(|cell| {
-                    if cell == LEADING_EMPTY_CELL_MARKER {
+                    if cell.leading_empty {
                         assert!(
                             !has_seen_content,
-                            "continuation marker must remain in the leading empty-cell run"
+                            "leading-empty state must remain in the leading empty-cell run"
                         );
                         String::new()
                     } else {
-                        has_seen_content |= !cell.is_empty();
-                        cell.clone()
+                        has_seen_content |= !cell.payload.is_empty();
+                        cell.payload.clone()
                     }
                 })
                 .collect()
@@ -122,75 +122,75 @@ fn parse_rows_preserves_literal_row_end_cell() {
         "| marker | ROW_END |".to_string(),
     ];
 
+    let (rows, split_within_line) = parse_rows(&input);
+
     assert_eq!(
-        parse_rows(&input),
-        (
-            vec![
-                vec!["Name".to_string(), "Value".to_string()],
-                vec!["marker".to_string(), "ROW_END".to_string()],
-            ],
-            false,
-        )
+        normalize_cells(&rows),
+        vec![
+            vec!["Name".to_string(), "Value".to_string()],
+            vec!["marker".to_string(), "ROW_END".to_string()],
+        ]
     );
+    assert!(!split_within_line);
 }
 
 #[test]
 fn parse_rows_recovers_legacy_rows_with_embedded_separator() {
     let input = vec!["| Name | Notes |  | --- | --- |  | alpha | value |".to_string()];
 
+    let (parsed, split_within_line) = parse_rows(&input);
+
     assert_eq!(
-        parse_rows(&input),
-        (
-            vec![
-                vec!["Name".to_string(), "Notes".to_string()],
-                vec!["---".to_string(), "---".to_string()],
-                vec!["alpha".to_string(), "value".to_string()],
-            ],
-            true,
-        )
+        normalize_cells(&parsed),
+        vec![
+            vec!["Name".to_string(), "Notes".to_string()],
+            vec!["---".to_string(), "---".to_string()],
+            vec!["alpha".to_string(), "value".to_string()],
+        ]
     );
+    assert!(split_within_line);
 }
 
 #[test]
 fn parse_rows_preserves_adjacent_empty_interior_cell() {
     let input = vec!["| A || C |".to_string()];
 
+    let (parsed, split_within_line) = parse_rows(&input);
+
     assert_eq!(
-        parse_rows(&input),
-        (
-            vec![vec!["A".to_string(), String::new(), "C".to_string()]],
-            false,
-        )
+        normalize_cells(&parsed),
+        vec![vec!["A".to_string(), String::new(), "C".to_string()]]
     );
+    assert!(!split_within_line);
 }
 
 #[test]
 fn parse_rows_preserves_whitespace_padded_empty_cells() {
     let input = vec!["| A |  | C |".to_string()];
 
+    let (parsed, split_within_line) = parse_rows(&input);
+
     assert_eq!(
-        parse_rows(&input),
-        (
-            vec![vec!["A".to_string(), String::new(), "C".to_string()]],
-            false,
-        )
+        normalize_cells(&parsed),
+        vec![vec!["A".to_string(), String::new(), "C".to_string()]]
     );
+    assert!(!split_within_line);
 }
 
 #[test]
 fn parse_rows_preserves_trailing_empty_cells() {
     let input = vec!["| A | B | C |".to_string(), "| 1 | 2 |  |".to_string()];
 
+    let (parsed, split_within_line) = parse_rows(&input);
+
     assert_eq!(
-        parse_rows(&input),
-        (
-            vec![
-                vec!["A".to_string(), "B".to_string(), "C".to_string()],
-                vec!["1".to_string(), "2".to_string(), String::new()],
-            ],
-            false,
-        )
+        normalize_cells(&parsed),
+        vec![
+            vec!["A".to_string(), "B".to_string(), "C".to_string()],
+            vec!["1".to_string(), "2".to_string(), String::new()],
+        ]
     );
+    assert!(!split_within_line);
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn parse_rows_splits_structural_rows_and_drops_marker_only_row() {
 
     assert!(split_within_line);
     assert_eq!(
-        rows,
+        normalize_cells(&rows),
         vec![
             vec!["H1".to_string(), "H2".to_string()],
             vec!["A".to_string(), "B".to_string()],
@@ -248,7 +248,7 @@ proptest! {
             .map(|row| render_table_row(row))
             .collect::<Vec<_>>();
         let (parsed, split_within_line) = parse_rows(&input);
-        let normalized = normalize_markers(&parsed);
+        let normalized = normalize_cells(&parsed);
 
         prop_assert_eq!(normalized.len(), rows.len());
         let dimensions_match = normalized
@@ -268,52 +268,76 @@ proptest! {
         let input = vec![render_legacy_concatenated_rows(&rows)];
         let (parsed, split_within_line) = parse_rows(&input);
 
-        prop_assert_eq!(normalize_markers(&parsed), rows);
+        prop_assert_eq!(normalize_cells(&parsed), rows);
         prop_assert!(split_within_line);
     }
 }
 
 #[test]
-fn protect_leading_empty_cells_reescapes_literal_pipes_after_marking() {
-    let protected = protect_leading_empty_cells("|   | keep \\| literal | tail |");
+fn parse_cells_marks_leading_empty_cells_without_reparsing() {
+    let cells = parse_cells("|   | keep \\| literal | tail |");
 
     assert_eq!(
-        split_cells(&protected),
-        vec![
-            LEADING_EMPTY_CELL_MARKER.to_string(),
+        normalize_cells(std::slice::from_ref(&cells)),
+        vec![vec![
+            String::new(),
             "keep | literal".to_string(),
             "tail".to_string(),
-        ]
+        ]]
     );
+    assert!(cells[0].leading_empty);
 }
 
 #[test]
-fn protect_leading_empty_cells_preserves_adjacent_interior_empty_cell() {
-    let protected = protect_leading_empty_cells("| | ROW_END || ROW_END |");
+fn parse_cells_preserves_adjacent_interior_empty_cell() {
+    let cells = parse_cells("| | ROW_END || ROW_END |");
 
     assert_eq!(
-        split_cells(&protected),
-        vec![
-            LEADING_EMPTY_CELL_MARKER.to_string(),
+        normalize_cells(std::slice::from_ref(&cells)),
+        vec![vec![
+            String::new(),
             "ROW_END".to_string(),
             String::new(),
             "ROW_END".to_string(),
-        ]
+        ]]
     );
+    assert!(cells[0].leading_empty);
+    assert!(!cells[2].leading_empty);
 }
 
 #[test]
-fn protect_leading_empty_cells_leaves_non_continuation_rows_unchanged() {
+fn parse_cells_leaves_non_continuation_rows_unmarked() {
     let line = "| head | body \\| value |";
 
-    assert_eq!(protect_leading_empty_cells(line), line);
+    assert_eq!(
+        normalize_cells(&[parse_cells(line)]),
+        vec![vec!["head".to_string(), "body | value".to_string()]]
+    );
 }
 
 #[test]
 fn clean_rows_restores_markers_and_discards_empty_rows() {
     let rows = vec![
-        vec![LEADING_EMPTY_CELL_MARKER.to_string(), "value".to_string()],
-        vec![String::new(), String::new()],
+        vec![
+            Cell {
+                payload: String::new(),
+                leading_empty: true,
+            },
+            Cell {
+                payload: "value".to_string(),
+                leading_empty: false,
+            },
+        ],
+        vec![
+            Cell {
+                payload: String::new(),
+                leading_empty: false,
+            },
+            Cell {
+                payload: String::new(),
+                leading_empty: false,
+            },
+        ],
     ];
 
     assert_eq!(

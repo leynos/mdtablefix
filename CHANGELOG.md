@@ -105,6 +105,10 @@
 
 ### Fixed
 
+- Preserve arbitrary Unicode table-cell payloads by carrying escaped-pipe and
+  leading-empty parser state out of band. U+001D and U+001F no longer collide
+  with legitimate cell content. ([#494](https://github.com/leynos/mdtablefix/issues/494))
+
 - Emit formatted output with the line-ending style that holds the majority of
   the input's line endings, so a carriage return and line feed (CRLF) document
   is no longer rewritten as LF. A consistently ended document keeps its ending,

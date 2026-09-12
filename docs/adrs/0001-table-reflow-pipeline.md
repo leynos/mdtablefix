@@ -30,14 +30,15 @@ A further false positive surfaced later:
 
 The table reflow pipeline now follows these rules:
 
-- Protect leading empty continuation cells with a private marker before
-  structural row parsing.
+- Represent each parsed cell as a private `Cell` with its payload and a
+  `leading_empty` flag, so continuation structure is separate from payload.
+- Scan table rows directly: `\|` contributes a literal pipe to the current
+  cell, while only unescaped pipes split cells.
 - Preserve physical source-line boundaries, and use the inferred table width
   to recover only complete legacy rows concatenated on one line instead of
   encoding row boundaries as sentinel cell content.
-- Restore the protected cells only after parsing has completed.
-- Re-escape literal pipe characters in non-leading cells when rebuilding a
-  protected row, so reparsing preserves the original cell boundaries.
+- Convert parsed `Cell` values back to payload strings after structural parsing
+  has completed, before width calculation and formatting.
 - Measure column widths with `UnicodeWidthStr::width` and keep separator
   columns at a minimum width of three dashes while preserving alignment markers.
 - Apply ellipsis replacement to buffered table lines before calling
@@ -54,10 +55,9 @@ The table reflow pipeline now follows these rules:
   delimiters during reparsing.
 - Tables that contain wide Unicode characters or ellipsis substitutions align
   by rendered width rather than byte length.
-- Literal cell content cannot be mistaken for an in-band row-boundary marker.
-- The parser carries a private marker for leading empty continuation cells and
-  re-escapes literal pipes in non-leading cells during row rebuilding, which
-  keeps the behaviour deterministic and testable.
+- Literal cell content, including U+001D and U+001F, cannot be mistaken for
+  parser state. The former control-character marker and escaped-pipe sentinel
+  have been removed.
 - Degenerate single-cell candidates with no separator row are returned
   unchanged, so stray pipe-prefixed lines (for example shell pipeline
   continuations in code blocks) are never fabricated into one-cell tables.

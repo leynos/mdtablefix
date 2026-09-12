@@ -48,13 +48,14 @@ When working in this area:
 The table reflow pipeline is split into small stages so continuation rows and
 separator rows can be handled without losing column structure.
 
-`protect_leading_empty_cells` rewrites leading empty continuation cells to a
-marker before parsing. `parse_rows` preserves physical source-line boundaries
-and delegates logical-row recovery to `src/reflow/row_parsing.rs`. That module
-infers the expected table width, recognizes complete legacy rows concatenated
-on one physical line, and retains padded or trailing empty cells as cell data.
-`clean_rows` restores the markers to empty strings and removes rows that are
-entirely empty.
+`parse_rows` stores each parsed cell in a private `Cell` value with a payload
+and `leading_empty` flag. `split_cells` scans escaped pipes directly, so neither
+escaping nor leading-empty state uses an in-band character. `parse_rows`
+preserves physical source-line boundaries and delegates logical-row recovery to
+`src/reflow/row_parsing.rs`. That module infers the expected table width,
+recognizes complete legacy rows concatenated on one physical line, and retains
+padded or trailing empty cells as cell data. `clean_rows` converts the private
+cells back to payload strings and removes rows that are entirely empty.
 
 `calculate_widths` measures each column using Unicode display width so the
 formatter sizes columns according to the glyphs that will actually be emitted.
@@ -197,10 +198,12 @@ filesystem access themselves.
 
 `src/reflow.rs`:
 
-- `parse_rows`: Parses trimmed table lines into row vectors while preserving
+- `Cell`: Carries a parsed cell payload and leading-empty state until the parse
+  stage completes.
+- `parse_rows`: Parses trimmed table lines into `Cell` rows while preserving
   continuation-row boundaries.
-- `clean_rows`: Restores continuation markers to empty strings and drops rows
-  that contain no cell content.
+- `clean_rows`: Converts `Cell` rows to payload strings and drops rows that
+  contain no cell content.
 - `calculate_widths`: Computes the emitted display width required for each
   output column.
 - `format_rows`: Escapes literal pipes, pads cells to the computed widths, and
@@ -212,8 +215,8 @@ filesystem access themselves.
 
 `src/reflow/row_parsing.rs`:
 
-- `cell_is_semantically_empty`: Treats both an empty string and the private
-  leading-cell marker as empty parser content.
+- `cell_is_semantically_empty(&Cell)`: Treats a payload-empty cell or a
+  leading-empty cell as empty parser content.
 - `split_physical_rows`: Recovers complete logical rows from each physical row
   using the inferred width, without treating padded cell delimiters as row
   boundaries.
