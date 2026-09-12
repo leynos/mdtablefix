@@ -2675,12 +2675,14 @@ INV-NOWRITE-UNCHANGED. Pull request #464 does all four.
   `check-option`. The behaviour is documented rather than inferred — GitHub's
   events reference states that workflows will not run on `pull_request`
   activity if the pull request has a merge conflict, and that the conflict must
-  be resolved first. Impact: EP-M3's documentation commits have never been
-  tested by CI, and neither has this repair, so no CI verdict exists for either
-  and the plan must not read the absence of a red run as a green one. It also
-  means the rebase this plan defers is what re-opens the pipeline, which turns a
-  tidiness question into the precondition for CI evidence — see the Decision
-  log.
+  be resolved first. The same push that carried this observation supplied its
+  control: run `34689481906` is a `pull_request_target` run on that commit,
+  which GitHub documents as not blocked by conflict, while no `pull_request` run
+  exists beside it. Impact: EP-M3's documentation commits have never been tested
+  by CI, and neither has this repair, so no CI verdict exists for either and the
+  plan must not read the absence of a red run as a green one. It also means the
+  rebase this plan defers is what re-opens the pipeline, which turns a tidiness
+  question into the precondition for CI evidence — see the Decision log.
 
 - Observation: **a test can be unreachable behind another test's failure, and
   the repair that hides it is the one that looks tidiest.** The linked-worktree
@@ -3745,14 +3747,29 @@ that the branch went conflicting during the rebase whose pushes `8f75fdd`,
 what a force-pushed rebase leaves behind — and that every push since has been
 silently untested.
 
-One limit on the evidence, stated rather than papered over: the mergeable state
-is a present-tense query with no history behind it, so the run list is what
-dates the silence and the documented rule is what explains it. They agree, and
-the mechanism is documented rather than inferred, but the moment the branch
-went conflicting is not itself recorded anywhere this session can read. What
-follows for the plan is unaffected either way: no run will appear for any of the
-three commits until the conflict is resolved, so the missing red run must not be
-read as a green one.
+The control this entry first lacked arrived with the push that carried it.
+Pushing `4c8a872` produced run `34689481906`, a **`pull_request_target`** run on
+that very commit, created 10:50:08Z — and no `pull_request` run at all:
+
+```plaintext
+34689481906  4c8a872cd  pull_request_target  completed  skipped  2026-09-12T10:50:08Z
+             —           pull_request         —          —        (none)
+```
+
+One push, one commit, one conflicting pull request, two triggers: the one
+GitHub documents as not blocked by conflict fires, and the one it documents as
+blocked does not. The skipped conclusion is the workflow's own condition
+declining the run, not a failure to trigger, which is why the run record exists
+to be counted. That is the same push the prose above was written about, so the
+evidence and the claim are of the same date and the same head.
+
+One limit remains, stated rather than papered over: the mergeable state is a
+present-tense query with no history behind it, so the run list is what dates the
+silence and the documented rule explains it. The moment the branch went
+conflicting is not itself recorded anywhere this session can read. What follows
+for the plan is unaffected either way: no run will appear for any of these
+commits until the conflict is resolved, so the missing red run must not be read
+as a green one.
 
 ## Revision note
 
