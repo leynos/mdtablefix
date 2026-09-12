@@ -2001,6 +2001,12 @@ plateau.
       `make typecheck`, and `make lint` all exit 0, `make test` reporting
       **1988 passed, 0 failed, 20 ignored**. The four upstream patterns were
       assessed for adoption rather than passed over; see the Decision log.
+- [x] (2026-09-12) EP-M2, CodeRabbit review: **completed, zero findings** over
+      the 27 files of this branch's diff against `check-option`, its base. The
+      branch's third round and the first to see the command-line surface,
+      `src/git_inputs.rs`, and the end-to-end tests; EP-M1's two rounds saw 19
+      files. No rate or seat limit appeared, so no wait was needed. Transcript
+      in Artefacts and notes, `EV-M2-CR`.
 - [ ] EP-M3: write **ADR 0010** and update `README.md`, `docs/users-guide.md`,
       `docs/architecture.md`, `docs/developers-guide.md`, `docs/contents.md`.
 - [ ] Reconcile Decision log and Surprises with ADR 0010, then set Status.
@@ -3187,6 +3193,31 @@ mutant pays that, so 60 mutants take 5 to 6 minutes wall at `-j 3` instead of
 84 seconds. That is the trade the milestone exists to make: a suite that
 includes the scenarios is what lets "0 missed" mean the behaviour is pinned and
 not merely the units.
+
+**EV-M2-CR** — CodeRabbit review of this milestone, run 2026-09-12 through
+`scrutineer` against the local branch, log at
+`/tmp/coderabbit-mdtablefix-git-option.out`. The base is again the branch this
+one is stacked on, so the review is scoped to this branch's work rather than to
+pull request #464's:
+
+```plaintext
+coderabbit review --agent --base check-option
+```
+
+```plaintext
+{"type":"complete","status":"review_completed","findings":0,"reviewedFiles":[".cargo/mutants.toml", …]}
+```
+
+Twenty-seven files were reviewed, which is the whole of this branch's diff
+against `check-option`: the five selection modules with their test files,
+`src/select.rs`, `src/cli.rs`, `src/git_inputs.rs`, `src/main.rs` and
+`src/driver.rs` with their unit tests, `tests/cli_git.rs` and its snapshot, the
+feature file with its step definitions and integration test, `Cargo.toml`,
+`Cargo.lock`, the `Makefile`, `.cargo/mutants.toml`, and this plan. The review
+reported **zero findings**. The status line is quoted with its file list elided,
+as the earlier rounds quote theirs; the log holds all twenty-seven names. No
+rate, seat, or quota limit appears anywhere in the round's output, so no wait
+was needed.
 
 ## Revision note
 
