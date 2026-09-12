@@ -30,7 +30,10 @@ use super::{
     lists::{footnote_block_range, has_existing_footnote_block, trimmed_range},
     parsing::{FOOTNOTE_LINE_RE, is_definition_continuation, parse_definition},
 };
-use crate::textproc::{Token, push_original_token, tokenize_markdown};
+use crate::{
+    textproc::{Token, push_original_token, tokenize_markdown},
+    wrap::FenceTracker,
+};
 
 static FOOTNOTE_REF_RE: LazyLock<Regex> = lazy_regex!(
     r"\[\^(?P<num>\d+)\]",
@@ -65,14 +68,6 @@ fn is_definition_like(text: &str, mat: &Match) -> bool {
         return false;
     }
     parse_definition(text.trim_end()).is_some()
-}
-
-fn is_fence_line(line: &str) -> bool {
-    let mut trimmed = line.trim_start();
-    while let Some(rest) = trimmed.strip_prefix('>') {
-        trimmed = rest.trim_start();
-    }
-    trimmed.starts_with("```") || trimmed.starts_with("~~~")
 }
 
 fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<usize, usize>) -> String {
@@ -112,13 +107,10 @@ fn rewrite_tokens(text: &str, mapping: &HashMap<usize, usize>) -> String {
 fn collect_reference_mapping(lines: &[String]) -> HashMap<usize, usize> {
     let mut mapping = HashMap::new();
     let mut next = 1;
-    let mut in_fence = false;
+    let mut fences = FenceTracker::default();
     for line in lines {
-        if is_fence_line(line) {
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
+        let fence = fences.observe_source_line(line);
+        if fence.is_fence_marker || fence.is_in_fence {
             continue;
         }
         for token in tokenize_markdown(line) {
@@ -181,13 +173,13 @@ fn apply_mapping_to_lines(
     mapping: &HashMap<usize, usize>,
     is_definition_line: &[bool],
 ) {
-    let mut in_fence = false;
+    let mut fences = FenceTracker::default();
     for (idx, line) in lines.iter_mut().enumerate() {
-        if is_fence_line(line) {
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence || is_definition_line.get(idx).copied().unwrap_or(false) {
+        let fence = fences.observe_source_line(line);
+        if fence.is_fence_marker
+            || fence.is_in_fence
+            || is_definition_line.get(idx).copied().unwrap_or(false)
+        {
             continue;
         }
         *line = rewrite_tokens(line, mapping);

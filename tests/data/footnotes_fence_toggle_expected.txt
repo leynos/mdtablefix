@@ -1,0 +1,8 @@
+Initial prose ref[^1].
+[^2]: Definition for trailing prose.
+
+````text
+```
+code with a ref[^1]
+````
+Prose ref[^2].

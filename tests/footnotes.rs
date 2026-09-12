@@ -39,6 +39,14 @@ fn test_idempotent_on_converted() {
 }
 
 #[test]
+fn test_fence_toggle_regression_prose_ref_after_nested_fence() {
+    let input: Vec<String> = include_lines!("data/footnotes_fence_toggle_input.txt");
+    let expected: Vec<String> = include_lines!("data/footnotes_fence_toggle_expected.txt");
+
+    assert_eq!(convert_footnotes(&input), expected);
+}
+
+#[test]
 fn test_avoids_false_positives() {
     let input = lines_vec!("Plan9 is interesting.", "Call 1-800-555-1234 for help.",);
     assert_eq!(convert_footnotes(&input), input);

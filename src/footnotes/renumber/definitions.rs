@@ -14,10 +14,10 @@ use super::{
     footnote_block_range,
     has_existing_footnote_block,
     is_definition_continuation,
-    is_fence_line,
     parse_definition,
     rewrite_tokens,
 };
+use crate::wrap::FenceTracker;
 
 /// Rewrite plan for a single footnote-definition line.
 ///
@@ -185,14 +185,11 @@ pub(super) fn numeric_candidate_from_line(line: &str, index: usize) -> Option<Nu
 }
 
 fn collect_scan_updates(lines: &[String], state: &mut DefinitionScanState<'_>) {
-    let mut in_fence = false;
+    let mut fences = FenceTracker::default();
 
     for (index, line) in lines.iter().enumerate() {
-        if is_fence_line(line) {
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
+        let fence = fences.observe_source_line(line);
+        if fence.is_fence_marker || fence.is_in_fence {
             continue;
         }
 
