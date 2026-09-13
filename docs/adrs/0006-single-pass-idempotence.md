@@ -42,11 +42,12 @@ defect classes contributed:
 
 The formatter is a fixed point, `format(format(x)) == format(x)`, for the flag
 sets and documents with recorded evidence: the `make fmt` flag set (`--wrap`,
-`--renumber`, `--breaks`, `--ellipsis`, `--fences`), that set with `--headings`,
-and that set with `--code-emphasis`. The guarantee is not universal over the
-inputs the formatter accepts: the one measured exception, a bracket reference
-the wrapper splits across lines, is recorded in the addendum below and tracked
-as issue #504. Seven rules enforce the invariant where it holds:
+`--renumber`, `--breaks`, `--ellipsis`, `--fences`), that set with
+`--headings`, and that set with `--code-emphasis`. The guarantee is not
+universal over the inputs the formatter accepts: the one measured exception, a
+bracket reference the wrapper splits across lines, is recorded in the addendum
+below and tracked as issue #504. Seven rules enforce the invariant where it
+holds:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
   `src/wrap/block.rs` recognizes a break with
@@ -80,10 +81,10 @@ as issue #504. Seven rules enforce the invariant where it holds:
   conversion, code-emphasis repair, ordered-list renumbering, ellipsis
   replacement, and paragraph wrapping. Footnotes, list renumbering, code
   emphasis, and ellipsis are therefore consumed by layout; they have no
-  downstream preservation obligation. Thematic-break normalization remains
-  last because it is width-independent. Replacing `...` with `…` shortens a
-  line by two display columns, while footnotes and list markers can lengthen
-  text, so wrapping must measure each final form.
+  downstream preservation obligation. Thematic-break normalization remains last
+  because it is width-independent. Replacing `...` with `…` shortens a line by
+  two display columns, while footnotes and list markers can lengthen text, so
+  wrapping must measure each final form.
 - `--code-emphasis` repairs table cells before reflow measures them. Removing
   emphasis markers around inline code shortens the cell, so applying the repair
   in the table-substitution stage lets the formatter calculate the final column
@@ -167,11 +168,24 @@ abm iqy uxqdkre fz ioelg
 [1]
 ```
 
-ends its first pass with `… **bold**`code` [` followed by `1]`, and its second
-pass rejoins that as `… **bold**`code`` followed by `[ 1]`. The output settles
-there rather than growing, so it is a one-pass drift and not a cycle. Issue
-#504 records the reproduction, and the split lives in the inline-wrapping path,
-which the rules above do not cover.
+ends its first pass with the opening bracket left dangling at the end of a line
+and the rest of the reference on the next one:
+
+```text
+aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht abm iqy uxqdkre fz ioelg **bold**`code` [
+1]
+```
+
+Its second pass rejoins the bracket with its text and reflows that line:
+
+```text
+aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht abm iqy uxqdkre fz ioelg **bold**`code`
+[ 1]
+```
+
+The output settles there rather than growing, so it is a one-pass drift and not
+a cycle. The reproduction is recorded as issue #504, and the split lives in the
+inline-wrapping path, which the rules above do not cover.
 
 The impact is that `--git --check` is a sound one-pass drift check for a
 document that does not contain that shape, while a document that does is

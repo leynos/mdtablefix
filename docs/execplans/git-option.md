@@ -320,9 +320,9 @@ Stop and escalate when any of these is reached.
   brought the fix into this branch is `ba035ba`, so the earlier instruction to
   keep the flag out of a corpus-wide drift gate is superseded. The residual a
   `--git` run can still reach is the bracket-at-line-break drift under `--wrap`
-  alone, tracked as issue #504 and recorded in ADR 0006's addendum: `--git
-  --check` is a one-pass drift check for a document without that shape, and a
-  document with it is reported again after an `--in-place` run.
+  alone, tracked as issue #504 and recorded in ADR 0006's addendum:
+  `--git --check` is a one-pass drift check for a document without that shape,
+  and a document with it is reported again after an `--in-place` run.
 
 - Risk: `src/main.rs` on `check-option` is already **386 lines** against the
   400-line cap, before this plan adds a single field. Severity: high.
@@ -1734,11 +1734,10 @@ and clap 4.6.6 renders `the following required arguments were not provided:`
 for that error kind, so the scenario would have failed on day one. The other
 two rejections do assert message text, because it is **ours** —
 `ExtensionSpecError` renders `extension is empty`, and `--list-files` is
-rejected by this plan's own post-parse check, which emits `--list-files
-requires --git` verbatim. The
-`stdout is empty` line in all three denies a naive implementation the escape of
-treating the flags as inert and formatting the positional as if `--git` were
-absent.
+rejected by this plan's own post-parse check, which emits
+`--list-files requires --git` verbatim. The `stdout is empty` line in all three
+denies a naive implementation the escape of treating the flags as inert and
+formatting the positional as if `--git` were absent.
 
 `--list-files` gives the selection an honest oracle; an earlier draft asserted
 dedup by grepping a conflict marker out of a concatenated content dump, which
@@ -3181,69 +3180,94 @@ plateau.
       so the correction was made without inventing one, and the reply says so.
 
 - [x] (2026-09-13) **The base moves a fifth time, the merge driver damages the
-      merge, and the fixed-point claim is re-measured against the merged tree**
-      (`ba035ba`). `origin/main` advanced to `f3ce108`, which normalizes
-      footnote, renumber, and code-emphasis content before the layout that
-      consumes it; the merge is a merge and not a rebase, so the commit SHAs
-      cited in the review replies stay reachable. Two prose conflicts, both in
-      the paragraph describing the binary's private driver, were resolved by
-      keeping both intents: this branch's named entry points and `main`'s
-      statement that they return `std::io::Result` and are therefore fallible
-      and independent of the CLI's filesystem policy.
+  merge, and the fixed-point claim is re-measured against the merged tree**
+  (`ba035ba`). `origin/main` advanced to `f3ce108`, which normalizes footnote,
+  renumber, and code-emphasis content before the layout that consumes it; the
+  merge is a merge and not a rebase, so the commit SHAs cited in the review
+  replies stay reachable. Two prose conflicts, both in the paragraph describing
+  the binary's private driver, were resolved by keeping both intents: this
+  branch's named entry points and `main`'s statement that they return
+  `std::io::Result` and are therefore fallible and independent of the CLI's
+  filesystem policy.
 
-      The `weave` merge driver then damaged two auto-merged files, and the gate
-      run over the merge caught it: six of eight gates failed on
-      `src/command.rs`, whose binary target no longer parsed, because the
-      module doc comment, the `use crate::{…};` block, and two stray `};` lines
-      had been duplicated into the middle of the file; `markdownlint` failed
-      separately on the doubled blank line the same driver leaves before
-      `### Stream formatting` in `docs/users-guide.md`. Both were repaired by
-      hand, and every file the merge touched was then compared with
-      `git merge-file` — a driver-free three-way merge — so the repair is
-      checked against something rather than eyeballed; all the other files
-      match byte for byte. The lesson is that a driver-assisted merge of a code
-      file is unverified until a driver-free merge agrees with it: the six
-      failures were one garbled file, and nothing but a build would have said
-      so. `main`'s own change to that file is `renumber` moving into
-      `Options::renumber`, which also removes this branch's hand renumbering.
+  The `weave` merge driver then damaged two auto-merged files, and the gate run
+  over the merge caught it: six of eight gates failed on `src/command.rs`,
+  whose binary target no longer parsed, because the module doc comment, the
+  `use crate::{…};` block, and two stray `};` lines had been duplicated into
+  the middle of the file; `markdownlint` failed separately on the doubled blank
+  line the same driver leaves before `### Stream formatting` in
+  `docs/users-guide.md`. Both were repaired by hand, and every file the merge
+  touched was then compared with `git merge-file` — a driver-free three-way
+  merge — so the repair is checked against something rather than eyeballed; all
+  the other files match byte for byte. The lesson is that a driver-assisted
+  merge of a code file is unverified until a driver-free merge agrees with it:
+  the six failures were one garbled file, and nothing but a build would have
+  said so. `main`'s own change to that file is `renumber` moving into
+  `Options::renumber`, which also removes this branch's hand renumbering.
 
-      `main` also fixed the `--code-emphasis` two-pass residual this plan
-      measured and raised as issue #478: `b01b999` repairs table cells before
-      reflow measures them and puts `--code-emphasis` back inside the corpus
-      drift sweep. Re-measured on the merged binary, the three fixtures that
-      used to re-pad on the second pass are now fixed points under
-      `--code-emphasis` alone, so the ADR's exception is no longer that flag.
-      The exemption this plan's risk register recorded is therefore discharged
-      rather than carried.
+  `main` also fixed the `--code-emphasis` two-pass residual this plan measured
+  and raised as issue #478: `b01b999` repairs table cells before reflow
+  measures them and puts `--code-emphasis` back inside the corpus drift sweep.
+  Re-measured on the merged binary, the three fixtures that used to re-pad on
+  the second pass are now fixed points under `--code-emphasis` alone, so the
+  ADR's exception is no longer that flag. The exemption this plan's risk
+  register recorded is therefore discharged rather than carried.
 
-      A second counterexample was then confirmed by measurement, and it is not
-      this branch's to fix: under `--wrap` alone — and so under every set that
-      contains it, including the `make fmt` set — a paragraph whose wrapped
-      output splits a bracket reference across lines is rejoined by the next
-      pass. The four-line input
+  A second counterexample was then confirmed by measurement, and it is not this
+  branch's to fix: under `--wrap` alone — and so under every set that contains
+  it, including the `make fmt` set — a paragraph whose wrapped output splits a
+  bracket reference across lines is rejoined by the next pass. The four-line
+  input
 
-      ```text
-      aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht
-      abm iqy uxqdkre fz ioelg
-      **bold**`code`
-      [1]
-      ```
+  ```text
+  aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht
+  abm iqy uxqdkre fz ioelg
+  **bold**`code`
+  [1]
+  ```
 
-      ends pass one with `… **bold**`code` [` followed by `1]`, and pass two
-      with `… **bold**`code`` followed by `[ 1]`; pass three equals pass two,
-      so it settles rather than cycling. The branch does not modify
-      `src/wrap/**`, so the behaviour is `main`'s and inherited. It is filed as
-      issue #504.
+  Pass one ends with the opening bracket left dangling at the end of a line and
+  the rest of the reference on the next one:
 
-      ADR 0006 is corrected accordingly: the Decision now claims the fixed
-      point for the three flag sets with recorded evidence and names the
-      bracket exception instead of the `--code-emphasis` one, and the Addendum
-      states that the evidence is the corpus sweep, describes the reproduction,
-      and narrows what `--git --check` guarantees to documents without that
-      shape. ADR 0010's residual bullet now records #478 as fixed by `b01b999`
-      and points at #504 for what a `--git` run can still reach. The risk
-      register in this plan records the discharge in place, because it is a
-      living register rather than a dated entry.
+  ```text
+  aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht abm iqy uxqdkre fz ioelg **bold**`code` [
+  1]
+  ```
+
+  Pass two rejoins the bracket with its text and reflows that line:
+
+  ```text
+  aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht abm iqy uxqdkre fz ioelg **bold**`code`
+  [ 1]
+  ```
+
+  Pass three equals pass two, so it settles rather than cycling. The branch
+  does not modify `src/wrap/**`, so the behaviour is `main`'s and inherited. It
+  is filed as issue #504.
+
+  ADR 0006 is corrected accordingly: the Decision now claims the fixed point
+  for the three flag sets with recorded evidence and names the bracket
+  exception instead of the `--code-emphasis` one, and the Addendum states that
+  the evidence is the corpus sweep, describes the reproduction, and narrows what
+  `--git --check` guarantees to documents without that shape. ADR 0010's
+  residual bullet now records #478 as fixed by `b01b999` and points at #504 for
+  what a `--git` run can still reach. The risk register in this plan records
+  the discharge in place, because it is a living register rather than a dated
+  entry.
+
+  The gate over these corrections then failed on three `markdownlint` errors of
+  their own making: the two outputs were quoted as code spans holding a nested
+  backtick run and a trailing space (MD038, in both the ADR and this entry),
+  the ADR line that follows began with `#504` and read as a heading (MD018),
+  and this entry's blank-line-separated paragraphs continued at the six-column
+  indent its siblings use, where a paragraph after a blank line is an indented
+  code block (MD046) — a six-column continuation is only a paragraph while the
+  list stays tight, which is why no other entry here trips it. Both outputs are
+  now fenced `text` blocks, the sentence naming the issue starts elsewhere, and
+  this entry continues at two columns, as the `- Risk:` items above already do.
+  Both files were then reformatted by the `make fmt` flag set and re-linted:
+  `markdownlint` reports 0 errors over its 36 files, and `mdtablefix --diff`
+  now reports no drift in either file, where it reported two hunks before.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
