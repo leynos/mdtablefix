@@ -37,7 +37,7 @@ fn handle_line(buffer: &mut ProcessBuffer, line: &str) -> Option<String> {
     buffer.handle_table_line(line.to_string())
 }
 
-#[test]
+#[rstest]
 fn finish_signature_consumes_the_buffer() {
     let _: fn(ProcessBuffer) -> (Vec<String>, Vec<bool>) = ProcessBuffer::finish;
 }
@@ -161,7 +161,7 @@ fn flush_table_passes_lines_through_reflow() {
     assert!(!buffer.in_table);
 }
 
-#[test]
+#[rstest]
 fn finish_flushes_a_table_that_ends_at_end_of_input() {
     let mut buffer = new_buffer();
 
