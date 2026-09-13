@@ -10,9 +10,15 @@ use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
 use super::AmbientPathProbe;
+// `ProbeFailureKind` is named only by the symbolic-link-loop test, which is
+// Unix-only because the kernel's mapping of a loop to an `io::ErrorKind` is not
+// stable enough to pin — so the import has to be Unix-only as well, or it is an
+// unused import on Windows and this crate's test targets deny warnings.
+#[cfg(unix)]
+use crate::select::policy::ProbeFailureKind;
 use crate::select::{
     extensions::ExtensionFilter,
-    policy::{CandidatePath, PathKind, PathProbe, ProbeFailureKind, select_files},
+    policy::{CandidatePath, PathKind, PathProbe, select_files},
 };
 
 fn at(path: &str) -> CandidatePath { CandidatePath::new(path.to_owned()) }
