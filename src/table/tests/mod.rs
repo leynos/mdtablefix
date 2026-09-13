@@ -125,12 +125,47 @@ fn reflow_table_keeps_the_delimiter_row_of_a_table_with_an_empty_header() {
     );
 }
 
+#[test]
+fn reflow_table_keeps_the_genuine_delimiter_row_below_a_malformed_header() {
+    // `| - - |` is made only of pipes, spaces, and dashes, so `SEP_RE` matches
+    // it and the old per-cell test found a dash in its only cell. The malformed
+    // header was then taken for the delimiter row and rewritten into `| --- |`,
+    // while the genuine delimiter row below it was laid out as text. A
+    // delimiter cell admits no embedded whitespace, so the genuine row is the
+    // one extracted and the malformed row stays data.
+    let lines = vec![
+        "| - - |".to_string(),
+        "| --- |".to_string(),
+        "| a |".to_string(),
+    ];
+    let mut scannable = lines.clone();
+
+    assert_eq!(
+        extract_separator_line(&mut scannable),
+        Some("| --- |".to_string())
+    );
+    assert_eq!(scannable, vec!["| - - |".to_string(), "| a |".to_string()]);
+    assert_eq!(
+        reflow_table(&lines),
+        vec![
+            "| - - |".to_string(),
+            "| --- |".to_string(),
+            "| a   |".to_string(),
+        ]
+    );
+}
+
 #[rstest]
 #[case::dashes("| --- | --- |", true)]
 #[case::alignment_markers("| :--: | ---: |", true)]
 #[case::single_column("---", true)]
+#[case::left_alignment("| :-- |", true)]
+#[case::right_alignment("| --: |", true)]
+#[case::centre_alignment("| :--: |", true)]
 #[case::empty_header("|  |  |", false)]
 #[case::lone_dash_header("|  | - |", false)]
+#[case::spaced_dashes("| - - |", false)]
+#[case::spaced_alignment_markers("| :- : |", false)]
 #[case::content_row("| a | b |", false)]
 fn is_delimiter_row_requires_a_dash_in_every_cell(#[case] line: &str, #[case] expected: bool) {
     assert_eq!(is_delimiter_row(line), expected);

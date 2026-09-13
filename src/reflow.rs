@@ -5,7 +5,7 @@
 
 use unicode_width::UnicodeWidthStr;
 
-use crate::table::{SEP_RE, format_separator_cells, split_cells};
+use crate::table::{format_separator_cells, is_delimiter_cell, split_cells};
 
 mod row_parsing;
 
@@ -311,14 +311,14 @@ fn should_use_second_row_as_separator(sep_invalid: bool, rows: &[Vec<Cell>]) -> 
 
 /// Reports whether the row below the header is a delimiter row.
 ///
-/// Each cell must carry a dash, as `row_parsing` requires: `SEP_RE` alone also
-/// matches an empty cell, so a row of nothing but pipes and spaces would
-/// otherwise be taken for the delimiter row.
+/// Each cell must be a delimiter cell as [`is_delimiter_cell`] defines it: an
+/// optional colon, one or more dashes, and an optional trailing colon, with no
+/// embedded whitespace, the same rule `row_parsing` requires. `SEP_RE` alone is
+/// too weak, because it also matches an empty cell and permits whitespace, so a
+/// row of nothing but pipes and spaces — or one whose cells merely carry a
+/// dash, such as `| - - |` — would otherwise be taken for the delimiter row.
 fn second_row_is_separator(rows: &[Vec<Cell>]) -> bool {
-    rows.len() > 1
-        && rows[1]
-            .iter()
-            .all(|cell| cell.payload.contains('-') && SEP_RE.is_match(&cell.payload))
+    rows.len() > 1 && rows[1].iter().all(|cell| is_delimiter_cell(&cell.payload))
 }
 
 /// Splits one physical row while retaining leading empty cells as column structure.

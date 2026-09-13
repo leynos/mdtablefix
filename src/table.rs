@@ -152,6 +152,31 @@ pub(crate) static SEP_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     "Markdown table separator row pattern should compile",
 );
 
+/// Matches a single Markdown delimiter cell: an optional leading colon, one or
+/// more dashes, and an optional trailing colon.
+///
+/// The row-level [`SEP_RE`] cannot judge a cell on its own, because it also
+/// matches an empty cell and permits whitespace inside one. A cell that merely
+/// contains a dash, such as `- -`, is therefore not a delimiter cell.
+pub(crate) static SEP_CELL_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^:?-+:?$",
+    "Markdown table separator cell pattern should compile",
+);
+
+/// Reports whether `payload` is a single Markdown delimiter cell.
+///
+/// A delimiter cell is an optional colon, one or more dashes, and an optional
+/// trailing colon, with no whitespace anywhere. The payload is trimmed first,
+/// because the padding spaces that surround a cell in the source row are not
+/// part of its content and the grammar admits no whitespace at all. Testing for
+/// a dash alone was too weak: the row-level [`SEP_RE`] permits embedded
+/// whitespace, so `- -` and `:- :` passed for delimiter cells and
+/// [`format_separator_cells`] then rewrote them into a well-formed dash run,
+/// silently turning malformed source rows into valid delimiter rows instead of
+/// leaving them as data.
+pub(crate) fn is_delimiter_cell(payload: &str) -> bool {
+    SEP_CELL_RE.is_match(payload.trim())
+}
 /// Holds the parsed and validated table data.
 ///
 /// This is produced by [`parse_and_validate`] and passed to
@@ -185,24 +210,32 @@ fn extract_indent_and_trim(lines: &[String]) -> (String, Vec<String>) {
 
 /// Reports whether `line` is a table delimiter row.
 ///
-/// Every cell must carry a dash, as `reflow::row_parsing` and
-/// `reflow::second_row_is_separator` require. `SEP_RE` alone matches a cell
-/// that is empty as readily as one that is dashes, so a line-level test admits
-/// rows that only resemble a delimiter row.
+/// Every cell must be a delimiter cell as [`is_delimiter_cell`] defines it: an
+/// optional colon, one or more dashes, and an optional trailing colon, the same
+/// rule `reflow::row_parsing` and `reflow::second_row_is_separator` apply.
+/// `SEP_RE` is only a row-level sieve, because it matches an empty cell as
+/// readily as one that is dashes and permits whitespace between them, so a
+/// line-level test would admit rows that merely resemble a delimiter row — and
+/// [`format_separator_cells`] would then rewrite them into valid ones.
 fn is_delimiter_row(line: &str) -> bool {
-    SEP_RE.is_match(line) && split_cells(line).iter().all(|cell| cell.contains('-'))
+    SEP_RE.is_match(line) && split_cells(line).iter().all(|cell| is_delimiter_cell(cell))
 }
 /// Removes and returns the first delimiter row detected in `lines`.
 ///
-/// The dash is required in every cell, as it is in `reflow::row_parsing`,
-/// because `SEP_RE` alone also matches a row whose cells are all empty: `|  |  |`
-/// is made only of pipes and spaces, so a table whose header row is empty had
-/// that header taken for the delimiter row, which demoted the real delimiter row
-/// to a data row and left two delimiter-shaped rows for later passes to consume
-/// in turn. A lone dash in an otherwise empty header row — `|  | - |` above
+/// Every cell must be a well-formed delimiter cell rather than one that merely
+/// carries a dash, as it is in `reflow::row_parsing`, because `SEP_RE` alone
+/// also matches a row whose cells are all empty: `|  |  |` is made only of
+/// pipes and spaces, so a table whose header row is empty had that header taken
+/// for the delimiter row, which demoted the real delimiter row to a data row
+/// and left two delimiter-shaped rows for later passes to consume in turn. A
+/// lone dash in an otherwise empty header row — `|  | - |` above
 /// `| --- | --- |` — is the same trap one dash later: the header became the
 /// delimiter row, the real delimiter row was laid out as text, and the
-/// synthesized delimiter row grew a column wider on every pass.
+/// synthesized delimiter row grew a column wider on every pass. A cell that
+/// holds both a dash and whitespace, as in the header `| - - |`, is the same
+/// trap again: `SEP_RE` admits the whitespace where the cell grammar does not,
+/// so the malformed header was taken for the delimiter row and rewritten into
+/// `| --- |`.
 fn extract_separator_line(lines: &mut Vec<String>) -> Option<String> {
     let sep_idx = lines.iter().position(|l| is_delimiter_row(l));
     sep_idx.map(|idx| lines.remove(idx))
