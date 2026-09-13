@@ -37,6 +37,10 @@ fn handle_line(buffer: &mut ProcessBuffer, line: &str) -> Option<String> {
     buffer.handle_table_line(line.to_string())
 }
 
+#[rstest]
+fn finish_signature_consumes_the_buffer() {
+    let _: fn(ProcessBuffer) -> (Vec<String>, Vec<bool>) = ProcessBuffer::finish;
+}
 #[test]
 fn plain_table_line_enters_table_mode() {
     let mut buffer = new_buffer();
@@ -154,6 +158,23 @@ fn flush_table_passes_lines_through_reflow() {
     assert_eq!(buffer.out, reflow_table(&input));
     assert_ne!(buffer.out, input, "reflow should normalise column widths");
     assert!(!buffer.in_table);
+}
+
+#[rstest]
+fn finish_flushes_a_table_that_ends_at_end_of_input() {
+    let mut buffer = new_buffer();
+
+    assert!(handle_line(&mut buffer, "| a | b |").is_none());
+    assert!(handle_line(&mut buffer, "| --- | --- |").is_none());
+    assert!(handle_line(&mut buffer, "| 1 | 2 |").is_none());
+
+    let (result, table_markers) = buffer.finish();
+
+    assert_eq!(
+        result,
+        owned(&["| a   | b   |", "| --- | --- |", "| 1   | 2   |"]),
+    );
+    assert_eq!(table_markers, vec![true; result.len()]);
 }
 
 #[test]
