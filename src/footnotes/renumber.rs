@@ -25,6 +25,7 @@ mod parsing {
 use definitions::numeric_candidate_from_line;
 use definitions::{DefinitionUpdates, collect_definition_updates, rewrite_definition_headers};
 use reorder::reorder_definition_block;
+use tracing::debug;
 
 use super::{
     lists::{footnote_block_range, has_existing_footnote_block, trimmed_range},
@@ -222,6 +223,65 @@ fn apply_mapping_to_lines(
     }
 }
 
+/// Plans the renumbering of `lines`: the reference mapping and the definitions.
+///
+/// Returns [`None`] when there is nothing to renumber, which covers both a
+/// document with neither references nor definitions and a document whose
+/// references are left alone because an explicit `[^n]:` block already exists
+/// elsewhere — such a block is maintained outside the formatter, so rewriting
+/// the references that point into it would clobber it.
+fn plan_renumbering(lines: &[String]) -> Option<(HashMap<usize, usize>, DefinitionUpdates)> {
+    let mut mapping = collect_reference_mapping(lines);
+    let definitions = collect_definition_updates(lines, &mut mapping);
+
+    if mapping.is_empty() && definitions.definitions.is_empty() {
+        return None;
+    }
+
+    if definitions.definitions.is_empty() && lines.iter().any(|line| FOOTNOTE_LINE_RE.is_match(line))
+    {
+        return None;
+    }
+
+    Some((mapping, definitions))
+}
+
+/// Rewrites footnote labels — references and definition headers — in place.
+///
+/// This is the length-changing half of [`renumber_footnotes`]: a reference such
+/// as `[^10]` becomes `[^1]` once the distinct references are numbered by first
+/// encounter, and a definition header is rewritten from the same mapping, so
+/// both narrow the line they sit on and every pass that measures text has to run
+/// after them. It is separate from the rest so the caller can place the two
+/// halves either side of those passes; see `process_stream_inner`.
+///
+/// The mapping is applied in full, which is what leaves the document's numbers
+/// final: a later [`renumber_footnotes`] call then recomputes an identity
+/// mapping and has only the block structure left to settle. Rewriting the
+/// references without the headers would not, because a definition header keeps
+/// the number the mapping gave the reference that pointed at it, and a header
+/// nobody referenced keeps its own — after the references have moved, the two
+/// are indistinguishable to a second scan.
+///
+/// Lines inside fenced code blocks, and the definition rows themselves, are
+/// never rewritten as references; a definition header is rewritten from its
+/// parsed parts instead.
+///
+/// The scan promotes a trailing ordered-list item whose number some reference
+/// shares into a definition header, because the two are matched by that number
+/// — a bare `error.3` and the item `3.` are one footnote — and the match only
+/// holds while the reference still carries the number it was written with.
+pub(super) fn renumber_labels(lines: &mut [String]) {
+    if let Some((mapping, definitions)) = plan_renumbering(lines) {
+        apply_mapping_to_lines(lines, &mapping, &definitions.is_definition_line);
+        rewrite_definition_headers(lines, &definitions.definitions);
+        debug!(
+            references = mapping.len(),
+            definitions = definitions.definitions.len(),
+            "renumbering footnote references and definition headers"
+        );
+    }
+}
 /// Sequentially renumbers GFM footnote references and definitions in `lines`.
 ///
 /// The input is mutated in place. Each distinct `[^n]` reference encountered
@@ -240,27 +300,22 @@ fn apply_mapping_to_lines(
 /// reordered so definitions appear sorted by their new sequential numbers,
 /// with continuation lines kept attached to their definition. Lines inside
 /// fenced code blocks are never rewritten.
+///
+/// The reference half also runs on its own, as [`renumber_references`], before
+/// the passes that measure text; by the time this whole-document form reaches
+/// it the references are already sequential and the second rewriting leaves
+/// them as they are.
 pub(super) fn renumber_footnotes(lines: &mut [String]) {
-    let mut mapping = collect_reference_mapping(lines);
-    let DefinitionUpdates {
-        definitions,
-        is_definition_line,
-    } = collect_definition_updates(lines, &mut mapping);
-
-    if mapping.is_empty() && definitions.is_empty() {
+    let Some((mapping, definitions)) = plan_renumbering(lines) else {
         return;
-    }
+    };
 
-    if definitions.is_empty() && lines.iter().any(|line| FOOTNOTE_LINE_RE.is_match(line)) {
-        return;
-    }
+    apply_mapping_to_lines(lines, &mapping, &definitions.is_definition_line);
 
-    apply_mapping_to_lines(lines, &mapping, &is_definition_line);
-
-    rewrite_definition_headers(lines, &definitions);
+    rewrite_definition_headers(lines, &definitions.definitions);
 
     if let Some((start, end)) = footnote_definition_block_range(lines) {
-        reorder_definition_block(lines, start, end, &definitions);
+        reorder_definition_block(lines, start, end, &definitions.definitions);
     }
 }
 

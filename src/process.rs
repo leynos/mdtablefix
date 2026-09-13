@@ -9,7 +9,11 @@ use table_line_protection::{protect_table_lines, restore_table_lines};
 use crate::{
     ellipsis::replace_ellipsis,
     fences::{attach_orphan_specifiers, compress_fences},
-    footnotes::{convert_footnote_definitions, convert_inline_footnotes_with_setext},
+    footnotes::{
+        convert_footnote_definitions,
+        convert_inline_footnotes_with_setext,
+        renumber_footnote_labels,
+    },
     frontmatter::split_leading_yaml_frontmatter,
     html::convert_html_tables,
     lists::renumber_lists,
@@ -113,13 +117,28 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     // see, so converting afterwards leaves the cell wider than the delimiter row
     // that was measured from it: `| a | see docs.1 |` over `| --- | --- |`
     // produced a delimiter row of ten dashes on the first pass and of thirteen
-    // on the second, and the two never agreed. Only the inline half runs here;
-    // the block half below reads the heading structure and appends definition
-    // lines, so it stays where the heading pass has settled and the layout is
-    // done. The ellipsis pass further down is placed by the same rule, and text
-    // the heading pass will read as a Setext heading is left alone.
+    // on the second, and the two never agreed.
+    //
+    // Renumbering the labels belongs here too, for the same reason: a label
+    // narrows, because `[^10]` becomes `[^1]` once the distinct references are
+    // numbered by first encounter. Renumbering after the wrap measured the
+    // longer label left a line the next pass rejoined, since `[^1]` fits where
+    // `[^10]` did not.
+    //
+    // The inline and label halves run here, and the label half's scan reaches
+    // further than its name suggests: a trailing list item that a reference
+    // points at is promoted to a definition header in the same scan, because
+    // the two are matched by the number they share — `error.3` and the item
+    // `3.` are one footnote — and the header is a longer marker than the item's
+    // own, so it has to be written before the wrap measures the line too.
+    //
+    // Only the block half waits: it reads the heading structure, converts a
+    // heading-led trailing list that no reference reaches, and reorders the
+    // definitions, so it stays where the heading pass has settled and the layout
+    // is done. The ellipsis pass further down is placed by the same rule, and
+    // text the heading pass will read as a Setext heading is left alone.
     if opts.footnotes {
-        pre = convert_inline_footnotes_with_setext(&pre, opts.headings);
+        pre = renumber_footnote_labels(&convert_inline_footnotes_with_setext(&pre, opts.headings));
     }
 
     // Code-emphasis and ellipsis both shorten table cells, so they must run
@@ -322,121 +341,4 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for Markdown processing.
-
-    use super::*;
-
-    #[test]
-    fn processes_html_and_tables() {
-        let input = vec![
-            "<table><tr><td>A</td><td>B</td></tr></table>".to_string(),
-            "| X | Y |".to_string(),
-            "|---|---|".to_string(),
-            "| 1 | 2 |".to_string(),
-        ];
-        let output = process_stream(&input);
-        assert!(output.iter().any(|l| l.contains("| A   | B   |")));
-        assert!(output.iter().any(|l| l.contains("| X   | Y   |")));
-    }
-
-    #[test]
-    fn no_wrap_option() {
-        let input = vec!["| a | b |".to_string(), "| 1 | 2 |".to_string()];
-        let out = process_stream_no_wrap(&input);
-        assert_eq!(out, vec!["| a | b |", "| 1 | 2 |"]);
-    }
-
-    #[test]
-    fn integrates_code_emphasis_flag() {
-        let input = vec!["`X`** Y (in **`Z`**)**".to_string()];
-        let out = process_stream_inner(
-            &input,
-            Options {
-                code_emphasis: true,
-                ..Default::default()
-            },
-        );
-        assert_eq!(out, vec!["**`X` Y (in `Z`)**"]);
-    }
-
-    #[test]
-    fn converts_headings_when_enabled() {
-        let input = vec![
-            "Heading".to_string(),
-            "====".to_string(),
-            "Paragraph".to_string(),
-        ];
-        let disabled = process_stream_inner(
-            &input,
-            Options {
-                headings: false,
-                ..Default::default()
-            },
-        );
-        assert_eq!(disabled, input);
-
-        let enabled = process_stream_inner(
-            &input,
-            Options {
-                headings: true,
-                ..Default::default()
-            },
-        );
-        assert_eq!(
-            enabled,
-            vec!["# Heading".to_string(), "Paragraph".to_string()]
-        );
-    }
-
-    #[test]
-    fn converts_footnote_references_before_the_table_is_measured() {
-        // `docs.1` grows into `docs.[^1]`, so the reference has to be rewritten
-        // before the table pass measures the cell it sits in. Converting
-        // afterwards left the delimiter row measured from the shorter text: ten
-        // dashes on the first pass and thirteen on the second, and the two never
-        // agreed.
-        let input = vec![
-            "| a | see docs.1 |".to_string(),
-            "| --- | --- |".to_string(),
-        ];
-        let out = process_stream_inner(
-            &input,
-            Options {
-                footnotes: true,
-                ..Default::default()
-            },
-        );
-
-        assert_eq!(
-            out,
-            vec![
-                "| a   | see docs.[^1] |".to_string(),
-                "| --- | ------------- |".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn process_stream_inner_applies_table_ellipsis_before_reflow() {
-        let input = vec![
-            "| example | value |".to_string(),
-            "| ------- | ----- |".to_string(),
-            "| ... | tail |".to_string(),
-        ];
-
-        let with_ellipsis = process_stream_inner(
-            &input,
-            Options {
-                ellipsis: true,
-                ..Default::default()
-            },
-        );
-        let without_ellipsis = process_stream_inner(&input, Options::default());
-
-        assert!(with_ellipsis.iter().any(|line| line.contains('…')));
-        assert!(!with_ellipsis.iter().any(|line| line.contains("...")));
-        assert!(without_ellipsis.iter().any(|line| line.contains("...")));
-        assert!(!without_ellipsis.iter().any(|line| line.contains('…')));
-    }
-}
+mod tests;
