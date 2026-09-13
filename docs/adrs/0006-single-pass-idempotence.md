@@ -40,8 +40,8 @@ defect classes contributed:
 
 ## Decision
 
-The formatter is a fixed point: `format(format(x)) == format(x)` for every flag
-set the CLI exposes. Seven rules enforce the invariant:
+For the proven `make fmt` CLI flag set, the formatter is a fixed point:
+`format(format(x)) == format(x)`. Seven rules enforce the invariant:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
   `src/wrap/block.rs` recognizes a break with

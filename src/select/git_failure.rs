@@ -55,6 +55,7 @@ impl GitListError {
     #[must_use]
     pub fn diagnostic(&self) -> String {
         match self {
+            Self::Spawn { source, .. } => format!("{self}: {source}"),
             Self::Failed { stderr, .. } if !stderr.is_empty() => format!("{self}: {stderr}"),
             _ => self.to_string(),
         }

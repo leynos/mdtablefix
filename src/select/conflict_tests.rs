@@ -76,8 +76,10 @@ fn all_three_markers_are_required_at_the_start_of_a_line(
 /// the separator and nothing else.
 #[test]
 fn a_document_about_conflict_markers_is_not_a_conflicted_one() {
-    let prose = "Resolving conflicts\n=======\n\nGit writes `<<<<<<< HEAD` where the first side \
-                 begins and `>>>>>>>` at the end.\n";
+    let prose = concat!(
+        "Resolving conflicts\n=======\n\nGit writes `<<<<<<< HEAD` where the first side ",
+        "begins and `>>>>>>>` at the end.\n"
+    );
     assert!(!has_conflict_markers(prose), "{prose:?}");
 }
 

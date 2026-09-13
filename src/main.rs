@@ -264,18 +264,24 @@ fn run_files(
     // they cost.
     let mut stdout = BufWriter::new(io::stdout().lock());
     for chunk in files.chunks(ANALYSIS_CHUNK) {
-        let results = in_argument_order(
-            chunk
-                .par_iter()
-                .enumerate()
-                .map(|(index, path)| {
-                    (
-                        index,
-                        record_analysis(mode, path, || analyse_one(mode, guard, path, &format)),
-                    )
-                })
+        let results = match mode {
+            Mode::InPlace => chunk
+                .iter()
+                .map(|path| record_analysis(mode, path, || analyse_one(mode, guard, path, &format)))
                 .collect(),
-        );
+            Mode::Print | Mode::Check | Mode::Diff | Mode::ListFiles => in_argument_order(
+                chunk
+                    .par_iter()
+                    .enumerate()
+                    .map(|(index, path)| {
+                        (
+                            index,
+                            record_analysis(mode, path, || analyse_one(mode, guard, path, &format)),
+                        )
+                    })
+                    .collect(),
+            ),
+        };
 
         for result in results {
             match result {

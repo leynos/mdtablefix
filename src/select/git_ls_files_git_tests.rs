@@ -5,20 +5,21 @@
 //! process working directory, and the failure Git reports when it is handed a
 //! directory that no repository governs. The fixture drives `git` through
 //! [`git`], which hardens its own environment rather than inheriting the
-//! developer's: the system configuration is disabled, the global configuration
-//! is pointed at an empty file, and the home directory, the locale, and the
-//! commit identity are the fixture's own. The adapter's env discipline is the
-//! subject of the sibling `git_ls_files_tests`, so the fixture is free to be
-//! stricter than it. It pins the branch name, and the one test that needs
-//! history commits under that supplied identity, so the settings that could
-//! perturb it are not in play, and the listing assertions are on the whole
-//! listing rather than on a subset, so a perturbation would be loud.
+//! developer's: system and global Git configuration are disabled, and the
+//! private home directory, locale, and commit identity are the fixture's own.
+//! The adapter's env discipline is the subject of the sibling
+//! `git_ls_files_tests`, so the fixture is free to be stricter than it. It
+//! pins the branch name, and the one test that needs history commits under that
+//! supplied identity, so the settings that could perturb it are not in play,
+//! and the listing assertions are on the whole listing rather than on a
+//! subset, so a perturbation would be loud.
 //!
 //! The tracing assertions at the end read the events the adapter emits. They
 //! belong to the binary's test target rather than to `tests/`, because a
 //! tracing subscriber is process-global and the install happens per test.
 
 use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 
 use super::{GitListError, GitLsFiles};
 use crate::select::git_output::CandidateListing;
@@ -37,11 +38,15 @@ fn names(listing: &CandidateListing) -> Vec<String> {
 }
 
 fn write(root: &Utf8Path, name: &str, content: &str) {
-    let path = root.join(name);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).expect("create the fixture directory");
+    let directory =
+        Dir::open_ambient_dir(root, ambient_authority()).expect("open fixture directory");
+    let name = Utf8Path::new(name);
+    if let Some(parent) = name.parent().filter(|parent| !parent.as_str().is_empty()) {
+        directory
+            .create_dir_all(parent)
+            .expect("create the fixture directory");
     }
-    std::fs::write(&path, content).expect("write a fixture");
+    directory.write(name, content).expect("write a fixture");
 }
 
 /// Runs `git` in `directory`, requiring it to succeed.
@@ -53,7 +58,8 @@ fn write(root: &Utf8Path, name: &str, content: &str) {
 /// nor a signing key can change what the fixture commits. A runner with no
 /// configured identity would otherwise fail at the first `git commit`.
 fn git(directory: &Utf8Path, args: &[&str]) {
-    let output = std::process::Command::new("git")
+    let mut command = std::process::Command::new("git");
+    command
         .current_dir(directory)
         .args(args)
         .env("GIT_CONFIG_NOSYSTEM", "1")
@@ -64,7 +70,16 @@ fn git(directory: &Utf8Path, args: &[&str]) {
         .env("GIT_AUTHOR_NAME", "mdtablefix tests")
         .env("GIT_AUTHOR_EMAIL", "tests@example.invalid")
         .env("GIT_COMMITTER_NAME", "mdtablefix tests")
-        .env("GIT_COMMITTER_EMAIL", "tests@example.invalid")
+        .env("GIT_COMMITTER_EMAIL", "tests@example.invalid");
+    for variable in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+    ] {
+        command.env_remove(variable);
+    }
+    let output = command
         .output()
         .expect("git on PATH; the boundary test needs a real one");
     assert!(

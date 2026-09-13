@@ -48,6 +48,32 @@ fn in_place_writes_the_formatted_text() {
     assert_eq!(read(&directory, "ragged.md"), ALIGNED);
 }
 
+/// An ordinary changed document never needs repository state to be read.
+///
+/// A regular file deliberately stands in for the Git directory here: opening
+/// it as a directory would fail, so successful formatting proves that the
+/// marker scan kept the guarded state probe out of this path.
+#[test]
+fn in_place_formats_an_unmarked_file_without_reading_repository_state() {
+    let (dir, directory) = fixture("ragged.md", RAGGED);
+    let regular_file = dir.path().join("ragged.md");
+    let git_dir = Utf8Path::from_path(&regular_file).expect("the fixture path is UTF-8");
+
+    let (report, payload) = analyse(
+        Mode::InPlace,
+        &ConflictGuard::guarded(git_dir),
+        &directory,
+        Utf8Path::new("ragged.md"),
+        Utf8Path::new("ragged.md"),
+        &align,
+    )
+    .expect("an unmarked file does not query repository state");
+
+    assert!(report.is_changed);
+    assert_eq!(payload, "");
+    assert_eq!(read(&directory, "ragged.md"), ALIGNED);
+}
+
 /// A drifting file is replaced, not edited in place.
 ///
 /// The positive control for [`in_place_leaves_a_clean_file_untouched`]:

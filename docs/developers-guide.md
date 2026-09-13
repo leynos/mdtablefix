@@ -411,13 +411,17 @@ selection question and the answer back into the paths `run_files` receives, and
 it is the one module that knows the whole selection tree at once.
 `src/select.rs` and its submodules state and answer that question.
 
-```text
+```plaintext
 src/select.rs               the tree root: module list and dependency rule
 src/select/policy.rs        select_files, FileIdentity, PathKind, PathProbe, ProbeError
 src/select/extensions.rs    --md-exts parsing and matching
 src/select/fs_probe.rs      AmbientPathProbe, the working-tree adapter
-src/select/git_ls_files.rs  the git subprocess, its framing and diagnostics
-src/select/conflict.rs      operation_in_progress and ConflictGuard
+src/select/git_ls_files.rs  the git subprocess and its framing
+src/select/git_failure.rs   Git failure types, diagnostics, and categories
+src/select/git_output.rs    NUL-delimited output parsing and diagnostic scrubbing
+src/select/conflict.rs      filesystem-independent marker policy and refusal
+                            decision
+src/select/repository_state.rs  Git operation-state probing and ConflictGuard
 ```
 
 Dependencies point inwards, in one direction only. `policy` names the
@@ -1693,7 +1697,7 @@ context radius is fixed at three lines, matching `git diff`, and the patience
 threshold switches algorithm above a line count so that diffing a very large
 file stays bounded without a wall-clock cut-off.
 
-### 2.6. Deterministic failure seams
+### 2.8. Deterministic failure seams
 
 The replacement tests drive two `#[cfg(test)]`-only, per-thread seams defined in
 `src/io/swap.rs`:

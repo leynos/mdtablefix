@@ -286,11 +286,13 @@ not read as a separator. Seven is Git's default marker length rather than its
 only one: `conflict-marker-size` lengthens the run Git writes, and the guard
 does not read `.gitattributes`, so a guard that demanded exactly seven would
 read a longer marker as ordinary Markdown. The longer run instead costs a false
-positive that `--allow-conflicted` overrides. All three are scanned only while
-an operation is in progress, because a fenced example quoting all three is
-otherwise indistinguishable from a conflict, and refusing to rewrite it would
-be a false alarm about a file nothing is merging. `--allow-conflicted` is the
-escape hatch for the case where the verdict is wrong.
+positive that `--allow-conflicted` overrides. The marker scan runs before the
+repository state is queried, and determines whether reading the Git directory
+is necessary: only a document carrying all three forms needs the operation
+state. A fenced example quoting all three is otherwise indistinguishable from a
+conflict, and refusing to rewrite it would be a false alarm about a file
+nothing is merging. `--allow-conflicted` is the escape hatch for the case where
+the verdict is wrong.
 
 ### Git's diagnostics are untrusted input
 

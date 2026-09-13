@@ -27,7 +27,7 @@ fn selection(skipped: usize) -> GitSelection {
 /// A selection that lost candidates owes one warning, in this tool's own words.
 ///
 /// The wording is pinned because a reader, a script, and the ADR's transcript
-/// all recognise the run by it; the count is the only thing that varies.
+/// all recognize the run by it; the count is the only thing that varies.
 #[test]
 fn a_selection_that_lost_candidates_owes_one_warning() {
     assert_eq!(

@@ -82,7 +82,7 @@ mdtablefix --git --in-place --wrap
 ```
 
 The files that Git reports but that cannot safely be rewritten — a symbolic
-link, or a document carrying conflict markers while a merge, rebase, or
+link, or a document carrying conflict markers while a merge, rebase, revert, or
 cherry-pick is in progress — are skipped or refused rather than rewritten. See
 [Git file selection](docs/architecture.md#git-file-selection) for how the
 selection is made.

@@ -38,3 +38,14 @@ fn a_category_names_the_class_a_host_may_aggregate(
 ) {
     assert_eq!(error.category(), expected);
 }
+
+/// A spawn failure includes its operating-system cause beside the command.
+#[test]
+fn a_spawn_diagnostic_includes_its_source() {
+    let error = GitListError::Spawn {
+        command: "git ls-files".to_string(),
+        source: io::Error::new(io::ErrorKind::PermissionDenied, "fixture"),
+    };
+
+    assert_eq!(error.diagnostic(), "running `git ls-files`: fixture");
+}

@@ -170,7 +170,7 @@ fn report_selection(candidates: usize, selected: usize, extensions: &ExtensionFi
 /// What the guard receives is the directory, not a verdict read from it: the
 /// repository is asked again immediately before each file is replaced, so a
 /// merge or revert that begins mid-run is seen. See
-/// [`ConflictGuard::refuses`](crate::select::conflict::ConflictGuard::refuses).
+/// [`refuses`](crate::select::conflict::refuses).
 ///
 /// # Errors
 ///

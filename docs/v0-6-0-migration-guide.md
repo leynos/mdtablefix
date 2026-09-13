@@ -199,12 +199,13 @@ each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   `mdtablefix::io::replace_file_if_unchanged` now also does so conditionally:
   it writes as `replace_file` does, but replaces the target only while the
   target still holds the text the caller passed as `expected`. The target is
-  read back after the temporary file is written and flushed and immediately
-  before the rename, so `Ok(false)` means it no longer held `expected` and is
-  left exactly as it is, with the temporary file removed; a target that cannot
-  be read back at all is an error. This is not a true compare-and-swap, but
-  every window before the rename is closed. Both entry points are additive, so
-  `rewrite` and `rewrite_no_wrap` keep their signatures.
+  read back after the temporary file is written and flushed, closing the
+  formatting-run window before the final comparison. If it no longer held
+  `expected`, `Ok(false)` is returned and it is left exactly as it is, with the
+  temporary file removed; a target that cannot be read back at all is an error.
+  This is not a true compare-and-swap: a race remains possible between the
+  comparison and the rename. Both entry points are additive, so `rewrite` and
+  `rewrite_no_wrap` keep their signatures.
 - **Who is affected:** Library consumers that already hold a
   `cap_std::fs_utf8::Dir` capability.
 - **Migration action:** No action is required.

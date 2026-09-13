@@ -196,17 +196,18 @@ pub fn replace_file(directory: &Dir, path: &Utf8Path, contents: &str) -> io::Res
 /// contents, so a writer that lands between the comparison and the rename still
 /// wins. Every earlier window — the whole formatting run — is closed.
 ///
-/// Returns `Ok(false)` when the target no longer holds `expected`: the target
-/// is left exactly as it was, the temporary file is removed, and the caller
-/// decides what a target that moved on means for its run. A target that cannot
-/// be read back at all is an error: a caller that asked for a conditional
+/// Returns `Ok(false)` when the target no longer holds `expected` and its
+/// temporary file was removed: the target is left exactly as it was, and the
+/// caller decides what a target that moved on means for its run. A target that
+/// cannot be read back, or a temporary file that cannot be removed after a
+/// declined replacement, is an error: a caller that asked for a conditional
 /// replacement must not be told it succeeded, or that the condition failed,
-/// when the question could not be put.
+/// when the question could not be put or cleaned up.
 ///
 /// # Errors
 /// Returns an error if the target cannot be inspected, if it cannot be read
-/// back for the comparison, if the temporary file cannot be written, or if the
-/// rename fails.
+/// back for the comparison, if the temporary file cannot be written or removed,
+/// or if the rename fails.
 #[tracing::instrument(level = "debug", skip(directory, expected, contents), fields(path = %path))]
 pub fn replace_file_if_unchanged(
     directory: &Dir,
@@ -280,20 +281,21 @@ fn replace_inner(
         &permissions,
         file,
     );
-    match &outcome {
-        Ok(true) => {}
+    match outcome {
+        Ok(true) => Ok(true),
         Ok(false) => {
             // Nothing was replaced, so the temporary file is this run's to
             // remove, exactly as it is after a failure.
             debug!("replacement declined: the target changed since it was read");
-            remove_failed_temporary_file(directory, &temp_path);
+            remove_temporary_file(directory, &temp_path)?;
+            Ok(false)
         }
         Err(error) => {
             debug!(error_category = ?error.kind(), "replacement failed");
             remove_failed_temporary_file(directory, &temp_path);
+            Err(error)
         }
     }
-    outcome
 }
 
 /// Removes the temporary file a replacement that did not complete left behind,
