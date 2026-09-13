@@ -241,6 +241,10 @@ filesystem access themselves.
   the final cell text in a deterministic order. The non-table branch emits
   buffered lines unchanged; the parent pipeline retains the existing
   post-processing path for those lines.
+- `ProcessBuffer::finish(self) -> (Vec<String>, Vec<bool>)`: Consumes the
+  buffer, flushes any pending table, and returns output lines with table
+  markers. `process_stream_inner` uses it at end of input; callers must not
+  issue a separate final `flush`.
 - `ProcessBuffer`: Owns the stream-processing output buffer, the pending table
   run, and the table-mode state for `process_stream_inner`. The parent process
   module is responsible for orchestration; the buffer owns the boundary rules

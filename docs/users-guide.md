@@ -171,6 +171,11 @@ contains a pipe character; it is not treated as a table continuation row. For
 example, after a table, `> quote | with pipe` starts a blockquote rather than
 extending the table.
 
+At end of input, any table still being buffered is also flushed and reflowed
+before the formatted result is returned. This applies to both command-line and
+library processing, so a final table does not need a following block line to be
+emitted.
+
 Pipe-looking lines indented by four or more columns are preserved as indented
 code blocks. For example, a source line with four leading spaces before
 `| not | a table |` is emitted verbatim rather than being table-reflowed.
