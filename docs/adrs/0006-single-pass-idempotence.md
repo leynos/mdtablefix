@@ -66,8 +66,9 @@ defect classes contributed:
   lines below it, and the flush that honours the hard break remembers the
   item's continuation indent; the flush-left line below the break dropped it,
   while the next pass re-read the indented tail above and applied the indent to
-  everything after it: `- alpha … beta` over `delta epsilon  ` over `zeta eta`
-  ended at column one on one pass and two columns in on the pass after.
+  everything after it: `- alpha … beta` over `delta epsilon` (a line ending in
+  the two-space hard break) over `zeta eta`, ended at column one on one pass and
+  two columns in on the pass after.
 - A deferred block's tail was reflowed without the backslash that ends it. The
   tail of an overlong prefixed line is wrapped on its own and the hard-break
   marker is put back afterwards, which is correct for the two-space form — the
