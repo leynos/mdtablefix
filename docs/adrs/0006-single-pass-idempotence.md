@@ -9,7 +9,7 @@
 inputs reachable under the `make fmt` flag set (`--wrap`, `--renumber`,
 `--breaks`, `--ellipsis`, `--fences`), and for further inputs once `--headings`
 or `--code-emphasis` was added, so a check-after-fix gate could never converge:
-one `--in-place` pass left a file that the next pass rewrote again. Thirteen
+one `--in-place` pass left a file that the next pass rewrote again. Fourteen
 defect classes contributed:
 
 - A normalized thematic break was absorbed into the following paragraph
@@ -48,6 +48,11 @@ defect classes contributed:
   cell one character longer: the delimiter row below `| a | see docs.1 |` was
   ten dashes wide on the first pass and thirteen on the second, and the two
   never agreed.
+- Footnote labels were renumbered after the passes that measure text. A label is
+  numbered by first encounter, so it narrows as the document is rewritten:
+  `[^10]` becomes `[^1]`, and a definition header is rewritten from the same
+  mapping. A wrap that measured the longer label broke a line the next pass
+  joined, once the shorter label left the line within the width.
 - A table whose header row was empty had that header taken for the delimiter
   row. `SEP_RE` matches a row made only of pipes and spaces as readily as one
   made of dashes, so `|  |  |` was read as the alignment row, the genuine
@@ -99,12 +104,23 @@ marker taken off it was the one column that did not fit.
 
 The formatter is a fixed point, `format(format(x)) == format(x)`, for the flag
 sets and documents with recorded evidence: the `make fmt` flag set (`--wrap`,
-`--renumber`, `--breaks`, `--ellipsis`, `--fences`), that set with
-`--headings`, and that set with `--code-emphasis`. The guarantee is not
-universal over the inputs the formatter accepts: the one measured exception, a
-bracket reference the wrapper splits across lines, is recorded in the addendum
-below and tracked as issue #504. Twelve rules enforce the invariant where it
-holds:
+`--renumber`, `--breaks`, `--ellipsis`, `--fences`), that set with `--headings`,
+and that set with `--code-emphasis`. The property suites broaden the ground
+within that claim — they force each flag alone and sample the eight-flag
+powerset — but not outside it. Two exceptions are of record:
+
+- `--headings` sits outside the `make fmt` flag set, so the everyday gate does
+  not reach it; the property suites force it on for the structural adjacency
+  shape instead, as the consequences below record.
+- Under `--wrap` alone, a paragraph that wraps so that the opening bracket of a
+  `[1]`-style reference is the last character on a line settles one pass later
+  than the invariant allows: the first pass ends the line with `[` and leaves
+  `1]` below it, the second rejoins the two with a space between them — `[ 1]`
+  — and the third reproduces the second. The shape is a pre-existing defect,
+  byte-identical on main, that this decision neither introduces nor fixes, and
+  is recorded in the addendum below as issue #504.
+
+Thirteen rules enforce the invariant where it holds:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
   `src/wrap/block.rs` recognizes a break with
@@ -211,11 +227,27 @@ holds:
   such as `docs.1` grows into `docs.[^1]` and every later pass lays out the line
   it sits in. `footnotes::convert_footnote_definitions` stays last, after the
   heading pass has settled, because it reads the block structure around the
-  trailing list and appends definition lines. `convert_footnotes` remains as the
-  composition of the two for callers that need them in one step.
-- A delimiter row carries a dash in every cell. `table::extract_separator_line`
-  and `reflow::second_row_is_separator` both require one, as
-  `reflow::row_parsing` already did when it decides what a delimiter cell is.
+  trailing list — converting a heading-led list that no reference reaches — and
+  reorders the definitions. `convert_footnotes` remains as the composition of
+  the three for callers that need them in one step.
+  The label stage promotes a trailing list item that a reference *does* reach,
+  and promotes it there rather than last: a bare reference and a list item are
+  matched by the number they share — `error.3` and the item `3.` are one
+  footnote — so the promotion has to happen in the scan that rewrites the
+  reference, before it is rewritten, and the header it writes is a longer marker
+  than the item's own, which puts it on the measuring side of the split as well.
+- Footnote labels are renumbered before the passes that measure text.
+  `footnotes::renumber_footnote_labels` rewrites both the references and the
+  definition headers from the mapping numbered by first encounter, and it runs
+  beside `convert_inline_footnotes`, ahead of the table pass and the wrap,
+  because a label narrows as it is rewritten: `[^10]` becomes `[^1]`. A wrap
+  that measured the longer label broke a line the next pass joined, once the
+  shorter label left the line within the width.
+- A delimiter cell is an optional colon, one or more dashes, and an optional
+  trailing colon. `table::is_delimiter_cell` applies that grammar to a cell's
+  payload, and `table::is_delimiter_row`, `reflow::second_row_is_separator`, and
+  `reflow::row_parsing` each require every cell of the row to satisfy it, so the
+  heading pass and the table pass agree on what table syntax is.
   `SEP_RE` alone also matches a cell that is empty, so a row of nothing but
   pipes and spaces — a table's empty header row — was read as the alignment row,
   and the genuine delimiter row was then demoted to a data row. A lone dash
@@ -223,9 +255,11 @@ holds:
   dash later, and is reachable with no flags at all: the header was taken for
   the delimiter row and the genuine delimiter row was laid out as a data row
   beside the synthesized one, so the pass after that read the data row as the
-  delimiter row in turn and the first pass had no fixed point. The predicate is
-  `table::is_delimiter_row`, which splits the line into cells and requires a
-  dash in each.
+  delimiter row in turn and the first pass had no fixed point. A cell test that
+  asked only for a dash was weaker still, because `SEP_RE` permits whitespace
+  inside a cell: the malformed header `| - - |` was taken for the alignment row
+  and rewritten into `| --- |`, which turned malformed source into table syntax
+  instead of leaving it as data.
 
 ## Consequences
 
@@ -237,12 +271,18 @@ holds:
   the block's continuation indent rather than starting a column to the left, to
   deferred tails ending in a backslash hard break, which now wrap within the
   width instead of one column past it, to unmatched fences that are rewritten
-  from the opener alone, to footnote references that are converted before the
-  layout rather than after it, to delimiter rows that are only recognized when
-  every cell carries a dash, and to candidates that are themselves block starts
-  or table rows, which no longer convert, so the line below them survives as a
-  block of its own. Tables with code-emphasis repairs also receive their final
-  column widths in the first pass.
+  from the opener alone, to footnote references that are converted and footnote
+  labels that are renumbered before the layout rather than after it, to
+  delimiter rows that are only recognized when every cell is a well-formed
+  delimiter cell, and to candidates that are themselves block starts or table
+  rows, which no longer convert, so the line below them survives as a block of
+  its own. Tables with
+  code-emphasis repairs also receive their final column widths in the first
+  pass. A footnote definition promoted from a trailing list item wraps its
+  continuation lines to the definition body's indent rather than to the item's
+  own, because the promotion now runs before the wrap measures the line; the
+  text the two indents apply to is the same either way, and both spellings are
+  fixed points.
 - `tests/idempotence.rs` formats the fixture corpus under
   `tests/data/idempotence/` twice through the real binary and asserts
   byte-identical output; the class `T` fixtures pin the table-adjacency screens

@@ -1515,16 +1515,26 @@ Integration-test helpers are organized under `tests/support/`:
 
 Table: Integration-test support modules and their purposes.
 
-| Module                   | Purpose                                                               |
-| ------------------------ | --------------------------------------------------------------------- |
-| `cli_args.rs`            | `run_cli_with_args` — invokes the binary with argument-only tests     |
-| `cli_stdin.rs`           | `run_cli_with_stdin` — invokes the binary feeding stdin               |
-| `fixtures.rs`            | Shared rstest fixtures (e.g. `broken_table`)                          |
-| `wrap_assertions.rs`     | Higher-level assertions for wrapping output                           |
-| `idempotence_harness.rs` | Shared proptest generators and CLI harness for the idempotence suites |
+| Module                        | Purpose                                                                          |
+| ----------------------------- | -------------------------------------------------------------------------------- |
+| `cli_args.rs`                 | `run_cli_with_args` — invokes the binary with argument-only tests                |
+| `cli_stdin.rs`                | `run_cli_with_stdin` — invokes the binary feeding stdin                          |
+| `fixtures.rs`                 | Shared rstest fixtures (e.g. `broken_table`)                                     |
+| `wrap_assertions.rs`          | Higher-level assertions for wrapping output                                      |
+| `idempotence_harness.rs`      | Shared vocabulary and CLI harness for the idempotence property suites            |
+| `idempotence_generators.rs`   | Document-level proptest strategies                                               |
+| `idempotence_reachability.rs` | Reachability sweeps and their helper predicates, used by the property suite only |
 
 Each integration-test file declares the modules it needs via explicit
 `#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
+
+The two idempotence suites read their case count from the `PROPTEST_CASES`
+environment variable through the `proptest_config` helper in
+`tests/support/idempotence_harness.rs`, falling back to 48 when it is unset or
+unparseable. The other property suites — `tests/check_properties.rs`,
+`tests/check_prediction.rs`, and `tests/static_regex_lint.rs` — pin their own
+counts and ignore the variable, so a longer sweep is an environment variable
+for the idempotence suites only.
 
 ### 2.2. Exported test macros (`tests/common/mod.rs`)
 

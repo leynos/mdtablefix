@@ -137,19 +137,24 @@ Code fences are passed through verbatim:
 | not | a | table |
 ```
 
-After fence processing and HTML-table conversion, the optional footnote pass
-runs over the complete normalized stream before Markdown table buffering. This
-preserves document-wide reference-definition mapping and ensures table cells
-enter layout with their final footnote labels. Buffered table runs then receive
-their enabled substitutions before reflow measures their columns. Those
-substitutions retain a fixed order: code-emphasis repair, then ellipsis
-replacement. The processor next performs its optional post-processing steps
-for remaining content in a fixed order: Setext heading conversion,
-code-emphasis repair, ordered-list renumbering, ellipsis replacement, and
-paragraph wrapping. Table reflow and paragraph wrapping consume final content,
-so every pass that can change cell or line width runs first. Thematic-break
-normalization stays at the binary boundary because it is width-independent.
-See \
+Buffered table runs receive their enabled table substitutions before reflow
+measures their columns. The substitutions run in a fixed order: code-emphasis
+repair, then ellipsis replacement. Footnote references and labels are rewritten
+before the table scan as well, because both rewrites change the length of the
+text they sit on: `docs.1` grows into `docs.[^1]`, while `[^10]` narrows to
+`[^1]`, so any pass that lays a line out has to measure the final text and a
+table cell enters layout with its final footnote labels. After scanning and
+flushing those runs, the processor performs its optional post-processing steps
+for non-table content in a fixed order: Setext heading conversion, code-emphasis
+repair, ordered-list renumbering, ellipsis replacement, and paragraph wrapping,
+and finally the footnote-definition fold, which reads the settled block
+structure and appends definition lines. Table reflow and paragraph wrapping
+consume final content, so every pass that can change cell or line width runs
+first. Thematic-break normalization stays at the binary boundary because it is
+width-independent. Ellipsis replacement runs before wrapping, so line breaking
+is computed from the glyphs the reader will see. See
+[footnote conversion](#footnote-conversion) for details. The function then
+returns the updated stream for writing to disk or further manipulation.
 [footnote conversion](#footnote-conversion) for details. The function then
 returns the updated stream for writing to disk or further manipulation.
 
@@ -230,7 +235,29 @@ An example of a bare numeric reference.1
 The official docs page showcases several types 7:
 ```
 
-`convert_footnotes` performs this operation and is exposed via the higher-level
+The conversion is split into three public stages, because two of the rewrites
+change the length of the text they sit on while the third reads settled block
+structure:
+
+- `footnotes::convert_inline_footnotes` rewrites bare numeric references as
+  Markdown references. It runs before the table reflow and the paragraph wrap,
+  because a reference such as `docs.1` grows into `docs.[^1]` and every pass
+  that measures the line has to see the longer form.
+- `footnotes::renumber_footnote_labels` rewrites both the references and the
+  definition headers from the mapping numbered by first encounter. It runs
+  before those same passes, because a label narrows as it is rewritten —
+  `[^10]` becomes `[^1]` — and a wrap that measures the longer label breaks a
+  line the next pass joins.
+- `footnotes::convert_footnote_definitions` folds a trailing ordered list into
+  definitions and reorders the definition block. It stays last, after the
+  heading pass has settled and the layout is done, because it reads the block
+  structure around the trailing list and appends definition lines. A list item
+  that a reference points at is folded by `renumber_footnote_labels` instead,
+  in the scan that rewrites the reference: the two are matched by the number
+  they share, and the header the fold writes is longer than the item's marker.
+
+`convert_footnotes` remains as the whole-document convenience form that runs the
+three in that order, and it is exposed via the higher-level
 `process_stream_opts` helper. Set
 `Options { footnotes: true, ..Default::default() }` when calling
 `process_stream_opts` to enable the conversion logic. The parameter defaults to
@@ -385,6 +412,9 @@ classDiagram
     }
     class footnotes {
         <<module>>
+        +convert_inline_footnotes()
+        +renumber_footnote_labels()
+        +convert_footnote_definitions()
         +convert_footnotes()
     }
     class footnotes_renumber_definitions {
@@ -455,7 +485,7 @@ classDiagram
     process ..> wrap : uses wrap_text, is_fence
     process ..> fences : uses compress_fences, attach_orphan_specifiers
     process ..> ellipsis : uses replace_ellipsis
-    process ..> footnotes : uses convert_footnotes
+    process ..> footnotes : uses the footnote stages
     process ..> process_buffer : buffers active table run
     footnotes --> footnotes_renumber_definitions
     footnotes_renumber_definitions --> footnotes_renumber_reorder : final definition block
