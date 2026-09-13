@@ -37,7 +37,9 @@ while IFS= read -r symbol; do
         exit 1
     fi
 
-    declaration="^[[:space:]]*([^[:space:]]+[[:space:]]+)*fn[[:space:]]+${symbol}([[:space:]<(])"
+    visibility="(pub(\\((crate|self|super|in[[:space:]]+[[:alnum:]_:]+)\\))?[[:space:]]+)?"
+    qualifiers="(const[[:space:]]+)?(async[[:space:]]+)?(unsafe[[:space:]]+)?(extern([[:space:]]+\"[^\"]+\")?[[:space:]]+)?"
+    declaration="^[[:space:]]*${visibility}${qualifiers}fn[[:space:]]+${symbol}([[:space:]<(])"
     status=0
     "${rg_cmd[@]}" --glob '*.rs' --regexp "${declaration}" "${source_dir}" >/dev/null || status=$?
     case "${status}" in

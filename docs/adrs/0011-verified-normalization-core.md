@@ -62,11 +62,11 @@ _Table 1: Comparison of verification-boundary options._
 
 ## Decision outcome
 
-Choose Option A. `verus/lib.rs` is the only proof entry point and documents the
-`#[path]` convention for future kernels. `make verus` invokes the pinned Verus
-release through `rust-prover-tools`, and CI runs the same target on every pull
-request. `make verus-selftest` runs a deliberately false proof and requires
-Verus to reject it.
+Choose Option A. `verus/lib.rs` is the only production proof entry point and
+documents the `#[path]` convention for future kernels. `make verus` invokes the
+pinned Verus release through `rust-prover-tools`, and CI runs the same target
+on every pull request. `make verus-selftest` runs a deliberately false proof
+and requires Verus to reject it.
 
 The verification ledger records the executable function, its input domain,
 every unverified external contract, and whether each result is local

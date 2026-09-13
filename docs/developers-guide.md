@@ -74,8 +74,9 @@ restores the separator row with widths derived from the final table body.
 
 The verification harness is maintained by the same contributors who maintain
 the formatter. The pinned release in `tools/verus/VERSION` is checked against
-the artifact checksums in `tools/verus/SHA256SUMS`; `tools/rust-prover-tools/REF`
-pins the `rust-prover-tools` revision that installs and runs it. The local
+the artifact checksums in `tools/verus/SHA256SUMS`;
+`tools/rust-prover-tools/REF` pins the `rust-prover-tools` revision that
+installs and runs it. The local
 prerequisites are `uvx` and `rustup`. The default `PROVER_TOOLS` command uses
 `uvx` to fetch the pinned runner, while `VERUS_RUN` selects the runner's Verus
 execution command. Both variables can be overridden when diagnosing a local
@@ -92,8 +93,9 @@ The pull-request workflow runs both targets on Ubuntu. It caches the
 version-specific `.verus` directory using the runner operating system,
 architecture, and pinned Verus version, then executes the same Makefile
 targets used locally. The [verification ledger](verification.md) records each
-claim and its trusted boundary; [ADR 0011](adrs/0011-verified-normalization-core.md)
-documents why the proof scope remains a narrow production-used core.
+claim and its trusted boundary;
+[ADR 0011](adrs/0011-verified-normalization-core.md) documents why the proof
+scope remains a narrow production-used core.
 
 ## Internal API reference
 

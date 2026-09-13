@@ -7,15 +7,15 @@
 
 #![cfg(unix)]
 
-use std::{
-    fs,
-    os::unix::fs::PermissionsExt,
-    process::{Command, Output},
-};
+use std::process::{Command, Output};
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use cap_std::{
+    ambient_authority,
+    fs::{Permissions, PermissionsExt},
+    fs_utf8::Dir,
+};
 use rstest::{fixture, rstest};
 use serde_yaml::{Mapping, Value};
 use tempfile::TempDir;
@@ -30,20 +30,20 @@ const PREFIX_ONLY_SYMBOL_DIAGNOSTIC: &str =
 
 fn manifest_dir() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
 
-fn utf8(path: &std::path::Path) -> &Utf8Path {
-    Utf8Path::from_path(path).expect("temporary directory path should be UTF-8")
+fn utf8(path: &std::path::Path) -> Result<&Utf8Path> {
+    Utf8Path::from_path(path).context("temporary directory path should be UTF-8")
 }
 
-fn open_dir(dir: &Utf8Path) -> Dir {
-    Dir::open_ambient_dir(dir, ambient_authority())
-        .unwrap_or_else(|error| panic!("failed to open directory {dir}: {error}"))
+fn open_dir(dir: &Utf8Path) -> Result<Dir> {
+    Dir::open_ambient_dir(dir, ambient_authority()).with_context(|| format!("open directory {dir}"))
 }
 
-fn fixture_text(name: &str, extension: &str) -> String {
+fn fixture_text(name: &str, extension: &str) -> Result<String> {
     let path = format!("tests/data/verification_ledger/{name}.{extension}");
-    open_dir(&manifest_dir())
+    let root = manifest_dir();
+    open_dir(&root)?
         .read_to_string(&path)
-        .unwrap_or_else(|error| panic!("failed to read fixture {path}: {error}"))
+        .with_context(|| format!("read verification-ledger fixture {path}"))
 }
 
 fn script_path() -> Utf8PathBuf { manifest_dir().join("scripts/check-verification-ledger.sh") }
@@ -51,8 +51,8 @@ fn script_path() -> Utf8PathBuf { manifest_dir().join("scripts/check-verificatio
 #[fixture]
 fn materialised_ledger(#[default("valid")] name: &str) -> Result<TempDir> {
     let directory = TempDir::new().context("create temporary ledger directory")?;
-    let root = utf8(directory.path());
-    let handle = open_dir(root);
+    let root = utf8(directory.path())?;
+    let handle = open_dir(root)?;
     handle
         .create_dir("docs")
         .context("create temporary documentation directory")?;
@@ -60,10 +60,10 @@ fn materialised_ledger(#[default("valid")] name: &str) -> Result<TempDir> {
         .create_dir("src")
         .context("create temporary source directory")?;
     handle
-        .write("docs/verification.md", fixture_text(name, "txt"))
+        .write("docs/verification.md", fixture_text(name, "txt")?)
         .context("write temporary verification ledger")?;
     handle
-        .write("src/kernel.rs", fixture_text(name, "rs"))
+        .write("src/kernel.rs", fixture_text(name, "rs")?)
         .context("write temporary source fixture")?;
     Ok(directory)
 }
@@ -85,7 +85,8 @@ struct FakeProverTools {
 
 fn fake_prover_tools(smoke_mode: &'static str) -> Result<FakeProverTools> {
     let directory = TempDir::new().context("create fake prover-tools directory")?;
-    let root = utf8(directory.path());
+    let root = utf8(directory.path())?;
+    let handle = open_dir(root)?;
     let path = root.join("prover-tools");
     let log_path = root.join("prover-tools.log");
     let script = r#"#!/usr/bin/env bash
@@ -105,8 +106,11 @@ if [[ "$*" == "verus run --repo-root . --proof-file verus/smoke.rs" ]]; then
     esac
 fi
 "#;
-    fs::write(&path, script).context("write fake prover-tools runner")?;
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o755))
+    handle
+        .write("prover-tools", script)
+        .context("write fake prover-tools runner")?;
+    handle
+        .set_permissions("prover-tools", Permissions::from_mode(0o755))
         .context("make fake prover-tools runner executable")?;
     Ok(FakeProverTools {
         _directory: directory,
@@ -133,7 +137,13 @@ fn make_command(target: &str, runner: &FakeProverTools) -> Command {
 }
 
 fn runner_log(runner: &FakeProverTools) -> Result<String> {
-    fs::read_to_string(&runner.log_path).context("read fake prover-tools log")
+    let root = runner
+        .path
+        .parent()
+        .context("fake prover-tools path has no parent")?;
+    open_dir(root)?
+        .read_to_string("prover-tools.log")
+        .context("read fake prover-tools log")
 }
 
 fn parse_workflow() -> Result<Value> {
@@ -274,7 +284,7 @@ fn ledger_check_requires_an_exact_declaration(
     materialised_ledger: Result<TempDir>,
 ) -> Result<()> {
     let directory = materialised_ledger?;
-    let output = run_ledger_check(utf8(directory.path()));
+    let output = run_ledger_check(utf8(directory.path())?);
 
     assert_eq!(
         output.status.code(),
