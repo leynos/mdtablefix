@@ -5,11 +5,14 @@
 //! process working directory, and the failure Git reports when it is handed a
 //! directory that no repository governs. The fixture drives `git` through
 //! [`git`], which hardens its own environment rather than inheriting the
-//! developer's — the adapter's env discipline is the subject of the sibling
-//! `git_ls_files_tests`, so the fixture is free to be stricter than it. It pins
-//! the branch name and commits nothing, so the settings that could perturb it
-//! are not in play, and the listing assertions are on the whole listing rather
-//! than on a subset, so a perturbation would be loud.
+//! developer's: the system configuration is disabled, the global configuration
+//! is pointed at an empty file, and the home directory, the locale, and the
+//! commit identity are the fixture's own. The adapter's env discipline is the
+//! subject of the sibling `git_ls_files_tests`, so the fixture is free to be
+//! stricter than it. It pins the branch name, and the one test that needs
+//! history commits under that supplied identity, so the settings that could
+//! perturb it are not in play, and the listing assertions are on the whole
+//! listing rather than on a subset, so a perturbation would be loud.
 //!
 //! The tracing assertions at the end read the events the adapter emits. They
 //! belong to the binary's test target rather than to `tests/`, because a

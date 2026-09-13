@@ -382,13 +382,9 @@ fn conditional_replacement_replaces_a_matching_target() {
     let capability =
         Dir::open_ambient_dir(root, ambient_authority()).expect("open the directory capability");
 
-    let replaced = replace_file_if_unchanged(
-        &capability,
-        Utf8Path::new("sample.md"),
-        original,
-        formatted,
-    )
-    .expect("replace the target that still matches");
+    let replaced =
+        replace_file_if_unchanged(&capability, Utf8Path::new("sample.md"), original, formatted)
+            .expect("replace the target that still matches");
 
     assert!(replaced, "a target holding what was read is replaced");
     assert_eq!(fs::read_to_string(&file).unwrap(), formatted);

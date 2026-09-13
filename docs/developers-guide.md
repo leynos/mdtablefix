@@ -49,13 +49,14 @@ The table reflow pipeline is split into small stages so continuation rows and
 separator rows can be handled without losing column structure.
 
 `parse_rows` stores each parsed cell in a private `Cell` value with a payload
-and `leading_empty` flag. `split_cells` scans escaped pipes directly, so neither
-escaping nor leading-empty state uses an in-band character. `parse_rows`
-preserves physical source-line boundaries and delegates logical-row recovery to
-`src/reflow/row_parsing.rs`. That module infers the expected table width,
-recognizes complete legacy rows concatenated on one physical line, and retains
-padded or trailing empty cells as cell data. `clean_rows` converts the private
-cells back to payload strings and removes rows that are entirely empty.
+and `leading_empty` flag. `split_cells` scans escaped pipes directly, so
+neither escaping nor leading-empty state uses an in-band character.
+`parse_rows` preserves physical source-line boundaries and delegates
+logical-row recovery to `src/reflow/row_parsing.rs`. That module infers the
+expected table width, recognizes complete legacy rows concatenated on one
+physical line, and retains padded or trailing empty cells as cell data.
+`clean_rows` converts the private cells back to payload strings and removes
+rows that are entirely empty.
 
 `calculate_widths` measures each column using Unicode display width so the
 formatter sizes columns according to the glyphs that will actually be emitted.
@@ -105,8 +106,7 @@ restores the separator row with widths derived from the final table body.
 - `formatting_closure(opts) -> impl Fn(&SourceDocument<'_>) -> String + Sync`
   builds the one formatter every mode shares. It renders the document's body
   through the pipeline and re-attaches the mark and the selected line ending,
-  so standard output, `--check`, `--diff`, and `--in-place` agree byte for
-  byte.
+  so standard output, `--check`, `--diff`, and `--in-place` agree byte for byte.
 - `format_lines(content, opts) -> Vec<String>` is the pure half of the
   boundary: it splits the body into lines and runs the transforms, leaving the
   terminator to the caller.
@@ -136,10 +136,11 @@ restores the separator row with widths derived from the final table body.
   the selection-only form of the same query, so the command boundaries can
   report the vote without restating the counting rule.
 - The counting query is pure and emits nothing. The report lives in the
-  boundary that acts on it: a private `report_line_endings(counts, operation,
-  path)` in `src/io/replace.rs`, called by `rewrite_with` with an `operation` of
-  `"rewrite"` or `"rewrite_no_wrap"` and always with the file's path; and,
-  because the binary is a separate crate and cannot reach that private helper,
+  boundary that acts on it: a private
+  `report_line_endings(counts, operation, path)` in `src/io/replace.rs`, called
+  by `rewrite_with` with an `operation` of `"rewrite"` or `"rewrite_no_wrap"`
+  and always with the file's path; and, because the binary is a separate crate
+  and cannot reach that private helper,
   `driver::report_line_endings(counts, operation, path)` in `src/driver.rs`,
   called by `driver::analyse` with `"file"` and the display path — the path the
   user wrote, not the bare name the capability reads by — and by `format_stdin`
@@ -155,13 +156,13 @@ restores the separator row with widths derived from the final table body.
   side-effecting.
 
 Detection runs on the raw document at each input boundary: `rewrite_with` in
-`src/io/replace.rs`, `driver::analyse` in `src/driver.rs`, and `format_stdin`
-in `src/main.rs`, each reporting through its own `report_line_endings` with the
-same message shape. The internal pipeline stays LF-only —
-`str::lines` strips each line's terminator before a transform sees it — and
-only the serializer re-applies the detected style. Standard input keeps its
-historical contract of printing one terminator even when it produces no lines,
-which `tests/parallel.rs` pins.
+`src/io/replace.rs`, `driver::analyse` in `src/driver.rs`, and `format_stdin` in
+`src/main.rs`, each reporting through its own `report_line_endings` with the
+same message shape. The internal pipeline stays LF-only — `str::lines` strips
+each line's terminator before a transform sees it — and only the serializer
+re-applies the detected style. Standard input keeps its historical contract of
+printing one terminator even when it produces no lines, which
+`tests/parallel.rs` pins.
 
 The mode selects behaviour rather than a formatting variant: every mode shares
 the one closure `formatting_closure` builds, and `driver::analyse` chooses what
@@ -179,20 +180,31 @@ filesystem access themselves.
   the target's permissions to the temporary file before the rename and clears a
   Windows destination's read-only attribute first, because that attribute
   blocks the rename. It attempts to remove the temporary file when a later step
-  fails. The CLI and `rewrite`/`rewrite_no_wrap` all call it, so the sequence
-  has one implementation.
+  fails. Both entry points call the one implementation, and the CLI and
+  `rewrite`/`rewrite_no_wrap` reach it through `replace_file_if_unchanged`.
+- `replace_file_if_unchanged(directory, path, expected, contents) -> std::io::Result<bool>`
+  writes exactly as `replace_file` does, except that after the temporary file
+  is written and flushed and immediately before the rename, it reads the target
+  back and compares it against `expected`. It returns `Ok(false)` when the
+  target no longer held `expected`: the target is left exactly as it is and the
+  temporary file is removed, and the caller decides what a target that moved on
+  means for its run. A target that cannot be read back at all is an `Err`: a
+  caller that asked a conditional question must not be told the condition
+  failed when the question could not be put. It is not a true compare-and-swap
+  — no supported platform's rename compares contents — but every window before
+  the rename, the whole formatting run, is closed.
 - `open_parent(path) -> std::io::Result<(Dir, Utf8PathBuf)>` is the library's
   only ambient filesystem boundary. It opens a directory capability for the
   target's parent and returns the target's file name relative to that
   capability.
 - `remove_failed_temporary_file(directory, temp_path)` is the `pub(super)`
-  helper `replace_file_inner` calls after any `write_and_swap` failure — a
-  write, flush or sync failure, or a failure inside the swap itself, not only
-  a failed rename — to remove the leftover temporary file via
-  `remove_temporary_file`. Best effort: it traces a removal that succeeds
-  (`trace!`); a removal that fails is logged at `debug` level and increments
-  `mdtablefix_io_temporary_cleanup_failures_total`, and is not returned, so
-  the caller still sees the original replacement failure; the `#[cfg(test)]`
+  helper `replace_inner` calls after any `write_and_swap` failure — a write,
+  flush or sync failure, or a failure inside the swap itself, not only a failed
+  rename — to remove the leftover temporary file via `remove_temporary_file`.
+  Best effort: it traces a removal that succeeds (`trace!`); a removal that
+  fails is logged at `debug` level and increments
+  `mdtablefix_io_temporary_cleanup_failures_total`, and is not returned, so the
+  caller still sees the original replacement failure; the `#[cfg(test)]`
   re-export in `src/io.rs` lets `src/io_metrics_failure_tests.rs` drive it
   directly.
 
@@ -235,8 +247,8 @@ filesystem access themselves.
   private subset to `ProcessBuffer::new`, keeping unrelated `Options` flags out
   of the buffer's interface.
 - `ProcessBuffer::new(&TableSubstitutions)`: Creates the stream-processing
-  buffer and records the substitutions that `flush` applies to table lines.
-  For a table run, `flush` applies code-emphasis repair first, then ellipsis
+  buffer and records the substitutions that `flush` applies to table lines. For
+  a table run, `flush` applies code-emphasis repair first, then ellipsis
   replacement, and only then calls `reflow_table`, so width measurement sees
   the final cell text in a deterministic order. The non-table branch emits
   buffered lines unchanged; the parent pipeline retains the existing
@@ -305,8 +317,7 @@ Re-use policy:
 - `driver::analyse` clones the caller's writable `Dir` capability with
   `try_clone` and wraps the clone as a `ReadOnlyDir`, so every mode reads
   through one type and only `Mode::InPlace` holds a capability that can write.
-  The clone is how the same directory handle serves both the read and the
-  write.
+  The clone is how the same directory handle serves both the read and the write.
 - Keep the read-only view on the type system. A convention can be broken by a
   later edit that never read the convention, and a runtime flag records a
   decision that a wrong branch can still make; a type with no write method
@@ -328,10 +339,10 @@ the defect this design exists to prevent.
 
 One closure behind both reporting modes and the writer is what makes `--check`
 and `--in-place` structurally unable to disagree: they assess the same bytes
-with the same formatter, so neither can report drift the other would not
-write, or leave a file the other reported. A mode with a second formatting
-route would drift from the writer by edits rather than by construction, which
-is the divergence the shared closure removes. See
+with the same formatter, so neither can report drift the other would not write,
+or leave a file the other reported. A mode with a second formatting route would
+drift from the writer by edits rather than by construction, which is the
+divergence the shared closure removes. See
 `docs/adrs/0009-check-and-diff-reporting.md`.
 
 The structure is necessary but not sufficient, and it is tested as well as
@@ -347,35 +358,38 @@ per transform flag, each measured to drift under the flag it is paired with.
 
 ### Explicit argument order
 
-`driver::in_argument_order(Vec<(usize, T)>) -> Vec<T>` sorts indexed results
-by their recorded index. `rayon`'s `ParallelIterator::collect` into a `Vec` is
-not documented to preserve input order, so a report list that relied on it
-could follow completion order instead of argument order, and the difference
-would be invisible on a machine that happened to finish in order. The index is
-captured by `par_iter().enumerate()` in `src/main.rs`'s `run_files`, and
+`driver::in_argument_order(Vec<(usize, T)>) -> Vec<T>` sorts indexed results by
+their recorded index. `rayon`'s `ParallelIterator::collect` into a `Vec` is not
+documented to preserve input order, so a report list that relied on it could
+follow completion order instead of argument order, and the difference would be
+invisible on a machine that happened to finish in order. The index is captured
+by `par_iter().enumerate()` in `src/main.rs`'s `run_files`, and
 `in_argument_order` restores the sequence explicitly. Because each index is
 unique, sorting on it is deterministic whatever order the workers produced.
 
 `tests/cli_check/ordering.rs`'s `reports_every_file_in_order` pins the
 sequence: its batch of eight files is in neither alphabetical nor size order,
 so a report list that came back sorted by file name, by file size, or by
-completion order is rejected rather than passing by luck. The plan records
-the reasoning as `AX-4`.
+completion order is rejected rather than passing by luck. The plan records the
+reasoning as `AX-4`.
 
 ## The binary's private driver
 
 `src/driver.rs` is declared `mod driver;` in `src/main.rs`, so it is not part
-of the published library. The library's entry points stay infallible and free
-of filesystem policy, while the CLI's exit-status contract, its directory
+of the published library. The library's formatting entry points return values,
+not `Result`s, and its filesystem entry points (`rewrite`, `rewrite_no_wrap`,
+`replace_file`, and `replace_file_if_unchanged`) are public and fallible,
+returning `std::io::Result`; the CLI's exit-status contract, its directory
 capabilities, and its `Mode`, `Inputs`, and `ExitStatus` types live in the
-binary.
+binary, which is what keeps the library free of CLI filesystem policy and
+exit-status handling.
 
-This placement is why the module can hold `anyhow` error types: its callers
-are the binary's own, so the module fails with context-rich errors and reports
-them at the command boundary. The public library keeps the formatting entry
-points and the report types (`mdtablefix::report` is public so a host can
-render a `FileReport` itself) and returns `std::io::Result` from its
-filesystem entry points rather than the binary's diagnostic error type.
+This placement is why the module can hold `anyhow` error types: its callers are
+the binary's own, so the module fails with context-rich errors and reports them
+at the command boundary. The public library keeps the formatting entry points
+and the report types (`mdtablefix::report` is public so a host can render a
+`FileReport` itself) and returns `std::io::Result` from its filesystem entry
+points rather than the binary's diagnostic error type.
 
 The unit tests live in three modules beside it: `src/driver_contract_tests.rs`
 covers the exit-status contract, `Inputs::resolve`, and `in_argument_order`;
@@ -393,8 +407,8 @@ contract is exercised end to end through the built binary by
 `src/command.rs` holds the clap surface, including the `ArgGroup`s and the
 post-parse check that the four git-only flags arrive with `--git`.
 `src/git_inputs.rs` is the composition root: it turns the command line into a
-selection question and the answer back into the paths `run_files` receives,
-and it is the one module that knows the whole selection tree at once.
+selection question and the answer back into the paths `run_files` receives, and
+it is the one module that knows the whole selection tree at once.
 `src/select.rs` and its submodules state and answer that question.
 
 ```text
@@ -411,9 +425,9 @@ Dependencies point inwards, in one direction only. `policy` names the
 so the rule it states can be read and tested without a filesystem; the adapters
 and the composition root depend on the policy, never the reverse. Nothing in
 the tree holds a directory capability: the paths it returns are relative to the
-working directory, and `main` opens each file's parent as it does for a path the
-user typed, so a `--git` run reaches the same capability-scoped writer as every
-other run.
+working directory, and `main` opens each file's parent as it does for a path
+the user typed, so a `--git` run reaches the same capability-scoped writer as
+every other run.
 
 The selection is tested at three levels. The sibling `*_tests.rs` files beside
 each module cover the policy and its adapters as unit tests, and the boundary
@@ -429,10 +443,10 @@ terminal depends on.
 
 Both fixture sets neutralize the ambient Git configuration
 (`GIT_CONFIG_NOSYSTEM`, `GIT_CONFIG_GLOBAL`, and `HOME`), so the developer's own
-`core.excludesFile` cannot change what is selected, and they supply the identity
-that `GIT_CONFIG_GLOBAL=/dev/null` would otherwise remove. No assertion quotes
-Git's own wording: this tool's text is the part under test, and Git's is relayed
-beside it rather than folded into it.
+`core.excludesFile` cannot change what is selected, and they supply the
+identity that `GIT_CONFIG_GLOBAL=/dev/null` would otherwise remove. No
+assertion quotes Git's own wording: this tool's text is the part under test,
+and Git's is relayed beside it rather than folded into it.
 
 ## HTML parser dependency coupling
 
@@ -524,26 +538,26 @@ depth-aware tracking.
    lines for ambiguity-preserving passthrough, and `synthetic_join_spaces`
    stores byte offsets for spaces inserted by continuation joining so only
    formatter-created code-span edge spaces are trimmed later. Subsequent source
-   lines are routed via `handle_pending_continuation` (in `src/wrap/pending.rs`)
-   instead of the normal wrapping path. `handle_pending_continuation`
-   classifies the line and delegates each soft-wrapped continuation chunk to
-   `apply_continuation_chunk` in `src/wrap/continuation.rs`, the module that
-   owns the join/update/dispatch state machine. Each continuation is joined onto
-   `pending_prefix.rest` via `join_pending_continuation`, which inserts a
-   space unless the continuation begins with the exact matching closing fence
-   (detected by `continuation_begins_with_closing_fence`). Blockquote
-   continuations are only joined when their prefix exactly matches the pending
-   prefix. After joining, `apply_continuation_chunk` consults
-   `update_span_state` to drive a `SpanStateUpdate` (`StillOpen`,
-   `ClosedAndReopened`, or `Flush`); when the same chunk both closes the
-   pre-existing span and opens a new one, the helper emits the closed prefix
-   segment and keeps the new span pending rather than inventing a closing fence.
-   `ParagraphState::drain_pending_prefix` takes that pending segment and
-   clears the regular paragraph buffers before final emission.
-   `PendingPrefix::used_prefix` tracks whether the original prefix has already
-   been emitted, and `pending_prefix_for_next_segment` uses it to give the
-   first split segment the original prefix and later split segments the
-   continuation indent. `TailReflow` records whether prose after a resolved
+   lines are routed via `handle_pending_continuation` (in
+   `src/wrap/pending.rs`) instead of the normal wrapping path.
+   `handle_pending_continuation` classifies the line and delegates each
+   soft-wrapped continuation chunk to `apply_continuation_chunk` in
+   `src/wrap/continuation.rs`, the module that owns the join/update/dispatch
+   state machine. Each continuation is joined onto `pending_prefix.rest` via
+   `join_pending_continuation`, which inserts a space unless the continuation
+   begins with the exact matching closing fence (detected by
+   `continuation_begins_with_closing_fence`). Blockquote continuations are only
+   joined when their prefix exactly matches the pending prefix. After joining,
+   `apply_continuation_chunk` consults `update_span_state` to drive a
+   `SpanStateUpdate` (`StillOpen`, `ClosedAndReopened`, or `Flush`); when the
+   same chunk both closes the pre-existing span and opens a new one, the helper
+   emits the closed prefix segment and keeps the new span pending rather than
+   inventing a closing fence. `ParagraphState::drain_pending_prefix` takes that
+   pending segment and clears the regular paragraph buffers before final
+   emission. `PendingPrefix::used_prefix` tracks whether the original prefix
+   has already been emitted, and `pending_prefix_for_next_segment` uses it to
+   give the first split segment the original prefix and later split segments
+   the continuation indent. `TailReflow` records whether prose after a resolved
    span may remain buffered for greedy reflow or must flush after an ambiguous
    close-and-reopen transition. If the opener is at or near the end of its
    source line, `PendingPrefix` marks subsequent continuations as verbatim, so
@@ -630,11 +644,10 @@ depth-aware tracking.
 
 Classified by `classify_block` when the stripped line matches
 `crate::breaks::THEMATIC_BREAK_RE`: three or more `-`, `*`, or `_` characters,
-including spaced runs such as `- - -`. The check outranks bullet
-classification because `BULLET_RE` also matches spaced runs. A thematic break
-passes through wrapping on its own line and never enters paragraph
-accumulation. Table separator rows such as `|---|` contain pipes and remain
-table rows.
+including spaced runs such as `- - -`. The check outranks bullet classification
+because `BULLET_RE` also matches spaced runs. A thematic break passes through
+wrapping on its own line and never enters paragraph accumulation. Table
+separator rows such as `|---|` contain pipes and remain table rows.
 
 **`BlockKind::LinkReferenceDefinition`**
 
@@ -847,12 +860,11 @@ and `metrics-util = "0.20"` are test-only dev-dependencies; use them only in
 tests (e.g. `DebuggingRecorder`). Traced tests should use the in-repo
 `test_macros::traced_test` rather than `tracing_test::traced_test` directly,
 because it rebuilds the `tracing` interest cache after the subscriber is
-installed, so a callsite first used before that install cannot remain cached
-as `Interest::never()` and lose the test's log lines (see
-`test-macros/src/lib.rs` for the full rationale). The crate does not install a
-global subscriber or metrics recorder. Executables and test harnesses that want
-log output must install their own subscriber (e.g.
-`tracing_subscriber::fmt::init()` in `main`).
+installed, so a callsite first used before that install cannot remain cached as
+`Interest::never()` and lose the test's log lines (see `test-macros/src/lib.rs`
+for the full rationale). The crate does not install a global subscriber or
+metrics recorder. Executables and test harnesses that want log output must
+install their own subscriber (e.g. `tracing_subscriber::fmt::init()` in `main`).
 
 `Cargo.toml` also declares `googletest = "0.14"` and `pretty_assertions = "1"`
 as dev-dependencies, though neither has a use site in the tree today. They are
@@ -879,10 +891,10 @@ Blockquote and fence events additionally use `line_len`, `prefix_len`, `depth`,
 Line-ending events use `crlf_count`, `lone_lf_count`, and `selected_ending`,
 and every reporting boundary adds `operation` and, for a file, `path` (the
 library rewrite reports both; standard input has no path). The binary's
-per-file analysis span adds `mode`, `outcome`, and `elapsed_seconds`.
-These events are content-free: never include raw Markdown, blockquote
-prefixes, fence info strings, or other document content. Executables remain
-responsible for installing subscribers.
+per-file analysis span adds `mode`, `outcome`, and `elapsed_seconds`. These
+events are content-free: never include raw Markdown, blockquote prefixes, fence
+info strings, or other document content. Executables remain responsible for
+installing subscribers.
 
 Blockquote parsing emits `blockquote prefix parsed` or
 `blockquote prefix rejected`. Fence tracking emits `fence state changed` with
@@ -892,10 +904,10 @@ corresponding `reason` values are `no_blockquote_prefix`,
 `blockquote_depth_decreased`, and `incompatible_active_opener`.
 
 The in-place rewrite in `src/io/replace.rs` follows the same discipline.
-`replace_file` carries a `debug` span whose only field is the target `path`.
-The `path` field is span metadata rather than a metric label, and the
-replacement path's metrics use only fixed label values, so target paths cannot
-create unbounded metric cardinality; the crate installs no recorder. Inside it,
+`replace_file` carries a `debug` span whose only field is the target `path`. The
+`path` field is span metadata rather than a metric label, and the replacement
+path's metrics use only fixed label values, so target paths cannot create
+unbounded metric cardinality; the crate installs no recorder. Inside it,
 `target metadata read` (trace), `temporary file created` (debug, with
 `attempt`), `temporary file written` (debug, with `bytes`),
 `temporary file synced` (debug), `destination read-only attribute cleared`
@@ -906,13 +918,12 @@ every platform), and `target replaced` (debug) mark the success path;
 `reason = "already_exists"`) marks the retry path;
 `temporary file removed after failure` (trace), `temporary file cleanup failed`
 (debug, with `error_category` from `io::ErrorKind`), and
-`temporary file mode could not be cleared` (debug, with
-`error_category` from `io::ErrorKind`, on Windows, where a read-only
-temporary file has its attribute cleared before it can be deleted)
-mark the cleanup path; and `rewrite declined` (debug, with
-`error_category = "symlink_target"`) marks a symbolic-link target.
-`replacement failed` (debug, with `error_category` from `io::ErrorKind`)
-marks a failed metadata read, temporary-file creation, or write/swap.
+`temporary file mode could not be cleared` (debug, with `error_category` from
+`io::ErrorKind`, on Windows, where a read-only temporary file has its attribute
+cleared before it can be deleted) mark the cleanup path; and `rewrite declined`
+(debug, with `error_category = "symlink_target"`) marks a symbolic-link target.
+`replacement failed` (debug, with `error_category` from `io::ErrorKind`) marks
+a failed metadata read, temporary-file creation, or write/swap.
 `destination mode restore failed` (debug, with `error_category` from
 `io::ErrorKind`) marks a swap that failed after the destination's read-only
 attribute had been cleared and whose original attribute could not be put back;
@@ -935,28 +946,28 @@ line-ending report this analysis emits carries `"file"`.
 
 Table: Structured field names emitted by tracing instrumentation.
 
-| Field             | Type            | Used in                                                 | Meaning                                                     |
-| ----------------- | --------------- | ------------------------------------------------------- | ----------------------------------------------------------- |
-| `token_length`    | `usize`         | fragment, link, footnote events                         | Character count of the text that was classified or parsed   |
-| `kind`            | `?FragmentKind` | `fragment classified`                                   | The computed fragment classification                        |
-| `start`           | `usize`         | span events                                             | Byte offset where the span begins                           |
-| `end`             | `usize`         | span events                                             | Byte offset where the span ends (exclusive)                 |
-| `width`           | `usize`         | span events                                             | Display-column width of the span                            |
-| `reason`          | `&str`          | rejected, unchanged, or fence-state decisions           | Stable diagnostic category for any decision                 |
-| `is_image`        | `bool`          | `link or image parsed`                                  | `true` when the link token is an image literal (`![]()`)    |
-| `row_index`       | `usize`         | table-row events                                        | Zero-based index of the parsed logical row                  |
-| `cell_count`      | `usize`         | table-row events                                        | Number of cells in the parsed logical row                   |
-| `error_category`  | `&str`, Debug   | declined, discarded, replacement, and analysis failures | Stable category or I/O error kind for a failure             |
-| `attempt`         | `u32`           | `replace_file` events                                   | Zero-based index of the temporary-file creation attempt     |
-| `bytes`           | `usize`         | `replace_file` events                                   | Byte length of the formatted replacement that was written   |
-| `line_len`        | `usize`         | blockquote-prefix events                                | Byte length of the examined source line                     |
-| `prefix_len`      | `usize`         | blockquote-prefix events                                | Byte length of the recognized blockquote prefix             |
-| `depth`           | `usize`         | blockquote and fence events                             | Current blockquote nesting depth                            |
-| `inner_len`       | `usize`         | blockquote-prefix events                                | Byte length after removing the blockquote prefix            |
-| `open_depth`      | `usize`         | fence-state events                                      | Blockquote depth of the active fence opener                 |
-| `marker_len`      | `usize`         | fence-state events                                      | Length of the currently recognized fence marker             |
-| `open_marker_len` | `usize`         | fence-state events                                      | Length of the active opening fence marker                   |
-| `transition`      | `&str`          | fence-state events                                      | Stable fence-state transition category                      |
+| Field             | Type            | Used in                                                 | Meaning                                                   |
+| ----------------- | --------------- | ------------------------------------------------------- | --------------------------------------------------------- |
+| `token_length`    | `usize`         | fragment, link, footnote events                         | Character count of the text that was classified or parsed |
+| `kind`            | `?FragmentKind` | `fragment classified`                                   | The computed fragment classification                      |
+| `start`           | `usize`         | span events                                             | Byte offset where the span begins                         |
+| `end`             | `usize`         | span events                                             | Byte offset where the span ends (exclusive)               |
+| `width`           | `usize`         | span events                                             | Display-column width of the span                          |
+| `reason`          | `&str`          | rejected, unchanged, or fence-state decisions           | Stable diagnostic category for any decision               |
+| `is_image`        | `bool`          | `link or image parsed`                                  | `true` when the link token is an image literal (`![]()`)  |
+| `row_index`       | `usize`         | table-row events                                        | Zero-based index of the parsed logical row                |
+| `cell_count`      | `usize`         | table-row events                                        | Number of cells in the parsed logical row                 |
+| `error_category`  | `&str`, Debug   | declined, discarded, replacement, and analysis failures | Stable category or I/O error kind for a failure           |
+| `attempt`         | `u32`           | `replace_file` events                                   | Zero-based index of the temporary-file creation attempt   |
+| `bytes`           | `usize`         | `replace_file` events                                   | Byte length of the formatted replacement that was written |
+| `line_len`        | `usize`         | blockquote-prefix events                                | Byte length of the examined source line                   |
+| `prefix_len`      | `usize`         | blockquote-prefix events                                | Byte length of the recognized blockquote prefix           |
+| `depth`           | `usize`         | blockquote and fence events                             | Current blockquote nesting depth                          |
+| `inner_len`       | `usize`         | blockquote-prefix events                                | Byte length after removing the blockquote prefix          |
+| `open_depth`      | `usize`         | fence-state events                                      | Blockquote depth of the active fence opener               |
+| `marker_len`      | `usize`         | fence-state events                                      | Length of the currently recognized fence marker           |
+| `open_marker_len` | `usize`         | fence-state events                                      | Length of the active opening fence marker                 |
+| `transition`      | `&str`          | fence-state events                                      | Stable fence-state transition category                    |
 
 For example:
 
@@ -970,24 +981,27 @@ The in-place replacement in `src/io/replace.rs` emits five counters and one
 histogram through the `metrics` façade. `describe_metrics` registers their
 descriptions exactly once per process behind a `std::sync::OnceLock`.
 
-- `mdtablefix_io_replace_total` increments once per `replace_file` call and
-  carries one label, `outcome`, with the value `success` or `failure`.
+- `mdtablefix_io_replace_total` increments once per replacement, whichever
+  entry point made it, and carries one label, `outcome`, with the value
+  `success`, `unchanged`, or `failure`. `unchanged` is a conditional
+  replacement whose condition did not hold (`Ok(false)`): the target no longer
+  held the text it was read as, so nothing was written.
 - `mdtablefix_io_replace_duration_seconds` is a histogram of replacement
   durations in seconds, with the unit declared by `metrics::Unit::Seconds`. It
-  is recorded once per `replace_file` call with the same `outcome` label as
-  `mdtablefix_io_replace_total`. Failures are recorded too, so a replacement
-  that stalls before it fails is visible rather than missing from the
-  distribution.
+  is recorded once per replacement, from either entry point, with the same
+  `outcome` label as `mdtablefix_io_replace_total`. Failures are recorded too,
+  so a replacement that stalls before it fails is visible rather than missing
+  from the distribution.
 - `mdtablefix_io_temporary_name_collisions_total` counts each candidate
   temporary name rejected because it was already taken. It carries no labels.
 - `mdtablefix_io_temporary_name_exhausted_total` counts each replacement
   abandoned when all 16 candidate names are taken. It carries no labels.
 - `mdtablefix_io_temporary_cleanup_failures_total` counts each temporary file
-  a failed replacement could not remove. It carries no labels: the replacement
-  is already reported as a `failure` by `mdtablefix_io_replace_total`. The
-  cleanup is best effort, so a failure to clean up never masks the reason the
-  replacement failed, and the count is the only signal that a stale temporary
-  file was left beside the target.
+  a replacement that did not complete could not remove. It carries no labels:
+  the replacement is already reported, as `failure` or as `unchanged`, by
+  `mdtablefix_io_replace_total`. The cleanup is best effort, so a failure to
+  clean up never masks the reason the replacement failed, and the count is the
+  only signal that a stale temporary file was left beside the target.
 - `mdtablefix_io_symlink_declined_total` counts each symbolic-link target
   declined with `InvalidInput` before any temporary file was created. It
   carries no labels, and separates that decline from the other ways a
@@ -1006,14 +1020,15 @@ unless a host wires one in.
 
 `src/io_metrics_tests.rs` uses `metrics_util::debugging::DebuggingRecorder`
 through `metrics::with_local_recorder` on the test thread and asserts the
-emitted metric names, the counts for a success, for an occupied candidate
-name, for an exhausted name space, for a declined symbolic link, and for a
-temporary file the cleanup could not remove, plus the bounded label set: only
-the `outcome` key, with only the values `success` and `failure`. The tests
-also assert that each counter carries a description, that the histogram's
-declared unit is seconds, and that exactly one sample is recorded per
-replacement for both the `success` and `failure` outcomes. The symbolic-link
-case is Unix-only, like the repository's other symlink tests.
+emitted metric names, the counts for a success, for a conditional replacement
+that declined as `unchanged`, for an occupied candidate name, for an exhausted
+name space, for a declined symbolic link, and for a temporary file the cleanup
+could not remove, plus the bounded label set: only the `outcome` key, with only
+the values `success`, `unchanged`, and `failure`. The tests also assert that
+each counter carries a description, that the histogram's declared unit is
+seconds, and that exactly one sample is recorded per replacement for each of the
+`success`, `unchanged`, and `failure` outcomes. The symbolic-link case is
+Unix-only, like the repository's other symlink tests.
 
 #### Binary metrics
 
@@ -1102,8 +1117,8 @@ are caught in review. These tests live next to the instrumented code:
 
 Each is wired into its owning module as a `#[cfg(test)]` `#[path = "…"]`
 submodule so the snapshot test sits beside the code it pins while keeping the
-production module within the 400-line limit. The `.snap` fixtures live under the
-neighbouring `snapshots/` directory.
+production module within the 400-line limit. The `.snap` fixtures live under
+the neighbouring `snapshots/` directory.
 
 A test captures events with the in-repo `test_macros::traced_test` attribute,
 then normalizes the captured lines through the shared
@@ -1117,14 +1132,14 @@ context, which would make raw snapshots non-deterministic.
 `normalise_event_lines(lines, message)` retains only the lines containing
 `message`, strips the volatile prefix up to the event level (`TRACE`/`DEBUG`),
 trims trailing whitespace, and joins the survivors. The level, target, message,
-and structured fields are preserved verbatim, so the snapshot still fails if any
-of those change.
+and structured fields are preserved verbatim, so the snapshot still fails if
+any of those change.
 
 Re-use policy for this helper:
 
-- **Ownership.** Owned by the wrap module (`src/wrap/tracing_snapshot_support.rs`)
-  and gated behind `#[cfg(test)]`; it is `pub(crate)` test-support code, not part
-  of any public or runtime API.
+- **Ownership.** Owned by the wrap module
+  (`src/wrap/tracing_snapshot_support.rs`) and gated behind `#[cfg(test)]`; it
+  is `pub(crate)` test-support code, not part of any public or runtime API.
 - **Permitted call-sites.** Only tracing-event snapshot tests. Call it from
   inside a `test_macros::traced_test` function through the injected
   `logs_assert` closure, copying the normalized result into an owned buffer
@@ -1204,8 +1219,8 @@ It follows these rules:
    though a run of underscores or hyphens matches the specifier pattern. The
    guard is `is_thematic_break`, whose predicate is deliberately identical to
    the one `format_breaks` uses, so a line the fences pass declines to attach
-   is exactly a line `format_breaks` rewrites. The break line and any
-   buffered blank lines are emitted unchanged.
+   is exactly a line `format_breaks` rewrites. The break line and any buffered
+   blank lines are emitted unchanged.
 
 This structure keeps the one non-trivial lookahead path local to the helper
 instead of spreading it between the main loop and several index-based search
@@ -1240,8 +1255,8 @@ that echoes the file it reports echoes the same name in every snapshot. The
 is what keeps a reporting snapshot free to claim the file was not written.
 
 The base catalogue lives in
-[tests/cli_matrix/cases.rs](../tests/cli_matrix/cases.rs). It covers the
-seven non-wrap transform flags:
+[tests/cli_matrix/cases.rs](../tests/cli_matrix/cases.rs). It covers the seven
+non-wrap transform flags:
 
 - `--renumber`
 - `--breaks`
@@ -1481,8 +1496,8 @@ by which other tests the harness happens to run alongside it.
 The wrapper prepends `::tracing::callsite::rebuild_interest_cache();` to the
 function body and re-emits `#[::tracing_test::traced_test]`. `tracing-test`
 prepends its own initialization to whatever body it is given, so the rebuild
-always runs after the install. The ordering is therefore structural rather
-than dependent on the test author writing calls in the right order. The full
+always runs after the install. The ordering is therefore structural rather than
+dependent on the test author writing calls in the right order. The full
 rationale is in the macro's doc comment in `test-macros/src/lib.rs`.
 
 Apply it to any test that asserts on its own log lines:
@@ -1507,9 +1522,9 @@ mod tests;
 
 `src/headings.rs`, `src/io.rs`, and `src/main.rs` use this shape, as do the
 tracing-snapshot modules listed under
-[Tracing-event snapshot tests](#tracing-event-snapshot-tests). The
-moved tests keep their original paths (`io::tests::…`), and `super` still
-resolves to the owning module, so unqualified access to its items is unchanged.
+[Tracing-event snapshot tests](#tracing-event-snapshot-tests). The moved tests
+keep their original paths (`io::tests::…`), and `super` still resolves to the
+owning module, so unqualified access to its items is unchanged.
 
 ### 2.5. Platform portability of the test suite
 
@@ -1530,12 +1545,12 @@ Windows-only failure. The committed snapshots under `tests/snapshots/`
 therefore carry `status: code: 0`, or `status: code: 1` where a reporting mode
 is asked about a file that drifts.
 
-`tests/static_regex_lint.rs` is gated whole-file with `#![cfg(unix)]`. The guard
-it drives is a `bash` script that shells out to ripgrep, and the tests stand in
-for ripgrep with stub scripts that have to carry the executable bit; on Windows
-the target compiles to an empty binary rather than failing. Nothing goes
-unguarded on that account: the Linux lint job runs the same script over the same
-sources through the `check-static-regexes` Makefile target.
+`tests/static_regex_lint.rs` is gated whole-file with `#![cfg(unix)]`. The
+guard it drives is a `bash` script that shells out to ripgrep, and the tests
+stand in for ripgrep with stub scripts that have to carry the executable bit;
+on Windows the target compiles to an empty binary rather than failing. Nothing
+goes unguarded on that account: the Linux lint job runs the same script over
+the same sources through the `check-static-regexes` Makefile target.
 
 A narrower gate follows the same reasoning one item down. `#[cfg(unix)]` on a
 test removes that test from a Windows build, so it has to own every symbol that
@@ -1558,17 +1573,17 @@ definitions are in `tests/steps/reporting.rs`, declared by the bindings as a
 Conventions:
 
 - The step definitions must be declared before the bindings. The step registry
-  is populated as macros expand, so a binding that expanded first would not
-  yet see them, and `strict-compile-time-validation` would report every step
-  as missing.
+  is populated as macros expand, so a binding that expanded first would not yet
+  see them, and `strict-compile-time-validation` would report every step as
+  missing.
 - Both feature files share one set of steps because they describe one analysis
   with two renderings. A step that differed between them would be exactly the
   place the two modes could silently diverge.
 - Each scenario has its own `ReportingState` fixture, built by the `state`
   fixture in `tests/bdd_reporting.rs` and injected through `#[from(state)]`.
   The state holds `Slot` fields, so a step borrows the whole state immutably
-  and fills one slot, which is what lets `Given`, `When`, and `Then` share
-  data without a mutable borrow crossing a step boundary. The state covers the
+  and fills one slot, which is what lets `Given`, `When`, and `Then` share data
+  without a mutable borrow crossing a step boundary. The state covers the
   scenario's temporary directory, the files as named in argument order, and the
   directory fingerprint from before a run through to the most recent `Run`, or
   the outputs when a scenario repeats the run.
@@ -1582,8 +1597,8 @@ Conventions:
   the run and compare it afterwards.
 - [docs/rstest-bdd-users-guide.md](rstest-bdd-users-guide.md) is vendored in
   this repository. It records the framework conventions and the
-  `strict-compile-time-validation` feature that
-  `rstest-bdd-macros` is pinned with in `Cargo.toml`.
+  `strict-compile-time-validation` feature that `rstest-bdd-macros` is pinned
+  with in `Cargo.toml`.
 
 ### 2.7. Build and test requirements
 
@@ -1602,9 +1617,9 @@ the integration binaries under `tests/`, and the compile fixtures driven by
 `tests/compile.rs` — with every feature enabled. The second is not redundant:
 documentation tests are not part of `--all-targets`, so `--doc` is the only
 invocation that compiles and runs the examples in doc comments, including those
-on `mdtablefix::report` and `mdtablefix::io::SourceDocument`. Because both
-carry `-D warnings`, a warning raised while compiling a test target or a
-doctest fails the gate rather than scrolling past.
+on `mdtablefix::report` and `mdtablefix::io::SourceDocument`. Because both carry
+`-D warnings`, a warning raised while compiling a test target or a doctest
+fails the gate rather than scrolling past.
 
 The other two commit gates are `make check-fmt` (`cargo fmt --all -- --check`)
 and `make lint` (`cargo clippy --all-targets --all-features -- -D warnings`).
@@ -1633,6 +1648,11 @@ checkout:
   copying the `target/` directory, which the configuration records as 15 GB
   here. The scratch tree is reused within a run, so the cold dependency build
   is paid once rather than once per mutant.
+- `gitignore = true` makes `cargo-mutants` honour `.gitignore` when it builds
+  its scratch tree, so ignored build artefacts and mutation output are not
+  copied into it. Stated rather than assumed: a copy that ignored `.gitignore`
+  would try to copy `target/`, which is 15 GB here, and would copy the scratch
+  tree into itself if `TMPDIR` were ever set inside the worktree again.
 
 Two Makefile variables can be overridden on the command line:
 
@@ -1643,18 +1663,17 @@ Two Makefile variables can be overridden on the command line:
   tree under test, and it names the worktree so two runs cannot collide:
   `cargo-mutants`' child processes run inside the scratch copy, where a
   relative path would not resolve, and a suite whose temporary directories
-  landed inside this repository would fail the `--git` scenarios that assert
-  on being outside one.
+  landed inside this repository would fail the `--git` scenarios that assert on
+  being outside one.
 
 The tool reports each mutant as caught, missed, or unviable. A `caught` mutant
 is one that made the suite fail, which is the wanted outcome. A `missed` mutant
 compiled and survived the suite: the tests do not observe the behaviour the
-mutation changed, and the mutant is listed in
-`target/mutants.out/missed.txt`. An `unviable` mutant did not build, so no
-test could have caught it; the tool counts those apart from the survivors
-rather than among them. The selection tree's acceptance criterion is an empty
-`missed.txt`: a surviving mutant in `src/select/**` is a gate failure, not a
-warning.
+mutation changed, and the mutant is listed in `target/mutants.out/missed.txt`.
+An `unviable` mutant did not build, so no test could have caught it; the tool
+counts those apart from the survivors rather than among them. The selection
+tree's acceptance criterion is an empty `missed.txt`: a surviving mutant in
+`src/select/**` is a gate failure, not a warning.
 
 #### `similar`
 
@@ -1676,26 +1695,26 @@ file stays bounded without a wall-clock cut-off.
 
 ### 2.6. Deterministic failure seams
 
-The replacement tests drive two `#[cfg(test)]`-only, per-thread seams defined
-in `src/io/swap.rs`:
+The replacement tests drive two `#[cfg(test)]`-only, per-thread seams defined in
+`src/io/swap.rs`:
 
 - `rename_failure_seam` fails the rename half of the swap.
 - `cleanup_failure_seam` fails the removal of the temporary file a failed
   replacement left behind.
 
-Each seam is a `thread_local!` flag with an `arm()` that sets it and returns
-an RAII guard, and a `take()` that consumes the arming and reports whether
-this call must fail. Dropping the guard disarms the seam, so a failing
-assertion cannot leave the failure armed for whatever runs next on that
-thread; because `take()` clears the flag, arming fails exactly one call.
+Each seam is a `thread_local!` flag with an `arm()` that sets it and returns an
+RAII guard, and a `take()` that consumes the arming and reports whether this
+call must fail. Dropping the guard disarms the seam, so a failing assertion
+cannot leave the failure armed for whatever runs next on that thread; because
+`take()` clears the flag, arming fails exactly one call.
 
 They exist because the failures they stand in for cannot be forced
 deterministically on every platform. A rename a test can make fail for real
 fails before the destination is prepared, so the rollback in `swap_into_place`
 would otherwise be unreachable. A permission bit that denies the removal is
 ignored by a run as root, and an occupied temporary name is simply retried
-past: candidate names are a pure function of the target, the process id and
-the attempt, so `create_temporary_file` advances to the next one.
+past: candidate names are a pure function of the target, the process id and the
+attempt, so `create_temporary_file` advances to the next one.
 
 The seams are re-exported under `#[cfg(test)]` in `src/io.rs`.
 `src/io_metrics_failure_tests.rs` arms both and drives `rewrite`, so the

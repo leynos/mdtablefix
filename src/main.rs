@@ -33,7 +33,7 @@ mod select;
 use command::{Cli, FormatOpts, format_lines, formatting_closure};
 use driver::{ExitStatus, Formatter, Inputs, Mode, analyse, exit_status, in_argument_order};
 use metrics::{record_analysis, record_run};
-use select::conflict::ConflictGuard;
+use select::ConflictGuard;
 
 /// Opens a file's parent directory and returns its relative UTF-8 path.
 ///

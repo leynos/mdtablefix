@@ -11,9 +11,9 @@
 //! `git ls-files`, and [`git_output`] turns what `git` wrote into types this
 //! crate owns. [`git_failure`] is what an invocation that did not succeed
 //! means to the user who reads it and to the host that charts it. [`conflict`]
-//! holds the two predicates that keep a rewrite from corrupting an in-progress
-//! merge resolution. [`extensions`] parses and matches `--md-exts` values and
-//! knows nothing of either.
+//! owns pure conflict policy and [`repository_state`] adapts the Git directory
+//! to it at the write boundary. [`extensions`] parses and matches `--md-exts`
+//! values and knows nothing of either.
 
 // `pub(crate)`, not `pub`: the tree is binary-private, and the composition root
 // is a sibling module rather than a descendant, so it needs the path to reach
@@ -25,3 +25,10 @@ pub(crate) mod git_failure;
 pub(crate) mod git_ls_files;
 pub(crate) mod git_output;
 pub(crate) mod policy;
+pub(crate) mod repository_state;
+
+pub(crate) use repository_state::ConflictGuard;
+
+#[cfg(test)]
+#[path = "select/conflict_tests.rs"]
+mod conflict_tests;

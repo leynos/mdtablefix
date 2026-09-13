@@ -15,7 +15,7 @@ use tempfile::tempdir;
 use super::{driver, format_stdin, open_file_parent, render_stdin_output};
 use crate::{
     command::{FormatOpts, formatting_closure},
-    select::conflict::ConflictGuard,
+    select::ConflictGuard,
 };
 
 /// Formats a capability-scoped file without modifying it.

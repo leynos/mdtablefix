@@ -13,10 +13,14 @@ use rstest::rstest;
 
 use super::{
     ConflictGuard,
-    has_conflict_markers,
-    marker_present,
-    opened_directory,
-    operation_in_progress,
+    conflict::{
+        ConflictMarkerState,
+        RepositoryOperationState,
+        has_conflict_markers,
+        marker_state,
+        refuses,
+    },
+    repository_state::{marker_present, opened_directory, operation_in_progress},
 };
 
 /// A temporary directory, its path, and the capability the scan reads it
@@ -133,8 +137,14 @@ fn a_conflicted_file_is_refused_only_mid_operation_and_without_the_override(
         "| A | B |\n"
     };
 
+    let markers = marker_state(content);
+    let state = if markers == ConflictMarkerState::Present {
+        guard.operation_state().expect("read the repository")
+    } else {
+        RepositoryOperationState::Idle
+    };
     assert_eq!(
-        guard.refuses(content).expect("read the repository"),
+        refuses(markers, state),
         expected,
         "guarding={guarding:?} conflicted={conflicted}"
     );
@@ -145,9 +155,12 @@ fn a_conflicted_file_is_refused_only_mid_operation_and_without_the_override(
 /// `--allow-conflicted` — from spawning `git` for the guard.
 #[test]
 fn the_unguarded_run_refuses_nothing() {
-    let refused = ConflictGuard::unguarded()
-        .refuses(CONFLICTED)
-        .expect("the unguarded guard asks nothing");
+    let refused = refuses(
+        marker_state(CONFLICTED),
+        ConflictGuard::unguarded()
+            .operation_state()
+            .expect("the unguarded guard asks nothing"),
+    );
 
     assert!(!refused);
 }
@@ -165,10 +178,17 @@ fn a_document_without_markers_never_asks_the_repository() {
         .write("not-a-directory", "")
         .expect("create a file where a Git directory was expected");
     let git_dir = root.join("not-a-directory");
+    let guard = ConflictGuard::guarded(&git_dir);
+    let markers = marker_state("| A | B |\n");
+    let state = if markers == ConflictMarkerState::Present {
+        guard
+            .operation_state()
+            .expect("a document without markers must not ask the repository")
+    } else {
+        RepositoryOperationState::Idle
+    };
 
-    let refused = ConflictGuard::guarded(&git_dir)
-        .refuses("| A | B |\n")
-        .expect("a document without markers must not ask the repository");
+    let refused = refuses(markers, state);
 
     assert!(!refused);
 }
@@ -190,7 +210,8 @@ enum Marker {
 fn an_in_progress_operation_is_detected(#[case] marker: Marker) {
     let (_temporary, git_dir, directory) = git_dir_fixture();
     assert!(
-        !operation_in_progress(&git_dir).expect("read the idle fixture"),
+        operation_in_progress(&git_dir).expect("read the idle fixture")
+            == RepositoryOperationState::Idle,
         "the fixture must start idle"
     );
 
@@ -201,7 +222,8 @@ fn an_in_progress_operation_is_detected(#[case] marker: Marker) {
     .expect("create the marker");
 
     assert!(
-        operation_in_progress(&git_dir).expect("read the marked fixture"),
+        operation_in_progress(&git_dir).expect("read the marked fixture")
+            == RepositoryOperationState::InProgress,
         "{marker:?} must signal an operation in progress"
     );
 }
@@ -222,7 +244,8 @@ fn an_idle_git_directory_is_not_mid_operation() {
     }
 
     assert!(
-        !operation_in_progress(&git_dir).expect("read the idle repository"),
+        operation_in_progress(&git_dir).expect("read the idle repository")
+            == RepositoryOperationState::Idle,
         "a directory holding the entries an idle repository holds is not mid-operation"
     );
 }

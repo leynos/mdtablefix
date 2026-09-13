@@ -134,7 +134,7 @@ _Table 1: Comparison of file-selection designs._
 
 ## Decision outcome
 
-Option A. The command line gains one flag that selects, four that modify the
+Option A. The command line gains one flag that selects, three that modify the
 selection, and one mode that reports it:
 
 - `--git` selects the files Git reports beneath the current directory.
@@ -186,23 +186,23 @@ ASCII case-insensitively, with a leading dot accepted — and the probe reports 
 regular file. An absent candidate (a staged deletion), a symbolic link, a
 candidate whose canonical path leaves the working directory — what a symlinked
 ancestor produces — and anything else are skipped silently, because each is an
-ordinary repository state rather than a user error, and writing a candidate that
-leaves the working directory would write outside the tree the selection was made
-in. Each of those is an _answer_: the probe says what the candidate is and the
-policy has a rule for it. A candidate the probe cannot classify at all — a
-permission failure, a path whose ancestor is a file, a symbolic-link loop among
-the ancestors — is a question that went unasked, and the selection stops with
-the path named rather than returning the candidates it did manage to read: a run
-that cannot classify one candidate cannot say which set it is about to format.
-Telling an absence from a failure to classify is not a matter of reading the
-failure: Windows reports a path beneath a regular file with the same `NOT_FOUND`
-as a path that is gone, where Unix reports `ENOTDIR`, so the probe asks the
-candidate's nearest existing ancestor rather than trusting the leaf's own error.
-A path that stops at something other than a directory is `NotADirectory` on
-either platform, and a path no part of which exists is the absence the selection
-skips. The probe's answer carries a `FileIdentity`,
-which is the canonicalized path: two names for one file collapse, and two hard
-links to one inode do not. Keying identity on `(st_dev, st_ino)` would be the
+ordinary repository state rather than a user error, and writing a candidate
+that leaves the working directory would write outside the tree the selection
+was made in. Each of those is an _answer_: the probe says what the candidate is
+and the policy has a rule for it. A candidate the probe cannot classify at all
+— a permission failure, a path whose ancestor is a file, a symbolic-link loop
+among the ancestors — is a question that went unasked, and the selection stops
+with the path named rather than returning the candidates it did manage to read:
+a run that cannot classify one candidate cannot say which set it is about to
+format. Telling an absence from a failure to classify is not a matter of
+reading the failure: Windows reports a path beneath a regular file with the same
+`NOT_FOUND` as a path that is gone, where Unix reports `ENOTDIR`, so the probe
+asks the candidate's nearest existing ancestor rather than trusting the leaf's
+own error. A path that stops at something other than a directory is
+`NotADirectory` on either platform, and a path no part of which exists is the
+absence the selection skips. The probe's answer carries a `FileIdentity`, which
+is the canonicalized path: two names for one file collapse, and two hard links
+to one inode do not. Keying identity on `(st_dev, st_ino)` would be the
 opposite mistake, because `--in-place` replaces a file through a temporary file
 and a rename, so formatting one of a pair of hard links would leave the other
 pointing at the stale, unformatted content.
@@ -219,13 +219,13 @@ cannot be read.
 `--git` and the positional `files` are alternatives in one clap argument group,
 so they are mutually exclusive and `--in-place` is satisfied by either; a
 positional path that no mode flag consumes is still a path to print. The four
-selection modifiers that only make sense under `--git` are checked after
-parsing rather than by `requires = "git"`, because on clap 4.6.6 that attribute
-is unreliable for a valueless flag when a `Vec` positional shares the group:
-`--list-files a.md` was accepted with no `--git` in sight. The post-parse check
-raises a clap error, so the exit status and the usage footer remain clap's, and
-`--md-exts` is checked by the source of its value rather than by its value,
-since its default means it always carries one.
+flags that only make sense under `--git` are checked after parsing rather than
+by `requires = "git"`, because on clap 4.6.6 that attribute is unreliable for a
+valueless flag when a `Vec` positional shares the group: `--list-files a.md`
+was accepted with no `--git` in sight. The post-parse check raises a clap
+error, so the exit status and the usage footer remain clap's, and `--md-exts`
+is checked by the source of its value rather than by its value, since its
+default means it always carries one.
 
 Selecting nothing is success. An empty selection is a file selection that
 happens to be empty, not a fall-through to standard input: a run that began
@@ -254,8 +254,8 @@ before any marker is read beneath it: on Windows a regular file opens as a
 directory, and every marker under it would otherwise read as absent. A merge or
 revert that begins while a long run is still analysing files is therefore seen
 by the writes that follow it, where a run-wide snapshot would have let exactly
-that run rewrite the conflict it started inside. A file whose content carries no
-markers never provokes the question, so the scan — not the filesystem —
+that run rewrite the conflict it started inside. A file whose content carries
+no markers never provokes the question, so the scan — not the filesystem —
 decides what the guard costs.
 
 If the repository is mid-merge, mid-rebase, mid-revert, or mid-cherry-pick, a
@@ -278,19 +278,19 @@ _The tool's own line is wrapped here to fit this page: one cause is printed on
 one line, however long it is._
 
 The refusal is per file, so every other selected file is still rewritten.
-Marker detection requires all three forms — a line of at least seven `<`, a line
-of at least seven `=`, and a line of at least seven `>` — each with a run of at
-least seven characters, so a document that merely discusses conflict markers is
-not mistaken for a conflicted one, and a setext heading underline is not read as
-a separator. Seven is Git's default marker length rather than its only one:
-`conflict-marker-size` lengthens the run Git writes, and the guard does not read
-`.gitattributes`, so a guard that demanded exactly seven would read a longer
-marker as ordinary Markdown. The longer run instead costs a false positive that
-`--allow-conflicted` overrides. All three are scanned only while an operation is
-in progress, because a fenced example quoting all three is otherwise
-indistinguishable from a conflict, and refusing to rewrite it would be a false
-alarm about a file nothing is merging. `--allow-conflicted` is the escape
-hatch for the case where the verdict is wrong.
+Marker detection requires all three forms — a line of at least seven `<`, a
+line of at least seven `=`, and a line of at least seven `>` — each with a run
+of at least seven characters, so a document that merely discusses conflict
+markers is not mistaken for a conflicted one, and a setext heading underline is
+not read as a separator. Seven is Git's default marker length rather than its
+only one: `conflict-marker-size` lengthens the run Git writes, and the guard
+does not read `.gitattributes`, so a guard that demanded exactly seven would
+read a longer marker as ordinary Markdown. The longer run instead costs a false
+positive that `--allow-conflicted` overrides. All three are scanned only while
+an operation is in progress, because a fenced example quoting all three is
+otherwise indistinguishable from a conflict, and refusing to rewrite it would
+be a false alarm about a file nothing is merging. `--allow-conflicted` is the
+escape hatch for the case where the verdict is wrong.
 
 ### Git's diagnostics are untrusted input
 
@@ -300,13 +300,13 @@ character that can lay out a line becomes a space — the control characters, th
 line and paragraph separators, and the bidirectional formatting controls — so
 an escape sequence or a direction override written into a repository name
 cannot drive the terminal that reads the diagnostic; a multi-line message is
-folded to one line, so a repository cannot forge additional lines of this tool's
-standard error; bytes that are not UTF-8 become the replacement character,
-because the text is a diagnostic rather than a path and nothing acts on it; and
-the relayed run is capped at 1024 characters, with a visible ellipsis when it is
-cut, so a flood cannot bury the message it is supposed to support. The tool's
-own wording is the part a test asserts on, and Git's own text is relayed beside
-it rather than folded into it.
+folded to one line, so a repository cannot forge additional lines of this
+tool's standard error; bytes that are not UTF-8 become the replacement
+character, because the text is a diagnostic rather than a path and nothing acts
+on it; and the relayed run is capped at 1024 characters, with a visible
+ellipsis when it is cut, so a flood cannot bury the message it is supposed to
+support. The tool's own wording is the part a test asserts on, and Git's own
+text is relayed beside it rather than folded into it.
 
 A failure anywhere in the selection prints one line to standard error and exits
 `2`, with Git's diagnostic appended where Git supplied one. Measured outside

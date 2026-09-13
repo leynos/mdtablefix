@@ -1,9 +1,9 @@
 # Migrating to 0.6.0
 
 This note is for users of the `mdtablefix` command-line interface (CLI) and
-consumers of the library application programming interface (API). It covers
-the behaviour changes in the 0.6.0 release and the migration action required
-for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
+consumers of the library application programming interface (API). It covers the
+behaviour changes in the 0.6.0 release and the migration action required for
+each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 
 ## Atomic in-place replacement
 
@@ -17,9 +17,8 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 - **Migration action:** No action is required for normal use. A successful
   rewrite of a regular file creates a new file that takes over the target's
   name, so handles, hard links, and watches tied to the previous file keep the
-  old contents and do not follow the replacement. A failed rewrite, or a
-  target declined for being a symbolic link, leaves the original file
-  untouched.
+  old contents and do not follow the replacement. A failed rewrite, or a target
+  declined for being a symbolic link, leaves the original file untouched.
 
 ## Line-ending preservation
 
@@ -34,9 +33,9 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   library entry points `mdtablefix::io::rewrite` and
   `mdtablefix::io::rewrite_no_wrap`; standard input keeps its existing contract
   of printing one terminator even when the output has no lines, while an empty
-  file still produces empty output. Five items are new public API: `LineEnding`,
-  whose `as_str` method returns the characters written between lines;
-  `LineEndingCounts`, the counts behind a selection;
+  file still produces empty output. Five items are new public API:
+  `LineEnding`, whose `as_str` method returns the characters written between
+  lines; `LineEndingCounts`, the counts behind a selection;
   `detect_line_ending(text) -> LineEnding`;
   `count_line_endings(text) -> LineEndingCounts`; and
   `serialize_lines(lines, ending) -> String`. The boundary that acts on the
@@ -72,8 +71,8 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   successfully, because the swap needs write permission on the containing
   directory rather than on the file itself, and because the replacement takes
   over the read-only state instead of losing it. Windows records read-only as
-  `FILE_ATTRIBUTE_READONLY`, which blocks the rename, so `mdtablefix` clears the
-  destination's attribute immediately before the swap and puts the original
+  `FILE_ATTRIBUTE_READONLY`, which blocks the rename, so `mdtablefix` clears
+  the destination's attribute immediately before the swap and puts the original
   attribute back if the swap does not complete. A run interrupted between those
   two steps, or a restoration that itself fails, can leave the target's
   read-only attribute cleared; the contents are unchanged either way, because a
@@ -128,9 +127,9 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 ## Unchanged files are not rewritten
 
 - **What changed:** `--in-place` writes only the files whose bytes would
-  change. A file that is already formatted keeps its inode and its
-  modification time, and a symbolic link to such a file now succeeds because
-  no write is attempted.
+  change. A file that is already formatted keeps its inode and its modification
+  time, and a symbolic link to such a file now succeeds because no write is
+  attempted.
 - **Who is affected:** Build systems that use modification time for staleness
   checks, and anyone who watches inodes to detect rewrites.
 - **Migration action:** None. A clean tree no longer looks modified.
@@ -140,9 +139,9 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 - **What changed:** `--check` reports each file that would be reformatted, as
   its path followed by the line delta, and `--diff` prints a unified diff for
   each of them. Both are read-only: a clean file prints nothing. A mode flag
-  requires at least one file path, so `mdtablefix --check` with no files is a
-  usage error, and at most one of `--in-place`, `--check`, and `--diff` may be
-  given.
+  requires a source of files — file arguments or `--git` — so
+  `mdtablefix --check` with no files is a usage error, and at most one of
+  `--in-place`, `--check`, `--diff`, and `--list-files` may be given.
 - **Who is affected:** Anyone adding a formatting gate to a pipeline.
 - **Migration action:** None. The modes are additive; see the
   [user's guide](users-guide.md#command-line-usage) for the report line format
@@ -153,17 +152,17 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
 - **What changed:** `--git` selects the working tree's Markdown files from
   Git's index (`git ls-files --cached`) rather than from the command line.
   `--include-untracked` adds the untracked files that Git does not ignore.
-  `--md-exts EXT[,EXT...]` replaces the default extension set, `md`, `mdc`,
-  and `markdown`. `--allow-conflicted` lets `--in-place` rewrite a selected
-  file that carries conflict markers while a merge, rebase, revert, or
-  cherry-pick is paused. `--list-files` prints the selected paths, one per
-  line, and exits without reading or writing them. All five flags are new, so
-  no existing invocation changes meaning, and each of the other four is
-  rejected without `--git`.
+  `--md-exts EXT[,EXT...]` replaces the default extension set, `md`, `mdc`, and
+  `markdown`. `--allow-conflicted` lets `--in-place` rewrite a selected file
+  that carries conflict markers while a merge, rebase, revert, or cherry-pick
+  is paused. `--list-files` prints the selected paths, one per line, and exits
+  without reading or writing them. All five flags are new, so no existing
+  invocation changes meaning, and each of the other four is rejected without
+  `--git`.
 - **Who is affected:** Only users who opt in with `--git`. Every existing
   invocation keeps its behaviour and exit status, including the exit `2` a
-  plain run reports for an unmatched glob the shell passed through as a
-  literal path.
+  plain run reports for an unmatched glob the shell passed through as a literal
+  path.
 - **Legal combinations:** File arguments and `--git` are alternatives, never
   both, and either satisfies the requirement that a mode carry a source of
   files. At most one of `--in-place`, `--check`, `--diff`, and `--list-files`
@@ -177,8 +176,8 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   `2` unless `--allow-conflicted` is given, and every other selected file is
   still rewritten. A candidate whose classification cannot be read at all — one
   behind a directory the run may not traverse, for instance — stops the
-  selection: the path is named on standard error, the run exits `2`, and no file
-  is formatted, because it cannot say which set it would have formatted.
+  selection: the path is named on standard error, the run exits `2`, and no
+  file is formatted, because it cannot say which set it would have formatted.
   `--list-files` exits `0` and reads no file content.
 - **Migration action:** None is required, because the surface is additive.
   Adopt it by replacing a shell-expanded file list with `--git`, and inspect
@@ -189,14 +188,22 @@ for each one ([#465](https://github.com/leynos/mdtablefix/issues/465)).
   mdtablefix --git --check
   ```
 
-  The selection rules, including which candidates are skipped and how paths
-  are ordered, are under
+  The selection rules, including which candidates are skipped and how paths are
+  ordered, are under
   [Selecting files from Git](users-guide.md#selecting-files-from-git).
 
 ## New library entry point
 
 - **What changed:** `mdtablefix::io::replace_file` atomically replaces a target
-  inside an already-open directory capability. The entry point is additive, so
+  inside an already-open directory capability, and
+  `mdtablefix::io::replace_file_if_unchanged` now also does so conditionally:
+  it writes as `replace_file` does, but replaces the target only while the
+  target still holds the text the caller passed as `expected`. The target is
+  read back after the temporary file is written and flushed and immediately
+  before the rename, so `Ok(false)` means it no longer held `expected` and is
+  left exactly as it is, with the temporary file removed; a target that cannot
+  be read back at all is an error. This is not a true compare-and-swap, but
+  every window before the rename is closed. Both entry points are additive, so
   `rewrite` and `rewrite_no_wrap` keep their signatures.
 - **Who is affected:** Library consumers that already hold a
   `cap_std::fs_utf8::Dir` capability.
@@ -208,18 +215,28 @@ pub fn replace_file(
     path: &camino::Utf8Path,
     contents: &str,
 ) -> std::io::Result<()>
+
+pub fn replace_file_if_unchanged(
+    directory: &cap_std::fs_utf8::Dir,
+    path: &camino::Utf8Path,
+    expected: &str,
+    contents: &str,
+) -> std::io::Result<bool>
 ```
 
 ## Replacement metrics
 
-- **What changed:** `mdtablefix::io::replace_file`, and therefore `rewrite`,
+- **What changed:** `mdtablefix::io::replace_file` and
+  `mdtablefix::io::replace_file_if_unchanged`, and therefore `rewrite`,
   `rewrite_no_wrap`, and `--in-place`, now emit five bounded counters and one
-  bounded histogram through the `metrics` façade. The crate installs no
-  recorder.
+  bounded histogram through the `metrics` façade. Both entry points feed the
+  same counter and histogram, because both call one shared implementation, and
+  the `outcome` label they carry has three values: `success`, `unchanged`, and
+  `failure`. The crate installs no recorder.
 - **Who is affected:** Library consumers and host applications that install a
   metrics recorder.
 - **Migration action:** No action is required for normal use. A host that wants
   the counters installs a recorder once at startup with
   `metrics::set_global_recorder(...)`. The
-  [Metrics](developers-guide.md#metrics) section of the developer's guide
-  lists the metric names and labels.
+  [Metrics](developers-guide.md#metrics) section of the developer's guide lists
+  the metric names and labels.

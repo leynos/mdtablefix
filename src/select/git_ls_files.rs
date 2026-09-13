@@ -271,20 +271,17 @@ impl GitLsFiles {
         args: &[&str],
         dir: &Utf8Path,
     ) -> Result<std::process::Output, GitListError> {
-        let output = self
-            .command(args, dir)
-            .output()
-            .map_err(|source| {
-                let program = self.program.to_string_lossy().into_owned();
-                if source.kind() == io::ErrorKind::NotFound {
-                    GitListError::ProgramNotFound { program }
-                } else {
-                    GitListError::Spawn {
-                        command: self.label(operation),
-                        source,
-                    }
+        let output = self.command(args, dir).output().map_err(|source| {
+            let program = self.program.to_string_lossy().into_owned();
+            if source.kind() == io::ErrorKind::NotFound {
+                GitListError::ProgramNotFound { program }
+            } else {
+                GitListError::Spawn {
+                    command: self.label(operation),
+                    source,
                 }
-            })?;
+            }
+        })?;
 
         if !output.status.success() {
             return Err(GitListError::Failed {

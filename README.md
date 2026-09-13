@@ -75,8 +75,7 @@ With `--git`, the files are the ones Git reports beneath the current directory
 rather than the ones named on the command line: the tracked Markdown files in
 the index, plus the untracked ones with `--include-untracked`. The selection is
 sorted and deduplicated, and `--list-files` reports it without touching a file,
-so a repository-wide run is one invocation with one summary and one exit
-status:
+so a repository-wide run is one invocation with one summary and one exit status:
 
 ```bash
 mdtablefix --git --in-place --wrap
@@ -255,8 +254,8 @@ failure before the rename leaves the original file intact. The target's
 permissions are copied to the temporary file before the rename, so the original
 file mode is preserved and a read-only target is replaced by a read-only file.
 On Windows, where a destination carrying `FILE_ATTRIBUTE_READONLY` cannot be
-renamed over at all, that attribute is cleared immediately before the rename and
-put back if the swap does not complete, though an abrupt interruption or a
+renamed over at all, that attribute is cleared immediately before the rename
+and put back if the swap does not complete, though an abrupt interruption or a
 failed restore can leave it cleared. A symbolic link is declined rather than
 replaced. Callers that already hold a `cap_std::fs_utf8::Dir` capability can
 call `mdtablefix::io::replace_file(directory, path, contents)` for the same

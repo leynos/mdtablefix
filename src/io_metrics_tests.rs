@@ -12,7 +12,11 @@ use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
 use tempfile::tempdir;
 
 use super::{
-    TEMP_FILE_ATTEMPTS, register_metrics, replace_file_if_unchanged, rewrite, temporary_path,
+    TEMP_FILE_ATTEMPTS,
+    register_metrics,
+    replace_file_if_unchanged,
+    rewrite,
+    temporary_path,
 };
 
 /// The outcome label's name.
@@ -305,9 +309,8 @@ fn a_conditional_replacement_of_a_matching_target_is_a_success() {
     let dir = tempdir().expect("create temporary directory");
     let file = fixture(&dir);
     let root = camino::Utf8Path::from_path(dir.path()).expect("the temporary directory is UTF-8");
-    let capability =
-        cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())
-            .expect("open the directory capability");
+    let capability = cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())
+        .expect("open the directory capability");
 
     let (replaced, recorded) = recorded(|| {
         replace_file_if_unchanged(
@@ -339,9 +342,8 @@ fn a_declined_replacement_after_the_target_moved_on_is_unchanged() {
     let file = fixture(&dir);
     fs::write(&file, "|X|Y|\n|3|4|").expect("write the other writer's version");
     let root = camino::Utf8Path::from_path(dir.path()).expect("the temporary directory is UTF-8");
-    let capability =
-        cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())
-            .expect("open the directory capability");
+    let capability = cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())
+        .expect("open the directory capability");
 
     let (replaced, recorded) = recorded(|| {
         replace_file_if_unchanged(
@@ -365,7 +367,8 @@ fn a_declined_replacement_after_the_target_moved_on_is_unchanged() {
     assert_eq!(
         outcome_samples(&recorded, "unchanged").len(),
         1,
-        "a declined replacement is timed too, so stalls before the comparison are visible: {recorded:?}"
+        "a declined replacement is timed too, so stalls before the comparison are visible: \
+         {recorded:?}"
     );
     assert_eq!(
         outcome_count(&recorded, "success") + outcome_count(&recorded, "failure"),

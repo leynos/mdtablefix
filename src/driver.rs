@@ -26,12 +26,14 @@ use mdtablefix::{
     io::SourceDocument,
     report::{FileReport, LineDelta, render_report_line},
 };
-
-use crate::select::conflict::ConflictGuard;
-use reporting::{listed, render_diff};
-
 pub use reporting::{ExitStatus, Mode, exit_status, report_line_endings};
+use reporting::{listed, render_diff};
 pub use source::{Inputs, ReadOnlyDir, assess, write_back};
+
+use crate::select::{
+    ConflictGuard,
+    conflict::{ConflictMarkerState, marker_state, refuses},
+};
 
 /// The formatting function every mode shares.
 ///
@@ -55,8 +57,8 @@ pub type Formatter = dyn Fn(&SourceDocument<'_>) -> String + Sync;
 /// # Errors
 ///
 /// Returns an error if the file cannot be read; under [`Mode::InPlace`], if it
-/// carries conflict markers and `guard` refuses it, if the repository's state
-/// cannot be read to decide that, or if the file cannot be rewritten.
+/// carries conflict markers and the guard's repository state refuses it, if
+/// that state cannot be read, or if the file cannot be rewritten.
 pub fn analyse(
     mode: Mode,
     guard: &ConflictGuard,
@@ -114,11 +116,14 @@ pub fn analyse(
         // both sides of the boundary, so the user would resolve against
         // corrupted content and commit it into a rewritten history, where
         // `git rebase --abort` is gone. The one arm holds both the refusal and
-        // the write because the guard's answer is itself a `Result`: a `match`
+        // the write because the state probe is itself a `Result`: a `match`
         // guard cannot ask with `?`, and a write whose guard went unread is not
-        // a write this arm may make.
+        // a write this arm may make. The decision stays pure: it combines the
+        // marker classification with the explicit state the adapter returns.
         Mode::InPlace if is_changed => {
-            if guard.refuses(&assessment.original)? {
+            let markers = marker_state(&assessment.original);
+            if markers == ConflictMarkerState::Present && refuses(markers, guard.operation_state()?)
+            {
                 return Err(anyhow!(
                     "refusing to rewrite {display_path}: it contains conflict markers and a \
                      merge, rebase, revert, or cherry-pick is in progress. Resolve it first, or \

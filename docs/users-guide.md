@@ -111,6 +111,13 @@ return, and the backslash itself (literally backslash-n, backslash-r, and
 backslash-backslash in the output); every other path is printed unchanged, so
 the one-line-per-path contract holds for every name Git's index can hold.
 
+The stream is escaped rather than plain, and default `xargs` does not decode
+it: it splits on spaces as well as newlines, and a quote or a backslash in a
+path is its own syntax to it. The pipeline below therefore suits a repository
+whose paths hold none of those characters; a consumer that needs every name
+exactly — including one holding a space, a quote, or a line terminator — must
+decode the escapes itself rather than hand this text to `xargs`.
+
 ```bash
 mdtablefix --git --list-files | xargs wc -l
 ```
@@ -135,18 +142,18 @@ markers is never the reason for asking, so an ordinary repository is not
 consulted at all.
 
 The check is deliberately narrow. A file is refused only if it holds all three
-marker forms — a line of at least seven `<`, a line of at least seven `=`, and a
-line of at least seven `>` — and only while an operation is in progress. Seven
-is Git's default marker length rather than its only one: the
-`conflict-marker-size` attribute makes Git write a run of exactly the configured
-length, and the guard does not read `.gitattributes`, so it accepts any run of
-seven or more. The cost is a false positive on a line of eight or more marker
-characters, which refuses a rewrite that `--allow-conflicted` overrides, and
-that is the safer direction: a guard that demanded exactly seven would read a
-longer marker as ordinary Markdown and rewrite an unresolved file. A document
-that merely discusses conflict markers inside a fenced example is therefore
-rewritten, while one that quotes all three forms during a real merge is
-refused; `--allow-conflicted` is the answer to that case. The guard is a
+marker forms — a line of at least seven `<`, a line of at least seven `=`, and
+a line of at least seven `>` — and only while an operation is in progress.
+Seven is Git's default marker length rather than its only one: the
+`conflict-marker-size` attribute makes Git write a run of exactly the
+configured length, and the guard does not read `.gitattributes`, so it accepts
+any run of seven or more. The cost is a false positive on a line of eight or
+more marker characters, which refuses a rewrite that `--allow-conflicted`
+overrides, and that is the safer direction: a guard that demanded exactly seven
+would read a longer marker as ordinary Markdown and rewrite an unresolved file.
+A document that merely discusses conflict markers inside a fenced example is
+therefore rewritten, while one that quotes all three forms during a real merge
+is refused; `--allow-conflicted` is the answer to that case. The guard is a
 heuristic, not a substitute for `git status`.
 
 Only `--in-place` consults the repository's state, because only `--in-place`
@@ -248,8 +255,8 @@ find . \( -name '*.md' -o -name '*.mdc' -o -name '*.markdown' \) -print0 | xargs
 
 Both run the tool once with every match, and run nothing at all — exiting `0` —
 when there are no matches. Both name the same three extensions the default
-`--git` selection covers, so a gate outside a repository checks the file types
-a `--git` run would.
+`--git` selection covers, so a gate outside a repository checks the file types a
+`--git` run would.
 
 ### Symbolic links
 
@@ -261,11 +268,12 @@ changes is not written at all, so it succeeds. See
 [In-place editing](#in-place-editing) for the full replacement contract.
 
 A `--git` selection never reaches either case for a link: a link is not a
-regular file, so it is skipped during selection, before it is analysed. The same
-skip covers a candidate reached through a symlinked directory, so if `docs` is a
-link to a directory outside the working tree, `docs/guide.md` is a regular file
-but not one inside the selection, and it is skipped rather than written through
-the link. See [Selecting files from Git](#selecting-files-from-git).
+regular file, so it is skipped during selection, before it is analysed. The
+same skip covers a candidate reached through a symlinked directory, so if
+`docs` is a link to a directory outside the working tree, `docs/guide.md` is a
+regular file but not one inside the selection, and it is skipped rather than
+written through the link. See
+[Selecting files from Git](#selecting-files-from-git).
 
 ## Footnote conversion
 
@@ -742,18 +750,26 @@ as described in [In-place editing](#in-place-editing).
 Callers that already hold a `cap_std::fs_utf8::Dir` capability can use
 `mdtablefix::io::replace_file(directory, path, contents)` instead. It performs
 the same temporary-file-and-rename sequence relative to the supplied directory,
-so no ambient filesystem access is needed. The CLI and the two path helpers all
-call it, so the sequence has one implementation.
+so no ambient filesystem access is needed. A caller that has just read the
+target can condition the replacement on that reading with
+`replace_file_if_unchanged(directory, path, expected, contents)`, which writes
+as `replace_file` does, but reads the target back immediately before the rename
+and replaces it only while the target still holds `expected`. An `Ok(false)`
+return means the target was left exactly as it was and the temporary file was
+removed, and a target that cannot be read back at all is an error. The
+conditional entry point is not a true compare-and-swap, but every window before
+the rename is closed. The CLI and the two path helpers all call the conditional
+form, so the sequence has one implementation.
 
 ### Replacement metrics
 
 The library emits six metrics for its replacement path: five counters and one
-histogram. It installs no recorder or subscriber of its own; a host
-application installs one to collect these metrics, and a host that installs
-none sees no behavioural change.
+histogram. It installs no recorder or subscriber of its own; a host application
+installs one to collect these metrics, and a host that installs none sees no
+behavioural change.
 
 - `mdtablefix_io_replace_total` — replacements attempted, labelled by
-  `outcome` (`success` or `failure`).
+  `outcome` (`success`, `unchanged`, or `failure`).
 - `mdtablefix_io_replace_duration_seconds` — histogram of replacement
   durations in seconds, labelled by `outcome`.
 - `mdtablefix_io_temporary_name_collisions_total` — candidate temporary names

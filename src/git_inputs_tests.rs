@@ -9,12 +9,11 @@
 // Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
 use test_macros::traced_test;
 
+use super::{GitSelection, report_selection};
 use crate::{
     driver::Inputs,
-    select::{conflict::ConflictGuard, extensions::ExtensionFilter},
+    select::{ConflictGuard, extensions::ExtensionFilter},
 };
-
-use super::{GitSelection, report_selection};
 
 /// A selection that lost `skipped` candidates to the UTF-8 boundary.
 fn selection(skipped: usize) -> GitSelection {

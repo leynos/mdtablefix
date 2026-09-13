@@ -8,9 +8,9 @@
 `mdtablefix` was not idempotent: `format(format(x)) != format(x)` held for
 inputs reachable under the `make fmt` flag set (`--wrap`, `--renumber`,
 `--breaks`, `--ellipsis`, `--fences`), and for further inputs once `--headings`
-or `--code-emphasis` was added, so a check-after-fix gate could never
-converge: one `--in-place` pass left a file that the next pass rewrote again.
-Seven defect classes contributed:
+or `--code-emphasis` was added, so a check-after-fix gate could never converge:
+one `--in-place` pass left a file that the next pass rewrote again. Seven
+defect classes contributed:
 
 - A normalized thematic break was absorbed into the following paragraph
   instead of passed through on its own line.
@@ -74,9 +74,9 @@ set the CLI exposes. Seven rules enforce the invariant:
   joined.
 - `--code-emphasis` repairs table cells before reflow measures them. Removing
   emphasis markers around inline code shortens the cell, so applying the repair
-  in the table-substitution stage lets the formatter calculate the final
-  column widths. The later global code-emphasis pass handles non-table content;
-  each table cell is repaired once.
+  in the table-substitution stage lets the formatter calculate the final column
+  widths. The later global code-emphasis pass handles non-table content; each
+  table cell is repaired once.
 - Setext conversion accepts only paragraph candidates. `is_setext_text` in
   `src/headings.rs` measures the candidate after the indentation or blockquote
   prefix it shares with the underline has been removed, so a quoted heading
@@ -86,17 +86,15 @@ set the CLI exposes. Seven rules enforce the invariant:
   whole line before the shared prefix is removed: the prefix would otherwise
   swallow the very columns that mark the code block. Blockquote markers and
   their optional single space are consumed before measuring, and tabs count as
-  four columns.
-  A candidate that is itself a block start keeps its underline: an ATX
-  heading, a thematic break, a list item, a blockquote, a footnote definition,
-  a link reference definition, a markdownlint directive, or a fence marker.
-  The kinds are the ones `wrap::classify_block` already reports, so the heading
-  pass and the wrapper agree on what a block start is. A digit-prefixed
+  four columns. A candidate that is itself a block start keeps its underline:
+  an ATX heading, a thematic break, a list item, a blockquote, a footnote
+  definition, a link reference definition, a markdownlint directive, or a fence
+  marker. The kinds are the ones `wrap::classify_block` already reports, so the
+  heading pass and the wrapper agree on what a block start is. A digit-prefixed
   candidate stays eligible, because `BlockKind::DigitPrefix` marks a line the
-  wrapper measures specially rather than a block. The check is limited to
-  the grammar this formatter supports and is not a CommonMark block parser:
-  HTML blocks other than the `<table>` conversion in `src/html.rs` remain
-  outside it.
+  wrapper measures specially rather than a block. The check is limited to the
+  grammar this formatter supports and is not a CommonMark block parser: HTML
+  blocks other than the `<table>` conversion in `src/html.rs` remain outside it.
 - Table delimiter rows are refused separately from the block kinds.
   `is_table_delimiter_row` in `src/headings.rs` refuses a candidate that
   carries a `|` and matches `crate::table::SEP_RE`, the pattern the table
@@ -121,13 +119,12 @@ set the CLI exposes. Seven rules enforce the invariant:
   column widths in the first pass.
 - `tests/idempotence.rs` formats the fixture corpus under
   `tests/data/idempotence/` twice through the real binary and asserts
-  byte-identical output; the class `T` fixtures pin the delimiter-row
-  adjacency and assert that the row survives as table syntax. Its
-  repository-wide drift sweeps live in `tests/idempotence_drift.rs`.
-  The drift sweeps include tables processed with `--code-emphasis`, including
-  the fixture that previously required a second pass.
-  `tests/idempotence_properties.rs` is a `proptest!` property over generated
-  documents and a sampled eight-flag powerset, while
+  byte-identical output; the class `T` fixtures pin the delimiter-row adjacency
+  and assert that the row survives as table syntax. Its repository-wide drift
+  sweeps live in `tests/idempotence_drift.rs`. The drift sweeps include tables
+  processed with `--code-emphasis`, including the fixture that previously
+  required a second pass. `tests/idempotence_properties.rs` is a `proptest!`
+  property over generated documents and a sampled eight-flag powerset, while
   `tests/idempotence_adjacencies.rs` holds the structural-adjacency property
   and its coverage sweep; the generator both suites share lives in
   `tests/support/idempotence_harness.rs`. The property generates structural

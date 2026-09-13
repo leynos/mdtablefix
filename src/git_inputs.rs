@@ -19,7 +19,7 @@ use crate::{
     command::Cli,
     driver::{Inputs, Mode},
     select::{
-        conflict::ConflictGuard,
+        ConflictGuard,
         extensions::ExtensionFilter,
         fs_probe::AmbientPathProbe,
         git_failure::GitListError,

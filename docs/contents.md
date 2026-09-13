@@ -47,8 +47,8 @@
   decision covering the read-only reporting modes, the shared assessment, and
   the exit-status contract.
 - [Git file selection](adrs/0010-git-file-selection.md): Accepted decision
-  covering `--git` selection through `git ls-files`, the conflict guard, and the
-  alternatives rejected in its favour.
+  covering `--git` selection through `git ls-files`, the conflict guard, and
+  the alternatives rejected in its favour.
 
 ## Reference material
 

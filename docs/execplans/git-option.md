@@ -1,7 +1,7 @@
 # Add a `--git` option that selects repository files to format
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances (exception triggers)`, `Risks`, `Progress`,
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances (exception triggers)`, `Risks`, `Progress`,
 `Surprises & discoveries`, `Decision log`, `Outcomes & retrospective`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
@@ -13,15 +13,15 @@ in `Progress` with the measurement of what it moved — on branch `git-option`,
 stacked on pull request #464 and carried by pull request #466, which was marked
 ready for review the same day while its base #464 remained open. The
 prerequisite extraction of `Cli` and `FormatOpts` landed, in the base's
-`src/command.rs` rather than in a `src/cli.rs` of this branch's own, and Stage A
-is discharged.
-All four milestones — EP-M0's grammar measurement, EP-M1's selection tree,
-EP-M2's command-line surface, and EP-M3's documentation — are delivered. Every
-deterministic gate is green on the milestone tree, the six CodeRabbit rounds
-recorded under `Artefacts and notes` returned zero findings, all four CI runs
-since the branch's conflict with its base was cleared are green on Linux and
-Windows, and `Outcomes & retrospective` states what was delivered against what
-was planned and which pinned interfaces the implementation superseded.
+`src/command.rs` rather than in a `src/cli.rs` of this branch's own, and Stage
+A is discharged. All four milestones — EP-M0's grammar measurement, EP-M1's
+selection tree, EP-M2's command-line surface, and EP-M3's documentation — are
+delivered. Every deterministic gate is green on the milestone tree, the six
+CodeRabbit rounds recorded under `Artefacts and notes` returned zero findings,
+all four CI runs since the branch's conflict with its base was cleared are
+green on Linux and Windows, and `Outcomes & retrospective` states what was
+delivered against what was planned and which pinned interfaces the
+implementation superseded.
 
 One thing this plan still owes, recorded rather than implied away. The branch's
 first CI run was red on both jobs over five defects that are all in test code —
@@ -31,17 +31,16 @@ carrying the executable suffix — and `6384543` answers all five. Those answers
 are now measured on a second platform rather than promised: the first two runs
 the branch could obtain after its conflict was cleared, `34691011897` and then
 `34691436697` on the pushed tip, each concluded `success` with all six jobs
-green, so the CI verdict that this plan spent the longest waiting on is no longer
-outstanding, and the claim that carries it is about the shipped tree rather
-than the head — every file this branch ships is CI-verified on Linux and Windows.
-What remains
-outstanding is the one
-verification no machine here can perform — the macOS and Windows half of the
-`canonicalize` case question behind INV-DEDUP — which is carried forward rather
-than discharged, with ADR 0010's known-risks section holding it and the fallback
-named in this plan's `Verification plan`. That one is not a gap in the work: it
-is a limit of the platform, and the fallback is named so a reader meeting it
-knows what to do rather than only what is unproven.
+green, so the CI verdict that this plan spent the longest waiting on is no
+longer outstanding, and the claim that carries it is about the shipped tree
+rather than the head — every file this branch ships is CI-verified on Linux and
+Windows. What remains outstanding is the one verification no machine here can
+perform — the macOS and Windows half of the `canonicalize` case question behind
+INV-DEDUP — which is carried forward rather than discharged, with ADR 0010's
+known-risks section holding it and the fallback named in this plan's
+`Verification plan`. That one is not a gap in the work: it is a limit of the
+platform, and the fallback is named so a reader meeting it knows what to do
+rather than only what is unproven.
 
 The plan's remaining work is not this plan's: pull request #464 must merge
 before this one can. See `Progress`, `Outcomes & retrospective`, and
@@ -60,8 +59,8 @@ After this change a user standing anywhere inside a Git working tree can run:
 mdtablefix --git --in-place --wrap
 ```
 
-and every Markdown file Git tracks beneath the current directory is reflowed
-in place. Adding `--include-untracked` extends the selection to untracked files
+and every Markdown file Git tracks beneath the current directory is reflowed in
+place. Adding `--include-untracked` extends the selection to untracked files
 Git does not ignore, making the pair exactly equivalent to
 `git ls-files --cached --others --exclude-standard`.
 
@@ -191,8 +190,7 @@ Four facts follow, each driving a design decision.
    is.
 4. Without `-z`, a path containing a space, a quote, or a non-ASCII byte is
    C-quoted, for example `"we ird\303\251\"q.md"`. With `-z` the bytes are
-   emitted verbatim and NUL-terminated. `-z` is mandatory, not an
-   optimization.
+   emitted verbatim and NUL-terminated. `-z` is mandatory, not an optimization.
 
 During an unresolved merge the same path is emitted once per index stage:
 
@@ -249,8 +247,9 @@ escalate rather than working around it.
   single in-package consumer.
 - **CON-SIZE-001** — No source file may exceed 400 lines. `src/main.rs` is
   already 303 lines and `src/process.rs` is 376.
-- **CON-LINT-001** — `cargo clippy --workspace --all-targets --all-features
-  -- -D warnings` must pass. Any `#[expect]` must carry a `reason`.
+- **CON-LINT-001** —
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings` must
+  pass. Any `#[expect]` must carry a `reason`.
 - **CON-OBS-001** — Selection code emits `debug!` and `trace!` only, and
   tracing fields must never contain document or path content. Note the
   corollary: tracing structurally cannot answer "why did it pick *that* file";
@@ -283,23 +282,21 @@ Stop and escalate when any of these is reached.
 ## Risks
 
 - Risk: `git` is absent from `PATH`, so `--git` fails at runtime even though
-  `mdtablefix` installed cleanly.
-  Severity: medium. Likelihood: low.
-  Mitigation: map `io::ErrorKind::NotFound` to a dedicated message naming
-  `git` and `PATH`, covered by a test injecting a non-existent program through
+  `mdtablefix` installed cleanly. Severity: medium. Likelihood: low.
+  Mitigation: map `io::ErrorKind::NotFound` to a dedicated message naming `git`
+  and `PATH`, covered by a test injecting a non-existent program through
   `GitLsFiles::with_program`. `--git` is opt-in and its premise is a Git
   working tree, so the requirement is reasonable.
 
 - Risk: `rstest-bdd` was new to this repository.
-  Severity: low now. Likelihood: low.
-  Mitigation: **largely discharged.** Pull request #464 already adds
-  `rstest-bdd = "0.5.0"` and
+  Severity: low now. Likelihood: low. Mitigation: **largely discharged.** Pull
+  request #464 already adds `rstest-bdd = "0.5.0"` and
   `rstest-bdd-macros = { version = "0.5.0", features =
-  ["strict-compile-time-validation"] }`, and ships passing feature files, so
-  the toolchain question is answered. Note the explicit macros crate and the
-  feature: match them rather than re-deriving them. EP-M0's BDD half is
-  therefore reduced to confirming a scenario in this plan's own feature file
-  runs.
+  ["strict-compile-time-validation"] }`,
+  and ships passing feature files, so the toolchain question is answered. Note
+  the explicit macros crate and the feature: match them rather than re-deriving
+  them. EP-M0's BDD half is therefore reduced to confirming a scenario in this
+  plan's own feature file runs.
 
 - Risk: **`--code-emphasis` reaches a fixed point on the second pass, not the
   first**, so a single `--in-place` run does not settle it. Measured on this
@@ -313,45 +310,43 @@ Stop and escalate when any of these is reached.
   a repository, a `--check` run would still report drift on such a file, and a
   check-fix-check loop needs two fixes rather than one.
 
-  Severity: medium, and only for `--code-emphasis` users. Likelihood: low —
-  one of 110 fixtures swept, and `make fmt`'s flag set excludes the flag.
-  Mitigation: **not this plan's defect and not this plan's to fix.** Tracked
-  as issue #478, raised from this plan's measurement, which also records the
-  root cause and the `--ellipsis` precedent for the fix.
+  Severity: medium, and only for `--code-emphasis` users. Likelihood: low — one
+  of 110 fixtures swept, and `make fmt`'s flag set excludes the flag.
+  Mitigation: **not this plan's defect and not this plan's to fix.** Tracked as
+  issue #478, raised from this plan's measurement, which also records the root
+  cause and the `--ellipsis` precedent for the fix.
   `tests/idempotence_drift.rs` gates the `make fmt` flag set and that set plus
   `--headings`; `--code-emphasis` is deliberately outside both. Do not add it
-  to a corpus-wide drift gate as part of this work. Document `--git --check`
-  as a gate for the gated flag sets, and do not claim one-pass convergence for
+  to a corpus-wide drift gate as part of this work. Document `--git --check` as
+  a gate for the gated flag sets, and do not claim one-pass convergence for
   `--code-emphasis`.
 
 - Risk: `src/main.rs` on `check-option` is already **386 lines** against the
-  400-line cap, before this plan adds a single field.
-  Severity: high. Likelihood: certain.
-  Mitigation: this is no longer a contingency but a required first step. The
-  `Cli` and `FormatOpts` declarations occupy roughly lines 38 to 120 of that
-  file; extract them into a binary-private `src/cli.rs` declared by
-  `main.rs`, which returns it to roughly 300 lines and leaves room for the
-  five new fields and the composition wiring. As delivered the module is the
-  base's `src/command.rs`, which does the same job and more — see
-  `EX-REBASE-STRUCTURE`. Do the extraction as its own
-  commit, with no behaviour change, before EP-M2 adds anything. `src/driver.rs`
-  at 369 lines has the same little headroom, so `--git` wiring must go in
-  `src/select/`, not there.
+  400-line cap, before this plan adds a single field. Severity: high.
+  Likelihood: certain. Mitigation: this is no longer a contingency but a
+  required first step. The `Cli` and `FormatOpts` declarations occupy roughly
+  lines 38 to 120 of that file; extract them into a binary-private `src/cli.rs`
+  declared by `main.rs`, which returns it to roughly 300 lines and leaves room
+  for the five new fields and the composition wiring. As delivered the module
+  is the base's `src/command.rs`, which does the same job and more — see
+  `EX-REBASE-STRUCTURE`. Do the extraction as its own commit, with no behaviour
+  change, before EP-M2 adds anything. `src/driver.rs` at 369 lines has the same
+  little headroom, so `--git` wiring must go in `src/select/`, not there.
 
 - Risk: a repository contains a path that is not valid UTF-8.
-  Severity: low. Likelihood: low.
-  Mitigation: `driver::Inputs::resolve` now fails the whole run on a non-UTF-8
-  argument, so selection must drop such candidates **before** constructing
-  `Inputs`, counting them and emitting one content-free stderr warning. This
-  keeps the disproportionate outcome — a whole-repository operation aborted by
-  one stray filename elsewhere in the tree — off the `--git` path without
-  disturbing the positional-argument contract #464 established.
+  Severity: low. Likelihood: low. Mitigation: `driver::Inputs::resolve` now
+  fails the whole run on a non-UTF-8 argument, so selection must drop such
+  candidates **before** constructing `Inputs`, counting them and emitting one
+  content-free stderr warning. This keeps the disproportionate outcome — a
+  whole-repository operation aborted by one stray filename elsewhere in the
+  tree — off the `--git` path without disturbing the positional-argument
+  contract #464 established.
 
 - Risk: the extension filter is the only thing between `--git` and rewriting
-  source files, so a defect there is destructive.
-  Severity: high. Likelihood: low.
-  Mitigation: verify the filter in both directions rather than only checking
-  that selected paths look right. See INV-EXT-SOUND and INV-EXT-COMPLETE.
+  source files, so a defect there is destructive. Severity: high. Likelihood:
+  low. Mitigation: verify the filter in both directions rather than only
+  checking that selected paths look right. See INV-EXT-SOUND and
+  INV-EXT-COMPLETE.
 
 ## Conformance basis
 
@@ -368,8 +363,7 @@ The sequencing question that previously blocked this plan is settled: this work
 comes **after** pull request #464. Three of its dependencies have merged, and
 pull request #464 itself is still open, so implementation proceeds by
 **branching from `check-option`** rather than waiting for the merge. See the
-Decision log, "stack this work on `check-option`", and Surprises &
-discoveries.
+Decision log, "stack this work on `check-option`", and Surprises & discoveries.
 
 **Merged to `main`, and now load-bearing for this plan:**
 
@@ -398,20 +392,20 @@ been renumbered, and EP-M3 must create `docs/adrs/0010-git-file-selection.md`.
 a second input source", implements the four forward-compatibility requests this
 plan made, so the interfaces this plan consumes now exist:
 
-| Interface on `check-option` | How this plan uses it |
-| --- | --- |
-| `ArgGroup "inputs"` holding `files`, with `mode` requiring `inputs` | `git` joins `inputs`; `--git --check`, `--git --diff`, `--git --in-place` all parse |
-| `driver::Inputs { Stdin, Files(Vec<Utf8PathBuf>) }` | `--git` becomes a second source producing `Inputs::Files`; an empty selection exits 0 without reading stdin |
-| `driver::Mode { Print, InPlace, Check, Diff }` | `--list-files` becomes a fifth variant |
-| `driver::ReadOnlyDir` | every mode reads through it, because `analyse` clones the caller's capability and wraps the clone; `--list-files` returns one statement earlier still, before the clone, so it holds no read capability at all. See the Decision log for what that does and does not guarantee |
-| `driver::Assessment::is_changed`, and `write_back` skipping unchanged files | discharges what this plan called INV-NOWRITE-UNCHANGED; this plan no longer implements it |
-| `driver::{ExitStatus, exit_status}` | `--git` failures map to `ExitStatus::Error`, exit code **2**, not 1 |
-| `driver::in_argument_order` | re-establishes ordering without relying on the withdrawn `AX-RAYON-ORDER` |
+| Interface on `check-option`                                                 | How this plan uses it                                                                                                                                                                                                                                                          |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ArgGroup "inputs"` holding `files`, with `mode` requiring `inputs`         | `git` joins `inputs`; `--git --check`, `--git --diff`, `--git --in-place` all parse                                                                                                                                                                                            |
+| `driver::Inputs { Stdin, Files(Vec<Utf8PathBuf>) }`                         | `--git` becomes a second source producing `Inputs::Files`; an empty selection exits 0 without reading stdin                                                                                                                                                                    |
+| `driver::Mode { Print, InPlace, Check, Diff }`                              | `--list-files` becomes a fifth variant                                                                                                                                                                                                                                         |
+| `driver::ReadOnlyDir`                                                       | every mode reads through it, because `analyse` clones the caller's capability and wraps the clone; `--list-files` returns one statement earlier still, before the clone, so it holds no read capability at all. See the Decision log for what that does and does not guarantee |
+| `driver::Assessment::is_changed`, and `write_back` skipping unchanged files | discharges what this plan called INV-NOWRITE-UNCHANGED; this plan no longer implements it                                                                                                                                                                                      |
+| `driver::{ExitStatus, exit_status}`                                         | `--git` failures map to `ExitStatus::Error`, exit code **2**, not 1                                                                                                                                                                                                            |
+| `driver::in_argument_order`                                                 | re-establishes ordering without relying on the withdrawn `AX-RAYON-ORDER`                                                                                                                                                                                                      |
 
 *Table 1: interfaces this plan consumes from pull request #464.*
 
-Pull request #464 also adds `googletest`, `pretty_assertions`, `rstest-bdd`,
-and `rstest-bdd-macros` as development dependencies, adds
+Pull request #464 also adds `googletest`, `pretty_assertions`, `rstest-bdd`, and
+`rstest-bdd-macros` as development dependencies, adds
 `cargo test --doc --all-features` to the `test` target, and bumps the crate to
 `0.6.0`. All four were items this plan intended to introduce; none of them is
 this plan's work any more.
@@ -422,8 +416,8 @@ recorded by its author rather than left to be discovered:
 1. `Inputs::resolve` now fails the **whole run** when any argument is not valid
    UTF-8, rather than counting it as one file's error. This plan's
    drop-and-count posture for non-UTF-8 paths therefore has to happen during
-   selection, before a path reaches `Inputs`. See the note under
-   "Interfaces and dependencies".
+   selection, before a path reaches `Inputs`. See the note under "Interfaces
+   and dependencies".
 2. A symlink pointing at a file that is already clean is no longer declined,
    because `write_back` attempts no replacement. The refusal still fires for a
    drifting target. That makes the symlink error **intermittent**, which is a
@@ -468,8 +462,7 @@ CON-SAFE-001 -> EP-M2 -> feature::"Never write through a symlink"
 - **REQ-GIT-006** — A candidate that is absent, is not a regular file, or is a
   symlink is skipped silently rather than reported as an error.
 - **REQ-GIT-007** — When `git` cannot be spawned, or exits non-zero, the tool
-  exits non-zero with a diagnostic naming the cause and relaying `git`'s
-  stderr.
+  exits non-zero with a diagnostic naming the cause and relaying `git`'s stderr.
 - **REQ-GIT-008** — Selecting zero files is success: exit 0, no output, and
   **standard input is not read**.
 - **REQ-GIT-009** — When the repository is mid-merge, mid-rebase, mid-revert,
@@ -533,12 +526,13 @@ exactly as `open_file_parent` does today.
 Assumed, not verified. Do not test third-party internals; exercise this
 repository's logic against the real interface at the boundary.
 
-- **AX-GIT-LSFILES** — `git ls-files -z --deduplicate --cached
-  [--others --exclude-standard]` writes to stdout exactly the index paths
-  (optionally unioned with non-ignored untracked paths), each NUL-terminated,
-  unquoted, verbatim, relative to the process working directory. Basis: the
-  `git-ls-files` manual page and the transcripts above. Boundary evidence: a
-  real-`git` test in `src/select/git_ls_files.rs`.
+- **AX-GIT-LSFILES** —
+  `git ls-files -z --deduplicate --cached [--others --exclude-standard]` writes
+  to stdout exactly the index paths (optionally unioned with non-ignored
+  untracked paths), each NUL-terminated, unquoted, verbatim, relative to the
+  process working directory. Basis: the `git-ls-files` manual page and the
+  transcripts above. Boundary evidence: a real-`git` test in
+  `src/select/git_ls_files.rs`.
 - **AX-GIT-EXIT** — `git` exits 0 on success, including on an empty selection,
   and non-zero with a stderr diagnostic otherwise (128 outside a repository).
 - **AX-GIT-NLS** — `git`'s diagnostics are **localised** when built with NLS
@@ -551,12 +545,12 @@ repository's logic against the real interface at the boundary.
   asserted that `par_iter().map(...).collect::<Vec<_>>()` preserves input
   order, on the grounds that the existing code already relies on it. The
   concurrent plan for `--check` and `--diff` (pull request #464) researched the
-  same question and refuted it: `rayon` does not document order preservation
-  for `collect`, and `rayon-1.12.0/src/iter/from_par_iter.rs:24-34` routes
-  through `par_extend` with no ordering statement. The existing reliance is
-  therefore a latent defect, not a contract. Selection must not depend on it:
-  each unit of work carries its index and results are ordered on that index.
-  See the note on ordering under EP-M2.
+  same question and refuted it: `rayon` does not document order preservation for
+  `collect`, and `rayon-1.12.0/src/iter/from_par_iter.rs:24-34` routes through
+  `par_extend` with no ordering statement. The existing reliance is therefore a
+  latent defect, not a contract. Selection must not depend on it: each unit of
+  work carries its index and results are ordered on that index. See the note on
+  ordering under EP-M2.
 - **AX-CLAP-GRAMMAR** — partially **falsified during planning**, and the
   surviving parts are now **measured rather than assumed**. Verified against
   clap 4.6.6: adding `git` to the `inputs` group with `multiple(false)` still
@@ -594,8 +588,7 @@ input returns an **empty list**, not a list holding one empty path.
 
 **INV-EXT-SOUND** — every selected path's ASCII-lowercased extension is in the
 configured set. **INV-EXT-COMPLETE** — every candidate whose lowercased
-extension is in the set and which probes as `RegularFile` appears in the
-output.
+extension is in the set and which probes as `RegularFile` appears in the output.
 
 - Method: one `proptest` asserting both directions, with a fake `PathProbe`.
 - Rationale: these are the two halves of the selection contract. Stating only
@@ -622,8 +615,8 @@ output.
   bytes with the run exiting 0. **That scenario is now closed at the write
   boundary.** `replace_file` writes a temporary file and renames it over the
   target, so there is no truncation window and no reader can observe an empty
-  file. The worst remaining outcome is a redundant format and a last-writer-wins
-  result, both of which are correct content.
+  file. The worst remaining outcome is a redundant format and a
+  last-writer-wins result, both of which are correct content.
 
   The invariant survives at much lower severity, for three honest reasons:
   `git ls-files` genuinely emits a conflicted path once per index stage, so
@@ -697,18 +690,18 @@ sorted byte-wise on the UTF-8 path.
   The variant is still required, for a different reason. `--git` selects files
   the user never named, so a repository containing a tracked Markdown symlink
   would emit a per-file error on every run for a file the user did not ask
-  about — and REQ-GIT-006 promises such candidates are skipped silently.
-  Commit `83e6150` makes it worse rather than better: with `write_back`
-  skipping unchanged files, the refusal fires only when the symlink's target
-  drifts, so the error is **intermittent**. Excluding symlinks at selection
-  time is what makes the behaviour predictable.
+  about — and REQ-GIT-006 promises such candidates are skipped silently. Commit
+  `83e6150` makes it worse rather than better: with `write_back` skipping
+  unchanged files, the refusal fires only when the symlink's target drifts, so
+  the error is **intermittent**. Excluding symlinks at selection time is what
+  makes the behaviour predictable.
 - Artefact: `src/select/policy.rs` `mod tests`, plus an end-to-end scenario.
 
-**INV-NOWRITE-UNCHANGED** — **discharged by pull request #464; not this
-plan's work.** `driver::write_back` is documented as reachable "only for a file
-whose bytes would change", and commit `83e6150` pins two properties for it,
-each beside a positive control proving a drifting file is still replaced, so
-neither can pass by never writing. Its rationale is now stronger than this plan
+**INV-NOWRITE-UNCHANGED** — **discharged by pull request #464; not this plan's
+work.** `driver::write_back` is documented as reachable "only for a file whose
+bytes would change", and commit `83e6150` pins two properties for it, each
+beside a positive control proving a drifting file is still replaced, so neither
+can pass by never writing. Its rationale is now stronger than this plan
 anticipated: because replacement renames a temporary over the target, an
 unconditional write would move the inode and the modification time of a
 byte-identical file, and a downstream staleness check would see a rebuild where
@@ -751,11 +744,10 @@ output of p differs from its contents }`.
 - Rationale: this connects the unit-level invariants to the user-visible
   promise. Its left-hand side is only observable end to end.
 - Non-vacuity: the scenario fixture contains a file in each equivalence class —
-  tracked Markdown, untracked Markdown, ignored Markdown, tracked
-  non-Markdown, tracked-but-deleted Markdown, and a Markdown symlink — and
-  asserts both that the right ones changed and that the rest did not. A
-  selection that is too narrow fails the first assertions; one that is too wide
-  fails the second.
+  tracked Markdown, untracked Markdown, ignored Markdown, tracked non-Markdown,
+  tracked-but-deleted Markdown, and a Markdown symlink — and asserts both that
+  the right ones changed and that the rest did not. A selection that is too
+  narrow fails the first assertions; one that is too wide fails the second.
 
 **Not verified by test: CON-CAP-001.** Whether writes flow through a
 `cap_std::Dir` cannot be observed by a black-box `assert_cmd` test. It is
@@ -797,15 +789,16 @@ Three properties of that config are load-bearing rather than incidental:
   same glob in a second place, free to drift from this one.
 - **No `additional_cargo_test_args`**: the whole suite is the test set, exactly
   as `make test` runs it. The setting was there while
-  `tests/git_file_selection.rs` was red — the tool checks the unmutated baseline
-  first, and a suite that is already red makes every mutant look caught — and
-  EP-M2 dropped it once that suite went green. The file records the history
-  where the setting used to be, because a narrowed run and a widened one report
-  the same number for a mutant no test in either set exercises.
+  `tests/git_file_selection.rs` was red — the tool checks the unmutated
+  baseline first, and a suite that is already red makes every mutant look
+  caught — and EP-M2 dropped it once that suite went green. The file records
+  the history where the setting used to be, because a narrowed run and a
+  widened one report the same number for a mutant no test in either set
+  exercises.
 - `TMPDIR` is set by the target, absolutely, to
-  `$(HOME)/.cache/mdtablefix/mutants/$(notdir $(CURDIR))`. Absolute, because the
-  tool's own child processes run inside the scratch copy of the tree, where a
-  relative path does not exist. Outside the worktree, because the children
+  `$(HOME)/.cache/mdtablefix/mutants/$(notdir $(CURDIR))`. Absolute, because
+  the tool's own child processes run inside the scratch copy of the tree, where
+  a relative path does not exist. Outside the worktree, because the children
   inherit `TMPDIR` and a test suite whose temporary directories landed inside
   this repository would fail the `--git` scenarios that assert on being outside
   one. `$HOME/.cache` is neither `/tmp`, which is not a build target on this
@@ -813,8 +806,8 @@ Three properties of that config are load-bearing rather than incidental:
 
 Zero survivors is the acceptance criterion. `src/select/policy.rs` and
 `src/select/git_ls_files.rs` are the two files it names, and the scope is the
-whole selection module, so the criterion is discharged for every file in it —
-a survivor anywhere in `src/select/` fails the run, and the run exits non-zero.
+whole selection module, so the criterion is discharged for every file in it — a
+survivor anywhere in `src/select/` fails the run, and the run exits non-zero.
 
 ## Milestones and plateaus
 
@@ -904,9 +897,10 @@ selection module is a real, revert-safe state.
   Note this is a pre-existing defect that `--git` makes reachable, not one
   `--git` introduces. If it proves larger than it looks, it is separable: raise
   it as its own issue rather than growing this plan.
-- Acceptance evidence: `EV-M2-CLI` — `cargo test --test cli_git --test
-  git_file_selection` passes, the `--help` snapshot is accepted, and the
-  transcripts under "Validation and acceptance" reproduce.
+- Acceptance evidence: `EV-M2-CLI` —
+  `cargo test --test cli_git --test git_file_selection` passes, the `--help`
+  snapshot is accepted, and the transcripts under "Validation and acceptance"
+  reproduce.
 - Conformance check: `src/main.rs` under 400 lines; `open_file_parent` remains
   the only ambient content boundary (**by review**, per the note above); no
   dependency added beyond the five named; every requirement discharged with
@@ -1201,9 +1195,9 @@ pub fn has_conflict_markers(content: &str) -> bool;
 against a 400-line cap. Extract the `Cli` and `FormatOpts` declarations into a
 binary-private `src/cli.rs`, declared from `main.rs`, as a separate
 behaviour-free commit before adding anything. That returns `main.rs` to roughly
-300 lines. Do not put `--git` wiring in `src/driver.rs`, which is 369 lines.
-As delivered, the base's `src/command.rs` is that module and this branch adds
-no `src/cli.rs` — see `EX-REBASE-STRUCTURE`.
+300 lines. Do not put `--git` wiring in `src/driver.rs`, which is 369 lines. As
+delivered, the base's `src/command.rs` is that module and this branch adds no
+`src/cli.rs` — see `EX-REBASE-STRUCTURE`.
 
 `Cli` gains `git` as a member of the existing `inputs` group, and four
 supporting flags. The `mode` group and `--in-place`, `--check`, and `--diff`
@@ -1276,12 +1270,12 @@ parse.
 4.6.6, with `git` in the `inputs` group and `files` a `Vec` positional:
 `--list-files` alone is correctly rejected, but `--list-files a.md` is
 **accepted**, silently running a `--git`-only flag with no `--git`. The same
-holds under `conflicts_with = "files"`, so group membership is not the cause;
-a bool flag's `requires` on another bool flag is not dependable once a
-positional is present, and `--md-exts` is a second instance of the same class
-because its default means it always carries a value. Use an explicit post-parse
-check emitting a real clap error, so the exit status stays 2 and the usage
-footer survives:
+holds under `conflicts_with = "files"`, so group membership is not the cause; a
+bool flag's `requires` on another bool flag is not dependable once a positional
+is present, and `--md-exts` is a second instance of the same class because its
+default means it always carries a value. Use an explicit post-parse check
+emitting a real clap error, so the exit status stays 2 and the usage footer
+survives:
 
 ```rust
 impl Cli {
@@ -1313,18 +1307,18 @@ on a bool, because `default_values` means it always carries a value.
 
 **`--list-files` needs it too**, which EP-M0 established by measurement and an
 earlier revision of this section got wrong. The claim was that `mode` already
-requires `inputs` and `--git` is the only way to satisfy that without positional
-files — but a positional argument *is* a way to satisfy `inputs`, so
-`mdtablefix --list-files notes.md` parses and runs. Listing a selection the user
-has just typed out by hand has nothing to resolve, so requiring `--git` is also
-the honest contract, and the feature file's "Reject `--list-files` without
+requires `inputs` and `--git` is the only way to satisfy that without
+positional files — but a positional argument *is* a way to satisfy `inputs`, so
+`mdtablefix --list-files notes.md` parses and runs. Listing a selection the
+user has just typed out by hand has nothing to resolve, so requiring `--git` is
+also the honest contract, and the feature file's "Reject `--list-files` without
 `--git`" scenario demands it. See Surprises & discoveries.
 
 ### Composition: `--git` as a second `Inputs` source
 
-Pull request #464 already resolved the shape this plan previously had to
-invent. `driver::Inputs` distinguishes `Stdin` from `Files(Vec<Utf8PathBuf>)`,
-and `main` matches on it. `--git` adds a second way to produce `Files`:
+Pull request #464 already resolved the shape this plan previously had to invent.
+`driver::Inputs` distinguishes `Stdin` from `Files(Vec<Utf8PathBuf>)`, and
+`main` matches on it. `--git` adds a second way to produce `Files`:
 
 ```rust
 /// Resolves `--git` into the paths to act on, and the guard that governs them.
@@ -1384,10 +1378,11 @@ the alternative of exporting an opaque error type.
 
 **No development dependency is this plan's to add.** Pull request #464 already
 adds `googletest = "0.14"`, `pretty_assertions = "1"`, `rstest-bdd = "0.5.0"`,
-and `rstest-bdd-macros = { version = "0.5.0", features =
-["strict-compile-time-validation"] }`. Match those exactly, including the
-explicit macros crate — `rstest-bdd` 0.5.0 does not re-export its macros — and
-the feature. Pull request #464 also adds
+and
+`rstest-bdd-macros = { version = "0.5.0", features =
+["strict-compile-time-validation"] }`.
+Match those exactly, including the explicit macros crate — `rstest-bdd` 0.5.0
+does not re-export its macros — and the feature. Pull request #464 also adds
 `cargo test --doc --all-features` to the `test` target, so the doctest gap this
 plan recorded is closed.
 
@@ -1593,8 +1588,8 @@ replacement is strictly stronger: an empty stdin is satisfied by a tool that
 reads and discards, whereas a document that would have been printed had it been
 read makes emptiness evidence. It is also deterministic — the pipe is closed
 after the write, so a read returns the document rather than blocking, and no
-timeout is needed. Every step writes `RAGGED` to stdin for this reason, not only
-the one that asserts on it.
+timeout is needed. Every step writes `RAGGED` to stdin for this reason, not
+only the one that asserts on it.
 
 The fixture builds a real repository with a real `git`: real commits, a real
 ignore file, and for the conflict scenarios a real `git merge` that is allowed
@@ -1636,8 +1631,8 @@ Validation: at each milestone boundary, `make check-fmt`, `make typecheck`,
 `make lint`, and `make test` all pass, run **sequentially**, never in parallel.
 
 Note that `make test` runs `cargo test --all-targets`, which **does not run
-doctests**. Add `cargo test --doc` to the `test` target as part of EP-M1, or
-any `# Examples` block written here is never compiled by any gate.
+doctests**. Add `cargo test --doc` to the `test` target as part of EP-M1, or any
+`# Examples` block written here is never compiled by any gate.
 
 ### Stage D — documentation and wider validation
 
@@ -1793,11 +1788,11 @@ exit=2
 
 Measured. Expected: the first is the dependency `clap` cannot express, enforced
 after parsing and reported as a clap error, so the status is 2 and the usage
-footer is clap's. `--list-files notes.md` is the case that forced the mechanism:
-on clap 4.6.6 it satisfies `requires = "git"` through the positional, with no
-`--git` in sight. The second is the `mode` group's own `requires("inputs")`,
-which is why `--git` is a way to satisfy `--in-place` rather than a way to
-bypass it.
+footer is clap's. `--list-files notes.md` is the case that forced the
+mechanism: on clap 4.6.6 it satisfies `requires = "git"` through the
+positional, with no `--git` in sight. The second is the `mode` group's own
+`requires("inputs")`, which is why `--git` is a way to satisfy `--in-place`
+rather than a way to bypass it.
 
 ```console
 $ mdtablefix --git --check ; echo "exit=$?"
@@ -1826,13 +1821,13 @@ Red-Green-Refactor evidence to record in Progress:
 
 Quality criteria — what "done" means:
 
-- Tests: `make test` passes with no warnings; `cargo test --bin mdtablefix
-  select`, `--test cli_git`, and `--test git_file_selection` all pass;
-  `cargo test --doc` passes.
+- Tests: `make test` passes with no warnings;
+  `cargo test --bin mdtablefix select`, `--test cli_git`, and
+  `--test git_file_selection` all pass; `cargo test --doc` passes.
 - Verification: every obligation in the Verification plan is discharged by its
   named artefact, observed red first, and `make mutants` reports zero survivors
-  in `src/select/policy.rs` and `src/select/git_ls_files.rs`.
-  LEM-SELECT-SETEQ is discharged end to end by the scenarios.
+  in `src/select/policy.rs` and `src/select/git_ls_files.rs`. LEM-SELECT-SETEQ
+  is discharged end to end by the scenarios.
 - Lint and typecheck: `make check-fmt`, `make typecheck`, `make lint`, run
   sequentially.
 - Documentation: `make markdownlint`; `make nixie` if a diagram was added.
@@ -1873,10 +1868,10 @@ transcripts use a throwaway repository under `mktemp -d`. Never run
 resulting diff would be indistinguishable from intended work. That warning
 applies to **every user with a dirty working tree**, not only to the
 implementor — once a run has interleaved its changes with uncommitted work,
-`git restore .` reverts both. Two mitigations are in scope and should both
-ship: `--list-files` lets a user see the selection first, and the stderr
-summary of changed paths makes `git restore -- <paths>` selective afterwards.
-Say so in the users' guide.
+`git restore .` reverts both. Two mitigations are in scope and should both ship:
+`--list-files` lets a user see the selection first, and the stderr summary of
+changed paths makes `git restore -- <paths>` selective afterwards. Say so in
+the users' guide.
 
 Each milestone is a single commit, so `git revert` returns to the previous
 plateau.
@@ -2458,7 +2453,7 @@ plateau.
       `6be1a76af63045837205cff7fcbeafffa1b746b1`, the commit this branch was
       rebased onto, `git merge-base --is-ancestor origin/check-option HEAD`
       succeeds, and `git rev-list --left-right --count
-      origin/check-option...HEAD` reads `0 36`. Nothing was replayed and no
+      origin/check-option…HEAD` reads `0 36`. Nothing was replayed and no
       conflict arose, so there was nothing to resolve and no recovery path to
       exercise; the branch already stood on the rebased tree rather than
       awaiting one. Replaying the rebase here would have rewritten 36 commits
@@ -2832,13 +2827,108 @@ plateau.
       green on CI at the moment the next review was queued, so a finding in that
       round is a finding about the code rather than a report of a red build.
 
+- [x] (2026-09-13) **The base moves again, and the replay silently dropped the
+      repair the previous one had made** (`bf2aef3`, `41c3c13`). The branch was
+      rebased onto `origin/main` at `b01b999`, which replayed all
+      fifty-six commits. The replay of `373c3a6` re-inserted
+      `### The four file modes` beside this branch's rewritten copy, so the
+      section appeared twice — and the earlier repair had been dropped the same
+      way, because it was written against the previous replay's tree: its
+      deletion of the base's text had nothing left to match once the base
+      reworded that text, so the merge driver kept the base's copy and the
+      insertion then added a second one. A duplicated section produces no
+      conflict marker and no failing gate, so the repair is checked by
+      measurement instead: `git diff --stat 764133f HEAD`, from the pre-rebase
+      head to this tree, is byte-for-byte the base's own three commits — the
+      same 31 files, the same 991 insertions and 290 deletions, matching
+      `git diff --stat 2c32602..origin/main` file by file. The weave merge
+      driver also doubles blank lines before headings wherever it merges
+      (MD012), which `make markdownlint` is what catches; that is why the
+      Markdown gate is run after every merge rather than once at the end.
+
+- [x] (2026-09-13) **The driver is split into the modes, the sources, and the
+      boundary** (`26e265d`), which is the review finding that `src/driver.rs`
+      was 467 lines against this repository's 400-line limit for any one file.
+      `src/driver.rs` keeps the boundary, its four test modules, and the
+      re-exports its callers already named, so `main.rs`, the tests, and the
+      `--git` path are unchanged; `src/driver/reporting.rs` holds `Mode`,
+      `ExitStatus`, `exit_status`, and the three rendering helpers;
+      `src/driver/source.rs` holds `ReadOnlyDir`, `Inputs`, `Assessment`,
+      `assess`, and `write_back`. The three are now well inside the cap at 187,
+      188, and 173 lines. `Assessment` is not re-exported, because nothing
+      outside the module names the type and `-D warnings` lints an unused
+      `pub use` in a binary crate like an unused private import.
+
+- [x] (2026-09-13) **The in-place write compares the target's text inside the
+      swap, and refuses a file that moved on** (`df0b90b`). Between the
+      assessment's read and the replacement's write is the whole formatting
+      run, and a file another writer changed inside that window was overwritten
+      unconditionally: work this run never saw, discarded without anyone being
+      asked. `mdtablefix::io::replace_file_if_unchanged` now reads the target
+      back after the temporary file is written, flushed, and synced, and
+      immediately before the rename, and declines with `Ok(false)` when the
+      target no longer holds the text the caller read — the target is left
+      exactly as its writer left it and the temporary file is removed. The
+      documentation says explicitly that this is not a compare-and-swap, since
+      no rename on any supported platform compares contents, so a writer
+      landing between the comparison and the rename still wins; what is closed
+      is every window before the rename, which is the whole run. A target that
+      cannot be read back at all is an error rather than a decline, because a
+      caller that asked a conditional question must not be told the condition
+      failed when the question could not be put. Both callers refuse rather
+      than proceed: `driver::write_back` returns whether the write happened and
+      the in-place path fails naming the file and saying the text this run read
+      is no longer there, and the library's `rewrite` and `rewrite_no_wrap`
+      turn the same decline into an `io::Error`. The two entry points share one
+      implementation, so the symlink refusal, the temporary file's cleanup, and
+      the metrics cannot disagree about what a replacement is; the counter's
+      `outcome` label gains `unchanged` as its third value, which is a
+      replacement that declined rather than one that failed. The driver test
+      drives the decline through the real seam — an ambient writer changes the
+      file while the formatter is running — so it is observed at the boundary
+      and not only in the swap's own tests.
+
+- [x] (2026-09-13) **The selection's review findings are answered, and its
+      failure type moves out of the invocation module** (`26053b1`).
+      `GitLsFiles`'s invocations now remove `GIT_DIR`, `GIT_WORK_TREE`,
+      `GIT_INDEX_FILE`, and `GIT_COMMON_DIR`, because a hook or a wrapper
+      leaves one behind and the listing would then be of a different
+      repository's files with the paths still read as relative to this one: a
+      silent wrong answer, and under `--in-place` a destructive one.
+      Discovery-only variables such as `GIT_CEILING_DIRECTORIES` are
+      deliberately left inherited, since they can only stop the search, which
+      fails honestly with Git's own diagnostic. The removals are asserted
+      through `Command::get_envs`, which reports a removal as a key with no
+      value, so what the subprocess is given is testable without a process to
+      run and without mutating the environment the test process shares. The
+      probe's verdict cases gain `OutsideRoot`, the one verdict where "reads as
+      a regular file" and "is selected" part company, and the property tests
+      draw that variant too, so the exclusion is covered as an example and as a
+      property. `report_selection` drops its `extensions = %extensions` field:
+      `--md-exts` accepts any string, of any length, any number of times, so
+      the field put caller-controlled text into every event a run emits and
+      into whatever stores them; the count answers the operator's question
+      without that, and `the_selection_log_names_no_extension_value` is the
+      test that keeps an extension value out of the log. The count of
+      candidates that could not be represented as paths leaves a warning
+      printed inside `resolve` for `GitSelection::skipped_warning`, because
+      resolving a selection is a query and writing to standard error is command
+      output — which is the *Unit Architecture* error the review's table raised
+      and the *Observability* warning it raised beside it. Finally,
+      `src/select/git_ls_files.rs` had reached 405 lines, so `GitListError`
+      moved to `src/select/git_failure.rs`, the reader it is written for rather
+      than the invocations that produce it: the `Display` half a test may
+      assert on, the `diagnostic` half a user reads, and the bounded `category`
+      half a tracing field may carry. Its one process-free test moved with it,
+      leaving the invocation module at 340 lines and the boundary tests at 345.
+
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
 `cargo test --doc` to the `test` target; and implementing
-INV-NOWRITE-UNCHANGED. Pull request #464 does all four. The rebase adds two more
-that this branch drops rather than carries: the `src/cli.rs` extraction, which
-the base's `src/command.rs` supersedes, and the EP-M7 documentation commit,
-whose every file the base carries in a fuller form.
+INV-NOWRITE-UNCHANGED. Pull request #464 does all four. The rebase adds two
+more that this branch drops rather than carries: the `src/cli.rs` extraction,
+which the base's `src/command.rs` supersedes, and the EP-M7 documentation
+commit, whose every file the base carries in a fuller form.
 
 ## Surprises & discoveries
 
@@ -3120,15 +3210,15 @@ whose every file the base carries in a fuller form.
   yields `Vec<u8>` while the function takes a `String` — a `prop_map` over a
   byte range needs `fn(Vec<u8>) -> _`, and the range already *is* the byte
   vector. `splitting_is_a_faithful_inverse` moved `textual` into
-  `prop_assert_eq!` and then read `textual.len()` two lines later; the count now
-  comes first. `.map(Utf8PathBuf::as_str)` names an associated function that
-  does not exist — `as_str` belongs to `Utf8Path`, and a path cannot be reached
-  from `&Utf8PathBuf` as a function pointer — so the map is now a closure over
-  the deref. And `regular(path.as_str())` over an iterator of `&str` resolves to
-  the unstable `str_as_str`; passing `path` directly lets the argument coercion
-  do the same job. Each fix is mechanical and none changes what a test asserts:
-  the same generator, the same assertion, the same expected values. The same
-  files also needed one Clippy fix under `-D warnings`
+  `prop_assert_eq!` and then read `textual.len()` two lines later; the count
+  now comes first. `.map(Utf8PathBuf::as_str)` names an associated function
+  that does not exist — `as_str` belongs to `Utf8Path`, and a path cannot be
+  reached from `&Utf8PathBuf` as a function pointer — so the map is now a
+  closure over the deref. And `regular(path.as_str())` over an iterator of
+  `&str` resolves to the unstable `str_as_str`; passing `path` directly lets
+  the argument coercion do the same job. Each fix is mechanical and none
+  changes what a test asserts: the same generator, the same assertion, the same
+  expected values. The same files also needed one Clippy fix under `-D warnings`
   (`redundant_closure_for_method_calls`), which is the gates doing their job
   rather than a further defect. Impact: the "red before green" claim needs
   restating precisely, and the Progress entry now does — the red state is a
@@ -3167,24 +3257,24 @@ whose every file the base carries in a fuller form.
   gate can be recorded as a green one.** Evidence: that same failed run ended
   `make: *** [Makefile:57: mutants] Error 4` in the log, while the shell around
   it reported `0`. Impact: gate runs piped to a log now run under
-  `set -o pipefail`, since the convention of teeing a log exists precisely to be
-  read by whoever checks the exit status afterwards. The log itself was never
-  wrong; only the status was, and it was wrong in the direction that hides a
-  failure.
+  `set -o pipefail`, since the convention of teeing a log exists precisely to
+  be read by whoever checks the exit status afterwards. The log itself was
+  never wrong; only the status was, and it was wrong in the direction that
+  hides a failure.
 
-- Observation: **the first mutation run found three survivors, and all three were
-  the same two source lines: the classification of a failed `canonicalize`.**
-  A path `symlink_metadata` has already accepted can reach the second arm only
-  by losing a race with the filesystem, so the guard's arms were unobservable to
-  any test rather than merely untested — which is why three mutants of it
-  (`true`, `false`, and an `==`/`!=` swap) outlived a suite that covers every
-  other branch of that function. Impact: the classification moved to
-  `unnameable`, a function of `io::ErrorKind`, tested by constructing both
-  errors. Excluding the three with `exclude_re` was the cheaper route to a green
-  run, and is what the rigour section above rules out: a survivor either has a
-  test that kills it, or has a written reason it cannot have one — and "the
-  fixture is impossible to stage" is a reason to change the seam, not to record
-  an exception.
+- Observation: **the first mutation run found three survivors, and all three
+  were the same two source lines: the classification of a failed `canonicalize`
+  .** A path `symlink_metadata` has already accepted can reach the second arm
+  only by losing a race with the filesystem, so the guard's arms were
+  unobservable to any test rather than merely untested — which is why three
+  mutants of it (`true`, `false`, and an `==`/`!=` swap) outlived a suite that
+  covers every other branch of that function. Impact: the classification moved
+  to `unnameable`, a function of `io::ErrorKind`, tested by constructing both
+  errors. Excluding the three with `exclude_re` was the cheaper route to a
+  green run, and is what the rigour section above rules out: a survivor either
+  has a test that kills it, or has a written reason it cannot have one — and
+  "the fixture is impossible to stage" is a reason to change the seam, not to
+  record an exception.
 
 - Observation: **`cargo-mutants` does not mutate test code**, so the five
   `*_tests.rs` files that `src/select/**` matches produce no mutants at all.
@@ -3196,8 +3286,8 @@ whose every file the base carries in a fuller form.
 
 - Observation: **a doc comment on a `clap` field is user-facing help text, and a
   second paragraph in one changes the rendering of every flag.** Evidence: the
-  first `--help` snapshot, taken while `--md-exts`'s doc comment carried a second
-  paragraph explaining why it declares `default_value` rather than
+  first `--help` snapshot, taken while `--md-exts`'s doc comment carried a
+  second paragraph explaining why it declares `default_value` rather than
   `default_values`. `clap` reads the first paragraph as `help` and the rest as
   `long_help`, and the presence of any long help switches the *whole* `--help`
   to the long layout: every flag in its own indented block, the internal
@@ -3214,8 +3304,8 @@ whose every file the base carries in a fuller form.
   single extension named `md mdc markdown`, which matches no file. Resolved by
   one `default_value = "md,mdc,markdown"` under the same `value_delimiter`:
   identical rendering to the grammar the flag accepts, identical three
-  extensions after splitting, and `ValueSource::DefaultValue` either way, so the
-  post-parse check is unaffected. Impact: the Interfaces block's
+  extensions after splitting, and `ValueSource::DefaultValue` either way, so
+  the post-parse check is unaffected. Impact: the Interfaces block's
   `default_values = [...]` is superseded, and
   `cli_git.rs::md_exts_replaces_the_default_set`'s unflagged case is what shows
   the default selection did not move.
@@ -3224,11 +3314,11 @@ whose every file the base carries in a fuller form.
   status", so the pinned failure message said it twice.** Evidence: the rendered
   `` `/bin/false ls-files` failed with exit status exit status: 1``. The unit
   test that existed asserted only `.contains("git ls-files")`, so the doubling
-  passed every gate until EP-M2's sanitizer work added an assertion on the whole
-  string. Resolved by `` `{command}` failed with {status}``, with the reason
-  recorded where the message is declared. Impact: an illustration of what a
-  substring assertion on a message pins — the substring, and nothing else about
-  the sentence around it.
+  passed every gate until EP-M2's sanitizer work added an assertion on the
+  whole string. Resolved by `` `{command}` failed with {status}``, with the
+  reason recorded where the message is declared. Impact: an illustration of
+  what a substring assertion on a message pins — the substring, and nothing
+  else about the sentence around it.
 
 - Observation: **a mutation survivor can be a test's blind spot rather than a
   defect, and the widened oracle found two of exactly that kind.** With the
@@ -3241,10 +3331,10 @@ whose every file the base carries in a fuller form.
   characters tells them apart. Evidence: the two `MISSED` lines in
   `EV-M2-MUTANTS`. Impact: both are killed now by tests that pin the boundary
   rather than the neighbourhood —
-  `a_failure_with_no_git_text_carries_our_wording_alone` compares the diagnostic
-  to `Display` exactly, and the cap has a test on either side of it. A survivor
-  is therefore evidence about the tests as much as about the code, which is the
-  argument for widening the oracle before believing a green run.
+  `a_failure_with_no_git_text_carries_our_wording_alone` compares the
+  diagnostic to `Display` exactly, and the cap has a test on either side of it.
+  A survivor is therefore evidence about the tests as much as about the code,
+  which is the argument for widening the oracle before believing a green run.
 
 - Observation: **writing the ADR found a stale doc comment that four gate runs
   and two CodeRabbit passes had not.** `GitSelection::inputs` described its
@@ -3253,9 +3343,9 @@ whose every file the base carries in a fuller form.
   exists to guarantee. Impact: a record that states the design in prose is a
   reading of the code from a direction no test takes, and it earns its keep
   before it is published, not after. The comment now names the sort and the two
-  places the order is visible. It is not a correctness defect — the sort is what
-  runs — but a reader who trusted the comment would have expected a different
-  `--list-files`.
+  places the order is visible. It is not a correctness defect — the sort is
+  what runs — but a reader who trusted the comment would have expected a
+  different `--list-files`.
 
 - Observation: **markdownlint's line rule applies inside a `console` fence at
   120 characters, and to a code span in prose at 80.** Evidence: the measured
@@ -3268,21 +3358,21 @@ whose every file the base carries in a fuller form.
   reader writing a long measured line should reach for the fence and check its
   width. Both wrap points are marked in the ADR as the page's wrapping rather
   than the tool's, because a reader may otherwise take a wrapped line for a
-  wrapped message, and the tool prints one cause on one line however long it
-  is.
+  wrapped message, and the tool prints one cause on one line however long it is.
 
 - Observation: **normalising one section of `docs/users-guide.md` to the wrap
   fixed point reflowed three paragraphs the change never touched.** Evidence:
   `git diff` shows the three hunks, and each is a pure re-wrap with no word
   changed. Reverted or kept was a real choice, so it was decided on evidence
   rather than on the tidiness of the diff: `make fmt`'s `mdformat-all` runs
-  exactly the flags used here, so these paragraphs were going to reflow the next
-  time anyone ran it, and `tests/idempotence_drift.rs` compares pass 1 against
-  pass 2 rather than committed input against pass 1 — so committed documentation
-  is not required to be a fixed point, and the drift gate says nothing either
-  way. Kept, and the file is now a fixed point. Impact: a documentation change
-  can carry reflows it did not make, and the honest thing is to say so in the
-  commit message rather than to leave the diff looking smaller than the change.
+  exactly the flags used here, so these paragraphs were going to reflow the
+  next time anyone ran it, and `tests/idempotence_drift.rs` compares pass 1
+  against pass 2 rather than committed input against pass 1 — so committed
+  documentation is not required to be a fixed point, and the drift gate says
+  nothing either way. Kept, and the file is now a fixed point. Impact: a
+  documentation change can carry reflows it did not make, and the honest thing
+  is to say so in the commit message rather than to leave the diff looking
+  smaller than the change.
 
 - Observation: **the missing-identity lesson was learned in one fixture and not
   applied to the second.** The Surprises entry above records
@@ -3291,12 +3381,14 @@ whose every file the base carries in a fuller form.
   remedy. The *unit* fixture in `src/select/git_ls_files_tests.rs` had the same
   gap and kept it, because it was written in the same milestone and its helper
   inherited the environment rather than hardening it. Evidence: CI run
-  `34661535150`, `git ["commit", "-m", "initialise"] failed with exit status:
-  128: Author identity unknown`, in that file's helper on **both** jobs. Impact:
-  a lesson recorded in one place does not propagate itself, and the fixture that
-  most needs the hardening is the one written before the lesson was learned. The
-  two helpers now harden their environments identically, and the shared shape is
-  the reason the repair was mechanical once the failure was read.
+  `34661535150`,
+  `git ["commit", "-m", "initialise"] failed with exit status:
+  128: Author identity unknown`,
+  in that file's helper on **both** jobs. Impact: a lesson recorded in one
+  place does not propagate itself, and the fixture that most needs the
+  hardening is the one written before the lesson was learned. The two helpers
+  now harden their environments identically, and the shared shape is the reason
+  the repair was mechanical once the failure was read.
 
 - Observation: **a green local gate is evidence about the local machine, not
   about the code.** All four of the Windows defects came from the test tree
@@ -3309,9 +3401,9 @@ whose every file the base carries in a fuller form.
   rather than behaviour, so the tool itself was never wrong on either platform;
   but the plan's own gates could not have caught them, and the *first* run of a
   new test suite on a second platform is doing real work rather than confirming
-  local green. Where a fact is spelled by the standard library, the repair is to
-  assert the part this crate words and let the platform supply the rest — which
-  is also what makes the assertion survive the next platform.
+  local green. Where a fact is spelled by the standard library, the repair is
+  to assert the part this crate words and let the platform supply the rest —
+  which is also what makes the assertion survive the next platform.
 
 - Observation: **GitHub runs no `pull_request` workflows at all while the pull
   request conflicts, so silence from CI is not agreement.** Evidence: the
@@ -3323,12 +3415,13 @@ whose every file the base carries in a fuller form.
   activity if the pull request has a merge conflict, and that the conflict must
   be resolved first. The same push that carried this observation supplied its
   control: run `34689481906` is a `pull_request_target` run on that commit,
-  which GitHub documents as not blocked by conflict, while no `pull_request` run
-  exists beside it. Impact: EP-M3's documentation commits have never been tested
-  by CI, and neither has this repair, so no CI verdict exists for either and the
-  plan must not read the absence of a red run as a green one. It also means the
-  rebase this plan defers is what re-opens the pipeline, which turns a tidiness
-  question into the precondition for CI evidence — see the Decision log.
+  which GitHub documents as not blocked by conflict, while no `pull_request`
+  run exists beside it. Impact: EP-M3's documentation commits have never been
+  tested by CI, and neither has this repair, so no CI verdict exists for either
+  and the plan must not read the absence of a red run as a green one. It also
+  means the rebase this plan defers is what re-opens the pipeline, which turns
+  a tidiness question into the precondition for CI evidence — see the Decision
+  log.
 
 - Observation: **a test can be unreachable behind another test's failure, and
   the repair that hides it is the one that looks tidiest.** The linked-worktree
@@ -3344,28 +3437,28 @@ whose every file the base carries in a fuller form.
   as a judgement rather than as an observation, because that is what it is.
 
 - Observation: **a configured merge driver can exit 0 and still corrupt the
-  merge, so a rebase on a machine whose attributes name one has to run with that
-  driver bypassed.** Evidence: this machine's Ansible-managed
+  merge, so a rebase on a machine whose attributes name one has to run with
+  that driver bypassed.** Evidence: this machine's Ansible-managed
   `~/.config/git/attributes` maps `*.rs merge=weave`, the driver itself defined
   in `/home/leynos/.gitconfig` as
   `merge.weave.driver = weave-driver %O %A %B %L %P`; the repository's own
   `.gitattributes` names no merge rule, so the branch cannot opt out through
-  anything it tracks. With the driver engaged, `git rebase` reported success and
-  exited 0 while producing a tree that cannot compile: `src/main_tests.rs` with
-  its module doc and a `#[cfg(unix)]` block duplicated around the resolution,
-  `src/main.rs` garbled outside any conflict marker, and a HEAD declaring
-  `mod cli;` while importing `Cli` from `command`. Impact: "the rebase finished"
-  is a claim about git's exit status, and a merge driver is part of what decides
-  it, so the status is worth less than the compile. The corrupted resolution was
-  discarded rather than repaired, the pre-weave state was saved aside, and the
-  rebase was rerun with `core.attributesFile=/dev/null`. One further trap, which
-  cost a second abort: `-c core.attributesFile=/dev/null` on the starting command
-  does not survive `git rebase --skip` or `--continue`, because those are fresh
-  processes that re-read configuration — the bypass has to be inherited by
-  children, in the environment form
-  `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.attributesFile
-  GIT_CONFIG_VALUE_0=/dev/null`, or the driver re-engages mid-rebase with no
-  marker to warn that it did.
+  anything it tracks. With the driver engaged, `git rebase` reported success
+  and exited 0 while producing a tree that cannot compile: `src/main_tests.rs`
+  with its module doc and a `#[cfg(unix)]` block duplicated around the
+  resolution, `src/main.rs` garbled outside any conflict marker, and a HEAD
+  declaring `mod cli;` while importing `Cli` from `command`. Impact: "the
+  rebase finished" is a claim about git's exit status, and a merge driver is
+  part of what decides it, so the status is worth less than the compile. The
+  corrupted resolution was discarded rather than repaired, the pre-weave state
+  was saved aside, and the rebase was rerun with
+  `core.attributesFile=/dev/null`. One further trap, which cost a second abort:
+  `-c core.attributesFile=/dev/null` on the starting command does not survive
+  `git rebase --skip` or `--continue`, because those are fresh processes that
+  re-read configuration — the bypass has to be inherited by children, in the
+  environment form
+  `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.attributesFile GIT_CONFIG_VALUE_0=/dev/null`,
+  or the driver re-engages mid-rebase with no marker to warn that it did.
 
 - Observation: **lines that both sides agree on are not necessarily lines that
   are right together, so a resolution is a reading of the whole region rather
@@ -3387,45 +3480,64 @@ whose every file the base carries in a fuller form.
   validated, so "rebased onto the base" is a statement about a commit rather
   than about a branch.** Evidence: the first rebase onto `origin/check-option`
   at `64117e4` was completed, its six gates ran green, and its record was
-  written; inside that window the base gained `9834fcb` (13:13:29 +0200) and its
-  record commit `49a2d0a`, so the tree that had just been measured was no longer
-  the tree on the base's tip. That the arrival was itself a CI-only repair — a
-  traced test that fails according to which tests the harness happens to run
-  alongside it, the same class as the five this branch had repaired — is the
-  part worth carrying: it says the failures CI reports are a property of the
-  stack rather than a debt this branch pays and is done with. Impact: the same
-  instruction was applied again rather than the first rebase being pushed, and
-  the record now names `49a2d0a` as the tip rebased onto while stating that a
-  third rebase becomes necessary only if the base moves once more.
-  **It did, and the shape of the second instance is what makes the observation
-  worth keeping rather than a footnote.** `e462b97` landed at 13:22:35 +0200 and
-  the second rebase's push at 11:25:22Z, three minutes apart, with the second
-  rebase measured, gated, and pushed in between; so this is not one unlucky
-  window but the ordinary state of a branch stacked on a branch that is still
-  being worked. The two instances also differ in a way that matters: the first
-  arrival was a code change that touched files this branch edits, and the second
-  is 27 lines of the base's own plan document that this branch never touches.
-  The rule that falls out is the one now applied — absorb the base, then
-  measure what actually moved with `git diff --stat` against the superseded tip
-  rather than assuming the replay changed anything — and the reason to state it
-  is that the assumption would have been right here by luck and wrong the time
-  before.
+  written; inside that window the base gained `9834fcb` (13:13:29 +0200) and
+  its record commit `49a2d0a`, so the tree that had just been measured was no
+  longer the tree on the base's tip. That the arrival was itself a CI-only
+  repair — a traced test that fails according to which tests the harness
+  happens to run alongside it, the same class as the five this branch had
+  repaired — is the part worth carrying: it says the failures CI reports are a
+  property of the stack rather than a debt this branch pays and is done with.
+  Impact: the same instruction was applied again rather than the first rebase
+  being pushed, and the record now names `49a2d0a` as the tip rebased onto
+  while stating that a third rebase becomes necessary only if the base moves
+  once more. **It did, and the shape of the second instance is what makes the
+  observation worth keeping rather than a footnote.** `e462b97` landed at
+  13:22:35 +0200 and the second rebase's push at 11:25:22Z, three minutes
+  apart, with the second rebase measured, gated, and pushed in between; so this
+  is not one unlucky window but the ordinary state of a branch stacked on a
+  branch that is still being worked. The two instances also differ in a way
+  that matters: the first arrival was a code change that touched files this
+  branch edits, and the second is 27 lines of the base's own plan document that
+  this branch never touches. The rule that falls out is the one now applied —
+  absorb the base, then measure what actually moved with `git diff --stat`
+  against the superseded tip rather than assuming the replay changed anything —
+  and the reason to state it is that the assumption would have been right here
+  by luck and wrong the time before.
 
 - Observation: **the Markdown line-length rule's exception is about the last
   whitespace-delimited word, not about whether a line could be broken, and the
   difference between the two readings is one column.** `MD013` shortens each
-  line before comparing it — it replaces the trailing run of non-whitespace with
-  a single character — so a line passes when its final word begins at or before
-  column 80 and fails when that word begins at column 81, even if the word is a
-  single em dash. Evidence: this plan's own Progress entry, reading "…in
-  `src/select.rs` —", was reported as `[Expected: 80; Actual: 81]` while eight
-  longer lines in the same file pass, because those carry a long code span after
-  their last space. The rule is in markdownlint's `md013.mjs`, which does the
-  shortening before the comparison, and the eight were re-derived under it
-  rather than assumed. Impact: a hand check that asks "is there whitespace past
-  column 80" answers a different question and will pass a line the gate fails;
-  "where does the final word begin" is the question that matches the
-  implementation, and it is the one this plan now uses.
+  line before comparing it — it replaces the trailing run of non-whitespace
+  with a single character — so a line passes when its final word begins at or
+  before column 80 and fails when that word begins at column 81, even if the
+  word is a single em dash. Evidence: this plan's own Progress entry, reading
+  "…in `src/select.rs` —", was reported as `[Expected: 80; Actual: 81]` while
+  eight longer lines in the same file pass, because those carry a long code
+  span after their last space. The rule is in markdownlint's `md013.mjs`, which
+  does the shortening before the comparison, and the eight were re-derived
+  under it rather than assumed. Impact: a hand check that asks "is there
+  whitespace past column 80" answers a different question and will pass a line
+  the gate fails; "where does the final word begin" is the question that
+  matches the implementation, and it is the one this plan now uses.
+
+- Observation: **a rebase replay can drop a repair instead of conflicting on
+  it, and the merge driver doubles blank lines wherever it does merge, so
+  neither failure announces itself.** Evidence: the second rebase onto
+  `origin/main` replayed the commit that first documented `--git` across the
+  guides, and the section it rewrote in place appeared twice — because the
+  deletion half of that rewrite no longer matched anything once the base had
+  reworded the same text, so the driver kept the base's copy and the insertion
+  added a second. The earlier repair of exactly that duplication had been
+  written against the previous replay's tree, so it met the same fate and was
+  dropped with it: the repair appeared to succeed while changing nothing. The
+  same driver doubles blank lines around a heading it merges, which is `MD012`
+  and is what `make markdownlint` catches. Impact: a repair is verified by
+  measuring the tree rather than by finding its commit in the log — the check
+  used here is that `git diff --stat` from the pre-rebase head to the rebased
+  tree equals the base's own numstat file for file, since a duplicated section
+  produces no conflict marker, no compile error, and no failing gate. The
+  Markdown gate is run after every merge for the same reason, not once at the
+  end of the work.
 
 ## Decision log
 
@@ -3439,9 +3551,9 @@ is the durable record, and EP-M3 reconciles this log into it.
   one function whose mode is a run-time value, so the capability it receives
   cannot change type with the mode. What the early return does give is that the
   listing path reaches no capability and no `Directory` call at all, so the
-  reading and writing arms are unreachable rather than merely unentered; what it
-  leaves to review is that the `&Dir` is still held. The alternatives were to
-  split `analyse` into a read-only half and a write half (a larger change to
+  reading and writing arms are unreachable rather than merely unentered; what
+  it leaves to review is that the `&Dir` is still held. The alternatives were
+  to split `analyse` into a read-only half and a write half (a larger change to
   #464's composition than this milestone is for) or to build the listing payload
   in `src/main.rs` (which would put the meaning of listing in two places).
   Cost: one plan sentence softened from "by type" to "by construction, with the
@@ -3459,8 +3571,8 @@ is the durable record, and EP-M3 reconciles this log into it.
   returning it through a field of `Inputs` would have put a conflict policy
   inside the type that answers "where does the text come from". Cost: the
   composition section's pinned signature is superseded, and the resolver now
-  lives in `src/git_inputs.rs` rather than in `src/main.rs` so that the choice is
-  testable without a repository. Date/Author: 2026-09-12, implementation.
+  lives in `src/git_inputs.rs` rather than in `src/main.rs` so that the choice
+  is testable without a repository. Date/Author: 2026-09-12, implementation.
 
 - Decision: the conflict guard refuses inside the `Mode::InPlace if is_changed`
   arm, not before the assessment. Rationale: the refusal is only meaningful for
@@ -3486,14 +3598,14 @@ is the durable record, and EP-M3 reconciles this log into it.
 
 - Decision: git's own stderr is relayed beside this repository's message, as one
   scrubbed line, capped at 1024 characters — rather than dropped, or printed
-  verbatim. Rationale: AX-GIT-NLS forbids asserting on git's text, so the part a
-  test may assert has to be this repository's wording; but dropping git's text
-  would leave a user with "git ls-files failed" and no reason. `relayable`
+  verbatim. Rationale: AX-GIT-NLS forbids asserting on git's text, so the part
+  a test may assert has to be this repository's wording; but dropping git's
+  text would leave a user with "git ls-files failed" and no reason. `relayable`
   replaces control characters and newlines with single spaces and non-UTF-8
-  bytes with the replacement character, so a path in the repository cannot forge
-  a second line of stderr or drive the terminal reading it, and the cap keeps a
-  kilobyte of a repository's name from burying the message it supports. Cost:
-  one screen of scrubbing logic, five cases in `git_ls_files_tests`, and a
+  bytes with the replacement character, so a path in the repository cannot
+  forge a second line of stderr or drive the terminal reading it, and the cap
+  keeps a kilobyte of a repository's name from burying the message it supports.
+  Cost: one screen of scrubbing logic, five cases in `git_ls_files_tests`, and a
   `diagnostic()` method whose output differs from `Display`. Date/Author:
   2026-09-12, implementation.
 
@@ -3507,12 +3619,12 @@ is the durable record, and EP-M3 reconciles this log into it.
   implementation.
 
 - Decision: narrow the mutation run to the binary's own test target
-  (`additional_cargo_test_args = ["--bin", "mdtablefix"]`) rather than the whole
-  suite. Rationale: `cargo-mutants` checks the unmutated baseline first, and
-  until EP-M2 lands `--git`, `tests/git_file_selection.rs` fails however the
-  source reads — a suite that is already red would report every mutant as
-  caught. Cost: the behavioural suite contributes nothing to the run yet, so the
-  setting is a temporary narrowing and EP-M2 revisits it once that suite is
+  (`additional_cargo_test_args = ["--bin", "mdtablefix"]`) rather than the
+  whole suite. Rationale: `cargo-mutants` checks the unmutated baseline first,
+  and until EP-M2 lands `--git`, `tests/git_file_selection.rs` fails however
+  the source reads — a suite that is already red would report every mutant as
+  caught. Cost: the behavioural suite contributes nothing to the run yet, so
+  the setting is a temporary narrowing and EP-M2 revisits it once that suite is
   green. Date/Author: 2026-09-12, implementation.
 
 - Decision: drop the narrowing at EP-M2, and re-run the whole suite as the
@@ -3529,8 +3641,8 @@ is the durable record, and EP-M3 reconciles this log into it.
   Date/Author: 2026-09-12, implementation.
 
 - Decision: change the seam rather than exclude the mutants that could not be
-  killed. Rationale: three mutants of `fs_probe`'s failed-canonicalization match
-  survived because their two arms differ only under a filesystem race, and
+  killed. Rationale: three mutants of `fs_probe`'s failed-canonicalization
+  match survived because their two arms differ only under a filesystem race, and
   `exclude_re` would have turned the run green in one line. Extracting the
   classification into a function of `io::ErrorKind` costs six lines, kills all
   three, and pins a decision the module's own comment already claimed — that
@@ -3741,16 +3853,17 @@ is the durable record, and EP-M3 reconciles this log into it.
 
 - Decision: ADR 0010 quotes measured tool output, and a passage that could not
   be measured was measured before being written. Rationale: the first draft of
-  the refusal passage read `mdtablefix: refusing to rewrite docs.md: ...` as one
-  line, which is not what the binary prints — the refusal is an `anyhow` chain,
-  so the tool's line is followed by a blank line, `Caused by:`, and an indented
-  cause. The draft was plausible and wrong, which is the failure mode a
-  decision record can least afford, because a reader checks a transcript against
-  the tool only when it disagrees with their expectation. Cost: two fixtures
-  built to measure rather than to test — a repository paused mid-merge with
-  `MERGE_HEAD` and conflict markers in the file, and a `--check` run outside any
-  repository — and a wrapping note under each fence, since the cause line is 123
-  characters and the fence's limit is 120. Date/Author: 2026-09-12, EP-M3.
+  the refusal passage read `mdtablefix: refusing to rewrite docs.md: ...` as
+  one line, which is not what the binary prints — the refusal is an `anyhow`
+  chain, so the tool's line is followed by a blank line, `Caused by:`, and an
+  indented cause. The draft was plausible and wrong, which is the failure mode
+  a decision record can least afford, because a reader checks a transcript
+  against the tool only when it disagrees with their expectation. Cost: two
+  fixtures built to measure rather than to test — a repository paused mid-merge
+  with `MERGE_HEAD` and conflict markers in the file, and a `--check` run
+  outside any repository — and a wrapping note under each fence, since the
+  cause line is 123 characters and the fence's limit is 120. Date/Author:
+  2026-09-12, EP-M3.
 
 - Decision: keep the three incidental reflows in `docs/users-guide.md` rather
   than reverting them or formatting the file in a mode that avoids them.
@@ -3760,8 +3873,8 @@ is the durable record, and EP-M3 reconciles this log into it.
   against pass 2, so a committed document is not required to be a fixed point
   and the gate neither demands the change nor forbids it. The file is now a
   fixed point. Cost: three hunks in the diff for words the change did not
-  author, named in the commit message and in Surprises & discoveries rather than
-  left for a reviewer to attribute. Date/Author: 2026-09-12, EP-M3.
+  author, named in the commit message and in Surprises & discoveries rather
+  than left for a reviewer to attribute. Date/Author: 2026-09-12, EP-M3.
 
 - Decision: `.gitattributes` is documented as a caveat rather than implemented.
   Rationale: EP-M3's acceptance names a CRLF caveat, and the risk is real but
@@ -3779,51 +3892,51 @@ is the durable record, and EP-M3 reconciles this log into it.
 - Decision: do **not** rebase `git-option` onto `origin/check-option` now, even
   though the base has moved and the branch is in conflict. Rationale: the base
   is being actively rewritten (`530bdbd` at 10:39Z and `914e9ae` at 10:43Z
-  arrived within minutes of each other, during this repair's own gate run), so a
-  rebase performed now would be against a moving target and would need repeating
-  before the stack merges; the base's own Windows job is red on an unused import
-  at `tests/cli_check/arguments.rs:3`, so a rebase would fold a failing job into
-  a branch that is otherwise explainable as red-for-its-own-reasons; and the
-  conflict is not blocking anything this branch can still do — the plan's stated
-  position is that the stack waits on #464's merge, at which point the base
-  stops moving and one rebase settles it. The cost is real and is recorded rather
-  than waved away: while the conflict stands, GitHub runs no `pull_request`
-  workflows at all, so the repairs in `6384543` and EP-M3's two commits have no
-  CI verdict and cannot get one until the conflict is resolved. The decision is
-  therefore to hold the correctness position and pay in delayed evidence, and to
-  re-open the pipeline as soon as the base settles. Date/Author: 2026-09-12,
-  EP-M4 (CI repair).
+  arrived within minutes of each other, during this repair's own gate run), so
+  a rebase performed now would be against a moving target and would need
+  repeating before the stack merges; the base's own Windows job is red on an
+  unused import at `tests/cli_check/arguments.rs:3`, so a rebase would fold a
+  failing job into a branch that is otherwise explainable as
+  red-for-its-own-reasons; and the conflict is not blocking anything this
+  branch can still do — the plan's stated position is that the stack waits on
+  #464's merge, at which point the base stops moving and one rebase settles it.
+  The cost is real and is recorded rather than waved away: while the conflict
+  stands, GitHub runs no `pull_request` workflows at all, so the repairs in
+  `6384543` and EP-M3's two commits have no CI verdict and cannot get one until
+  the conflict is resolved. The decision is therefore to hold the correctness
+  position and pay in delayed evidence, and to re-open the pipeline as soon as
+  the base settles. Date/Author: 2026-09-12, EP-M4 (CI repair).
 
 - Decision: **rebase onto `origin/check-option` now**, superseding the deferral
-  above, and make `src/command.rs` this branch's one command module.
-  Rationale: the deferral held that the base was moving and would stop once #464
-  merged, so one late rebase would settle the stack — and it recorded its cost
-  honestly, that while the conflict stood GitHub ran no `pull_request` workflows
-  at all, leaving the branch's newest commits without a CI verdict and with no
-  way to obtain one. Both halves of that cost are now payable. The base's own
-  Windows failure has been fixed upstream in `3737276`, so a rebase no longer
-  folds a red job into this branch; and the conflict is itself the reason no run
-  exists for `6384543` or for EP-M3's two commits, which makes resolving it the
-  precondition for the evidence rather than a tidiness question. The structural
-  half follows from what the base did: it extracted `Cli` and `FormatOpts` into
-  `src/command.rs` together with the pipeline functions this branch's
-  `src/cli.rs` never held, so keeping both modules would put two `Cli` types and
-  two `FormatOpts` types in one binary. Keeping the base's module and folding the
-  `--git` surface into it is the only arrangement that leaves one of each, and
-  the `--git` behaviour is untouched by it — the module is the outermost adapter
-  either way, and the mode it names is still passed inward unchanged. The base's
-  newer patterns were adopted rather than mirrored, on the rule that a pattern
-  the base introduces is the one a later reader will expect: `crate::command`
-  paths, `Mode::ListFiles` in `mode_label` and `MODES`, the split driver test
-  files, and the `--fences` "Normalize" wording; `Progress` lists them, and the
-  metrics one is a compile requirement rather than a preference. Cost: 30 of the
-  branch's 62 commits were dropped as patch-equivalent and never replayed, which
-  is invisible in the resulting tree but changes every hash on the branch; the
-  two transcripts that list `src/cli.rs` now describe a file the branch does not
-  carry, and the plan says so beside them; and one commit was
-  skipped by hand, the EP-M7 documentation merge, which is a judgement that the
-  base's text is the fuller one rather than a mechanical outcome. Date/Author:
-  2026-09-12, EP-M4 (rebase).
+  above, and make `src/command.rs` this branch's one command module. Rationale:
+  the deferral held that the base was moving and would stop once #464 merged,
+  so one late rebase would settle the stack — and it recorded its cost
+  honestly, that while the conflict stood GitHub ran no `pull_request`
+  workflows at all, leaving the branch's newest commits without a CI verdict
+  and with no way to obtain one. Both halves of that cost are now payable. The
+  base's own Windows failure has been fixed upstream in `3737276`, so a rebase
+  no longer folds a red job into this branch; and the conflict is itself the
+  reason no run exists for `6384543` or for EP-M3's two commits, which makes
+  resolving it the precondition for the evidence rather than a tidiness
+  question. The structural half follows from what the base did: it extracted
+  `Cli` and `FormatOpts` into `src/command.rs` together with the pipeline
+  functions this branch's `src/cli.rs` never held, so keeping both modules
+  would put two `Cli` types and two `FormatOpts` types in one binary. Keeping
+  the base's module and folding the `--git` surface into it is the only
+  arrangement that leaves one of each, and the `--git` behaviour is untouched
+  by it — the module is the outermost adapter either way, and the mode it names
+  is still passed inward unchanged. The base's newer patterns were adopted
+  rather than mirrored, on the rule that a pattern the base introduces is the
+  one a later reader will expect: `crate::command` paths, `Mode::ListFiles` in
+  `mode_label` and `MODES`, the split driver test files, and the `--fences`
+  "Normalize" wording; `Progress` lists them, and the metrics one is a compile
+  requirement rather than a preference. Cost: 30 of the branch's 62 commits
+  were dropped as patch-equivalent and never replayed, which is invisible in
+  the resulting tree but changes every hash on the branch; the two transcripts
+  that list `src/cli.rs` now describe a file the branch does not carry, and the
+  plan says so beside them; and one commit was skipped by hand, the EP-M7
+  documentation merge, which is a judgement that the base's text is the fuller
+  one rather than a mechanical outcome. Date/Author: 2026-09-12, EP-M4 (rebase).
 
 - Decision: rebase **a second time**, onto `origin/check-option`'s new tip
   `49a2d0a`, rather than pushing the rebase onto `64117e4` that had just been
@@ -3833,60 +3946,60 @@ is the durable record, and EP-M3 reconciles this log into it.
   produced a pull request measured against a tip it no longer sits on, which is
   the condition the exercise exists to clear. The cost was measured rather than
   assumed: the base's two commits touch `src/driver_report_tests.rs` and
-  `src/main_tests.rs`, which this branch edits too, so a conflict was plausible;
-  the replay was in fact clean, because the base edits import lines and
-  attribute positions while this branch edits `ConflictGuard::unguarded()` call
-  sites, and reading the merged file is what confirms both survived. The new
-  base also carried a convention this branch had to be measured against rather
-  than mirrored — `test_macros::traced_test` for every traced test — and the
-  measurement is that this branch has none to convert, adding no traced test of
-  its own. Date/Author: 2026-09-12, EP-M4 (rebase).
+  `src/main_tests.rs`, which this branch edits too, so a conflict was
+  plausible; the replay was in fact clean, because the base edits import lines
+  and attribute positions while this branch edits `ConflictGuard::unguarded()`
+  call sites, and reading the merged file is what confirms both survived. The
+  new base also carried a convention this branch had to be measured against
+  rather than mirrored — `test_macros::traced_test` for every traced test — and
+  the measurement is that this branch has none to convert, adding no traced
+  test of its own. Date/Author: 2026-09-12, EP-M4 (rebase).
 
 - Decision: rebase **a third time**, onto `origin/check-option`'s tip
   `e462b97`, rather than holding the second rebase and recording the base's
   third move as an observation. Rationale: the instruction is to rebase onto
-  `origin/check-option`, and a branch one commit behind the tip it names has not
-  discharged it — the same reasoning as the second rebase, applied to the same
-  condition, so treating this instance differently would need a reason and there
-  is none. The cost was measured before the decision rather than after: one base
-  commit to absorb, 32 to replay, and `e462b97` touches exactly one file,
-  `docs/execplans/check-option.md`, which this branch never touches. What the
-  third rebase cost in evidence is worth stating honestly: it supersedes the
-  head the in-flight run `34691011897` was launched against, so a verdict
+  `origin/check-option`, and a branch one commit behind the tip it names has
+  not discharged it — the same reasoning as the second rebase, applied to the
+  same condition, so treating this instance differently would need a reason and
+  there is none. The cost was measured before the decision rather than after:
+  one base commit to absorb, 32 to replay, and `e462b97` touches exactly one
+  file, `docs/execplans/check-option.md`, which this branch never touches. What
+  the third rebase cost in evidence is worth stating honestly: it supersedes
+  the head the in-flight run `34691011897` was launched against, so a verdict
   arrives on `70d58ab` while the branch tips at a new commit whose only
-  difference from it is the base's own plan file. The alternative considered and
-  rejected was to hold `70d58ab` until `34691011897` reported, then rebase and
-  re-push; rejected because it makes the branch's correctness posture contingent
-  on the timing of a base still being pushed to, which is the treadmill the
-  second rebase already declined to join. Date/Author: 2026-09-12, EP-M4
-  (rebase).
+  difference from it is the base's own plan file. The alternative considered
+  and rejected was to hold `70d58ab` until `34691011897` reported, then rebase
+  and re-push; rejected because it makes the branch's correctness posture
+  contingent on the timing of a base still being pushed to, which is the
+  treadmill the second rebase already declined to join. Date/Author:
+  2026-09-12, EP-M4 (rebase).
 
 - Decision: rebase **a fourth time**, onto `origin/check-option` at `6be1a76`,
-  and with it a rule for a branch stacked on a branch that is still being worked
-  on rather than a case-by-case judgement. The rule: absorb the base whenever it
-  moves, but measure first what the replay actually moves, because that
-  measurement is what says which gates the rebase has invalidated. Only one of
-  the four moved the base's prose alone — the third, whose replay touched
-  nothing but `docs/execplans/check-option.md`, and it is therefore the one case
-  where the Markdown gate was the only gate that had to be re-run. The other
-  three each absorbed base commits that reach code, and each was followed by the
-  full set: the first took the base's own refactor into this tree across 45
-  files, splitting `src/cli.rs` into `src/command.rs` and giving the reporting
-  tests and the check suite their own modules; the second absorbed `9834fcb`,
-  the traced-callsite fix, which edits 17 files under `src/`; and this one moved
-  `src/report/render_tests.rs`. The alternative considered was to stop at the
-  third rebase and let later base commits sit unabsorbed until #464 merges, on
-  the argument that the pull request's diff and its CI verdict are unaffected
-  either way. Rejected because it is not true of the verdict in the long run —
-  the base's new test file joins this branch's tree the moment it is absorbed,
-  and a reader should know which run measured the tree they are looking at —
-  and because the stopping condition it implies is "whenever the base happens
-  to settle", which is unbounded while another session is actively pushing to
-  it. The rate is measured rather than asserted: six base commits landed in the
-  fifty minutes from the tip tagged before the first rebase to the fourth
-  arrival, three of them inside the nine minutes from 13:13:29 to 13:22:35,
-  which is a rate rather than an accident. Cost: each rebase rewrites every
-  hash on the branch and so re-points the review and run verdicts at a
+  and with it a rule for a branch stacked on a branch that is still being
+  worked on rather than a case-by-case judgement. The rule: absorb the base
+  whenever it moves, but measure first what the replay actually moves, because
+  that measurement is what says which gates the rebase has invalidated. Only
+  one of the four moved the base's prose alone — the third, whose replay
+  touched nothing but `docs/execplans/check-option.md`, and it is therefore the
+  one case where the Markdown gate was the only gate that had to be re-run. The
+  other three each absorbed base commits that reach code, and each was followed
+  by the full set: the first took the base's own refactor into this tree across
+  45 files, splitting `src/cli.rs` into `src/command.rs` and giving the
+  reporting tests and the check suite their own modules; the second absorbed
+  `9834fcb`, the traced-callsite fix, which edits 17 files under `src/`; and
+  this one moved `src/report/render_tests.rs`. The alternative considered was
+  to stop at the third rebase and let later base commits sit unabsorbed until
+  #464 merges, on the argument that the pull request's diff and its CI verdict
+  are unaffected either way. Rejected because it is not true of the verdict in
+  the long run — the base's new test file joins this branch's tree the moment
+  it is absorbed, and a reader should know which run measured the tree they are
+  looking at — and because the stopping condition it implies is "whenever the
+  base happens to settle", which is unbounded while another session is actively
+  pushing to it. The rate is measured rather than asserted: six base commits
+  landed in the fifty minutes from the tip tagged before the first rebase to
+  the fourth arrival, three of them inside the nine minutes from 13:13:29 to
+  13:22:35, which is a rate rather than an accident. Cost: each rebase rewrites
+  every hash on the branch and so re-points the review and run verdicts at a
   superseded commit, which is a real loss of traceability mitigated only by the
   `backup/git-option-pre-*` tags and by the plan naming the commit each verdict
   describes. Date/Author: 2026-09-12, EP-M4 (rebase).
@@ -3896,33 +4009,33 @@ is the durable record, and EP-M3 reconciles this log into it.
   review a diff this branch has not changed: `git diff --stat 70d58ab HEAD`,
   over the tree round six reviewed, names three files — the base's own
   `src/report/render_tests.rs` and `docs/execplans/check-option.md`, and this
-  plan's prose — so every file this branch authors is byte-identical to the tree
-  round six returned zero findings on, and the only new code in the tree arrives
-  from the base, where the base's own pull request is what reviews it. The
-  mutation record is carried by a stronger measurement than that diffstat:
+  plan's prose — so every file this branch authors is byte-identical to the
+  tree round six returned zero findings on, and the only new code in the tree
+  arrives from the base, where the base's own pull request is what reviews it.
+  The mutation record is carried by a stronger measurement than that diffstat:
   `git rev-parse <tag>:src/select` returns
   `dd44c4b496878fa4ced57448b1dfada0ed94ee27` at every checkpoint from
   `backup/git-option-pre-check-option-rebase` (12:54) through the fourth rebase
-  (13:51) and at `4de8a7d`, so the 60 mutants over the selection module describe
-  the same bytes on every side of all four rebases and `make mutants` was not
-  re-run. Against
-  that, a round consumes one of the reviews the service rate-limits, and this
-  branch's six rounds have each returned zero findings, so the expected yield of
-  a seventh over an unchanged diff is a repeat of the sixth at the price of a
-  wait that would fall on whoever needs a round next. The alternative considered
-  and rejected was to run it anyway for symmetry with the third rebase, on the
-  argument that a review of the pushed tree is cheap insurance. Rejected because
-  the third rebase's round was not symmetric: that rebase cleared the conflict,
-  moved the branch from a tree the pipeline had never measured to one it could,
-  and its round was the first over a diff GitHub was willing to test. This
-  omission is reversible by asking — if a reader wants a seventh round over
-  `4de8a7d`, nothing here prevents it, and the branch's diff against its base is
-  36 files, 8891 insertions, and 144 deletions. The omission was reversed the
-  same day, on the requester's instruction: a review was queued through `comenq`
-  as `fa732d8c`. That is the hosted service reviewing the pull request rather
-  than a seventh `--agent` round, and the omission was recorded as reversible
-  precisely so that asking would be a decision to take rather than a rule to
-  argue with. Date/Author: 2026-09-12, EP-M4 (review).
+  (13:51) and at `4de8a7d`, so the 60 mutants over the selection module
+  describe the same bytes on every side of all four rebases and `make mutants`
+  was not re-run. Against that, a round consumes one of the reviews the service
+  rate-limits, and this branch's six rounds have each returned zero findings,
+  so the expected yield of a seventh over an unchanged diff is a repeat of the
+  sixth at the price of a wait that would fall on whoever needs a round next.
+  The alternative considered and rejected was to run it anyway for symmetry
+  with the third rebase, on the argument that a review of the pushed tree is
+  cheap insurance. Rejected because the third rebase's round was not symmetric:
+  that rebase cleared the conflict, moved the branch from a tree the pipeline
+  had never measured to one it could, and its round was the first over a diff
+  GitHub was willing to test. This omission is reversible by asking — if a
+  reader wants a seventh round over `4de8a7d`, nothing here prevents it, and
+  the branch's diff against its base is 36 files, 8891 insertions, and 144
+  deletions. The omission was reversed the same day, on the requester's
+  instruction: a review was queued through `comenq` as `fa732d8c`. That is the
+  hosted service reviewing the pull request rather than a seventh `--agent`
+  round, and the omission was recorded as reversible precisely so that asking
+  would be a decision to take rather than a rule to argue with. Date/Author:
+  2026-09-12, EP-M4 (review).
 
 - Decision: **mark pull request #466 ready for review while its base is
   unmerged**, on the requester's instruction, which reverses the draft posture
@@ -3941,19 +4054,69 @@ is the durable record, and EP-M3 reconciles this log into it.
   own files are measured as unchanged across the moves rather than assumed to
   be. Date/Author: 2026-09-12, EP-M4 (review).
 
+- Decision: **the in-place write is made conditional on the target still holding
+  the text the assessment read, and a declined write is an error at the command
+  boundary rather than a quiet success.** The window is not hypothetical for
+  `--git`: one run formats a whole repository, and an editor, a
+  formatter-on-save, or a second run may be working in it. The alternative
+  considered and rejected was to compare the file's modification time or its
+  identity before writing: both are attributes a writer can change without
+  changing the text this run read, so a timestamp check would refuse rewrites
+  that are still correct and an identity check would miss an ordinary in-place
+  edit, and neither asks the question the run actually has. The comparison is
+  placed inside the swap rather than before the temporary file is created,
+  because a comparison made earlier decides on text that a concurrent writer
+  can change during the temporary file's creation, write, and flush, and the
+  rename would then discard that writer's work. It is deliberately not
+  described as a compare-and-swap in the code or in the guides: no rename on
+  any supported platform compares contents, and claiming the stronger property
+  would be a claim about atomicity the implementation cannot keep. The decline
+  is fatal at both callers, because the user asked for a rewrite that did not
+  happen and a run that exited 0 having written nothing would misreport what it
+  did — which is also why the metric gained a third `outcome` value,
+  `unchanged`, rather than folding the decline into `failure` or `success`.
+  Date/Author: 2026-09-13, EP-M4 (atomic writes).
+
+- Decision: **the conflict guard's second filesystem path is answered rather
+  than re-plumbed**, in reply to the review's *Domain Architecture* warning that
+  `ConflictGuard::refuses` calls `operation_in_progress`, which imports
+  `cap_std::fs_utf8`. The warning proposes separating the refusal decision from
+  Git's filesystem access, either by accepting a computed
+  `RepositoryOperationState` or by injecting an `OperationStateProbe` port. The
+  first half of that proposal is the design the module deliberately rejects, on
+  a reason the module doc states and ADR 0010 records: the repository is asked
+  at the write boundary rather than once per run, because a merge, rebase, or
+  revert can begin while a long run is still analysing files, and a run-wide
+  snapshot would let exactly that run rewrite the conflict it started inside.
+  The second half would introduce a port with one implementation in the binary
+  and a fake in the tests, for a presence test over five constant names of this
+  tool's own, in a resolution that contains no repository-authored data — no
+  user path, no file content, no branch name. ADR 0010 already records the
+  carve-out in the sentence the finding describes: `PathProbe` is the one
+  driven port and policy depends on it and on nothing else, while "the
+  selection opens one directory for itself, the Git directory, whose entries
+  are this tool's own constant file names". `docs/architecture.md` states the
+  same shape independently: the guard "sits on a second, narrower path", and
+  "Nothing in the selection holds a directory capability". The row is answered
+  as contravening a recorded project standard, and the condition under which it
+  would be taken is recorded in its place: if the guard's decision surface
+  grows beyond a presence test, or its answer starts depending on repository
+  content, the injected port becomes the right shape. Date/Author: 2026-09-13,
+  EP-M4 (review).
+
 ## Outcomes & retrospective
 
 Completed 2026-09-12, at commit `6384543`, rebased the same day onto
 `origin/check-option` — first at `64117e4`, again at `49a2d0a`, again at
 `e462b97`, and once more at `6be1a76`, the base having moved four times while
-this branch was being measured against it. Every milestone is
-delivered: EP-M0's
-grammar measurement, EP-M1's selection tree with zero surviving mutants, EP-M2's
-command-line surface and end-to-end behaviour, and EP-M3's ADR 0010 and the five
-component documents. Every Surprise and Decision above is reconciled into ADR
-0010 or into a component document — the reconciliation is the ADR's "Decision
-outcome" and "Known risks and limitations" sections, which is where the
-alternatives and the residuals now live — and no deviation is left unrecorded.
+this branch was being measured against it. Every milestone is delivered:
+EP-M0's grammar measurement, EP-M1's selection tree with zero surviving
+mutants, EP-M2's command-line surface and end-to-end behaviour, and EP-M3's ADR
+0010 and the five component documents. Every Surprise and Decision above is
+reconciled into ADR 0010 or into a component document — the reconciliation is
+the ADR's "Decision outcome" and "Known risks and limitations" sections, which
+is where the alternatives and the residuals now live — and no deviation is left
+unrecorded.
 
 **Delivered against the plan.** `--git` with its four modifiers and
 `--list-files`; the selection tree private to the binary, with `PathProbe` as
@@ -3961,23 +4124,23 @@ its one driven port and `src/lib.rs` untouched; a conflict guard that runs only
 when a write can corrupt a resolution; Git's diagnostics scrubbed to one capped
 line before being relayed; five new flags on the command line with a post-parse
 dependency check standing in for `requires = "git"`; seventeen behavioural
-scenarios, fifteen tests pinning the command-line surface, and unit and property
-tests for every selection module; a mutation run of 60 mutants with none missed
-once the oracle was widened; ADR 0010; and the user's guide, architecture,
-developer's guide, README, and documentation contents updated to match. Six
-CodeRabbit rounds are recorded in Artefacts and notes — two at EP-M1 (the
-second after the mutation widening), one at EP-M2, one at EP-M3, one for the
-CI repair, and one over the rebased tree — and every one returned zero findings.
-A seventh, over the fourth rebase, was deliberately not requested, and the
-Decision log records the measurement behind that rather than leaving it an
-omission.
+scenarios, fifteen tests pinning the command-line surface, and unit and
+property tests for every selection module; a mutation run of 60 mutants with
+none missed once the oracle was widened; ADR 0010; and the user's guide,
+architecture, developer's guide, README, and documentation contents updated to
+match. Six CodeRabbit rounds are recorded in Artefacts and notes — two at EP-M1
+(the second after the mutation widening), one at EP-M2, one at EP-M3, one for
+the CI repair, and one over the rebased tree — and every one returned zero
+findings. A seventh, over the fourth rebase, was deliberately not requested,
+and the Decision log records the measurement behind that rather than leaving it
+an omission.
 
 **Deviation from the plan's pinned interfaces, all recorded.** The command
 module is the base's `src/command.rs` rather than the `src/cli.rs` this plan
-pins, because the base had performed the same extraction and given the module the
-pipeline functions as well; no `src/cli.rs` exists on the branch, and the
-`--git` surface is folded into the module that does. The composition
-root is `src/git_inputs.rs` rather than `src/main.rs`, and `resolve` returns
+pins, because the base had performed the same extraction and given the module
+the pipeline functions as well; no `src/cli.rs` exists on the branch, and the
+`--git` surface is folded into the module that does. The composition root is
+`src/git_inputs.rs` rather than `src/main.rs`, and `resolve` returns
 `GitSelection { inputs, guard }` rather than `Inputs` alone, because the guard
 must travel beside the inputs and only a writable run should pay for it.
 `--md-exts` declares `default_value = "md,mdc,markdown"` rather than
@@ -4021,38 +4184,38 @@ were green before the run and green again after the repair, on the same machine
 that could not have found any of the five. The honest summary is that the first
 run of a new suite on a second platform is doing real work, and that a green
 gate is a statement about the machine it ran on. A sixth change, the
-linked-worktree assertion, was made on judgement rather than observation because
-another test's failure had hidden it; `Progress` says so rather than presenting
-it as a sixth finding.
+linked-worktree assertion, was made on judgement rather than observation
+because another test's failure had hidden it; `Progress` says so rather than
+presenting it as a sixth finding.
 
 **The CI posture, stated plainly.** No CI run existed for `6384543`, nor for
-EP-M3's `9a83339` or `5f294b7`, because #466 stood in conflict with its base and
-GitHub runs no `pull_request` workflows while a conflict stands — so at the time
-those commits were written, their green rested on the local gate set and the
-CodeRabbit rounds, and nothing else. That conflict was resolved the same day by
-the rebase onto `64117e4`, then by the second rebase onto `49a2d0a` and the third
-onto `e462b97` as the base moved twice more. Resolving it re-opened the pipeline,
-and the re-opening was observed rather than hoped for: run `34691011897`, event
-`pull_request`, on `70d58ab1`, created within seconds of the push. It concluded
-`success`, all six jobs green, `atomic write contract (windows)` among them in
-6m46s — so the five test-code defects the repair answers are now answered on
-Linux and on Windows, and the platform the first run was red on is the platform
-the repair was measured on. The one qualification the first verdict carried was
-the head rather than the content: it described `70d58ab`, and the third rebase
-had moved the branch one base commit on, touching
-`docs/execplans/check-option.md` and no file this branch ships. That
-qualification is discharged rather than left standing: the push after the third
-rebase produced run `34691436697` on `70919bc`, concluded 11:41:47Z, `success`
-with all six jobs green again. The plan records both runs rather than the more
-convenient of the two, and states the residual precisely: recording them adds
-further commits, so the head moves past `70919bc` — but only inside
-`docs/execplans/git-option.md`, and a commit that changes no file the tool ships
-does not put the shipped code back under test. Two later pushes produced two
-more runs, `34691869670` on `d1d10d4` and `34692137192` on `4de8a7d`, both
-`success` with all six jobs green, so the pattern held rather than having to be
-argued. The honest form of the claim is therefore "every file this branch ships
-is CI-verified on Linux and Windows", not "the newest commit has a run", which
-is a different and more perishable statement.
+EP-M3's `9a83339` or `5f294b7`, because #466 stood in conflict with its base
+and GitHub runs no `pull_request` workflows while a conflict stands — so at the
+time those commits were written, their green rested on the local gate set and
+the CodeRabbit rounds, and nothing else. That conflict was resolved the same
+day by the rebase onto `64117e4`, then by the second rebase onto `49a2d0a` and
+the third onto `e462b97` as the base moved twice more. Resolving it re-opened
+the pipeline, and the re-opening was observed rather than hoped for: run
+`34691011897`, event `pull_request`, on `70d58ab1`, created within seconds of
+the push. It concluded `success`, all six jobs green,
+`atomic write contract (windows)` among them in 6m46s — so the five test-code
+defects the repair answers are now answered on Linux and on Windows, and the
+platform the first run was red on is the platform the repair was measured on.
+The one qualification the first verdict carried was the head rather than the
+content: it described `70d58ab`, and the third rebase had moved the branch one
+base commit on, touching `docs/execplans/check-option.md` and no file this
+branch ships. That qualification is discharged rather than left standing: the
+push after the third rebase produced run `34691436697` on `70919bc`, concluded
+11:41:47Z, `success` with all six jobs green again. The plan records both runs
+rather than the more convenient of the two, and states the residual precisely:
+recording them adds further commits, so the head moves past `70919bc` — but
+only inside `docs/execplans/git-option.md`, and a commit that changes no file
+the tool ships does not put the shipped code back under test. Two later pushes
+produced two more runs, `34691869670` on `d1d10d4` and `34692137192` on
+`4de8a7d`, both `success` with all six jobs green, so the pattern held rather
+than having to be argued. The honest form of the claim is therefore "every file
+this branch ships is CI-verified on Linux and Windows", not "the newest commit
+has a run", which is a different and more perishable statement.
 
 **What a reader should take from the record.** Three things were found by
 writing rather than by testing: a stale doc comment on the selection's order, a
@@ -4418,8 +4581,8 @@ milestone whose acceptance criterion was not yet met.
 
 **EV-M2-CLI** — measured 2026-09-12, logs at
 `/tmp/test-cli-git-mdtablefix-git-option.out` and
-`/tmp/test-grown-mdtablefix-git-option.out`. The acceptance command, on the tree
-this milestone lands:
+`/tmp/test-grown-mdtablefix-git-option.out`. The acceptance command, on the
+tree this milestone lands:
 
 ```plaintext
 cargo test --test cli_git --test git_file_selection --bin mdtablefix
@@ -4437,11 +4600,11 @@ first measured: the two tests that kill the widened mutation run's survivors
 were added after it, and the run was repeated. `EV-M2-MUTANTS` is that pair.
 
 The second run is that command *without* `INSTA_UPDATE`, which is what makes the
-`--help` snapshot **accepted** rather than merely written: the first run created
-`tests/snapshots/cli_git_help.snap`, and the second compared against it and
-passed. The snapshot holds the whole rendering, 31 lines of it — see Surprises &
-discoveries for the two defects it caught, neither of which an assertion of the
-form `help.contains("--md-exts")` would have.
+`--help` snapshot **accepted** rather than merely written: the first run
+created `tests/snapshots/cli_git_help.snap`, and the second compared against it
+and passed. The snapshot holds the whole rendering, 31 lines of it — see
+Surprises & discoveries for the two defects it caught, neither of which an
+assertion of the form `help.contains("--md-exts")` would have.
 
 The five transcripts under "Validation and acceptance" were re-measured on
 `target/debug/mdtablefix` at this commit, against a scratch repository built by
@@ -4452,8 +4615,8 @@ including the `--check` transcript's exit 1 and the empty-selection case's exit
 **EV-M2-MUTANTS** — measured 2026-09-12, log at
 `/tmp/mutants-mdtablefix-git-option.out`. This is EP-M1's run repeated with the
 widening in place: the whole suite is the oracle, so the behavioural scenarios
-that were red through EP-M1 kill mutants now rather than being excluded from the
-run. The Makefile is what sets the scratch directory, so the command to
+that were red through EP-M1 kill mutants now rather than being excluded from
+the run. The Makefile is what sets the scratch directory, so the command to
 reproduce it is `make mutants`, which runs:
 
 ```plaintext
@@ -4470,8 +4633,8 @@ ok       Unmutated baseline in 21s build + 87s test
 An empty `missed.txt` is again the whole of the acceptance criterion, and it is
 met: exit status 0, 53 caught, 7 unviable, none missed. The count is 60 rather
 than EP-M1's 40 because this milestone added production code inside
-`src/select/**` — the Git-directory query, the diagnostic relay and its cap, the
-conflict guard — and `cargo-mutants` mutates production code only.
+`src/select/**` — the Git-directory query, the diagnostic relay and its cap,
+the conflict guard — and `cargo-mutants` mutates production code only.
 
 The run before the two tests below, same command:
 
@@ -4487,8 +4650,8 @@ MISSED   src/select/git_ls_files.rs:255:33: replace > with >= in relayable
 Those two lines are cut at the mutator's own description and before the
 per-mutant timings, to stay inside the 120 columns markdownlint allows a code
 block; the log holds them whole. Both survivors were correct code that no test
-observed rather than code that was wrong — see Surprises & discoveries, and note
-that no gate short of this one could have said so.
+observed rather than code that was wrong — see Surprises & discoveries, and
+note that no gate short of this one could have said so.
 
 The seven unviable mutants are EP-M1's six with one more of a new type: each
 substitutes `Default::default()` for a return type that deliberately has no
@@ -4523,10 +4686,10 @@ against `check-option`: the five selection modules with their test files,
 `src/driver.rs` with their unit tests, `tests/cli_git.rs` and its snapshot, the
 feature file with its step definitions and integration test, `Cargo.toml`,
 `Cargo.lock`, the `Makefile`, `.cargo/mutants.toml`, and this plan. The review
-reported **zero findings**. The status line is quoted with its file list elided,
-as the earlier rounds quote theirs; the log holds all twenty-seven names. No
-rate, seat, or quota limit appears anywhere in the round's output, so no wait
-was needed.
+reported **zero findings**. The status line is quoted with its file list
+elided, as the earlier rounds quote theirs; the log holds all twenty-seven
+names. No rate, seat, or quota limit appears anywhere in the round's output, so
+no wait was needed.
 
 **EV-M3-DOCS** — the documentation milestone's gates, run 2026-09-12 through
 `scrutineer` over the uncommitted EP-M3 tree, one log per gate under
@@ -4545,12 +4708,12 @@ The Markdown gate failed on the first run and is the reason this milestone's
 evidence is not a single green run. `MD038/no-space-in-code`, at
 `docs/execplans/git-option.md:2495`, was a code span split across two source
 lines whose content therefore began with an escaped backtick and a space — a
-span written in the Surprises entry *about* line-length rules, which is a
-small lesson of its own. The entry now describes the measured line instead of
-quoting it inline, and the gate was re-run alone over the whole corpus:
-**36 files, 0 errors**. The other five gates were not re-run, because the only
-change since they passed is prose inside one Markdown file; their logs remain
-canonical for the committed tree.
+span written in the Surprises entry *about* line-length rules, which is a small
+lesson of its own. The entry now describes the measured line instead of quoting
+it inline, and the gate was re-run alone over the whole corpus: **36 files, 0
+errors**. The other five gates were not re-run, because the only change since
+they passed is prose inside one Markdown file; their logs remain canonical for
+the committed tree.
 
 `cargo test --test idempotence_drift` was run separately, before the gates, and
 reports **2 passed** — `repository_documents_do_not_drift_on_a_second_pass` and
@@ -4574,10 +4737,10 @@ coderabbit review --agent --base check-option
 Thirty-three files were reviewed and the review reported **zero findings**, so
 no concern was raised about the new ADR, the four edited documents, or the
 figure renumbering. `"reviewType":"all"` in the round's context line means the
-file list is the review's own scope rather than this branch's diff; the branch's
-diff against `check-option` at this commit is the eight files of `9a83339`.
-No rate, seat, or quota limit appears anywhere in the round's output, so no wait
-was needed.
+file list is the review's own scope rather than this branch's diff; the
+branch's diff against `check-option` at this commit is the eight files of
+`9a83339`. No rate, seat, or quota limit appears anywhere in the round's
+output, so no wait was needed.
 
 **EV-CI-1** — the branch's first CI run, `34661535150` at `573deb9`, read
 2026-09-12 from `gh run view 34661535150 --log-failed`, kept at
@@ -4606,11 +4769,11 @@ windows:     7 git-selection scenarios FAILED at tests\steps\git_selection.rs:19
 
 The Windows library run's own tally is `124 passed; 3 failed; 0 ignored`, and
 the panics are at `src\select\fs_probe_tests.rs:45`,
-`src\select\git_ls_files_tests.rs:316`, and `src\select\git_ls_files_tests.rs:145`
-— the last of which is the helper's assert rather than the test body, which is
-what put the sixth, unreached assertion out of the log's reach. The four
-packaging jobs never compile a test target, which is why they pass on both
-platforms while the suites fail on one.
+`src\select\git_ls_files_tests.rs:316`, and
+`src\select\git_ls_files_tests.rs:145` — the last of which is the helper's
+assert rather than the test body, which is what put the sixth, unreached
+assertion out of the log's reach. The four packaging jobs never compile a test
+target, which is why they pass on both platforms while the suites fail on one.
 
 **EV-M4-GATES** — the repair's gates, run 2026-09-12 through `scrutineer` over
 the committed tree at `6384543`, one log per gate under
@@ -4623,19 +4786,19 @@ make lint          exit 0    cargo clippy --all-targets --all-features -- -D war
 make test          exit 0    1988 passed, 0 failed, 20 ignored
 ```
 
-All four passed on the first run, with no retry. The change is test code in four
-files, so the documentation gates — `make markdownlint` and `make nixie` — are
-not in this set; they belong to the plan edit that follows it and are recorded
-with it. `make lint` clean under `-D warnings` is what closes the two
+All four passed on the first run, with no retry. The change is test code in
+four files, so the documentation gates — `make markdownlint` and `make nixie` —
+are not in this set; they belong to the plan edit that follows it and are
+recorded with it. `make lint` clean under `-D warnings` is what closes the two
 `needless_borrows_for_generic_args` findings that a first attempt at the repair
 introduced, and `make check-fmt` clean is what closes the rustfmt layout it
 also wanted. The 1988/0/20 tally is identical to `EV-M3-DOCS`'s, which is the
 expected result: the repair changes assertions, not the number of tests.
 
-**EV-M4-CI-SILENCE** — measured 2026-09-12 from `gh run list --branch git-option`,
-read alongside GitHub's events reference. The branch's newest run is
-`34661535150` at `573deb9`, created 00:24:40Z; the three commits pushed after it
-have no run between them:
+**EV-M4-CI-SILENCE** — measured 2026-09-12 from
+`gh run list --branch git-option`, read alongside GitHub's events reference.
+The branch's newest run is `34661535150` at `573deb9`, created 00:24:40Z; the
+three commits pushed after it have no run between them:
 
 ```plaintext
 573deb9   run 34661535150   failure    2026-09-12T00:24:40Z
@@ -4656,8 +4819,8 @@ what a force-pushed rebase leaves behind — and that every push since has been
 silently untested.
 
 The control this entry first lacked arrived with the push that carried it.
-Pushing `4c8a872` produced run `34689481906`, a **`pull_request_target`** run on
-that very commit, created 10:50:08Z — and no `pull_request` run at all:
+Pushing `4c8a872` produced run `34689481906`, a **`pull_request_target`** run
+on that very commit, created 10:50:08Z — and no `pull_request` run at all:
 
 ```plaintext
 34689481906  4c8a872cd  pull_request_target  completed  skipped  2026-09-12T10:50:08Z
@@ -4672,8 +4835,8 @@ to be counted. That is the same push the prose above was written about, so the
 evidence and the claim are of the same date and the same head.
 
 One limit remains, stated rather than papered over: the mergeable state is a
-present-tense query with no history behind it, so the run list is what dates the
-silence and the documented rule explains it. The moment the branch went
+present-tense query with no history behind it, so the run list is what dates
+the silence and the documented rule explains it. The moment the branch went
 conflicting is not itself recorded anywhere this session can read. What follows
 for the plan is unaffected either way: no run will appear for any of these
 commits until the conflict is resolved, so the missing red run must not be read
@@ -4681,8 +4844,8 @@ as a green one.
 
 **EV-M4-CR** — CodeRabbit review of the CI repair and the plan reconciliation,
 run 2026-09-12 through `scrutineer` against the local branch at `0ee306b`, log
-at `/tmp/coderabbit-git-option.out` — the previous round's log having been moved
-aside to `/tmp/coderabbit-git-option-prev-round.out` before the intended
+at `/tmp/coderabbit-git-option.out` — the previous round's log having been
+moved aside to `/tmp/coderabbit-git-option-prev-round.out` before the intended
 overwrite. The base is the branch this one is stacked on, so the review is
 scoped to this branch's work rather than to pull request #464's:
 
@@ -4695,8 +4858,8 @@ coderabbit review --agent --base check-option
 ```
 
 Ninety-five files were reviewed and the review reported **zero findings**. The
-round's context line gives `"reviewType":"all"` with `currentBranch` `git-option`
-and `baseBranch` `check-option`, and the reviewed set matches
+round's context line gives `"reviewType":"all"` with `currentBranch`
+`git-option` and `baseBranch` `check-option`, and the reviewed set matches
 `git diff --name-only origin/check-option...HEAD` exactly at 95 paths, so the
 scope is verifiable rather than assumed.
 
@@ -4708,9 +4871,9 @@ files at `9a83339`; this round reviews the whole span from the merge-base
 the rest as patch-equivalent upstream. So roughly two thirds of the 95 are the
 base's own work arriving under this review's eye rather than this branch's, and
 the zero findings cover that traffic too. It is a stronger result than the
-earlier rounds rather than a differently-measured one, and it is also a reminder
-that the review's file count tracks the merge-base rather than the branch, so a
-count that grows between rounds is not evidence of new work here.
+earlier rounds rather than a differently-measured one, and it is also a
+reminder that the review's file count tracks the merge-base rather than the
+branch, so a count that grows between rounds is not evidence of new work here.
 
 No rate, seat, quota, or deferral condition appears in the round's output;
 `coderabbit auth status` reports the Team plan, an assigned seat rather than a
@@ -4723,31 +4886,32 @@ assumed.
 branch's diff rather than deferring to the pull request, kept as evidence
 because a deferral and a clean review are both "no findings" to a reader who
 does not look. Three conditions were verified: the run's own context line names
-`git-option` as `currentBranch` and `check-option` as `baseBranch`; the reviewed
-file list equals `git diff --name-only origin/check-option...HEAD` path for
-path, 95 in each; and `coderabbit auth status` reports an assigned seat rather
-than a waiting-room entry. The distinction is not academic here: the earlier
-`--base check-option` rounds on this same branch printed a 33-file list, so a
-file count that changed between rounds was a real signal to chase down rather
-than noise to ignore. It resolved to the merge-base, as described above, and not
-to a scope regression.
+`git-option` as `currentBranch` and `check-option` as `baseBranch`; the
+reviewed file list equals `git diff --name-only origin/check-option...HEAD`
+path for path, 95 in each; and `coderabbit auth status` reports an assigned
+seat rather than a waiting-room entry. The distinction is not academic here:
+the earlier `--base check-option` rounds on this same branch printed a 33-file
+list, so a file count that changed between rounds was a real signal to chase
+down rather than noise to ignore. It resolved to the merge-base, as described
+above, and not to a scope regression.
 
 **EX-REBASE-STRUCTURE** — why the rebase's collision between `src/cli.rs` and
 `src/command.rs` was resolved by keeping the base's module. The two are one
 refactor performed twice: each declares `Cli` and `FormatOpts`, extracted from
 `src/main.rs`, and the base's `src/command.rs` additionally holds
 `process_lines`, `format_lines`, and `formatting_closure`, which this branch's
-extraction never moved — this branch's `src/main.rs` still calls them, and after
-the merge it reaches them through `command`. The evidence for the collision is
-in the rebase's own conflict labels, which name `HEAD:src/command.rs` against
-`parent:src/cli.rs` on the same hunks, and in the import list, which would
-otherwise hold two `FormatOpts` types. It is kept as a record because the choice
-looks reversible and is not: restoring `src/cli.rs` would mean moving the three
-pipeline functions back out of a module the base's `src/main.rs` already imports
-them from, which is a change to the base's design made for no gain to this
-feature. A reader meeting the `EV-M1-CR` or `EV-M2-CR` transcript, each of which
-lists `src/cli.rs` among its reviewed files, should read it as dated: it
-records a round run before the rebase, and the file is not on the branch now.
+extraction never moved — this branch's `src/main.rs` still calls them, and
+after the merge it reaches them through `command`. The evidence for the
+collision is in the rebase's own conflict labels, which name
+`HEAD:src/command.rs` against `parent:src/cli.rs` on the same hunks, and in the
+import list, which would otherwise hold two `FormatOpts` types. It is kept as a
+record because the choice looks reversible and is not: restoring `src/cli.rs`
+would mean moving the three pipeline functions back out of a module the base's
+`src/main.rs` already imports them from, which is a change to the base's design
+made for no gain to this feature. A reader meeting the `EV-M1-CR` or `EV-M2-CR`
+transcript, each of which lists `src/cli.rs` among its reviewed files, should
+read it as dated: it records a round run before the rebase, and the file is not
+on the branch now.
 
 **EX-REBASE-SECOND** — the second rebase onto `origin/check-option`, and the
 command form that performs any rebase on this machine at all. The base's tip was
@@ -4775,8 +4939,8 @@ guard call sites six and three.
 **EX-REBASE-THIRD** — the third rebase onto `origin/check-option`, onto
 `e462b97`, and the measurement that decides whether a rebase like it needs any
 gate run of its own. The base's one new commit is
-`docs/execplans/check-option.md` and nothing else, so the whole question is what
-moved across the replay:
+`docs/execplans/check-option.md` and nothing else, so the whole question is
+what moved across the replay:
 
 ```console
 git diff --stat 70d58ab HEAD -- src tests Cargo.toml Cargo.lock Makefile
@@ -4794,13 +4958,13 @@ So the third rebase is the second rebase's counterpart in kind but not in
 consequence: there, the base changed code this branch also edits and the merged
 file had to be read to know both sides survived; here, no file under `src/`,
 `tests/`, or the manifests differs at all, so the deterministic gates and the
-mutation record describe the same bytes before and after. That is the reason the
-gates were re-run over the frozen tree anyway — the instruction asks for them
-over the rebase, and "the measurement says nothing changed" is a claim to verify
-rather than a licence to skip. The gates' verdict is recorded under `Progress`,
-and the artefact worth keeping is the rule: absorb the base, then ask `git diff`
-what actually moved, because the answer has been "nothing but the base's own
-prose" once and "two test files this branch edits" once.
+mutation record describe the same bytes before and after. That is the reason
+the gates were re-run over the frozen tree anyway — the instruction asks for
+them over the rebase, and "the measurement says nothing changed" is a claim to
+verify rather than a licence to skip. The gates' verdict is recorded under
+`Progress`, and the artefact worth keeping is the rule: absorb the base, then
+ask `git diff` what actually moved, because the answer has been "nothing but
+the base's own prose" once and "two test files this branch edits" once.
 
 **EV-REBASE-CR** — CodeRabbit round six, over the rebased tree, run 2026-09-12
 through `scrutineer` with the log at
@@ -4816,15 +4980,15 @@ coderabbit review --agent --base check-option
 ```
 
 Thirty-six files were reviewed and the round reported **zero findings**, with
-the reviewed set equal to `git diff --name-only origin/check-option...HEAD` path
-for path at 36 each, so the scope is checked rather than assumed — the same
-check `EX-M4-CR-SCOPE` describes, applied to a round whose count is much lower
-than the previous one's 95 for the reason recorded there, that the count tracks
-the merge-base rather than the branch. That drop is itself worth one sentence,
-since the earlier entry warns that a changing count is a signal: the base
-landed the commits both branches had been carrying separately, so the set this
-review sees is this branch's own work alone. No rate, seat, quota, or deferral
-condition appears in the output.
+the reviewed set equal to `git diff --name-only origin/check-option...HEAD`
+path for path at 36 each, so the scope is checked rather than assumed — the
+same check `EX-M4-CR-SCOPE` describes, applied to a round whose count is much
+lower than the previous one's 95 for the reason recorded there, that the count
+tracks the merge-base rather than the branch. That drop is itself worth one
+sentence, since the earlier entry warns that a changing count is a signal: the
+base landed the commits both branches had been carrying separately, so the set
+this review sees is this branch's own work alone. No rate, seat, quota, or
+deferral condition appears in the output.
 
 **One qualifier, kept because it is the kind of thing a clean result is tempted
 to drop.** The round took 45 seconds, which is fast for a full review, so the
@@ -4832,19 +4996,19 @@ possibility of a service-side cached result was raised against it. What argues
 against that reading is the shape of the transcript rather than its speed: the
 run emitted the whole phase sequence — `connecting_to_review_service`,
 `setting_up`, `preparing_sandbox`, `summarizing`, `tools_completed`,
-`reviewing` — and returned a concrete 36-file set that matches the diff exactly,
-where a review that had short-circuited or deferred to the pull request would
-present as an empty or absent set, which is the signature `EX-M4-CR-SCOPE` exists
-to catch. What the client log cannot exclude is a service-side cache, and that is
-stated rather than argued away: excluding it would take a fresh re-run rather
-than a better reading of this one. The zero stands as recorded, with that limit
-named.
+`reviewing` — and returned a concrete 36-file set that matches the diff
+exactly, where a review that had short-circuited or deferred to the pull
+request would present as an empty or absent set, which is the signature
+`EX-M4-CR-SCOPE` exists to catch. What the client log cannot exclude is a
+service-side cache, and that is stated rather than argued away: excluding it
+would take a fresh re-run rather than a better reading of this one. The zero
+stands as recorded, with that limit named.
 
 ## Revision note
 
 Revised 2026-09-12, eighth pass, after a fourth rebase onto
-`origin/check-option`, whose tip had moved to `6be1a76`, and after the full gate
-set was re-run because this rebase moved more than prose.
+`origin/check-option`, whose tip had moved to `6be1a76`, and after the full
+gate set was re-run because this rebase moved more than prose.
 
 What changed. The base gained three commits in this window — `80f80d1`, which
 hardens a writer-error test in `src/report/render_tests.rs`, and its two plan
@@ -4852,19 +5016,19 @@ records `69bc8ea` and `6be1a76` — so the same instruction was applied again,
 making four rebases in one day. The rule this pass records is the one the three
 earlier rebases had been deciding case by case: absorb the base whenever it
 moves, but measure what the replay actually moved before deciding which gates
-the rebase invalidated. The measurement is `git diff --stat d1d10d4 HEAD`, which
-names the base's plan document (+71) and `src/report/render_tests.rs` (+26/-5)
-and nothing else. Where the third rebase left the tree byte-identical and needed
-only the Markdown gate, this one does not, so all six gates were re-run over the
-frozen tree: `make check-fmt`, `make typecheck`, `make lint`,
+the rebase invalidated. The measurement is `git diff --stat d1d10d4 HEAD`,
+which names the base's plan document (+71) and `src/report/render_tests.rs`
+(+26/-5) and nothing else. Where the third rebase left the tree byte-identical
+and needed only the Markdown gate, this one does not, so all six gates were
+re-run over the frozen tree: `make check-fmt`, `make typecheck`, `make lint`,
 `make markdownlint` (36 files, 0 errors), `make nixie`, and `make test` — 2014
 passed, 0 failed, 20 ignored, across 48 suites.
 
-Two figures in this pass's first draft were corrected against measurement rather
-than written down as they stood, and they are recorded because the same mistake
-is easy to make again. The draft claimed that three of the four rebases had
-moved only the base's prose; `git diff --stat` over the tips on either side of
-each says otherwise — the first moved 45 files, the second absorbed a commit
+Two figures in this pass's first draft were corrected against measurement
+rather than written down as they stood, and they are recorded because the same
+mistake is easy to make again. The draft claimed that three of the four rebases
+had moved only the base's prose; `git diff --stat` over the tips on either side
+of each says otherwise — the first moved 45 files, the second absorbed a commit
 editing 17 files under `src/`, and only the third moved prose alone. It also
 gave the interval from the first rebase to the third base arrival as four and a
 quarter hours; the base's own commit dates give fifty minutes to the fourth
@@ -4879,10 +5043,11 @@ Recorded with the rebase is the push it produced: run `34692137192` on
 `success` — four green runs since the branch's conflict was cleared, so the
 Status header's "both CI runs" becomes "all four". One omission is recorded
 rather than left silent: no seventh CodeRabbit round was requested over
-`4de8a7d`, because `git diff --stat 70d58ab HEAD` names only the base's own test
-file and plan record plus this plan's prose, so every file this branch authors
-is byte-identical to the tree round six cleared. The Decision log carries that
-reasoning, and the omission can be reversed by asking for the round.
+`4de8a7d`, because `git diff --stat 70d58ab HEAD` names only the base's own
+test file and plan record plus this plan's prose, so every file this branch
+authors is byte-identical to the tree round six cleared. The Decision log
+carries that reasoning, and the omission can be reversed by asking for the
+round.
 
 Revised 2026-09-12, seventh pass, after a third rebase onto
 `origin/check-option`, whose tip had moved to `e462b97` while the second
@@ -4890,48 +5055,49 @@ rebase's push was landing, and after the CodeRabbit round over the rebased tree
 returned zero findings.
 
 What changed. The base gained one further commit, `e462b97`, which records its
-green Windows job; it touches `docs/execplans/check-option.md` and nothing else,
-so the branch was rebased again and the third rebase is recorded with the
-measurement that says what moved — `git diff --stat 70d58ab HEAD` names that one
-file, and the same command restricted to `src`, `tests`, and the manifests
+green Windows job; it touches `docs/execplans/check-option.md` and nothing
+else, so the branch was rebased again and the third rebase is recorded with the
+measurement that says what moved — `git diff --stat 70d58ab HEAD` names that
+one file, and the same command restricted to `src`, `tests`, and the manifests
 prints nothing, which is why the gates' verdict and the mutation record carry
 across unchanged while the gates were re-run over the frozen tree all the same.
 `EX-REBASE-THIRD` holds the command and the rule, `EV-REBASE-CR` the round's
 transcript and its scope check, and a Decision-log entry states why the third
-rebase was performed rather than the second held. What this pass adds beyond the
-rebase is the end of the conflict's silence and of the wait it caused: the push
-produced run `34691011897` on `pull_request` within seconds, which is the
+rebase was performed rather than the second held. What this pass adds beyond
+the rebase is the end of the conflict's silence and of the wait it caused: the
+push produced run `34691011897` on `pull_request` within seconds, which is the
 pipeline re-opening as the conflict hypothesis predicted, and that run concluded
-`success` with all six jobs green — so the plan's longest-standing open item, a
-CI verdict for the repaired test code, is closed, with
+`success` with all six jobs green — so the plan's longest-standing open item,
+a CI verdict for the repaired test code, is closed, with
 `atomic write contract (windows)` among the jobs that passed. The verdict's own
-head is named where it is recorded, `70d58ab`, because the third rebase moved the
-branch one base commit past it while the run was in flight; the difference is the
-base's own plan document, and the run the push produced is its successor — which
-also concluded `success`, on the pushed tip, so the qualification about the head
-is discharged rather than carried.
+head is named where it is recorded, `70d58ab`, because the third rebase moved
+the branch one base commit past it while the run was in flight; the difference
+is the base's own plan document, and the run the push produced is its successor
+— which also concluded `success`, on the pushed tip, so the qualification about
+the head is discharged rather than carried.
 
-Revised 2026-09-12, sixth pass, after a second rebase onto `origin/check-option`,
-whose tip had moved to `49a2d0a` while the first rebase's gates were running.
+Revised 2026-09-12, sixth pass, after a second rebase onto
+`origin/check-option`, whose tip had moved to `49a2d0a` while the first
+rebase's gates were running.
 
 What changed. The base gained two commits inside that window — `9834fcb`, which
-heals the `tracing` callsite interest cache in every traced test, and `49a2d0a`,
-which records it — so the tip the first rebase had been measured against was no
-longer the base's tip, and the same instruction was applied again. The replay
-was clean, leaving thirty-one commits past the base at `eda86ca`, and why it was
-clean is recorded rather than assumed: the base's hunks and this branch's sit in
-different regions of the two test files that both of them edit. The base's new
-convention, `test_macros::traced_test` in place of `tracing_test::traced_test`
-for every traced test, is recorded in `Progress` as assessed rather than adopted,
-with the measurement that decides it: this branch adds no traced test to convert,
-and every `tracing_test::` mention left under `src/` is the wrapper's own
-explanatory comment. A Surprises entry states the general observation and a
-Decision-log entry states why the second rebase was performed rather than the
-first pushed.
+heals the `tracing` callsite interest cache in every traced test, and
+`49a2d0a`, which records it — so the tip the first rebase had been measured
+against was no longer the base's tip, and the same instruction was applied
+again. The replay was clean, leaving thirty-one commits past the base at
+`eda86ca`, and why it was clean is recorded rather than assumed: the base's
+hunks and this branch's sit in different regions of the two test files that
+both of them edit. The base's new convention, `test_macros::traced_test` in
+place of `tracing_test::traced_test` for every traced test, is recorded in
+`Progress` as assessed rather than adopted, with the measurement that decides
+it: this branch adds no traced test to convert, and every `tracing_test::`
+mention left under `src/` is the wrapper's own explanatory comment. A Surprises
+entry states the general observation and a Decision-log entry states why the
+second rebase was performed rather than the first pushed.
 
-What this pass still does not do is claim a CI verdict, for the reason the fifth
-pass did not: the run the push should produce is a separate observation, and the
-plan leaves that item open rather than inferring it.
+What this pass still does not do is claim a CI verdict, for the reason the
+fifth pass did not: the run the push should produce is a separate observation,
+and the plan leaves that item open rather than inferring it.
 
 Revised 2026-09-12, fifth pass, after rebasing onto `origin/check-option` at
 `64117e4` on the requester's instruction.
@@ -4940,35 +5106,35 @@ What changed. The branch no longer conflicts with its base. Thirty commits now
 stand on `64117e4` where sixty-two had stood on the previous base: git dropped
 thirty of them as patch-equivalent, replayed thirty-two, and two of those were
 skipped by hand — the `src/cli.rs` extraction, superseded by the base's
-`src/command.rs`, and the EP-M7 documentation merge, whose text the base carries
-in a fuller form. The branch's one command module is therefore the base's
-`src/command.rs`, with the `--git` surface folded into it, and `src/cli.rs` never
-lands; `EX-REBASE-STRUCTURE` records why that is the only arrangement leaving one
-`Cli` and one `FormatOpts` in the binary. Four of the base's newer patterns were
-adopted, because they are now the shape a later reader will expect: the
-`crate::command` import paths, `Mode::ListFiles` in the metrics label and its
-test list, the split driver test files, and the `Normalize` help wording. The
-metrics one is a compile requirement rather than a preference — the base's new
-`mode_label` match is exhaustive over `Mode`, so it does not build without a
-`ListFiles` arm.
+`src/command.rs`, and the EP-M7 documentation merge, whose text the base
+carries in a fuller form. The branch's one command module is therefore the
+base's `src/command.rs`, with the `--git` surface folded into it, and
+`src/cli.rs` never lands; `EX-REBASE-STRUCTURE` records why that is the only
+arrangement leaving one `Cli` and one `FormatOpts` in the binary. Four of the
+base's newer patterns were adopted, because they are now the shape a later
+reader will expect: the `crate::command` import paths, `Mode::ListFiles` in the
+metrics label and its test list, the split driver test files, and the
+`Normalize` help wording. The metrics one is a compile requirement rather than
+a preference — the base's new `mode_label` match is exhaustive over `Mode`, so
+it does not build without a `ListFiles` arm.
 
 Two entries were corrected rather than merely extended. The Progress record of
-the base's movement said `64117e4` stood twenty commits past the merge-base; the
-distance is fifty-seven, and the note is corrected in place with the correction
-stated rather than quietly overwritten. And the entry recording the decision not
-to rebase is now marked superseded, as is this section's reading of it, because
-the reason to wait — a base repairing its own failures — is a reason that expires
-when the repair lands, and `3737276` is that landing.
+the base's movement said `64117e4` stood twenty commits past the merge-base;
+the distance is fifty-seven, and the note is corrected in place with the
+correction stated rather than quietly overwritten. And the entry recording the
+decision not to rebase is now marked superseded, as is this section's reading
+of it, because the reason to wait — a base repairing its own failures — is a
+reason that expires when the repair lands, and `3737276` is that landing.
 
-What the pass deliberately does not do is claim a CI verdict. The rebase is what
-re-opens the pipeline, but the run it produces is a separate observation; the
-plan leaves that item open rather than inferring it, so until a run exists the
-rebased tip's green is the local gates and nothing more. Two Surprises entries
-were added for the rebase itself, and both are about trusting a tool's exit
-status: a globally configured `merge=weave` driver returned 0 for a merge that
-could not compile, and an auto-merged region between two conflict hunks bound a
-name to nothing, because lines both sides agree on are not necessarily lines that
-work together.
+What the pass deliberately does not do is claim a CI verdict. The rebase is
+what re-opens the pipeline, but the run it produces is a separate observation;
+the plan leaves that item open rather than inferring it, so until a run exists
+the rebased tip's green is the local gates and nothing more. Two Surprises
+entries were added for the rebase itself, and both are about trusting a tool's
+exit status: a globally configured `merge=weave` driver returned 0 for a merge
+that could not compile, and an auto-merged region between two conflict hunks
+bound a name to nothing, because lines both sides agree on are not necessarily
+lines that work together.
 
 Revised 2026-09-12, fourth pass, after the branch's first CI run came back red,
 its repair was gated, the plan reconciliation was reviewed, and the base branch
@@ -4991,16 +5157,16 @@ it.
 
 The round that reviewed all of this, `EV-M4-CR`, returned **zero findings over
 95 files** — a wider scope than the earlier rounds, because the reviewed set
-tracks the merge-base rather than the branch and roughly two thirds of it is the
-base's own traffic. `EX-M4-CR-SCOPE` records the three conditions that
+tracks the merge-base rather than the branch and roughly two thirds of it is
+the base's own traffic. `EX-M4-CR-SCOPE` records the three conditions that
 distinguish this from a review that quietly deferred to the pull request, since
-both read as "no findings" to anyone who does not look. The base branch, for its
-part, has fixed the Windows dead-import failure this plan had recorded against
-it, in `3737276`, and has moved fifty-seven commits past the merge-base — which
-was the deferral decision's reasoning arriving as evidence, until the requester's
-instruction to rebase superseded it the same day, as the fifth pass above
-records. The distance is given here as twenty in this pass's first writing and is
-corrected on re-measurement.
+both read as "no findings" to anyone who does not look. The base branch, for
+its part, has fixed the Windows dead-import failure this plan had recorded
+against it, in `3737276`, and has moved fifty-seven commits past the merge-base
+— which was the deferral decision's reasoning arriving as evidence, until the
+requester's instruction to rebase superseded it the same day, as the fifth pass
+above records. The distance is given here as twenty in this pass's first
+writing and is corrected on re-measurement.
 
 The Epic path itself is not reopened: the tool's behaviour was correct on both
 platforms and every defect was in the tests that observe it. What the pass adds
@@ -5022,10 +5188,10 @@ The merged code changed two invariants on their merits rather than merely
 renumbering them. `INV-DEDUP` lost its data-loss rationale, because atomic
 replacement closes the truncate-and-read race; and it gained a corrected
 identity, because collapsing hard links on `(st_dev, st_ino)` would now format
-one and leave the other stale. `INV-PROBE-EXCLUSIONS` lost its destructive-write
-rationale, because `replace_file` already declines symlinks, and kept the
-variant for a weaker but real reason. `INV-NOWRITE-UNCHANGED` is discharged
-by #464 and is no longer this plan's work.
+one and leave the other stale. `INV-PROBE-EXCLUSIONS` lost its
+destructive-write rationale, because `replace_file` already declines symlinks,
+and kept the variant for a weaker but real reason. `INV-NOWRITE-UNCHANGED` is
+discharged by #464 and is no longer this plan's work.
 
 Corrections: the decision record moves to ADR 0010, because 0006 and 0007 were
 taken; the failure transcript exits 2 rather than 1 and does not render through
@@ -5063,17 +5229,17 @@ Markdown output could be written over a same-directory source file inside the
 capability sandbox. Deduplication moved from path strings to file identity,
 closing a concurrent truncate-and-read race that produced a zero-byte file and
 exit 0 on case-insensitive filesystems. The composition root returns an
-`Inputs` enum rather than a `Vec`, because the previous shape made
-`--git` with an empty selection block on standard input. The
-`RepositoryFileSource` port was deleted as a pattern transplant, leaving one
-port. The module tree moved out of the public library API, and errors moved
-from `anyhow` to `thiserror` enums, both to comply with `AGENTS.md`.
-`--list-files` and `--allow-conflicted` were added. Assertions on git's and
-clap's message text were removed — one scenario asserted a string clap does not
-emit. Hand-applied negative controls were replaced with `cargo-mutants`.
-EP-M1 and EP-M2 were merged, the scope tolerances were corrected from
-arithmetically unsatisfiable values, `rstest-bdd-macros` and `thiserror` were
-added to the dependency list, and duplicated rationale was cut.
+`Inputs` enum rather than a `Vec`, because the previous shape made `--git` with
+an empty selection block on standard input. The `RepositoryFileSource` port was
+deleted as a pattern transplant, leaving one port. The module tree moved out of
+the public library API, and errors moved from `anyhow` to `thiserror` enums,
+both to comply with `AGENTS.md`. `--list-files` and `--allow-conflicted` were
+added. Assertions on git's and clap's message text were removed — one scenario
+asserted a string clap does not emit. Hand-applied negative controls were
+replaced with `cargo-mutants`. EP-M1 and EP-M2 were merged, the scope
+tolerances were corrected from arithmetically unsatisfiable values,
+`rstest-bdd-macros` and `thiserror` were added to the dependency list, and
+duplicated rationale was cut.
 
 How it affects the remaining work. Nothing has been implemented, so there is no
 rework. The plan is longer in the areas that carry risk and shorter in the

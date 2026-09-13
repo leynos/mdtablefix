@@ -36,8 +36,7 @@
   exhausted, temporary files a failed replacement could not remove, and
   symbolic-link targets declined rather than replaced. The crate installs no
   recorder itself.
-  ([#465](https://github.com/leynos/mdtablefix/issues/465),
-  [#471](https://github.com/leynos/mdtablefix/issues/471))
+  ([#465](https://github.com/leynos/mdtablefix/issues/465), [#471](https://github.com/leynos/mdtablefix/issues/471))
 - Add the line-ending helpers `LineEnding`, `LineEndingCounts`,
   `count_line_endings`, `detect_line_ending`, and `serialize_lines`, so a
   caller can select and apply the majority line-ending style of an input
@@ -53,17 +52,15 @@
 
 - `--in-place`, `rewrite` and `rewrite_no_wrap` replace a read-only file in a
   writable directory instead of failing, because the atomic swap needs write
-  permission on the containing directory rather than on the file itself, and the
-  replacement inherits the target's permissions, read-only included. On Windows
-  the destination's `FILE_ATTRIBUTE_READONLY` blocks the rename, so it is
-  cleared immediately before the swap and put back if the swap does not
-  complete.
-  ([#465](https://github.com/leynos/mdtablefix/issues/465))
+  permission on the containing directory rather than on the file itself, and
+  the replacement inherits the target's permissions, read-only included. On
+  Windows the destination's `FILE_ATTRIBUTE_READONLY` blocks the rename, so it
+  is cleared immediately before the swap and put back if the swap does not
+  complete. ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - `--in-place`, `rewrite` and `rewrite_no_wrap` decline a symbolic link instead
   of replacing the link entry with a regular file, which previously left the
   real file untouched while destroying the link. Rewrite the link's target
-  directly.
-  ([#465](https://github.com/leynos/mdtablefix/issues/465))
+  directly. ([#465](https://github.com/leynos/mdtablefix/issues/465))
 - A failed file reports the full error chain, so a declined rewrite states its
   reason rather than only the file being written. See
   [Migrating to 0.6.0](docs/v0-6-0-migration-guide.md) for the actions these
@@ -88,8 +85,7 @@
 - Gate the `check-static-regexes` regression tests to Unix, because the guard
   they drive is a `bash` script that stands in for ripgrep with stub scripts
   carrying the executable bit. The Linux lint job still runs that guard over
-  the same sources.
-  ([#347](https://github.com/leynos/mdtablefix/issues/347))
+  the same sources. ([#347](https://github.com/leynos/mdtablefix/issues/347))
 - `format_breaks` now returns `Vec<Cow<'_, str>>` rather than `Vec<String>`,
   so unchanged lines stay borrowed instead of forcing heap allocations.
 - Reserve exit `1` for drift and exit `2` for operational failure. A run that
@@ -107,7 +103,8 @@
 
 - Preserve arbitrary Unicode table-cell payloads by carrying escaped-pipe and
   leading-empty parser state out of band. U+001D and U+001F no longer collide
-  with legitimate cell content. ([#482](https://github.com/leynos/mdtablefix/issues/482))
+  with legitimate cell content.
+  ([#482](https://github.com/leynos/mdtablefix/issues/482))
 
 - Emit formatted output with the line-ending style that holds the majority of
   the input's line endings, so a carriage return and line feed (CRLF) document

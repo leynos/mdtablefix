@@ -1,9 +1,9 @@
 # Add `--check` and `--diff` reporting modes to the `mdtablefix` CLI
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`,
-`Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
-`Verification plan` must be kept up to date as work proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
+`Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
+be kept up to date as work proceeds.
 
 Status: COMPLETE — `EP-M0`–`EP-M7` are discharged. `EP-M6` ran after the rebase
 onto `408c76a`, the upstream fix for the non-idempotent `--headings` class that
@@ -24,8 +24,7 @@ After this change a user gains two read-only reporting modes.
 `mdtablefix --check FILE...` reads every supplied file, computes what the
 formatter would write, and reports each file that would change together with
 the number of lines that would be inserted and deleted. It writes nothing to
-disk. It exits `1` when at least one file would change and `0` when none
-would.
+disk. It exits `1` when at least one file would change and `0` when none would.
 
 `mdtablefix --diff FILE...` performs the same analysis but prints a unified
 diff for each file that would change. It also writes nothing, and it exits `1`
@@ -62,31 +61,31 @@ unmodified
 Delivering this honestly requires two further changes, both of which exist
 because a check mode that lies is worse than no check mode at all.
 
-First, line-ending preservation. The formatter currently normalizes every
-input to LF, so on a CRLF file `--check` would report that every line changes
-even when no Markdown content changes. That is GitHub issue #451, whose own
+First, line-ending preservation. The formatter currently normalizes every input
+to LF, so on a CRLF file `--check` would report that every line changes even
+when no Markdown content changes. That is GitHub issue #451, whose own
 rationale says line-ending normalization "prevents check-only formatting gates
 from comparing formatter output directly with valid CRLF source files".
 
 Second, byte-order-mark handling. `Dir::read_to_string` retains a leading
 U+FEFF, so the first line of a BOM-prefixed file becomes `\u{FEFF}|A|B|`, the
 table detector never matches, no reflow happens, and `--check` reports **clean
-on a genuinely ragged file**. A gate that passes while the tree is dirty is
-the worst possible failure for this feature, so the BOM must be split off
-before formatting and restored on output.
+on a genuinely ragged file**. A gate that passes while the tree is dirty is the
+worst possible failure for this feature, so the BOM must be split off before
+formatting and restored on output.
 
 ## Constraints
 
 Hard invariants. Violating one requires escalation, not a workaround.
 
 - `--check` and `--diff` must never write to, create, truncate, or change the
-  modification time of any file, nor create any adjacent file such as a
-  backup or lock. This must be enforced by the type system: the read-only
-  path receives a capability that has no write method, so a wrong `match` arm
-  cannot write. It must not rest on a test double alone.
+  modification time of any file, nor create any adjacent file such as a backup
+  or lock. This must be enforced by the type system: the read-only path
+  receives a capability that has no write method, so a wrong `match` arm cannot
+  write. It must not rest on a test double alone.
 - `--check` must report drift for a file if and only if `--in-place` would
-  alter that file's bytes, for the same transform flags. Both must derive
-  their answer from one `Assessment` value produced by one function, and the
+  alter that file's bytes, for the same transform flags. Both must derive their
+  answer from one `Assessment` value produced by one function, and the
   transform closure must be constructed once and shared, not per mode.
 - Drift produces exit `1` under the two read-only reporting modes, `--check`
   and `--diff`, and never outside them. In particular a successful
@@ -106,8 +105,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `similar::Algorithm::Patience`, which is deterministic; it must never use a
   time-based cut-off.
 - The line delta must not be computed for a file whose bytes are unchanged.
-  `is_changed()` is a byte comparison; the diff runs only when it is true.
-  This is what keeps a clean-tree gate cheap.
+  `is_changed()` is a byte comparison; the diff runs only when it is true. This
+  is what keeps a clean-tree gate cheap.
 - Multi-file report order must equal command-line argument order. This must be
   guaranteed by construction, by tagging each unit of work with its argument
   index and ordering on that index, not by relying on `rayon`'s collection
@@ -135,8 +134,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `src/process.rs` is at 375 and is out of bounds for this work. Per-file
   budgets are given in `Interfaces and dependencies`.
 - Report lines go to standard output; the human summary and all diagnostics go
-  to standard error, so `--check`'s standard output is a clean machine
-  contract.
+  to standard error, so `--check`'s standard output is a clean machine contract.
 - Dependency requirements use caret ranges, per `AGENTS.md:249-255`.
 - Clippy warnings are denied; suppressions are a last resort, tightly scoped,
   and carry a `reason`.
@@ -160,10 +158,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
   byte-order-mark preservation; signature stability alone is not sufficient
   protection for existing library consumers.
 - Idempotence: if `INV-IDEMPOTENT` fails, meaning `--check` reports drift on
-  the formatter's own output, stop immediately. That indicates a
-  non-idempotent transform, which is a pre-existing defect outside this plan's
-  scope and makes the feature unusable as a gate. Record the failing input and
-  escalate rather than working around it.
+  the formatter's own output, stop immediately. That indicates a non-idempotent
+  transform, which is a pre-existing defect outside this plan's scope and makes
+  the feature unusable as a gate. Record the failing input and escalate rather
+  than working around it.
 - Behaviour: if line-ending or byte-order-mark handling changes any existing
   test fixture's output in a way not explained by those two concerns, stop.
   That indicates a transform regression.
@@ -172,8 +170,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   execution modes to four cannot be done under a limit of 30. If the actual
   churn exceeds 40, stop and narrow the curated subset further.
 - Performance: if `--check` over the repository's own `docs/` tree takes more
-  than two seconds on a warm cache, stop and investigate before adding
-  features.
+  than two seconds on a warm cache, stop and investigate before adding features.
 - Iterations: if a gate still fails after three focused fix cycles, stop and
   record the command, the `/tmp` log path, and the likely cause.
 - Ambiguity: if any requirement admits two readings that produce materially
@@ -184,20 +181,18 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - Risk: a transform may not be idempotent, so `--check` would report drift on
   the formatter's own output and the gate could never go green. Severity:
   critical. Likelihood: low but unquantified. Mitigation: `EP-M2` adds
-  `INV-IDEMPOTENT` as a property test over the existing fixture corpus
-  *before* any CLI surface exists, so the answer is known early and cheaply.
+  `INV-IDEMPOTENT` as a property test over the existing fixture corpus *before*
+  any CLI surface exists, so the answer is known early and cheaply.
   `tests/cli.rs:307-356` already round-trips `--in-place` twice for its own
-  cases, which is partial evidence but not a general result.
-  Materialised, twice, as predicted: two classes under `--wrap`/`--breaks`
-  (issue #468, fixed by pull request #470) and a third under `--headings`
-  (issue #474, fixed upstream by pull request #477, merged as `408c76a` and
-  absorbed by this branch's rebase). All three are pre-existing and none is
-  reachable through
+  cases, which is partial evidence but not a general result. Materialised,
+  twice, as predicted: two classes under `--wrap`/`--breaks` (issue #468, fixed
+  by pull request #470) and a third under `--headings` (issue #474, fixed
+  upstream by pull request #477, merged as `408c76a` and absorbed by this
+  branch's rebase). All three are pre-existing and none is reachable through
   `make fmt`'s flag set today. The mitigation worked as intended — the answer
   was known before any CLI surface existed — but the *unquantified* likelihood
   in the original wording is now measured and is not low: the third class is
-  reachable by the property test's own generator. See
-  `Surprises & discoveries`.
+  reachable by the property test's own generator. See `Surprises & discoveries`.
 
 - Risk: the `INV-IDEMPOTENT` property is flaky rather than merely imperfect, so
   a green `test` gate is not evidence that the invariant holds. Severity: high.
@@ -215,34 +210,33 @@ Hard invariants. Violating one requires escalation, not a workaround.
   run since, and Revision 17 measures it green inside a fully green `make test`
   (1860 passed, 0 failed). That retires this class and not the sampling: the
   property still draws from a fraction of a large space, so a green run stays
-  evidence rather than proof. The fixtures are what make the shape's presence in
-  the suite unconditional rather than sampled.
+  evidence rather than proof. The fixtures are what make the shape's presence
+  in the suite unconditional rather than sampled.
 
 - Risk: `EP-M1` rewrites the serialization path used by every mode, including
-  the one that mutates users' files, and the repository has **no existing
-  CRLF, byte-order-mark, lone-`\r`, or empty-file coverage at all** (verified:
-  the only `\r\n` anywhere is a tokenizer unit test at
+  the one that mutates users' files, and the repository has **no existing CRLF,
+  byte-order-mark, lone-`\r`, or empty-file coverage at all** (verified: the
+  only `\r\n` anywhere is a tokenizer unit test at
   `src/wrap/tokenize/mod_tests.rs:72`). Severity: high. Likelihood: high.
   Mitigation: `EP-M1` adds those fixtures **before** the refactor, so the
   regression oracle actually covers the inputs the change is about. The claim
-  that the existing suite is a sufficient oracle was wrong and has been
-  removed.
+  that the existing suite is a sufficient oracle was wrong and has been removed.
 
 - Risk: whole-file majority line-ending detection homogenizes endings inside
   fenced code blocks. A mostly-CRLF document containing an LF-authored shell
   snippet has that snippet rewritten to CRLF, which is a content change, not a
   formatting change. Severity: medium. Likelihood: medium. Mitigation: issue
   #451 specifies majority detection, so this plan implements it, but adds a
-  mixed-endings-inside-a-fence fixture and documents the behaviour explicitly
-  in `docs/users-guide.md`. Flagged for the approval gate as a consequence the
+  mixed-endings-inside-a-fence fixture and documents the behaviour explicitly in
+  `docs/users-guide.md`. Flagged for the approval gate as a consequence the
   requester should confirm.
 
 - Risk: `similar`'s default Myers algorithm is O(ND); `--wrap` on a large
-  unwrapped document changes nearly every line, so D approaches 2N and the
-  cost approaches O(N squared). A gate that hangs is worse than one that is
-  wrong. Severity: medium. Likelihood: low. Mitigation: a deterministic
-  line-count threshold switches to `Algorithm::Patience`. Time-based cut-offs
-  are forbidden by `Constraints` because they would make snapshots unstable.
+  unwrapped document changes nearly every line, so D approaches 2N and the cost
+  approaches O(N squared). A gate that hangs is worse than one that is wrong.
+  Severity: medium. Likelihood: low. Mitigation: a deterministic line-count
+  threshold switches to `Algorithm::Patience`. Time-based cut-offs are
+  forbidden by `Constraints` because they would make snapshots unstable.
 
 - Risk: changing operational errors from exit `1` to exit `2` silently breaks
   a caller written as `mdtablefix ...; [ $? -eq 1 ] && handle_failure`, which
@@ -256,8 +250,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
   backup, so a kill or a full disk leaves files truncated. Severity: high.
   Likelihood: low. Mitigation: **discharged.** This plan kept it out of scope
   and raised it as GitHub issue #465, which pull request #467 then fixed while
-  this plan was halted at `EP-M2`. The rebase took that fix, and
-  `src/main.rs` now writes through `replace_file`'s write-then-rename. See
+  this plan was halted at `EP-M2`. The rebase took that fix, and `src/main.rs`
+  now writes through `replace_file`'s write-then-rename. See
   `Artefacts and notes → Rebase onto origin/main`.
 
 - Risk: `rstest-bdd` has never been used here, and its user's guide does not
@@ -470,59 +464,58 @@ Hard invariants. Violating one requires escalation, not a workaround.
 ## Surprises & discoveries
 
 - Observation: a leading byte-order mark defeats table detection entirely, so
-  `--check` would report clean on a ragged file.
-  Evidence: `Dir::read_to_string` returns the U+FEFF; `src/main.rs:126` feeds
-  the result straight to `content.lines()`, making the first line
-  `\u{FEFF}|A|B|`, which no table pattern matches.
-  Impact: byte-order-mark handling moved from "not considered" into
-  `Constraints` and `EP-M1`. Without it the feature's headline guarantee is
-  false for a class of real Windows-authored files, and the failure is silent.
+  `--check` would report clean on a ragged file. Evidence:
+  `Dir::read_to_string` returns the U+FEFF; `src/main.rs:126` feeds the result
+  straight to `content.lines()`, making the first line `\u{FEFF}|A|B|`, which
+  no table pattern matches. Impact: byte-order-mark handling moved from "not
+  considered" into `Constraints` and `EP-M1`. Without it the feature's headline
+  guarantee is false for a class of real Windows-authored files, and the
+  failure is silent.
 
 - Observation: `--in-place` over drifting files would have exited `1` under
   the first draft's design, because `Outcome::exit_code` mapped `Drift` to `1`
-  unconditionally while `Mode` was not in scope.
-  Evidence: the draft's own `INV-EXIT` said "`1` when at least one file drifts
-  **under `--check`**", a qualifier no interface expressed.
-  Impact: exit status is now a function of mode and observation. A test that
-  `--in-place` on a drifting file exits `0` is a required acceptance item.
+  unconditionally while `Mode` was not in scope. Evidence: the draft's own
+  `INV-EXIT` said "`1` when at least one file drifts **under `--check`**", a
+  qualifier no interface expressed. Impact: exit status is now a function of
+  mode and observation. A test that `--in-place` on a drifting file exits `0`
+  is a required acceptance item.
 
 - Observation: `open_file_parent` (`src/main.rs:100-119`) returns a `Dir` for
   the parent plus the **bare file name**, so a store keyed on that name would
   have reported `a.md` for `--check docs/a.md`, contradicting the plan's own
   decision that paths echo as supplied. A single store also cannot serve
-  `--check docs/a.md src/b.md`.
-  Evidence: `src/main.rs:110-116`.
-  Impact: storage key and display path are now separate parameters, and the
-  capability is constructed per file inside the parallel stage.
+  `--check docs/a.md src/b.md`. Evidence: `src/main.rs:110-116`. Impact:
+  storage key and display path are now separate parameters, and the capability
+  is constructed per file inside the parallel stage.
 
 - Observation: `rayon`'s `collect::<Vec<_>>()` does not document order
   preservation. `FromParallelIterator<T> for Vec<T>`
-  (`rayon-1.12.0/src/iter/from_par_iter.rs:24-34`) routes through
-  `par_extend` with no ordering statement; the documented order-preserving API
-  is `IndexedParallelIterator::collect_into_vec`.
-  Impact: `src/main.rs` already relies on this for stdout ordering. Rather
-  than deepen that reliance, the new code tags each unit of work with its
-  argument index and orders on it, removing the assumption entirely.
+  (`rayon-1.12.0/src/iter/from_par_iter.rs:24-34`) routes through `par_extend`
+  with no ordering statement; the documented order-preserving API is
+  `IndexedParallelIterator::collect_into_vec`. Impact: `src/main.rs` already
+  relies on this for stdout ordering. Rather than deepen that reliance, the new
+  code tags each unit of work with its argument index and orders on it,
+  removing the assumption entirely.
 
 - Observation: `similar::DiffableStr::tokenize_lines` is a true partition for
-  all inputs, including the final unterminated line and a lone `\r`.
-  Evidence: `similar-2.7.0/src/text/abstraction.rs:101-127` — terminators are
-  retained by inclusive ranges, a lone `\r` separates at lines 112-115, and
-  the trailing fragment is pushed at lines 122-124.
-  Impact: two texts have equal token sequences exactly when they are
-  byte-equal, which makes `INV-AGREE` meaningful. It also means `similar` and
-  `str::lines()` disagree about lone-`\r` files, recorded in `Risks`.
+  all inputs, including the final unterminated line and a lone `\r`. Evidence:
+  `similar-2.7.0/src/text/abstraction.rs:101-127` — terminators are retained by
+  inclusive ranges, a lone `\r` separates at lines 112-115, and the trailing
+  fragment is pushed at lines 122-124. Impact: two texts have equal token
+  sequences exactly when they are byte-equal, which makes `INV-AGREE`
+  meaningful. It also means `similar` and `str::lines()` disagree about
+  lone-`\r` files, recorded in `Risks`.
 
 - Observation: `docs/users-guide.md` contains no command-line flag reference;
   the canonical list is in `README.md:52-106`, contradicting
   `docs/documentation-style-guide.md:103-129`, which places command-line
-  reference material in the user's guide.
-  Impact: `EP-M7` adds a proper interface section to the user's guide and
-  reduces the README to a synopsis plus a link.
+  reference material in the user's guide. Impact: `EP-M7` adds a proper
+  interface section to the user's guide and reduces the README to a synopsis
+  plus a link.
 
 - Observation: `docs/state-machine-abstractions-roadmap.md` exists but is
-  absent from `docs/contents.md`, against the style guide's own rule.
-  Impact: a one-line index fix is included in `EP-M7`.
+  absent from `docs/contents.md`, against the style guide's own rule. Impact: a
+  one-line index fix is included in `EP-M7`.
 
 - Observation: `src/io.rs` duplicates `src/main.rs`'s read-format-write
   pattern including the trailing-newline rule, is never called by the binary,
@@ -534,101 +527,96 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 - Observation: `.github/workflows/ci.yml` does not run `make test`; it runs a
   shared coverage action that recompiles with instrumentation, so new
-  development dependencies are compiled twice per run.
-  Impact: noted so the plan does not claim a CI cost it has not measured. No
-  CI change is required.
+  development dependencies are compiled twice per run. Impact: noted so the
+  plan does not claim a CI cost it has not measured. No CI change is required.
 
 - Observation: `make test` does not run doctests, because its recipe passes
   `--all-targets`, which cargo documents as excluding them. `AGENTS.md:154`
   claims the gate runs `cargo test --workspace`, which would include them, so
-  the Makefile diverges from its own documentation.
-  Evidence: `grep -niE 'doc-?test'
-  /tmp/test-mdtablefix-check-option.out` returns nothing, while
-  `cargo test --doc --all-features` reports `28 passed; 0 failed; 20 ignored`.
-  Impact: this plan adds doctests to every new public item, so their contract
-  would otherwise be unverifiable by the deterministic gates. Mitigation: the
-  `test` recipe now runs `cargo test --doc --all-features` as a second
-  command, and `make test` reports `28 passed; 0 failed; 20 ignored` for the
-  doctest section. The pre-existing doctest suite passed before the change, so
-  widening the gate could not break unrelated work.
+  the Makefile diverges from its own documentation. Evidence:
+  `grep -niE 'doc-?test' /tmp/test-mdtablefix-check-option.out` returns
+  nothing, while `cargo test --doc --all-features` reports
+  `28 passed; 0 failed; 20 ignored`. Impact: this plan adds doctests to every
+  new public item, so their contract would otherwise be unverifiable by the
+  deterministic gates. Mitigation: the `test` recipe now runs
+  `cargo test --doc --all-features` as a second command, and `make test` reports
+  `28 passed; 0 failed; 20 ignored` for the doctest section. The pre-existing
+  doctest suite passed before the change, so widening the gate could not break
+  unrelated work.
 
 - Observation: `INV-IDEMPOTENT` **fails**. Two independent, pre-existing
   defects make `format(format(x)) != format(x)` for reachable inputs. This is
   the `Tolerances` stop condition, so `EP-M2` halted at its first property run
-  and the finding is escalated rather than worked around.
-  Evidence, class A — normalised thematic breaks stop being breaks. `--breaks`
-  rewrites every thematic break to 70 underscores, but `wrap` recognises a
-  break only through the table-separator pattern `^[\s|:-]+$`
-  (`src/table.rs:117-120`, reached via `is_table_or_separator`,
-  `src/wrap.rs:67-69`), which matches hyphens and colons only. A normalised
-  break is therefore folded into the adjacent paragraph on the next pass.
-  Minimal synthetic input: `alpha\n` + 70 underscores + `\nbeta\n` under
-  `--wrap` becomes `alpha ____…____` on one line. Minimal original input:
-  `---\nprose words here` under `--wrap --breaks` →
-  `____…____\nprose words here\n` → `____…____ prose\nwords here\n`. The same
+  and the finding is escalated rather than worked around. Evidence, class A —
+  normalised thematic breaks stop being breaks. `--breaks` rewrites every
+  thematic break to 70 underscores, but `wrap` recognises a break only through
+  the table-separator pattern `^[\s|:-]+$` (`src/table.rs:117-120`, reached via
+  `is_table_or_separator`, `src/wrap.rs:67-69`), which matches hyphens and
+  colons only. A normalised break is therefore folded into the adjacent
+  paragraph on the next pass. Minimal synthetic input: `alpha\n` + 70
+  underscores + `\nbeta\n` under `--wrap` becomes `alpha ____…____` on one
+  line. Minimal original input: `---\nprose words here` under `--wrap --breaks`
+  → `____…____\nprose words here\n` → `____…____ prose\nwords here\n`. The same
   predicate means `--wrap` alone already folds `***` and `___` breaks into
   paragraphs on the first pass. Existing fixture affected:
   `tests/data/cli-matrix/frontmatter-breaks.dat` (1 of 123 under the full flag
-  set; 0 of 123 under `--wrap` alone).
-  Evidence, class B — wrap tail reflow depends on the source line's trailing
-  token. A list item whose first line ends with an inline code span re-wraps
-  differently on the second pass. Minimal input (83 chars, `--wrap` alone,
-  found by character-level delta debugging):
+  set; 0 of 123 under `--wrap` alone). Evidence, class B — wrap tail reflow
+  depends on the source line's trailing token. A list item whose first line
+  ends with an inline code span re-wraps differently on the second pass.
+  Minimal input (83 chars, `--wrap` alone, found by character-level delta
+  debugging):
   ``- *Ownership.** Owned by the wrap module (`src/wrap/tracing_snapshot_support.rs`)\nn``
   → pass 1 breaks after `module`, pass 2 joins the code span to the following
   line. Affected in-repo: `docs/developers-guide.md` (1 of 28 Markdown files,
-  under `--wrap` alone and under the full `mdformat-all` flag set).
-  Both classes converge after two passes and neither can loop, but both are
+  under `--wrap` alone and under the full `mdformat-all` flag set). Both
+  classes converge after two passes and neither can loop, but both are
   reachable with flags `make fmt` already uses: `mdformat-all` runs
-  `--wrap --renumber --breaks --ellipsis --fences --in-place`.
-  Pre-existence: this branch modifies only `src/lib.rs` and adds `src/report*`,
-  so `src/wrap*`, `src/breaks.rs`, and `src/table.rs` are untouched; both
-  defects are present at `HEAD` and in released versions.
-  Impact: `--check` cannot be a one-pass gate for the affected classes. A
-  single `--in-place` pass leaves the file still drifting, so check → fix →
-  check does not go green without a second fix. `Tolerances` forbids narrowing
-  the property as a workaround, so the decision is the user's: fix both
-  defects on this branch, or halt.
+  `--wrap --renumber --breaks --ellipsis --fences --in-place`. Pre-existence:
+  this branch modifies only `src/lib.rs` and adds `src/report*`, so `src/wrap*`,
+  `src/breaks.rs`, and `src/table.rs` are untouched; both defects are present
+  at `HEAD` and in released versions. Impact: `--check` cannot be a one-pass
+  gate for the affected classes. A single `--in-place` pass leaves the file
+  still drifting, so check → fix → check does not go green without a second fix.
+  `Tolerances` forbids narrowing the property as a workaround, so the decision
+  is the user's: fix both defects on this branch, or halt.
 
 - Observation: a unified diff does **not** spell out the whole right-hand side
   of the document. The first version of the `--diff` matrix invariant
-  reconstructed it from the body's context and insertion lines, which holds only
-  where every line falls inside some hunk's context.
-  Evidence: `row_000_nowrap_diff` failed that comparison, short by the trailing
-  blank line, `Title`, and `=====`. The `similar` payload is `@@ -1,4 +1,6 @@`
-  for a seven-line file: the last change is on line 1, so the three lines of
-  trailing context end at line 4 and lines 5-7 are absent from the payload
-  entirely, exactly as GNU `diff` omits them. The invariant was replaced by a
-  patch applier that copies the lines no hunk covers from the file, which is
-  what any consumer of the diff must do; the case now passes without weakening
-  the assertion, and unit tests pin the gap and tail cases directly. Measuring
+  reconstructed it from the body's context and insertion lines, which holds
+  only where every line falls inside some hunk's context. Evidence:
+  `row_000_nowrap_diff` failed that comparison, short by the trailing blank
+  line, `Title`, and `=====`. The `similar` payload is `@@ -1,4 +1,6 @@` for a
+  seven-line file: the last change is on line 1, so the three lines of trailing
+  context end at line 4 and lines 5-7 are absent from the payload entirely,
+  exactly as GNU `diff` omits them. The invariant was replaced by a patch
+  applier that copies the lines no hunk covers from the file, which is what any
+  consumer of the diff must do; the case now passes without weakening the
+  assertion, and unit tests pin the gap and tail cases directly. Measuring
   twice here was worth it: the naive version was one fixture away from being
-  silently vacuous.
-  Date/Author: 2026-09-11.
+  silently vacuous. Date/Author: 2026-09-11.
 
 - Observation: `mdformat-all` is not `mdformat`. It runs this crate's own CLI
-  over every Markdown-like file — `mdtablefix --wrap --renumber --breaks
-  --ellipsis --fences --in-place` — and then `markdownlint-cli2 --fix`.
-  Evidence: the wrapper script at `~/.local/bin/mdformat-all`; `mdformat` is not
-  installed at all. Two consequences for documentation work. First, the scoped
-  equivalent of `make fmt` for one file is now available as a check:
+  over every Markdown-like file —
+  `mdtablefix --wrap --renumber --breaks --ellipsis --fences --in-place` — and
+  then `markdownlint-cli2 --fix`. Evidence: the wrapper script at
+  `~/.local/bin/mdformat-all`; `mdformat` is not installed at all. Two
+  consequences for documentation work. First, the scoped equivalent of
+  `make fmt` for one file is now available as a check:
   `mdtablefix --wrap --renumber --breaks --ellipsis --fences --check <file>`.
   Second, the wrapper re-wraps a paragraph as a whole rather than line by line,
   so prose whose every line fits within 80 columns can still be re-flowed: the
   new `docs/developers-guide.md` prose was re-balanced across lines even though
   no line exceeded the limit. Those sections were therefore taken from that
-  command's own output rather than hand-wrapped.
-  Date/Author: 2026-09-11.
+  command's own output rather than hand-wrapped. Date/Author: 2026-09-11.
 
 - Observation: the repository's Markdown does not satisfy its own formatter at
   `HEAD`. All three of `README.md`, `docs/users-guide.md`, and
-  `docs/developers-guide.md` drift under the `mdformat-all` flag set.
-  Evidence: `mdtablefix --wrap --renumber --breaks --ellipsis --fences --check
-  <file>` exits `1` for each, with `+101 -103` for `docs/developers-guide.md` at
-  `HEAD` before this milestone's edits. Consequence for `EP-M7`: running
-  `make fmt` there will rewrite unrelated prose across the documentation set, so
-  that step must be reviewed as its own change rather than folded into the
-  content edit.
+  `docs/developers-guide.md` drift under the `mdformat-all` flag set. Evidence:
+  `mdtablefix --wrap --renumber --breaks --ellipsis --fences --check <file>`
+  exits `1` for each, with `+101 -103` for `docs/developers-guide.md` at `HEAD`
+  before this milestone's edits. Consequence for `EP-M7`: running `make fmt`
+  there will rewrite unrelated prose across the documentation set, so that step
+  must be reviewed as its own change rather than folded into the content edit.
   Date/Author: 2026-09-11.
 
 - Observation: a **third** non-idempotent transform class exists, and it is both
@@ -637,12 +625,11 @@ Hard invariants. Violating one requires escalation, not a workaround.
   not a fixed point: the `---` makes the delimiter row a Setext heading
   candidate, so pass 1 rewrites `|---|---|` as `## | --- | --- |` and pads the
   body row to the delimiter row's cell widths, and pass 2 re-pads that body row
-  against the new heading's narrower cells.
-  Evidence: `printf '|1|2|\n|---|---|\n---'` → pass 1
-  `| 1   | 2   |\n## | --- | --- |\n` → pass 2
-  `| 1 | 2 |\n## | --- | --- |\n`; five of six corpus cases drift, and the
-  sixth (`|A|B|\n|---|---|\nTitle\n---\n`) is the control in which a line of
-  prose between the delimiter row and the `---` prevents the absorption. The
+  against the new heading's narrower cells. Evidence:
+  `printf '|1|2|\n|---|---|\n---'` → pass 1 `| 1   | 2   |\n## | --- | --- |\n`
+  → pass 2 `| 1 | 2 |\n## | --- | --- |\n`; five of six corpus cases drift, and
+  the sixth (`|A|B|\n|---|---|\nTitle\n---\n`) is the control in which a line
+  of prose between the delimiter row and the `---` prevents the absorption. The
   pass-1 bytes are **byte-identical** to those of a binary built from
   `git archive origin/main` (v0.5.1), and this branch's `src/` diff against
   `origin/main` contains no transform code, so the class is pre-existing rather
@@ -650,123 +637,116 @@ Hard invariants. Violating one requires escalation, not a workaround.
   classes, and the same reason issue #468's closure was incomplete.
   Date/Author: 2026-09-11.
 
-- Observation: `tests/check_properties.rs::generated_documents_reach_a_fixed_point`
+- Observation:
+  `tests/check_properties.rs::generated_documents_reach_a_fixed_point`
   **samples the failing class too rarely to fail reliably**, so the `test` gate
   has been passing by luck. The generator's `markdown_lines()` can emit
-  `"|---|---|"` and `"---"` but draws a document of at most twelve lines, so the
-  three-line shape that triggers the class is one of a very large space of
-  draws and `with_cases(48)` does not reliably reach it.
-  Evidence: repeated runs in one unchanged tree gave 10 passes, then 3 passes
-  followed by 27 failures, then 5 failures out of 5; another tree gave a pass
-  followed by failures. With `PROPTEST_RNG_SEED=0` the failure is reproducible
-  and always shrinks to `document = "|1|2|\n|---|---|\n---", mask = 128` (the
-  `--headings` bit). `PROPTEST_RNG_SEED` is honoured by proptest 1.11.0, so the
-  seed explains which draw is taken, but **why some earlier unseeded runs in the
+  `"|---|---|"` and `"---"` but draws a document of at most twelve lines, so
+  the three-line shape that triggers the class is one of a very large space of
+  draws and `with_cases(48)` does not reliably reach it. Evidence: repeated
+  runs in one unchanged tree gave 10 passes, then 3 passes followed by 27
+  failures, then 5 failures out of 5; another tree gave a pass followed by
+  failures. With `PROPTEST_RNG_SEED=0` the failure is reproducible and always
+  shrinks to `document = "|1|2|\n|---|---|\n---", mask = 128` (the `--headings`
+  bit). `PROPTEST_RNG_SEED` is honoured by proptest 1.11.0, so the seed
+  explains which draw is taken, but **why some earlier unseeded runs in the
   same tree passed is not fully explained**: stale-binary, feature-flag,
   target-directory, `RUSTFLAGS`, path-dependence, assert_cmd-resolution, and
   binary-nondeterminism explanations were each tested and each ruled out (30 of
-  30 identical invocations at five different paths). The honest statement is that
-  the property is flaky because the generator is sparse, which is exactly the
-  vacuity hazard issue #468's acceptance criteria name; the residual variance is
-  recorded as an open question rather than asserted away.
+  30 identical invocations at five different paths). The honest statement is
+  that the property is flaky because the generator is sparse, which is exactly
+  the vacuity hazard issue #468's acceptance criteria name; the residual
+  variance is recorded as an open question rather than asserted away.
   Date/Author: 2026-09-11.
 
 - Observation: resolving the positional arguments up front **changes what one
   unusable path does to a run**. Before, a path that is not valid UTF-8 was
-  rejected per file by `open_file_parent`, so it was counted as one file's error
-  while its siblings were still analysed and reported. Now the whole run fails
-  before the parallel stage, prints no reports, and exits `2`.
-  Evidence: `tests/cli_check.rs::a_non_utf8_path_argument_exits_error` runs
-  `--check clean.md <invalid>` and asserts exit `2`, an empty standard output, and
-  a message naming the problem; the source behaviour is
-  `Inputs::resolve`'s single conversion, and
-  `src/driver_tests.rs::resolve_declines_a_non_utf8_path` pins it at unit level.
-  The change is deliberate: a path the tool cannot name cannot be a per-file
-  report, because the report would have to name it. It is called out here because
-  it is a user-visible difference that the `--git` request implied rather than
-  stated.
-  Date/Author: 2026-09-11.
+  rejected per file by `open_file_parent`, so it was counted as one file's
+  error while its siblings were still analysed and reported. Now the whole run
+  fails before the parallel stage, prints no reports, and exits `2`. Evidence:
+  `tests/cli_check.rs::a_non_utf8_path_argument_exits_error` runs
+  `--check clean.md <invalid>` and asserts exit `2`, an empty standard output,
+  and a message naming the problem; the source behaviour is `Inputs::resolve`'s
+  single conversion, and
+  `src/driver_tests.rs::resolve_declines_a_non_utf8_path` pins it at unit
+  level. The change is deliberate: a path the tool cannot name cannot be a
+  per-file report, because the report would have to name it. It is called out
+  here because it is a user-visible difference that the `--git` request implied
+  rather than stated. Date/Author: 2026-09-11.
 
 - Observation: making the clean-file write a no-op also **removes the symlink
-  refusal for clean targets**. `--in-place link.md`, where `link.md` is a symlink
-  to a file that already matches the formatter's output, used to fail with
-  `refusing to replace the symlink …` and now succeeds without touching the link
-  or its target.
-  Evidence: measured on the built binary — a symlink to `| A | B |\n| 1 | 2 |\n`
-  exits `0`, and the link, its target, and both inodes and modification times are
-  unchanged. A symlink to a *drifting* file still fails, which
-  `tests/in_place_atomic.rs::in_place_declines_symlinked_target` pins beside the
-  new `in_place_accepts_a_symlink_to_a_clean_file`; `src/io_tests.rs` and
-  `src/io_tracing_tests.rs` pin the refusal at the `replace_file` level and are
-  untouched, because the refusal is a property of the replacement and there is
-  now no replacement to make. Declared to the `--git` plan rather than left for
-  a reviewer to find.
-  Date/Author: 2026-09-11.
+  refusal for clean targets**. `--in-place link.md`, where `link.md` is a
+  symlink to a file that already matches the formatter's output, used to fail
+  with `refusing to replace the symlink …` and now succeeds without touching
+  the link or its target. Evidence: measured on the built binary — a symlink to
+  `| A | B |\n| 1 | 2 |\n` exits `0`, and the link, its target, and both inodes
+  and modification times are unchanged. A symlink to a *drifting* file still
+  fails, which `tests/in_place_atomic.rs::in_place_declines_symlinked_target`
+  pins beside the new `in_place_accepts_a_symlink_to_a_clean_file`;
+  `src/io_tests.rs` and `src/io_tracing_tests.rs` pin the refusal at the
+  `replace_file` level and are untouched, because the refusal is a property of
+  the replacement and there is now no replacement to make. Declared to the
+  `--git` plan rather than left for a reviewer to find. Date/Author: 2026-09-11.
 
 - Observation: **a rebase can report success and still be wrong.** The first
   attempt at the second rebase exited clean, with no conflict, and silently
-  corrupted three Markdown documents: `docs/architecture.md`'s footnotes example
-  had its `Before:` lines rewritten to the `After:` form and lost the `After:`
-  label, its blank line, the opening fence, and the `Text.` line under it, and
-  fourteen blank lines appeared from nowhere across `docs/architecture.md` (one),
-  `docs/developers-guide.md` (five), and `docs/users-guide.md` (eight). The only
-  signal was a stream of `weave: N entities auto-resolved (<confidence>)`
-  notices, at `high`, `very_high`, and once `conflict` confidence — a merge
-  driver selected by the global attributes file for Markdown paths, reporting
-  confidence in an entity merge that had changed the meaning of a worked
-  example.
-  Evidence: the three blobs compared three ways (`origin/main:<path>`,
-  `2a73a58:<path>`, working file) — the corrupt copies, the rebase log, and both
-  diagnostic diffs are preserved under `/tmp/weave-corrupt/`; the recovery run
-  under `git -c core.attributesFile=/dev/null` produced a tree whose delta
-  against `2a73a58` is exactly `408c76a`'s own stat. Recorded in
-  `Artefacts and notes → Second rebase onto origin/main (#477)`.
-  Lesson: for this repository a clean driver exit is not evidence of intended
-  semantics, so the default is Git's built-in merge and a byte-level comparison
-  against both parents is what makes a driver's result acceptable. The
-  deterministic gates would have caught the damage in the end, and not only the
-  blank lines: the preserved copies fail `markdownlint` with 21 errors under the
-  repository's own configuration — 14 `MD012` from the inserted blanks, three
-  `MD053` on the `[^1]`, `[^2]`, and `[^10]` definitions the entity merge
-  invented, two `MD051`, and `MD031`/`MD040` on the fence it dropped — while the
-  same three files as merged report 0, which is what makes the corruption the
-  cause rather than a pre-existing finding. What the blob comparison bought was
-  finding it before the corrupted replay was committed and pushed, which the
-  gate run alone would not have done.
-  Date/Author: 2026-09-11.
+  corrupted three Markdown documents: `docs/architecture.md`'s footnotes
+  example had its `Before:` lines rewritten to the `After:` form and lost the
+  `After:` label, its blank line, the opening fence, and the `Text.` line under
+  it, and fourteen blank lines appeared from nowhere across
+  `docs/architecture.md` (one), `docs/developers-guide.md` (five), and
+  `docs/users-guide.md` (eight). The only signal was a stream of
+  `weave: N entities auto-resolved (<confidence>)` notices, at `high`,
+  `very_high`, and once `conflict` confidence — a merge driver selected by the
+  global attributes file for Markdown paths, reporting confidence in an entity
+  merge that had changed the meaning of a worked example. Evidence: the three
+  blobs compared three ways (`origin/main:<path>`, `2a73a58:<path>`, working
+  file) — the corrupt copies, the rebase log, and both diagnostic diffs are
+  preserved under `/tmp/weave-corrupt/`; the recovery run under
+  `git -c core.attributesFile=/dev/null` produced a tree whose delta against
+  `2a73a58` is exactly `408c76a`'s own stat. Recorded in
+  `Artefacts and notes → Second rebase onto origin/main (#477)`. Lesson: for
+  this repository a clean driver exit is not evidence of intended semantics, so
+  the default is Git's built-in merge and a byte-level comparison against both
+  parents is what makes a driver's result acceptable. The deterministic gates
+  would have caught the damage in the end, and not only the blank lines: the
+  preserved copies fail `markdownlint` with 21 errors under the repository's
+  own configuration — 14 `MD012` from the inserted blanks, three `MD053` on the
+  `[^1]`, `[^2]`, and `[^10]` definitions the entity merge invented, two
+  `MD051`, and `MD031`/`MD040` on the fence it dropped — while the same three
+  files as merged report 0, which is what makes the corruption the cause rather
+  than a pre-existing finding. What the blob comparison bought was finding it
+  before the corrupted replay was committed and pushed, which the gate run
+  alone would not have done. Date/Author: 2026-09-11.
 
 ## Decision log
 
 - Decision: `--check` reports concisely as `<path> +<ins> -<del>` and `--diff`
   is a separate unified-diff mode; the `--concise` flag proposed in GitHub
-  issue #452 is not implemented.
-  Rationale: issue #452 proposed `--check` emitting diffs with `--concise`
-  reducing it to filenames. The requested design inverts this, so `--check` is
-  already the concise form and a third flag would be redundant. Confirmed by
-  `@leynos`.
-  Date/Author: 2026-09-09.
+  issue #452 is not implemented. Rationale: issue #452 proposed `--check`
+  emitting diffs with `--concise` reducing it to filenames. The requested
+  design inverts this, so `--check` is already the concise form and a third
+  flag would be redundant. Confirmed by `@leynos`. Date/Author: 2026-09-09.
 
 - Decision: `--diff` exits `1` on drift, exactly as `--check` does. The two
-  remain mutually exclusive.
-  Rationale: the original requirement had `--diff` exit `0` regardless of
-  drift. Design review established that `ruff format --diff`, `rustfmt
-  --check`, `dprint check` and modern `gofmt -d` all exit non-zero when a diff
-  exists, and `@leynos` adopted that behaviour on the principle of least
-  surprise. `ruff format --diff` is documented as "exit with a non-zero status
-  code **and** the difference between the current file and how the formatted
-  file would look"; `gofmt -d` was changed to exit non-zero in golang/go#46289
-  for the same reason.
-  This also dissolves the second half of the original concern. The reason
-  Black, ruff, and `terraform fmt` permit combining check with diff is so that
-  one run can both show the drift and fail the build. Now that `--diff` does
-  both by itself, combining the flags would be redundant, so `--check` and
-  `--diff` stay mutually exclusive and a CI job needs only one invocation,
-  reading every file once. That preserves the `Quality criteria` requirement
-  that no file is read more than once, which the earlier design would have
-  violated for any job wanting both outputs.
-  `--check` and `--diff` are therefore two renderings of one analysis with
-  identical exit semantics: `--check` is the concise rendering for logs,
-  `--diff` the verbose rendering for diagnosis.
+  remain mutually exclusive. Rationale: the original requirement had `--diff`
+  exit `0` regardless of drift. Design review established that
+  `ruff format --diff`, `rustfmt --check`, `dprint check` and modern `gofmt -d`
+  all exit non-zero when a diff exists, and `@leynos` adopted that behaviour on
+  the principle of least surprise. `ruff format --diff` is documented as "exit
+  with a non-zero status code **and** the difference between the current file
+  and how the formatted file would look"; `gofmt -d` was changed to exit
+  non-zero in golang/go#46289 for the same reason. This also dissolves the
+  second half of the original concern. The reason Black, ruff, and
+  `terraform fmt` permit combining check with diff is so that one run can both
+  show the drift and fail the build. Now that `--diff` does both by itself,
+  combining the flags would be redundant, so `--check` and `--diff` stay
+  mutually exclusive and a CI job needs only one invocation, reading every file
+  once. That preserves the `Quality criteria` requirement that no file is read
+  more than once, which the earlier design would have violated for any job
+  wanting both outputs. `--check` and `--diff` are therefore two renderings of
+  one analysis with identical exit semantics: `--check` is the concise
+  rendering for logs, `--diff` the verbose rendering for diagnosis.
   Date/Author: 2026-09-09, planning agent; revised 2026-09-09 on explicit
   instruction from `@leynos` after design review.
 
@@ -776,84 +756,73 @@ Hard invariants. Violating one requires escalation, not a workaround.
   Rationale: a gate must distinguish "needs formatting" from "could not run";
   today both exit `1`. Making the status a function of mode is what prevents
   `--in-place` and a bare invocation from exiting `1` on a successful run. An
-  operational error dominates drift, because an incomplete analysis must not
-  be reported as a merely drifted result. Confirmed by `@leynos`; the version
-  bump was added after design review as the migration signal, and `--diff` was
-  brought under the drift status in the same revision.
-  Date/Author: 2026-09-09.
+  operational error dominates drift, because an incomplete analysis must not be
+  reported as a merely drifted result. Confirmed by `@leynos`; the version bump
+  was added after design review as the migration signal, and `--diff` was
+  brought under the drift status in the same revision. Date/Author: 2026-09-09.
 
 - Decision: `--check` reports drift if and only if the formatted bytes differ
-  from the file's current bytes.
-  Rationale: the value of `--check` is that it predicts `--in-place`. Any
-  comparison ignoring differences `--in-place` would write produces a gate
-  that passes while the tree is dirty. Confirmed by `@leynos`.
-  Date/Author: 2026-09-09.
+  from the file's current bytes. Rationale: the value of `--check` is that it
+  predicts `--in-place`. Any comparison ignoring differences `--in-place` would
+  write produces a gate that passes while the tree is dirty. Confirmed by
+  `@leynos`. Date/Author: 2026-09-09.
 
 - Decision: implement line-ending preservation (issue #451) and byte-order-mark
-  preservation as `EP-M1`, before any reporting feature.
-  Rationale: with byte-exact comparison, unconditional LF normalization makes
-  `--check` report whole-file drift on every CRLF file, and a retained
-  byte-order mark makes it report clean on a ragged file. The first is useless,
-  the second is dangerous. Line-ending preservation was confirmed by `@leynos`;
-  byte-order-mark handling was discovered during design review and is included
-  because without it the feature's headline guarantee is false.
-  Date/Author: 2026-09-09.
+  preservation as `EP-M1`, before any reporting feature. Rationale: with
+  byte-exact comparison, unconditional LF normalization makes `--check` report
+  whole-file drift on every CRLF file, and a retained byte-order mark makes it
+  report clean on a ragged file. The first is useless, the second is dangerous.
+  Line-ending preservation was confirmed by `@leynos`; byte-order-mark handling
+  was discovered during design review and is included because without it the
+  feature's headline guarantee is false. Date/Author: 2026-09-09.
 
 - Decision: the report line is `<path> +<insertions> -<deletions>` with plain
-  decimal counts.
-  Rationale: chosen by `@leynos`. Recorded caveat from design review: this
-  matches no existing formatter, and `git diff --numstat` is in fact
-  `insertions<TAB>deletions<TAB>path` with git-style quoting for awkward paths.
-  Consumers must therefore parse by taking the final two whitespace-separated
-  fields as the counts and everything before them as the path. Paths
-  containing a newline cannot be represented; such paths are rejected with an
-  operational error rather than emitting an unparseable line.
+  decimal counts. Rationale: chosen by `@leynos`. Recorded caveat from design
+  review: this matches no existing formatter, and `git diff --numstat` is in
+  fact `insertions<TAB>deletions<TAB>path` with git-style quoting for awkward
+  paths. Consumers must therefore parse by taking the final two
+  whitespace-separated fields as the counts and everything before them as the
+  path. Paths containing a newline cannot be represented; such paths are
+  rejected with an operational error rather than emitting an unparseable line.
   Date/Author: 2026-09-09.
 
 - Decision: a changed line counts as one insertion plus one deletion, matching
-  `git diff --numstat`.
-  Date/Author: 2026-09-09, planning agent.
+  `git diff --numstat`. Date/Author: 2026-09-09, planning agent.
 
 - Decision: report lines go to standard output; the summary line and all
-  diagnostics go to standard error.
-  Rationale: standard output becomes a pure machine contract that needs no
-  filtering, which is the point of the concise format. Black does the same.
-  Added after design review, which found the draft mixed a prose sentence into
-  the machine stream.
-  Date/Author: 2026-09-09.
+  diagnostics go to standard error. Rationale: standard output becomes a pure
+  machine contract that needs no filtering, which is the point of the concise
+  format. Black does the same. Added after design review, which found the draft
+  mixed a prose sentence into the machine stream. Date/Author: 2026-09-09.
 
 - Decision: the summary states changed, unchanged, and errored counts, with
   clauses elided at zero and correct singular and plural forms. Exact grammar
-  is specified in `Interfaces and dependencies` and snapshot-tested.
-  Rationale: the draft showed three mutually inconsistent summary strings for
-  the same class of run, which by the plan's own ambiguity tolerance should
-  have stopped work. An errored count is required so a user can tell that
-  three of five files were analysed.
-  Date/Author: 2026-09-09, added after design review.
+  is specified in `Interfaces and dependencies` and snapshot-tested. Rationale:
+  the draft showed three mutually inconsistent summary strings for the same
+  class of run, which by the plan's own ambiguity tolerance should have stopped
+  work. An errored count is required so a user can tell that three of five
+  files were analysed. Date/Author: 2026-09-09, added after design review.
 
 - Decision: use `similar = "2.7"` for counting and unified-diff rendering.
-  Rationale: correct minimal line diffing and conformant unified-diff
-  rendering are solved problems with real subtleties. `similar 2.7.0` is
-  already in `Cargo.lock` via `insta`, is Apache-2.0 (permissive, compatible
-  with distributing an ISC-licensed binary), and has no mandatory
-  dependencies. Requesting `"2.7"` rather than `"3"` keeps one copy in the
-  graph.
+  Rationale: correct minimal line diffing and conformant unified-diff rendering
+  are solved problems with real subtleties. `similar 2.7.0` is already in
+  `Cargo.lock` via `insta`, is Apache-2.0 (permissive, compatible with
+  distributing an ISC-licensed binary), and has no mandatory dependencies.
+  Requesting `"2.7"` rather than `"3"` keeps one copy in the graph.
   Date/Author: 2026-09-09. Requires approval at the gate.
 
 - Decision: do not introduce a `DocumentStore` trait. Instead introduce a
   `ReadOnlyDir` newtype wrapping `cap_std::fs_utf8::Dir` and exposing only
   reads; `--check` and `--diff` receive that type, `--in-place` receives the
-  `Dir`.
-  Rationale: the draft's trait had exactly one production adapter and one test
-  adapter with no second backend in prospect, which `AGENTS.md`'s abstraction
-  policy would classify as speculative generality. Worse, it did not deliver
-  its stated benefit: the draft passed the store into `apply`, so every mode
-  had a `write` method in scope and the read-only guarantee still rested on a
-  panicking test double. A newtype with no write method makes the guarantee
-  hold by construction, adds no public library surface, and matches
+  `Dir`. Rationale: the draft's trait had exactly one production adapter and
+  one test adapter with no second backend in prospect, which `AGENTS.md`'s
+  abstraction policy would classify as speculative generality. Worse, it did
+  not deliver its stated benefit: the draft passed the store into `apply`, so
+  every mode had a `write` method in scope and the read-only guarantee still
+  rested on a panicking test double. A newtype with no write method makes the
+  guarantee hold by construction, adds no public library surface, and matches
   `AGENTS.md:217-231`'s explicit preference for newtypes over ad hoc
-  abstraction. Reversed after design review.
-  Date/Author: 2026-09-09.
+  abstraction. Reversed after design review. Date/Author: 2026-09-09.
 
 - Decision: the driver lives in the **binary** as `src/driver.rs`, not in the
   library. The library gains only the pure modules `document` and `report`.
@@ -866,134 +835,122 @@ Hard invariants. Violating one requires escalation, not a workaround.
   library API in direct violation of `AGENTS.md:266-270`. `src/io.rs` is the
   cautionary precedent: public library API the binary never calls. Keeping the
   driver in the binary leaves the library infallible and error-type-free.
-  Reversed after design review.
-  Date/Author: 2026-09-09.
+  Reversed after design review. Date/Author: 2026-09-09.
 
 - Decision: the parallel stage returns a small `FileReport` plus a rendered
   `String`, dropping each `Assessment` inside its closure; ordering is by
-  explicit argument index.
-  Rationale: the draft's `apply(..., out: &mut impl Write)` could not be
-  called from a `par_iter` at all, and retaining every `Assessment` until
-  printing meant peak memory of roughly twice the total input. Returning a
-  value type also makes a future `--format=json` a leaf addition rather than a
-  re-plumb. Added after design review.
-  Date/Author: 2026-09-09.
+  explicit argument index. Rationale: the draft's
+  `apply(..., out: &mut impl Write)` could not be called from a `par_iter` at
+  all, and retaining every `Assessment` until printing meant peak memory of
+  roughly twice the total input. Returning a value type also makes a future
+  `--format=json` a leaf addition rather than a re-plumb. Added after design
+  review. Date/Author: 2026-09-09.
 
 - Decision: defer atomic write-then-rename for `--in-place` to GitHub issue
   #465 rather than including it here.
   Rationale: design review identified that `--in-place` truncates before
   writing, so a kill or a full disk leaves files empty, and that this plan
   already rewrites the seam where the fix belongs. `@leynos` directed that it
-  be raised separately, keeping this plan scoped to the reporting modes and
-  the two document-boundary fixes that `--check` correctness depends upon.
-  Sequence #465 immediately after this work so the serialization path is
-  edited once.
+  be raised separately, keeping this plan scoped to the reporting modes and the
+  two document-boundary fixes that `--check` correctness depends upon. Sequence
+  #465 immediately after this work so the serialization path is edited once.
   Date/Author: 2026-09-09, on explicit instruction from `@leynos`.
 
 - Decision: accept whole-file majority line-ending detection, including its
-  effect on fenced code blocks.
-  Rationale: design review noted that a mostly-CRLF document containing an
-  LF-authored snippet inside a fence has that snippet rewritten to CRLF, which
-  is a content change rather than a formatting one. Issue #451 specifies
-  majority detection, and `@leynos` accepted the consequence. The obligation
-  `INV-DOCUMENT` therefore carries a mixed-endings-inside-a-fence case so the
-  behaviour is pinned rather than incidental, and `EP-M7` documents it
-  explicitly in the user's guide.
+  effect on fenced code blocks. Rationale: design review noted that a
+  mostly-CRLF document containing an LF-authored snippet inside a fence has
+  that snippet rewritten to CRLF, which is a content change rather than a
+  formatting one. Issue #451 specifies majority detection, and `@leynos`
+  accepted the consequence. The obligation `INV-DOCUMENT` therefore carries a
+  mixed-endings-inside-a-fence case so the behaviour is pinned rather than
+  incidental, and `EP-M7` documents it explicitly in the user's guide.
   Date/Author: 2026-09-09, on explicit instruction from `@leynos`.
 
 - Decision: accept the five proposed dependencies.
   Rationale: `similar` at runtime, and `rstest-bdd`, `rstest-bdd-macros`,
   `googletest`, and `pretty_assertions` for tests. Approved by `@leynos`. The
   design review's cost objection to the assertion libraries is recorded above
-  and is mitigated by scope rather than removal.
-  Date/Author: 2026-09-09, on explicit instruction from `@leynos`.
+  and is mitigated by scope rather than removal. Date/Author: 2026-09-09, on
+  explicit instruction from `@leynos`.
 
 - Decision: `--check`, `--diff`, and `--in-place` all require file arguments.
   Rationale: consistency with `--in-place`'s existing `requires = "files"`,
   which `tests/cli.rs:28-35` asserts. Recorded hazard: under a shell without
   `nullglob`, `mdtablefix --check docs/*.md` matching nothing becomes a usage
-  error exiting `2`, failing a job that should pass, whereas Black and ruff
-  exit `0` on an empty file set. Documented in the user's guide rather than
+  error exiting `2`, failing a job that should pass, whereas Black and ruff exit
+  `0` on an empty file set. Documented in the user's guide rather than
   changing tested behaviour. Raised at the gate as a reversible choice.
   Date/Author: 2026-09-09.
 
 - Decision: when no line-ending style holds a strict majority, or the file has
-  none, emit LF.
-  Rationale: issue #451 requires deterministic documented behaviour in the
-  no-majority case; LF preserves today's behaviour and is the ecosystem
-  default. Counting must count `\r\n` occurrences and subtract them from the
-  total `\n` count to obtain lone LFs; counting `\n` naively double-counts
-  every CRLF and makes CRLF unable to win.
-  Date/Author: 2026-09-09.
+  none, emit LF. Rationale: issue #451 requires deterministic documented
+  behaviour in the no-majority case; LF preserves today's behaviour and is the
+  ecosystem default. Counting must count `\r\n` occurrences and subtract them
+  from the total `\n` count to obtain lone LFs; counting `\n` naively
+  double-counts every CRLF and makes CRLF unable to win. Date/Author:
+  2026-09-09.
 
 - Decision: unified-diff headers use the display path on both sides with
   directory separators normalized to `/`, no timestamps, context radius three,
-  and the missing-newline marker retained.
-  Rationale: timestamps would make output non-deterministic and
-  unsnapshot-able. Backslash separators would not resolve on other platforms.
-  Recorded limitation: without a tab delimiter, GNU `patch` truncates a path at
-  the first space, so `--diff` output is for human review and is not
-  guaranteed to apply cleanly for paths containing whitespace. The draft's
-  acceptance criterion requiring `patch` to reproduce the file is therefore
-  dropped, which also removes an undeclared external tool dependency from the
-  test suite.
-  Date/Author: 2026-09-09, amended after design review.
+  and the missing-newline marker retained. Rationale: timestamps would make
+  output non-deterministic and unsnapshot-able. Backslash separators would not
+  resolve on other platforms. Recorded limitation: without a tab delimiter, GNU
+  `patch` truncates a path at the first space, so `--diff` output is for human
+  review and is not guaranteed to apply cleanly for paths containing
+  whitespace. The draft's acceptance criterion requiring `patch` to reproduce
+  the file is therefore dropped, which also removes an undeclared external tool
+  dependency from the test suite. Date/Author: 2026-09-09, amended after design
+  review.
 
 - Decision: never colourize output, under any terminal or environment
-  setting.
-  Rationale: determinism is a hard constraint and the snapshot tests run
-  without a terminal, so a colour regression would be invisible to them.
-  Added after design review, which found the draft silent on this.
-  Date/Author: 2026-09-09.
+  setting. Rationale: determinism is a hard constraint and the snapshot tests
+  run without a terminal, so a colour regression would be invisible to them.
+  Added after design review, which found the draft silent on this. Date/Author:
+  2026-09-09.
 
 - Decision: cut the Verus proof milestone entirely rather than making it
-  optional.
-  Rationale: the draft rejected Kani on the ground that a bounded model check
-  over a synthetic tag sequence would verify a re-implementation rather than
-  the real diff engine, then proposed Verus over the identical synthetic
-  domain. That is special pleading. More decisively, the proposed goal reduces
-  to `|E| + |I| = |E| + |D| + |I| - |D|`, an arithmetic identity, not a lemma;
-  all the content lives in `AX-2`, which is `similar`'s documented behaviour
-  and is axiomatized precisely because it is third-party. `AGENTS.md` requires
-  a proof to be substantive and not a restatement of an assumed property, so
-  cutting this is compliance, not evasion. `rust-toolchain.toml` also pins
-  `nightly-2026-03-26` while Verus ships its own pinned toolchain and build
-  system, so the go/no-go condition was almost certainly unsatisfiable.
+  optional. Rationale: the draft rejected Kani on the ground that a bounded
+  model check over a synthetic tag sequence would verify a re-implementation
+  rather than the real diff engine, then proposed Verus over the identical
+  synthetic domain. That is special pleading. More decisively, the proposed
+  goal reduces to `|E| + |I| = |E| + |D| + |I| - |D|`, an arithmetic identity,
+  not a lemma; all the content lives in `AX-2`, which is `similar`'s documented
+  behaviour and is axiomatized precisely because it is third-party. `AGENTS.md`
+  requires a proof to be substantive and not a restatement of an assumed
+  property, so cutting this is compliance, not evasion. `rust-toolchain.toml`
+  also pins `nightly-2026-03-26` while Verus ships its own pinned toolchain and
+  build system, so the go/no-go condition was almost certainly unsatisfiable.
   Replaced by `EP-M6`, targeted mutation testing, which attacks the actual
   stated risk — that the counting mis-attributes a tag — empirically.
   Date/Author: 2026-09-09, after design review.
 
 - Decision: keep `googletest`, `pretty_assertions`, and `rstest-bdd` despite
-  the review's objection.
-  Rationale: all three were named as authorized and requested. The review's
-  case is recorded honestly: they take the repository from two assertion
-  idioms to four, and the behavioural scenarios here map one-to-one onto plain
-  `rstest` plus `assert_cmd` cases. The mitigation is scope rather than
-  removal: `rstest-bdd` owns the readable end-to-end specification,
-  `tests/cli_check.rs` owns only the mechanical cases that read badly as
-  Gherkin, and `EP-M5` is narrowed, so the feature has two test surfaces
-  rather than three.
-  Date/Author: 2026-09-09.
+  the review's objection. Rationale: all three were named as authorized and
+  requested. The review's case is recorded honestly: they take the repository
+  from two assertion idioms to four, and the behavioural scenarios here map
+  one-to-one onto plain `rstest` plus `assert_cmd` cases. The mitigation is
+  scope rather than removal: `rstest-bdd` owns the readable end-to-end
+  specification, `tests/cli_check.rs` owns only the mechanical cases that read
+  badly as Gherkin, and `EP-M5` is narrowed, so the feature has two test
+  surfaces rather than three. Date/Author: 2026-09-09.
 
 - Decision: vendor `docs/rstest-bdd-users-guide.md` and
-  `docs/reliable-testing-in-rust-via-dependency-injection.md` with a
-  provenance header naming the source repository and commit.
-  Rationale: both are signposted by the task but absent here, and this plan is
-  the first to introduce `rstest-bdd` and injected boundaries to this
-  repository. A bare copy would drift silently; a provenance header makes the
-  fork visible and re-syncable. `docs/netsuke-design.md` and
-  `docs/ortho-config-users-guide.md` are also absent but not applicable: this
-  repository parses arguments with plain `clap`, not `ortho-config`, and
-  adopting the Netsuke lint baseline is tracked separately as issue #441.
-  Date/Author: 2026-09-09.
+  `docs/reliable-testing-in-rust-via-dependency-injection.md` with a provenance
+  header naming the source repository and commit. Rationale: both are
+  signposted by the task but absent here, and this plan is the first to
+  introduce `rstest-bdd` and injected boundaries to this repository. A bare
+  copy would drift silently; a provenance header makes the fork visible and
+  re-syncable. `docs/netsuke-design.md` and `docs/ortho-config-users-guide.md`
+  are also absent but not applicable: this repository parses arguments with
+  plain `clap`, not `ortho-config`, and adopting the Netsuke lint baseline is
+  tracked separately as issue #441. Date/Author: 2026-09-09.
 
 - Decision: raise the two idempotence defects as GitHub issue #468, with the
-  reproduction corpus attached and an acceptance bar of corpus **and**
-  property test, and leave `EP-M2` green work suspended until the scope
-  decision is made.
-  Rationale: the defects are pre-existing in `--wrap` and `--breaks`, outside
-  the reporting feature this plan was scoped to build, so fixing them here
-  would silently widen the change under review; leaving them undocumented
+  reproduction corpus attached and an acceptance bar of corpus **and** property
+  test, and leave `EP-M2` green work suspended until the scope decision is
+  made. Rationale: the defects are pre-existing in `--wrap` and `--breaks`,
+  outside the reporting feature this plan was scoped to build, so fixing them
+  here would silently widen the change under review; leaving them undocumented
   would let `--check` ship against a guarantee it cannot meet. An issue with a
   failing corpus is the artefact that keeps the finding actionable without
   binding this plan to a fix whose blast radius is not yet agreed. Raised on
@@ -1002,77 +959,71 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 - Decision: resolve the rebase onto `origin/main` by taking pull request #469's
   line-ending implementation and re-landing only the byte-order-mark half of
-  `EP-M1`.
-  Rationale: #469 (issue #451) had already landed `src/io/line_endings.rs` with
-  equivalent behaviour, so keeping both would leave two competing definitions of
-  the same policy in one crate. But a `git grep` over `main` showed no
-  byte-order-mark handling anywhere: a marked file would reach the transforms
-  with `U+FEFF` fused to its first line, defeating them and making `--check`
-  report a ragged file clean. That is a silent false negative in the
-  user-facing guarantee, so the mark still had to land.
-  Date/Author: 2026-09-11.
+  `EP-M1`. Rationale: #469 (issue #451) had already landed
+  `src/io/line_endings.rs` with equivalent behaviour, so keeping both would
+  leave two competing definitions of the same policy in one crate. But a
+  `git grep` over `main` showed no byte-order-mark handling anywhere: a marked
+  file would reach the transforms with `U+FEFF` fused to its first line,
+  defeating them and making `--check` report a ragged file clean. That is a
+  silent false negative in the user-facing guarantee, so the mark still had to
+  land. Date/Author: 2026-09-11.
 
 - Decision: move the document boundary from the planned `src/document.rs` to
   `src/io/document.rs`, and take `LineEnding`, `LineEndingCounts`,
   `count_line_endings`, and `serialize_lines` from `src/io/line_endings.rs`
-  instead of redefining them.
-  Rationale: with #469 merged, a top-level `src/document` and an `src/io` that
-  both needed the line-ending policy would form a cyclic module dependency, and
-  a second public `LineEnding` beside the crate-root re-export would be two
-  types with one name in the published surface. `SourceDocument` keeps its shape
-  and its type-level guarantee.
+  instead of redefining them. Rationale: with #469 merged, a top-level
+  `src/document` and an `src/io` that both needed the line-ending policy would
+  form a cyclic module dependency, and a second public `LineEnding` beside the
+  crate-root re-export would be two types with one name in the published
+  surface. `SourceDocument` keeps its shape and its type-level guarantee.
   Date/Author: 2026-09-11.
 
 - Decision: write the check-and-diff ADR as `0009` and give the byte-order mark
   its own `0008`, rather than reusing the `0006` and `0007` numbers this plan
-  had reserved.
-  Rationale: #470 and #469 had already written `0006-single-pass-idempotence.md`
-  and `0007-line-ending-detection.md`. An ADR number is a stable reference, so
-  renumbering merged records to reclaim the reserved slots would break every
-  citation of them; the new records take the next free numbers instead. `0007`
-  covers line endings only and does not mention the mark, so the mark still
-  needs a record of its own.
-  Date/Author: 2026-09-11.
+  had reserved. Rationale: #470 and #469 had already written
+  `0006-single-pass-idempotence.md` and `0007-line-ending-detection.md`. An ADR
+  number is a stable reference, so renumbering merged records to reclaim the
+  reserved slots would break every citation of them; the new records take the
+  next free numbers instead. `0007` covers line endings only and does not
+  mention the mark, so the mark still needs a record of its own. Date/Author:
+  2026-09-11.
 
 - Decision: treat the atomic `--in-place` write as discharged by pull request
   #467 (issue #465) rather than implementing it here.
-  Rationale: this plan had deliberately deferred write-then-rename to issue #465
-  and recorded it as a high-severity risk. #467 landed it as `replace_file`,
-  which is what `src/main.rs` and this branch's document-boundary work now call,
-  so `EP-M3` inherits the guarantee instead of restating it.
-  Date/Author: 2026-09-11.
+  Rationale: this plan had deliberately deferred write-then-rename to issue
+  #465 and recorded it as a high-severity risk. #467 landed it as
+  `replace_file`, which is what `src/main.rs` and this branch's
+  document-boundary work now call, so `EP-M3` inherits the guarantee instead of
+  restating it. Date/Author: 2026-09-11.
 
 - Decision: keep the idempotence cases in `tests/check_properties.rs` but scope
   them to the document boundary, leaving the general suites to
-  `tests/idempotence.rs` and `tests/idempotence_properties.rs`.
-  Rationale: #470 landed those two suites for document *structure*, with a
-  stronger generator than this plan's, so carrying an unscoped copy here would
-  duplicate both the runtime and the maintenance. The *boundary* dimension —
-  ending style, byte-order mark, and trailing terminator, under every singleton
-  flag — is not sampled by those suites and is exactly what this plan changed,
-  so dropping it entirely would lose real coverage of the new code.
-  Date/Author: 2026-09-11.
+  `tests/idempotence.rs` and `tests/idempotence_properties.rs`. Rationale: #470
+  landed those two suites for document *structure*, with a stronger generator
+  than this plan's, so carrying an unscoped copy here would duplicate both the
+  runtime and the maintenance. The *boundary* dimension — ending style,
+  byte-order mark, and trailing terminator, under every singleton flag — is not
+  sampled by those suites and is exactly what this plan changed, so dropping it
+  entirely would lose real coverage of the new code. Date/Author: 2026-09-11.
 
 - Decision: sample *related* text pairs in
   `count_conserves_tokens_and_agrees_with_byte_equality`, in addition to
-  independent random pairs.
-  Rationale: applying the `LEM-COUNT` negative control showed the property test
-  caught nothing, because two independent `any::<String>()` draws never share a
-  line and both assertions then hold for any diff at all. The property test now
-  fails under all three controls. This is the plan's own argument that the
-  conservation law is not falsifiable by itself, applied to the generator rather
-  than only to the golden fixtures.
+  independent random pairs. Rationale: applying the `LEM-COUNT` negative
+  control showed the property test caught nothing, because two independent
+  `any::<String>()` draws never share a line and both assertions then hold for
+  any diff at all. The property test now fails under all three controls. This
+  is the plan's own argument that the conservation law is not falsifiable by
+  itself, applied to the generator rather than only to the golden fixtures.
   Date/Author: 2026-09-11.
 
 - Decision: the three gate failures reported by the first `EP-M2` gate run were
   fixed rather than waived: four `cast_possible_wrap` errors in
   `tests/check_properties.rs`, nine rustfmt diffs, and three markdownlint
-  errors in this plan.
-  Rationale: green tests are not a gate. `make check-fmt` had not been run over
-  `src/io/document.rs`, which an earlier segment of this session committed, so
-  its `SourceDocument::parse` doc example was still a single over-long line;
-  the rest of the rustfmt diffs were in this milestone's own new code. The
-  `MD029` errors were structural rather than cosmetic:
+  errors in this plan. Rationale: green tests are not a gate. `make check-fmt`
+  had not been run over `src/io/document.rs`, which an earlier segment of this
+  session committed, so its `SourceDocument::parse` doc example was still a
+  single over-long line; the rest of the rustfmt diffs were in this milestone's
+  own new code. The `MD029` errors were structural rather than cosmetic:
   `.markdownlint-cli2.jsonc` sets `MD029` to `ordered`, and the
   negative-control transcripts' column-zero fences ended the numbered list, so
   the items numbered `2.` and `3.` each started a fresh list that has to begin
@@ -1084,134 +1035,129 @@ Hard invariants. Violating one requires escalation, not a workaround.
   Date/Author: 2026-09-11.
 
 - Decision: the reporting subset is the three base rows `row_000`, `row_010`,
-  and `row_111`, not a spread across the matrix.
-  Rationale: the rows were chosen by measurement rather than by taste. Running
-  every row under both wrap variants and both reporting modes showed that only
-  `row_010` **unwrapped** is already a fixed point, so that row is the only
-  source of the no-drift branch (`--check` and `--diff` silent, exit `0`);
-  `row_000` is the plain table case a user meets first, and `row_111` carries
-  the frontmatter boundary, which is where the report line and the diff can
-  disagree about the document's extent. Twelve snapshots are added, well inside
-  the milestone's raised churn limit, and no existing snapshot changes.
-  Date/Author: 2026-09-11.
+  and `row_111`, not a spread across the matrix. Rationale: the rows were
+  chosen by measurement rather than by taste. Running every row under both wrap
+  variants and both reporting modes showed that only `row_010` **unwrapped** is
+  already a fixed point, so that row is the only source of the no-drift branch
+  (`--check` and `--diff` silent, exit `0`); `row_000` is the plain table case
+  a user meets first, and `row_111` carries the frontmatter boundary, which is
+  where the report line and the diff can disagree about the document's extent.
+  Twelve snapshots are added, well inside the milestone's raised churn limit,
+  and no existing snapshot changes. Date/Author: 2026-09-11.
 
 - Decision: the matrix stages every fixture as `input.dat` and runs the binary
-  with the temporary directory as its working directory.
-  Rationale: both reporting modes name the file they report, so a staged path
-  the harness invented (a `tempdir()` path) would be written into a snapshot and
-  make it machine-specific. The relative name is stable, and the existing
-  `.dat` fixture self-test now carries the second reason for its rule. The cost
-  is that a case cannot distinguish two same-named inputs, which no matrix row
-  needs.
-  Date/Author: 2026-09-11.
+  with the temporary directory as its working directory. Rationale: both
+  reporting modes name the file they report, so a staged path the harness
+  invented (a `tempdir()` path) would be written into a snapshot and make it
+  machine-specific. The relative name is stable, and the existing `.dat`
+  fixture self-test now carries the second reason for its rule. The cost is
+  that a case cannot distinguish two same-named inputs, which no matrix row
+  needs. Date/Author: 2026-09-11.
 
 - Decision: the `--diff` invariant applies the payload to the file rather than
-  reconstructing the printed document from the body's marker lines.
-  Rationale: the payload is a patch, so applying it is the semantics a consumer
-  relies on, and it is the only version that holds once a change is far enough
-  from the end of the file (see `Surprises & discoveries`). The applier asserts
-  each context and deleted line against the file as it goes, so a diff of the
-  wrong text fails loudly rather than reconstructing something merely different.
+  reconstructing the printed document from the body's marker lines. Rationale:
+  the payload is a patch, so applying it is the semantics a consumer relies on,
+  and it is the only version that holds once a change is far enough from the
+  end of the file (see `Surprises & discoveries`). The applier asserts each
+  context and deleted line against the file as it goes, so a diff of the wrong
+  text fails loudly rather than reconstructing something merely different.
   Date/Author: 2026-09-11.
 
 - Decision: `RunResult::envelope` keeps emitting the `[file]` block for the
   read-only modes, marked `<not applicable>`, rather than omitting it.
   Rationale: omitting the block would change all 32 pre-existing matrix
   snapshots for a purely cosmetic gain. Keeping the block means the milestone
-  adds twelve snapshots and rewrites none, so the reviewer reads exactly the new
-  evidence. The block also records the mode's defining property — a reporting
-  run does not write — which the harness then asserts against the fixture bytes.
-  Date/Author: 2026-09-11.
+  adds twelve snapshots and rewrites none, so the reviewer reads exactly the
+  new evidence. The block also records the mode's defining property — a
+  reporting run does not write — which the harness then asserts against the
+  fixture bytes. Date/Author: 2026-09-11.
 
 - Decision: `tests/cli_matrix/support.rs` is left above 400 lines rather than
-  split again to satisfy the `AGENTS.md` file-length rule.
-  Rationale: the rule is written for production modules, and this repository
-  already carries test files over the limit (`tests/idempotence_properties.rs`
-  537, `tests/fences.rs` 493). Splitting the harness further would add a module
+  split again to satisfy the `AGENTS.md` file-length rule. Rationale: the rule
+  is written for production modules, and this repository already carries test
+  files over the limit (`tests/idempotence_properties.rs` 537,
+  `tests/fences.rs` 493). Splitting the harness further would add a module
   boundary that exists only to move lines, while the reporting helpers already
   live in their own `tests/cli_matrix/reporting.rs` because they are a distinct
-  concern rather than because of the cap.
-  Date/Author: 2026-09-11.
-  **Superseded 2026-09-12** by the review round recorded in `Revision 22`. The
-  rule is enforced on every file, test or not: the repository's other over-limit
-  test files are pre-existing debt this plan does not add to, and the review
-  asked for the split. The catalogue now lives in `tests/cli_matrix/cases.rs`
-  and the harness's unit tests in `tests/cli_matrix/support_tests.rs`, leaving
+  concern rather than because of the cap. Date/Author: 2026-09-11. **Superseded
+  2026-09-12** by the review round recorded in `Revision 22`. The rule is
+  enforced on every file, test or not: the repository's other over-limit test
+  files are pre-existing debt this plan does not add to, and the review asked
+  for the split. The catalogue now lives in `tests/cli_matrix/cases.rs` and the
+  harness's unit tests in `tests/cli_matrix/support_tests.rs`, leaving
   `support.rs` at 380 lines.
 
 - Decision: `EP-M6` is halted before its first command, and the mutation run is
-  deferred until the `test` gate is green again.
-  Rationale: `cargo-mutants` refuses to test any mutant when the unmutated
-  baseline `cargo test` fails (`ERROR cargo test failed in an unmutated tree, so
-  no mutants were tested`), and the baseline is red on `a06bab6` because
+  deferred until the `test` gate is green again. Rationale: `cargo-mutants`
+  refuses to test any mutant when the unmutated baseline `cargo test` fails
+  (`ERROR cargo test failed in an unmutated tree, so no mutants were tested`),
+  and the baseline is red on `a06bab6` because
   `generated_documents_reach_a_fixed_point` has a genuine counterexample. The
-  options were to fix the transform, to exclude the flaky test from the baseline,
-  or to defer. Excluding it was rejected outright: it would report a mutation
-  score for a tree whose own gate is red, which is the "hide the failure"
-  outcome `Tolerances` forbids. Fixing the transform is the correct outcome but
-  is a change to `src/headings.rs` (or its call site) that this plan's
-  `Constraints` place out of scope, and the established precedent for exactly
-  this situation — the `EP-M2` classes, which became issue #468 and pull request
+  options were to fix the transform, to exclude the flaky test from the
+  baseline, or to defer. Excluding it was rejected outright: it would report a
+  mutation score for a tree whose own gate is red, which is the "hide the
+  failure" outcome `Tolerances` forbids. Fixing the transform is the correct
+  outcome but is a change to `src/headings.rs` (or its call site) that this
+  plan's `Constraints` place out of scope, and the established precedent for
+  exactly this situation — the `EP-M2` classes, which became issue #468 and
+  pull request
   #470 — is a separate issue and a separate change. So the milestone is deferred,
-  the gap is recorded rather than skipped, and the plan does not claim a mutation
-  result it does not have.
-  Date/Author: 2026-09-11.
+  the gap is recorded rather than skipped, and the plan does not claim a
+  mutation result it does not have. Date/Author: 2026-09-11.
 
 - Decision: the new defect class is escalated as GitHub issue #474, with a
   reproduction corpus and a non-vacuity requirement, in the shape issue #468
-  used, rather than folded into this plan's remaining milestones.
-  Rationale: the user's instruction for #468 fixed the acceptance bar —
-  "the issue cannot be considered fixed until both the reproduction corpus and a
-  substantive property check demonstrate idempotency" — and this class passes
-  neither half today: the corpus does not carry the shape, and the property
-  check that would have caught it is the flaky one. Raising it separately keeps
-  the reporting feature's own acceptance criteria honest, because a green `test`
-  gate reached by narrowing the property would close the feature while leaving
-  the defect live.
-  Date/Author: 2026-09-11.
+  used, rather than folded into this plan's remaining milestones. Rationale:
+  the user's instruction for #468 fixed the acceptance bar — "the issue cannot
+  be considered fixed until both the reproduction corpus and a substantive
+  property check demonstrate idempotency" — and this class passes neither half
+  today: the corpus does not carry the shape, and the property check that would
+  have caught it is the flaky one. Raising it separately keeps the reporting
+  feature's own acceptance criteria honest, because a green `test` gate reached
+  by narrowing the property would close the feature while leaving the defect
+  live. Date/Author: 2026-09-11.
 
 - Decision: work does not proceed past the halt into `EP-M7` as though the tree
-  were healthy, and no further commit claims all gates green.
-  Rationale: `make test` is red at `HEAD` and the failure is deterministic under
-  a fixed seed. `EP-M7` is documentation-only, so its own diff can still be gated
-  by `markdownlint` and `nixie`, but the `Gates:` line of any commit that touches
+  were healthy, and no further commit claims all gates green. Rationale:
+  `make test` is red at `HEAD` and the failure is deterministic under a fixed
+  seed. `EP-M7` is documentation-only, so its own diff can still be gated by
+  `markdownlint` and `nixie`, but the `Gates:` line of any commit that touches
   code or tests must not assert a passing test suite while this counterexample
-  stands. Recording the true state is the whole point of the `Progress` section.
-  Date/Author: 2026-09-11.
+  stands. Recording the true state is the whole point of the `Progress`
+  section. Date/Author: 2026-09-11.
 
 - Decision: the `mode` group requires a new `inputs` group that holds `files`,
   so the input source is a named thing rather than a flag-to-positional
-  dependency.
-  Rationale: `requires("files")` states the same runtime behaviour, but it binds
-  every mode flag to one particular source. The requesting plan's author measured
-  both shapes on `clap` 4.6.6 and found them behaviourally identical (`[]` and
-  `["--in-place"]` refused; `["a.md", "b.md"]` and `["--in-place", "a.md"]`
-  accepted; `["--check", "--diff", …]` refused), and
-  `tests/cli_check.rs::mode_flags_require_an_input_source` pins that matrix from
-  this branch's side, including the two-file cell that a group with
-  `multiple(false)` could plausibly have broken.
-  Date/Author: 2026-09-11, requested by the `--git` plan's author.
+  dependency. Rationale: `requires("files")` states the same runtime behaviour,
+  but it binds every mode flag to one particular source. The requesting plan's
+  author measured both shapes on `clap` 4.6.6 and found them behaviourally
+  identical (`[]` and `["--in-place"]` refused; `["a.md", "b.md"]` and
+  `["--in-place", "a.md"]` accepted; `["--check", "--diff", …]` refused), and
+  `tests/cli_check.rs::mode_flags_require_an_input_source` pins that matrix
+  from this branch's side, including the two-file cell that a group with
+  `multiple(false)` could plausibly have broken. Date/Author: 2026-09-11,
+  requested by the `--git` plan's author.
 
 - Decision: `main` no longer chooses between standard input and files by testing
   whether the file list is empty. `driver::Inputs::resolve` returns
-  `Inputs::Stdin` or `Inputs::Files(Vec<Utf8PathBuf>)`, and `run` matches on it.
-  Rationale: emptiness-as-sentinel conflates "no paths were named, so read
-  standard input" with "the source matched no paths". A source that discovers its
-  own inputs must be able to match nothing and exit `0`, rather than block on a
-  terminal's standard input. The conversion to `Utf8PathBuf` happens once in the
-  same place, so the parallel stage no longer carries a path that cannot name a
-  file in a `Dir` capability. See `AX-6`.
-  Date/Author: 2026-09-11, requested by the `--git` plan's author.
+  `Inputs::Stdin` or `Inputs::Files(Vec<Utf8PathBuf>)`, and `run` matches on
+  it. Rationale: emptiness-as-sentinel conflates "no paths were named, so read
+  standard input" with "the source matched no paths". A source that discovers
+  its own inputs must be able to match nothing and exit `0`, rather than block
+  on a terminal's standard input. The conversion to `Utf8PathBuf` happens once
+  in the same place, so the parallel stage no longer carries a path that cannot
+  name a file in a `Dir` capability. See `AX-6`. Date/Author: 2026-09-11,
+  requested by the `--git` plan's author.
 
-- Decision: input-resolution failures return through `exit_status(mode, false,
-  true)` rather than propagating out of `run`.
-  Rationale: the documented contract is that an operational error exits `2`, and
-  a pre-flight failure — a path that cannot be named, and later a missing `git`
-  or a directory that is not a repository — is an operational error like any
-  other. Folding it into `exit_status` keeps one place that decides the status,
-  and `tests/cli_check.rs::a_non_utf8_path_argument_exits_error` pins exit `2`
-  for the one such failure that exists today.
-  Date/Author: 2026-09-11, requested by the `--git` plan's author.
+- Decision: input-resolution failures return through
+  `exit_status(mode, false, true)` rather than propagating out of `run`.
+  Rationale: the documented contract is that an operational error exits `2`,
+  and a pre-flight failure — a path that cannot be named, and later a missing
+  `git` or a directory that is not a repository — is an operational error like
+  any other. Folding it into `exit_status` keeps one place that decides the
+  status, and `tests/cli_check.rs::a_non_utf8_path_argument_exits_error` pins
+  exit `2` for the one such failure that exists today. Date/Author: 2026-09-11,
+  requested by the `--git` plan's author.
 
 - Decision: `--in-place` does not write a file whose bytes would not change.
   Rationale: the write is invisible in the text but not in the file. `--check`
@@ -1230,19 +1176,18 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 - Decision: the `--git` plan's remaining requests need no change here, and none
   was made. `ReadOnlyDir`, `Assessment`, `Mode`, `exit_status`, and
-  `in_argument_order` stay named items, which is what `--git --list-files` needs
-  to take a `ReadOnlyDir` and be a `Mode` variant; no file discovery was added,
-  because directory walking, globbing, and `git ls-files` are that plan's scope
-  and not this one's.
-  Rationale: it also closes the `clap` trap the requesting plan described. That
-  trap — `requires` from one boolean flag to another being unreliable once a
-  positional is present — needs a flag-to-flag relationship, and this CLI has
-  none: every requirement here is flag-to-group, and the acceptance and rejection
-  cells are measured by `tests/cli_check.rs::mode_flags_require_an_input_source`
-  rather than reasoned about. The `AX-4` citation in the ADR stays, as the
-  requesting plan asked: `rayon`'s `collect` still does not document order
-  preservation.
-  Date/Author: 2026-09-11, requested by the `--git` plan's author.
+  `in_argument_order` stay named items, which is what `--git --list-files`
+  needs to take a `ReadOnlyDir` and be a `Mode` variant; no file discovery was
+  added, because directory walking, globbing, and `git ls-files` are that
+  plan's scope and not this one's. Rationale: it also closes the `clap` trap
+  the requesting plan described. That trap — `requires` from one boolean flag
+  to another being unreliable once a positional is present — needs a
+  flag-to-flag relationship, and this CLI has none: every requirement here is
+  flag-to-group, and the acceptance and rejection cells are measured by
+  `tests/cli_check.rs::mode_flags_require_an_input_source` rather than reasoned
+  about. The `AX-4` citation in the ADR stays, as the requesting plan asked:
+  `rayon`'s `collect` still does not document order preservation. Date/Author:
+  2026-09-11, requested by the `--git` plan's author.
 
 ## Outcomes & retrospective
 
@@ -1251,12 +1196,11 @@ blocked by issue #474, a pre-existing non-idempotent transform class under
 `--headings`, and that blocker cleared without a change from this branch: pull
 request #477 fixed the transform, the branch rebased onto it, and every gate is
 green again (`make test` at 1860 passed, 0 failed). The milestone then ran, in
-Revision 18, on the rebased tip: 46 mutants, 39 caught, 6 unviable, 1 missed, no
-timeouts — the miss recorded as an equivalent mutation whose premise is now a
-test, the other initial survivor having been killed by a new assertion and the
-score then re-measured in a single complete run over the final tree. No
-obligation is outstanding,
-so `Surprises & discoveries` and
+Revision 18, on the rebased tip: 46 mutants, 39 caught, 6 unviable, 1 missed,
+no timeouts — the miss recorded as an equivalent mutation whose premise is now
+a test, the other initial survivor having been killed by a new assertion and
+the score then re-measured in a single complete run over the final tree. No
+obligation is outstanding, so `Surprises & discoveries` and
 `Artefacts and notes → EP-M6 baseline blocked` are the record of a defect class
 this plan found and an upstream fix closed, not live issues, exactly as the
 previous revision of this paragraph asked the reader to take them.
@@ -1273,8 +1217,8 @@ What was delivered, against the obligations:
   the order the plan's own method forbids. The test could not be the obvious
   two-run comparison either: both modes consult one shared change decision, so
   a decision that answered wrongly would move both sides together and the
-  agreement would hold vacuously. Each case therefore runs the document a
-  third time in print mode, which renders the shared formatter's output without
+  agreement would hold vacuously. Each case therefore runs the document a third
+  time in print mode, which renders the shared formatter's output without
   consulting that decision, and measures both the writer's bytes and the
   report's answer against it. The lesson is the one the plan already states and
   this bullet is the counter-example to: a claim about evidence is itself a
@@ -1311,10 +1255,9 @@ What was delivered, against the obligations:
 - `INV-ORDER`, `INV-EXIT`, `INV-SUMMARY`, `INV-DETERMINISTIC`,
   `INV-FRONTMATTER`: discharged in the driver's unit test modules,
   `tests/cli_check.rs`, and the BDD scenarios. `INV-DETERMINISTIC`'s negative
-  control exposed a
-  blind spot in the method itself — the hazard sits on a transition band that
-  a single fixed input cannot straddle — and the finding is recorded rather
-  than papered over.
+  control exposed a blind spot in the method itself — the hazard sits on a
+  transition band that a single fixed input cannot straddle — and the finding
+  is recorded rather than papered over.
 - `AX-4` was correct and is now load-bearing in two places: the design does not
   rely on `rayon`'s collection order, and `ADR 0009` cites the reasoning. The
   `--git` plan (pull request #466) asked for the citation to stay.
@@ -1343,27 +1286,27 @@ Discoveries that changed the plan rather than being absorbed by it:
 The method that worked, recorded for whoever continues: write the falsifiable
 obligation before the code, run the negative control as a real mutation, and
 measure the tooling instead of assuming it — `cargo mutants`' baseline refusal,
-`mdformat-all`'s scope, and the property test's own flakiness were each found by
-running the thing rather than by reading about it.
+`mdformat-all`'s scope, and the property test's own flakiness were each found
+by running the thing rather than by reading about it.
 
 ## Context and orientation
 
 `mdtablefix` is a Rust command-line tool that repairs and reflows Markdown
-tables and optionally applies further transforms such as paragraph wrapping
-and footnote conversion. It is one crate plus a small `test-macros` helper
-crate, at version `0.5.1`.
+tables and optionally applies further transforms such as paragraph wrapping and
+footnote conversion. It is one crate plus a small `test-macros` helper crate,
+at version `0.5.1`.
 
 Five existing pieces matter here.
 
-**The transform pipeline.** `src/process.rs` exposes pure `&[String] ->
-Vec<String>` functions that perform no input or output: `process_stream_inner`
-at `src/process.rs:95` and `process_with_frontmatter` at `src/process.rs:275`,
-the canonical boundary that splits leading YAML frontmatter, applies a body
-function, and rejoins. `Options` at `src/process.rs:42` is a `Copy` struct of
-six booleans. Note that the CLI's `FormatOpts` has **eight** flags: `renumber`
-and `breaks` are applied by `src/main.rs:84-98` *outside* `process_stream_inner`.
-Anything reasoning about "all transform options" must cover the eight, not the
-six.
+**The transform pipeline.** `src/process.rs` exposes pure
+`&[String] -> Vec<String>` functions that perform no input or output:
+`process_stream_inner` at `src/process.rs:95` and `process_with_frontmatter` at
+`src/process.rs:275`, the canonical boundary that splits leading YAML
+frontmatter, applies a body function, and rejoins. `Options` at
+`src/process.rs:42` is a `Copy` struct of six booleans. Note that the CLI's
+`FormatOpts` has **eight** flags: `renumber` and `breaks` are applied by
+`src/main.rs:84-98` *outside* `process_stream_inner`. Anything reasoning about
+"all transform options" must cover the eight, not the six.
 
 **The binary.** `src/main.rs` (302 lines) defines the `clap` `Cli` with an
 `in_place` flag, a flattened `FormatOpts`, and `Vec<PathBuf>` files.
@@ -1390,14 +1333,14 @@ by the binary.
 
 **Testing.** Each `.rs` file directly under `tests/` compiles to its own test
 binary, so shared helpers are re-declared per binary with
-`#[path = "..."] mod ...;`; there is no central registration.
-`tests/support/` provides `run_cli_with_args` and `run_cli_with_stdin`.
-`tests/cli_matrix.rs` with `tests/cli_matrix/support.rs` implements a pairwise
-option matrix expanding curated base rows into wrap and no-wrap variants and
-then into standard-output and `--in-place` runs, snapshotting each with
-`insta`; `RunResult::envelope` at `tests/cli_matrix/support.rs:191` builds a
-labelled block of case identifier, mode, arguments, exit status, standard
-output, standard error, and resulting file content. Snapshots live flat under
+`#[path = "..."] mod ...;`; there is no central registration. `tests/support/`
+provides `run_cli_with_args` and `run_cli_with_stdin`. `tests/cli_matrix.rs`
+with `tests/cli_matrix/support.rs` implements a pairwise option matrix
+expanding curated base rows into wrap and no-wrap variants and then into
+standard-output and `--in-place` runs, snapshotting each with `insta`;
+`RunResult::envelope` at `tests/cli_matrix/support.rs:191` builds a labelled
+block of case identifier, mode, arguments, exit status, standard output,
+standard error, and resulting file content. Snapshots live flat under
 `tests/snapshots/`. `tests/cli.rs` is at exactly the 400-line cap.
 `src/main.rs:252-301` contains `formatting_matches_in_place_output`, a
 `proptest` that writes two copies of an input, runs `format_to_string` on one
@@ -1405,8 +1348,8 @@ and `rewrite_in_place` on the other, and compares bytes. That is the precedent
 this plan's strongest obligation extends.
 
 **The tracked requirements.** GitHub issue #452 is the check-mode request;
-issue #451 is its prerequisite. There is no `docs/roadmap.md`; these two
-issues are the roadmap entries this plan discharges.
+issue #451 is its prerequisite. There is no `docs/roadmap.md`; these two issues
+are the roadmap entries this plan discharges.
 
 Terms used throughout:
 
@@ -1419,8 +1362,8 @@ Terms used throughout:
 
 ## Conformance basis
 
-There is no Terms of Reference or technical design document in this
-repository, and none should be invented. Upstream artefacts:
+There is no Terms of Reference or technical design document in this repository,
+and none should be invented. Upstream artefacts:
 
 - `AGENTS.md` at commit `c792270`: style, the 400-line cap, testing
   obligations, dependency policy (`:249-263`), error handling (`:262-283`),
@@ -1460,8 +1403,7 @@ ISSUE-452-exit -> ADR-0009 -> EP-M3 -> tests::driver::exit_status_matrix
 ISSUE-452-multifile -> ADR-0009 -> EP-M3 -> tests::cli_check::reports_every_file_in_order
 ```
 
-Issue #452's `--concise` criteria are deliberately untraced; see
-`Decision log`.
+Issue #452's `--concise` criteria are deliberately untraced; see `Decision log`.
 
 ## Verification plan
 
@@ -1482,18 +1424,18 @@ interface.
   `Equal` or `Delete` reproduces the old token sequence in order, and the
   subsequence tagged `Equal` or `Insert` reproduces the new one.
 - AX-3: `cap_std::fs_utf8::Dir` confines operations to the opened directory.
-  This says nothing about ambient writes elsewhere in the process, which is
-  why `INV-NOWRITE` snapshots the directory rather than only the inputs.
+  This says nothing about ambient writes elsewhere in the process, which is why
+  `INV-NOWRITE` snapshots the directory rather than only the inputs.
 - AX-4: **not an axiom.** `rayon`'s `collect::<Vec<_>>()` does not document
   order preservation (`rayon-1.12.0/src/iter/from_par_iter.rs:24-34` routes
   through `par_extend` with no ordering statement). The design therefore does
   not rely on it: each unit of work carries its argument index and results are
-  ordered on that index. Recorded here so a future reader does not
-  reintroduce the assumption.
+  ordered on that index. Recorded here so a future reader does not reintroduce
+  the assumption.
 - AX-5: `str::lines()` splits on `\n`, strips one preceding `\r`, and does
-  **not** treat a lone `\r` as a separator. It therefore disagrees with AX-1
-  on lone-`\r` input. Every obligation below is stated over exactly one of the
-  two notions, never both.
+  **not** treat a lone `\r` as a separator. It therefore disagrees with AX-1 on
+  lone-`\r` input. Every obligation below is stated over exactly one of the two
+  notions, never both.
 - AX-6: an empty positional list says only that no paths were named; it is not a
   statement about where the input comes from. The driver therefore resolves the
   command line into an `Inputs` value — `Stdin` or `Files(Vec<Utf8PathBuf>)` —
@@ -1506,117 +1448,106 @@ interface.
 ### Obligations
 
 - **INV-PREDICTS**: for every input and every combination of the CLI's eight
-  transform flags, `--check` exits `1` if and only if running `--in-place`
-  over an identical copy changes that copy's bytes, and the reported counts
-  equal the delta between the copy's before and after bytes.
-  Method: property test that actually runs both paths over two copies, with a
-  third run as the oracle. **Two runs are not enough**, and the reason is the
-  same one the rationale records: both modes consult one shared change
-  decision, so a decision that answered wrongly would move the report and the
-  write in the same direction and the agreement would hold vacuously. Each
-  case therefore also runs the document in print mode, which renders the shared
-  formatter's output without consulting that decision, and asserts both
-  `--in-place`'s bytes and `--check`'s exit status against the printed bytes.
-  Rationale: the first draft claimed this held "structurally" because both
-  modes read one `Assessment`, and proposed asserting
+  transform flags, `--check` exits `1` if and only if running `--in-place` over
+  an identical copy changes that copy's bytes, and the reported counts equal
+  the delta between the copy's before and after bytes. Method: property test
+  that actually runs both paths over two copies, with a third run as the
+  oracle. **Two runs are not enough**, and the reason is the same one the
+  rationale records: both modes consult one shared change decision, so a
+  decision that answered wrongly would move the report and the write in the
+  same direction and the agreement would hold vacuously. Each case therefore
+  also runs the document in print mode, which renders the shared formatter's
+  output without consulting that decision, and asserts both `--in-place`'s
+  bytes and `--check`'s exit status against the printed bytes. Rationale: the
+  first draft claimed this held "structurally" because both modes read one
+  `Assessment`, and proposed asserting
   `is_changed() == (original != formatted)`. That is the definition of
   `is_changed`, not a test of it, and the structural claim was weaker than
   advertised because the transform closure is supplied by the adapter and
   nothing forced both modes to receive the same one. Running both paths and
-  comparing real bytes cannot be satisfied by a wrong closure.
-  Domain: generated Markdown mixing tables, prose, lists, fenced code, and
-  frontmatter; LF, CRLF, mixed, and byte-order-marked; with and without a
-  trailing newline; over the eight-flag powerset, sampled; including CJK and
-  combining-mark content, since table padding is width-sensitive. The corpus
-  adds one measured fixture per flag, because a flag whose fixture never drifts
-  is untested however many cases name it.
-  Artefact: `tests/check_prediction.rs` and its corpus module
-  `tests/check_prediction/corpus.rs`, split so neither file breaks
-  `AGENTS.md`'s 400-line limit. **This obligation was first claimed
-  against `tests/check_properties.rs`, which does not test it** — that file
-  drives the formatter in print mode and never runs `--check`. The mistake is
-  recorded in `Outcomes & retrospective` rather than corrected quietly, since
-  the plan's method is to write the falsifiable obligation before the code and
-  a claim about evidence is itself a claim.
-  Evidence: `cargo test --test check_prediction`.
-  Non-vacuity: each corpus case asserts that both a drifting and a clean
-  document were observed, and that each fixture drifts under the flag it was
-  chosen for; the generated property samples the eight-flag powerset from a
-  bitmask and asserts `--check` printed exactly one report line carrying the
-  delta recomputed from the two byte strings. Negative control: make `--check`
-  compare trimmed strings; a trailing-newline case must fail. **Run, and it
-  fails as required** — the corpus fixture `unterminated_clean` drifts by one
-  terminator byte only, and the property shrinks to `document = "prose words
-  here"`. Transcript in `Artefacts and notes → EP-M7 prediction control`.
+  comparing real bytes cannot be satisfied by a wrong closure. Domain:
+  generated Markdown mixing tables, prose, lists, fenced code, and frontmatter;
+  LF, CRLF, mixed, and byte-order-marked; with and without a trailing newline;
+  over the eight-flag powerset, sampled; including CJK and combining-mark
+  content, since table padding is width-sensitive. The corpus adds one measured
+  fixture per flag, because a flag whose fixture never drifts is untested
+  however many cases name it. Artefact: `tests/check_prediction.rs` and its
+  corpus module `tests/check_prediction/corpus.rs`, split so neither file breaks
+  `AGENTS.md`'s 400-line limit. **This obligation was first claimed against
+  `tests/check_properties.rs`, which does not test it** — that file drives the
+  formatter in print mode and never runs `--check`. The mistake is recorded in
+  `Outcomes & retrospective` rather than corrected quietly, since the plan's
+  method is to write the falsifiable obligation before the code and a claim
+  about evidence is itself a claim. Evidence:
+  `cargo test --test check_prediction`. Non-vacuity: each corpus case asserts
+  that both a drifting and a clean document were observed, and that each
+  fixture drifts under the flag it was chosen for; the generated property
+  samples the eight-flag powerset from a bitmask and asserts `--check` printed
+  exactly one report line carrying the delta recomputed from the two byte
+  strings. Negative control: make `--check` compare trimmed strings; a
+  trailing-newline case must fail. **Run, and it fails as required** — the
+  corpus fixture `unterminated_clean` drifts by one terminator byte only, and
+  the property shrinks to `document = "prose words here"`. Transcript in
+  `Artefacts and notes → EP-M7 prediction control`.
 
 - **INV-IDEMPOTENT**: `--check` over the formatter's own output reports clean,
-  for every input and flag combination.
-  Method: property test.
-  Rationale: **the single most important obligation, and it was missing from
-  the first draft.** If any transform is not idempotent, a repository can
-  never make the gate go green: formatting produces output that the gate then
-  rejects. That destroys the feature's purpose. `tests/cli.rs:307-356` already
-  round-trips `--in-place` twice for its own cases, which is partial evidence
-  only. This obligation must be discharged in `EP-M2`, before any CLI surface
-  exists, so a negative result is cheap.
-  Domain: as INV-PREDICTS, plus the entire existing `tests/data/` corpus.
-  Artefact: `tests/check_properties.rs`.
-  Evidence: `cargo test --test check_properties idempotent`.
-  Non-vacuity: assert that the first pass genuinely changed something for at
-  least some inputs; a generator producing only already-formatted documents
-  would pass trivially. Escalate rather than work around a failure, per
-  `Tolerances`.
+  for every input and flag combination. Method: property test. Rationale: **the
+  single most important obligation, and it was missing from the first draft.**
+  If any transform is not idempotent, a repository can never make the gate go
+  green: formatting produces output that the gate then rejects. That destroys
+  the feature's purpose. `tests/cli.rs:307-356` already round-trips
+  `--in-place` twice for its own cases, which is partial evidence only. This
+  obligation must be discharged in `EP-M2`, before any CLI surface exists, so a
+  negative result is cheap. Domain: as INV-PREDICTS, plus the entire existing
+  `tests/data/` corpus. Artefact: `tests/check_properties.rs`. Evidence:
+  `cargo test --test check_properties idempotent`. Non-vacuity: assert that the
+  first pass genuinely changed something for at least some inputs; a generator
+  producing only already-formatted documents would pass trivially. Escalate
+  rather than work around a failure, per `Tolerances`.
 
 - **INV-NOWRITE**: `--check` and `--diff` leave the working directory
   byte-identical, including entry set, file lengths, and modification times,
-  and create no adjacent files.
-  Method: type-level argument plus a directory-snapshot end-to-end test.
-  Rationale: `ReadOnlyDir` has no write method, so the read-only path cannot
-  write through the capability at all — that is the structural argument, and
-  it is stronger than the draft's panicking test double. The snapshot covers
-  what the type cannot: an ambient `std::fs` write, a `.orig` backup, or a
-  lock file, none of which the draft's port-scoped double would have caught.
-  Domain: clean, drifting, empty, byte-order-marked, and unreadable files, and
-  multi-file batches mixing them.
-  Artefact: `tests/cli_check.rs`, `tests/cli_diff.rs`.
-  Evidence: `cargo test --test cli_check directory_snapshot_unchanged`.
-  Non-vacuity: run the same snapshot assertion against `--in-place`, where it
-  must fail. A snapshot helper that always passes is otherwise undetectable.
+  and create no adjacent files. Method: type-level argument plus a
+  directory-snapshot end-to-end test. Rationale: `ReadOnlyDir` has no write
+  method, so the read-only path cannot write through the capability at all —
+  that is the structural argument, and it is stronger than the draft's
+  panicking test double. The snapshot covers what the type cannot: an ambient
+  `std::fs` write, a `.orig` backup, or a lock file, none of which the draft's
+  port-scoped double would have caught. Domain: clean, drifting, empty,
+  byte-order-marked, and unreadable files, and multi-file batches mixing them.
+  Artefact: `tests/cli_check.rs`, `tests/cli_diff.rs`. Evidence:
+  `cargo test --test cli_check directory_snapshot_unchanged`. Non-vacuity: run
+  the same snapshot assertion against `--in-place`, where it must fail. A
+  snapshot helper that always passes is otherwise undetectable.
 
 - **LEM-COUNT**: the reported counts are the insertion and deletion counts of
   a minimal line diff, satisfying
   `formatted_tokens == original_tokens + insertions - deletions` and agreeing
-  with `git diff --numstat` on fixed fixtures.
-  Method: property test for the conservation law plus golden fixtures for
-  minimality.
-  Rationale: the conservation law alone is **not** falsifiable. An
-  implementation returning `{ insertions: formatted_lines, deletions:
-  original_lines }` — no diff at all — satisfies it identically, and is
-  indistinguishable from a correct one on this plan's own worked example
-  (`+3 -3` on a three-line table). Golden fixtures checked against
-  `git diff --numstat` are what make the obligation bite: a single changed
-  line in a twenty-line file must report `+1 -1`, not `+20 -20`.
-  Domain: empty against non-empty, pure insertion, pure deletion, pure
-  replacement, identical, single-line change in a long file.
-  Artefact: `tests/check_properties.rs` and `tests/data/numstat/`.
-  Evidence: `cargo test --test check_properties count`.
-  Non-vacuity: the six classes above must each be exercised. Negative
-  controls: count `Equal` as `Insert`; and return whole-file line counts. Both
-  must be rejected.
+  with `git diff --numstat` on fixed fixtures. Method: property test for the
+  conservation law plus golden fixtures for minimality. Rationale: the
+  conservation law alone is **not** falsifiable. An implementation returning
+  `{ insertions: formatted_lines, deletions: original_lines }` — no diff at all
+  — satisfies it identically, and is indistinguishable from a correct one on
+  this plan's own worked example (`+3 -3` on a three-line table). Golden
+  fixtures checked against `git diff --numstat` are what make the obligation
+  bite: a single changed line in a twenty-line file must report `+1 -1`, not
+  `+20 -20`. Domain: empty against non-empty, pure insertion, pure deletion,
+  pure replacement, identical, single-line change in a long file. Artefact:
+  `tests/check_properties.rs` and `tests/data/numstat/`. Evidence:
+  `cargo test --test check_properties count`. Non-vacuity: the six classes
+  above must each be exercised. Negative controls: count `Equal` as `Insert`;
+  and return whole-file line counts. Both must be rejected.
 
 - **INV-AGREE**: the delta is zero in both components exactly when the two
-  texts are byte-equal.
-  Method: one property assertion, folded into LEM-COUNT's test rather than
-  standing alone.
-  Rationale: `is_changed` is a byte comparison and the delta comes from
-  `similar`; cross-checking two independent routes to the same fact detects a
-  mistake in either. By AX-1 it must hold.
-  Domain: pairs differing only in line-ending style, and only in the presence
-  of a trailing newline — precisely the cases a naive implementation gets
-  wrong.
-  Evidence: `cargo test --test check_properties agree`.
-  Non-vacuity: assert both such pairs are generated. Negative control: compute
-  the delta from `str::lines()`-split text; the CRLF-only case must fail.
+  texts are byte-equal. Method: one property assertion, folded into LEM-COUNT's
+  test rather than standing alone. Rationale: `is_changed` is a byte comparison
+  and the delta comes from `similar`; cross-checking two independent routes to
+  the same fact detects a mistake in either. By AX-1 it must hold. Domain:
+  pairs differing only in line-ending style, and only in the presence of a
+  trailing newline — precisely the cases a naive implementation gets wrong.
+  Evidence: `cargo test --test check_properties agree`. Non-vacuity: assert
+  both such pairs are generated. Negative control: compute the delta from
+  `str::lines()`-split text; the CRLF-only case must fail.
 
 - **INV-DOCUMENT**: `SourceDocument::parse` followed by `render_lines` over
   the unmodified lines reproduces the input byte-for-byte for any input whose
@@ -1624,125 +1555,114 @@ interface.
   inputs, rendering is a fixed point. Line-ending selection is CRLF exactly
   when CRLF occurrences strictly exceed lone-LF occurrences, and LF otherwise.
   A leading byte-order mark is removed before formatting and restored on
-  output.
-  Method: parameterized tests for the partition plus a property test for the
-  fixed point.
-  Domain: pure LF; pure CRLF; mixed with an LF majority; mixed with a CRLF
-  majority; an exact tie; no line endings; empty; lone `\r`; leading
-  byte-order mark with each ending style; **and mixed endings inside a fenced
-  code block**, which is the case that reveals homogenization.
-  Artefact: `src/io/document.rs` unit tests and `tests/document_properties.rs`.
-  Evidence: `cargo test --lib document` and
-  `cargo test --test document_properties`.
+  output. Method: parameterized tests for the partition plus a property test
+  for the fixed point. Domain: pure LF; pure CRLF; mixed with an LF majority;
+  mixed with a CRLF majority; an exact tie; no line endings; empty; lone `\r`;
+  leading byte-order mark with each ending style; **and mixed endings inside a
+  fenced code block**, which is the case that reveals homogenization. Artefact:
+  `src/io/document.rs` unit tests and `tests/document_properties.rs`. Evidence:
+  `cargo test --lib document` and `cargo test --test document_properties`.
   Non-vacuity: the tie case must assert LF. Negative controls: change the
   majority comparison from strictly-greater to greater-or-equal, which the tie
-  case must reject; **and count LF with `content.matches('\n').count()`
-  without subtracting CRLF occurrences**, which double-counts every CRLF and
-  makes CRLF unable to hold a majority — the likelier defect, and the one the
-  first draft's control missed entirely.
+  case must reject; **and count LF with `content.matches('\n').count()` without
+  subtracting CRLF occurrences**, which double-counts every CRLF and makes CRLF
+  unable to hold a majority — the likelier defect, and the one the first
+  draft's control missed entirely.
 
 - **INV-BOM**: a byte-order-marked ragged file reports drift, and a
   byte-order-marked already-formatted file reports clean, with the mark
-  preserved in both cases.
-  Method: parameterized end-to-end test.
-  Rationale: without this the feature silently reports clean on dirty files.
-  It is separated from INV-DOCUMENT because the failure mode is a false
-  negative in the user-facing guarantee, not a serialization error.
-  Artefact: `tests/cli_check.rs`.
-  Evidence: `cargo test --test cli_check bom`.
+  preserved in both cases. Method: parameterized end-to-end test. Rationale:
+  without this the feature silently reports clean on dirty files. It is
+  separated from INV-DOCUMENT because the failure mode is a false negative in
+  the user-facing guarantee, not a serialization error. Artefact:
+  `tests/cli_check.rs`. Evidence: `cargo test --test cli_check bom`.
   Non-vacuity: negative control is the current behaviour — do not strip the
   mark; the ragged case must then wrongly report clean and the test must fail.
 
 - **INV-ORDER**: report output lists files in command-line argument order.
   Method: unit test over the ordering function plus an end-to-end test.
   Rationale: since AX-4 is not a contract, this is load-bearing. The first
-  draft's control was self-admittedly probabilistic ("would very likely
-  produce a different order"), and with eight small files `rayon` will
-  normally hand the whole range to one worker, so an unordered implementation
-  would pass essentially always. Making ordering explicit by argument index
-  turns this into a deterministic unit test on a pure function.
-  Domain: eight files alternating clean and drifting, ordered so that
-  alphabetical, size, and completion orderings all differ from argument order;
-  and, for the unit test, an explicitly shuffled input.
-  Artefact: `src/driver.rs` unit tests and `tests/cli_check.rs`.
-  Evidence: `cargo test --test cli_check reports_every_file_in_order`.
-  Non-vacuity: the unit test feeds results in reverse order and asserts they
-  come back in argument order; an implementation that returns them as received
-  fails 100% of the time.
+  draft's control was self-admittedly probabilistic ("would very likely produce
+  a different order"), and with eight small files `rayon` will normally hand
+  the whole range to one worker, so an unordered implementation would pass
+  essentially always. Making ordering explicit by argument index turns this
+  into a deterministic unit test on a pure function. Domain: eight files
+  alternating clean and drifting, ordered so that alphabetical, size, and
+  completion orderings all differ from argument order; and, for the unit test,
+  an explicitly shuffled input. Artefact: `src/driver.rs` unit tests and
+  `tests/cli_check.rs`. Evidence:
+  `cargo test --test cli_check reports_every_file_in_order`. Non-vacuity: the
+  unit test feeds results in reverse order and asserts they come back in
+  argument order; an implementation that returns them as received fails 100% of
+  the time.
 
 - **INV-EXIT**: exit status equals `exit_status(mode, any_drift, any_error)`,
-  where any error yields `2` in every mode, drift yields `1` under `--check`
-  and `--diff`, and everything else yields `0`.
-  Method: exhaustive parameterized unit test plus end-to-end assertions.
-  Domain: the full cross product of {all clean, some drift, all drift} with
-  {no error, some error} for each of the four modes. The "no files" cell is
-  unreachable because all three mode flags require file arguments, so it is
-  excluded rather than padding the domain.
+  where any error yields `2` in every mode, drift yields `1` under `--check` and
+  `--diff`, and everything else yields `0`. Method: exhaustive parameterized
+  unit test plus end-to-end assertions. Domain: the full cross product of {all
+  clean, some drift, all drift} with {no error, some error} for each of the
+  four modes. The "no files" cell is unreachable because all three mode flags
+  require file arguments, so it is excluded rather than padding the domain.
   Artefact: `src/driver.rs` unit tests, `tests/cli_check.rs`,
-  `tests/cli_diff.rs`.
-  Evidence: `cargo test --bin mdtablefix exit_status_matrix`.
-  Non-vacuity: three cells carry the real risk and all must be asserted
-  explicitly — `--in-place` with drift and no error must be `0`, `--diff` with
-  drift and no error must be `1`, and `--check` with both drift and an error
-  must be `2`. Negative controls: drop `mode` from the mapping, which the
-  first cell must reject; treat `--diff` like `--in-place`, which the second
-  must reject; and swap the error-over-drift precedence, which the third must
-  reject. The first two controls are distinct: a mapping that suppresses drift
-  for every mode except `--check` passes the `--in-place` cell while failing
-  `--diff`, so testing only one would leave the other undetected.
+  `tests/cli_diff.rs`. Evidence:
+  `cargo test --bin mdtablefix exit_status_matrix`. Non-vacuity: three cells
+  carry the real risk and all must be asserted explicitly — `--in-place` with
+  drift and no error must be `0`, `--diff` with drift and no error must be `1`,
+  and `--check` with both drift and an error must be `2`. Negative controls:
+  drop `mode` from the mapping, which the first cell must reject; treat
+  `--diff` like `--in-place`, which the second must reject; and swap the
+  error-over-drift precedence, which the third must reject. The first two
+  controls are distinct: a mapping that suppresses drift for every mode except
+  `--check` passes the `--in-place` cell while failing `--diff`, so testing
+  only one would leave the other undetected.
 
 - **INV-DETERMINISTIC**: for a fixed input and flag set, standard output is
-  byte-identical across repeated runs and independent of file ordering within
-  a directory.
-  Method: end-to-end test running the same invocation ten times.
+  byte-identical across repeated runs and independent of file ordering within a
+  directory. Method: end-to-end test running the same invocation ten times.
   Rationale: determinism is a hard constraint with no obligation in the first
-  draft, and every snapshot test depends on it.
-  Artefact: `tests/cli_diff.rs`, including an above-threshold case whose
-  changes are far enough apart that prefix and suffix trimming cannot reduce
-  it to the changed table.
-  Evidence: `cargo test --test cli_diff diff_is_deterministic`.
-  Non-vacuity: the negative control — enabling `TextDiffConfig::timeout` — was
-  applied and removed. It confirmed the hazard on the transition band, where
-  ten identical invocations produced up to six distinct outputs, and it failed
-  the above-threshold case outright, where a tripped deadline reports 1020
-  untouched prose lines as deleted. It also showed that the ten-run method
-  detects a budget only when the budget lands mid-computation, which is
-  recorded as a residual gap rather than a passing control; see
+  draft, and every snapshot test depends on it. Artefact: `tests/cli_diff.rs`,
+  including an above-threshold case whose changes are far enough apart that
+  prefix and suffix trimming cannot reduce it to the changed table. Evidence:
+  `cargo test --test cli_diff diff_is_deterministic`. Non-vacuity: the negative
+  control — enabling `TextDiffConfig::timeout` — was applied and removed. It
+  confirmed the hazard on the transition band, where ten identical invocations
+  produced up to six distinct outputs, and it failed the above-threshold case
+  outright, where a tripped deadline reports 1020 untouched prose lines as
+  deleted. It also showed that the ten-run method detects a budget only when
+  the budget lands mid-computation, which is recorded as a residual gap rather
+  than a passing control; see
   `Artefacts and notes → INV-DETERMINISTIC negative control`.
 
 - **INV-SUMMARY**: the summary line renders correctly for every combination of
   zero, one, and many in each of the changed, unchanged, and errored counts.
-  Method: exhaustive parameterized test plus `insta` snapshots.
-  Rationale: the first draft contained three mutually inconsistent summary
-  strings for the same class of run and specified neither pluralization nor
-  zero-clause elision. That is exactly the ambiguity its own tolerance says
-  should stop work.
-  Domain: the 27 combinations of {0, 1, 2} across the three counts.
-  Artefact: `src/report/render.rs` unit tests.
-  Evidence: `cargo test --lib report::render::summary`.
-  Non-vacuity: includes the all-zero case, which must still print something
-  intelligible.
+  Method: exhaustive parameterized test plus `insta` snapshots. Rationale: the
+  first draft contained three mutually inconsistent summary strings for the
+  same class of run and specified neither pluralization nor zero-clause
+  elision. That is exactly the ambiguity its own tolerance says should stop
+  work. Domain: the 27 combinations of {0, 1, 2} across the three counts.
+  Artefact: `src/report/render.rs` unit tests. Evidence:
+  `cargo test --lib report::render::summary`. Non-vacuity: includes the
+  all-zero case, which must still print something intelligible.
 
 - **INV-FRONTMATTER**: an assessment preserves frontmatter bytes exactly,
   including CRLF inside frontmatter, a frontmatter-only file, and an
-  unterminated delimiter.
-  Method: parameterized test.
-  Rationale: `Constraints` mandates routing through `process_with_frontmatter`
-  but the first draft had no obligation checking the mandate held.
-  Artefact: `tests/check_properties.rs`.
-  Evidence: `cargo test --test check_properties frontmatter`.
-  Non-vacuity: an unterminated-delimiter fixture must be present, since that
-  is where the splitter is most likely to mis-handle the boundary.
+  unterminated delimiter. Method: parameterized test. Rationale: `Constraints`
+  mandates routing through `process_with_frontmatter` but the first draft had
+  no obligation checking the mandate held. Artefact:
+  `tests/check_properties.rs`. Evidence:
+  `cargo test --test check_properties frontmatter`. Non-vacuity: an
+  unterminated-delimiter fixture must be present, since that is where the
+  splitter is most likely to mis-handle the boundary.
 
 ### Rigour and residual gaps
 
 `proptest` is used where an invariant ranges over generated inputs;
-parameterized tests where the partition is finite and enumerable; `insta`
-where output format stability is the requirement; `rstest-bdd` for the
-readable end-to-end specification. No bounded model check or formal proof is
-planned, and that is a considered judgement rather than an omission: the only
-candidate obligation, LEM-COUNT, decomposes into `AX-2` — third-party
-behaviour, correctly axiomatized — and an arithmetic identity that reduces to
+parameterized tests where the partition is finite and enumerable; `insta` where
+output format stability is the requirement; `rstest-bdd` for the readable
+end-to-end specification. No bounded model check or formal proof is planned,
+and that is a considered judgement rather than an omission: the only candidate
+obligation, LEM-COUNT, decomposes into `AX-2` — third-party behaviour,
+correctly axiomatized — and an arithmetic identity that reduces to
 `a + b = a + c + b - c`. A proof of that would be a restatement of an assumed
 property, which `AGENTS.md` explicitly disallows. `EP-M6` spends the effort on
 mutation testing instead, which attacks the genuine risk that the counting
@@ -1784,8 +1704,8 @@ rstest-bdd-macros = { version = "0.5.0", features = ["strict-compile-time-valida
 `similar = "2.7"` unifies with the copy `insta` already resolves; verify with
 `cargo tree --duplicates`. `strict-compile-time-validation` turns a missing
 step definition into a compile error. Both `rstest-bdd` crates need Rust 1.85
-or newer; this repository pins `1.89` in `Cargo.toml` and
-`nightly-2026-03-26` in `rust-toolchain.toml`.
+or newer; this repository pins `1.89` in `Cargo.toml` and `nightly-2026-03-26`
+in `rust-toolchain.toml`.
 
 ### `src/io/document.rs` (new, library, budget 200 lines)
 
@@ -1988,8 +1908,8 @@ own count, and `No files were analysed.` when all three are zero.
 
 ### `src/driver.rs` (new, binary-private, budget 300 lines)
 
-Declared by `src/main.rs` as `mod driver;`. Lives in the binary because that
-is the application boundary where `anyhow` is permitted; the library stays
+Declared by `src/main.rs` as `mod driver;`. Lives in the binary because that is
+the application boundary where `anyhow` is permitted; the library stays
 infallible. Not part of the published library surface.
 
 ```rust
@@ -2095,8 +2015,8 @@ pub fn write_back(
 pub fn in_argument_order<T>(results: Vec<(usize, T)>) -> Vec<T>;
 ```
 
-The parallel stage produces `(usize, anyhow::Result<(FileReport, String)>)`
-per file and drops each `Assessment` inside its closure, so retained memory is
+The parallel stage produces `(usize, anyhow::Result<(FileReport, String)>)` per
+file and drops each `Assessment` inside its closure, so retained memory is
 proportional to the rendered reports rather than to twice the total input.
 
 ### `src/main.rs` (modified, binary, budget 350 lines)
@@ -2134,14 +2054,14 @@ flag-to-positional `requires` would have bound every mode flag to files.
 `run` resolves the command line into an `Inputs` value before doing anything
 else — see `AX-6` — and routes a resolution failure through
 `exit_status(mode, false, true)`, so it exits `2` like every other operational
-error rather than propagating out of `run`. `run_stdin` and `run_files` hold the
-two halves that the empty-list test used to jump between.
+error rather than propagating out of `run`. `run_stdin` and `run_files` hold
+the two halves that the empty-list test used to jump between.
 
 `fn main` returns `std::process::ExitCode`. A broken pipe on standard output,
 as in `mdtablefix --check *.md | head`, must be caught and treated as a
-successful early exit rather than allowed to panic into exit `101`, which
-would be a fourth undocumented status. The formatting closure is built once
-and shared by every mode, so `--check` and `--in-place` cannot diverge.
+successful early exit rather than allowed to panic into exit `101`, which would
+be a fourth undocumented status. The formatting closure is built once and
+shared by every mode, so `--check` and `--in-place` cannot diverge.
 
 ### `src/io.rs` (modified, library)
 
@@ -2180,32 +2100,32 @@ implementation was taken during the rebase, and the byte-order-mark half by
 `src/io/document.rs`, which this branch re-landed because `git grep` showed
 `main` had no mark handling anywhere. No new flag exists yet.
 
-Requirements: `ISSUE-451`, `INV-DOCUMENT`, `INV-BOM` (partially; its
-end-to-end half lands in `EP-M3`).
+Requirements: `ISSUE-451`, `INV-DOCUMENT`, `INV-BOM` (partially; its end-to-end
+half lands in `EP-M3`).
 
 **Fixtures first.** The repository has no CRLF, byte-order-mark, lone-`\r`, or
-empty-file coverage whatsoever. Add those fixtures and their assertions
-against the *current* behaviour before touching the serialization path, so
-there is a real oracle. Include the mixed-endings-inside-a-fence case.
+empty-file coverage whatsoever. Add those fixtures and their assertions against
+the *current* behaviour before touching the serialization path, so there is a
+real oracle. Include the mixed-endings-inside-a-fence case.
 
-Acceptance: `cargo test --lib document`, `cargo test --test
-document_properties`, and the entire pre-existing suite pass. A CRLF fixture
-survives `--in-place`. A byte-order-marked ragged file is reflowed and keeps
-its mark.
+Acceptance: `cargo test --lib document`,
+`cargo test --test document_properties`, and the entire pre-existing suite
+pass. A CRLF fixture survives `--in-place`. A byte-order-marked ragged file is
+reflowed and keeps its mark.
 
 Conformance check: `src/io.rs` signatures unchanged; `mdtablefix::document` is
 a public addition; written bytes change for CRLF and byte-order-marked inputs,
 which is the requested behaviour and is recorded in `CHANGELOG.md`.
 
-Recovery: revert the commits. **Point of no return:** once `--in-place` has
-run across a repository under the new behaviour, reverting this milestone does
-not un-rewrite those users' files. This is the only irreversible step in the
-plan, and it arrives first. Say so in the changelog.
+Recovery: revert the commits. **Point of no return:** once `--in-place` has run
+across a repository under the new behaviour, reverting this milestone does not
+un-rewrite those users' files. This is the only irreversible step in the plan,
+and it arrives first. Say so in the changelog.
 
 Remaining gaps: no reporting modes.
 
-Compatibility decision: none required; signatures are stable and the
-behaviour change is the requested fix.
+Compatibility decision: none required; signatures are stable and the behaviour
+change is the requested fix.
 
 ### EP-M2: pure reporting domain
 
@@ -2215,8 +2135,8 @@ and are fully tested. Nothing in the binary calls them yet.
 Requirements: `LEM-COUNT`, `INV-AGREE`, `INV-SUMMARY`, `INV-IDEMPOTENT`.
 
 `INV-IDEMPOTENT` is discharged here, before any CLI surface exists, so that a
-non-idempotent transform is discovered at its cheapest point. Per
-`Tolerances`, a failure stops the plan rather than being worked around.
+non-idempotent transform is discovered at its cheapest point. Per `Tolerances`,
+a failure stops the plan rather than being worked around.
 
 Acceptance: `cargo test --lib report`, `cargo test --test check_properties`,
 including the six LEM-COUNT classes, both negative controls, and the golden
@@ -2233,8 +2153,8 @@ Compatibility decision: none required.
 
 Outcome: `src/driver.rs` exists with `ReadOnlyDir`, `Assessment`, `Mode`,
 `ExitStatus`, `assess`, `write_back`, `exit_status`, and `in_argument_order`.
-`src/main.rs` returns `ExitCode` and supports `--check`. The crate is
-`0.6.0`. All four modes share one formatting closure.
+`src/main.rs` returns `ExitCode` and supports `--check`. The crate is `0.6.0`.
+All four modes share one formatting closure.
 
 Requirements: `ISSUE-452-check`, `ISSUE-452-no-write`, `ISSUE-452-exit`,
 `ISSUE-452-multifile`, `INV-PREDICTS`, `INV-NOWRITE`, `INV-ORDER`, `INV-EXIT`,
@@ -2245,24 +2165,24 @@ Acceptance: `tests/cli_check.rs` and the `src/driver.rs` unit tests pass;
 asserted, **including that `--in-place` over a drifting file exits `0`** and
 that drift plus an error yields `2`.
 
-Conformance check: `main`'s return type changed and the error status moved
-from `1` to `2`, requiring ADR 0009; the manifest already declares `0.6.0` as
+Conformance check: `main`'s return type changed and the error status moved from
+`1` to `2`, requiring ADR 0009; the manifest already declares `0.6.0` as
 unreleased, so the bump recorded under `EP-M0` covers the change and no further
-version bump is needed. `--check` is a new
-public command-line interface approved at the gate; no trust boundary widens,
-because access still flows through `open_file_parent`.
+version bump is needed. `--check` is a new public command-line interface
+approved at the gate; no trust boundary widens, because access still flows
+through `open_file_parent`.
 
 Recovery: revert; `EP-M2`'s modules become unreferenced but remain correct.
 
 Compatibility decision: none required. The exit-status change is deliberate on
-a pre-1.0 tool with no compatibility commitment, signalled by the minor
-version bump rather than shimmed.
+a pre-1.0 tool with no compatibility commitment, signalled by the minor version
+bump rather than shimmed.
 
 ### EP-M4: `--diff`
 
 Outcome: `--diff` is implemented, streams a deterministic unified diff per
-changed file, and exits `1` on drift exactly as `--check` does, so one run
-both shows the drift and fails the build.
+changed file, and exits `1` on drift exactly as `--check` does, so one run both
+shows the drift and fails the build.
 
 Requirements: `ISSUE-452-diff`, `INV-DETERMINISTIC`, and the `--diff` cells of
 `INV-EXIT`.
@@ -2275,8 +2195,8 @@ threshold; `--diff` over a drifting file exits `1` and over a clean file exits
 the suite.
 
 Control outcome: the wall-clock-budget control was applied and removed. It
-rejected the above-threshold test and made the transition band nondeterministic,
-and it showed the method's blind spot; see
+rejected the above-threshold test and made the transition band
+nondeterministic, and it showed the method's blind spot; see
 `Artefacts and notes → INV-DETERMINISTIC negative control`.
 
 Recovery: revert; `--check` remains functional.
@@ -2291,10 +2211,10 @@ transform combinations in the option matrix, not the full cross product, and
 modes, where it is by definition unchanged.
 
 Rationale: `tests/snapshots/` holds 32 matrix snapshots for two modes.
-Expanding to four modes across the full matrix would add 32 more, exceeding
-the usual churn limit and doubling review burden for no additional signal,
-since `--check` and `--diff` share their entire analysis path with the
-existing modes and differ only in rendering.
+Expanding to four modes across the full matrix would add 32 more, exceeding the
+usual churn limit and doubling review burden for no additional signal, since
+`--check` and `--diff` share their entire analysis path with the existing modes
+and differ only in rendering.
 
 Acceptance: `cargo test --test cli_matrix` passes with the harness self-tests
 updated to assert the curated expansion is complete and intentional.
@@ -2312,10 +2232,11 @@ Outcome: `cargo mutants --file src/report/delta.rs --file src/driver.rs`
 reports no surviving mutants, or each survivor is either killed by a new test
 or recorded with a justification.
 
-Rationale: this replaces the first draft's Verus milestone, which `Decision
-log` cuts. Mutation testing attacks the plan's actual stated risk — that the
-counting mis-attributes a tag, or that the exit-status mapping loses a case —
-directly and empirically, at a fraction of the cost of a toolchain adoption.
+Rationale: this replaces the first draft's Verus milestone, which
+`Decision log` cuts. Mutation testing attacks the plan's actual stated risk —
+that the counting mis-attributes a tag, or that the exit-status mapping loses a
+case — directly and empirically, at a fraction of the cost of a toolchain
+adoption.
 
 Fallback: if `cargo-mutants` is unavailable, skip and record the gap. It is a
 developer tool, not a manifest entry, and is not added to any gate.
@@ -2331,28 +2252,28 @@ the transform is fixed (GitHub issue #474). See
 `Artefacts and notes → EP-M6 baseline blocked`.
 
 Blocker cleared (recorded in Revision 17): the transform was fixed upstream, by
-pull request #477, which refuses Setext conversion of a table delimiter row. The
-branch rebased onto that commit as `408c76a`, the gate runner then measured
+pull request #477, which refuses Setext conversion of a table delimiter row.
+The branch rebased onto that commit as `408c76a`, the gate runner then measured
 `make test` green — `generated_documents_reach_a_fixed_point` itself reports
-`ok` — and so the baseline precondition below is met. The milestone is unblocked
-and remains unrun; the condition it was never allowed to satisfy itself, "green
-by exclusion or by a pinned seed", therefore still holds.
+`ok` — and so the baseline precondition below is met. The milestone is
+unblocked and remains unrun; the condition it was never allowed to satisfy
+itself, "green by exclusion or by a pinned seed", therefore still holds.
 
 Outcome (recorded in Revision 18): the milestone's command was run on the
 rebased tip and the outcome above is met. Of the **46** mutants it collected —
 28 in `src/driver.rs` and 18 in `src/report/delta.rs`, three more than the
 enumeration below because `4a599ed` landed after it — the first run, in 14
-minutes, **caught 38, found 6 unviable, and left 2 survivors, with no timeouts**,
-and a third run over the final tree, in 9 minutes, measured **39 caught, 1
-missed, 6 unviable, 0 timeouts** in a single reading. Both initial survivors are
-resolved: `src/report/delta.rs:92:84` (`>` mutated to `<` in
+minutes, **caught 38, found 6 unviable, and left 2 survivors, with no
+timeouts**, and a third run over the final tree, in 9 minutes, measured **39
+caught, 1 missed, 6 unviable, 0 timeouts** in a single reading. Both initial
+survivors are resolved: `src/report/delta.rs:92:84` (`>` mutated to `<` in
 `LineDelta::has_changes`) is killed by an assertion covering the deletion-only
 delta, with its insertion-side twin added for symmetry, and re-measured as
-caught; `src/driver.rs:287:23` (`Mode::Diff if is_changed` mutated to `if true`)
-is recorded as an equivalent mutation, because the renderer writes nothing for
-byte-equal texts, which is now a test rather than an argument. The final score
-is **39 of 40 viable mutants killed**, one run having measured it. See
-`Artefacts and notes → EP-M6 run`.
+caught; `src/driver.rs:287:23` (`Mode::Diff if is_changed` mutated to
+`if true`) is recorded as an equivalent mutation, because the renderer writes
+nothing for byte-equal texts, which is now a test rather than an argument. The
+final score is **39 of 40 viable mutants killed**, one run having measured it.
+See `Artefacts and notes → EP-M6 run`.
 
 Recovery: additive; no production change unless a survivor is found.
 
@@ -2483,8 +2404,8 @@ Feature: Show what would change in Markdown files
 ```
 
 Step definitions live in `tests/steps/reporting.rs`, shared by both feature
-files, with scenario bindings in `tests/bdd_reporting.rs`. Scenario state is
-an `rstest` fixture rather than a global world, following the `rstest-bdd`
+files, with scenario bindings in `tests/bdd_reporting.rs`. Scenario state is an
+`rstest` fixture rather than a global world, following the `rstest-bdd`
 guidance that fixtures are the world: a `#[derive(ScenarioState)]` struct
 carrying `Slot<TempDir>`, `Slot<Vec<Utf8PathBuf>>`, and
 `Slot<std::process::Output>`. The `When` steps run the real binary through
@@ -2502,8 +2423,8 @@ and the directory-snapshot assertions.
 Stage A is this document, ending at the approval gate. Stage B writes the
 failing tests and feature files for a milestone. Stage C implements that
 milestone's production code and its verification artefacts together. Stage D
-covers documentation and wider validation. Each stage ends with validation;
-do not proceed past a failing stage.
+covers documentation and wider validation. Each stage ends with validation; do
+not proceed past a failing stage.
 
 ## Concrete steps
 
@@ -2524,8 +2445,8 @@ re-running a gate to diagnose a failure.
 
 ### EP-M0
 
-1. `cargo add similar@2.7`, then confirm `cargo tree --duplicates | grep
-   similar` prints nothing.
+1. `cargo add similar@2.7`, then confirm
+   `cargo tree --duplicates | grep similar` prints nothing.
 2. Write a scratch test printing the unified diff for a two-line ragged table;
    run `cargo test --lib -- --nocapture spike` and paste the output into
    `Artefacts and notes`.
@@ -2539,28 +2460,27 @@ re-running a gate to diagnose a failure.
 ### EP-M1
 
 1. Add CRLF, mixed-endings, mixed-endings-inside-a-fence, byte-order-mark,
-   lone-`\r`, empty-file, and no-trailing-newline fixtures under
-   `tests/data/`, with tests asserting the **current** behaviour. Commit. This
-   is the regression oracle, and it does not exist yet.
+   lone-`\r`, empty-file, and no-trailing-newline fixtures under `tests/data/`,
+   with tests asserting the **current** behaviour. Commit. This is the
+   regression oracle, and it does not exist yet.
 2. Red: add `src/io/document.rs` with signatures and `todo!()` bodies, plus its
-   unit tests and `tests/document_properties.rs`. Run `cargo test --lib
-   document` and observe the `todo!()` panics.
+   unit tests and `tests/document_properties.rs`. Run
+   `cargo test --lib document` and observe the `todo!()` panics.
 3. Green: implement `LineEnding::detect` (subtracting CRLF occurrences from
    the line-feed count), `SourceDocument::parse` (splitting off the byte-order
    mark), and `render_lines`.
 4. Refactor: replace the join logic in `src/main.rs:129-133` and
    `src/io.rs:21-25` with `SourceDocument`. Update the step-1 fixture
-   assertions to the new expected behaviour, reviewing each change
-   individually — an unexplained change here is a transform regression and
-   trips a tolerance.
+   assertions to the new expected behaviour, reviewing each change individually
+   — an unexplained change here is a transform regression and trips a tolerance.
 5. Run all gates and commit.
 
 ### EP-M2
 
 1. Red: create `src/report.rs`, `src/report/delta.rs`, `src/report/render.rs`
-   with signatures and `todo!()` bodies; write `tests/check_properties.rs`,
-   the golden `tests/data/numstat/` fixtures, and the unit tests. Observe the
-   red failure.
+   with signatures and `todo!()` bodies; write `tests/check_properties.rs`, the
+   golden `tests/data/numstat/` fixtures, and the unit tests. Observe the red
+   failure.
 2. Green: implement `LineDelta::between` over
    `TextDiff::from_lines(original, formatted).iter_all_changes()`, counting
    `ChangeTag::Insert` and `ChangeTag::Delete`; implement the renderers using
@@ -2598,8 +2518,8 @@ re-running a gate to diagnose a failure.
 1. Red: write `tests/features/diff_mode.feature` and `tests/cli_diff.rs`.
 2. Green: add `--diff` and the `Mode::Diff` arm, including the
    `patience_threshold` switch, and extend `exit_status` so `Mode::Diff`
-   reports drift. Confirm the `--in-place` cell of `INV-EXIT` still yields
-   `0`; that pair of assertions is what stops the two modes being conflated.
+   reports drift. Confirm the `--in-place` cell of `INV-EXIT` still yields `0`;
+   that pair of assertions is what stops the two modes being conflated.
 3. Run all gates and commit.
 
 ### EP-M5
@@ -2607,9 +2527,10 @@ re-running a gate to diagnose a failure.
 1. Extend the matrix's execution-mode expansion to the curated `--check` and
    `--diff` subset, and make `RunResult::envelope` elide file content for
    read-only modes.
-2. Regenerate with `INSTA_UPDATE=always cargo test --test cli_matrix
-   cli_matrix_snapshots`, then review every changed `.snap` before staging.
-   Do not accept snapshots mechanically.
+2. Regenerate with
+   `INSTA_UPDATE=always cargo test --test cli_matrix cli_matrix_snapshots`,
+   then review every changed `.snap` before staging. Do not accept snapshots
+   mechanically.
 3. Update `docs/developers-guide.md` in the same commit. Run all gates and
    commit.
 
@@ -2628,16 +2549,16 @@ re-running a gate to diagnose a failure.
 
 1. Add a command-line interface section to `docs/users-guide.md` covering
    every flag, the exit-status contract, line-ending and byte-order-mark
-   behaviour, the trailing-newline rule, the fenced-code homogenization
-   caveat, the lone-`\r` limitation, the symlink limitation, the empty-glob
-   hazard, and how to parse the report line.
+   behaviour, the trailing-newline rule, the fenced-code homogenization caveat,
+   the lone-`\r` limitation, the symlink limitation, the empty-glob hazard, and
+   how to parse the report line.
 2. Reduce `README.md`'s flag list to a synopsis linking to the user's guide,
    updating the usage line for `--check` and `--diff`.
 3. Add a "Check and diff reporting" section to `docs/architecture.md` near
    "Concurrency with `rayon`"; update the Module Relationships diagram for
    `document`, `report`, and `driver`; update the `## Contents` index. The
-   existing diagram already names functions that no longer match
-   `src/main.rs`; correct those while editing it.
+   existing diagram already names functions that no longer match `src/main.rs`;
+   correct those while editing it.
 4. Add sections to `docs/developers-guide.md` covering the `ReadOnlyDir`
    capability and its re-use policy, the shared-closure rule that keeps
    `--check` and `--in-place` in agreement, the explicit argument-index
@@ -2659,8 +2580,8 @@ re-running a gate to diagnose a failure.
    for `docs/state-machine-abstractions-roadmap.md`.
 9. Run `make markdownlint`, `make nixie`, and all Rust gates, then commit. Do
    **not** run `make fmt`: `mdformat-all` is repository-wide and is not a gate,
-   and 10 of the 31 tracked Markdown files already drift under its flag set.
-   See `Artefacts and notes → make fmt measured, and declined`.
+   and 10 of the 31 tracked Markdown files already drift under its flag set. See
+   `Artefacts and notes → make fmt measured, and declined`.
 10. Close issues #451 and #452 with a comment linking this plan and explaining
     the `--concise` supersession.
 11. Added in Revision 14, after the closing audit found `INV-PREDICTS` claimed
@@ -2733,8 +2654,8 @@ $ $MDT --in-place ragged.md; echo "status=$?"
 status=0
 ```
 
-`--diff` prints a diff and fails on drift, matching `--check`, so one run
-both shows the change and gates the build:
+`--diff` prints a diff and fails on drift, matching `--check`, so one run both
+shows the change and gates the build:
 
 ```console
 $ cp ragged.md.orig ragged.md
@@ -2776,23 +2697,23 @@ bom.md +3 -3
 status=1
 ```
 
-Clean up `clean.md`, `ragged.md`, `ragged.md.orig`, `windows.md`, and
-`bom.md` afterwards, or run the block in a scratch directory.
+Clean up `clean.md`, `ragged.md`, `ragged.md.orig`, `windows.md`, and `bom.md`
+afterwards, or run the block in a scratch directory.
 
 ### Red, green, refactor evidence
 
-Record in `Artefacts and notes`, per milestone: the red command and its
-failure (the compiler error for tests referencing a flag that does not exist,
-or the `todo!()` panic); the same command passing after the minimal
-implementation; and the command sequence passing after cleanup. A test that
-passes before the change is not a red test and must be strengthened.
+Record in `Artefacts and notes`, per milestone: the red command and its failure
+(the compiler error for tests referencing a flag that does not exist, or the
+`todo!()` panic); the same command passing after the minimal implementation;
+and the command sequence passing after cleanup. A test that passes before the
+change is not a red test and must be strengthened.
 
 ### Verification evidence
 
-For each obligation, record the command, the initial failure or
-counterexample, the passing result, and each negative control's observed
-rejection. An implementation change requiring a new invariant, lemma, or axiom
-returns to `Verification plan` before continuing.
+For each obligation, record the command, the initial failure or counterexample,
+the passing result, and each negative control's observed rejection. An
+implementation change requiring a new invariant, lemma, or axiom returns to
+`Verification plan` before continuing.
 
 ### Quality criteria
 
@@ -2805,11 +2726,11 @@ returns to `Verification plan` before continuing.
 - Documentation: `make markdownlint` and `make nixie` pass.
 - Performance: `--check` over this repository's `docs/` tree completes in
   under two seconds on a warm cache, and computes no diff for unchanged files.
-  No mode reads any file more than once; because `--diff` now gates on drift
-  by itself, no continuous-integration usage requires a second invocation.
+  No mode reads any file more than once; because `--diff` now gates on drift by
+  itself, no continuous-integration usage requires a second invocation.
 - Security: no widening of the filesystem capability; all access continues
-  through `open_file_parent`, and the read-only path holds a capability with
-  no write method.
+  through `open_file_parent`, and the read-only path holds a capability with no
+  write method.
 
 ### Quality method
 
@@ -2824,12 +2745,11 @@ read-only apart from `target/` and `insta`'s pending snapshots. Snapshot
 regeneration overwrites `.snap` files, so review `git diff` before staging and
 use `git restore tests/snapshots/` to undo an unwanted regeneration.
 
-Commit after each milestone so any milestone can be reverted independently.
-The ordering means a later revert leaves a coherent state: reverting `EP-M4`
-leaves `--check` working, and reverting `EP-M3` leaves the pure modules
-unreferenced but correct. The one exception is `EP-M1`, recorded in its
-milestone: reverting it does not un-rewrite files already processed under the
-new serialization.
+Commit after each milestone so any milestone can be reverted independently. The
+ordering means a later revert leaves a coherent state: reverting `EP-M4` leaves
+`--check` working, and reverting `EP-M3` leaves the pure modules unreferenced
+but correct. The one exception is `EP-M1`, recorded in its milestone: reverting
+it does not un-rewrite files already processed under the new serialization.
 
 The manual validation commands create fixtures in the working directory; run
 them in a scratch directory or delete them afterwards.
@@ -2842,14 +2762,14 @@ negative control. Keep each excerpt short and focused on what proves success.
 
 ### Rebase onto `origin/main`
 
-Three pull requests merged while this plan was halted at `EP-M2`. The branch was
-rebased onto `origin/main` before any further work:
+Three pull requests merged while this plan was halted at `EP-M2`. The branch
+was rebased onto `origin/main` before any further work:
 
-| PR | Issue | Merged subject | Effect on this plan |
-| --- | --- | --- | --- |
-| #467 | #465 | `Write files atomically in --in-place mode` | lands the atomic `--in-place` write this plan had deferred; see `Decision log` |
-| #469 | #451 | `Preserve the majority input line-ending style in formatter output` | supersedes the line-ending half of `EP-M1`, and writes `docs/adrs/0007-line-ending-detection.md` |
-| #470 | #468 | `Make the formatter a fixed point in one pass` | discharges `INV-IDEMPOTENT`, unblocks `EP-M2` step 3, and writes `docs/adrs/0006-single-pass-idempotence.md` |
+| PR   | Issue | Merged subject                                                      | Effect on this plan                                                                                          |
+| ---- | ----- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| #467 | #465  | `Write files atomically in --in-place mode`                         | lands the atomic `--in-place` write this plan had deferred; see `Decision log`                               |
+| #469 | #451  | `Preserve the majority input line-ending style in formatter output` | supersedes the line-ending half of `EP-M1`, and writes `docs/adrs/0007-line-ending-detection.md`             |
+| #470 | #468  | `Make the formatter a fixed point in one pass`                      | discharges `INV-IDEMPOTENT`, unblocks `EP-M2` step 3, and writes `docs/adrs/0006-single-pass-idempotence.md` |
 
 Conflicts were resolved in `Cargo.lock` (regenerated from the merged manifest),
 `src/io.rs`, and `src/main.rs`, taking `main`'s line-ending implementation and
@@ -2874,9 +2794,9 @@ in place:
 One pull request merged after the first rebase above, and it is the one this
 plan had been waiting for:
 
-| PR | Issue | Merged subject | Effect on this plan |
-| --- | --- | --- | --- |
-| #477 | #474 | `Refuse Setext conversion of a table delimiter row (#474)` | fixes the `--headings` class recorded in `Artefacts and notes → EP-M6 baseline blocked`; clears `EP-M6`'s baseline precondition |
+| PR   | Issue | Merged subject                                             | Effect on this plan                                                                                                             |
+| ---- | ----- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| #477 | #474  | `Refuse Setext conversion of a table delimiter row (#474)` | fixes the `--headings` class recorded in `Artefacts and notes → EP-M6 baseline blocked`; clears `EP-M6`'s baseline precondition |
 
 The initial tip was `2a73a58`; the branch was replayed onto `origin/main` at
 `408c76a`, twenty-six commits, and **no file conflicted in either attempt**.
@@ -2886,19 +2806,19 @@ was no lock file to rebuild and nothing to take from `main` on that account.
 
 #### The first attempt rebased cleanly and was still wrong
 
-`git rebase origin/main` reported `Successfully rebased and updated
-refs/heads/check-option.`, with no conflict and nothing on stderr but
-`weave: N entities auto-resolved (<confidence>)` notices, at `high`,
-`very_high`, and once `conflict` confidence: the Weave merge driver, selected
-for Markdown and Rust paths by the global attributes file, had auto-resolved the
-documentation. Comparing the result against both parents showed what
-"auto-resolved" had cost:
+`git rebase origin/main` reported
+`Successfully rebased and updated refs/heads/check-option.`, with no conflict
+and nothing on stderr but `weave: N entities auto-resolved (<confidence>)`
+notices, at `high`, `very_high`, and once `conflict` confidence: the Weave
+merge driver, selected for Markdown and Rust paths by the global attributes
+file, had auto-resolved the documentation. Comparing the result against both
+parents showed what "auto-resolved" had cost:
 
 - `docs/architecture.md`: the footnotes example had its `Before:` lines
   rewritten from `1. First note` to `[^1]: First note` — the *After* form — and
   lost the `After:` label, its blank line, the opening fence, and the `Text.`
-  line beneath it: seven lines replaced by five, so the worked example no longer
-  demonstrates the transform it documents.
+  line beneath it: seven lines replaced by five, so the worked example no
+  longer demonstrates the transform it documents.
 - Fourteen stray blank lines were inserted across the same three files: one in
   `docs/architecture.md`, five in `docs/developers-guide.md`, eight in
   `docs/users-guide.md`.
@@ -2910,12 +2830,13 @@ for each of the three documents. The evidence was then preserved in
 both diagnostic diffs (against the pre-rebase tip and against `origin/main`) —
 **before** any command that would recreate or discard it.
 
-Recovery followed the skill's procedure for a global Weave setup. The branch was
-reset to `2a73a58`; `git -c core.attributesFile=/dev/null check-attr merge --
-<path>` was measured to report `merge: unspecified` for a representative path,
-confirming that the selection comes from the global attributes file and that
-disabling it for the command leaves Git's built-in merge machinery in charge;
-then the whole operation was re-run with the same override:
+Recovery followed the skill's procedure for a global Weave setup. The branch
+was reset to `2a73a58`;
+`git -c core.attributesFile=/dev/null check-attr merge -- <path>` was measured
+to report `merge: unspecified` for a representative path, confirming that the
+selection comes from the global attributes file and that disabling it for the
+command leaves Git's built-in merge machinery in charge; then the whole
+operation was re-run with the same override:
 
 ```plaintext
 $ git -c core.attributesFile=/dev/null rebase origin/main
@@ -2947,14 +2868,14 @@ until afterwards.
   `tests/support/idempotence_harness.rs`, and the six
   `tests/data/idempotence/T*.dat` fixtures. The other three are the documents
   this branch also edits, so they differ by the branch's own additions and
-  nothing else — every line `main` has there and the tree does not is one of the
-  branch's own rewrites (`format_to_string` and `rewrite_in_place`, which `EP-M3`
-  deleted, and the snapshot-portability sentence `EP-M5` corrected), checked one
-  by one rather than assumed.
+  nothing else — every line `main` has there and the tree does not is one of
+  the branch's own rewrites (`format_to_string` and `rewrite_in_place`, which
+  `EP-M3` deleted, and the snapshot-portability sentence `EP-M5` corrected),
+  checked one by one rather than assumed.
 - Both sides' documentation edits are present: the branch's `--check`/`--diff`
-  sections and `main`'s rewritten idempotence material coexist, the architecture
-  footnotes example is byte-identical to `origin/main`'s (same MD5 over the
-  block), and no conflict marker appears anywhere in the tree.
+  sections and `main`'s rewritten idempotence material coexist, the
+  architecture footnotes example is byte-identical to `origin/main`'s (same MD5
+  over the block), and no conflict marker appears anywhere in the tree.
 - The branch's intermediate commit `7b59154` (`EP-M7`) is intact, so the replay
   is of the branch's real history rather than a squashed approximation.
 
@@ -3026,9 +2947,9 @@ error: No matching step definition found for 'Then the canary sings'
   = note: this error originates in the attribute macro `scenario`
 ```
 
-so `strict-compile-time-validation` is active. No fallback to plain `rstest`
-is needed. `cargo tree --duplicates | grep similar` prints nothing, so
-`similar` is a single copy in the graph.
+so `strict-compile-time-validation` is active. No fallback to plain `rstest` is
+needed. `cargo tree --duplicates | grep similar` prints nothing, so `similar`
+is a single copy in the graph.
 
 ### CodeRabbit review after `EP-M0`
 
@@ -3049,36 +2970,36 @@ so that in-flight `EP-M1` edits stayed out of the review. Nothing to clear;
 
 Eleven fixtures under `tests/data/document/`, driven by
 `tests/document_properties.rs`: twelve `--in-place` cases plus one stdin case.
-Every case asserts the exact bytes left on disk, captured from the
-pre-refactor binary, so the serialization rewrite has a byte-exact oracle
-rather than a hand-written expectation. `.dat` is deliberate: `make fmt`
-formats only `.md`, `.markdown`, and `.mdx`, so these bytes survive the
-formatter. `cargo test --test document_properties` reports 12 passed.
+Every case asserts the exact bytes left on disk, captured from the pre-refactor
+binary, so the serialization rewrite has a byte-exact oracle rather than a
+hand-written expectation. `.dat` is deliberate: `make fmt` formats only `.md`,
+`.markdown`, and `.mdx`, so these bytes survive the formatter.
+`cargo test --test document_properties` reports 12 passed.
 
 Escapes are Rust string escapes; `\u{FEFF}` is the byte-order mark.
 
-| Fixture | Pre-refactor output | Flips in step 4 |
-| --- | --- | --- |
-| `crlf_ragged` | `\| A   \| B   \|\n\| --- \| --- \|\n\| 1   \| 2   \|\n` | yes, endings become CRLF |
-| `crlf_clean` | same as `crlf_ragged` | yes, endings become CRLF |
-| `mixed_lf_majority` | same as `crlf_ragged` | no |
-| `mixed_crlf_majority` | same as `crlf_ragged` | yes, endings become CRLF |
-| `mixed_tie` | `alpha\nbeta\n` | no |
-| `mixed_in_fence` | table, blank line, then a `sh` fence holding `echo hi`, all LF | yes, every line becomes CRLF |
-| `bom_ragged` | `\u{FEFF}\|A\|B\|\n\| 1   \| 2   \|\n\| --- \| --- \|\n` | yes, mark kept, table reflowed |
-| `bom_crlf_clean` | `\u{FEFF}\| A \| B \|\n\| 1   \| 2   \|\n\| --- \| --- \|\n` | yes, mark kept, endings CRLF |
-| `lone_cr` | `alpha\rbeta\n` | no |
-| `empty` | empty | no |
-| `no_trailing_newline` | table plus a trailing line feed | no |
-| stdin, CRLF ragged | same as `crlf_ragged` | yes, endings become CRLF |
+| Fixture               | Pre-refactor output                                            | Flips in step 4                |
+| --------------------- | -------------------------------------------------------------- | ------------------------------ |
+| `crlf_ragged`         | `\| A   \| B   \|\n\| --- \| --- \|\n\| 1   \| 2   \|\n`       | yes, endings become CRLF       |
+| `crlf_clean`          | same as `crlf_ragged`                                          | yes, endings become CRLF       |
+| `mixed_lf_majority`   | same as `crlf_ragged`                                          | no                             |
+| `mixed_crlf_majority` | same as `crlf_ragged`                                          | yes, endings become CRLF       |
+| `mixed_tie`           | `alpha\nbeta\n`                                                | no                             |
+| `mixed_in_fence`      | table, blank line, then a `sh` fence holding `echo hi`, all LF | yes, every line becomes CRLF   |
+| `bom_ragged`          | `\u{FEFF}\|A\|B\|\n\| 1   \| 2   \|\n\| --- \| --- \|\n`       | yes, mark kept, table reflowed |
+| `bom_crlf_clean`      | `\u{FEFF}\| A \| B \|\n\| 1   \| 2   \|\n\| --- \| --- \|\n`   | yes, mark kept, endings CRLF   |
+| `lone_cr`             | `alpha\rbeta\n`                                                | no                             |
+| `empty`               | empty                                                          | no                             |
+| `no_trailing_newline` | table plus a trailing line feed                                | no                             |
+| stdin, CRLF ragged    | same as `crlf_ragged`                                          | yes, endings become CRLF       |
 
-Two pre-refactor oddities are pinned deliberately. The first disappears in
-step 4: the byte-order mark defeats table detection, so the first line
-survives verbatim while the separator and data lines are reflowed — and the
-data line is emitted *before* the separator. The second remains: a lone `\r`
-is not a line ending to `str::lines`, so `alpha\rbeta` stays a single line and
-the `\r` survives inside it. Only the byte-order-mark defect is in `EP-M1`'s
-scope; the lone-`\r` limitation is the remaining gap recorded in
+Two pre-refactor oddities are pinned deliberately. The first disappears in step
+4: the byte-order mark defeats table detection, so the first line survives
+verbatim while the separator and data lines are reflowed — and the data line is
+emitted *before* the separator. The second remains: a lone `\r` is not a line
+ending to `str::lines`, so `alpha\rbeta` stays a single line and the `\r`
+survives inside it. Only the byte-order-mark defect is in `EP-M1`'s scope; the
+lone-`\r` limitation is the remaining gap recorded in
 `Rigour and residual gaps` and must be documented in `EP-M7`.
 
 ### EP-M1 red and green transcripts
@@ -3102,9 +3023,9 @@ test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 720 filtered out
 ```
 
 Those 23 are not all `document` cases: the filter also matches two `ellipsis`
-tests whose names contain "document"
-(`grep -cE '^test document::tests::'` on the log gives 21, which is the count
-of `document::tests::` cases). `src/document.rs` is 242 lines.
+tests whose names contain "document" (`grep -cE '^test document::tests::'` on
+the log gives 21, which is the count of `document::tests::` cases).
+`src/document.rs` is 242 lines.
 
 `as_str` stays implemented in the red state: `todo!()` is not callable in a
 `const fn`, and the function is a two-arm match with no logic worth red-ing.
@@ -3113,10 +3034,10 @@ of `document::tests::` cases). `src/document.rs` is 242 lines.
 
 ### EP-M1 step 4: post-refactor oracle
 
-`src/main.rs` gained `format_content`, which parses through
-`SourceDocument`, formats `document.lines()`, and renders through
-`render_lines`; both `format_to_string` and the stdin branch call it. The
-stdin branch prints a bare newline for empty output, keeping
+`src/main.rs` gained `format_content`, which parses through `SourceDocument`,
+formats `document.lines()`, and renders through `render_lines`; both
+`format_to_string` and the stdin branch call it. The stdin branch prints a bare
+newline for empty output, keeping
 `tests/parallel.rs::test_cli_parallel_empty_file_list`'s `stdout("\n")`
 contract. `src/io.rs`'s `rewrite_with` performs the same three steps over
 `fs::read_to_string` and `fs::write`. No public signature changed.
@@ -3124,19 +3045,19 @@ contract. `src/io.rs`'s `rewrite_with` performs the same three steps over
 Six expectations flipped, each because an ending or the mark is now preserved,
 never because a content transform changed:
 
-| Case | New expectation | Why |
-| --- | --- | --- |
-| `crlf_ragged` | `TABLE` with CRLF | CRLF majority |
-| `crlf_clean` | `TABLE` with CRLF | CRLF majority |
-| `mixed_crlf_majority` | `TABLE` with CRLF | CRLF majority |
-| `mixed_in_fence` | table, blank line, `sh` fence, all CRLF | CRLF majority |
-| `bom_ragged` | `TABLE` with LF, mark restored | mark split off, table now detected |
-| `bom_crlf_clean` | `TABLE` with CRLF, mark restored | mark split off, ending kept |
+| Case                  | New expectation                         | Why                                |
+| --------------------- | --------------------------------------- | ---------------------------------- |
+| `crlf_ragged`         | `TABLE` with CRLF                       | CRLF majority                      |
+| `crlf_clean`          | `TABLE` with CRLF                       | CRLF majority                      |
+| `mixed_crlf_majority` | `TABLE` with CRLF                       | CRLF majority                      |
+| `mixed_in_fence`      | table, blank line, `sh` fence, all CRLF | CRLF majority                      |
+| `bom_ragged`          | `TABLE` with LF, mark restored          | mark split off, table now detected |
+| `bom_crlf_clean`      | `TABLE` with CRLF, mark restored        | mark split off, ending kept        |
 
-The stdin case was renamed `stdin_preserves_line_endings` and now expects
-CRLF. `mixed_lf_majority`, `mixed_tie`, and `no_trailing_newline` keep LF;
-`empty` still yields nothing; `lone_cr` still yields `alpha\rbeta\n`, because
-a lone `\r` is not a line ending to `str::lines()`.
+The stdin case was renamed `stdin_preserves_line_endings` and now expects CRLF.
+`mixed_lf_majority`, `mixed_tie`, and `no_trailing_newline` keep LF; `empty`
+still yields nothing; `lone_cr` still yields `alpha\rbeta\n`, because a lone
+`\r` is not a line ending to `str::lines()`.
 
 Focused runs after the refactor: `cargo test --test document_properties`
 reports 12 passed, and `cargo test --lib -- document:: io::` reports 28 passed.
@@ -3190,10 +3111,10 @@ pass 2: - *Ownership.** Owned by the wrap module\n  (`src/wrap/tracing_snapshot_
 Repository-wide scan, two in-place passes per file, comparing bytes between
 pass 1 and pass 2:
 
-| Corpus | `--wrap` alone | `mdformat-all` flag set |
-| --- | --- | --- |
-| `tests/data/` (123 files) | 0 not fixed points | 1 (`cli-matrix/frontmatter-breaks.dat`) |
-| `*.md` in `HEAD` (28 files) | 1 (`docs/developers-guide.md`) | 1 (`docs/developers-guide.md`) |
+| Corpus                      | `--wrap` alone                 | `mdformat-all` flag set                 |
+| --------------------------- | ------------------------------ | --------------------------------------- |
+| `tests/data/` (123 files)   | 0 not fixed points             | 1 (`cli-matrix/frontmatter-breaks.dat`) |
+| `*.md` in `HEAD` (28 files) | 1 (`docs/developers-guide.md`) | 1 (`docs/developers-guide.md`)          |
 
 `frontmatter-breaks.dat` pass 1 → pass 2, showing the Setext underline
 normalised by `--breaks` then absorbed by the next wrap:
@@ -3204,8 +3125,8 @@ normalised by `--breaks` then absorbed by the next wrap:
 +Heading ______________________________________________________________________
 ```
 
-Convergence: every case above reaches a fixed point on pass 3. The defects
-cost an extra pass, they do not loop.
+Convergence: every case above reaches a fixed point on pass 3. The defects cost
+an extra pass, they do not loop.
 
 Escalated rather than worked around, per `Tolerances`. Work on `EP-M2` green
 steps is suspended pending the decision recorded in `Decision log`.
@@ -3214,8 +3135,8 @@ Red state preserved on the scratch branch `wip/ep-m2-red-state` (commit
 `51f6701`), which carries `src/report*`, `tests/check_properties.rs`, and the
 eight `tests/data/numstat/` fixtures with their `todo!()` bodies intact. That
 branch is a red-state checkpoint and must not be merged as-is; resume by
-continuing from it or by re-creating the files, which `Concrete steps →
-EP-M2` fully specifies.
+continuing from it or by re-creating the files, which `Concrete steps → EP-M2`
+fully specifies.
 
 Raised as GitHub issue #468 on explicit instruction from `@leynos`. The issue
 carries the self-checking corpus script verbatim, the observed pass-1 and
@@ -3229,8 +3150,8 @@ neither does a property test that never reaches the failing shapes.
 
 ### EP-M2 green transcripts
 
-Red, from `cargo test --test check_properties` on the rebased tree with the four
-bodies still stubbed as `todo!()`:
+Red, from `cargo test --test check_properties` on the rebased tree with the
+four bodies still stubbed as `todo!()`:
 
 ```plaintext
 test result: FAILED. 11 passed; 9 failed; 0 ignored; 0 measured; 0 filtered out
@@ -3262,8 +3183,8 @@ no second copy, satisfying the milestone's conformance check.
 `src/report/delta.rs`, run, and reverted; `cmp` confirmed the file restored
 byte-identical each time. Logs are
 `/tmp/test-mdtablefix-check-option.control<N>.out`. Line numbers quoted below
-are those of the tree when each control ran; a later rustfmt pass re-wrapped
-one `CORPUS` entry and shifted them by three.
+are those of the tree when each control ran; a later rustfmt pass re-wrapped one
+`CORPUS` entry and shifted them by three.
 
 - **Control 1.** Count `Equal` as `Insert`
   (`ChangeTag::Equal => delta.insertions += 1`). Rejected: 6 of 20 cases
@@ -3316,8 +3237,8 @@ their own documentation. No snapshot churn was introduced beyond the single new
 `summary_grammar` snapshot, well inside the usual limit of 30.
 
 **Close-out.** All six gates pass on the committed tree, with each gate's log
-under `/tmp/<gate>-mdtablefix-check-option.out`, and `coderabbit review
---agent --base main` returned `findings: 0` (logged to
+under `/tmp/<gate>-mdtablefix-check-option.out`, and
+`coderabbit review --agent --base main` returned `findings: 0` (logged to
 `/tmp/coderabbit-mdtablefix-check-option.out`). The accepted commits are
 `91692d6` and `8bcf3eb`.
 
@@ -3329,11 +3250,10 @@ survive locally, matched one for one by subject before the push.
 ### EP-M3 red and green transcripts
 
 Red, before any `--check` existed: `cargo test --test cli_check` reported
-`2 passed; 2 failed` (log
-`/tmp/red-cli_check-mdtablefix-check-option.out`) and
+`2 passed; 2 failed` (log `/tmp/red-cli_check-mdtablefix-check-option.out`) and
 `cargo test --test bdd_reporting` reported `1 passed; 7 failed` (log
-`/tmp/red-bdd_reporting-mdtablefix-check-option.out`), every failure sharing one
-cause:
+`/tmp/red-bdd_reporting-mdtablefix-check-option.out`), every failure sharing
+one cause:
 
 ```plaintext
 error: unexpected argument '--check' found
@@ -3343,10 +3263,10 @@ error: unexpected argument '--check' found
 Usage: mdtablefix [OPTIONS] [FILES]...
 ```
 
-**The red state was a run-time failure, not a compile-time one.** `EP-M3` step 1
-predicted that the tests would not compile because `--check` does not exist; in
-fact the binary still builds, `clap` rejects the unknown flag while parsing, and
-the process exits `2`. Two consequences followed. First, a red test whose
+**The red state was a run-time failure, not a compile-time one.** `EP-M3` step
+1 predicted that the tests would not compile because `--check` does not exist;
+in fact the binary still builds, `clap` rejects the unknown flag while parsing,
+and the process exits `2`. Two consequences followed. First, a red test whose
 failure is "the flag was rejected" proves much less than one whose failure is
 "the flag was accepted and the behaviour was wrong", so `EP-M3`'s assertions
 were checked for non-vacuity rather than taken on trust. Second, the one
@@ -3363,14 +3283,14 @@ because `clap` never learns the file names. The companion test in the same file
 asserts that the snapshot helper *does* detect a write, so the read-only
 assertion is not vacuous in the other direction either.
 
-**`| A | B |` is not a fixed point.** The first draft of the `CLEAN` fixture was
-a hand-written approximation, which the `--in-place` scenario rejected with
+**`| A | B |` is not a fixed point.** The first draft of the `CLEAN` fixture
+was a hand-written approximation, which the `--in-place` scenario rejected with
 `left: "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n"`. The formatter pads
 every cell to the delimiter row's width, so `| A | B |` is itself drift. Both
-test files now hold the formatter's own bytes, and `tests/line_endings.rs` holds
-the same fixture. The plan's own `Validation and acceptance` block carried the
-same error and has been corrected, as has its `--diff` transcript, whose body is
-the padded output.
+test files now hold the formatter's own bytes, and `tests/line_endings.rs`
+holds the same fixture. The plan's own `Validation and acceptance` block
+carried the same error and has been corrected, as has its `--diff` transcript,
+whose body is the padded output.
 
 Green, from the milestone's acceptance commands:
 
@@ -3426,11 +3346,11 @@ file.
   driver is now what parses a document and therefore what selects an ending.
   Its message and fields are unchanged.
 - The spec block's `assess` documentation mentioned a `display_path` parameter
-  its signature does not take; the signature is authoritative, and the block has
-  been corrected to say the caller attaches the display path.
+  its signature does not take; the signature is authoritative, and the block
+  has been corrected to say the caller attaches the display path.
 
-**The first gate run was red, and for two avoidable reasons.** `make
-check-fmt` and `make lint` failed on the new files while `typecheck`, `test`,
+**The first gate run was red, and for two avoidable reasons.** `make check-fmt`
+and `make lint` failed on the new files while `typecheck`, `test`,
 `markdownlint`, and `nixie` passed. Neither failure was a behavioural defect,
 and both are recorded here because the milestone's steps put the gates at the
 end, whereas what they checked was code written earlier in the same session:
@@ -3440,9 +3360,9 @@ end, whereas what they checked was code written earlier in the same session:
   applied, and it touched only those two files.
 - Three Clippy lints fired in `tests/cli_check.rs`, all in test fixtures rather
   than in the code under test: `format_push_string` and `format_collect` in the
-  batch-file writer and its expected-string builder, and
-  `bool_to_int_with_if` in the exit-status oracle. The first two became
-  `str::repeat` and an explicit loop appending to a `String`; the third became
+  batch-file writer and its expected-string builder, and `bool_to_int_with_if`
+  in the exit-status oracle. The first two became `str::repeat` and an explicit
+  loop appending to a `String`; the third became
   `i32::from(files != Files::Clean && self == Self::Check)`, which states the
   drift condition positively instead of negating a disjunction.
 
@@ -3467,11 +3387,12 @@ Zero findings, so nothing carried into `EP-M4`. The full JSON-lines log is
 
 ### EP-M4 red and green transcripts
 
-Red, before `--diff` existed: `cargo test --test cli_diff` reported `0 passed;
-4 failed` (log `/tmp/red-cli_diff-mdtablefix-check-option.out`),
+Red, before `--diff` existed: `cargo test --test cli_diff` reported
+`0 passed; 4 failed` (log `/tmp/red-cli_diff-mdtablefix-check-option.out`),
 `cargo test --test bdd_reporting` reported `9 passed; 5 failed`, and
-`cargo test --test cli_check` reported `4 passed; 1 failed`. Every failure shared
-one cause, and it was again a run-time rejection rather than a compile error:
+`cargo test --test cli_check` reported `4 passed; 1 failed`. Every failure
+shared one cause, and it was again a run-time rejection rather than a compile
+error:
 
 ```plaintext
 error: unexpected argument '--diff' found
@@ -3497,23 +3418,23 @@ stderr: error: unexpected argument '--diff' found
 because `write!`-style rendering to a string feels as though it should work. It
 does not: `String` implements `fmt::Write` and nothing else, so the type error
 arrives from a direction that reads like a missing import. A standalone
-`rustc --edition 2024 --crate-type lib --emit=metadata` snippet settled it before
-the driver was changed. `render_diff` now renders into a `Vec<u8>` and validates
-with `String::from_utf8`, which is also where the fallible step belongs: both
-sides came from `String`s, so validation cannot fail in practice, but the driver
-does not get to assume it.
+`rustc --edition 2024 --crate-type lib --emit=metadata` snippet settled it
+before the driver was changed. `render_diff` now renders into a `Vec<u8>` and
+validates with `String::from_utf8`, which is also where the fallible step
+belongs: both sides came from `String`s, so validation cannot fail in practice,
+but the driver does not get to assume it.
 
 **A determinism scenario that would have passed in the red state.** The spec's
 `Diff output is byte-identical across repeated runs` compares ten runs against
 each other, and ten rejections of an unknown flag are ten *identical empty*
 outputs, so the scenario was satisfied before any implementation existed. Two
-changes remove that vacuity: the scenario now also asserts that the diff contains
-a hunk header, and the step `every run produced identical standard output`
-requires the output to be non-empty on its own. An empty repeated output now
-fails in both places.
+changes remove that vacuity: the scenario now also asserts that the diff
+contains a hunk header, and the step
+`every run produced identical standard output` requires the output to be
+non-empty on its own. An empty repeated output now fails in both places.
 
-Green, from the milestone's acceptance commands, after the negative control below
-had been applied and removed:
+Green, from the milestone's acceptance commands, after the negative control
+below had been applied and removed:
 
 ```plaintext
 $ cargo test --test cli_diff
@@ -3546,22 +3467,22 @@ earlier in the same session while the gates were held to the end.
 
 ### `INV-DETERMINISTIC` negative control
 
-The plan's non-vacuity requirement for `INV-DETERMINISTIC` is: "negative control
-is enabling `TextDiffConfig::timeout`, which must make the test flaky or fail."
-The control was applied, and the outcome is reported in two parts, because the
-answer is not the one the plan predicted.
+The plan's non-vacuity requirement for `INV-DETERMINISTIC` is: "negative
+control is enabling `TextDiffConfig::timeout`, which must make the test flaky
+or fail." The control was applied, and the outcome is reported in two parts,
+because the answer is not the one the plan predicted.
 
 The mechanism is reachable. In `similar` 2.7.0 the deadline is checked once per
-iteration of `myers::find_middle_snake` (`src/algorithms/myers.rs:178`) and once
-per row of `lcs::make_table` (`src/algorithms/lcs.rs:169`), against
+iteration of `myers::find_middle_snake` (`src/algorithms/myers.rs:178`) and
+once per row of `lcs::make_table` (`src/algorithms/lcs.rs:169`), against
 `Instant::now() > deadline`. When it trips, `find_middle_snake` returns `None`
 and `conquer` takes its `else` branch (`myers.rs:314`), deleting the entire old
 range and inserting the entire new range. The failure mode is therefore a
 *wholesale replacement* of whatever region the search was working on, not a
 partial or approximate answer.
 
-**The hazard is real, and it is a budget-dependence rather than a per-run one on
-the plateau.** With the renderer's timeout driven from the environment, a
+**The hazard is real, and it is a budget-dependence rather than a per-run one
+on the plateau.** With the renderer's timeout driven from the environment, a
 1601-line corpus holding 400 scattered ragged tables — so that no common prefix
 or suffix trimming can reduce the problem — renders two different files for the
 same input and flags:
@@ -3619,29 +3540,30 @@ test result: ok. 5 passed; 0 failed
 
 Same mutated binary in both runs, so the red is attributable to the wall-clock
 budget and not to the fixture or the assertion. Logs:
-`/tmp/control-timeout-cli_diff-mdtablefix-check-option.out` and the sweep above.
-The mutation was then removed with `git checkout -- src/report/render.rs`, and
-`rg 'timeout|Instant|Duration|deadline' src/report/render.rs` finds nothing: the
-algorithm is chosen by `line_count` and the file consults no clock.
+`/tmp/control-timeout-cli_diff-mdtablefix-check-option.out` and the sweep
+above. The mutation was then removed with
+`git checkout -- src/report/render.rs`, and
+`rg 'timeout|Instant|Duration|deadline' src/report/render.rs` finds nothing:
+the algorithm is chosen by `line_count` and the file consults no clock.
 
 **Residual gap.** The ten-run method detects nondeterminism only when a budget
-lands mid-computation. A budget never crossed is invisible to it, and nothing in
-the suite forbids one structurally, so a future `.timeout(500ms)` would pass
+lands mid-computation. A budget never crossed is invisible to it, and nothing
+in the suite forbids one structurally, so a future `.timeout(500ms)` would pass
 every test here while making output depend on machine speed. The invariant
 currently rests on `write_unified_diff` reading `line_count` and nothing else.
 Closing that gap means either a corpus large enough to cross a plausible budget
 — which costs seconds per test — or a source-level assertion that the diff path
-names no clock. Neither is in `EP-M4`'s scope; both are recorded here rather than
-silently dropped.
+names no clock. Neither is in `EP-M4`'s scope; both are recorded here rather
+than silently dropped.
 
 ### CodeRabbit review after `EP-M4`
 
 Requested through the gate runner only once all six deterministic gates were
-green on this exact tree — 43 suites, 1812 passed, 0 failed, 20 ignored — so the
-review was not asked to find anything the gates could have caught first. It ran
-against the pushed commit `cf8995d` on `origin/check-option`, reviewing the whole
-branch diff rather than this milestone alone: 44 files, from `EP-M0` onward. It
-reported no rate limit, no refusal, and no findings:
+green on this exact tree — 43 suites, 1812 passed, 0 failed, 20 ignored — so
+the review was not asked to find anything the gates could have caught first. It
+ran against the pushed commit `cf8995d` on `origin/check-option`, reviewing the
+whole branch diff rather than this milestone alone: 44 files, from `EP-M0`
+onward. It reported no rate limit, no refusal, and no findings:
 
 ```plaintext
 {"type":"review_context","reviewType":"all","currentBranch":"check-option","baseBranch":"main",…}
@@ -3662,9 +3584,10 @@ JSON-lines log is `/tmp/coderabbit-mdtablefix-check-option.out`.
 
 ### EP-M5 red and green transcripts
 
-Red — the first `INSTA_UPDATE=always cargo test --test cli_matrix
-cli_matrix_snapshots` run did not get as far as writing the new snapshots. It
-panicked inside the new diff invariant:
+Red — the first
+`INSTA_UPDATE=always cargo test --test cli_matrix cli_matrix_snapshots` run did
+not get as far as writing the new snapshots. It panicked inside the new diff
+invariant:
 
 ```plaintext
 thread 'cli_matrix_snapshots' panicked at tests/cli_matrix/reporting.rs:167:5:
@@ -3698,19 +3621,19 @@ files added, none modified. The twelve are `row_000`, `row_010`, and `row_111`
 in both wrap variants and both reporting modes. What they pin, in order:
 
 - `row_000_nowrap`: `input.dat +3 -1`; the diff opens `@@ -1,4 +1,6 @@` and
-  shows the collapsed table row replaced by three rows, with the document's tail
-  deliberately outside the hunk. This is the case that caught the reconstruction
-  bug, so it is now the load-bearing one.
+  shows the collapsed table row replaced by three rows, with the document's
+  tail deliberately outside the hunk. This is the case that caught the
+  reconstruction bug, so it is now the load-bearing one.
 - `row_000_wrap`: `input.dat +6 -4`; the same table plus a re-wrapped list item
   and a Setext heading folded to `Title =====`.
 - `row_010_nowrap`: **silent**, exit `0`, stderr `1 file left unchanged.` — the
   no-drift branch, which is why this row is in the subset at all.
 - `row_010_wrap`: `input.dat +2 -1`; only the wrapped paragraph drifts.
 - `row_111_{nowrap,wrap}`: `input.dat +3 -4`; the diff's first hunk line is a
-  context line for `title: Matrix` inside the frontmatter, and the frontmatter's
-  own `---` stays a context line while the document-level `---` becomes the
-  normalized thematic break. That is the boundary the reporting modes have to
-  respect, recorded in both renderings.
+  context line for `title: Matrix` inside the frontmatter, and the
+  frontmatter's own `---` stays a context line while the document-level `---`
+  becomes the normalized thematic break. That is the boundary the reporting
+  modes have to respect, recorded in both renderings.
 
 The subset's selection rule was re-measured as a script rather than remembered:
 each base row's fixture was written to one file and the binary run over it with
@@ -3741,27 +3664,29 @@ So the no-drift branch is not a hope that some row happens to be clean: it is
 `clean > 0` assertion fails the moment that stops being true.
 
 Every verdict above was cross-checked between the two modes by
-`matrix_reporting_modes_agree`, which requires `--check`'s counts and `--diff`'s
-marked lines to be equal for all six curated cases, so the transcripts cannot
-drift apart without failing. Two further properties are measured rather than
-written down: the file's bytes after a reporting run are compared against the
-fixture, and the expected exit status is computed from `printed != source`. A
-report that always fired would fail the `clean > 0` assertion in
-`cli_matrix_snapshots`, and one that never fired would fail `drifting > 0`.
+`matrix_reporting_modes_agree`, which requires `--check`'s counts and
+`--diff`'s marked lines to be equal for all six curated cases, so the
+transcripts cannot drift apart without failing. Two further properties are
+measured rather than written down: the file's bytes after a reporting run are
+compared against the fixture, and the expected exit status is computed from
+`printed != source`. A report that always fired would fail the `clean > 0`
+assertion in `cli_matrix_snapshots`, and one that never fired would fail
+`drifting > 0`.
 
 The docs change was checked the same way rather than trusted:
 `mdtablefix --wrap --renumber --breaks --ellipsis --fences --check
-docs/developers-guide.md` reports the file's drift, and the new sections were
-taken from that command's own stdout, which is what `mdformat-all` would write.
-The check also established that the file drifted at `HEAD` too (`+101 -103`), so
-the residual drift is pre-existing and not introduced here; see
-`Surprises & discoveries`.
+docs/developers-guide.md`
+reports the file's drift, and the new sections were taken from that command's
+own stdout, which is what `mdformat-all` would write. The check also
+established that the file drifted at `HEAD` too (`+101 -103`), so the residual
+drift is pre-existing and not introduced here; see `Surprises & discoveries`.
 
 ### EP-M6 baseline blocked
 
-`EP-M6` did not run. Its first command, `cargo mutants --file
-src/report/delta.rs --file src/driver.rs`, collects the 43 mutants the milestone
-targets and then refuses to test them because the unmutated baseline is red:
+`EP-M6` did not run. Its first command,
+`cargo mutants --file src/report/delta.rs --file src/driver.rs`, collects the
+43 mutants the milestone targets and then refuses to test them because the
+unmutated baseline is red:
 
 ```plaintext
 $ cargo mutants --file src/report/delta.rs --file src/driver.rs   # cargo-mutants 27.1.0
@@ -3775,10 +3700,10 @@ ERROR cargo test failed in an unmutated tree, so no mutants were tested
 The 43 survivors-to-be, as enumerated before the refusal (line and mutation
 only; each is a distinct mutant of the two targets):
 
-| File | Mutants |
-| --- | --- |
-| `src/driver.rs` | 25 |
-| `src/report/delta.rs` | 18 |
+| File                  | Mutants |
+| --------------------- | ------- |
+| `src/driver.rs`       | 25      |
+| `src/report/delta.rs` | 18      |
 
 That enumeration is a reading of the tree as it was, not of the tip: `a06bab6`
 predates `4a599ed`, which is where `Inputs::resolve` and the
@@ -3804,20 +3729,20 @@ make: *** [Makefile:20: test] Error 101
 A self-checking corpus script over six documents, two passes each, comparing
 pass-1 bytes with pass-2 bytes:
 
-| Case | Document (escaped) | `--headings` | `mdformat-all` set |
-| --- | --- | --- | --- |
-| `C1` | `\|1\|2\|\n\|---\|---\|\n---` | drifts | fixed point |
-| `C2` | `\|1\|2\|\n\|---\|---\|\n---\n` | drifts | fixed point |
-| `C3` | `prose\n\|1\|2\|\n\|---\|---\|\n---\n` | drifts | fixed point |
-| `C4` | `\|A\|B\|\n\|---\|---\|\n---\n\|1\|2\|\n` | drifts | fixed point |
-| `C5` | `\|---\|---\|\n\|1\|2\|\n---\n` | drifts | fixed point |
-| `C6` | `\|A\|B\|\n\|---\|---\|\nTitle\n---\n` | fixed point | fixed point |
+| Case | Document (escaped)                        | `--headings` | `mdformat-all` set |
+| ---- | ----------------------------------------- | ------------ | ------------------ |
+| `C1` | `\|1\|2\|\n\|---\|---\|\n---`             | drifts       | fixed point        |
+| `C2` | `\|1\|2\|\n\|---\|---\|\n---\n`           | drifts       | fixed point        |
+| `C3` | `prose\n\|1\|2\|\n\|---\|---\|\n---\n`    | drifts       | fixed point        |
+| `C4` | `\|A\|B\|\n\|---\|---\|\n---\n\|1\|2\|\n` | drifts       | fixed point        |
+| `C5` | `\|---\|---\|\n\|1\|2\|\n---\n`           | drifts       | fixed point        |
+| `C6` | `\|A\|B\|\n\|---\|---\|\nTitle\n---\n`    | fixed point  | fixed point        |
 
 `C6` is the control: prose between the delimiter row and the `---` stops the
 absorption. The `mdformat-all` column matters for blast radius — `make fmt` runs
 `--wrap --renumber --breaks --ellipsis --fences --in-place` and does **not**
-include `--headings`, so no repository document is affected by this class today.
-The only route to it is the property test's sampled powerset.
+include `--headings`, so no repository document is affected by this class
+today. The only route to it is the property test's sampled powerset.
 
 `C1`, pass 0 through pass 3, on the branch's binary:
 
@@ -3899,11 +3824,11 @@ corpus landed as `tests/data/idempotence/T1_delimiter_then_break.dat` through
 table above, renamed one for one and byte-identical (`C6`, the prose-between
 control, is `T6`). The unconditional coverage landed as
 `tests/idempotence_adjacencies.rs`, `tests/idempotence_drift.rs`, and
-`tests/support/idempotence_harness.rs`, which formats every fixture twice through
-the real binary, and as a rewritten `tests/idempotence.rs` and
-`tests/idempotence_properties.rs`. The fix itself is the exclusion direction this
-issue recommended: `src/headings.rs` no longer treats a table delimiter row as
-Setext underline text. The documentation of the rule moved with it, in
+`tests/support/idempotence_harness.rs`, which formats every fixture twice
+through the real binary, and as a rewritten `tests/idempotence.rs` and
+`tests/idempotence_properties.rs`. The fix itself is the exclusion direction
+this issue recommended: `src/headings.rs` no longer treats a table delimiter
+row as Setext underline text. The documentation of the rule moved with it, in
 `docs/adrs/0006-single-pass-idempotence.md`, `docs/architecture.md`,
 `docs/developers-guide.md`, and `docs/users-guide.md`.
 
@@ -3934,34 +3859,35 @@ MISSED   src/report/delta.rs:92:84: replace > with < in LineDelta::has_changes i
 The unmutated baseline passing is the precondition this milestone spent two
 revisions waiting for, and it is measured here in the mutation tool's own
 scratch tree rather than inherited from `make test`. Three substitutions are
-deliberate and none of them changes what is measured: `-j 3` keeps three jobs on
-a six-core machine other agents are using, and `TMPDIR` plus `-o` keep the
+deliberate and none of them changes what is measured: `-j 3` keeps three jobs
+on a six-core machine other agents are using, and `TMPDIR` plus `-o` keep the
 mutated copies, the build directories, and the results inside the ignored
 `target/` directory, so `/tmp` holds a log and nothing else. The two console
 transcripts are the durable evidence:
 `/tmp/mutants-run-mdtablefix-check-option.out` for the round below and
-`/tmp/mutants-iterate-mdtablefix-check-option.out` for the re-check that follows
-it. The per-mutant files — `caught.txt`, `missed.txt`, `unviable.txt`,
+`/tmp/mutants-iterate-mdtablefix-check-option.out` for the re-check that
+follows it. The per-mutant files — `caught.txt`, `missed.txt`, `unviable.txt`,
 `timeout.txt`, `mutants.json`, and one diff per mutant under
 `target/mutants.out/diff/` — are rewritten by each run and so describe the run
 that wrote them rather than the sequence; they live under the ignored `target/`
 directory and are not evidence any commit carries.
 
-**The count moved from 43 to 46 between the blocked run and this one**, and both
-figures are readings of real trees rather than a correction of an error: the
-enumeration above was taken at `a06bab6`. `git log -S` shows `4a599ed` ("Keep
-the reporting shape open to a second input source") is where `Inputs::resolve`
-and the `Mode::InPlace if is_changed` guard entered `src/driver.rs` — one mutant
-for the first and two for the second — and `git merge-base --is-ancestor`
-confirms that commit is not an ancestor of the blocked run's tree. Nothing was
-lost from the earlier list; it simply predates three of the mutants.
+**The count moved from 43 to 46 between the blocked run and this one**, and
+both figures are readings of real trees rather than a correction of an error:
+the enumeration above was taken at `a06bab6`. `git log -S` shows `4a599ed`
+("Keep the reporting shape open to a second input source") is where
+`Inputs::resolve` and the `Mode::InPlace if is_changed` guard entered
+`src/driver.rs` — one mutant for the first and two for the second — and
+`git merge-base --is-ancestor` confirms that commit is not an ancestor of the
+blocked run's tree. Nothing was lost from the earlier list; it simply predates
+three of the mutants.
 
 The survivors, and what became of each:
 
-| Mutant | Verdict |
-| --- | --- |
+| Mutant                                                             | Verdict              |
+| ------------------------------------------------------------------ | -------------------- |
 | `src/report/delta.rs:92:84`: `>` → `<` in `LineDelta::has_changes` | killed by a new test |
-| `src/driver.rs:287:23`: `Mode::Diff if is_changed` → `if true` | equivalent, recorded |
+| `src/driver.rs:287:23`: `Mode::Diff if is_changed` → `if true`     | equivalent, recorded |
 
 The first is the narrow kind of survivor a one-sided corpus hides. The mutated
 body is `self.insertions > 0 || self.deletions < 0`, which agrees with the
@@ -4018,10 +3944,10 @@ MISSED   src/driver.rs:287:23: replace match guard is_changed with true in analy
 ```
 
 One run, one tally: **39 caught, 1 missed, 6 unviable, 0 timeouts**, the single
-miss being the equivalent mutant justified below. Nothing else moved between the
-two runs — the same six mutants are unviable and no mutant the first run caught
-became survivable — and the per-mutant lists under `target/mutants.out/` are
-this run's. Transcript: `/tmp/mutants-rerun-mdtablefix-check-option.out`.
+miss being the equivalent mutant justified below. Nothing else moved between
+the two runs — the same six mutants are unviable and no mutant the first run
+caught became survivable — and the per-mutant lists under `target/mutants.out/`
+are this run's. Transcript: `/tmp/mutants-rerun-mdtablefix-check-option.out`.
 
 The second survivor is accepted, on a justification that is itself a test. The
 arm is `Mode::Diff if is_changed => render_diff(display_path, &assessment)?`;
@@ -4035,8 +3961,8 @@ still the empty string, the `is_changed` field of the `FileReport` is computed
 before the match and independently of which arm runs, and stdout, stderr, the
 exit status, and every file's bytes are identical to the unmutated run. The
 mutant's only effect is that a clean file pays for a render that cannot produce
-output. Because that reasoning is a claim about this crate's boundary, it is now
-pinned there:
+output. Because that reasoning is a claim about this crate's boundary, it is
+now pinned there:
 
 ```rust
     /// Byte-equal texts render as nothing at all, headers included: `similar`
@@ -4053,36 +3979,36 @@ justification would need revisiting. This is the one survivor the milestone's
 own outcome allows to stand, by its second clause: "each survivor is either
 killed by a new test or recorded with a justification".
 
-Six mutants are **unviable**, meaning the mutated source does not compile and so
-says nothing about test coverage: `exit_status`, `Inputs::resolve`, `assess`,
-both `analyse` replacements, and `in_argument_order` mutated to
-`vec![Default::default()]`. Each is a default-value substitution for a type that
-has no `Default` impl — `ExitStatus`, `Inputs`, `Assessment`, and `FileReport`
-derive `Debug`, `Clone`, `PartialEq` and `Eq`, not `Default` — or, for
-`in_argument_order`, for an unconstrained generic `T`. They are excluded from
-the score rather than counted as kills, which is why the denominator above is 40
-rather than 46.
+Six mutants are **unviable**, meaning the mutated source does not compile and
+so says nothing about test coverage: `exit_status`, `Inputs::resolve`,
+`assess`, both `analyse` replacements, and `in_argument_order` mutated to
+`vec![Default::default()]`. Each is a default-value substitution for a type
+that has no `Default` impl — `ExitStatus`, `Inputs`, `Assessment`, and
+`FileReport` derive `Debug`, `Clone`, `PartialEq` and `Eq`, not `Default` — or,
+for `in_argument_order`, for an unconstrained generic `T`. They are excluded
+from the score rather than counted as kills, which is why the denominator above
+is 40 rather than 46.
 
 One caveat belongs with the score. `cargo-mutants` counts a mutant as caught
-whenever any test fails, so the historically flaky idempotence property can only
-move a mutant from missed to caught, never the reverse: the score is an upper
-bound on the kills and cannot be the cause of a survivor. No mutant timed out
-in either run, and the auto-set timeout — 843 s, then 420 s — was never
+whenever any test fails, so the historically flaky idempotence property can
+only move a mutant from missed to caught, never the reverse: the score is an
+upper bound on the kills and cannot be the cause of a survivor. No mutant timed
+out in either run, and the auto-set timeout — 843 s, then 420 s — was never
 approached, the slowest mutant test taking 164 s.
 
 ### Forward-compatibility for `--git` (#466)
 
 The `--git` plan's author asked for four changes and supplied a rationale and a
-`clap` measurement for each. None of them implements `--git`; all four keep this
-branch's shape from foreclosing it. The requests are recorded as A1–A4 in the
-request that arrived, and in this plan's own terms:
+`clap` measurement for each. None of them implements `--git`; all four keep
+this branch's shape from foreclosing it. The requests are recorded as A1–A4 in
+the request that arrived, and in this plan's own terms:
 
-| Request | This plan's change | Evidence |
-| --- | --- | --- |
-| mode group requires an `inputs` group | `inputs` holds `files`; `mode.requires("inputs")` | `tests/cli_check.rs::mode_flags_require_an_input_source` |
-| an explicit input type, not an empty-list test | `driver::Inputs` with `Stdin` / `Files` | `src/driver_contract_tests.rs::resolve_*`, `AX-6` |
-| resolution errors reach `exit_status` | `run` prints and returns `exit_status(mode, false, true)` | `tests/cli_check.rs::a_non_utf8_path_argument_exits_error` |
-| `--in-place` is a no-op for clean files | the `Mode::InPlace` payload arm is guarded by `is_changed` | inode and modification-time assertions in `src/driver_in_place_tests.rs` and `tests/in_place_atomic.rs` |
+| Request                                        | This plan's change                                         | Evidence                                                                                                |
+| ---------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| mode group requires an `inputs` group          | `inputs` holds `files`; `mode.requires("inputs")`          | `tests/cli_check.rs::mode_flags_require_an_input_source`                                                |
+| an explicit input type, not an empty-list test | `driver::Inputs` with `Stdin` / `Files`                    | `src/driver_contract_tests.rs::resolve_*`, `AX-6`                                                       |
+| resolution errors reach `exit_status`          | `run` prints and returns `exit_status(mode, false, true)`  | `tests/cli_check.rs::a_non_utf8_path_argument_exits_error`                                              |
+| `--in-place` is a no-op for clean files        | the `Mode::InPlace` payload arm is guarded by `is_changed` | inode and modification-time assertions in `src/driver_in_place_tests.rs` and `tests/in_place_atomic.rs` |
 
 Measurements taken while implementing, all on the built binary:
 
@@ -4101,34 +4027,34 @@ $ ls -i --full-time
 ```
 
 Both the inode and the modification time are unchanged by the clean-file run,
-and the clean symlink succeeds. The second line is the behaviour change recorded
-in `Surprises & discoveries`: before this change, `--in-place` over any symlink
-called `replace_file` unconditionally and was refused.
+and the clean symlink succeeds. The second line is the behaviour change
+recorded in `Surprises & discoveries`: before this change, `--in-place` over
+any symlink called `replace_file` unconditionally and was refused.
 
 Two further requests needed no code. `--git --list-files` will be a `Mode`
 variant taking a `ReadOnlyDir`, and all five of the named items it depends on
 (`ReadOnlyDir`, `Assessment`, `Mode`, `exit_status`, `in_argument_order`) are
-still items rather than inlined. No file discovery was added: directory walking,
-globbing, and `git ls-files` are pull request #466's scope, and the plan's
-`Constraints` place new CLI surface outside this plan. The `clap` flag-to-flag
-hazard the request described does not arise, because this CLI has no
-flag-to-flag requirement to be unreliable — the `mode`-to-`inputs` requirement is
-flag-to-group, and its cells are measured rather than reasoned about. The `AX-4`
-citation in `ADR 0009` stays, as asked.
+still items rather than inlined. No file discovery was added: directory
+walking, globbing, and `git ls-files` are pull request #466's scope, and the
+plan's `Constraints` place new CLI surface outside this plan. The `clap`
+flag-to-flag hazard the request described does not arise, because this CLI has
+no flag-to-flag requirement to be unreliable — the `mode`-to-`inputs`
+requirement is flag-to-group, and its cells are measured rather than reasoned
+about. The `AX-4` citation in `ADR 0009` stays, as asked.
 
 ### CodeRabbit review after the `--git` forward-compatibility change
 
-Requested through the gate runner with five of the six deterministic gates green
-on this tree — `check-fmt`, `lint`, `typecheck`, `markdownlint` (30 files, 0
-errors) and `nixie` — and the sixth, `make test`, red on the recorded
+Requested through the gate runner with five of the six deterministic gates
+green on this tree — `check-fmt`, `lint`, `typecheck`, `markdownlint` (30
+files, 0 errors) and `nixie` — and the sixth, `make test`, red on the recorded
 pre-existing #474 counterexample. That is a deviation from the standing rule
-that every gate be green before a review is requested, and it is recorded rather
-than glossed: the rule exists so that CodeRabbit is not asked to catch what a
-deterministic gate could catch first, and #474 *is* deterministically caught, by
-`make test`, and is already its own issue. The red is a defect in the
-`--headings` transform that predates the branch, not a fault in this change, and
-every test this change touches passes. The clean result below should still be
-read as "nothing was raised about this diff", not as "the tree is green".
+that every gate be green before a review is requested, and it is recorded
+rather than glossed: the rule exists so that CodeRabbit is not asked to catch
+what a deterministic gate could catch first, and #474 *is* deterministically
+caught, by `make test`, and is already its own issue. The red is a defect in the
+`--headings` transform that predates the branch, not a fault in this change,
+and every test this change touches passes. The clean result below should still
+be read as "nothing was raised about this diff", not as "the tree is green".
 
 The review ran against the pushed commit `83e6150` on `origin/check-option`,
 reviewing the whole branch diff rather than this change alone: 62 files, from
@@ -4141,25 +4067,26 @@ reviewing the whole branch diff rather than this change alone: 62 files, from
 {"type":"complete","status":"review_completed","findings":0,"reviewedFiles":[…62 paths…]}
 ```
 
-The `reviewedFiles` list was checked against `git diff --name-only
-origin/main...HEAD` and is set-equal to it, 62 paths each way: the zero is a
-completed review of the whole change surface, with no changed file skipped. (The
-gate runner's own summary said 69 files; the log it cites says 62, and the
-set-equality check is what the claim rests on.) The four areas this change is
-most likely to be questioned on drew no comment, because the review produced no
-findings at all: the `clap` `inputs` group, `driver::Inputs` and
-`Inputs::resolve`, the `exit_status(mode, false, true)` pre-flight path, and the
-`--in-place` clean-file no-op with its symlink-to-a-clean-file consequence. As
-with the earlier reviews, the zero means the contracted reviewer raised nothing
-rather than that the diff was exhaustively audited — it completed in about 49
-seconds over a 9,467-line diff, most of which had passed review once before. The
-full JSON-lines log is `/tmp/coderabbit-mdtablefix-check-option.out`.
+The `reviewedFiles` list was checked against
+`git diff --name-only origin/main...HEAD` and is set-equal to it, 62 paths each
+way: the zero is a completed review of the whole change surface, with no
+changed file skipped. (The gate runner's own summary said 69 files; the log it
+cites says 62, and the set-equality check is what the claim rests on.) The four
+areas this change is most likely to be questioned on drew no comment, because
+the review produced no findings at all: the `clap` `inputs` group,
+`driver::Inputs` and `Inputs::resolve`, the `exit_status(mode, false, true)`
+pre-flight path, and the `--in-place` clean-file no-op with its
+symlink-to-a-clean-file consequence. As with the earlier reviews, the zero
+means the contracted reviewer raised nothing rather than that the diff was
+exhaustively audited — it completed in about 49 seconds over a 9,467-line diff,
+most of which had passed review once before. The full JSON-lines log is
+`/tmp/coderabbit-mdtablefix-check-option.out`.
 
 ### `make fmt` measured, and declined
 
 `make fmt` was not run on this change. It is not one of the commit gates, and
-it cannot be scoped to a diff: `/home/leynos/.local/bin/mdformat-all` accepts no
-path arguments and applies itself to every Markdown file in the repository.
+it cannot be scoped to a diff: `/home/leynos/.local/bin/mdformat-all` accepts
+no path arguments and applies itself to every Markdown file in the repository.
 
 ```bash
 with_all_md() {
@@ -4179,18 +4106,18 @@ over the same tree.
 Measured rather than assumed, with this branch's binary and the flag set above.
 At `HEAD`, 10 of the 31 tracked Markdown files drift:
 
-| File | Drift at `HEAD` |
-| --- | --- |
-| `CHANGELOG.md` | `+7 -10` |
-| `README.md` | `+2 -2` |
-| `docs/adrs/0006-single-pass-idempotence.md` | `+15 -16` |
-| `docs/adrs/0007-line-ending-detection.md` | `+2 -3` |
-| `docs/architecture.md` | `+13 -13` |
-| `docs/developers-guide.md` | `+99 -101` |
-| `docs/execplans/check-option.md` | `+1028 -1098` |
-| `docs/execplans/issue-373-code-block-pipe-line-trailing-pipe.md` | `+1 -2` |
-| `docs/users-guide.md` | `+25 -25` |
-| `docs/v0-6-0-migration-guide.md` | `+9 -10` |
+| File                                                             | Drift at `HEAD` |
+| ---------------------------------------------------------------- | --------------- |
+| `CHANGELOG.md`                                                   | `+7 -10`        |
+| `README.md`                                                      | `+2 -2`         |
+| `docs/adrs/0006-single-pass-idempotence.md`                      | `+15 -16`       |
+| `docs/adrs/0007-line-ending-detection.md`                        | `+2 -3`         |
+| `docs/architecture.md`                                           | `+13 -13`       |
+| `docs/developers-guide.md`                                       | `+99 -101`      |
+| `docs/execplans/check-option.md`                                 | `+1028 -1098`   |
+| `docs/execplans/issue-373-code-block-pipe-line-trailing-pipe.md` | `+1 -2`         |
+| `docs/users-guide.md`                                            | `+25 -25`       |
+| `docs/v0-6-0-migration-guide.md`                                 | `+9 -10`        |
 
 Three of those — ADR 0006, ADR 0007, and the #373 plan — are files this change
 never touches, which is what makes the drift pre-existing rather than a residue
@@ -4204,17 +4131,17 @@ from 31 to 35 because this branch added documents, the drifting set is the same
 ten files, and only the deltas moved, for the documents this branch went on to
 edit — `docs/execplans/check-option.md` is now `+1158 -1230` and
 `docs/developers-guide.md` is `+129 -132`. Re-measured a third time at
-`bb068f1`, the rebased tip, the drifting set is still the same ten files and the
-developers' guide is `+127 -131` — *down*, because `main`'s #477 rewrote that
-same document and took some of the drift with it. The plan's own figure is the
-special case: it was `+1158 -1230` at `ec936b2` and `+1259 -1329` at `bb068f1`,
-and it changes whenever this document is edited, so it is quoted as a reading
-taken at a named point rather than as a property of the file. Each reading is
-dated for the same reason. The conclusion does not depend on any of the counts:
-the same ten files drifted before this branch existed and drift still, three of
-them documents this change never touches, so declining `make fmt` remains the
-decision. The command behind both measurements
-is `mdtablefix --check` with the five flags above over `git ls-files '*.md'`,
+`bb068f1`, the rebased tip, the drifting set is still the same ten files and
+the developers' guide is `+127 -131` — *down*, because `main`'s #477 rewrote
+that same document and took some of the drift with it. The plan's own figure is
+the special case: it was `+1158 -1230` at `ec936b2` and `+1259 -1329` at
+`bb068f1`, and it changes whenever this document is edited, so it is quoted as
+a reading taken at a named point rather than as a property of the file. Each
+reading is dated for the same reason. The conclusion does not depend on any of
+the counts: the same ten files drifted before this branch existed and drift
+still, three of them documents this change never touches, so declining
+`make fmt` remains the decision. The command behind both measurements is
+`mdtablefix --check` with the five flags above over `git ls-files '*.md'`,
 which reports only the files that would change.
 
 Run over this branch's working tree instead, the same measurement is a check on
@@ -4235,8 +4162,8 @@ new — and the vendored guides, the two ADRs, and the contents index are all
 fixed points.
 
 `make check-fmt`, the gate that does exist for formatting, is
-`cargo fmt --all -- --check` and covers Rust sources only; it ran with the other
-gates on this change.
+`cargo fmt --all -- --check` and covers Rust sources only; it ran with the
+other gates on this change.
 
 ### EP-M7 prediction control
 
@@ -4312,9 +4239,9 @@ both times and is not committed.
 Repository documents:
 
 - `AGENTS.md`: binding style, the 400-line cap, testing obligations, the
-  abstraction and newtype policy (`:217-231`), the `cap_std`/`camino`
-  preference (`:232-234`), dependency policy (`:249-263`), error handling
-  (`:262-283`), and observability (`:286-306`).
+  abstraction and newtype policy (`:217-231`), the `cap_std`/`camino` preference
+  (`:232-234`), dependency policy (`:249-263`), error handling (`:262-283`),
+  and observability (`:286-306`).
 - `docs/contents.md`: the index to everything else; start here.
 - `docs/repository-layout.md`: directory ownership.
 - `docs/documentation-style-guide.md`: en-GB-oxendict spelling, sentence-case
@@ -4357,8 +4284,8 @@ Skills to load:
 - `rust-router` first, then the smallest useful follow-on.
 - `hexagonal-architecture` to protect the boundary between pure domain and
   adapters, not to impose a directory layout. Note that this plan deliberately
-  chose a newtype capability over a port trait; read the skill's
-  "when hexagonal architecture applies" guidance before reversing that.
+  chose a newtype capability over a port trait; read the skill's "when
+  hexagonal architecture applies" guidance before reversing that.
 - `rust-unit-testing` for fixture shape, table tests, and choosing between
   equality, matcher, and snapshot assertions.
 - `proptest` for generator design and shrinking discipline.
@@ -4383,8 +4310,7 @@ Skills to load:
   <https://black.readthedocs.io/en/stable/usage_and_configuration/the_basics.html>.
 - Ruff's formatter documentation, whose `--diff` is specified to "exit with a
   non-zero status code and the difference between the current file and how the
-  formatted file would look":
-  <https://docs.astral.sh/ruff/formatter/>.
+  formatted file would look": <https://docs.astral.sh/ruff/formatter/>.
 - `dprint check`, which prints diffs and exits non-zero:
   <https://dprint.dev/ci/>.
 - golang/go#46289, which changed `gofmt -d` to exit non-zero when diffs exist:
@@ -4397,30 +4323,29 @@ Skills to load:
 
 ### Revision 2, 2026-09-09
 
-After a six-lens design review. The first draft's
-architecture was substantially wrong in four ways, all now corrected. The
-application service moved from the library to the binary, because the argument
-for library placement was factually wrong and the placement would have forced
-`anyhow` into public library API against `AGENTS.md:266-270`. The
-`DocumentStore` port was replaced by a `ReadOnlyDir` newtype, because the port
-had one adapter, no second backend in prospect, and — since the draft passed
-the store into every mode — did not actually deliver the read-only guarantee
-it existed to provide. Exit status became a function of mode as well as
-observation, because the draft would have made a successful `--in-place` over
-drifting files exit `1`. Storage key and display path were separated, because
-`open_file_parent` yields a bare file name and the draft would have reported
-`a.md` for `--check docs/a.md`.
+After a six-lens design review. The first draft's architecture was
+substantially wrong in four ways, all now corrected. The application service
+moved from the library to the binary, because the argument for library
+placement was factually wrong and the placement would have forced `anyhow` into
+public library API against `AGENTS.md:266-270`. The `DocumentStore` port was
+replaced by a `ReadOnlyDir` newtype, because the port had one adapter, no
+second backend in prospect, and — since the draft passed the store into every
+mode — did not actually deliver the read-only guarantee it existed to provide.
+Exit status became a function of mode as well as observation, because the draft
+would have made a successful `--in-place` over drifting files exit `1`. Storage
+key and display path were separated, because `open_file_parent` yields a bare
+file name and the draft would have reported `a.md` for `--check docs/a.md`.
 
 Three correctness gaps were added: byte-order-mark handling, without which
 `--check` reports clean on a genuinely ragged file; a formatter-idempotence
 obligation, without which the gate could never go green; and a deterministic
-bound on diff computation. The verification plan was substantially
-strengthened — `INV-PREDICTS` was circular, `LEM-COUNT` was satisfied by an
-implementation doing no diff at all, `INV-NOWRITE` was blind to ambient
-writes, `INV-ORDER`'s control was probabilistic, and `rayon`'s collection
-order turned out not to be a documented guarantee. The Verus milestone was
-cut, because its stated goal reduces to an arithmetic identity and proving it
-would restate an assumed property.
+bound on diff computation. The verification plan was substantially strengthened
+— `INV-PREDICTS` was circular, `LEM-COUNT` was satisfied by an implementation
+doing no diff at all, `INV-NOWRITE` was blind to ambient writes, `INV-ORDER`'s
+control was probabilistic, and `rayon`'s collection order turned out not to be
+a documented guarantee. The Verus milestone was cut, because its stated goal
+reduces to an arithmetic identity and proving it would restate an assumed
+property.
 
 Two requirements were reaffirmed against contrary evidence and flagged for the
 approval gate rather than silently changed, along with one out-of-scope
@@ -4432,17 +4357,17 @@ Resolving the three items revision 2 raised at the approval gate, on explicit
 direction from `@leynos`.
 
 `--diff` now exits `1` on drift rather than `0`, adopting the behaviour of
-`ruff format --diff`, `dprint check`, and modern `gofmt -d` on the principle
-of least surprise. This also dissolves the mutual-exclusion concern rather
-than requiring a second change: the reason Black, ruff, and `terraform fmt`
-permit combining check with diff is so that one run can both display the drift
-and fail the build, and `--diff` now does both by itself. `--check` and
-`--diff` therefore remain mutually exclusive as two renderings of one analysis
-with identical exit semantics, and no continuous-integration usage needs a
-second invocation, which preserves the requirement that no file is read more
-than once. `INV-EXIT` gained a third high-risk cell and a matching negative
-control, because a mapping that suppresses drift for every mode except
-`--check` would pass the `--in-place` assertion while failing `--diff`.
+`ruff format --diff`, `dprint check`, and modern `gofmt -d` on the principle of
+least surprise. This also dissolves the mutual-exclusion concern rather than
+requiring a second change: the reason Black, ruff, and `terraform fmt` permit
+combining check with diff is so that one run can both display the drift and
+fail the build, and `--diff` now does both by itself. `--check` and `--diff`
+therefore remain mutually exclusive as two renderings of one analysis with
+identical exit semantics, and no continuous-integration usage needs a second
+invocation, which preserves the requirement that no file is read more than once.
+`INV-EXIT` gained a third high-risk cell and a matching negative control,
+because a mapping that suppresses drift for every mode except `--check` would
+pass the `--in-place` assertion while failing `--diff`.
 
 `EP-M1b`, atomic write-then-rename, is removed from this plan and raised as
 GitHub issue #465. The hazard remains recorded in `Risks` with a pointer to
@@ -4468,8 +4393,9 @@ proceeds. Status moved from `DRAFT` to `IN PROGRESS`.
 ### Revision 5, 2026-09-11
 
 Rebased onto `origin/main` after three pull requests merged while the plan was
-halted at `EP-M2`, and resumed. Recorded in `Artefacts and notes → Rebase onto
-origin/main` and in six `Decision log` entries dated 2026-09-11.
+halted at `EP-M2`, and resumed. Recorded in
+`Artefacts and notes → Rebase onto origin/main` and in six `Decision log`
+entries dated 2026-09-11.
 
 What changed in the plan itself:
 
@@ -4481,8 +4407,8 @@ What changed in the plan itself:
 - `EP-M3` no longer claims a version bump: `0.6.0` is already declared and
   unreleased, so the exit-status change ships inside it.
 - The check-and-diff ADR is `0009` and the byte-order mark gets `0008`; `0006`
-  and `0007` are held by merged records, and the trace links in `Conformance
-  basis` follow.
+  and `0007` are held by merged records, and the trace links in
+  `Conformance basis` follow.
 - The `--in-place` truncation risk is marked discharged by #467.
 - `EP-M2` is complete. `INV-IDEMPOTENT` was the blocker and #470 cleared it; the
   red state was re-observed on the rebased tree before any green code was
@@ -4497,8 +4423,8 @@ idempotence suites #470 added.
 
 ### Revision 6, 2026-09-11
 
-`EP-M3` implemented; see `Artefacts and notes → EP-M3 red and green
-transcripts`.
+`EP-M3` implemented; see
+`Artefacts and notes → EP-M3 red and green transcripts`.
 
 What changed in the plan itself:
 
@@ -4519,18 +4445,19 @@ factual, not scope.
 
 ### Revision 7, 2026-09-11
 
-`EP-M4` implemented; see `Artefacts and notes → EP-M4 red and green transcripts`
-and `→ INV-DETERMINISTIC negative control`.
+`EP-M4` implemented; see
+`Artefacts and notes → EP-M4 red and green transcripts` and
+`→ INV-DETERMINISTIC negative control`.
 
 What changed in the plan itself:
 
 - `INV-DETERMINISTIC`'s non-vacuity line stated the control's predicted outcome
-  as a requirement — "must make the test flaky or fail". The control was applied
-  and the outcome is now recorded as measured: it does make the test fail, both
-  deterministically on an above-threshold corpus and nondeterministically in the
-  transition band, and it also exposed that the ten-run method cannot see a
-  budget that is never crossed. The prediction was right about the hazard and
-  incomplete about its detection.
+  as a requirement — "must make the test flaky or fail". The control was
+  applied and the outcome is now recorded as measured: it does make the test
+  fail, both deterministically on an above-threshold corpus and
+  nondeterministically in the transition band, and it also exposed that the
+  ten-run method cannot see a budget that is never crossed. The prediction was
+  right about the hazard and incomplete about its detection.
 - The same block's artefact and evidence lines now name the above-threshold
   case, because the first version of that test was insensitive to the hazard it
   existed to detect: with one changed table at the end of 1200 unchanged lines,
@@ -4543,20 +4470,22 @@ What changed in the plan itself:
 
 No requirement, obligation, or acceptance criterion changed. `EP-M4`'s outcome,
 the exit-status contract, the read-only guarantee, and the deterministic
-rendering were all met as specified. The above-threshold test is a strengthening
-of `INV-DETERMINISTIC`'s artefact, not a new obligation: it asserts the same
-invariant over the corpus shape where the invariant is actually at risk.
+rendering were all met as specified. The above-threshold test is a
+strengthening of `INV-DETERMINISTIC`'s artefact, not a new obligation: it
+asserts the same invariant over the corpus shape where the invariant is
+actually at risk.
 
 ### Revision 8, 2026-09-11
 
-`EP-M5` implemented; see `Artefacts and notes → EP-M5 red and green transcripts`.
+`EP-M5` implemented; see
+`Artefacts and notes → EP-M5 red and green transcripts`.
 
 What changed in the plan itself:
 
 - `EP-M5`'s step 2 said to review every changed `.snap`. That is the wrong test
-  for this milestone: the curated subset adds twelve snapshots and changes none,
-  so the review covers every *added* file, and the "none changed" claim is
-  established by an `md5sum` comparison against a baseline taken before
+  for this milestone: the curated subset adds twelve snapshots and changes
+  none, so the review covers every *added* file, and the "none changed" claim
+  is established by an `md5sum` comparison against a baseline taken before
   regeneration rather than by inspection.
 - `EP-M5`'s step 1 is recorded as implemented with its three curated rows named
   and the reason each is in the subset. The no-drift branch exists only because
@@ -4590,15 +4519,15 @@ What changed in the plan itself:
   that `make test` is red at `a06bab6`. No earlier milestone's completion claim
   is retracted — every one of them was gated on a run that passed — but the
   claim that the tree is currently green is not made.
-- `Concrete steps → EP-M6` gains a step 0 precondition, `Milestones and
-  plateaus → EP-M6` gains its blocker paragraph, and three `Decision log`
-  entries record why the milestone was deferred rather than the flaky test
-  excluded, why the class is escalated as GitHub issue #474, and why no further
-  commit claims all gates green.
+- `Concrete steps → EP-M6` gains a step 0 precondition,
+  `Milestones and plateaus → EP-M6` gains its blocker paragraph, and three
+  `Decision log` entries record why the milestone was deferred rather than the
+  flaky test excluded, why the class is escalated as GitHub issue #474, and why
+  no further commit claims all gates green.
 - `Surprises & discoveries` gains the class itself (with the six-case corpus
-  and the `origin/main` byte-identity evidence) and the flakiness finding, whose
-  unexplained residual variance is recorded as an open question rather than
-  asserted away.
+  and the `origin/main` byte-identity evidence) and the flakiness finding,
+  whose unexplained residual variance is recorded as an open question rather
+  than asserted away.
 - `Artefacts and notes → EP-M6 baseline blocked` carries the mutants refusal
   transcript, the corpus table, the pass-by-pass bytes, the pre-existence
   measurements, the variance evidence and what would close the gap.
@@ -4608,10 +4537,10 @@ No requirement, obligation, or acceptance criterion changed for `EP-M0` through
 rendered three ways, exit `0`/`1`/`2`, drift only in the reporting modes — is
 untouched by this class, which lies in the `--headings` transform and predates
 the branch. What the discovery does change is the meaning of the `test` gate for
-`EP-M6` and `EP-M7`: it is currently a coin flip on this input class, so a green
-run is not by itself evidence that `INV-IDEMPOTENT` holds. `EP-M7` can proceed
-on its documentation diff, gated by `markdownlint` and `nixie`, but the feature
-cannot be called closed while a `--headings` input is not a fixed point.
+`EP-M6` and `EP-M7`: it is currently a coin flip on this input class, so a
+green run is not by itself evidence that `INV-IDEMPOTENT` holds. `EP-M7` can
+proceed on its documentation diff, gated by `markdownlint` and `nixie`, but the
+feature cannot be called closed while a `--headings` input is not a fixed point.
 
 ### Revision 10, 2026-09-11
 
@@ -4627,33 +4556,34 @@ What changed:
 - The `mode` group now requires an `inputs` group holding `files`, so a mode
   flag still demands an input source while the source is a named thing to
   extend. Behaviour is unchanged; the requesting plan measured both shapes on
-  `clap` 4.6.6, and `tests/cli_check.rs` now pins the whole accept/reject matrix
-  from this side, including the two-file positional that a group with
+  `clap` 4.6.6, and `tests/cli_check.rs` now pins the whole accept/reject
+  matrix from this side, including the two-file positional that a group with
   `multiple(false)` could plausibly have broken.
 - `driver::Inputs` replaces `main`'s `cli.files.is_empty()` test, recorded as
-  `AX-6` in `Verification plan`: no paths named is `Inputs::Stdin`, and a source
-  that resolves to no paths is `Inputs::Files(vec![])`, which a future `--git`
-  needs in order to exit `0` on an empty match rather than block on a terminal.
+  `AX-6` in `Verification plan`: no paths named is `Inputs::Stdin`, and a
+  source that resolves to no paths is `Inputs::Files(vec![])`, which a future
+  `--git` needs in order to exit `0` on an empty match rather than block on a
+  terminal.
 - Input resolution now happens before the parallel stage and its failures return
   through `exit_status(mode, false, true)`, so they exit `2` like every other
   operational failure. This is a user-visible change for a non-UTF-8 argument,
-  recorded in `Surprises & discoveries`: the run now fails as a whole instead of
-  counting that path as one file's error.
+  recorded in `Surprises & discoveries`: the run now fails as a whole instead
+  of counting that path as one file's error.
 - `--in-place` no longer writes a file whose bytes would not change. The bytes
   would be identical but the file would not be: the replacement renames a
   temporary over the target, so the inode and the modification time would move.
   Both properties are now pinned, each beside a positive control that proves a
-  drifting file *is* replaced. This is a behaviour change and is declared as one:
-  a symlink to a clean file is no longer declined, because there is no
+  drifting file *is* replaced. This is a behaviour change and is declared as
+  one: a symlink to a clean file is no longer declined, because there is no
   replacement to decline.
 
 The plan's interfaces were updated to match (`driver::Inputs`, the `write_back`
-doc, the `Cli` group attributes and the `run`/`run_stdin`/`run_files` split), the
-`Decision log` carries one entry per request plus one recording that the
+doc, the `Cli` group attributes and the `run`/`run_stdin`/`run_files` split),
+the `Decision log` carries one entry per request plus one recording that the
 remaining requests needed no change, and
 `Artefacts and notes → Forward-compatibility for --git (#466)` carries the
-request-to-evidence table and the inode measurement. The `AX-4` citation stays in
-the ADR, as the requesting plan asked.
+request-to-evidence table and the inode measurement. The `AX-4` citation stays
+in the ADR, as the requesting plan asked.
 
 `EP-M6` stays blocked and `EP-M7` stays pending; this revision neither unblocks
 nor blocks them. `make test` is still red for the recorded #474 counterexample,
@@ -4665,10 +4595,10 @@ The forward-compatibility change of revision 10 was reviewed by CodeRabbit and
 came back clean: `review_completed`, 0 findings, no rate limit and no refusal.
 The review ran against the pushed commit `83e6150` over the whole branch diff —
 62 files, set-equal to `git diff --name-only origin/main...HEAD` — and raised
-nothing on any of the four areas the change is most exposed on. That is one more
-piece of evidence, not proof: as with `EP-M0`, `EP-M3` and `EP-M4`, the review
-is a contracted second reader, and its zero means it raised nothing rather than
-that the diff was exhaustively audited.
+nothing on any of the four areas the change is most exposed on. That is one
+more piece of evidence, not proof: as with `EP-M0`, `EP-M3` and `EP-M4`, the
+review is a contracted second reader, and its zero means it raised nothing
+rather than that the diff was exhaustively audited.
 
 What changed in the plan itself is the record of how that review was requested.
 Five of the six deterministic gates were green and `make test` was red on the
@@ -4676,11 +4606,10 @@ recorded pre-existing #474 counterexample, so the request was a deviation from
 the standing "all gates green first" rule. The artefact note recording the
 CodeRabbit review of the `--git` forward-compatibility change states the
 deviation and its reasoning plainly, and asks the reader to take the clean
-result as "nothing raised about this diff" rather than as evidence that the tree
-is green. The same
-section records the `reviewedFiles` set-equality check and notes that the gate
-runner's summary reported 69 files where the log it cites carries 62, so the
-number in this plan is the measured one.
+result as "nothing raised about this diff" rather than as evidence that the
+tree is green. The same section records the `reviewedFiles` set-equality check
+and notes that the gate runner's summary reported 69 files where the log it
+cites carries 62, so the number in this plan is the measured one.
 
 `EP-M6` remains blocked on issue #474 and `EP-M7` remains pending. No
 requirement, obligation, or acceptance criterion changed in this revision, and
@@ -4727,17 +4656,17 @@ What is written, against the step list:
   the commit, and the blob hash, each verified by md5 against the sibling
   checkout rather than asserted.
 
-One decision belongs in the open: `make fmt` was declined, with the
-measurement and the reasoning in
-`Artefacts and notes → make fmt measured, and declined`. The measurement also
-caught a regression this change had introduced — `docs/contents.md` is a fixed
-point at `HEAD` and my index entry was not — so the two new ADRs and
-`docs/contents.md` were re-authored to the formatter's own output and re-run to
-confirm they are fixed points. After that the change adds no new drift: 10 of
-the 35 Markdown files on disk drift, the same 10 as at `HEAD`, three of which
-this change never touches. The gates for this revision and the issue closure
-are recorded in Revision 13; no commit in this revision claims a green
-`make test`, which remains red for the recorded #474 counterexample.
+One decision belongs in the open: `make fmt` was declined, with the measurement
+and the reasoning in `Artefacts and notes → make fmt measured, and declined`.
+The measurement also caught a regression this change had introduced —
+`docs/contents.md` is a fixed point at `HEAD` and my index entry was not — so
+the two new ADRs and `docs/contents.md` were re-authored to the formatter's own
+output and re-run to confirm they are fixed points. After that the change adds
+no new drift: 10 of the 35 Markdown files on disk drift, the same 10 as at
+`HEAD`, three of which this change never touches. The gates for this revision
+and the issue closure are recorded in Revision 13; no commit in this revision
+claims a green `make test`, which remains red for the recorded #474
+counterexample.
 
 ### Revision 13, 2026-09-11
 
@@ -4747,14 +4676,13 @@ Gate run for the documentation change of Revision 12, through the gate runner:
 `make markdownlint` reports 34 files and 0 errors
 (`/tmp/markdownlint-mdtablefix-check-option-3.out`), and `make nixie` validates
 all 10 Mermaid diagrams in the tree, including the two new and one edited
-diagram in `docs/architecture.md`
-(`/tmp/nixie-mdtablefix-check-option-2.out`). The first markdownlint run was
-**red** — three `MD060` table-alignment errors on the exit-status table this
-change adds to `docs/users-guide.md` — and is kept at
-`/tmp/markdownlint-mdtablefix-check-option-2.out` rather than overwritten,
-because the failure is evidence that the gate ran over the new content rather
-than that it was skipped. No Rust gate was run: no Rust source, test, or
-configuration file changed in this revision.
+diagram in `docs/architecture.md` (`/tmp/nixie-mdtablefix-check-option-2.out`).
+The first markdownlint run was **red** — three `MD060` table-alignment errors
+on the exit-status table this change adds to `docs/users-guide.md` — and is
+kept at `/tmp/markdownlint-mdtablefix-check-option-2.out` rather than
+overwritten, because the failure is evidence that the gate ran over the new
+content rather than that it was skipped. No Rust gate was run: no Rust source,
+test, or configuration file changed in this revision.
 
 The documentation landed as commit `95ec57c` and is pushed to
 `origin/check-option`. Issue #452 is closed as not planned, with a comment
@@ -4764,10 +4692,10 @@ milestone.
 
 `Outcomes & retrospective` is written, `Progress` records `EP-M7` as complete,
 and the plan's status line now states what remains: `EP-M6` is blocked by issue
-[#474](https://github.com/leynos/mdtablefix/issues/474) and `make test` is
-still red on that counterexample, so the plan stays `IN PROGRESS` rather than
-being set `COMPLETE`. Nothing in this revision changes a requirement,
-obligation, or acceptance criterion.
+[#474](https://github.com/leynos/mdtablefix/issues/474)
+and `make test` is still red on that counterexample, so the plan stays
+`IN PROGRESS` rather than being set `COMPLETE`. Nothing in this revision
+changes a requirement, obligation, or acceptance criterion.
 
 ### Revision 14, 2026-09-11
 
@@ -4824,32 +4752,31 @@ stale `target/debug` binary that produced a false alarm after the mutation was
 reverted, because that is the kind of evidence a reader would otherwise have to
 rediscover.
 
-Two plan errors are corrected rather than overwritten. `Outcomes &
-retrospective` now says what `tests/check_properties.rs` actually discharges —
-`LEM-COUNT` and `INV-AGREE`, in-process and not over two copies — and keeps the
-`INV-PREDICTS` mistake visible with its lesson: a claim about evidence is itself
-a claim. The obligation carries the corrected artefact, evidence, non-vacuity
-statement, and control result. `Progress` records step 11, added to `EP-M7` for
-this work.
+Two plan errors are corrected rather than overwritten.
+`Outcomes & retrospective` now says what `tests/check_properties.rs` actually
+discharges — `LEM-COUNT` and `INV-AGREE`, in-process and not over two copies —
+and keeps the `INV-PREDICTS` mistake visible with its lesson: a claim about
+evidence is itself a claim. The obligation carries the corrected artefact,
+evidence, non-vacuity statement, and control result. `Progress` records step
+11, added to `EP-M7` for this work.
 
 Gate run, through the gate runner, over the new test and this plan revision
 (including the Revision 13 text, the status line, and the corrected
 retrospective and obligation, none of which was committed when the last gate
-run was taken): `make check-fmt`,
-`make lint`, `make typecheck`, `make markdownlint` (34 files, 0 errors), and
-`make nixie` all pass, and the new test files compile under
-`--all-targets --all-features` with `-D warnings` contributing no diagnostic.
-`make test` is **red**, and `check_prediction` passed 11/11 inside it before the
-abort — the failure is
+run was taken): `make check-fmt`, `make lint`, `make typecheck`,
+`make markdownlint` (34 files, 0 errors), and `make nixie` all pass, and the
+new test files compile under `--all-targets --all-features` with `-D warnings`
+contributing no diagnostic. `make test` is **red**, and `check_prediction`
+passed 11/11 inside it before the abort — the failure is
 `check_properties::generated_documents_reach_a_fixed_point` on
 `document = "|1|2|\n|---|---|\n---", mask = 128`: the recorded issue #474
-class, and not this change. Because `cargo test` fail-fast aborted there,
-36 integration binaries and the doctests did not execute in that run, so the
-whole suite was run again with `--no-fail-fast` rather than left partly
-unverified: all 43 binaries ran, exactly one failed — the same
-`check_properties` function on the same minimal input, replayed from the
-persisted regression file — and the doctests pass, 40 passed and 20 ignored. No
-`*.proptest-regressions` file was created or modified by either run. Logs:
+class, and not this change. Because `cargo test` fail-fast aborted there, 36
+integration binaries and the doctests did not execute in that run, so the whole
+suite was run again with `--no-fail-fast` rather than left partly unverified:
+all 43 binaries ran, exactly one failed — the same `check_properties` function
+on the same minimal input, replayed from the persisted regression file — and
+the doctests pass, 40 passed and 20 ignored. No `*.proptest-regressions` file
+was created or modified by either run. Logs:
 `/tmp/check-fmt-mdtablefix-check-option.out`,
 `/tmp/lint-mdtablefix-check-option.out`,
 `/tmp/typecheck-mdtablefix-check-option.out`,
@@ -4886,8 +4813,8 @@ fixture that carries the terminator rule: a padded table with no final newline.
 byte-identical, confirmed by `cmp` against a copy. `--in-place` over that same
 file exited 0 and added the terminator, visible under `od -c` as the closing
 `\n`, and a second `--check` printed `1 file left unchanged.` and exited 0. The
-report line names the path as given rather than the file's base name, the counts
-are the rewrite's own delta, and the sequence is the prediction test in
+report line names the path as given rather than the file's base name, the
+counts are the rewrite's own delta, and the sequence is the prediction test in
 miniature. Doing it by hand also exercises the shipped binary rather than the
 test harness, which is the only place `main`'s argument handling, the exit
 status, and the printer meet.
@@ -4899,9 +4826,8 @@ The second run completed: exit 0, `review_completed`, 0 findings, 73 seconds,
 against a `reviewedFiles` set measured as exactly equal to
 `git diff --name-only origin/main...HEAD` — 73 files either way, no file in the
 diff unreviewed and none reviewed that is not in the diff, the two new test
-files among them.
-As with the earlier reviews, that zero means nothing was raised, not that the
-diff was exhaustively audited. Log:
+files among them. As with the earlier reviews, that zero means nothing was
+raised, not that the diff was exhaustively audited. Log:
 `/tmp/coderabbit-mdtablefix-check-option.out`. This revision is documentation
 that was committed after that review, so the reviewed tip predates it; a
 further run over the new head was requested and its outcome is recorded in the
@@ -4918,13 +4844,13 @@ supersession of issue #452, and the design review's four architectural
 corrections. The body is a summary of this plan and cites it for the detail;
 where the two disagree, the plan is the record.
 
-A gate run over this revision cost one fix, and it is the same defect class this
-plan already records twice: a line wrapped so that it begins with `#452` parses
-as an ATX heading missing its space, and `make markdownlint` reports MD018. The
-prose was reflowed to put the issue number mid-line, changing nothing about
-what the revision says. The reminder is that a rewrap is an edit, and a plan
-that mentions issue numbers in running prose will trip this whenever a line
-break lands on the `#`.
+A gate run over this revision cost one fix, and it is the same defect class
+this plan already records twice: a line wrapped so that it begins with `#452`
+parses as an ATX heading missing its space, and `make markdownlint` reports
+MD018. The prose was reflowed to put the issue number mid-line, changing
+nothing about what the revision says. The reminder is that a rewrap is an edit,
+and a plan that mentions issue numbers in running prose will trip this whenever
+a line break lands on the `#`.
 
 Gate run, through the gate runner, over this revision: `make markdownlint` (34
 files, 0 errors) and `make nixie` (all diagrams validated) pass. The first
@@ -4942,18 +4868,19 @@ counterexample in `check_properties`.
 Two threads left open by Revision 15 are closed here, and nothing else changes:
 the review of that revision's own commit, requested after the commit was pushed
 because the previous review's tip predated it, and the `make fmt` measurement,
-which had been taken at an earlier `HEAD`. No requirement, acceptance criterion,
-or code file changes; the diff is `docs/execplans/check-option.md` alone.
+which had been taken at an earlier `HEAD`. No requirement, acceptance
+criterion, or code file changes; the diff is `docs/execplans/check-option.md`
+alone.
 
-`coderabbit review --agent --committed` over `ec936b2` — the commit that carries
-Revision 15 — completed in 55 seconds with exit 0, `review_completed`, 0
-findings, and no rate limit, quota message, or refusal anywhere in the log. Its
-`reviewedFiles` set is again exactly equal to
+`coderabbit review --agent --committed` over `ec936b2` — the commit that
+carries Revision 15 — completed in 55 seconds with exit 0, `review_completed`,
+0 findings, and no rate limit, quota message, or refusal anywhere in the log.
+Its `reviewedFiles` set is again exactly equal to
 `git diff --name-only origin/main...HEAD`, 73 files either way, so the review
 covered the documentation revision and the corpus and prediction test files
 alike. The log records no commit SHA; that is a limitation of the tool rather
-than of the run, and the commit is known by HEAD at launch and by `git log`, not
-from the transcript. Log:
+than of the run, and the commit is known by HEAD at launch and by `git log`,
+not from the transcript. Log:
 `/tmp/coderabbit-rev15-mdtablefix-check-option.out`. Taken with every earlier
 run this plan records, from `EP-M0` onward, no CodeRabbit review of this branch
 has yet raised a finding; that is a consistent result rather than independent
@@ -4969,56 +4896,56 @@ them, so the claim behind declining `make fmt` can be re-run rather than
 trusted.
 
 Gate run, through the gate runner, over this revision: `make markdownlint` (34
-files, 0 errors) passes. `make nixie` and the Rust gates are not re-run, and not
-because they would fail: no diagram, Rust source, test, or configuration file
-changed. Log: `/tmp/markdownlint-mdtablefix-check-option.out`.
+files, 0 errors) passes. `make nixie` and the Rust gates are not re-run, and
+not because they would fail: no diagram, Rust source, test, or configuration
+file changed. Log: `/tmp/markdownlint-mdtablefix-check-option.out`.
 
 ### Revision 17, 2026-09-11
 
 This revision is the rebase onto `origin/main`, and the record of what it took
-to get right. The branch is replayed onto `408c76a`, `Refuse Setext conversion
-of a table delimiter row (#474) (#477)` — the upstream fix for the defect class
-this plan raised as issue #474 and recorded as `EP-M6`'s blocker. That clears
-the precondition `cargo mutants` aborted on, so `EP-M6` is unblocked and is now
-the only outstanding milestone; the milestone itself is **not** run here, and no
-mutant score is claimed. The substance of this branch's own diff is unchanged by
-the rebase: 26 commits replayed, no file conflicted in either attempt, and the
-difference between the rebased tip and the pre-rebase tip `2a73a58` is exactly
-`408c76a`'s own stat — 17 files, 1010 insertions, 551 deletions, the same 17
-paths.
+to get right. The branch is replayed onto `408c76a`,
+`Refuse Setext conversion of a table delimiter row (#474) (#477)` — the
+upstream fix for the defect class this plan raised as issue #474 and recorded as
+`EP-M6`'s blocker. That clears the precondition `cargo mutants` aborted on, so
+`EP-M6` is unblocked and is now the only outstanding milestone; the milestone
+itself is **not** run here, and no mutant score is claimed. The substance of
+this branch's own diff is unchanged by the rebase: 26 commits replayed, no file
+conflicted in either attempt, and the difference between the rebased tip and
+the pre-rebase tip `2a73a58` is exactly `408c76a`'s own stat — 17 files, 1010
+insertions, 551 deletions, the same 17 paths.
 
-**The first attempt rebased cleanly and was still wrong.** `git rebase
-origin/main` exited successfully with no conflict, and the Weave merge driver
-that the global attributes file selects for Markdown silently corrupted three
-documents: `docs/architecture.md`'s footnotes example lost its `Before:`/`After:`
-structure — the `Before:` lines were rewritten to the `[^1]:` form and the
-`After:` label, its blank line, the opening fence, and the `Text.` line under it
-were dropped — and fourteen blank lines appeared across `docs/architecture.md`
-(one), `docs/developers-guide.md` (five), and `docs/users-guide.md` (eight).
-Nothing in the driver's output said so; it reported auto-resolutions at `high`
-and `very_high` confidence, and once at `conflict`.
-The blobs were compared three ways to
-establish it, the result was preserved under `/tmp/weave-corrupt/` before
-anything destructive, and the operation was re-run — after verifying with
+**The first attempt rebased cleanly and was still wrong.**
+`git rebase origin/main` exited successfully with no conflict, and the Weave
+merge driver that the global attributes file selects for Markdown silently
+corrupted three documents: `docs/architecture.md`'s footnotes example lost its
+`Before:`/`After:` structure — the `Before:` lines were rewritten to the
+`[^1]:` form and the `After:` label, its blank line, the opening fence, and the
+`Text.` line under it were dropped — and fourteen blank lines appeared across
+`docs/architecture.md` (one), `docs/developers-guide.md` (five), and
+`docs/users-guide.md` (eight). Nothing in the driver's output said so; it
+reported auto-resolutions at `high` and `very_high` confidence, and once at
+`conflict`. The blobs were compared three ways to establish it, the result was
+preserved under `/tmp/weave-corrupt/` before anything destructive, and the
+operation was re-run — after verifying with
 `git -c core.attributesFile=/dev/null check-attr merge -- <path>` that the
 override really does return the path to Git's built-in machinery — as
-`git -c core.attributesFile=/dev/null rebase origin/main`. The re-run produced no
-conflict markers, restored the footnotes example byte-for-byte (same MD5 as
+`git -c core.attributesFile=/dev/null rebase origin/main`. The re-run produced
+no conflict markers, restored the footnotes example byte-for-byte (same MD5 as
 `origin/main`'s block), and left a tree whose delta against `2a73a58` is
 `main`'s change and nothing else. Measured afterwards: the preserved copies fail
-`markdownlint` with 21 errors under this repository's own configuration, against
-0 for the merged files, so the damage was real and the gates would eventually
-have caught it — after a corrupted rebase had been committed. The full account,
-with the integrity checks over all 17 of `main`'s paths, is in
+`markdownlint` with 21 errors under this repository's own configuration,
+against 0 for the merged files, so the damage was real and the gates would
+eventually have caught it — after a corrupted rebase had been committed. The
+full account, with the integrity checks over all 17 of `main`'s paths, is in
 `Surprises & discoveries` and
 `Artefacts and notes → Second rebase onto origin/main (#477)`.
 
-`EP-M6`'s blocker is recorded as cleared in the milestone section, in its step 0
-precondition, in `Progress`, and in `Outcomes & retrospective`; the status line
-now says the milestone is unblocked and unrun rather than blocked. The condition
-the blocker paragraph refused to satisfy — green by excluding the failing test
-or pinning a passing seed — is untouched, because the fix came from upstream
-instead.
+`EP-M6`'s blocker is recorded as cleared in the milestone section, in its step
+0 precondition, in `Progress`, and in `Outcomes & retrospective`; the status
+line now says the milestone is unblocked and unrun rather than blocked. The
+condition the blocker paragraph refused to satisfy — green by excluding the
+failing test or pinning a passing seed — is untouched, because the fix came
+from upstream instead.
 
 Gate run, through the gate runner, over the rebased tip `bb068f1` with a clean
 tree, all six gates, sequentially: `make check-fmt` passes (7 s), `make lint`
@@ -5055,41 +4982,42 @@ milestone section all say so, and `Artefacts and notes → EP-M6 run` carries th
 command, the transcript, and the per-mutant evidence paths.
 
 The run was the milestone's own command over the two files `EP-M6` names, at
-the rebased tip, from a clean tree, with `-j 3`, `TMPDIR=target/mutants-scratch`
-and `-o target` so that the mutated copies, the scratch builds, and the results
-all stay inside the ignored `target/` directory and `/tmp` holds only logs.
-Measured: the unmutated baseline is green (136 s build + 168 s test) — the
-precondition the previous two revisions could not satisfy — and of **46
-mutants, 38 were caught, 6 were unviable, 2 were missed, none timed out**, in
-14 minutes. The delta survivor (`LineDelta::has_changes` mutated from `>` to
-`<`) is killed by a new `pure_deletion_counts_only_deletions` test and a
-symmetric assertion in `pure_insertion_counts_only_insertions`; re-measured
-with `--iterate`, which re-tests only the two survivors, it moves into
-`caught.txt` (`1 missed, 1 caught`, baseline green with the new tests). The
-driver survivor (`Mode::Diff if is_changed` mutated to `if true`) is accepted as
-an equivalent mutation, and its premise is pinned by the new
-`equal_texts_render_nothing` test rather than left as an argument, so a future
-renderer that emits an unconditional header fails a test instead of silently
-changing what that guard costs. **Final state: 39 of the 40 viable mutants
-killed, the fortieth recorded as equivalent.**
+the rebased tip, from a clean tree, with `-j 3`,
+`TMPDIR=target/mutants-scratch` and `-o target` so that the mutated copies, the
+scratch builds, and the results all stay inside the ignored `target/` directory
+and `/tmp` holds only logs. Measured: the unmutated baseline is green (136 s
+build + 168 s test) — the precondition the previous two revisions could not
+satisfy — and of **46 mutants, 38 were caught, 6 were unviable, 2 were missed,
+none timed out**, in 14 minutes. The delta survivor (`LineDelta::has_changes`
+mutated from `>` to `<`) is killed by a new
+`pure_deletion_counts_only_deletions` test and a symmetric assertion in
+`pure_insertion_counts_only_insertions`; re-measured with `--iterate`, which
+re-tests only the two survivors, it moves into `caught.txt`
+(`1 missed, 1 caught`, baseline green with the new tests). The driver survivor
+(`Mode::Diff if is_changed` mutated to `if true`) is accepted as an equivalent
+mutation, and its premise is pinned by the new `equal_texts_render_nothing`
+test rather than left as an argument, so a future renderer that emits an
+unconditional header fails a test instead of silently changing what that guard
+costs. **Final state: 39 of the 40 viable mutants killed, the fortieth recorded
+as equivalent.**
 
-The mutant count is 46, not the 43 the blocked run enumerated, and that is three
-mutants arriving rather than a number being corrected: `4a599ed` ("Keep the
-reporting shape open to a second input source") added `Inputs::resolve` and the
-`Mode::InPlace if is_changed` guard, and `git merge-base --is-ancestor` confirms
-that commit is not an ancestor of the tree the 43 were counted on. The earlier
-enumeration is kept in place with a note, and the PR body's figure is corrected
-to the measured one. The six unviable mutants are default-value substitutions
-for types with no `Default` impl (`ExitStatus`, `Inputs`, `Assessment`,
-`FileReport`) or an unconstrained generic (`in_argument_order<T>`): they do not
-compile, so they are excluded from the denominator rather than counted as
-kills, which is why it is 40 and not 46.
+The mutant count is 46, not the 43 the blocked run enumerated, and that is
+three mutants arriving rather than a number being corrected: `4a599ed` ("Keep
+the reporting shape open to a second input source") added `Inputs::resolve` and
+the `Mode::InPlace if is_changed` guard, and `git merge-base --is-ancestor`
+confirms that commit is not an ancestor of the tree the 43 were counted on. The
+earlier enumeration is kept in place with a note, and the PR body's figure is
+corrected to the measured one. The six unviable mutants are default-value
+substitutions for types with no `Default` impl (`ExitStatus`, `Inputs`,
+`Assessment`, `FileReport`) or an unconstrained generic
+(`in_argument_order<T>`): they do not compile, so they are excluded from the
+denominator rather than counted as kills, which is why it is 40 and not 46.
 
 The code change is two files, `src/report/delta.rs` and `src/report/render.rs`,
 `+29 -1`: one assertion added to each of the two one-sided delta tests, which
-pre-existed and already computed the deltas they now also assert on, and one new
-test in `src/report/render.rs` whose doc comment states why the guard it pins
-exists. Nothing in `src/driver.rs` changes — the accepted survivor is a
+pre-existed and already computed the deltas they now also assert on, and one
+new test in `src/report/render.rs` whose doc comment states why the guard it
+pins exists. Nothing in `src/driver.rs` changes — the accepted survivor is a
 statement about the renderer's output, so the pin belongs at the renderer's
 boundary.
 
@@ -5098,13 +5026,13 @@ Gate run, through the gate runner, over this tip: `make check-fmt` passes (6 s),
 `make typecheck` passes (1 s), `make test` passes (81 s: 45 test binaries plus
 the doc-test target, 1861 passed, 0 failed, 20 ignored, the ignored being
 doc-tests), `make markdownlint` passes (34 files, 0 errors), and `make nixie`
-passes. The test count is Revision 17's 1860 plus the one new test, which is the
-only test either change adds — the delta change adds two assertions to existing
-tests. The first lint pass failed on a `doc_markdown` finding this revision
-introduced, `ExecPlan` unbackticked in the new test's doc comment
+passes. The test count is Revision 17's 1860 plus the one new test, which is
+the only test either change adds — the delta change adds two assertions to
+existing tests. The first lint pass failed on a `doc_markdown` finding this
+revision introduced, `ExecPlan` unbackticked in the new test's doc comment
 (`src/report/render.rs:292`), which was fixed and re-gated rather than argued
-away; `make test` is unchanged by that fix, a doc comment being invisible to the
-harness. Logs: `/tmp/check-fmt-epm6-mdtablefix-check-option.out`,
+away; `make test` is unchanged by that fix, a doc comment being invisible to
+the harness. Logs: `/tmp/check-fmt-epm6-mdtablefix-check-option.out`,
 `/tmp/lint-epm6-2-mdtablefix-check-option.out`,
 `/tmp/typecheck-epm6-mdtablefix-check-option.out`,
 `/tmp/test-epm6-mdtablefix-check-option.out`,
@@ -5122,33 +5050,33 @@ The first is a unit test that reaches the file-rewriting boundary with nothing
 in the way of it. `src/io_tests.rs` now calls `rewrite_with` directly with an
 identity transform over three cases — CRLF endings, a leading byte-order mark,
 and a body with no final newline — writing the fixture to a temporary file and
-comparing the bytes read back. `rewrite_with` becomes `pub(super)` for it, which
-is the visibility the test actually needs rather than a convenience: the item is
-private to `io::replace` and the test module is `io::tests`, a sibling, so a
-private item is not nameable from there at all. `register_metrics` is
+comparing the bytes read back. `rewrite_with` becomes `pub(super)` for it,
+which is the visibility the test actually needs rather than a convenience: the
+item is private to `io::replace` and the test module is `io::tests`, a sibling,
+so a private item is not nameable from there at all. `register_metrics` is
 `pub(super)` for exactly that reason and is reached through the same
 `#[cfg(test)] use replace::{…}` line. This is the only test that can separate
 the bytes the boundary restores from the bytes a transform produces, because
 both public entry points always transform content.
 
-Two of the three cases assert byte-identity and the third deliberately does not.
-A non-empty document whose last line is unterminated gains a terminator on the
-way out, which ADR 0007 states as "unterminated non-empty file gains one
+Two of the three cases assert byte-identity and the third deliberately does
+not. A non-empty document whose last line is unterminated gains a terminator on
+the way out, which ADR 0007 states as "unterminated non-empty file gains one
 terminator" and the users' guide states as "is unterminated gains a terminator
 and is reported as drift, as `+1 -1`". Asserting byte-identity for that case
 would pin the opposite of the crate's contract, so the case table carries its
 expected bytes explicitly and the test's doc comment says why; the test passes
 with the terminator restored rather than absent.
 
-The second is `tests/document_properties.rs`'s `rewrite_in_place`, which reached
-its fixture through ambient `std::fs` on both sides of the command it runs. It
-now opens a `cap_std::fs_utf8::Dir` over the temporary directory — a camino
-path, `Dir::open_ambient_dir`, the shape `tests/cli.rs`'s
+The second is `tests/document_properties.rs`'s `rewrite_in_place`, which
+reached its fixture through ambient `std::fs` on both sides of the command it
+runs. It now opens a `cap_std::fs_utf8::Dir` over the temporary directory — a
+camino path, `Dir::open_ambient_dir`, the shape `tests/cli.rs`'s
 `capability_directory` uses, on which the local helper is modelled — writes
-`fixture.dat` and reads it back through that capability, and keeps the host path
-for the one thing that cannot inherit a capability: the argument handed to the
-subprocess. `std::fs` is gone from the file, and the twelve document-boundary
-cases pass unchanged.
+`fixture.dat` and reads it back through that capability, and keeps the host
+path for the one thing that cannot inherit a capability: the argument handed to
+the subprocess. `std::fs` is gone from the file, and the twelve
+document-boundary cases pass unchanged.
 
 The third finding is the formatting one at `#[case::mixed_in_fence(...)]`, and
 it is skipped rather than fixed, because the attribute is already what this
@@ -5157,19 +5085,18 @@ is what the finding noticed, but running rustfmt over a copy of the file with
 this repository's own `.rustfmt.toml` exits 0 and reports no diff, so the
 formatter has nothing to change in that file and a hand-reflow would be a
 departure from rustfmt rather than a fix. The check was proved non-vacuous by
-appending a
-deliberately misformatted function to the same scratch copy, where rustfmt
-reported that diff and exited 1. `make fmt` itself was not run, unchanged from
-Revisions 15 to 17 and for the same reason: it cannot be scoped to a diff, and
-ten Markdown files in the tree drift under it.
+appending a deliberately misformatted function to the same scratch copy, where
+rustfmt reported that diff and exited 1. `make fmt` itself was not run,
+unchanged from Revisions 15 to 17 and for the same reason: it cannot be scoped
+to a diff, and ten Markdown files in the tree drift under it.
 
-Gate run, through the gate runner, over this round: `make check-fmt` passes
-(2 s), `make lint` passes (4 s, clippy `--all-targets --all-features` `-D
-warnings`), `make typecheck` passes (1 s), and `make test` passes (70 s, 1864
-passed, 0 failed, 20 ignored, the ignored being doc-tests). The total is
+Gate run, through the gate runner, over this round: `make check-fmt` passes (2
+s), `make lint` passes (4 s, clippy `--all-targets --all-features`
+`-D warnings`), `make typecheck` passes (1 s), and `make test` passes (70 s,
+1864 passed, 0 failed, 20 ignored, the ignored being doc-tests). The total is
 Revision 18's 1861 plus the three new cases, and the log shows each of them
-running and passing by name rather than only the total moving. No test was flaky
-in this run. Logs: `/tmp/check-fmt-epm7-mdtablefix-check-option.out`,
+running and passing by name rather than only the total moving. No test was
+flaky in this run. Logs: `/tmp/check-fmt-epm7-mdtablefix-check-option.out`,
 `/tmp/lint-epm7-mdtablefix-check-option.out`,
 `/tmp/typecheck-epm7-mdtablefix-check-option.out`,
 `/tmp/test-epm7-mdtablefix-check-option.out`.
@@ -5178,11 +5105,11 @@ in this run. Logs: `/tmp/check-fmt-epm7-mdtablefix-check-option.out`,
 
 This revision is driven by continuous integration rather than by review, and it
 changes no milestone, obligation, or acceptance criterion. The Windows job of
-this branch's own CI run failed on `44c718e`: `atomic write contract (windows)`,
-run `34654449073`, job `103443680234`, with exit 101 and two failing targets,
-`--test cli_check` and `--test cli_diff`. Both failures are the same test,
-`a_closed_pipe_is_a_successful_early_exit`, and both are the same panic at the
-`spawn` expectation:
+this branch's own CI run failed on `44c718e`:
+`atomic write contract (windows)`, run `34654449073`, job `103443680234`, with
+exit 101 and two failing targets, `--test cli_check` and `--test cli_diff`.
+Both failures are the same test, `a_closed_pipe_is_a_successful_early_exit`,
+and both are the same panic at the `spawn` expectation:
 
 ```plaintext
 spawn mdtablefix: Os { code: 206, kind: InvalidFilename,
@@ -5202,29 +5129,32 @@ of 180 padding on Unix, unchanged, and 250 files of 80 padding elsewhere. The
 arithmetic that couples the two numbers is worth stating, because it is what
 makes the Unix pair a *measurement* rather than a guess. A `--check` report is
 one line per file, and that line is the path the argument named, so the
-arguments *are* the output — the report is the name plus the `+N -M` delta. Unix
-holds 64 KiB in a pipe, so the run must write past that, and 500 × (187 + 8) is
-about 97 KiB: the child is blocked in `write` when the read end closes, which is
-what makes the early exit deterministic rather than a race. The Windows command
-line caps the same figure near 32 KiB, so a deterministic block cannot be
-guaranteed there at all, and the pipe is in any case created with a size hint of
-zero — the system default rather than the Unix 64 KiB. The exit-status assertion
-is split accordingly: `cfg(unix)` keeps the strict `Some(0)`, and elsewhere the
-test asserts that the run ends in a documented status, `0` or `1`, and never in
-a panic or a crash. Both platforms keep the assertion that no `panicked` reached
-stderr, which is the defect the test exists to catch.
+arguments *are* the output — the report is the name plus the `+N -M` delta.
+Unix holds 64 KiB in a pipe, so the run must write past that, and 500 × (187 +
+8) is about 97 KiB: the child is blocked in `write` when the read end closes,
+which is what makes the early exit deterministic rather than a race. The
+Windows command line caps the same figure near 32 KiB, so a deterministic block
+cannot be guaranteed there at all, and the pipe is in any case created with a
+size hint of zero — the system default rather than the Unix 64 KiB. The
+exit-status assertion is split accordingly: `cfg(unix)` keeps the strict
+`Some(0)`, and elsewhere the test asserts that the run ends in a documented
+status, `0` or `1`, and never in a panic or a crash. Both platforms keep the
+assertion that no `panicked` reached stderr, which is the defect the test
+exists to catch.
 
 The Windows arm could not be measured here: this estate has no Windows host, so
-the assertion compiles only under `cfg(not(unix))` and its first real reading is
-the next CI run on the pushed commit. What *is* measured is that the shape the
-fix produces is still the shape Unix needs: through the gate runner, `make
-check-fmt` passes (2 s), `make lint` passes (1 s, clippy `--all-targets
---all-features -D warnings`), `make typecheck` passes (under 1 s), and `make
-test` passes (50 s, 1864 passed, 0 failed, 20 ignored, the ignored being
-doc-tests), with `cli_check::a_closed_pipe_is_a_successful_early_exit` and
+the assertion compiles only under `cfg(not(unix))` and its first real reading
+is the next CI run on the pushed commit. What *is* measured is that the shape
+the fix produces is still the shape Unix needs: through the gate runner,
+`make check-fmt` passes (2 s), `make lint` passes (1 s, clippy
+`--all-targets --all-features -D warnings`), `make typecheck` passes (under 1
+s), and `make test` passes (50 s, 1864 passed, 0 failed, 20 ignored, the
+ignored being doc-tests), with
+`cli_check::a_closed_pipe_is_a_successful_early_exit` and
 `cli_diff::a_closed_pipe_is_a_successful_early_exit` both `ok` by name in the
 log. Nothing under `src/` changed, so no obligation's evidence and no milestone
-outcome is affected. Logs: `/tmp/check-fmt-ci-pipefix-mdtablefix-check-option.out`,
+outcome is affected. Logs:
+`/tmp/check-fmt-ci-pipefix-mdtablefix-check-option.out`,
 `/tmp/lint-ci-pipefix-mdtablefix-check-option.out`,
 `/tmp/typecheck-ci-pipefix-mdtablefix-check-option.out`,
 `/tmp/test-ci-pipefix-mdtablefix-check-option.out`.
@@ -5234,13 +5164,13 @@ outcome is affected. Logs: `/tmp/check-fmt-ci-pipefix-mdtablefix-check-option.ou
 Revision 20 left one claim open on purpose: the Windows arm of the split
 assertion had no local reading, because this estate has no Windows host, so the
 CI run on the pushed commit would be its first measurement. That run has now
-happened, on `4cfb2d6`, run `34655247077`, and it is green: `atomic write
-contract (windows)` passes in 6m22s, and every other job — `build-test` and the
-four `binstall packaging` targets — passes with it. The two failures that
-motivated Revision 20, `--test cli_check` and `--test cli_diff` exiting 101 at
-the spawn, are gone, which is the reading the fixture-sizing fix needed and
-could not get locally. Nothing was changed to obtain it; this entry records the
-measurement, not a further edit.
+happened, on `4cfb2d6`, run `34655247077`, and it is green:
+`atomic write contract (windows)` passes in 6m22s, and every other job —
+`build-test` and the four `binstall packaging` targets — passes with it. The
+two failures that motivated Revision 20, `--test cli_check` and
+`--test cli_diff` exiting 101 at the spawn, are gone, which is the reading the
+fixture-sizing fix needed and could not get locally. Nothing was changed to
+obtain it; this entry records the measurement, not a further edit.
 
 ### Revision 22, 2026-09-12
 
@@ -5259,13 +5189,13 @@ move lines — a split with no such justification would be the "module boundary
 that exists only to move lines" the superseded decision below rejected, and
 that rejection still stands as reasoning.
 
-| Before | After | Lines |
-| --- | --- | --- |
-| `src/driver_tests.rs` 485 | `src/driver_contract_tests.rs`, `src/driver_report_tests.rs`, `src/driver_in_place_tests.rs` | 107, 214, 115 |
-| the same file's fixtures | `src/driver_test_support.rs` | 83 |
-| `tests/cli_check.rs` 542 | root harness plus `tests/cli_check/{arguments,closed_pipe,exit_status,no_write,ordering}.rs` | 104 + 50, 96, 163, 62, 123 |
-| `tests/in_place_atomic.rs` 408 | root plus `tests/in_place_atomic/failure.rs` | 270 + 155 |
-| `tests/cli_matrix/support.rs` 557 | harness plus `cases.rs` (catalogue) and `support_tests.rs` (unit tests) | 380 + 125 + 84 |
+| Before                            | After                                                                                        | Lines                      |
+| --------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------- |
+| `src/driver_tests.rs` 485         | `src/driver_contract_tests.rs`, `src/driver_report_tests.rs`, `src/driver_in_place_tests.rs` | 107, 214, 115              |
+| the same file's fixtures          | `src/driver_test_support.rs`                                                                 | 83                         |
+| `tests/cli_check.rs` 542          | root harness plus `tests/cli_check/{arguments,closed_pipe,exit_status,no_write,ordering}.rs` | 104 + 50, 96, 163, 62, 123 |
+| `tests/in_place_atomic.rs` 408    | root plus `tests/in_place_atomic/failure.rs`                                                 | 270 + 155                  |
+| `tests/cli_matrix/support.rs` 557 | harness plus `cases.rs` (catalogue) and `support_tests.rs` (unit tests)                      | 380 + 125 + 84             |
 
 Three consequences are worth recording, because none is visible from the diff
 alone.
@@ -5295,10 +5225,10 @@ The round also cost a detour worth recording. Rebuilding
 `tests/cli_matrix/support.rs` after a compile probe, a `git checkout --` on the
 file — intended to drop the probe — restored the *tracked* version and
 discarded the split with it. The recovery was mechanical because the other two
-files of the split (`cases.rs`, `support_tests.rs`) were untracked and survived,
-and because the original is in Git; but the probe was unnecessary, and the
-compile check that preceded it had already read the file it was meant to prove
-(it failed on the probe, which is the proof).
+files of the split (`cases.rs`, `support_tests.rs`) were untracked and
+survived, and because the original is in Git; but the probe was unnecessary,
+and the compile check that preceded it had already read the file it was meant
+to prove (it failed on the probe, which is the proof).
 
 ### Revision 23, 2026-09-12
 
@@ -5344,9 +5274,9 @@ boundaries). The three that were genuinely outstanding are discharged by:
   rendering as a method so one document's style cannot be applied to another's
   lines. Both sections carry a Rust example.
 - `Developer Documentation` — `996d701` states the build and test
-  requirements: `make test` is two invocations, the second not redundant
-  because `--doc` is the only way to run doc examples, and both deny warnings
-  so a warning in a test target or doctest fails the gate. It also records
+  requirements: `make test` is two invocations, the second not redundant because
+  `--doc` is the only way to run doc examples, and both deny warnings so a
+  warning in a test target or doctest fails the gate. It also records
   `similar`'s part — the line tokenizer behind the delta counts and the
   unified-diff engine — and that the requirement is the 2.x line, with both
   call sites to re-check before a 3.x widening.
@@ -5360,18 +5290,19 @@ boundaries). The three that were genuinely outstanding are discharged by:
   attribute's arguments (`path`, `index`, `name`, `tags`) offer no inline-text
   escape. The validation such a fixture would pin is already a hard compile
   error, which was measured rather than asserted: adding an undefined step to
-  `tests/features/check_mode.feature` fails the build with `error: No matching
-  step definition found for 'Then a step no one has defined'`, listing the
-  definitions that do exist and pointing at the binding that names the
-  scenario.
+  `tests/features/check_mode.feature` fails the build with
+  `error: No matching
+  step definition found for 'Then a step no one has defined'`,
+  listing the definitions that do exist and pointing at the binding that names
+  the scenario.
 
 That measurement turned up the round's only code change, and it is a defect
-worth the space. `#[scenario]` reads the feature file itself rather than
-through `include_str!`, so Cargo fingerprinted the test target by its bindings
-alone: editing a feature file on its own left the previously expanded binary in
-place, and the probe compiled cleanly until the bindings were touched by hand.
-Strict validation could therefore be missed in an incremental build while a
-clean build in CI still caught it. `96e4596` adds a `const _` array that
+worth the space. `#[scenario]` reads the feature file itself rather than through
+`include_str!`, so Cargo fingerprinted the test target by its bindings alone:
+editing a feature file on its own left the previously expanded binary in place,
+and the probe compiled cleanly until the bindings were touched by hand. Strict
+validation could therefore be missed in an incremental build while a clean
+build in CI still caught it. `96e4596` adds a `const _` array that
 `include_str!`s both specifications, which restores the missing dependency:
 after it, the same probe fails with no file other than the feature file
 touched, and all fourteen scenarios pass with the feature files restored.
@@ -5409,28 +5340,29 @@ every Mermaid diagram validated. That is the record the queued review will be
 judged against.
 
 **A second gate failure, taken as a finding.** `make markdownlint` was red over
-the same tree — 5 errors across 34 files — and both causes were this round's own
-documentation work rather than anything pre-existing. The build-and-test table
-`996d701` added had one row wider than its separator, so its pipes did not align
-with the header (MD060, two errors), and the rebase's conflict resolution in the
-migration guide left a second blank line before three headings (MD012, three
-errors): removing the weave markers also removed the hint line that had
-separated them, and the blank line above it stayed. Main has a single blank in
-all three places, so this was repair of our own conflict resolution, not drift
-inherited from main. `3eb244e` widens the column to its longest cell and
-collapses the three blank-line pairs, with no wording changed; `make
-markdownlint` then reports 34 files, 0 errors, and that is the state the gate
-evidence above is measured against.
+the same tree — 5 errors across 34 files — and both causes were this round's
+own documentation work rather than anything pre-existing. The build-and-test
+table `996d701` added had one row wider than its separator, so its pipes did
+not align with the header (MD060, two errors), and the rebase's conflict
+resolution in the migration guide left a second blank line before three
+headings (MD012, three errors): removing the weave markers also removed the
+hint line that had separated them, and the blank line above it stayed. Main has
+a single blank in all three places, so this was repair of our own conflict
+resolution, not drift inherited from main. `3eb244e` widens the column to its
+longest cell and collapses the three blank-line pairs, with no wording changed;
+`make markdownlint` then reports 34 files, 0 errors, and that is the state the
+gate evidence above is measured against.
 
 **The reconciliation, posted.** The row-by-row answer went to #464 as an issue
 comment
 ([#issuecomment-5642414743](https://github.com/leynos/mdtablefix/pull/464#issuecomment-5642414743)),
 because the pre-merge table lives on the walkthrough issue comment rather than
-on a review, so a reply on a thread would not reach it. It names the three stale
-rows and the commits that discharged them, the two documentation rows and their
-commits, and the `Testing (Compile-Time / Ui)` rebuttal with the manifest-dir
-evidence, the measured compile error, and the fingerprinting defect that
-measurement found. The `Ignore` checkbox was deliberately left unticked.
+on a review, so a reply on a thread would not reach it. It names the three
+stale rows and the commits that discharged them, the two documentation rows and
+their commits, and the `Testing (Compile-Time / Ui)` rebuttal with the
+manifest-dir evidence, the measured compile error, and the fingerprinting
+defect that measurement found. The `Ignore` checkbox was deliberately left
+unticked.
 
 **Push.** The rebase rewrote the branch's history, so the push needed
 `--force-with-lease`: `52ea246...3eb244e` forced update, and the remote now
@@ -5438,11 +5370,12 @@ matches the local head, which stands 44 commits ahead of `origin/main`. Two
 further commits followed — the markdownlint fix and this record — and both went
 up on the normal path.
 
-**The pull request description** was brought level with the tree before the next
-review was queued, because a review reads it: the rebase bullet now names the
-base the branch actually sits on, and the test tally in `Gates` is the measured
-`1884 passed, 0 failed, 20 ignored across 46 test binaries` plus the separate
-`--doc` run. A `Pre-merge checks` section records the reconciliation above.
+**The pull request description** was brought level with the tree before the
+next review was queued, because a review reads it: the rebase bullet now names
+the base the branch actually sits on, and the test tally in `Gates` is the
+measured `1884 passed, 0 failed, 20 ignored across 46 test binaries` plus the
+separate `--doc` run. A `Pre-merge checks` section records the reconciliation
+above.
 
 **Next review.** One is queued against the current head — `590209f4`, posting
 in about 22 minutes — because a new review is the only thing that refreshes the
@@ -5480,10 +5413,11 @@ used, which is the shape that made the old code look right.
 `#[cfg(unix)]` because it observes the write through the inode. The import was
 not, so on Windows it was an unused import under `-D warnings`. The finding's
 line numbers were verified against `db64399` before the fix (import at line 18,
-use at line 89, `#[cfg(unix)]` at line 77) rather than taken on trust. The group
-could not be gated whole: the other five names stay live on Windows through the
-ungated `in_place_writes_the_formatted_text`. There is no Windows host here, so
-the `atomic write contract (windows)` job is this fix's first reading.
+use at line 89, `#[cfg(unix)]` at line 77) rather than taken on trust. The
+group could not be gated whole: the other five names stay live on Windows
+through the ungated `in_place_writes_the_formatted_text`. There is no Windows
+host here, so the `atomic write contract (windows)` job is this fix's first
+reading.
 
 **Four more, all small.** The fixture builder wrote its file with `std::fs`
 beside the capability and so gave the test a different view of the file from
@@ -5499,8 +5433,8 @@ carries no `io::Error` for the chain walk to find in any case — the only
 refusal. ADR 0009 said `--check` exits `2` when a file could not be "read or
 rewritten", and `--check` never rewrites.
 
-**Spelling, and one deliberate divergence.** `Normalise` becomes `Normalize`
-in the three descriptions of the one `--fences` flag — the clap help text, the
+**Spelling, and one deliberate divergence.** `Normalise` becomes `Normalize` in
+the three descriptions of the one `--fences` flag — the clap help text, the
 users' guide row, and the `Options` doc — because `src/fences.rs` already used
 `-ize` and the policy requires it. The `normalise_event_lines` identifier and
 its many call sites are pre-existing and untouched, so the change stays
@@ -5517,12 +5451,12 @@ silently.
 towards `errored` and is then reported by `render_summary` as "could not be
 read". The count is mode-independent, but the rendering is not:
 `src/main.rs:227` calls `render_summary` under `if mode.reports()`, and
-`Mode::reports` is
-`matches!(self, Self::Check | Self::Diff)`, so no summary is printed for
-`--in-place` or for a bare invocation. In the two modes that do print it, the
-read is the only step that can fail, because `analyse`'s `write_back` call sits
-on the `Mode::InPlace` arm alone. The suggested wording would therefore make the
-summary less precise for every mode that can display it.
+`Mode::reports` is `matches!(self, Self::Check | Self::Diff)`, so no summary is
+printed for `--in-place` or for a bare invocation. In the two modes that do
+print it, the read is the only step that can fail, because `analyse`'s
+`write_back` call sits on the `Mode::InPlace` arm alone. The suggested wording
+would therefore make the summary less precise for every mode that can display
+it.
 
 **The tautological test.** `non_wrap_signature_ignores_wrap_variant` asserted
 `f(x) == f(x)` over two local booleans that neither operand used, so it could
@@ -5541,13 +5475,13 @@ ADR wording, which the reply answers, and `src/main.rs:228`, which is the
 rebuttal — and a GraphQL sweep afterwards found all 26 threads on the pull
 request resolved, with none left unanswered.
 
-**Gates.** The full set was run through `scrutineer` over `6238940` with a clean
-worktree: `check-fmt` 2s, `lint` 4s, `typecheck` 0s, `test` 60s — 46 binaries,
-`1885 passed, 0 failed, 20 ignored`, one more than the previous run, which is
-the new tracing test — `markdownlint` 34 files and 0 errors, and `nixie` with
-every diagram validated. The one advisory is non-fatal: `nixie` logs
-`--> line 89: <unknown>` for `docs/architecture.md`, which was already the case
-before this round.
+**Gates.** The full set was run through `scrutineer` over `6238940` with a
+clean worktree: `check-fmt` 2s, `lint` 4s, `typecheck` 0s, `test` 60s — 46
+binaries, `1885 passed, 0 failed, 20 ignored`, one more than the previous run,
+which is the new tracing test — `markdownlint` 34 files and 0 errors, and
+`nixie` with every diagram validated. The one advisory is non-fatal: `nixie`
+logs `--> line 89: <unknown>` for `docs/architecture.md`, which was already the
+case before this round.
 
 ### Revision 25, 2026-09-12 — the pre-merge checks at `6238940`
 
@@ -5564,16 +5498,17 @@ two of these rows had already been answered once in an earlier round.
 **Five rows, three actioned.** Each was fixed in `be41510`, a commit whose only
 subject is the reconciliation.
 
-*Developer Documentation* (⚠️ Warning) held. `docs/developers-guide.md` headed a
-list "`src/main.rs` file-output functions:" while `format_lines` and
-`formatting_closure` had moved to `src/command.rs:131` and `src/command.rs:140`,
-a later bullet still placed `formatting_closure` in `src/main.rs`, and the guide
-documented the library's `mdtablefix_io_*` instruments but none of the binary's
-`mdtablefix_file_*` and `mdtablefix_run_*`. The headings now say what
-`src/command.rs` owns and what stays in `src/main.rs`, the line-ending bullet
-says the report names the display path, and a `#### Binary metrics` subsection
-documents the four instruments, their bounded label sets and error categories,
-and the analysis span.
+*Developer Documentation* (⚠️ Warning) held. `docs/developers-guide.md` headed
+a list "`src/main.rs` file-output functions:" while `format_lines` and
+`formatting_closure` had moved to `src/command.rs:131` and
+`src/command.rs:140`, a later bullet still placed `formatting_closure` in
+`src/main.rs`, and the guide documented the library's `mdtablefix_io_*`
+instruments but none of the binary's `mdtablefix_file_*` and
+`mdtablefix_run_*`. The headings now say what `src/command.rs` owns and what
+stays in `src/main.rs`, the line-ending bullet says the report names the
+display path, and a `#### Binary metrics` subsection documents the four
+instruments, their bounded label sets and error categories, and the analysis
+span.
 
 *Testing (Overall)* (❌ Error) held. The induced `--in-place` write failure was
 asserted as "any non-zero": `tests/in_place_atomic.rs` used `.failure()`, and
@@ -5587,12 +5522,12 @@ exits `2` rather than `1`, while the drifted file is still rewritten. The
 byte-preservation and no-temporary-file assertions are kept.
 
 *Observability* (⚠️ Warning) held, and it was the round's one real gap.
-`AGENTS.md` asks for spans around work at the boundaries and the developer guide
-states that a target `path` appears only as a tracing span field;
+`AGENTS.md` asks for spans around work at the boundaries and the developer
+guide states that a target `path` appears only as a tracing span field;
 `src/io/replace.rs:163` had such a span and the binary's per-file analysis had
-none. `record_analysis` now opens a `debug` span carrying `mode` and the
-display `path` on entry, and records `outcome` and `elapsed_seconds` once the
-analysis has run, under the same names and values the counters use.
+none. `record_analysis` now opens a `debug` span carrying `mode` and the display
+`path` on entry, and records `outcome` and `elapsed_seconds` once the analysis
+has run, under the same names and values the counters use.
 
 **The span's missing half, and the statuses the row called unguarded.** Two
 follow-ups landed in `7455e9b`, both from re-reading a row's own words against
@@ -5600,10 +5535,10 @@ the tree rather than from a new finding.
 
 The Observability row also asks for "a bounded error category and completion
 outcome" — and the bounded category existed only on
-`mdtablefix_file_error_total`, so a host filtering a trace could see that a file
-failed but not under which of the four names. `record_analysis` now emits
-`analysis failed` at debug level inside the span, carrying `error_category` from
-the same `category` function the counter labels with — derived from the
+`mdtablefix_file_error_total`, so a host filtering a trace could see that a
+file failed but not under which of the four names. `record_analysis` now emits
+`analysis failed` at debug level inside the span, carrying `error_category`
+from the same `category` function the counter labels with — derived from the
 `io::ErrorKind` in the error's chain, never from its message — so a span filter
 and a metric filter select the same failures by the same name. A successful
 analysis emits nothing, which is what lets a host filter on the event at all.
@@ -5624,37 +5559,37 @@ trace, and the documentation name the same failures.
 
 *Unit Architecture* (❌ Error) asks for "a fallible read-only assessment
 operation that reads through `ReadOnlyDir`, formats the document, and returns an
-`Assessment` without logging, metrics, rendering, or writes". That operation
-is `driver::assess(&ReadOnlyDir, storage_key, format) ->
-anyhow::Result<Assessment>` at `src/driver.rs:218`, which is exactly those
-things: it returns the counts on
-the assessment, emits nothing, and cannot write because `ReadOnlyDir` has no
+`Assessment` without logging, metrics, rendering, or writes". That operation is
+`driver::assess(&ReadOnlyDir, storage_key, format) ->
+anyhow::Result<Assessment>`
+at `src/driver.rs:218`, which is exactly those things: it returns the counts
+on the assessment, emits nothing, and cannot write because `ReadOnlyDir` has no
 write method. `analyse` is the rendering half layered on top of it. Moving
 rendering out of `analyse` would contradict the property the design documents —
-retained memory is proportional to the rendered payload rather than to twice the
-whole input — so the reply points at the seam and asks for a concrete
+retained memory is proportional to the rendered payload rather than to twice
+the whole input — so the reply points at the seam and asks for a concrete
 counter-proposal rather than performing a refactor the design argues against.
 
-*Testing (Compile-Time / Ui)* (⚠️ Warning) is the row the previous round already
-answered, and the answer has not changed: a trybuild fixture cannot compile a
-`#[scenario]` binding, for two structural reasons. The macro resolves the
-feature path against `CARGO_MANIFEST_DIR`, while trybuild compiles fixtures in a
-synthetic project under `target/tests/trybuild/` that contains no feature file
-anywhere beneath it; and `#[scenario]` accepts only `path`, `index`, `name`, and
-`tags`, so the feature text cannot be inlined in the fixture either. The
-validation such a fixture would pin is already a compile-time gate, and that was
-measured rather than argued: adding an undefined step makes the build fail,
-which is how the missing feature-file fingerprint dependency was found and
-fixed.
+*Testing (Compile-Time / Ui)* (⚠️ Warning) is the row the previous round
+already answered, and the answer has not changed: a trybuild fixture cannot
+compile a `#[scenario]` binding, for two structural reasons. The macro resolves
+the feature path against `CARGO_MANIFEST_DIR`, while trybuild compiles fixtures
+in a synthetic project under `target/tests/trybuild/` that contains no feature
+file anywhere beneath it; and `#[scenario]` accepts only `path`, `index`,
+`name`, and `tags`, so the feature text cannot be inlined in the fixture
+either. The validation such a fixture would pin is already a compile-time gate,
+and that was measured rather than argued: adding an undefined step makes the
+build fail, which is how the missing feature-file fingerprint dependency was
+found and fixed.
 
 **Gates.** Six gates green at `7455e9b`, run through `scrutineer` with a clean
 worktree: `check-fmt` 2s, `lint` 1s, `typecheck` 1s, `test` 50s — 46 result
 lines, `1888 passed, 0 failed, 20 ignored`, with `tests/in_place_atomic.rs` 11
 of 11 and `tests/parallel.rs` 4 of 4 — `markdownlint` 34 files and 0 errors, and
-`nixie` with every diagram validated. The tally moves from 1886 to 1888 because
-this round adds the two tracing tests for the failure event; a run over the same
-tree before the three assertion tightenings was green at the same tally, since
-tightening an assertion adds no test.
+`nixie` with every diagram validated. The tally moves from 1886 to 1888
+because this round adds the two tracing tests for the failure event; a run over
+the same tree before the three assertion tightenings was green at the same
+tally, since tightening an assertion adds no test.
 
 **The reconciliation, and the push.** The row-by-row answer is posted as an
 issue comment on the pull request (`5642773695`), tagging `@coderabbitai`, with
@@ -5662,16 +5597,16 @@ the `Ignore` checkbox deliberately unticked. `7455e9b` is pushed to
 `origin/check-option`, which stands 50 commits ahead of `origin/main`. A thread
 sweep before that found 26 threads and none unresolved; seven carry no reply of
 mine, of which six are outdated and one — `tests/cli_matrix/invariants.rs:79`,
-asking for `rstest` cases over `contains_table_delimiter` — was self-resolved by
-the bot's "addressed in commits" annotation, and the pinning test it asked for,
-`contains_table_delimiter_needs_a_pipe`, is in the tree at line 155.
+asking for `rstest` cases over `contains_table_delimiter` — was self-resolved
+by the bot's "addressed in commits" annotation, and the pinning test it asked
+for, `contains_table_delimiter_needs_a_pipe`, is in the tree at line 155.
 
 **Next review.** `d5e31dc7` is queued and posts in about 22 minutes, at
-2026-09-12T02:33Z, so findings are expected from roughly 02:48Z. A review is the
-only thing that refreshes the pre-merge table, and every row of this round has
-been either discharged or answered, so what it reports decides whether the loop
-continues or ends. The pull request description was brought level with the tree
-before the review was queued, because a review reads it.
+2026-09-12T02:33Z, so findings are expected from roughly 02:48Z. A review is
+the only thing that refreshes the pre-merge table, and every row of this round
+has been either discharged or answered, so what it reports decides whether the
+loop continues or ends. The pull request description was brought level with the
+tree before the review was queued, because a review reads it.
 
 ### Revision 26, 2026-09-12 — the refreshed table, and a row it derived anew
 
@@ -5684,13 +5619,13 @@ hand.
 
 **The queued review ran and said almost nothing.** `d5e31dc7` posted at
 2026-09-12T02:33:30Z as comment `5642894586` from `wafflecat-df12`. Its two
-replies — "Review triggered." at 02:33:36Z and "Review finished." at
-02:33:37Z — are one second apart, and the second carries the note that
-CodeRabbit is an incremental review system and does not re-review already
-reviewed commits. No inline comment has been posted since the ten of
-`5184665530` (01:59:21Z–01:59:37Z, ids `3994699930` to `3994701183`), so the
-inline phase closed in Revision 24 stays closed: 26 threads, none unresolved,
-and nothing new to answer.
+replies — "Review triggered." at 02:33:36Z and "Review finished." at 02:33:37Z
+— are one second apart, and the second carries the note that CodeRabbit is an
+incremental review system and does not re-review already reviewed commits. No
+inline comment has been posted since the ten of `5184665530`
+(01:59:21Z–01:59:37Z, ids `3994699930` to `3994701183`), so the inline phase
+closed in Revision 24 stays closed: 26 threads, none unresolved, and nothing
+new to answer.
 
 **The table refreshed at 02:39:34Z.** The pull request's walkthrough comment
 (`5603998327`, identified by its `updated_at`) was edited in place and now
@@ -5706,26 +5641,26 @@ but it no longer says what it said. Its `6238940` explanation was that "the
 changed exit-status contract is not fully guarded"; the refreshed one is that
 `write_unified_diff` "documents that it returns output-writer errors, but no
 test supplies a failing `io::Write` implementation or asserts error
-propagation". The exit-status complaint is gone precisely because every
-induced per-file failure now requires code `2` — a change made in `7455e9b`,
-after the table that raised it. So the refresh was generated from the current
-tree rather than carried over, which settles how the two surviving rows should
-be read: they are the bot's position after seeing the fixes, not staleness.
-The answers posted to them at 02:10:40Z (`5642773695`) predate the refresh, so
-they cannot have moved it either way.
+propagation". The exit-status complaint is gone precisely because every induced
+per-file failure now requires code `2` — a change made in `7455e9b`, after the
+table that raised it. So the refresh was generated from the current tree rather
+than carried over, which settles how the two surviving rows should be read:
+they are the bot's position after seeing the fixes, not staleness. The answers
+posted to them at 02:10:40Z (`5642773695`) predate the refresh, so they cannot
+have moved it either way.
 
 **One row actioned, in `530bdbd`.** The renderer's writer-error row is valid
 and was genuinely unaddressed. `write_unified_diff`'s `# Errors` section
 promises the writer's failure is returned, and both direct renderer tests wrote
-into a `Vec`, which cannot fail.
-`a_failing_writer_error_reaches_the_caller` supplies a writer with a byte
-budget and asserts the returned error's kind. Two cases: a writer that is
-already closed (`budget = 0`) and one that fails inside the body, after the
-headers have been accepted (`budget = 16`). Both pass, which is itself the
-measurement — `similar`'s `to_writer` propagates the writer's own error
-unchanged rather than wrapping it. Asserting on the error's `kind` rather than
-on "some error" is what makes that a result: an implementation that replaced
-the writer's error with one of its own would fail the test.
+into a `Vec`, which cannot fail. `a_failing_writer_error_reaches_the_caller`
+supplies a writer with a byte budget and asserts the returned error's kind. Two
+cases: a writer that is already closed (`budget = 0`) and one that fails inside
+the body, after the headers have been accepted (`budget = 16`). Both pass,
+which is itself the measurement — `similar`'s `to_writer` propagates the
+writer's own error unchanged rather than wrapping it. Asserting on the error's
+`kind` rather than on "some error" is what makes that a result: an
+implementation that replaced the writer's error with one of its own would fail
+the test.
 
 `src/report/render.rs` stood at 354 lines and the new test took it to 409, past
 the 400-line limit in `AGENTS.md`. The whole test module therefore moved to
@@ -5759,12 +5694,12 @@ review reports on those two decides whether the loop continues or ends.
 
 **Gates.** All six deterministic gates are green at `530bdbd`, run sequentially
 through `scrutineer` over a clean worktree: `check-fmt` 4s, `lint` 7s with the
-`check-static-regexes` prerequisite met, `typecheck` 2s, `test` 98s over its two
-cargo invocations, `markdownlint` 34 files and 0 errors, and `nixie` with every
-diagram validated. The tally is `1890 passed, 0 failed, 20 ignored` across 46
-result lines — two more than Revision 25's 1888, which is exactly the new
-test's two rstest cases, and the snapshot test's green after the module moved
-is what shows the insta path survived the split.
+`check-static-regexes` prerequisite met, `typecheck` 2s, `test` 98s over its
+two cargo invocations, `markdownlint` 34 files and 0 errors, and `nixie` with
+every diagram validated. The tally is `1890 passed, 0 failed, 20 ignored`
+across 46 result lines — two more than Revision 25's 1888, which is exactly the
+new test's two rstest cases, and the snapshot test's green after the module
+moved is what shows the insta path survived the split.
 
 **The push, the description, and the reply.** `530bdbd` is pushed to
 `origin/check-option` before the queue is asked for anything. The pull request
@@ -5777,9 +5712,9 @@ answer to the refreshed table is posted as an issue comment tagging
 `@coderabbitai`, with the `Ignore` checkbox left unticked.
 
 **The queue.** `4966887b` is queued for `leynos/mdtablefix#464`, posting at
-2026-09-12T11:05:41Z (it reported 22m03s at 10:43:38Z), so findings are expected
-from roughly 11:20Z and the next check-in is set for 11:25Z. The queue was
-empty when it was added, and the two entries before it — `590209f4` and
+2026-09-12T11:05:41Z (it reported 22m03s at 10:43:38Z), so findings are
+expected from roughly 11:20Z and the next check-in is set for 11:25Z. The queue
+was empty when it was added, and the two entries before it — `590209f4` and
 `d5e31dc7` — are the rounds this revision and Revision 25 record.
 
 ### Revision 27, 2026-09-12 — the Windows job's dead imports
@@ -5795,12 +5730,13 @@ success, `atomic write contract (windows)` failure, merge state `UNSTABLE`.
 
 **Verified against the tree and against CI, not taken on trust.** The CI log
 was fetched rather than inferred. Run `34667046126` failed in the Windows job
-with exactly those three errors — `tests\cli_check\arguments.rs:3:5`, `:5:5`
-and `:7:13`, the third naming all five helpers — and `Process completed with
-exit code 101`. That run also shows why the failure is easy to misread: the
-job's first step runs the library tests and two named suites and passes with
-936 + 2 + 2 tests green, and the failure lands in the second step, when the
-whole suite is compiled and `cli_check` is built for the first time.
+with exactly those three errors — `tests\cli_check\arguments.rs:3:5`, `:5:5` and
+`:7:13`, the third naming all five helpers — and
+`Process completed with exit code 101`. That run also shows why the failure is
+easy to misread: the job's first step runs the library tests and two named
+suites and passes with 936 + 2 + 2 tests green, and the failure lands in the
+second step, when the whole suite is compiled and `cli_check` is built for the
+first time.
 
 **The local instrument.** There is no Windows host here, and this class of
 defect is invisible to the Linux gates by construction: on Unix the test runs,
@@ -5808,10 +5744,10 @@ so its imports are used, and only a build *for another target* can see them as
 dead. The Windows target is installed in this environment, so the job's own
 configuration can be reproduced locally except for the running of the tests:
 `RUSTFLAGS="-D warnings" cargo check --target x86_64-pc-windows-msvc
---all-targets --all-features`. It fails with those same three errors before the
-change and exits 0 with no warnings after it. `--all-targets` is the part that
-matters — the defect lives in a test binary, which a default `cargo check`
-would not build.
+--all-targets --all-features`.
+It fails with those same three errors before the change and exits 0 with no
+warnings after it. `--all-targets` is the part that matters — the defect lives
+in a test binary, which a default `cargo check` would not build.
 
 **The fix, in `3737276`.** The three imports are gated with `#[cfg(unix)]`
 rather than the module declaration being gated in `tests/cli_check.rs`. The
@@ -5828,24 +5764,24 @@ recording.** Revision 24 fixed an identical defect: `identity` in
 introduced by a *refactor* — that one by a test split, this one by `ba84de9`,
 which carves four test files out of one and moved the non-UTF-8 case into a
 file whose header imports what only it needs. Neither the Linux gate nor the
-review could see it; only a build for the other target can. If a third
-instance appears, the cross-check above belongs in the Makefile as a gate
-rather than in a plan revision as a command, because the failure mode is
-silent everywhere else. It is not added here: the CI job already runs it on
-every push, it needs a target that a fresh checkout has not installed, and this
-round's request was to fix the defect and re-run the gates.
+review could see it; only a build for the other target can. If a third instance
+appears, the cross-check above belongs in the Makefile as a gate rather than in
+a plan revision as a command, because the failure mode is silent everywhere
+else. It is not added here: the CI job already runs it on every push, it needs
+a target that a fresh checkout has not installed, and this round's request was
+to fix the defect and re-run the gates.
 
 **Gates.** All six are green at `3737276` over a clean worktree, run
-sequentially through `scrutineer`: `check-fmt` 2s, `lint` 1s, `typecheck`
-under a second, `test` 51s — 46 result lines, `1890 passed, 0 failed,
-20 ignored` — `markdownlint` 34 files and 0 errors, and `nixie` with every
-diagram validated. The tally is unchanged from `530bdbd`, which is what this
-commit should do: it gates three imports and adds no test.
+sequentially through `scrutineer`: `check-fmt` 2s, `lint` 1s, `typecheck` under
+a second, `test` 51s — 46 result lines, `1890 passed, 0 failed, 20 ignored` —
+`markdownlint` 34 files and 0 errors, and `nixie` with every diagram validated.
+The tally is unchanged from `530bdbd`, which is what this commit should do: it
+gates three imports and adds no test.
 
 **What confirms it, and what cannot.** The cross-check above is the compile
-half of the Windows job and nothing more; no test can be run for another
-target from here. The push starts the real job, and its conclusion is the
-next reading this revision will carry.
+half of the Windows job and nothing more; no test can be run for another target
+from here. The push starts the real job, and its conclusion is the next reading
+this revision will carry.
 
 ### Revision 28, 2026-09-12 — the callsite that went silent
 
@@ -5867,9 +5803,9 @@ failure, and it is a *missing log line*, not a wrong one.
 
 **Three of its siblings passed, which is what identifies the cause.** The four
 tests in `fence_tracker_logging` are the same shape, run in the same binary,
-within the same second, and share one production function: `FenceTracker::
-observe_parsed`, which holds five separate `debug!`/`trace!` invocations —
-`implicit_close`, `matching_close`, `unchanged` twice, and `open`
+within the same second, and share one production function:
+`FenceTracker:: observe_parsed`, which holds five separate `debug!`/`trace!`
+invocations — `implicit_close`, `matching_close`, `unchanged` twice, and `open`
 (`src/wrap/fence.rs:177,209,224,235,246`). The run reads:
 
 ```text
@@ -5880,8 +5816,8 @@ observe_parsed`, which holds five separate `debug!`/`trace!` invocations —
 ```
 
 `fence_opening` asserts on the `open` callsite, `depth_decrease` on
-`implicit_close`, `incompatible_marker` on the second `unchanged`, and all three
-passed. A span, buffer, or thread-locality fault would affect these four
+`implicit_close`, `incompatible_marker` on the second `unchanged`, and all
+three passed. A span, buffer, or thread-locality fault would affect these four
 identically — same macro, same span name mechanism, same global mutex buffer.
 The only thing that distinguishes the failing test is *which callsite* it
 asserts on. That is what an interest cache keyed per callsite does, and it is
@@ -5896,19 +5832,21 @@ answer is `Interest::never()`, and `tracing-core-0.1.36` produces it whenever
 the dispatcher set cannot be consulted: `DISPATCHERS.rebuilder()` yields
 `JustOne`, which calls `dispatcher::get_default()`, which returns `&NONE` while
 `GLOBAL_INIT` is not `INITIALIZED`. `dispatcher::set_global_default`
-(`dispatcher.rs:299`) never recomputes the cache: it sets `INITIALIZING`,
-swaps in `GLOBAL_DISPATCH`, stores `INITIALIZED`, and returns. `Interest::and`
-does not rescue it either — `never` combined with anything is `never`. So a
-callsite that is first used while no global dispatcher is installable caches
-`never` permanently, and `event!`'s gate — `level_enabled! && { let interest =
-__CALLSITE.interest(); !interest.is_never() && … }` — silently drops every
-event from that site thereafter, for the life of the process.
+(`dispatcher.rs:299`) never recomputes the cache: it sets `INITIALIZING`, swaps
+in `GLOBAL_DISPATCH`, stores `INITIALIZED`, and returns. `Interest::and` does
+not rescue it either — `never` combined with anything is `never`. So a callsite
+that is first used while no global dispatcher is installable caches `never`
+permanently, and `event!`'s gate —
+`level_enabled! && { let interest =
+__CALLSITE.interest(); !interest.is_never() && … }` —
+silently drops every event from that site thereafter, for the life of the
+process.
 
-**Measured, not inferred.** Before any test code was touched, the hypothesis was
-handed to `alchemist` for falsification, with a minimal probe at
+**Measured, not inferred.** Before any test code was touched, the hypothesis
+was handed to `alchemist` for falsification, with a minimal probe at
 `/home/leynos/scratch/callsite-probe/`. Its one test registers a callsite with
-no dispatcher in place, installs one, and prints the subscriber's event count at
-each step: `before_install=0 after_install=0 after_rebuild=1`. Verdict:
+no dispatcher in place, installs one, and prints the subscriber's event count
+at each step: `before_install=0 after_install=0 after_rebuild=1`. Verdict:
 **not falsified**. The install does not heal the callsite; the documented remedy
 `tracing_core::callsite::rebuild_interest_cache()` (`callsite.rs:222`) does.
 The probe uses the same `tracing` 0.1.44 / `tracing-core` 0.1.36 pair this
@@ -5919,15 +5857,15 @@ no upstream fix to take.
 `test-macros` dev-dependency prepends
 `::tracing::callsite::rebuild_interest_cache();` to the function body and
 re-emits `#[::tracing_test::traced_test]`. `tracing-test` prepends its own
-initialization to whatever body it is handed, so the rebuild always runs *after*
-the install — the ordering is structural, not a matter of which statement the
-test author writes first. All 16 traced sites use it: 13 `use
-tracing_test::traced_test;` imports swapped for `use test_macros::traced_test;`,
-and the three fully qualified sites (`src/ellipsis.rs:324`,
-`src/main_tests.rs:247`, `:274`) rewritten as `#[test_macros::traced_test]`.
-Each site carries a one-line pointer to `test_macros` rather than the full
-rationale, which lives in the macro's doc comment and in the `§2.3
-test-macros` section of the developer's guide.
+initialization to whatever body it is handed, so the rebuild always runs
+*after* the install — the ordering is structural, not a matter of which
+statement the test author writes first. All 16 traced sites use it: 13
+`use tracing_test::traced_test;` imports swapped for
+`use test_macros::traced_test;`, and the three fully qualified sites
+(`src/ellipsis.rs:324`, `src/main_tests.rs:247`, `:274`) rewritten as
+`#[test_macros::traced_test]`. Each site carries a one-line pointer to
+`test_macros` rather than the full rationale, which lives in the macro's doc
+comment and in the `§2.3 test-macros` section of the developer's guide.
 
 **Alternatives considered and dropped.** Bumping `tracing-test` is not
 available (0.2.6 is current). A `#[ctor]`-style pre-main install would add a
@@ -5938,26 +5876,28 @@ the race without addressing it, and would slow every gate. The wrapper adds no
 dependency, changes no production code, and is scoped to test infrastructure.
 
 **Gates.** All six are green at `9834fcb` over the worktree, run sequentially
-through `scrutineer`: `check-fmt` 2s, `lint` 5s with `check-static-regexes`
-met, `typecheck` 4s, `test` 67s — 46 result lines, `1890 passed, 0 failed,
-20 ignored`, the same tally as `530bdbd` because this commit adds no test —
-`markdownlint` 34 files and 0 errors, and `nixie` with every diagram validated.
-Two extras were run because the change reaches past the root package:
-`cargo fmt --manifest-path test-macros/Cargo.toml -- --check` exits 0, since
-`cargo fmt --all` does not cover a crate the root package has no `[workspace]`
-for, and the Windows cross-check
+through `scrutineer`: `check-fmt` 2s, `lint` 5s with `check-static-regexes` met,
+`typecheck` 4s, `test` 67s — 46 result lines,
+`1890 passed, 0 failed, 20 ignored`, the same tally as `530bdbd` because this
+commit adds no test — `markdownlint` 34 files and 0 errors, and `nixie` with
+every diagram validated. Two extras were run because the change reaches past
+the root package: `cargo fmt --manifest-path test-macros/Cargo.toml -- --check`
+exits 0, since `cargo fmt --all` does not cover a crate the root package has no
+`[workspace]` for, and the Windows cross-check
 `RUSTFLAGS="-D warnings" cargo check --target x86_64-pc-windows-msvc
---all-targets --all-features` exits 0 with no warnings.
+--all-targets --all-features`
+exits 0 with no warnings.
 
 **The attribution, and the reading that settled it.** The mechanism is measured
 in isolation, and the per-callsite symptom points at it; that the *specific*
 Windows interleaving reached the poisoning window was an inference, and the job
-was the test of it. Run `34690495578` on `9834fcb` is green: `atomic write
-contract (windows)` passes in 6m29s with **both** steps succeeding — "Test the
-atomic write contract", the step that failed on `64117e4`, and "Test the whole
-suite", which that failure had skipped — and `build-test` and all four
-`binstall packaging` jobs pass with it. The job that failed twice on this branch
-now passes end to end, which is the reading this revision was waiting for.
+was the test of it. Run `34690495578` on `9834fcb` is green:
+`atomic write contract (windows)` passes in 6m29s with **both** steps
+succeeding — "Test the atomic write contract", the step that failed on
+`64117e4`, and "Test the whole suite", which that failure had skipped — and
+`build-test` and all four `binstall packaging` jobs pass with it. The job that
+failed twice on this branch now passes end to end, which is the reading this
+revision was waiting for.
 
 **What the green does and does not prove.** It proves the failure is gone from
 the head that carries the fix, which is what the round asked for. It does not
@@ -5978,20 +5918,19 @@ commit volume, not a finding. It posted no inline comment — the newest is stil
 `updated_at` moved to 11:06:02Z only because the pause notice was appended to
 the same comment. The table's three rows are the ones Revision 26 recorded, and
 each was reconciled against the tree again: *Testing (Overall)* is the row
-`530bdbd` actioned, and the work is present
-(`src/report/render_tests.rs:15` defines `FailingWriter`, `:175` is
-`a_failing_writer_error_reaches_the_caller`, asserting the returned error's kind
-so a substituted error fails the test); *Unit Architecture* and *Testing
-(Compile-Time / Ui)* are the two rows answered with reasons at `7455e9b`.
-Nothing in this commit changes either position. No thread is unresolved and
-none is unanswered. `@coderabbitai resume` is the documented way out of the
-pause, and it is worth asking for once the branch is quiet rather than now,
-while commits are still landing.
+`530bdbd` actioned, and the work is present (`src/report/render_tests.rs:15`
+defines `FailingWriter`, `:175` is `a_failing_writer_error_reaches_the_caller`,
+asserting the returned error's kind so a substituted error fails the test);
+*Unit Architecture* and *Testing (Compile-Time / Ui)* are the two rows answered
+with reasons at `7455e9b`. Nothing in this commit changes either position. No
+thread is unresolved and none is unanswered. `@coderabbitai resume` is the
+documented way out of the pause, and it is worth asking for once the branch is
+quiet rather than now, while commits are still landing.
 
 ### Revision 29, 2026-09-12 — the writer's message, not just its kind
 
-**The requested test was already there.** The round asked for a focused unit test
-of output-writer error propagation from `write_unified_diff`: a test-only
+**The requested test was already there.** The round asked for a focused unit
+test of output-writer error propagation from `write_unified_diff`: a test-only
 `io::Write` that fails with a known `BrokenPipe` and a flush that succeeds,
 called with different original and formatted input, asserting the error comes
 back with the injected kind. All of that landed in `530bdbd` as `FailingWriter`
@@ -6006,58 +5945,60 @@ test would have been a duplicate, so the round's one real gap became the work.
 `error.kind() == io::ErrorKind::BrokenPipe` and stopped there, with a comment
 claiming this showed the writer's own error reached the caller. The claim was
 stronger than the assertion: a renderer that re-wrapped the failure as
-`io::Error::new(BrokenPipe, "diff failed")` keeps the kind and loses the message,
-and the test would still pass. Revision 28 repeated that overclaim when it
-described the row as asserting "the returned error's kind so a substituted error
-fails the test".
+`io::Error::new(BrokenPipe, "diff failed")` keeps the kind and loses the
+message, and the test would still pass. Revision 28 repeated that overclaim
+when it described the row as asserting "the returned error's kind so a
+substituted error fails the test".
 
 **`80f80d1` closes it.** The injected message is named once, as
 `WRITER_FAILURE_MESSAGE` (`:16`), used by the writer and by the assertion, and
 the test now checks `error.to_string()` against it as well as the kind
 (`:206`). The message is what separates passing an error through from
 manufacturing one; a string literal written twice would have matched the
-substitution and passed, which is why the constant earns its place. Both `budget`
-arms assert it — the one that fails before any byte is written and the one that
-fails inside the rendered body — and the four existing byte-output and snapshot
-tests are untouched.
+substitution and passed, which is why the constant earns its place. Both
+`budget` arms assert it — the one that fails before any byte is written and the
+one that fails inside the rendered body — and the four existing byte-output and
+snapshot tests are untouched.
 
 **Why the message is stable here.** `similar` 2.7.0's `UnifiedDiff::to_writer`
 (`src/udiff.rs:181`) writes with `writeln!` and `write!`, so the bytes pass
 through `io::Write::write_fmt`. That adapter does not turn the writer's failure
 into a `fmt::Error`: it saves the underlying `io::Error` and returns it
 unchanged, and `write_all` propagates `Err(e)` as-is. The message reaching the
-caller is the writer's own. This is observed rather than assumed — the assertion
-held on both arms first time.
+caller is the writer's own. This is observed rather than assumed — the
+assertion held on both arms first time.
 
-**Gates.** `cargo fmt --check` exits 0, after one reflow that rustfmt asked for.
-The smallest relevant target,
+**Gates.** `cargo fmt --check` exits 0, after one reflow that rustfmt asked
+for. The smallest relevant target,
 `RUSTFLAGS="-D warnings" cargo test --lib -- report::render::tests`, passes 32
-tests with both `a_failing_writer_error_reaches_the_caller` cases `ok`. The full
-set at `80f80d1` was run sequentially through `scrutineer`: `check-fmt` 2s, `lint`
-4s with `check-static-regexes` met, `typecheck` 1s, and
+tests with both `a_failing_writer_error_reaches_the_caller` cases `ok`. The
+full set at `80f80d1` was run sequentially through `scrutineer`: `check-fmt` 2s,
+`lint` 4s with `check-static-regexes` met, `typecheck` 1s, and
 `RUSTFLAGS="-D warnings" cargo test --all-features --no-fail-fast` 107s over 46
 binaries — `1890 passed, 0 failed, 20 ignored`, both changed cases `ok` — plus
-`markdownlint` and `nixie`. The nominated test command is the commit gate here in
-place of `make test`, because this crate has no `benches/` or `examples/`
-directory and no explicit `[[bench]]`, `[[example]]`, or `[[test]]` sections, so
-it already covers the library, the binary, every `tests/*` integration suite and
-the doc tests that `make test` runs as its two lines; the equivalence was checked
-rather than assumed. The Windows cross-check
+`markdownlint` and `nixie`. The nominated test command is the commit gate here
+in place of `make test`, because this crate has no `benches/` or `examples/`
+directory and no explicit `[[bench]]`, `[[example]]`, or `[[test]]` sections,
+so it already covers the library, the binary, every `tests/*` integration suite
+and the doc tests that `make test` runs as its two lines; the equivalence was
+checked rather than assumed. The Windows cross-check
 `RUSTFLAGS="-D warnings" cargo check --target x86_64-pc-windows-msvc
---all-targets --all-features` exits 0 with no warnings, so the new code is
-portable and the hazard of Revision 27 does not repeat.
+--all-targets --all-features`
+exits 0 with no warnings, so the new code is portable and the hazard of
+Revision 27 does not repeat.
 
 **The test tally did not move.** 1890 passed at `9834fcb` and 1890 here: this
 commit changes what an existing test asserts, not how many tests exist.
 
 **The job that runs this test is green.** Run `34691506030` on `69bc8ea`
 succeeds end to end, `atomic write contract (windows)` included — the job that
-failed twice on this branch, and the only one that executes the edited file on a
-non-Unix target. `build-test` and all four `binstall packaging` jobs pass with it.
+failed twice on this branch, and the only one that executes the edited file on
+a non-Unix target. `build-test` and all four `binstall packaging` jobs pass
+with it.
 
 **Review status.** `6388d9a7` is queued for PR #464 and has not posted; the
-branch's head is now `80f80d1`, so the review will read a diff that includes this
-commit. No inline thread is outstanding from the paused round.
+branch's head is now `80f80d1`, so the review will read a diff that includes
+this commit. No inline thread is outstanding from the paused round.
 
 ### Revision 30, 2026-09-12 — the refreshed table's five rows
 
@@ -6103,7 +6044,8 @@ answered once, and the latter's first ask was actioned in this round.
   the parent's dependencies, which is what makes both generated paths resolve,
   and the fixture is run as well as compiled: the captured
   `DEBUG traced_test_expands: trybuild000: a callsite the rebuilt cache can
-  reach` line shows the wrapper's whole purpose working rather than merely
+  reach`
+  line shows the wrapper's whole purpose working rather than merely
   type-checking.
 - *Domain Architecture* (Warning, `0af5a07`): one part taken. `src/report.rs`
   claimed the module "performs no input or output", which
@@ -6146,16 +6088,16 @@ answered once, and the latter's first ask was actioned in this round.
 **Inline findings.** The round's only new inline finding — use `concat!()` for
 the expected diff rather than a backslash-continued literal — is fixed in
 `d3b3b19` and answered at `r3997160084`, and the fix was measured rather than
-assumed: the fragments reproduce the same bytes, the `\ No newline at end of
-file` marker included.
+assumed: the fragments reproduce the same bytes, the
+`\ No newline at end of file` marker included.
 
 **Gate evidence.** All six gates pass at `9b08edc`, run sequentially:
 `check-fmt`, `lint`, `typecheck`, `test` — 947 unit tests, every integration
 suite, the trybuild fixtures including the new one
-(`/tmp/test-mdtablefix-check-option.out:1335`) and `40 passed; 0 failed; 20
-ignored` doctests — `markdownlint` (34 files, 0 errors) and `nixie`. The
-Windows job executes the same fixture, so the cross-check is the CI run on the
-pushed head rather than a local claim.
+(`/tmp/test-mdtablefix-check-option.out:1335`) and
+`40 passed; 0 failed; 20 ignored` doctests — `markdownlint` (34 files, 0
+errors) and `nixie`. The Windows job executes the same fixture, so the
+cross-check is the CI run on the pushed head rather than a local claim.
 
 ### Revision 31, 2026-09-12 — the round closed
 
@@ -6166,9 +6108,9 @@ rows the round quoted — Testing (Overall), Unit Architecture and Testing
 round's reading and the current table are answered in one place rather than two.
 
 **Sweep.** `reviewThreads` reports 27 threads on the pull request and every one
-of them is resolved; none is unresolved with no reply of mine. No inline comment
-has arrived since `r3997160743`, so nothing is left to answer inline, and the
-table reconciliation is posted on that basis.
+of them is resolved; none is unresolved with no reply of mine. No inline
+comment has arrived since `r3997160743`, so nothing is left to answer inline,
+and the table reconciliation is posted on that basis.
 
 **The last commit's gates.** `2e95a8a` adds only prose to this plan, so the
 change surface is Markdown and the narrowed scope is the two Markdown gates:
@@ -6179,5 +6121,5 @@ diagrams validated, this file included. Logs:
 two commits earlier at `9b08edc` (Revision 30) and no code has changed since.
 
 **Pushed.** `6be1a76..2e95a8a` on `origin/check-option`. The table refreshes
-only when CodeRabbit next reviews, so its rows keep their old status until then;
-the next review's reading is the check, not a re-queue for its own sake.
+only when CodeRabbit next reviews, so its rows keep their old status until
+then; the next review's reading is the check, not a re-queue for its own sake.
