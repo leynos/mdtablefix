@@ -40,8 +40,8 @@ defect classes contributed:
 
 ## Decision
 
-For the proven `make fmt` CLI flag set, the formatter is a fixed point:
-`format(format(x)) == format(x)`. Seven rules enforce the invariant:
+The formatter is a fixed point: `format(format(x)) == format(x)` for every flag
+set the CLI exposes. Seven rules enforce the invariant:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
   `src/wrap/block.rs` recognizes a break with
@@ -134,3 +134,18 @@ For the proven `make fmt` CLI flag set, the formatter is a fixed point:
   asserts the shape is reached and its row survives, so removing the generator
   branch fails the sweep rather than leaving the guard unexercised. Together
   they guard the invariant against regression.
+
+## Addendum (2026-09-13)
+
+The accepted decision above records the intended CLI-wide invariant. The
+evidence currently recorded for this branch proves the fixed-point guarantee
+for the `make fmt` flag set and for that set with `--headings`; it does not
+establish the guarantee for every exposed flag combination. In particular, ADR
+0010 records the outstanding `--code-emphasis` case, which can settle on a
+second pass rather than the first.
+
+The impact is that `--git --check` is a sound one-pass drift check for the
+proven flag sets, while callers enabling an unproven combination must account
+for the possibility of a further formatting pass. This addendum narrows the
+operational guarantee until the remaining combination has evidence of the same
+fixed-point behaviour.

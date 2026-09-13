@@ -13,18 +13,16 @@
 //! as every other selection.
 
 use camino::{Utf8Path, Utf8PathBuf};
-use tracing::debug;
 
 use crate::{
     command::Cli,
     driver::{Inputs, Mode},
     select::{
         ConflictGuard,
-        extensions::ExtensionFilter,
         fs_probe::AmbientPathProbe,
         git_failure::GitListError,
         git_ls_files::GitLsFiles,
-        policy::{ProbeError, select_files},
+        policy::{CandidatePath, ProbeFailure, select_files},
     },
 };
 
@@ -43,7 +41,7 @@ pub enum GitInputsError {
     Git(#[from] GitListError),
     /// A listed candidate could not be classified.
     #[error(transparent)]
-    Probe(#[from] ProbeError),
+    Probe(#[from] ProbeFailure),
 }
 
 impl GitInputsError {
@@ -57,7 +55,7 @@ impl GitInputsError {
     pub fn diagnostic(&self) -> String {
         match self {
             Self::Git(error) => error.diagnostic(),
-            Self::Probe(error) => format!("{error}: {}", error.source),
+            Self::Probe(error) => error.to_string(),
         }
     }
 }
@@ -78,6 +76,22 @@ pub struct GitSelection {
     /// writing a warning is command output. [`GitSelection::skipped_warning`]
     /// renders it for the boundary that owns standard error.
     pub skipped_non_utf8: usize,
+    /// Bounded counts describing how the candidate set was narrowed.
+    ///
+    /// The command boundary may log them without emitting path names or raw
+    /// extension values, while this query remains reusable as data only.
+    pub selection: SelectionStatistics,
+}
+
+/// Bounded facts about a completed repository selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelectionStatistics {
+    /// How many UTF-8 candidates Git reported.
+    pub candidates: usize,
+    /// How many candidates satisfied the selection policy.
+    pub selected: usize,
+    /// How many configured extensions the policy considered.
+    pub extension_count: usize,
 }
 
 impl GitSelection {
@@ -126,37 +140,32 @@ pub fn resolve(
     let extensions = cli.extensions();
     let listing = GitLsFiles::new(cli.includes_untracked()).list_candidates(working_directory)?;
 
+    let candidates: Vec<CandidatePath> = listing
+        .paths
+        .iter()
+        .map(|path| CandidatePath::new(path.to_string()))
+        .collect();
     let selected = select_files(
-        &listing.paths,
-        working_directory,
+        &candidates,
         &extensions,
-        &AmbientPathProbe,
+        &AmbientPathProbe::new(working_directory),
     )?;
-    report_selection(listing.paths.len(), selected.len(), &extensions);
-
+    let selection = SelectionStatistics {
+        candidates: listing.paths.len(),
+        selected: selected.len(),
+        extension_count: extensions.iter().count(),
+    };
     Ok(GitSelection {
-        inputs: Inputs::Files(selected),
+        inputs: Inputs::Files(
+            selected
+                .into_iter()
+                .map(|candidate| Utf8PathBuf::from(candidate.as_str()))
+                .collect(),
+        ),
         guard: guard(cli, mode, working_directory)?,
         skipped_non_utf8: listing.skipped_non_utf8,
+        selection,
     })
-}
-
-/// Reports how much the selection narrowed, and nothing the user typed.
-///
-/// The extension values are deliberately absent. `--md-exts` accepts any
-/// string, of any length, any number of times, so `extensions = %extensions`
-/// would put arbitrary caller-controlled text into every event this run emits
-/// and into whatever stores them; the count answers the operator's question —
-/// "was this a default run or a narrowed one, and how narrow?" — without that.
-/// The filter is still rendered in full by `--help` and by the diagnostics that
-/// have a user waiting to read them, which is where an arbitrary value belongs.
-fn report_selection(candidates: usize, selected: usize, extensions: &ExtensionFilter) {
-    debug!(
-        candidates,
-        selected,
-        extension_count = extensions.iter().count(),
-        "selected files from the repository"
-    );
 }
 
 /// The guard a `--git` run must consult before it rewrites anything.

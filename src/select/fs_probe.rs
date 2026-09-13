@@ -7,7 +7,7 @@
 //!
 //! Absence is a classification, because the selection has a rule for a
 //! candidate that is gone. Every other failure to read one is returned as a
-//! [`ProbeError`]: a permission failure or a path through a file is not a
+//! [`ProbeFailure`]: a permission failure or a path through a file is not a
 //! verdict about the file, and a run that could not classify a candidate must
 //! say so rather than format the ones it could. See
 //! [`select_files`](crate::select::policy::select_files).
@@ -36,27 +36,40 @@ use std::io::{self, ErrorKind};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use super::policy::{FileIdentity, PathKind, PathProbe, ProbeError};
+use super::policy::{CandidatePath, FileIdentity, PathKind, PathProbe, ProbeFailure};
 
 /// Probes the real working tree using `std::fs::symlink_metadata`.
 ///
 /// `symlink_metadata`, not `metadata`: see [`PathKind::Symlink`].
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AmbientPathProbe;
+#[derive(Debug, Clone, Copy)]
+pub struct AmbientPathProbe<'root> {
+    root: &'root Utf8Path,
+}
 
-impl PathProbe for AmbientPathProbe {
-    fn probe(&self, root: &Utf8Path, path: &Utf8Path) -> Result<PathKind, ProbeError> {
+impl<'root> AmbientPathProbe<'root> {
+    /// Probes candidates beneath `root` using ambient filesystem reads.
+    #[must_use]
+    pub fn new(root: &'root Utf8Path) -> Self { Self { root } }
+}
+
+impl PathProbe for AmbientPathProbe<'_> {
+    fn probe(&self, candidate: &CandidatePath) -> Result<PathKind, ProbeFailure> {
         // `join` replaces rather than appends when `path` is already absolute,
         // so a candidate a caller resolved itself is asked about where it
         // actually points.
-        let absolute = root.join(path);
+        let path = Utf8Path::new(candidate.as_str());
+        let absolute = self.root.join(path);
         let metadata = match std::fs::symlink_metadata(&absolute) {
             Ok(metadata) => metadata,
             // Absence is the one failure the selection has a rule for — a
             // staged deletion, or a file removed since Git listed it. Every
             // other kind leaves the question unasked rather than answered, and
-            // [`unreadable`] is what tells the two apart.
-            Err(source) => return unreadable(absolute, source),
+            // [`classify_unreadable`] is what tells the two apart.
+            Err(source) => {
+                return classify_unreadable(&absolute, source).map_err(|source| {
+                    ProbeFailure::unreadable(candidate.clone(), source.to_string())
+                });
+            }
         };
         if metadata.is_symlink() {
             return Ok(PathKind::Symlink);
@@ -70,10 +83,11 @@ impl PathProbe for AmbientPathProbe {
         // reported as a regular file.
         match std::fs::canonicalize(&absolute) {
             Ok(canonical) => match Utf8PathBuf::from_path_buf(canonical) {
-                Ok(canonical) => identify(root, canonical),
+                Ok(canonical) => identify(self.root, candidate, canonical),
                 Err(_) => Ok(PathKind::Other),
             },
-            Err(source) => unreadable(absolute, source),
+            Err(source) => classify_unreadable(&absolute, source)
+                .map_err(|source| ProbeFailure::unreadable(candidate.clone(), source.to_string())),
         }
     }
 }
@@ -84,10 +98,16 @@ impl PathProbe for AmbientPathProbe {
 /// reaching through a symlinked ancestor: a candidate is what its real path
 /// says it is, and a real path that leaves `root` is not a file this selection
 /// may name.
-fn identify(root: &Utf8Path, canonical: Utf8PathBuf) -> Result<PathKind, ProbeError> {
-    if confined_to(root, &canonical)? {
-        Ok(PathKind::RegularFile(FileIdentity::from_canonical_path(
-            canonical,
+fn identify(
+    root: &Utf8Path,
+    candidate: &CandidatePath,
+    canonical: Utf8PathBuf,
+) -> Result<PathKind, ProbeFailure> {
+    if confined_to(root, &canonical)
+        .map_err(|source| ProbeFailure::unreadable(candidate.clone(), source.to_string()))?
+    {
+        Ok(PathKind::RegularFile(FileIdentity::from_canonical_name(
+            canonical.into_string(),
         )))
     } else {
         Ok(PathKind::OutsideRoot)
@@ -104,10 +124,10 @@ fn identify(root: &Utf8Path, canonical: Utf8PathBuf) -> Result<PathKind, ProbeEr
 ///
 /// # Errors
 ///
-/// Returns a [`ProbeError`] if the root exists but cannot be read. A root that
+/// Returns an I/O error if the root exists but cannot be read. A root that
 /// cannot be resolved leaves every candidate's classification unwarranted, and
 /// the selection does not report a confinement it could not establish.
-fn confined_to(root: &Utf8Path, canonical: &Utf8Path) -> Result<bool, ProbeError> {
+fn confined_to(root: &Utf8Path, canonical: &Utf8Path) -> Result<bool, io::Error> {
     let root = match std::fs::canonicalize(root) {
         Ok(root) => root,
         // A root that is not there confines nothing, and a root that cannot be
@@ -115,10 +135,7 @@ fn confined_to(root: &Utf8Path, canonical: &Utf8Path) -> Result<bool, ProbeError
         // Which of the two this is the probe's own classifier decides, so that
         // a root and a candidate are held to the same rule.
         Err(source) => {
-            absent(root, source).map_err(|source| ProbeError {
-                path: root.to_owned(),
-                source,
-            })?;
+            absent(root, source)?;
             return Ok(false);
         }
     };
@@ -141,10 +158,10 @@ fn confined_to(root: &Utf8Path, canonical: &Utf8Path) -> Result<bool, ProbeError
 /// in the probe above: a path `symlink_metadata` has already accepted can reach
 /// the second arm only by losing a race with the filesystem, so no fixture
 /// stages it there. Here, every arm is a test's to cover.
-fn unreadable(path: Utf8PathBuf, error: io::Error) -> Result<PathKind, ProbeError> {
-    match absent(&path, error) {
+fn classify_unreadable(path: &Utf8Path, error: io::Error) -> Result<PathKind, io::Error> {
+    match absent(path, error) {
         Ok(()) => Ok(PathKind::Missing),
-        Err(source) => Err(ProbeError { path, source }),
+        Err(source) => Err(source),
     }
 }
 

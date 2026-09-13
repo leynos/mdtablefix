@@ -1,42 +1,60 @@
 //! What `--git` selects, stated as a rule rather than as a procedure.
 //!
-//! Depends on the [`PathProbe`] port, [`ExtensionFilter`], `camino`, and
-//! `std::io` — the last for the failure a probe returns, never for a read of
-//! its own. Nothing here imports `std::fs`, `std::process`, or `cap_std`: the
-//! rule is testable against a fake probe, and no test needs to change
-//! directory. The adapters that answer the port live in
+//! Depends on the [`PathProbe`] port and [`ExtensionFilter`]. Paths and probe
+//! failures are domain values here, so the rule does not know whether an
+//! adapter represents them with `camino`, an operating-system handle, or
+//! another transport. The working-tree adapter lives in
 //! [`crate::select::fs_probe`].
 
-use std::{collections::BTreeMap, io};
-
-use camino::{Utf8Path, Utf8PathBuf};
+use std::{collections::BTreeMap, fmt};
 
 use super::extensions::ExtensionFilter;
 
-/// Identifies a file independently of the path used to reach it.
+/// A candidate name selected from Git's listing.
 ///
-/// The canonicalized path, not `(st_dev, st_ino)`. Replacement writes a new
-/// inode over the target, so an identity keyed on the inode would collapse two
-/// hard links, format one, and leave the other stale. See INV-DEDUP.
+/// The spelling is deliberately opaque to the policy. It is ordered only to
+/// make the externally visible selection deterministic; translating it into a
+/// filesystem path belongs to an adapter.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct FileIdentity(Utf8PathBuf);
+pub struct CandidatePath(String);
 
-impl FileIdentity {
-    /// Wraps a canonicalized path, as the probe obtains it.
+impl CandidatePath {
+    /// Creates a candidate from the spelling supplied by an adapter.
     #[must_use]
-    pub fn from_canonical_path(path: Utf8PathBuf) -> Self { Self(path) }
+    pub fn new(path: String) -> Self { Self(path) }
 
-    /// The canonicalized path this identity was built from.
-    ///
-    /// `#[cfg(test)]` because the selection acts on the spelling a user's run
-    /// reports rather than on the identity's own name: this reads the identity
-    /// back, which is what the probe's tests assert the probe formed it from.
-    #[cfg(test)]
+    /// Returns the candidate's stable, adapter-supplied spelling.
     #[must_use]
-    pub fn as_path(&self) -> &Utf8Path { &self.0 }
+    pub fn as_str(&self) -> &str { &self.0 }
 }
 
-/// What a candidate path turned out to be in the working tree.
+impl fmt::Display for CandidatePath {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+/// Identifies a file independently of the candidate name used to reach it.
+///
+/// The adapter forms this from its canonical name, not from `(st_dev, st_ino)`.
+/// Replacement writes a new inode over the target, so an inode identity would
+/// collapse two hard links, format one, and leave the other stale. See
+/// INV-DEDUP.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FileIdentity(String);
+
+impl FileIdentity {
+    /// Creates an identity from an adapter's canonical name.
+    #[must_use]
+    pub fn from_canonical_name(name: String) -> Self { Self(name) }
+
+    /// Returns the canonical spelling retained for this identity.
+    #[cfg(test)]
+    #[must_use]
+    pub fn as_str(&self) -> &str { &self.0 }
+}
+
+/// What a candidate turned out to be in the adapter's source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PathKind {
@@ -47,74 +65,90 @@ pub enum PathKind {
     /// A symbolic link. Never followed: the link's extension says nothing
     /// about the target's type, and writing through it escapes the selection.
     Symlink,
-    /// Present but neither a regular file nor a symlink, for example a
+    /// Present but neither a regular file nor a symbolic link, for example a
     /// submodule gitlink.
     Other,
-    /// A regular file whose canonical path lies outside `root`, which is what a
-    /// candidate reached through a symlinked ancestor produces: `docs/guide.md`
-    /// is a regular file even when `docs` is a link to a directory elsewhere.
+    /// A regular file whose canonical name lies outside the selected root.
     /// Never selected, because writing it would write outside the tree the
     /// selection was made in. See [`crate::select::fs_probe`].
     OutsideRoot,
+}
+
+/// The domain category for a candidate an adapter could not classify.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProbeFailureKind {
+    /// The adapter could not read enough state to classify the candidate.
+    Unreadable,
 }
 
 /// A candidate whose class could not be established.
 ///
 /// Distinct from [`PathKind::Missing`], which is an answer: a staged deletion
 /// is absent, and absent is a class the selection has a rule for. This is the
-/// absence of an answer — a permission failure, a path through a file, a
-/// symbolic-link loop among the ancestors — and a selection that met one
-/// cannot say what it selected. See [`select_files`].
-#[derive(Debug, thiserror::Error)]
-#[error("reading `{path}` while selecting files")]
-pub struct ProbeError {
-    /// The path that could not be read, as the probe addressed it.
-    pub path: Utf8PathBuf,
-    /// Why it could not be read.
-    #[source]
-    pub source: io::Error,
+/// absence of an answer — a permission failure, a path through a file, or a
+/// symbolic-link loop — and a selection that met one cannot say what it
+/// selected. See [`select_files`].
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("reading `{path}` while selecting files: {detail}")]
+pub struct ProbeFailure {
+    /// The candidate the adapter could not classify.
+    pub path: CandidatePath,
+    /// The domain category of the failure.
+    pub kind: ProbeFailureKind,
+    /// The adapter's human-readable detail, for a command-boundary diagnostic.
+    pub detail: String,
+}
+
+impl ProbeFailure {
+    /// Records an unreadable candidate without exposing an adapter error type.
+    #[must_use]
+    pub fn unreadable(path: CandidatePath, detail: String) -> Self {
+        Self {
+            path,
+            kind: ProbeFailureKind::Unreadable,
+            detail,
+        }
+    }
 }
 
 /// Reports what a candidate path actually is. Implemented by adapters.
 pub trait PathProbe {
-    /// Classifies `path`, which is spelled relative to `root` unless it is
-    /// already absolute.
+    /// Classifies a candidate.
     ///
     /// # Errors
     ///
-    /// Returns a [`ProbeError`] if the path cannot be read for a reason that is
-    /// not its absence. Absence itself is [`PathKind::Missing`]: the caller has
-    /// a rule for a candidate that is gone, and none for one it could not look
-    /// at.
-    fn probe(&self, root: &Utf8Path, path: &Utf8Path) -> Result<PathKind, ProbeError>;
+    /// Returns a [`ProbeFailure`] if the candidate cannot be read for a reason
+    /// that is not its absence. Absence itself is [`PathKind::Missing`]: the
+    /// caller has a rule for a candidate that is gone, and none for one it
+    /// could not inspect.
+    fn probe(&self, candidate: &CandidatePath) -> Result<PathKind, ProbeFailure>;
 }
 
-/// Narrows candidates to the sorted, alias-free set of files that exist as
-/// regular files and carry a configured extension.
+/// Narrows candidates to the sorted, alias-free set of regular files carrying
+/// a configured extension.
 ///
 /// # Errors
 ///
-/// Returns the first [`ProbeError`] a candidate draws. The selection stops
+/// Returns the first [`ProbeFailure`] a candidate draws. The selection stops
 /// there rather than returning what it had: a run that cannot classify one
 /// candidate does not know what it is about to format, so the incomplete set
 /// must not be presented as a selection. The caller reports it the way it
 /// reports a failed listing, before any file is analysed.
 pub fn select_files<P>(
-    candidates: &[Utf8PathBuf],
-    root: &Utf8Path,
+    candidates: &[CandidatePath],
     extensions: &ExtensionFilter,
     probe: &P,
-) -> Result<Vec<Utf8PathBuf>, ProbeError>
+) -> Result<Vec<CandidatePath>, ProbeFailure>
 where
     P: PathProbe + ?Sized,
 {
-    // The extension comes first so that the filesystem is touched once per
+    // The extension comes first so that the adapter is consulted once per
     // distinct Markdown candidate and never for a `.rs` file: on the
     // repository this was measured against, that is 28 probes rather than 416.
-    let mut matching: Vec<&Utf8Path> = candidates
+    let mut matching: Vec<&CandidatePath> = candidates
         .iter()
-        .map(Utf8PathBuf::as_path)
-        .filter(|path| extensions.matches(path))
+        .filter(|candidate| extensions.matches(candidate.as_str()))
         .collect();
 
     // Sorted and deduplicated before probing, so a path reported once per merge
@@ -123,15 +157,14 @@ where
     matching.sort_unstable();
     matching.dedup();
 
-    let mut by_identity: BTreeMap<FileIdentity, &Utf8Path> = BTreeMap::new();
-    for path in matching {
-        if let PathKind::RegularFile(identity) = probe.probe(root, path)? {
-            by_identity.entry(identity).or_insert(path);
+    let mut by_identity: BTreeMap<FileIdentity, &CandidatePath> = BTreeMap::new();
+    for candidate in matching {
+        if let PathKind::RegularFile(identity) = probe.probe(candidate)? {
+            by_identity.entry(identity).or_insert(candidate);
         }
     }
 
-    let mut selected: Vec<Utf8PathBuf> =
-        by_identity.into_values().map(Utf8Path::to_owned).collect();
+    let mut selected: Vec<CandidatePath> = by_identity.into_values().cloned().collect();
     selected.sort_unstable();
 
     Ok(selected)

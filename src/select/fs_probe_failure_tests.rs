@@ -12,7 +12,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
-use super::{Reading, confined_to, nearest_existing, unreadable};
+use super::{Reading, classify_unreadable, confined_to, nearest_existing};
 use crate::select::policy::PathKind;
 
 fn at(path: &str) -> Utf8PathBuf { Utf8PathBuf::from(path) }
@@ -60,14 +60,9 @@ fn write(root: &Utf8Path, name: &str, content: &str) {
 fn a_failure_that_is_not_absence_is_reported_unchanged(#[case] kind: ErrorKind) {
     let path = at("/repo/docs/guide.md");
 
-    let error = unreadable(path.clone(), io::Error::from(kind))
+    let error = classify_unreadable(&path, io::Error::from(kind))
         .expect_err("a file that is present but unreadable is not absent");
-
-    assert_eq!(
-        error.path, path,
-        "the failure names the path it could not read"
-    );
-    assert_eq!(error.source.kind(), kind, "the cause is reported unchanged");
+    assert_eq!(error.kind(), kind, "the cause is reported unchanged");
 }
 
 /// Absence is answered for the whole path, not for the leaf that failed.
@@ -84,22 +79,17 @@ fn a_read_that_fails_under_a_file_is_not_an_absence(temp_root: TempDir) {
     let root = as_path(&temp_root);
     let gone = root.join("gone.md");
     assert_eq!(
-        unreadable(gone.clone(), io::Error::from(ErrorKind::NotFound)).ok(),
+        classify_unreadable(&gone, io::Error::from(ErrorKind::NotFound)).ok(),
         Some(PathKind::Missing),
         "gone.md is gone, and that is the answer the selection has a rule for"
     );
 
     write(&root, "blocker", "not a directory\n");
     let through_a_file = root.join("blocker/guide.md");
-    let error = unreadable(through_a_file.clone(), io::Error::from(ErrorKind::NotFound))
+    let error = classify_unreadable(&through_a_file, io::Error::from(ErrorKind::NotFound))
         .expect_err("a path through a file is not an absence");
-
     assert_eq!(
-        error.path, through_a_file,
-        "the failure names the candidate it could not read"
-    );
-    assert_eq!(
-        error.source.kind(),
+        error.kind(),
         ErrorKind::NotADirectory,
         "the kind Unix reports for it, reported on every platform"
     );
@@ -116,7 +106,7 @@ fn a_read_that_fails_where_the_whole_path_is_gone_is_an_absence(temp_root: TempD
     let path = root.join("gone/sub/guide.md");
 
     assert_eq!(
-        unreadable(path, io::Error::from(ErrorKind::NotFound)).ok(),
+        classify_unreadable(&path, io::Error::from(ErrorKind::NotFound)).ok(),
         Some(PathKind::Missing),
         "a subtree that is gone is absent, not unreachable"
     );
@@ -195,11 +185,7 @@ fn a_root_that_cannot_be_resolved_is_reported(temp_root: TempDir) {
     let error = confined_to(&unreachable, &at("/canonical/guide.md"))
         .expect_err("a root that cannot be resolved is a failure, not confinement");
     assert_eq!(
-        error.path, unreachable,
-        "the failure names the root it could not read"
-    );
-    assert_eq!(
-        error.source.kind(),
+        error.kind(),
         ErrorKind::NotADirectory,
         "a root behind a file is present, not absent: {error:?}"
     );

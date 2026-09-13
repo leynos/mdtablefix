@@ -23,6 +23,7 @@ use mdtablefix::{
     report::{FileReport, render_summary},
 };
 use rayon::prelude::*;
+use tracing::debug;
 
 mod command;
 mod driver;
@@ -190,6 +191,7 @@ fn run() -> anyhow::Result<ExitStatus> {
                 if let Some(warning) = selection.skipped_warning() {
                     eprintln!("{warning}");
                 }
+                report_selection(&selection);
                 (selection.inputs, selection.guard)
             }
             Err(error) => {
@@ -220,6 +222,21 @@ fn run() -> anyhow::Result<ExitStatus> {
     record_run(mode, result.as_ref().copied().unwrap_or(ExitStatus::Error));
 
     result
+}
+
+/// Emits the bounded facts a repository selection returned.
+///
+/// Extension values and paths are caller-controlled, so only counts cross this
+/// command boundary. The selection query itself returns these facts without
+/// emitting an event, which lets another delivery mechanism reuse it silently.
+fn report_selection(selection: &git_inputs::GitSelection) {
+    let statistics = selection.selection;
+    debug!(
+        candidates = statistics.candidates,
+        selected = statistics.selected,
+        extension_count = statistics.extension_count,
+        "selected files from the repository"
+    );
 }
 
 /// Formats standard input and writes the result to standard output.
@@ -367,3 +384,7 @@ fn main() -> ExitCode {
 #[cfg(test)]
 #[path = "main_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "main_git_selection_tests.rs"]
+mod git_selection_tests;

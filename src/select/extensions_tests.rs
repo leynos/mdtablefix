@@ -5,7 +5,6 @@
 //! asserts on `extension is empty` as it appears on stderr, so the wording
 //! belongs to a test as well as to the feature file.
 
-use camino::Utf8Path;
 use rstest::rstest;
 
 use super::{ExtensionFilter, ExtensionSpecError, InvalidCharacterKind, parse_extension};
@@ -122,7 +121,7 @@ fn an_invalid_character_names_the_reason_and_the_value() {
 #[case("docs/.hidden", false)]
 fn only_the_last_extension_counts_and_case_is_folded(#[case] path: &str, #[case] expected: bool) {
     let filter = ExtensionFilter::default();
-    assert_eq!(filter.matches(Utf8Path::new(path)), expected, "{path}");
+    assert_eq!(filter.matches(path), expected, "{path}");
 }
 
 /// Why a configured dot is refused, stated as the fact the refusal rests on.
@@ -136,7 +135,7 @@ fn only_the_last_extension_counts_and_case_is_folded(#[case] path: &str, #[case]
 /// because the parser's rule is only as durable as this behaviour, and because
 /// this is what a reviewer should check the rule against.
 #[rstest]
-// Measured against `std::path::Path`, which `Utf8Path` delegates to.
+// The candidate spelling delegates its final component to this rule.
 #[case("a.mdc.", Some(""))]
 #[case("a.b.c", Some("c"))]
 #[case("archive.tar.gz", Some("gz"))]
@@ -146,7 +145,7 @@ fn a_paths_extension_is_the_segment_after_its_last_dot(
     #[case] path: &str,
     #[case] extension: Option<&str>,
 ) {
-    assert_eq!(Utf8Path::new(path).extension(), extension, "{path}");
+    assert_eq!(super::extension(path), extension, "{path}");
 }
 
 #[test]

@@ -1,12 +1,11 @@
 //! Parsing and matching of `--md-exts` values.
 //!
-//! Depends on `camino` and `thiserror` alone: no filesystem, no subprocess, no
-//! capability. The type is named for what it does rather than for Markdown,
-//! because `--md-exts` accepts any extension.
+//! Depends on candidate spellings and `thiserror` alone: no filesystem, no
+//! subprocess, no capability, and no path-library representation. The type is
+//! named for what it does rather than for Markdown, because `--md-exts`
+//! accepts any extension.
 
 use std::collections::BTreeSet;
-
-use camino::Utf8Path;
 
 /// The set `--md-exts` means when the user does not give one.
 const DEFAULT_EXTENSIONS: [&str; 3] = ["md", "mdc", "markdown"];
@@ -28,11 +27,11 @@ impl ExtensionFilter {
     ///
     /// Only the last extension is consulted, and case is folded, so
     /// `docs/guide.MD` matches `md`. A leading dot with no second dot is part
-    /// of the file name rather than an extension — [`camino::Utf8Path`]'s own
-    /// reading, and the one that keeps `.md` from matching every dotfile.
+    /// of the file name rather than an extension, which keeps `.md` from
+    /// matching every dotfile.
     #[must_use]
-    pub fn matches(&self, path: &Utf8Path) -> bool {
-        path.extension()
+    pub fn matches(&self, candidate: &str) -> bool {
+        extension(candidate)
             .is_some_and(|extension| self.0.contains(&extension.to_ascii_lowercase()))
     }
 
@@ -48,6 +47,17 @@ impl ExtensionFilter {
         extensions.sort_unstable_by_key(|extension| (extension.len(), *extension));
         extensions.into_iter()
     }
+}
+
+/// The final extension in a Git candidate's slash-separated spelling.
+///
+/// Git uses `/` in its path listing on every platform. The policy keeps that
+/// spelling opaque, so extension matching reads its final component here rather
+/// than asking a filesystem path type to interpret it.
+fn extension(path: &str) -> Option<&str> {
+    let name = path.rsplit('/').next()?;
+    let (stem, extension) = name.rsplit_once('.')?;
+    (!stem.is_empty()).then_some(extension)
 }
 
 /// Builds a filter from values [`parse_extension`] has already accepted.
@@ -83,7 +93,7 @@ impl std::fmt::Display for ExtensionFilter {
 /// Strips one optional leading dot, trims surrounding whitespace, and folds
 /// ASCII case. No dot may follow that one, because
 /// [`ExtensionFilter::matches`] compares this value with
-/// [`Utf8Path::extension`], which is the segment after the final dot: `mdc.`
+/// the final segment after a dot: `mdc.`
 /// would match no path at all, and `tar.gz` would be compared against `gz`.
 /// A value that parsed and then selected nothing would be the worst of both,
 /// so it is refused where it is written rather than at the end of an empty run.

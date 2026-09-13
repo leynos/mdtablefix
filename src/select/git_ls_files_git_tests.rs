@@ -13,11 +13,6 @@
 //! supplied identity, so the settings that could perturb it are not in play,
 //! and the listing assertions are on the whole listing rather than on a
 //! subset, so a perturbation would be loud.
-//!
-//! The tracing assertions at the end read the events the adapter emits. They
-//! belong to the binary's test target rather than to `tests/`, because a
-//! tracing subscriber is process-global and the install happens per test.
-
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
@@ -292,72 +287,4 @@ fn the_repository_query_reports_an_absent_program_as_such() {
         matches!(error, GitListError::ProgramNotFound { .. }),
         "{error}"
     );
-}
-
-/// A successful invocation is traced with its operation, its outcome, and how
-/// long the process took.
-///
-/// The elapsed time is asserted only to be present: what a test could pin is a
-/// number no assertion should depend on. The operation name is pinned instead,
-/// because that is the field a host groups by.
-#[test_macros::traced_test]
-#[test]
-fn a_successful_listing_is_traced_with_its_operation_and_outcome() {
-    let (_directory, root) = repository();
-
-    GitLsFiles::new(false)
-        .list_candidates(&root)
-        .expect("git ls-files");
-
-    // The span carries the same fields, so a host reading a timeline sees the
-    // outcome and the duration against the operation rather than only a line.
-    assert!(logs_contain(
-        "git{operation=\"ls_files\" outcome=\"success\""
-    ));
-    assert!(logs_contain(
-        "git invocation completed operation=\"ls_files\" outcome=\"success\""
-    ));
-    assert!(logs_contain("elapsed_seconds="));
-}
-
-/// The two invocations are told apart by name: the Git directory query is
-/// traced as its own operation rather than as the listing.
-#[test_macros::traced_test]
-#[test]
-fn the_repository_query_is_traced_under_its_own_operation() {
-    let (_directory, root) = repository();
-
-    GitLsFiles::new(false)
-        .resolve_git_dir(&root)
-        .expect("git rev-parse --absolute-git-dir");
-
-    assert!(logs_contain(
-        "git{operation=\"rev_parse\" outcome=\"success\""
-    ));
-    assert!(logs_contain(
-        "git invocation completed operation=\"rev_parse\" outcome=\"success\""
-    ));
-}
-
-/// The failure half of the contract: the outcome says the invocation did not
-/// succeed, and the category says which of the four classes it failed in.
-///
-/// Git's own text is deliberately absent. It is relayed to a user by
-/// [`GitListError::diagnostic`], but a telemetry field is not a place for
-/// another program's bytes.
-#[cfg(unix)]
-#[test_macros::traced_test]
-#[test]
-fn a_failed_invocation_is_traced_with_its_bounded_category() {
-    let error = GitLsFiles::with_program("/bin/false", false)
-        .list_candidates(Utf8Path::new("."))
-        .expect_err("`false` always fails");
-    assert_eq!(error.category(), "nonzero_exit");
-
-    assert!(logs_contain("git{operation=\"ls_files\" outcome=\"error\""));
-    assert!(logs_contain(
-        "git invocation failed operation=\"ls_files\" outcome=\"error\""
-    ));
-    assert!(logs_contain("failure=\"nonzero_exit\""));
-    assert!(logs_contain("elapsed_seconds="));
 }

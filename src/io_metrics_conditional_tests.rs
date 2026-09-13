@@ -10,7 +10,7 @@ use super::*;
 #[test]
 fn a_conditional_replacement_of_a_matching_target_is_a_success() {
     let dir = tempdir().expect("create temporary directory");
-    let file = fixture(&dir);
+    let _file = fixture(&dir);
     let root = camino::Utf8Path::from_path(dir.path()).expect("the temporary directory is UTF-8");
     let capability = cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())
         .expect("open the directory capability");
@@ -26,7 +26,9 @@ fn a_conditional_replacement_of_a_matching_target_is_a_success() {
 
     replaced.expect("a matching target is replaced");
     assert_eq!(
-        fs::read_to_string(&file).expect("read the target"),
+        capability
+            .read_to_string(camino::Utf8Path::new("sample.md"))
+            .expect("read the target"),
         "| A | B |\n| 1 | 2 |\n"
     );
     assert_labels_are_bounded(&recorded);
@@ -42,11 +44,13 @@ fn a_conditional_replacement_of_a_matching_target_is_a_success() {
 #[test]
 fn a_declined_replacement_after_the_target_moved_on_is_unchanged() {
     let dir = tempdir().expect("create temporary directory");
-    let file = fixture(&dir);
-    fs::write(&file, "|X|Y|\n|3|4|").expect("write the other writer's version");
+    let _file = fixture(&dir);
     let root = camino::Utf8Path::from_path(dir.path()).expect("the temporary directory is UTF-8");
     let capability = cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())
         .expect("open the directory capability");
+    capability
+        .write(camino::Utf8Path::new("sample.md"), "|X|Y|\n|3|4|")
+        .expect("write the other writer's version");
 
     let (replaced, recorded) = recorded(|| {
         replace_file_if_unchanged(

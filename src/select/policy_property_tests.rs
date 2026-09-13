@@ -12,14 +12,14 @@ use std::{
     collections::{BTreeMap, BTreeSet},
 };
 
-use camino::{Utf8Path, Utf8PathBuf};
 use proptest::{collection::vec, prelude::*, test_runner::TestRunner};
 
 use super::{
+    CandidatePath,
     PathKind,
     PathProbe,
     select_files,
-    tests::{FakeProbe, at, regular, select_root},
+    tests::{FakeProbe, at, regular},
 };
 use crate::select::extensions::ExtensionFilter;
 
@@ -62,15 +62,15 @@ fn verdict() -> impl Strategy<Value = Verdict> {
     ]
 }
 
-fn candidate() -> impl Strategy<Value = Utf8PathBuf> {
+fn candidate() -> impl Strategy<Value = CandidatePath> {
     (0..POOL.len()).prop_map(|index| at(POOL[index]))
 }
 
-fn candidate_and_verdict() -> impl Strategy<Value = Vec<(Utf8PathBuf, Verdict)>> {
+fn candidate_and_verdict() -> impl Strategy<Value = Vec<(CandidatePath, Verdict)>> {
     vec((candidate(), verdict()), 0..=30)
 }
 
-fn kind_for(verdict: Verdict, path: &Utf8Path) -> PathKind {
+fn kind_for(verdict: Verdict, path: &CandidatePath) -> PathKind {
     match verdict {
         Verdict::Regular => regular(path.as_str()),
         Verdict::Missing => PathKind::Missing,
@@ -87,11 +87,11 @@ fn kind_for(verdict: Verdict, path: &Utf8Path) -> PathKind {
 /// expectation assumes another — which is exactly what two independent folds
 /// over `candidates` would allow, since a probe table keeps the last verdict
 /// and a `any` keeps the first.
-fn verdicts_for(candidates: &[(Utf8PathBuf, Verdict)]) -> BTreeMap<Utf8PathBuf, Verdict> {
+fn verdicts_for(candidates: &[(CandidatePath, Verdict)]) -> BTreeMap<CandidatePath, Verdict> {
     candidates.iter().cloned().collect()
 }
 
-fn probe_for(verdicts: &BTreeMap<Utf8PathBuf, Verdict>) -> FakeProbe {
+fn probe_for(verdicts: &BTreeMap<CandidatePath, Verdict>) -> FakeProbe {
     FakeProbe::new(
         verdicts
             .iter()
@@ -113,36 +113,36 @@ fn a_path_is_selected_exactly_when_it_matches_and_probes_as_a_regular_file() {
 
     runner
         .run(&candidate_and_verdict(), |candidates| {
-            let paths: Vec<Utf8PathBuf> = candidates.iter().map(|(path, _)| path.clone()).collect();
+            let paths: Vec<CandidatePath> =
+                candidates.iter().map(|(path, _)| path.clone()).collect();
             let verdicts = verdicts_for(&candidates);
             let probe = probe_for(&verdicts);
-            let selected = select_files(&paths, select_root(), &filter, &probe)
+            let selected = select_files(&paths, &filter, &probe)
                 .expect("the fake probe answers every candidate it is handed");
 
             // Soundness: nothing reaches the output that the rule does not name.
             for path in &selected {
                 prop_assert!(
-                    filter.matches(path),
+                    filter.matches(path.as_str()),
                     "{} does not carry a configured extension",
                     path
                 );
                 prop_assert!(
-                    matches!(
-                        probe.probe(select_root(), path),
-                        Ok(PathKind::RegularFile(_))
-                    ),
+                    matches!(probe.probe(path), Ok(PathKind::RegularFile(_))),
                     "{} was selected without a regular-file verdict",
                     path
                 );
             }
 
             // Completeness: nothing the rule names is left out.
-            let expected: BTreeSet<&Utf8Path> = verdicts
+            let expected: BTreeSet<&CandidatePath> = verdicts
                 .iter()
-                .filter(|(path, verdict)| **verdict == Verdict::Regular && filter.matches(path))
-                .map(|(path, _)| path.as_path())
+                .filter(|(path, verdict)| {
+                    **verdict == Verdict::Regular && filter.matches(path.as_str())
+                })
+                .map(|(path, _)| path)
                 .collect();
-            let actual: BTreeSet<&Utf8Path> = selected.iter().map(Utf8PathBuf::as_path).collect();
+            let actual: BTreeSet<&CandidatePath> = selected.iter().collect();
             prop_assert_eq!(&actual, &expected);
             prop_assert_eq!(selected.len(), actual.len(), "a path was selected twice");
 
@@ -151,10 +151,9 @@ fn a_path_is_selected_exactly_when_it_matches_and_probes_as_a_regular_file() {
             } else {
                 saw_non_empty.set(true);
             }
-            if verdicts
-                .iter()
-                .any(|(path, verdict)| *verdict != Verdict::Regular && filter.matches(path))
-            {
+            if verdicts.iter().any(|(path, verdict)| {
+                *verdict != Verdict::Regular && filter.matches(path.as_str())
+            }) {
                 saw_probe_only_exclusion.set(true);
             }
             Ok(())
@@ -178,7 +177,7 @@ fn a_path_is_selected_exactly_when_it_matches_and_probes_as_a_regular_file() {
 /// Stated here rather than drawn from a random-number generator so that the
 /// test needs no shuffling dependency and the permutation is reproducible from
 /// the failing case alone.
-fn permute(items: &[Utf8PathBuf], keys: &[u8]) -> Vec<Utf8PathBuf> {
+fn permute(items: &[CandidatePath], keys: &[u8]) -> Vec<CandidatePath> {
     let mut order: Vec<usize> = (0..items.len()).collect();
     order.sort_by_key(|index| (keys[*index], *index));
     order
@@ -187,7 +186,7 @@ fn permute(items: &[Utf8PathBuf], keys: &[u8]) -> Vec<Utf8PathBuf> {
         .collect()
 }
 
-fn candidates_and_keys() -> impl Strategy<Value = (Vec<Utf8PathBuf>, Vec<u8>)> {
+fn candidates_and_keys() -> impl Strategy<Value = (Vec<CandidatePath>, Vec<u8>)> {
     vec(candidate(), 0..=12).prop_flat_map(|paths| {
         let shared = paths.clone();
         vec(any::<u8>(), paths.len()).prop_map(move |keys| (shared.clone(), keys))
@@ -220,9 +219,9 @@ fn selection_does_not_depend_on_the_order_the_listing_arrives_in() {
                     .iter()
                     .map(|path| (path.clone(), regular(path.as_str()))),
             );
-            let in_listing_order = select_files(&paths, select_root(), &filter, &probe)
+            let in_listing_order = select_files(&paths, &filter, &probe)
                 .expect("the fake probe answers every candidate it is handed");
-            let in_shuffled_order = select_files(&shuffled, select_root(), &filter, &probe)
+            let in_shuffled_order = select_files(&shuffled, &filter, &probe)
                 .expect("the fake probe answers every candidate it is handed");
             prop_assert_eq!(
                 &in_listing_order,

@@ -5,9 +5,8 @@
 //! a user reads: this repository's own wording with Git's text appended,
 //! because a terminal shows one failure rather than a failure and an appendix.
 //! [`Display`] alone is the half a test may assert on, since Git's own words
-//! are localised and version-dependent. [`GitListError::category`] is the half
-//! a tracing field may carry: a closed set, none of whose values is a path or
-//! anything Git wrote.
+//! are localised and version-dependent. Selection queries return these errors
+//! as data; the command boundary decides what, if anything, to report.
 //!
 //! [`Display`]: std::fmt::Display
 
@@ -58,23 +57,6 @@ impl GitListError {
             Self::Spawn { source, .. } => format!("{self}: {source}"),
             Self::Failed { stderr, .. } if !stderr.is_empty() => format!("{self}: {stderr}"),
             _ => self.to_string(),
-        }
-    }
-
-    /// The bounded class this failure belongs to.
-    ///
-    /// What a tracing field may carry where [`diagnostic`](Self::diagnostic)
-    /// carries prose: a closed set of four, none of which is a path, a status
-    /// code, or anything Git wrote. `ExitStatus` is deliberately not reported
-    /// as itself — the class of a failure is what a host aggregates, and the
-    /// number of a failing exit code is a detail of Git's, not of ours.
-    #[must_use]
-    pub const fn category(&self) -> &'static str {
-        match self {
-            Self::ProgramNotFound { .. } => "program_not_found",
-            Self::Spawn { .. } => "spawn",
-            Self::Failed { .. } => "nonzero_exit",
-            Self::NoGitDir { .. } => "no_git_dir",
         }
     }
 }

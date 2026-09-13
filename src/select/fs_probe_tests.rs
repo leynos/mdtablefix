@@ -12,10 +12,10 @@ use tempfile::TempDir;
 use super::AmbientPathProbe;
 use crate::select::{
     extensions::ExtensionFilter,
-    policy::{PathKind, PathProbe, select_files},
+    policy::{CandidatePath, PathKind, PathProbe, ProbeFailureKind, select_files},
 };
 
-fn at(path: &str) -> Utf8PathBuf { Utf8PathBuf::from(path) }
+fn at(path: &str) -> CandidatePath { CandidatePath::new(path.to_owned()) }
 
 /// `directory` as the UTF-8 path a test works in.
 fn as_path(directory: &TempDir) -> Utf8PathBuf {
@@ -57,18 +57,17 @@ fn write(root: &Utf8Path, name: &str, content: &str) {
 /// The cases that exercise a *failure* call [`AmbientPathProbe::probe`]
 /// directly, since a helper that panics cannot report the error they assert on.
 fn probe(root: &Utf8Path, path: &str) -> PathKind {
-    AmbientPathProbe
-        .probe(root, Utf8Path::new(path))
+    AmbientPathProbe::new(root)
+        .probe(&at(path))
         .expect("every fixture path is one the probe can read")
 }
 
 /// The selection over `candidates` in `root`, with the ambient probe.
-fn selected_in(root: &Utf8Path, candidates: &[Utf8PathBuf]) -> Vec<Utf8PathBuf> {
+fn selected_in(root: &Utf8Path, candidates: &[CandidatePath]) -> Vec<CandidatePath> {
     select_files(
         candidates,
-        root,
         &ExtensionFilter::default(),
-        &AmbientPathProbe,
+        &AmbientPathProbe::new(root),
     )
     .expect("every fixture candidate is one the probe can read")
 }
@@ -81,18 +80,22 @@ fn a_regular_file_is_identified_by_an_absolute_canonical_path(temp_root: TempDir
     let PathKind::RegularFile(identity) = probe(&root, "docs/guide.md") else {
         panic!("docs/guide.md is a regular file");
     };
-    assert!(identity.as_path().is_absolute(), "{identity:?}");
+    assert!(
+        Utf8Path::new(identity.as_str()).is_absolute(),
+        "{identity:?}"
+    );
     // Compared by path components rather than as text, so the assertion holds
     // where the platform spells the separator the other way round. A canonical
     // path is also the platform's own spelling of the absolute path, which on
     // Windows prefixes it with the verbatim marker.
     assert!(
-        identity
-            .as_path()
-            .ends_with(Utf8Path::new("docs").join("guide.md")),
+        Utf8Path::new(identity.as_str()).ends_with(Utf8Path::new("docs").join("guide.md")),
         "{identity:?}"
     );
-    assert_eq!(identity.as_path().file_name(), Some("guide.md"));
+    assert_eq!(
+        Utf8Path::new(identity.as_str()).file_name(),
+        Some("guide.md")
+    );
 }
 
 #[cfg(unix)]
@@ -219,15 +222,11 @@ fn a_symbolic_link_loop_is_an_error_rather_than_a_missing_file(temp_root: TempDi
     std::os::unix::fs::symlink("b", root.join("a")).expect("create the fixture symlink");
     std::os::unix::fs::symlink("a", root.join("b")).expect("create the fixture symlink");
 
-    let error = AmbientPathProbe
-        .probe(&root, Utf8Path::new("a/guide.md"))
+    let error = AmbientPathProbe::new(&root)
+        .probe(&at("a/guide.md"))
         .expect_err("a link loop is not an absence, and not an answer");
-    assert_eq!(error.path, root.join("a/guide.md"));
-    assert_ne!(
-        error.source.kind(),
-        std::io::ErrorKind::NotFound,
-        "a loop must not be reported as a file that is merely gone: {error:?}"
-    );
+    assert_eq!(error.path, at("a/guide.md"));
+    assert_eq!(error.kind, ProbeFailureKind::Unreadable);
 }
 
 #[rstest]

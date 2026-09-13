@@ -76,11 +76,22 @@ fn a_redirecting_variable_is_removed_from_the_invocations_environment(#[case] va
 #[test]
 fn the_environment_is_pruned_rather_than_cleared() {
     let command = GitLsFiles::new(false).command(&["ls-files"], Utf8Path::new("."));
+    let mut removed: Vec<&OsStr> = command
+        .get_envs()
+        .filter(|(_, value)| value.is_none())
+        .map(|(key, _)| key)
+        .collect();
+    removed.sort_unstable();
 
-    assert!(
-        command.get_envs().all(|(_, value)| value.is_none()),
-        "an invocation must set no variable of its own: {:?}",
-        command.get_envs().collect::<Vec<_>>()
+    assert_eq!(
+        removed,
+        [
+            OsStr::new("GIT_COMMON_DIR"),
+            OsStr::new("GIT_DIR"),
+            OsStr::new("GIT_INDEX_FILE"),
+            OsStr::new("GIT_WORK_TREE"),
+        ],
+        "an invocation must remove exactly the Git redirections"
     );
 }
 
