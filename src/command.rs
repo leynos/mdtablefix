@@ -14,7 +14,6 @@ use mdtablefix::{
     format_breaks,
     io::SourceDocument,
     process::{process_stream_inner, process_with_frontmatter},
-    renumber_lists,
 };
 
 use crate::driver::Mode;
@@ -100,6 +99,7 @@ impl From<FormatOpts> for Options {
             ellipsis: opts.ellipsis,
             fences: opts.fences,
             footnotes: opts.footnotes,
+            renumber: opts.renumber,
             code_emphasis: opts.code_emphasis,
             headings: opts.headings,
         }
@@ -110,9 +110,6 @@ impl From<FormatOpts> for Options {
 fn process_lines(lines: &[String], opts: FormatOpts) -> Vec<String> {
     process_with_frontmatter(lines, |body| {
         let mut out = process_stream_inner(body, opts.into());
-        if opts.renumber {
-            out = renumber_lists(&out);
-        }
         if opts.breaks {
             out = format_breaks(&out)
                 .into_iter()

@@ -41,3 +41,9 @@ fn line_ending_const_api_compiles() {
     let cases = trybuild::TestCases::new();
     cases.pass("tests/ui/line_ending_const_pass.rs");
 }
+
+#[test]
+fn options_renumber_api_compiles() {
+    let cases = trybuild::TestCases::new();
+    cases.pass("tests/ui/options_renumber_pass.rs");
+}

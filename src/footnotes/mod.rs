@@ -17,11 +17,29 @@ use crate::textproc::{Token, push_original_token, tokenize_markdown};
 
 /// Convert bare numeric footnote references to Markdown footnote syntax.
 #[must_use]
-pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
+pub fn convert_footnotes(lines: &[String]) -> Vec<String> { convert_footnotes_inner(lines, None) }
+
+/// Converts footnotes while preserving valid Setext heading text.
+///
+/// `process_stream_inner` invokes this when it will subsequently convert
+/// Setext headings. Standalone callers retain the historical behaviour of
+/// [`convert_footnotes`], which has no heading-conversion context.
+#[must_use]
+pub(crate) fn convert_footnotes_with_setext(
+    lines: &[String],
+    headings_enabled: bool,
+) -> Vec<String> {
+    let setext_text_lines = headings_enabled.then(|| crate::headings::setext_text_lines(lines));
+    convert_footnotes_inner(lines, setext_text_lines.as_deref())
+}
+
+fn convert_footnotes_inner(lines: &[String], setext_text_lines: Option<&[bool]>) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
 
-    for line in lines {
-        if is_atx_heading_prefix(line) {
+    for (index, line) in lines.iter().enumerate() {
+        if setext_text_lines.is_some_and(|setext_lines| setext_lines[index])
+            || is_atx_heading_prefix(line)
+        {
             out.push(line.clone());
         } else {
             let mut converted = String::with_capacity(line.len());
