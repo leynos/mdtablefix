@@ -112,6 +112,63 @@ fn shrunk_drift_documents_are_fixed_points_with_indented_lazy_lines() {
     }
 }
 
+/// The document the 4000-case sweep shrank the backslash-tail overflow to.
+///
+/// A list item whose overlong first line is deferred, and whose joined
+/// paragraph ends with a backslash hard break. The two documents below are the
+/// same shape at two sizes: the first fits the reflow in three continuation
+/// lines, the second is the sweep's own shrink.
+const SHRUNK_BACKSLASH_TAIL_DOCUMENTS: &[&[&str]] = &[
+    &[
+        "1. aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa",
+        "bbbbb bbbbb bbbbb bbbbb bbbbb bbbbb bbbbb bbbbb bbbbb bbbbb bbbbb\\",
+    ],
+    &[
+        "1. aaaaa aaaaaaaa aaaaaaa aaaaa aa aaaaaaa aaaaaaaa aaaa aaa aaaa aaaaa aaaaaaaa aa \
+         aaaaaaa aaaa",
+        "aa aaaaaa aaa aaaaaa aaaa aaaaaaa aa aaaaaaa aaaaaaa",
+        "aaaaa aaaaa aaaaaaaa aa",
+        "aaa aaaaaaa aaaa aaaaaaaa aaaa aaaaaaaa aaaaa\\",
+    ],
+];
+
+/// Asserts a deferred tail measures a backslash hard break as content.
+///
+/// The tail of a deferred prefix is rewrapped on its own and the Markdown
+/// hard-break marker is re-appended afterwards. A backslash marker ends up
+/// glued to the last word of the source line, so it is content: the next pass
+/// reads it back as part of that word and measures it. Appending it after the
+/// wrap spent the whole width first, so the emitted line grew one column past
+/// the width and the next pass, which did measure the backslash, wrapped one
+/// word earlier. The marker is now left in the text handed to the wrapper for
+/// the backslash case, and still stripped and re-appended for a whitespace
+/// marker, which the next pass trims before measuring.
+#[test]
+fn deferred_tail_measures_a_backslash_hard_break_as_content() {
+    for (index, document) in SHRUNK_BACKSLASH_TAIL_DOCUMENTS.iter().enumerate() {
+        let input: Vec<String> = document.iter().map(|line| (*line).to_string()).collect();
+        let once = wrap_text(&input, WRAP_COLS);
+
+        assert_eq!(
+            wrap_text(&once, WRAP_COLS),
+            once,
+            "document {index} is not a fixed point:\n{}",
+            once.join("\n"),
+        );
+        for line in &once {
+            let width = UnicodeWidthStr::width(line.as_str());
+            assert!(
+                width <= WRAP_COLS,
+                "document {index} emitted a {width}-column line: {line:?}",
+            );
+        }
+        assert!(
+            once.last().is_some_and(|line| line.ends_with('\\')),
+            "document {index} lost the hard break: {once:?}",
+        );
+    }
+}
+
 #[test]
 fn wrap_with_prefix_emits_single_line_when_text_fits() {
     let mut out = Vec::new();

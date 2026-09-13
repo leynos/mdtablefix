@@ -9,7 +9,7 @@
 inputs reachable under the `make fmt` flag set (`--wrap`, `--renumber`,
 `--breaks`, `--ellipsis`, `--fences`), and for further inputs once `--headings`
 or `--code-emphasis` was added, so a check-after-fix gate could never converge:
-one `--in-place` pass left a file that the next pass rewrote again. Twelve
+one `--in-place` pass left a file that the next pass rewrote again. Thirteen
 defect classes contributed:
 
 - A normalized thematic break was absorbed into the following paragraph
@@ -68,6 +68,15 @@ defect classes contributed:
   while the next pass re-read the indented tail above and applied the indent to
   everything after it: `- alpha … beta` over `delta epsilon  ` over `zeta eta`
   ended at column one on one pass and two columns in on the pass after.
+- A deferred block's tail was reflowed without the backslash that ends it. The
+  tail of an overlong prefixed line is wrapped on its own and the hard-break
+  marker is put back afterwards, which is correct for the two-space form — the
+  next pass trims trailing spaces before measuring — but a backslash is content.
+  It is glued to the last word of the source line, so wrapping the line without
+  it spent the whole width and the marker then pushed the line one column past
+  it. The next pass did measure the backslash and broke one word earlier: a list
+  item ending `… bbbb bbbbb\` reflowed to two continuation lines on one pass and
+  three on the pass after, the last of them carrying the marker alone.
 
 The unmatched-fence class was reported separately, in issue #480, and reached
 the suite through the corpus rather than through a generator. The
@@ -80,7 +89,10 @@ its cells, and put neither a hard break nor an overlong code span in a
 paragraph. The
 lazy-continuation class was found by those same generators, once their
 paragraphs carried a hard break at all; a list item wide enough to defer, a
-break inside it, and one prose line below the break reach it.
+break inside it, and one prose line below the break reach it. The
+backslash-tail class needed a longer sweep still — it appeared four thousand
+cases in, where the tail's last wrapped line filled the width exactly and the
+marker taken off it was the one column that did not fit.
 
 ## Decision
 
@@ -90,7 +102,7 @@ sets and documents with recorded evidence: the `make fmt` flag set (`--wrap`,
 `--headings`, and that set with `--code-emphasis`. The guarantee is not
 universal over the inputs the formatter accepts: the one measured exception, a
 bracket reference the wrapper splits across lines, is recorded in the addendum
-below and tracked as issue #504. Eleven rules enforce the invariant where it
+below and tracked as issue #504. Twelve rules enforce the invariant where it
 holds:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
@@ -122,6 +134,16 @@ holds:
   spelling, and the pass that re-read the indented tail above applied the indent
   to everything below the break. The remembered indent is consumed either way,
   and a flush-left line with none to inherit contributes no indent of its own.
+- A deferred tail measures a backslash hard break as content.
+  `ParagraphWriter::append_stable_pending_prefix` in
+  `src/wrap/paragraph/tail_reflow.rs` leaves the backslash in the text it hands
+  to `wrap_preserving_code`, and still strips and re-appends the two-space
+  marker. The two forms do not re-parse alike: the next pass trims trailing
+  spaces before measuring, so the whitespace marker is appended after the fit
+  without changing it, while the backslash is read back as the final character
+  of the last word and must be inside it. A line that ends
+  `bbbbb bbbbb\` therefore wraps on the marker's column budget, not one column
+  beyond it.
 - Content normalizers consumed by layout run before the layout they affect.
   After fence processing and HTML-table conversion, the inline footnote stage
   runs over the complete normalized stream before Markdown table buffering, so
@@ -212,12 +234,14 @@ holds:
   of consumed, to prefixed blocks that now reflow with their continuation lines
   in one pass, to lazy continuation lines below such a block, which now carry
   the block's continuation indent rather than starting a column to the left, to
-  unmatched fences that are rewritten from the opener alone, to footnote
-  references that are converted before the layout rather than after it, to
-  delimiter rows that are only recognized when every cell carries a dash, and
-  to candidates that are themselves block starts or table rows, which no longer
-  convert, so the line below them survives as a block of its own. Tables with
-  code-emphasis repairs also receive their final column widths in the first pass.
+  deferred tails ending in a backslash hard break, which now wrap within the
+  width instead of one column past it, to unmatched fences that are rewritten
+  from the opener alone, to footnote references that are converted before the
+  layout rather than after it, to delimiter rows that are only recognized when
+  every cell carries a dash, and to candidates that are themselves block starts
+  or table rows, which no longer convert, so the line below them survives as a
+  block of its own. Tables with code-emphasis repairs also receive their final
+  column widths in the first pass.
 - `tests/idempotence.rs` formats the fixture corpus under
   `tests/data/idempotence/` twice through the real binary and asserts
   byte-identical output; the class `T` fixtures pin the table-adjacency screens
@@ -250,9 +274,10 @@ holds:
   asserts the shape is reached and its row survives, so removing the generator
   branch fails the sweep rather than leaving the guard unexercised.
   `src/wrap/paragraph_tests.rs` pins the two documents that sweep shrank its
-  drift to, along with a three-line item that reaches the class on its own, and
-  `src/table.rs` pins the lone-dash header row beside the empty one. Together
-  they guard the invariant against regression.
+  drift to, along with a three-line item that reaches the class on its own, the
+  two documents the backslash-tail overflow shrank to, and `src/table.rs` pins
+  the lone-dash header row beside the empty one. Together they guard the
+  invariant against regression.
 
 ## Addendum (2026-09-13)
 
