@@ -225,7 +225,6 @@ passed through unchanged. For example, a GitHub compare destination containing
 `v1...v2` remains a valid URL even when it follows its reference label on the
 next line.
 
-
 ## Code-emphasis handling
 
 The `--code-emphasis` flag repairs emphasis markers adjoining inline code

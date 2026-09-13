@@ -302,18 +302,6 @@ Text.
 `convert_footnotes` only processes the final contiguous numeric list that
 immediately follows an H2 heading when these conditions are met.
 
-## Footnotes
-
- [^1]: First note
-
- [^2]: Second note
-
-[^10]: Final note
-```
-
-`convert_footnotes` only processes the final contiguous numeric list that
-immediately follows an H2 heading when these conditions are met.
-
 ## HTML table support in mdtablefix
 
 `mdtablefix` can format simple HTML `<table>` elements embedded in Markdown.
