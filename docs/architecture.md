@@ -478,9 +478,10 @@ CRLF while the transform pipeline itself remains line-ending agnostic. The
 rationale is recorded in [ADR 0007](adrs/0007-line-ending-detection.md).
 
 The `driver` module is binary-private by design: it is declared as `mod
-driver;` in the binary rather than part of the library, so the library's entry
-points stay infallible and free of filesystem policy while the CLI's
-exit-status contract lives in the driver.
+driver;` in the binary rather than part of the library, so the library's
+filesystem entry points return `std::io::Result` and are therefore fallible.
+They remain independent of CLI filesystem policy and exit-status handling,
+which the driver owns.
 
 ### Stateful helpers
 
