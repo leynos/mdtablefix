@@ -40,8 +40,12 @@ defect classes contributed:
 
 ## Decision
 
-The formatter is a fixed point: `format(format(x)) == format(x)` for every flag
-set the CLI exposes. Seven rules enforce the invariant:
+The formatter is a fixed point, `format(format(x)) == format(x)`, for the flag
+sets with recorded evidence: the `make fmt` flag set (`--wrap`, `--renumber`,
+`--breaks`, `--ellipsis`, `--fences`), and that set with `--headings`.
+`--code-emphasis` may settle on a second pass rather than the first, including
+under `--git --check`; the Addendum below narrows the guarantee to the proven
+sets. Seven rules enforce the invariant where it holds:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
   `src/wrap/block.rs` recognizes a break with
@@ -137,12 +141,12 @@ set the CLI exposes. Seven rules enforce the invariant:
 
 ## Addendum (2026-09-13)
 
-The accepted decision above records the intended CLI-wide invariant. The
-evidence currently recorded for this branch proves the fixed-point guarantee
-for the `make fmt` flag set and for that set with `--headings`; it does not
-establish the guarantee for every exposed flag combination. In particular, ADR
-0010 records the outstanding `--code-emphasis` case, which can settle on a
-second pass rather than the first.
+The decision above is scoped to the flag sets for which this branch has
+evidence. That evidence proves the fixed-point guarantee for the `make fmt`
+flag set and for that set with `--headings`; it does not establish the
+guarantee for every exposed flag combination. In particular, ADR 0010 records
+the outstanding `--code-emphasis` case, which can settle on a second pass
+rather than the first.
 
 The impact is that `--git --check` is a sound one-pass drift check for the
 proven flag sets, while callers enabling an unproven combination must account

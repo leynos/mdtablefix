@@ -183,16 +183,17 @@ filesystem access themselves.
   fails. Both entry points call the one implementation, and the CLI and
   `rewrite`/`rewrite_no_wrap` reach it through `replace_file_if_unchanged`.
 - `replace_file_if_unchanged(directory, path, expected, contents) -> std::io::Result<bool>`
-  writes exactly as `replace_file` does, except that after the temporary file
-  is written and flushed and immediately before the rename, it reads the target
-  back and compares it against `expected`. It returns `Ok(false)` when the
-  target no longer held `expected`: the target is left exactly as it is and the
-  temporary file is removed, and the caller decides what a target that moved on
-  means for its run. A target that cannot be read back at all is an `Err`: a
-  caller that asked a conditional question must not be told the condition
-  failed when the question could not be put. It is not a true compare-and-swap
-  — no supported platform's rename compares contents — but every window before
-  the rename, the whole formatting run, is closed.
+  writes exactly as `replace_file` does, except that it reads the target back
+  and compares it against `expected` twice: once after the temporary file is
+  written and synced, and once after the destination is prepared and
+  immediately before the rename. It returns `Ok(false)` when the target no
+  longer held `expected`: the target is left exactly as it is and the temporary
+  file is removed, and the caller decides what a target that moved on means for
+  its run. A target that cannot be read back at all is an `Err`: a caller that
+  asked a conditional question must not be told the condition failed when the
+  question could not be put. It is not a true compare-and-swap — no supported
+  platform's rename compares contents — but every window before the rename, the
+  whole formatting run, is closed.
 - `open_parent(path) -> std::io::Result<(Dir, Utf8PathBuf)>` is the library's
   only ambient filesystem boundary. It opens a directory capability for the
   target's parent and returns the target's file name relative to that
@@ -413,7 +414,7 @@ it is the one module that knows the whole selection tree at once.
 
 ```plaintext
 src/select.rs               the tree root: module list and dependency rule
-src/select/policy.rs        select_files, FileIdentity, PathKind, PathProbe, ProbeError
+src/select/policy.rs        select_files, FileIdentity, PathKind, PathProbe, ProbeFailure
 src/select/extensions.rs    --md-exts parsing and matching
 src/select/fs_probe.rs      AmbientPathProbe, the working-tree adapter
 src/select/git_ls_files.rs  the git subprocess and its framing
@@ -435,10 +436,12 @@ every other run.
 
 The selection is tested at three levels. The sibling `*_tests.rs` files beside
 each module cover the policy and its adapters as unit tests, and the boundary
-test in `src/select/git_ls_files_tests.rs` runs the real `git`, because the
+tests in `src/select/git_ls_files_git_tests.rs` run the real `git`, because the
 framing the adapter depends on — NUL-terminated, unquoted, verbatim paths
 relative to the process working directory — is exactly the part a fake would
-assume. The scenarios in `tests/features/git_file_selection.feature`, bound by
+assume. Its sibling, `src/select/git_ls_files_tests.rs`, covers the adapter's
+environment discipline and how Git's output is read, spawning no process. The
+scenarios in `tests/features/git_file_selection.feature`, bound by
 `tests/git_file_selection.rs` to the steps in `tests/steps/git_selection.rs`,
 build real repositories and drive the built binary as a user would.
 `tests/cli_git.rs` covers what a scenario cannot state as behaviour: the
@@ -947,6 +950,18 @@ the user wrote and is span metadata rather than a metric label, so two files
 called `a.md` in different directories stay distinct in a trace and still cost
 no cardinality. The `operation` field already reaches the same trace: the
 line-ending report this analysis emits carries `"file"`.
+
+The `git` invocation boundary in `src/select/git_ls_files.rs` follows the same
+discipline. `GitLsFiles` wraps every invocation in a `debug` span named `git`
+carrying `operation` (`ls_files` or `rev_parse`), `outcome` (`success` or
+`error`), and `elapsed_seconds`, and one `debug` event per invocation repeats
+`operation` and `outcome`; a failing invocation adds `failure`, the bounded
+category `GitListError::category` in `src/select/git_failure.rs` returns:
+`program_not_found`, `spawn`, `nonzero_exit`, or `no_git_dir`. A span is not
+a line, so a test asserting what happened reads the event and a host drawing a
+timeline reads the span. Nothing traced there is a path or Git's own
+diagnostic text: the adapter's own diagnostics relay Git's words to a user,
+while a telemetry field does not.
 
 Table: Structured field names emitted by tracing instrumentation.
 
