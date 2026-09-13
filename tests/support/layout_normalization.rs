@@ -1,5 +1,7 @@
 //! Regression tests for normalization that must precede layout.
 
+use proptest::{prelude::*, test_runner::Config as ProptestConfig};
+
 use super::idempotence_harness::{flags_for, format_twice};
 
 const WRAP: u16 = 1;
@@ -7,6 +9,50 @@ const RENUMBER: u16 = 1 << 1;
 const ELLIPSIS: u16 = 1 << 3;
 const FOOTNOTES: u16 = 1 << 5;
 const CODE_EMPHASIS: u16 = 1 << 6;
+const HEADINGS: u16 = 1 << 7;
+
+fn footnote_document_strategy() -> impl Strategy<Value = String> {
+    (
+        proptest::collection::btree_set(1_u8..=99, 1..=4),
+        proptest::collection::vec("[a-z]{2,8}", 4..=8),
+    )
+        .prop_map(|(labels, words)| {
+            let prose = words.join(" ");
+            let references = labels
+                .iter()
+                .map(|label| format!("{prose}.{label}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let definitions = labels
+                .iter()
+                .map(|label| format!("{label}. {prose}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            format!("{references}\n\n## Footnotes\n\n{definitions}\n")
+        })
+}
+
+fn wide_ordered_list_strategy() -> impl Strategy<Value = String> {
+    proptest::collection::vec(proptest::collection::vec("[a-z]{2,8}", 2..=5), 10..=12).prop_map(
+        |items| {
+            items
+                .into_iter()
+                .map(|words| {
+                    format!(
+                        concat!(
+                            "1. {} and a deliberately long continuation that must wrap beneath ",
+                            "this ordered list marker for alignment."
+                        ),
+                        words.join(" ")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n"
+        },
+    )
+}
 
 #[test]
 fn footnote_conversion_precedes_wrapping_at_the_width_boundary() {
@@ -37,6 +83,15 @@ fn footnote_conversion_precedes_list_renumbering() {
 
     assert_eq!(twice, once);
     assert_eq!(once, "See.[^1]\n\n[^1]: Seventh\n");
+}
+
+#[test]
+fn footnote_conversion_preserves_setext_heading_text() {
+    let flags = flags_for(FOOTNOTES | HEADINGS);
+    let (once, twice) = format_twice("Title.2\n=====\n", &flags);
+
+    assert_eq!(twice, once);
+    assert_eq!(once, "# Title.2\n");
 }
 
 #[test]
@@ -109,4 +164,39 @@ fn table_reflow_measures_code_emphasis_repaired_cells() {
             "| alpha | Use `cargo test` before merging... |",
         ]
     );
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(48))]
+
+    #[test]
+    fn generated_footnotes_and_lists_reach_a_wrapped_fixed_point(
+        document in footnote_document_strategy(),
+    ) {
+        let flags = flags_for(WRAP | RENUMBER | FOOTNOTES);
+        let (once, twice) = format_twice(&document, &flags);
+
+        prop_assert_eq!(&twice, &once);
+        prop_assert!(once.lines().all(|line| line.len() <= 80));
+    }
+
+    #[test]
+    fn generated_wide_ordered_lists_use_final_continuation_width(
+        document in wide_ordered_list_strategy(),
+    ) {
+        let flags = flags_for(WRAP | RENUMBER);
+        let (once, twice) = format_twice(&document, &flags);
+        let lines = once.lines().collect::<Vec<_>>();
+        let tenth = lines
+            .iter()
+            .position(|line| line.starts_with("10. "))
+            .expect("renumbered output has a tenth item");
+        let continuation = lines
+            .get(tenth + 1)
+            .expect("the tenth item has a continuation");
+
+        prop_assert_eq!(&twice, &once);
+        prop_assert!(once.lines().all(|line| line.len() <= 80));
+        prop_assert!(continuation.starts_with("    "));
+    }
 }

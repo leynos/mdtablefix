@@ -9,7 +9,7 @@ use table_line_protection::{protect_table_lines, restore_table_lines};
 use crate::{
     ellipsis::replace_ellipsis,
     fences::{attach_orphan_specifiers, compress_fences},
-    footnotes::convert_footnotes,
+    footnotes::convert_footnotes_with_setext,
     frontmatter::split_leading_yaml_frontmatter,
     html::convert_html_tables,
     lists::renumber_lists,
@@ -107,7 +107,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     let mut pre = convert_html_tables(&lines);
     if opts.footnotes {
-        pre = convert_footnotes(&pre);
+        pre = convert_footnotes_with_setext(&pre, opts.headings);
     }
 
     // Code-emphasis and ellipsis both shorten table cells, so they must run

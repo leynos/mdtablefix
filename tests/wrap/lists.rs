@@ -26,9 +26,12 @@ fn test_wrap_list_items_with_inline_code(
     #[case] expected: usize,
 ) {
     let input = lines_vec![format!(
-        "{source_prefix}`script`: A multi-line script declared with the YAML `|` block style. The \
-         entire block is passed to an interpreter. If the first line begins with `#!`, Netsuke \
-         executes the script verbatim, respecting the shebang."
+        concat!(
+            "{}`script`: A multi-line script declared with the YAML `|` block style. ",
+            "The entire block is passed to an interpreter. If the first line begins with `#!`, ",
+            "Netsuke executes the script verbatim, respecting the shebang."
+        ),
+        source_prefix
     )];
     let output = process_stream(&input);
     assert_wrapped_list_item(&output, output_prefix, expected);

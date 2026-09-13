@@ -7,10 +7,11 @@ Its visibility is restricted to `pub(crate)` in the library so the crate does
 not expose YAML frontmatter parsing as part of its supported public API.
 
 This boundary matches the role of the module. The helper exists to shield a
-leading YAML frontmatter block from Markdown transforms, including CLI-only
-operations such as list renumbering and thematic break normalization. External
-callers interact with that behaviour through higher-level formatting entry
-points rather than by calling the frontmatter helper directly.
+leading YAML frontmatter block from Markdown transforms, including library
+operations such as list renumbering and the CLI-only thematic-break
+normalization. External callers interact with that behaviour through
+higher-level formatting entry points rather than by calling the frontmatter
+helper directly.
 
 ### Rationale
 
@@ -31,8 +32,14 @@ the closure's output.
 Callers must not split, transform, or restore frontmatter outside this
 boundary. Both [`process_stream_opts`](../src/process.rs) in the library and
 `process_lines` in the package binary route through it. All body transforms
-must run inside the closure, including CLI-only transforms such as
-`renumber_lists` and `format_breaks`.
+must run inside the closure. The library-owned `renumber_lists` pass runs inside
+`process_stream_inner`, controlled by `Options::renumber`; `format_breaks` is
+the only CLI-only transform and runs after that pipeline.
+
+The normalization-before-layout order is recorded in
+[`ADR 0006`](adrs/0006-single-pass-idempotence.md). Keep content normalizers,
+including footnotes and list markers, before table reflow and paragraph
+wrapping so layout measures the final text.
 
 When working in this area:
 
