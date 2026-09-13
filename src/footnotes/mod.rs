@@ -11,7 +11,7 @@ mod renumber;
 
 use inline::{convert_inline, is_atx_heading_prefix};
 use lists::convert_block;
-use renumber::{renumber_footnotes, renumber_labels};
+use renumber::{renumber_labels, reorder_footnotes};
 use tracing::debug;
 
 use crate::textproc::{Token, push_original_token, tokenize_markdown};
@@ -108,19 +108,29 @@ pub fn renumber_footnote_labels(lines: &[String]) -> Vec<String> {
     );
     out
 }
-/// Fold a trailing ordered list into definitions and renumber the references.
+
+/// Fold a trailing ordered list into definitions and reorder the block.
 ///
-/// This is the structural half of [`convert_footnotes`]. It reads the block
-/// structure around the trailing list — `convert_block` converts that list only
-/// when a second-level heading precedes it, and leaves a list the label stage
-/// has already promoted — so it runs after the heading pass has settled that
-/// structure, and it appends definition lines, so it runs after the passes that
-/// lay lines out.
+/// This is the structural half of [`convert_footnotes`]: it settles the block
+/// and keeps the number each header already carries, because those are
+/// [`renumber_footnote_labels`]'s work. Numbering them here as well would take
+/// fresh numbers from the pool for the definitions no reference points at, in
+/// line order, which moves a definition the label stage had placed earlier to
+/// the end of the block.
+///
+/// The one list it does number is the one it folds itself, and it numbers that
+/// from one: `convert_block` converts a heading-led trailing list only when no
+/// reference and no definition has claimed a number, so the items are the only
+/// definitions in the document and the list's own marker numbers say nothing
+/// about where they belong. It reads the block structure around that list, so
+/// it runs after the heading pass has settled the structure, and it rewrites
+/// list items as definition headers, so it runs after the passes that lay lines
+/// out.
 #[must_use]
 pub fn convert_footnote_definitions(lines: &[String]) -> Vec<String> {
     let mut out = lines.to_vec();
     convert_block(&mut out);
-    renumber_footnotes(&mut out);
+    reorder_footnotes(&mut out);
     debug!(
         phase = "definitions",
         lines_in = lines.len(),

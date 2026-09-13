@@ -1484,8 +1484,8 @@ explicit reference rewrites. Explicit `[^n]:` headers are appended to
 header in scan order. Ordered-list items that look like candidate footnote
 definitions are buffered as `NumericCandidate` entries during the scan and
 finalized at the end via `finalize_numeric_candidates`, which drains the buffer
-in reverse, so the assigned numbers reflect bottom-up ordering rather than the
-order in which the candidates were discovered.
+in the order the candidates were discovered, so an item no reference reaches
+keeps the position it was written in once the block is sorted by number.
 
 Footnote reference collection, definition scanning, and reference rewriting
 classify each source line with `FenceTracker::observe_source_line`. The shared

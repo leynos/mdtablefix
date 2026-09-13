@@ -71,12 +71,19 @@ pub(super) fn has_existing_footnote_block(lines: &[String], start: usize) -> boo
     false
 }
 
-/// Converts one ordered-list item into a definition while preserving indent
-/// and the whitespace before its body.
+/// Rewrites an ordered-list item as a footnote definition header.
+///
+/// `number` is the number the fold assigns rather than the item's own, because
+/// the two differ whenever the list is not already numbered from one — `10.`
+/// is the third item of a list of three. The fold reaches that list only when
+/// nothing has claimed a number yet: the label stage promotes every item of
+/// such a list in its own scan as soon as any reference or definition exists,
+/// so a list still numbered here belongs to a document with neither, and the
+/// numbers it takes start at one and run in list order.
 ///
 /// The capture boundaries are used instead of trimming so list formatting and
 /// continuation alignment remain stable after conversion.
-fn replace_footnote_line(line: &str) -> String {
+fn replace_footnote_line(line: &str, number: usize) -> String {
     FOOTNOTE_LINE_RE
         .replace(line, |caps: &Captures| {
             let num_match = caps
@@ -87,8 +94,8 @@ fn replace_footnote_line(line: &str) -> String {
                 .expect("footnote line capture missing rest");
             let whitespace = &line[num_match.end() + 1..rest_match.start()];
             format!(
-                "{}[^{}]:{}{}",
-                &caps["indent"], &caps["num"], whitespace, &caps["rest"]
+                "{}[^{number}]:{}{}",
+                &caps["indent"], whitespace, &caps["rest"]
             )
         })
         .to_string()
@@ -102,9 +109,11 @@ pub(super) fn convert_block(lines: &mut [String]) {
     if !has_h2_heading_before(lines, start) || has_existing_footnote_block(lines, start) {
         return;
     }
+    let mut number = 1;
     for line in &mut lines[start..end] {
         if FOOTNOTE_LINE_RE.is_match(line) {
-            *line = replace_footnote_line(line);
+            *line = replace_footnote_line(line, number);
+            number += 1;
         }
     }
 }

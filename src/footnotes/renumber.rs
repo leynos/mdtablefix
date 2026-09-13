@@ -23,7 +23,12 @@ mod parsing {
 
 #[cfg(test)]
 use definitions::numeric_candidate_from_line;
-use definitions::{DefinitionUpdates, collect_definition_updates, rewrite_definition_headers};
+use definitions::{
+    DefinitionUpdates,
+    collect_definition_updates,
+    rewrite_definition_headers,
+    settled_definitions,
+};
 use reorder::reorder_definition_block;
 use tracing::debug;
 
@@ -238,7 +243,8 @@ fn plan_renumbering(lines: &[String]) -> Option<(HashMap<usize, usize>, Definiti
         return None;
     }
 
-    if definitions.definitions.is_empty() && lines.iter().any(|line| FOOTNOTE_LINE_RE.is_match(line))
+    if definitions.definitions.is_empty()
+        && lines.iter().any(|line| FOOTNOTE_LINE_RE.is_match(line))
     {
         return None;
     }
@@ -248,20 +254,20 @@ fn plan_renumbering(lines: &[String]) -> Option<(HashMap<usize, usize>, Definiti
 
 /// Rewrites footnote labels — references and definition headers — in place.
 ///
-/// This is the length-changing half of [`renumber_footnotes`]: a reference such
+/// This is the length-changing half of the footnote pipeline: a reference such
 /// as `[^10]` becomes `[^1]` once the distinct references are numbered by first
 /// encounter, and a definition header is rewritten from the same mapping, so
 /// both narrow the line they sit on and every pass that measures text has to run
-/// after them. It is separate from the rest so the caller can place the two
-/// halves either side of those passes; see `process_stream_inner`.
+/// after them. [`reorder_footnotes`] settles the block afterwards; it is separate
+/// so the caller can place the two halves either side of those passes. See
+/// `process_stream_inner`.
 ///
 /// The mapping is applied in full, which is what leaves the document's numbers
-/// final: a later [`renumber_footnotes`] call then recomputes an identity
-/// mapping and has only the block structure left to settle. Rewriting the
-/// references without the headers would not, because a definition header keeps
-/// the number the mapping gave the reference that pointed at it, and a header
-/// nobody referenced keeps its own — after the references have moved, the two
-/// are indistinguishable to a second scan.
+/// final and lets [`reorder_footnotes`] treat every header as settled.
+/// Rewriting the references without the headers would not, because a definition
+/// header keeps the number the mapping gave the reference that pointed at it,
+/// and a header nobody referenced keeps its own — after the references have
+/// moved, the two are indistinguishable to a second scan.
 ///
 /// Lines inside fenced code blocks, and the definition rows themselves, are
 /// never rewritten as references; a definition header is rewritten from its
@@ -282,41 +288,34 @@ pub(super) fn renumber_labels(lines: &mut [String]) {
         );
     }
 }
-/// Sequentially renumbers GFM footnote references and definitions in `lines`.
+
+/// Reorders the definition block of a document whose labels are already final.
 ///
-/// The input is mutated in place. Each distinct `[^n]` reference encountered
-/// in document order is mapped to the next available positive integer,
-/// starting at `1`, with the very first reference always becoming `[^1]`.
-/// Repeat references share the previously assigned number. Definitions are
-/// rewritten using the same mapping; if a numeric ordered-list item is being
-/// promoted into a definition it is also assigned the next available number.
+/// This is the structural half of [`renumber_labels`]: it leaves every number
+/// as it stands and only sorts the block, so definitions appear in ascending
+/// number order with their continuation lines attached. The numbers are
+/// [`renumber_labels`]'s work — it applies the reference mapping to the headers
+/// as well as the references — and numbering the headers again here would take
+/// fresh numbers from the free pool for the definitions no reference points at,
+/// in line order, which moves a definition the label stage had placed ahead of
+/// another behind it.
 ///
-/// If no references and no definitions are found the input is left untouched.
-/// If references exist but no definitions do, and the document already
-/// contains an explicit `[^n]:` block elsewhere, references are also left
-/// untouched to avoid clobbering an externally maintained block.
-///
-/// When the document carries a footnote-definition block its contents are
-/// reordered so definitions appear sorted by their new sequential numbers,
-/// with continuation lines kept attached to their definition. Lines inside
-/// fenced code blocks are never rewritten.
-///
-/// The reference half also runs on its own, as [`renumber_references`], before
-/// the passes that measure text; by the time this whole-document form reaches
-/// it the references are already sequential and the second rewriting leaves
-/// them as they are.
-pub(super) fn renumber_footnotes(lines: &mut [String]) {
-    let Some((mapping, definitions)) = plan_renumbering(lines) else {
+/// Lines inside fenced code blocks are never treated as headers.
+pub(super) fn reorder_footnotes(lines: &mut [String]) {
+    let Some((start, end)) = footnote_definition_block_range(lines) else {
         return;
     };
 
-    apply_mapping_to_lines(lines, &mapping, &definitions.is_definition_line);
+    let definitions = settled_definitions(lines);
 
-    rewrite_definition_headers(lines, &definitions.definitions);
+    reorder_definition_block(lines, start, end, &definitions);
 
-    if let Some((start, end)) = footnote_definition_block_range(lines) {
-        reorder_definition_block(lines, start, end, &definitions.definitions);
-    }
+    debug!(
+        start,
+        end,
+        definitions = definitions.len(),
+        "reordering the footnote definition block"
+    );
 }
 
 #[cfg(test)]

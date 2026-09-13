@@ -294,7 +294,13 @@ A numbered item in the final list is folded into a definition in the same early
 stage when a reference points at it, because the two are matched by the number
 they share. Folding the rest of the final list, and reordering the definition
 block, runs last, after the layout, because both read the document's settled
-block structure.
+block structure. The numbers are final by then, so that last stage leaves them
+as they are.
+
+The definition block is sorted by those numbers, so it reads in the order the
+text reaches its references, and the definitions no reference reaches follow at
+the end, in the order they were written.
+
 ## Table reflow
 
 `mdtablefix` reformats Markdown pipe tables so each column is aligned to a

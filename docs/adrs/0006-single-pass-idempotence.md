@@ -228,8 +228,12 @@ Thirteen rules enforce the invariant where it holds:
   it sits in. `footnotes::convert_footnote_definitions` stays last, after the
   heading pass has settled, because it reads the block structure around the
   trailing list — converting a heading-led list that no reference reaches — and
-  reorders the definitions. `convert_footnotes` remains as the composition of
-  the three for callers that need them in one step.
+  reorders the definitions. It settles the structure only, keeping the number
+  each header already carries, because the label stage has already made the
+  numbers final; a second scan would take fresh numbers from the free pool for
+  the definitions no reference points at, in line order, which moves them behind
+  one the label stage placed earlier. `convert_footnotes` remains as the
+  composition of the three for callers that need them in one step.
   The label stage promotes a trailing list item that a reference *does* reach,
   and promotes it there rather than last: a bare reference and a list item are
   matched by the number they share — `error.3` and the item `3.` are one

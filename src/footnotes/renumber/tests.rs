@@ -6,9 +6,19 @@
 
 use rstest::rstest;
 
-use super::{numeric_candidate_from_line, renumber_footnotes};
+use super::{numeric_candidate_from_line, renumber_labels, reorder_footnotes};
 
 fn strings(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_string()).collect() }
+
+/// Runs both halves of the scan the way the pipeline does.
+///
+/// The caller normally places the measuring passes between them, with
+/// `convert_block` settling the trailing list on the way back; for these cases
+/// the two halves back to back are the whole of the behaviour under test.
+fn renumber_and_reorder(lines: &mut [String]) {
+    renumber_labels(lines);
+    reorder_footnotes(lines);
+}
 
 #[rstest]
 #[case("7.")]
@@ -33,7 +43,7 @@ fn renumber_footnotes_rewrites_definitions(
     #[case] mut input: Vec<String>,
     #[case] expected: Vec<String>,
 ) {
-    renumber_footnotes(&mut input);
+    renumber_and_reorder(&mut input);
     assert_eq!(input, expected);
 }
 
@@ -86,7 +96,7 @@ fn renumber_footnotes_preserves_references_in_shared_fence_regions(#[case] mut i
         "[^2]: Second definition",
     ]);
 
-    renumber_footnotes(&mut input);
+    renumber_and_reorder(&mut input);
 
     assert_eq!(input, expected);
 }
@@ -106,7 +116,7 @@ fn renumber_footnotes_rewrites_prose_after_blockquote_fence_depth_exit() {
         "[^1]: Prose definition",
     ]);
 
-    renumber_footnotes(&mut input);
+    renumber_and_reorder(&mut input);
 
     assert_eq!(input, expected);
 }
@@ -121,7 +131,7 @@ mod proptest_tests {
     use proptest::prelude::*;
     use regex::Regex;
 
-    use super::renumber_footnotes;
+    use super::renumber_and_reorder;
 
     /// Distinct numbers in first-appearance order.
     fn unique_in_order(numbers: &[usize]) -> Vec<usize> {
@@ -160,7 +170,7 @@ mod proptest_tests {
                 input.push(format!("[^{n}]: Body for {n}"));
             }
 
-            renumber_footnotes(&mut input);
+            renumber_and_reorder(&mut input);
 
             // 1. References in non-fenced text map to their definition's new number.
             let mapping: std::collections::HashMap<usize, usize> = unique

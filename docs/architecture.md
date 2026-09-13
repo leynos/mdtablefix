@@ -251,10 +251,16 @@ structure:
 - `footnotes::convert_footnote_definitions` folds a trailing ordered list into
   definitions and reorders the definition block. It stays last, after the
   heading pass has settled and the layout is done, because it reads the block
-  structure around the trailing list and appends definition lines. A list item
-  that a reference points at is folded by `renumber_footnote_labels` instead,
-  in the scan that rewrites the reference: the two are matched by the number
-  they share, and the header the fold writes is longer than the item's marker.
+  structure around the trailing list and appends definition lines. It settles
+  the structure only: the numbers are already final, because
+  `renumber_footnote_labels` rewrote the headers from the same mapping as the
+  references. Numbering them a second time would take fresh numbers from the
+  free pool for the definitions no reference points at — and it would do so in
+  line order, moving a definition the label stage had placed earlier to the end
+  of the block. A list item that a reference points at is folded by
+  `renumber_footnote_labels` instead, in the scan that rewrites the reference:
+  the two are matched by the number they share, and the header the fold writes
+  is longer than the item's marker.
 
 `convert_footnotes` remains as the whole-document convenience form that runs the
 three in that order, and it is exposed via the higher-level
@@ -311,14 +317,16 @@ definitions, allowing references before the final footnote definition block.
 Definitions prefixed by blockquote markers (`>`) still count as existing
 blocks, but those inside fenced code blocks are ignored.
 
-Once inline references and trailing lists are normalized, `renumber_footnotes`
-walks the document in the order readers encounter references. It assigns
-sequential identifiers starting from one, rewrites every reference to use its
-new identifier, and updates footnote definitions to match. Trailing numeric
-lists are converted into definitions when the document already contains at
-least one footnote reference or definition, ensuring unrelated lists are left
-untouched. The rewritten definitions are then sorted numerically so the
-rendered footnote block mirrors the logical ordering of references in the text.
+Once inline references and trailing lists are normalized,
+`renumber_footnote_labels` walks the document in the order readers encounter
+references. It assigns sequential identifiers starting from one, rewrites every
+reference to use its new identifier, and updates footnote definitions to match.
+Trailing numeric lists are converted into definitions when the document already
+contains at least one footnote reference or definition, ensuring unrelated
+lists are left untouched. The definitions are then sorted numerically, at the
+end of the pipeline, so the rendered footnote block mirrors the logical
+ordering of references in the text, with the definitions no reference reaches
+following at the end of the block in the order they were written.
 
 Before:
 

@@ -2,7 +2,12 @@
 
 use rstest::rstest;
 
-use super::{convert_footnote_definitions, convert_footnotes, convert_inline_footnotes};
+use super::{
+    convert_footnote_definitions,
+    convert_footnotes,
+    convert_inline_footnotes,
+    renumber_footnote_labels,
+};
 
 #[test]
 fn converts_inline_numbers() {
@@ -268,24 +273,29 @@ fn inline_stage_rewrites_only_bare_references(
     assert_eq!(convert_inline_footnotes(&owned(&input)), owned(&expected));
 }
 
-/// Asserts the definition stage settles the definition block and leaves a
-/// bare numeric reference to the inline stage that runs before it.
+/// Asserts the definition stage settles only the block structure.
+///
+/// It leaves a bare numeric reference to the inline stage that runs before it,
+/// and it leaves the numbering to the label stage that runs before that: a
+/// header already carrying the number it keeps is not numbered again, because
+/// the free pool reaches exactly the definitions no reference points at, and
+/// would move them to the end in line order.
 #[rstest]
 #[case::bare_reference_untouched(vec!["See docs.2"], vec!["See docs.2"])]
-#[case::labels_renumbered_and_block_reordered(
+#[case::block_reordered_by_its_settled_numbers(
+    vec![
+        "First reference.[^7]",
+        "Second reference.[^3]",
+        "",
+        "  [^7]: Seventh footnote",
+        "  [^3]: Third footnote",
+    ],
     vec![
         "First reference.[^7]",
         "Second reference.[^3]",
         "",
         "  [^3]: Third footnote",
         "  [^7]: Seventh footnote",
-    ],
-    vec![
-        "First reference.[^1]",
-        "Second reference.[^2]",
-        "",
-        "  [^1]: Seventh footnote",
-        "  [^2]: Third footnote",
     ],
 )]
 fn definition_stage_leaves_bare_references_to_the_inline_stage(
@@ -298,7 +308,36 @@ fn definition_stage_leaves_bare_references_to_the_inline_stage(
     );
 }
 
-/// Owns a case's lines for the stages, which take `&[String]`.
-fn owned(lines: &[&str]) -> Vec<String> {
-    lines.iter().map(|line| (*line).to_string()).collect()
+/// Asserts the label stage's numbering survives the definitions stage.
+///
+/// The two stages run either side of the passes that measure text, so the
+/// definitions stage sees labels that are already final. Numbering them again
+/// from its own scan would reach the definitions no reference points at — the
+/// pool never reaches the referenced ones — and move them to the end of the
+/// block in line order, undoing the position the label stage gave them.
+#[test]
+fn definition_stage_keeps_the_numbers_the_label_stage_settled() {
+    let input = owned(&[
+        "First reference.[^7]",
+        "Second reference.[^3]",
+        "",
+        "1. Legacy footnote",
+        "3. Third footnote",
+        "7. Seventh footnote",
+    ]);
+    let expected = owned(&[
+        "First reference.[^1]",
+        "Second reference.[^2]",
+        "",
+        "[^1]: Seventh footnote",
+        "[^2]: Third footnote",
+        "[^3]: Legacy footnote",
+    ]);
+
+    let labelled = renumber_footnote_labels(&convert_inline_footnotes(&input));
+
+    assert_eq!(convert_footnote_definitions(&labelled), expected);
 }
+
+/// Owns a case's lines for the stages, which take `&[String]`.
+fn owned(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_string()).collect() }

@@ -91,6 +91,36 @@ fn collect_definition_updates_converts_numeric_candidates() {
 }
 
 #[test]
+fn collect_definition_updates_numbers_candidates_in_scan_order() {
+    let lines = strings(&[
+        "Reference.[^7]",
+        "",
+        "1. First note",
+        "2. Second note",
+        "7. Seventh note",
+    ]);
+    let mut mapping = HashMap::from([(7, 1)]);
+
+    let updates = collect_definition_updates(&lines, &mut mapping);
+
+    assert_eq!(
+        updates
+            .definitions
+            .iter()
+            .map(|definition| definition.line.as_str())
+            .collect::<Vec<_>>(),
+        // The item the reference reaches takes its number; the items it does
+        // not reach take the pool in the order they were written, so the block
+        // still reads the way the list was authored once it is sorted.
+        vec![
+            "[^2]: First note",
+            "[^3]: Second note",
+            "[^1]: Seventh note"
+        ]
+    );
+}
+
+#[test]
 fn rewrite_definition_headers_updates_only_known_definition_lines() {
     let mut lines = strings(&["[^7]: Old", "text"]);
     let definitions = vec![DefinitionLine {
