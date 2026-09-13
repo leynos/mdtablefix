@@ -95,11 +95,16 @@ fn test_wrap_joins_unclosed_span_continuation() {
 
 #[test]
 fn test_wrap_preserves_hard_break_when_buffered_span_closes() {
+    // The line below the break is a lazy continuation of the item, so it
+    // carries the item's continuation indent. Emitting it flush-left gave the
+    // same paragraph a second spelling that only the deferral path produced,
+    // and the next pass then re-read it as part of the item and indented it.
     let input = lines_vec!["- `foo", "bar` continues.  ", "next"];
     let output = wrap_text(&input, 80);
     assert_eq!(output.len(), 2);
     assert_eq!(output[0], "- `foo bar` continues.  ");
-    assert_eq!(output[1], "next");
+    assert_eq!(output[1], "  next");
+    assert_eq!(wrap_text(&output, 80), output, "wrap is not a fixed point");
 }
 
 #[test]
@@ -115,11 +120,13 @@ fn test_wrap_defers_while_any_span_stays_open() {
 fn test_wrap_pending_cleared_after_span_closes_on_continuation() {
     // Span closes on the continuation line; the pending buffer stays alive
     // only until the scanner confirms no span remains open. The following
-    // plain line starts a new paragraph instead of extending the pending
-    // prefix buffer.
+    // plain line gets an output line of its own, carrying the item's
+    // continuation indent so the deferred and non-deferred paths agree,
+    // instead of extending the pending prefix buffer.
     let input = lines_vec!["- `foo", "  bar`", "baz"];
     let output = wrap_text(&input, 80);
-    assert_eq!(output, vec!["- `foo bar`".to_string(), "baz".to_string()],);
+    assert_eq!(output, vec!["- `foo bar`".to_string(), "  baz".to_string()],);
+    assert_eq!(wrap_text(&output, 80), output, "wrap is not a fixed point");
 }
 
 #[test]

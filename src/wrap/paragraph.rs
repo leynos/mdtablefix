@@ -96,18 +96,20 @@ impl ParagraphState {
     /// Records the paragraph indent from `line` when the buffer is still empty.
     ///
     /// The `line` parameter is the original input line whose leading
-    /// whitespace may become the continuation prefix. This method returns no
-    /// value, updates `indent` only for the first buffered segment, and never
-    /// panics.
+    /// whitespace may become the continuation prefix. An indent remembered by
+    /// a deferred prefix flush takes precedence over the line's own, and a
+    /// flush-left line inherits it too: such a line is a lazy continuation of
+    /// the block above, and the flush's indented tail makes the next pass
+    /// indent it, so a first pass that left it flush-left had no fixed point.
+    /// The remembered indent is consumed either way, and a flush-left line
+    /// with none remembered contributes no indent of its own.
+    ///
+    /// This method returns no value, updates `indent` only for the first
+    /// buffered segment, and never panics.
     pub(super) fn note_indent(&mut self, line: &str) {
         if self.buf.is_empty() {
             let indent = crate::textproc::leading_indent(line).to_string();
-            if indent.is_empty() {
-                self.continuation_indent = None;
-                self.indent.clear();
-            } else {
-                self.indent = self.continuation_indent.take().unwrap_or(indent);
-            }
+            self.indent = self.continuation_indent.take().unwrap_or(indent);
         }
     }
 

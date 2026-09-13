@@ -9,7 +9,7 @@
 inputs reachable under the `make fmt` flag set (`--wrap`, `--renumber`,
 `--breaks`, `--ellipsis`, `--fences`), and for further inputs once `--headings`
 or `--code-emphasis` was added, so a check-after-fix gate could never converge:
-one `--in-place` pass left a file that the next pass rewrote again. Eleven
+one `--in-place` pass left a file that the next pass rewrote again. Twelve
 defect classes contributed:
 
 - A normalized thematic break was absorbed into the following paragraph
@@ -60,6 +60,14 @@ defect classes contributed:
   every one of them was padded a column narrower on the next pass: `| a | b |`
   over `| --- | --- |` over `| ccccc | d |` over `---` reflowed to a
   five-column first row on one pass and a three-column one on the pass after.
+- A lazy continuation line below a deferred block's hard break was emitted
+  flush-left on the first pass and indented on the second. A list item whose
+  first line spills past the width is deferred so its tail reflows with the
+  lines below it, and the flush that honours the hard break remembers the
+  item's continuation indent; the flush-left line below the break dropped it,
+  while the next pass re-read the indented tail above and applied the indent to
+  everything after it: `- alpha … beta` over `delta epsilon  ` over `zeta eta`
+  ended at column one on one pass and two columns in on the pass after.
 
 The unmatched-fence class was reported separately, in issue #480, and reached
 the suite through the corpus rather than through a generator. The
@@ -68,7 +76,10 @@ it. The footnote, empty-header, and table-row classes were found by the widened
 generators of issue #493, which the suite had been unable to reach: it wrote
 only balanced three-character fences, used `1.` as its sole ordered-list
 marker, left the characters the parser used as placeholders out of its cells,
-and put neither a hard break nor an overlong code span in a paragraph.
+and put neither a hard break nor an overlong code span in a paragraph. The
+lazy-continuation class was found by those same generators, once their
+paragraphs carried a hard break at all; a list item wide enough to defer, a
+break inside it, and one prose line below the break reach it.
 
 ## Decision
 
@@ -78,7 +89,7 @@ sets and documents with recorded evidence: the `make fmt` flag set (`--wrap`,
 `--headings`, and that set with `--code-emphasis`. The guarantee is not
 universal over the inputs the formatter accepts: the one measured exception, a
 bracket reference the wrapper splits across lines, is recorded in the addendum
-below and tracked as issue #504. Ten rules enforce the invariant where it
+below and tracked as issue #504. Eleven rules enforce the invariant where it
 holds:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
@@ -102,6 +113,14 @@ holds:
   reparse as a different block: a tail indented by four or more columns
   (indented code), a tail that repeats its blockquote marker, and a footnote
   definition tail stay separate.
+- A lazy continuation below a deferred block keeps the block's indent.
+  `ParagraphState::note_indent` in `src/wrap/paragraph.rs` prefers the indent a
+  deferred prefix flush remembered over the line's own, and a flush-left line
+  inherits it instead of clearing it: such a line is a lazy continuation of the
+  block above, so emitting it at column one gave the same paragraph a second
+  spelling, and the pass that re-read the indented tail above applied the indent
+  to everything below the break. The remembered indent is consumed either way,
+  and a flush-left line with none to inherit contributes no indent of its own.
 - Content normalizers consumed by layout run before the layout they affect.
   After fence processing and HTML-table conversion, the inline footnote stage
   runs over the complete normalized stream before Markdown table buffering, so
@@ -183,9 +202,11 @@ holds:
   check-after-fix gate cannot report drift indefinitely on the same file.
 - Changed output is confined to thematic breaks that are now preserved instead
   of consumed, to prefixed blocks that now reflow with their continuation lines
-  in one pass, to unmatched fences that are rewritten from the opener alone, to
-  footnote references that are converted before the layout rather than after it,
-  to delimiter rows that are only recognized when every cell carries a dash, and
+  in one pass, to lazy continuation lines below such a block, which now carry
+  the block's continuation indent rather than starting a column to the left, to
+  unmatched fences that are rewritten from the opener alone, to footnote
+  references that are converted before the layout rather than after it, to
+  delimiter rows that are only recognized when every cell carries a dash, and
   to candidates that are themselves block starts or table rows, which no longer
   convert, so the line below them survives as a block of its own. Tables with
   code-emphasis repairs also receive their final column widths in the first pass.
@@ -219,8 +240,10 @@ holds:
   delimiter row is generated both alone and below a header row, and a
   deterministic sweep
   asserts the shape is reached and its row survives, so removing the generator
-  branch fails the sweep rather than leaving the guard unexercised. Together
-  they guard the invariant against regression.
+  branch fails the sweep rather than leaving the guard unexercised.
+  `src/wrap/paragraph_tests.rs` pins the two documents that sweep shrank its
+  drift to, along with a three-line item that reaches the class on its own.
+  Together they guard the invariant against regression.
 
 ## Addendum (2026-09-13)
 

@@ -21,6 +21,96 @@ use super::{
     pending_prefix_for_next_segment,
     wraps_to_tail,
 };
+use crate::{process::WRAP_COLS, wrap::wrap_text};
+
+/// The list continuation indent a deferred bullet item reuses.
+const LIST_CONTINUATION_INDENT: &str = "  ";
+
+/// The two documents the widened issue #493 sweep shrank its drift to.
+///
+/// Each is a bullet item whose overlong first line is deferred — its tail
+/// reflows with the lines below it — and whose joined paragraph ends with a
+/// hard break: two trailing spaces in the first document, a trailing
+/// backslash in the second. The first also carries a code span wider than the
+/// wrap width, which is what the sweep's paragraph element contributed.
+const SHRUNK_DRIFT_DOCUMENTS: &[&[&str]] = &[
+    &[
+        "- aaaa aaaaaa aaaaaaa aaaaa aa aa yuslmwa rco (mozsfzb elo mvezlum lcedwv vzzfqs)",
+        "  sw",
+        "rr yzrbvin",
+        "hwcjtt qqslqrti yfo lkcahvz upt  ",
+        "hlepyw xvrsqmjs qobvb ap \
+         `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\
+         xxxxxxxxxxxxxxxxxxxxxxxx` vzwi wxjqqnb kstoebq ybrhxptt jor xyo azqdhnd zred mxr",
+    ],
+    &[
+        "- aaaaaaa aaaaaaa aaaa aaaaa abhi icwzwn tlwtc gvxrfi osdt uoj wn zvjzc tbwklp fx",
+        "gityvz yhedqomw wgxxridm hmfxp xhwl dcvxgoi gmlbowiv qdjfqw aatedp",
+        "mvcqmbh orgva iraf ykduq jbxi xyk",
+        "gpllvp xqpjmpy spjkj lhacuycz jyf algs\\",
+        "xyjoxbut\\",
+        "cqt hmizwk ad je jeov umu oseomxt oymopk",
+    ],
+];
+
+/// Asserts a deferred bullet item indents the lazy lines below a hard break.
+///
+/// The first line is overlong, so its tail is deferred and reflowed with the
+/// lines below it; the flush that ends on the hard break remembers the item's
+/// continuation indent. The line below the break is a lazy continuation of the
+/// same item, so it must be emitted with that indent. It was emitted
+/// flush-left instead and re-indented on the next pass, so the source had no
+/// fixed point.
+#[test]
+fn deferred_list_item_indents_the_lazy_line_below_a_hard_break() {
+    let input: Vec<String> = [
+        "- alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha beta",
+        "delta epsilon  ",
+        "zeta eta",
+    ]
+    .iter()
+    .map(|line| (*line).to_string())
+    .collect();
+
+    let once = wrap_text(&input, WRAP_COLS);
+
+    assert_eq!(
+        once,
+        vec![
+            "- alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha",
+            "  beta delta epsilon  ",
+            "  zeta eta",
+        ],
+    );
+    assert_eq!(
+        wrap_text(&once, WRAP_COLS),
+        once,
+        "wrap is not a fixed point"
+    );
+}
+
+/// Asserts the two documents the sweep shrank its failure to are fixed points
+/// whose lazy lines keep the item's continuation indent.
+#[test]
+fn shrunk_drift_documents_are_fixed_points_with_indented_lazy_lines() {
+    for (index, document) in SHRUNK_DRIFT_DOCUMENTS.iter().enumerate() {
+        let input: Vec<String> = document.iter().map(|line| (*line).to_string()).collect();
+        let once = wrap_text(&input, WRAP_COLS);
+
+        assert_eq!(
+            wrap_text(&once, WRAP_COLS),
+            once,
+            "document {index} is not a fixed point:\n{}",
+            once.join("\n"),
+        );
+        for line in once.iter().skip(1) {
+            assert!(
+                line.starts_with(LIST_CONTINUATION_INDENT),
+                "document {index} lost the list indent on {line:?}",
+            );
+        }
+    }
+}
 
 #[test]
 fn wrap_with_prefix_emits_single_line_when_text_fits() {
