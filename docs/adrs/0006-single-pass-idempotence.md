@@ -72,11 +72,12 @@ defect classes contributed:
 The unmatched-fence class was reported separately, in issue #480, and reached
 the suite through the corpus rather than through a generator. The
 code-emphasis class was found by the property suite once the flag was added to
-it. The footnote, empty-header, and table-row classes were found by the widened
-generators of issue #493, which the suite had been unable to reach: it wrote
-only balanced three-character fences, used `1.` as its sole ordered-list
-marker, left the characters the parser used as placeholders out of its cells,
-and put neither a hard break nor an overlong code span in a paragraph. The
+it. The footnote, empty-header, table-row, and lone-dash-header classes were
+found by the widened generators of issue #493, which the suite had been unable
+to reach: it wrote only balanced three-character fences, used `1.` as its sole
+ordered-list marker, left the characters the parser used as placeholders out of
+its cells, and put neither a hard break nor an overlong code span in a
+paragraph. The
 lazy-continuation class was found by those same generators, once their
 paragraphs carried a hard break at all; a list item wide enough to defer, a
 break inside it, and one prose line below the break reach it.
