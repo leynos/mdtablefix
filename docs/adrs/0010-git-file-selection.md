@@ -403,8 +403,11 @@ otherwise meet a line that is not a path.
   records this before the sections that use it.
 - A repository-wide `--in-place` applies every requested transform to every
   selected file in one command, so a transform that is not a fixed point is
-  correspondingly wider in effect. Issue #478 records one such residual, where
-  `--code-emphasis` settles on a second pass rather than the first.
+  correspondingly wider in effect. Issue #478 recorded one such residual, where
+  `--code-emphasis` settled on a second pass rather than the first; `b01b999`
+  fixed it. Issue #504 records the residual a `--git` run can still reach: a
+  bracket reference the wrapper splits across lines, which `--wrap` alone
+  carries and every selection therefore inherits.
 - Whether `std::fs::canonicalize` folds case on macOS and Windows is asserted
   from documentation rather than measured on those platforms, so the identity
   rule is only proved case-insensitive-by-canonicalization on Linux. If it is

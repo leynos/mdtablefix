@@ -41,11 +41,12 @@ defect classes contributed:
 ## Decision
 
 The formatter is a fixed point, `format(format(x)) == format(x)`, for the flag
-sets with recorded evidence: the `make fmt` flag set (`--wrap`, `--renumber`,
-`--breaks`, `--ellipsis`, `--fences`), and that set with `--headings`.
-`--code-emphasis` may settle on a second pass rather than the first, including
-under `--git --check`; the Addendum below narrows the guarantee to the proven
-sets. Seven rules enforce the invariant where it holds:
+sets and documents with recorded evidence: the `make fmt` flag set (`--wrap`,
+`--renumber`, `--breaks`, `--ellipsis`, `--fences`), that set with `--headings`,
+and that set with `--code-emphasis`. The guarantee is not universal over the
+inputs the formatter accepts: the one measured exception, a bracket reference
+the wrapper splits across lines, is recorded in the addendum below and tracked
+as issue #504. Seven rules enforce the invariant where it holds:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
   `src/wrap/block.rs` recognizes a break with
@@ -148,15 +149,32 @@ sets. Seven rules enforce the invariant where it holds:
 
 ## Addendum (2026-09-13)
 
-The decision above is scoped to the flag sets for which this branch has
-evidence. That evidence proves the fixed-point guarantee for the `make fmt`
-flag set and for that set with `--headings`; it does not establish the
-guarantee for every exposed flag combination. In particular, ADR 0010 records
-the outstanding `--code-emphasis` case, which can settle on a second pass
-rather than the first.
+The decision above is scoped to the flag sets and documents with recorded
+evidence. That evidence is the corpus sweep in `tests/idempotence_drift.rs`,
+which runs each of the three sets over every fixture under `tests/data/` and
+asserts the two passes are byte-identical; the `--code-emphasis` set covers the
+table case that once required a second pass, fixed in `b01b999`. It is not a
+universal guarantee over the inputs the formatter accepts.
 
-The impact is that `--git --check` is a sound one-pass drift check for the
-proven flag sets, while callers enabling an unproven combination must account
-for the possibility of a further formatting pass. This addendum narrows the
-operational guarantee until the remaining combination has evidence of the same
-fixed-point behaviour.
+The measured exception is a bracket reference the wrapper splits across lines.
+Under `--wrap` alone — and so under every set above, since each one contains it
+— the input
+
+```text
+aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht
+abm iqy uxqdkre fz ioelg
+**bold**`code`
+[1]
+```
+
+ends its first pass with `… **bold**`code` [` followed by `1]`, and its second
+pass rejoins that as `… **bold**`code`` followed by `[ 1]`. The output settles
+there rather than growing, so it is a one-pass drift and not a cycle. Issue
+#504 records the reproduction, and the split lives in the inline-wrapping path,
+which the rules above do not cover.
+
+The impact is that `--git --check` is a sound one-pass drift check for a
+document that does not contain that shape, while a document that does is
+reported as needing formatting again after an `--in-place` run has written the
+first pass's output. This addendum narrows the operational guarantee until the
+inline-wrapping path has evidence of the same fixed-point behaviour.
