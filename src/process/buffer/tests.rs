@@ -156,6 +156,23 @@ fn flush_table_passes_lines_through_reflow() {
     assert!(!buffer.in_table);
 }
 
+#[test]
+fn finish_flushes_a_table_that_ends_at_end_of_input() {
+    let mut buffer = new_buffer();
+
+    assert!(handle_line(&mut buffer, "| a | b |").is_none());
+    assert!(handle_line(&mut buffer, "| --- | --- |").is_none());
+    assert!(handle_line(&mut buffer, "| 1 | 2 |").is_none());
+
+    let (result, table_markers) = buffer.finish();
+
+    assert_eq!(
+        result,
+        owned(&["| a   | b   |", "| --- | --- |", "| 1   | 2   |"]),
+    );
+    assert_eq!(table_markers, vec![true; result.len()]);
+}
+
 #[rstest]
 fn flush_table_applies_code_emphasis_before_reflow(
     mut new_buffer_with_code_emphasis: ProcessBuffer,

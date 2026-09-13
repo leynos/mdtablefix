@@ -6,6 +6,7 @@ target/
 .claude/
 .memdb/
 .grepai/
+.verus/
 *.swp
 *.swo
 *~

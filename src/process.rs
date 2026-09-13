@@ -95,6 +95,19 @@ pub struct Options {
 ///     ]
 /// );
 /// ```
+///
+/// The private buffer completes before this function returns its owned output.
+/// The returned collection follows normal Rust move semantics:
+///
+/// ```compile_fail
+/// use mdtablefix::process::{Options, process_stream_inner};
+///
+/// let lines = vec!["| a | b |".to_string()];
+/// let output = process_stream_inner(&lines, Options::default());
+/// drop(output);
+/// // This test pins the consuming contract.
+/// let _cannot_reuse_after_drop = output;
+/// ```
 #[must_use]
 pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     let lines = if opts.fences {
@@ -136,9 +149,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         state.push_out(line);
     }
 
-    state.flush();
-
-    let (mut out, table_markers) = state.into_out();
+    let (mut out, table_markers) = state.finish();
     let table_lines = out
         .iter()
         .zip(table_markers)

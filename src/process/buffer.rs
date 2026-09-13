@@ -39,7 +39,7 @@ fn is_indented_content_line(line: &str) -> bool {
 /// narrow [`new`](Self::new), [`push_out`](Self::push_out),
 /// [`handle_fence_line`](Self::handle_fence_line),
 /// [`handle_table_line`](Self::handle_table_line), [`flush`](Self::flush),
-/// and [`into_out`](Self::into_out) API so the table-detection invariants
+/// and [`finish`](Self::finish) API so the table-detection invariants
 /// stay encapsulated.
 pub(super) struct ProcessBuffer {
     out: Vec<String>,
@@ -72,11 +72,15 @@ impl ProcessBuffer {
         self.table_lines.push(false);
     }
 
-    /// Consumes the buffer and returns output lines with their table markers.
+    /// Flushes pending lines, consumes the buffer, and returns output lines
+    /// with their table markers.
     ///
-    /// Call [`flush`](Self::flush) beforehand to drain any pending buffered
-    /// lines into the output.
-    pub(super) fn into_out(self) -> (Vec<String>, Vec<bool>) { (self.out, self.table_lines) }
+    /// This drains pending buffered lines internally, so callers do not need a
+    /// separate [`flush`](Self::flush) call before finishing.
+    pub(super) fn finish(mut self) -> (Vec<String>, Vec<bool>) {
+        self.flush();
+        (self.out, self.table_lines)
+    }
 
     pub(super) fn flush(&mut self) {
         debug!(
