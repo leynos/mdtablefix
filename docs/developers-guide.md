@@ -37,9 +37,10 @@ must run inside the closure. The library-owned `renumber_lists` pass runs inside
 the only CLI-only transform and runs after that pipeline.
 
 The normalization-before-layout order is recorded in
-[`ADR 0006`](adrs/0006-single-pass-idempotence.md). Keep content normalizers,
-including footnotes and list markers, before table reflow and paragraph
-wrapping so layout measures the final text.
+[`ADR 0006`](adrs/0006-single-pass-idempotence.md). Inline footnotes, table
+substitutions, list markers, and ellipsis run before the passes that measure
+their text, so layout measures final content; only the footnote-definition
+fold runs after the wrap, appending lines to the settled block structure.
 
 When working in this area:
 

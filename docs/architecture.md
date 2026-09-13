@@ -155,8 +155,6 @@ width-independent. Ellipsis replacement runs before wrapping, so line breaking
 is computed from the glyphs the reader will see. See
 [footnote conversion](#footnote-conversion) for details. The function then
 returns the updated stream for writing to disk or further manipulation.
-[footnote conversion](#footnote-conversion) for details. The function then
-returns the updated stream for writing to disk or further manipulation.
 
 ## Table reflow pipeline
 
