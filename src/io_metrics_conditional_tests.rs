@@ -3,23 +3,61 @@
 //! These cases live apart from the general metrics suite so both test modules
 //! remain within the repository's file-size limit.
 
+use cap_std::{ambient_authority, fs_utf8::Dir};
+use rstest::{fixture, rstest};
+use tempfile::TempDir;
+
 use super::*;
+
+/// The text a conditional replacement in these cases was read as.
+const ORIGINAL: &str = "|A|B|\n|1|2|";
+
+/// The target both cases drive, reached only through a capability.
+///
+/// The temporary directory, the capability opened on it, and the fixture written
+/// through that capability are one thing, made once: a case that rebuilt them
+/// would be saying something about how a test reaches a directory rather than
+/// about what the replacement does with one. Nothing here destructures the
+/// value, so the guard that owns the directory outlives every read and write.
+struct ConditionalTarget {
+    /// Keeps the directory alive for as long as the capability is in use.
+    _temporary: TempDir,
+    /// The capability the replacement is handed, and the fixture written through.
+    directory: Dir,
+}
+
+/// Creates the target `sample.md`, through the capability that replaces it.
+#[test_macros::allow_fixture_expansion_lints]
+#[fixture]
+fn conditional_target() -> ConditionalTarget {
+    let temporary = tempdir().expect("create temporary directory");
+    let root =
+        camino::Utf8Path::from_path(temporary.path()).expect("the temporary directory is UTF-8");
+    let directory =
+        Dir::open_ambient_dir(root, ambient_authority()).expect("open the directory capability");
+    directory
+        .write(camino::Utf8Path::new("sample.md"), ORIGINAL)
+        .expect("write the fixture through the capability");
+
+    ConditionalTarget {
+        _temporary: temporary,
+        directory,
+    }
+}
 
 /// A conditional replacement that finds the target unchanged from the text it
 /// was read as writes it and records `success`, like any other replacement.
-#[test]
-fn a_conditional_replacement_of_a_matching_target_is_a_success() {
-    let dir = tempdir().expect("create temporary directory");
-    let _file = fixture(&dir);
-    let root = camino::Utf8Path::from_path(dir.path()).expect("the temporary directory is UTF-8");
-    let capability = cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())
-        .expect("open the directory capability");
+#[rstest]
+fn a_conditional_replacement_of_a_matching_target_is_a_success(
+    conditional_target: ConditionalTarget,
+) {
+    let capability = &conditional_target.directory;
 
     let (replaced, recorded) = recorded(|| {
         replace_file_if_unchanged(
-            &capability,
+            capability,
             camino::Utf8Path::new("sample.md"),
-            "|A|B|\n|1|2|",
+            ORIGINAL,
             "| A | B |\n| 1 | 2 |\n",
         )
     });
@@ -41,22 +79,20 @@ fn a_conditional_replacement_of_a_matching_target_is_a_success() {
 
 /// The other half of the case above: a target that moved on before the swap
 /// records `unchanged` rather than `success` or `failure`.
-#[test]
-fn a_declined_replacement_after_the_target_moved_on_is_unchanged() {
-    let dir = tempdir().expect("create temporary directory");
-    let _file = fixture(&dir);
-    let root = camino::Utf8Path::from_path(dir.path()).expect("the temporary directory is UTF-8");
-    let capability = cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())
-        .expect("open the directory capability");
+#[rstest]
+fn a_declined_replacement_after_the_target_moved_on_is_unchanged(
+    conditional_target: ConditionalTarget,
+) {
+    let capability = &conditional_target.directory;
     capability
         .write(camino::Utf8Path::new("sample.md"), "|X|Y|\n|3|4|")
         .expect("write the other writer's version");
 
     let (replaced, recorded) = recorded(|| {
         replace_file_if_unchanged(
-            &capability,
+            capability,
             camino::Utf8Path::new("sample.md"),
-            "|A|B|\n|1|2|",
+            ORIGINAL,
             "| A | B |\n| 1 | 2 |\n",
         )
     });
