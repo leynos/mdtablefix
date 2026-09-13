@@ -21,6 +21,7 @@ use super::predicates::{
     is_trailing_punctuation_token,
     is_whitespace_token,
     is_year,
+    looks_like_bracketed_reference,
     looks_like_footnote_ref,
     looks_like_link,
 };
@@ -36,6 +37,8 @@ pub(in crate::wrap::inline) enum SpanKind {
     Link,
     /// Treat the span as a GitHub Flavoured Markdown footnote reference.
     FootnoteRef,
+    /// Treat the span as a bare numeric bracket reference, such as `[1]`.
+    BracketedRef,
 }
 
 /// Extends a grouped span over trailing punctuation tokens and updates `width`.
@@ -233,6 +236,32 @@ pub(in crate::wrap::inline) fn try_couple_inline_link_after_opener(
     Some((SpanKind::Link, extend_punctuation(tokens, end + 2, width)))
 }
 
+/// Couples an opening bracket to the numeric reference that closes it.
+///
+/// The tokenizer emits a bracket without an inline destination as its own
+/// token, so `[1]` reaches this module as `[` followed by `1]`. Treated as two
+/// independent wrap units, the opener fits at the end of a line while the
+/// digits move to the next one, which splits the reference across the break and
+/// leaves the formatter with an input it reflows differently on a second pass.
+pub(in crate::wrap::inline) fn try_couple_bracketed_reference(
+    tokens: &[String],
+    end: usize,
+    width: &mut usize,
+) -> Option<(SpanKind, usize)> {
+    let opener = tokens.get(end)?;
+    let reference = tokens.get(end + 1)?;
+    if !opener.chars().all(is_opening_punct) || !looks_like_bracketed_reference(reference) {
+        return None;
+    }
+
+    *width += UnicodeWidthStr::width(opener.as_str());
+    *width += UnicodeWidthStr::width(reference.as_str());
+    Some((
+        SpanKind::BracketedRef,
+        extend_punctuation(tokens, end + 2, width),
+    ))
+}
+
 /// Couples an adjacent footnote reference into the current span when appropriate.
 pub(in crate::wrap::inline) fn try_couple_footnote_reference(
     tokens: &[String],
@@ -265,7 +294,9 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
             kind,
             absorb_token_and_trailing_punctuation(tokens, end, width),
         )),
-        SpanKind::FootnoteRef => None,
+        // A reference marker binds only to the opener that introduces it, so a
+        // second one starts a span of its own.
+        SpanKind::FootnoteRef | SpanKind::BracketedRef => None,
     }
 }
 

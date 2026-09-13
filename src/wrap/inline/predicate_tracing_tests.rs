@@ -15,6 +15,7 @@ use super::{
     is_numeric_day,
     is_ordinal_day,
     is_year,
+    looks_like_bracketed_reference,
     looks_like_footnote_ref,
 };
 
@@ -23,6 +24,7 @@ use super::{
     predicate,
     input,
     expected_log,
+    case(looks_like_bracketed_reference, "1]", "looks_like_bracketed_reference"),
     case(looks_like_footnote_ref, "[^1]", "looks_like_footnote_ref"),
     case(ends_with_footnote_ref, "word.[^1]", "ends_with_footnote_ref"),
     case(ends_with_hyphen_prefix, "pre-", "ends_with_hyphen_prefix"),

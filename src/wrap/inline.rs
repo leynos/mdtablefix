@@ -41,6 +41,7 @@ pub(in crate::wrap::inline) use predicates::{
     is_trailing_punct,
     is_trailing_punctuation_token,
     is_whitespace_token,
+    looks_like_bracketed_reference,
     looks_like_footnote_ref,
 };
 use span_helpers::{
@@ -50,6 +51,7 @@ use span_helpers::{
     extend_punctuation,
     merge_code_span,
     should_couple_whitespace,
+    try_couple_bracketed_reference,
     try_couple_footnote_reference,
     try_couple_inline_link_after_opener,
 };
@@ -77,6 +79,13 @@ fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKin
             end = extend_punctuation(tokens, end, &mut width);
         } else if looks_like_link(next) {
             kind = SpanKind::Link;
+            end += 1;
+            width += UnicodeWidthStr::width(next.as_str());
+            end = extend_punctuation(tokens, end, &mut width);
+        } else if looks_like_bracketed_reference(next) {
+            // Forward-couple a bare bracket reference to its opener so wrapping
+            // never strands `[` at the end of a line before its digits.
+            kind = SpanKind::BracketedRef;
             end += 1;
             width += UnicodeWidthStr::width(next.as_str());
             end = extend_punctuation(tokens, end, &mut width);
@@ -164,6 +173,16 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
         let is_code = is_code_token(token);
         if let Some((next_kind, next_end)) =
             try_couple_inline_link_after_opener(tokens, end, &mut width)
+        {
+            kind = next_kind;
+            end = next_end;
+            continue;
+        }
+
+        // A bare bracket reference couples to its opener for the same reason
+        // footnote markers do: the opener can follow an atomic span directly,
+        // and leaving `[` in the preceding span would strand it at a line end.
+        if let Some((next_kind, next_end)) = try_couple_bracketed_reference(tokens, end, &mut width)
         {
             kind = next_kind;
             end = next_end;

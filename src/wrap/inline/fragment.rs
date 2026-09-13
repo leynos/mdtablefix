@@ -22,6 +22,7 @@ use super::{
     is_opening_punct,
     is_trailing_punct,
     is_whitespace_token,
+    looks_like_bracketed_reference,
     looks_like_footnote_ref,
 };
 
@@ -36,6 +37,8 @@ pub(super) enum FragmentKind {
     Link,
     /// Marks a fragment that contains a GFM footnote reference.
     FootnoteRef,
+    /// Marks a fragment that contains a bare numeric bracket reference.
+    BracketedRef,
     /// Marks a fragment that contains ordinary prose.
     Plain,
 }
@@ -75,7 +78,10 @@ impl InlineFragment {
     pub(super) fn is_atomic(&self) -> bool {
         matches!(
             self.kind,
-            FragmentKind::InlineCode | FragmentKind::Link | FragmentKind::FootnoteRef
+            FragmentKind::InlineCode
+                | FragmentKind::Link
+                | FragmentKind::FootnoteRef
+                | FragmentKind::BracketedRef
         )
     }
 
@@ -173,6 +179,8 @@ fn classify_fragment(text: &str) -> FragmentKind {
         || ends_with_footnote_ref(text)
     {
         FragmentKind::FootnoteRef
+    } else if looks_like_bracketed_reference(text) || looks_like_bracketed_reference(trimmed) {
+        FragmentKind::BracketedRef
     } else {
         FragmentKind::Plain
     }

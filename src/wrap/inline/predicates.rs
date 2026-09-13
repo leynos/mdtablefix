@@ -132,6 +132,33 @@ pub(in crate::wrap::inline) fn looks_like_footnote_ref(token: &str) -> bool {
         .is_some_and(|label| !label.is_empty())
 }
 
+/// Returns whether `token` is a bare numeric bracket reference, or the closing
+/// half of one.
+///
+/// The tokenizer emits a bracket without an inline destination as its own
+/// token, so `[1]` reaches the wrapper as the two tokens `[` and `1]`: the
+/// opener arrives alone and the reference is recognisable only from its closing
+/// half. Rendered fragments carry the merged form instead, so both are accepted.
+///
+/// Only ASCII digits are recognised. A short label such as `[a]` is ordinary
+/// prose the wrapper may break at, and the `[^` of a footnote reference is a
+/// separate case, so this predicate stays disjoint from `looks_like_link` and
+/// `looks_like_footnote_ref`.
+///
+/// The `#[tracing::instrument]` attribute records the return value while
+/// excluding document content from the span.
+#[tracing::instrument(level = "trace", skip(token), ret)]
+pub(in crate::wrap::inline) fn looks_like_bracketed_reference(token: &str) -> bool {
+    let label = token.strip_prefix('[').unwrap_or(token);
+    let Some((digits, tail)) = label.rsplit_once(']') else {
+        return false;
+    };
+
+    !digits.is_empty()
+        && digits.chars().all(|digit| digit.is_ascii_digit())
+        && tail.chars().all(is_trailing_punct)
+}
+
 /// Returns whether `token` ends with an inline footnote reference.
 ///
 /// The `#[tracing::instrument]` attribute records the return value while
