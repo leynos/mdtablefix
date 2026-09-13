@@ -109,7 +109,14 @@ impl ParagraphState {
     pub(super) fn note_indent(&mut self, line: &str) {
         if self.buf.is_empty() {
             let indent = crate::textproc::leading_indent(line).to_string();
+            let had_continuation_indent = self.continuation_indent.is_some();
             self.indent = self.continuation_indent.take().unwrap_or(indent);
+            trace!(
+                line_len = line.len(),
+                indent_len = self.indent.len(),
+                had_continuation_indent,
+                "noting the paragraph indent"
+            );
         }
     }
 
