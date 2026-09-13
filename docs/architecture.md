@@ -27,8 +27,9 @@ The public stream entry points call `process_with_frontmatter` before invoking
 this function. It is the canonical boundary for leading YAML frontmatter: it
 passes only the post-frontmatter body to a caller-provided closure and restores
 the prefix verbatim after the closure returns. The library pipeline and
-`process_lines` in the binary both use this boundary, with CLI-only transforms
-such as `renumber_lists` and `format_breaks` inside the binary's closure.
+`process_lines` in the binary both use this boundary. The library owns content
+normalization such as `renumber_lists`; the binary applies only the
+width-independent `format_breaks` transform afterwards.
 
 The function combines several helpers documented in `docs/`:
 
@@ -139,10 +140,11 @@ Buffered table runs receive their enabled table substitutions before reflow
 measures their columns. The substitutions run in a fixed order: code-emphasis
 repair, then ellipsis replacement. After scanning and flushing those runs, the
 processor performs its optional post-processing steps for non-table content in
-a fixed order: Setext heading conversion, code-emphasis repair, ellipsis
-replacement, paragraph wrapping, and finally footnote conversion. Ellipsis
-replacement runs before wrapping, so line breaking is computed from the glyphs
-the reader will see. See \
+a fixed order: Setext heading conversion, code-emphasis repair, ordered-list
+renumbering, footnote conversion, ellipsis replacement, and paragraph wrapping.
+Table reflow and paragraph wrapping consume final content, so every pass that
+can change cell or line width runs first. Thematic-break normalization stays at
+the binary boundary because it is width-independent. See \
 [footnote conversion](#footnote-conversion) for details. The function then
 returns the updated stream for writing to disk or further manipulation.
 
@@ -178,7 +180,8 @@ lines before calling `reflow_table`. This ordering ensures that the width
 calculation sees the final cell contents, rather than aligning for markers or
 `...` and shrinking the rendered column after the fact. The later global
 code-emphasis pass handles non-table content only. The same ordering rule
-governs prose: `replace_ellipsis` runs before `--wrap` measures paragraph text.
+governs prose: list renumbering, footnote conversion, and `replace_ellipsis`
+all run before `--wrap` measures paragraph text.
 
 Outside table buffering, `replace_ellipsis` maintains fence and indented-code
 state while it walks the original lines. Its private indented-code tracker is
@@ -475,9 +478,10 @@ CRLF while the transform pipeline itself remains line-ending agnostic. The
 rationale is recorded in [ADR 0007](adrs/0007-line-ending-detection.md).
 
 The `driver` module is binary-private by design: it is declared as `mod
-driver;` in the binary rather than part of the library, so the library's entry
-points stay infallible and free of filesystem policy while the CLI's
-exit-status contract lives in the driver.
+driver;` in the binary rather than part of the library, so the library's
+filesystem entry points return `std::io::Result` and are therefore fallible.
+They remain independent of CLI filesystem policy and exit-status handling,
+which the driver owns.
 
 ### Stateful helpers
 

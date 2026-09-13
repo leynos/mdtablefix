@@ -365,10 +365,10 @@ the reasoning as `AX-4`.
 ## The binary's private driver
 
 `src/driver.rs` is declared `mod driver;` in `src/main.rs`, so it is not part
-of the published library. The library's entry points stay infallible and free
-of filesystem policy, while the CLI's exit-status contract, its directory
-capabilities, and its `Mode`, `Inputs`, and `ExitStatus` types live in the
-binary.
+of the published library. The library's public filesystem entry points return
+`std::io::Result`, so they are fallible and independent of the CLI's filesystem
+policy and exit-status handling. The CLI's directory capabilities, and its
+`Mode`, `Inputs`, and `ExitStatus` types live in the binary.
 
 This placement is why the module can hold `anyhow` error types: its callers
 are the binary's own, so the module fails with context-rich errors and reports

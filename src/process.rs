@@ -14,6 +14,7 @@ use crate::{
     footnotes::convert_footnotes,
     frontmatter::split_leading_yaml_frontmatter,
     html::convert_html_tables,
+    lists::renumber_lists,
     wrap::{FenceTracker, wrap_text},
 };
 
@@ -33,6 +34,7 @@ pub const WRAP_COLS: usize = 80;
 ///     ellipsis: false,
 ///     fences: false,
 ///     footnotes: false,
+///     renumber: false,
 ///     code_emphasis: false,
 ///     headings: false,
 /// };
@@ -53,6 +55,8 @@ pub struct Options {
     pub fences: bool,
     /// Convert bare numeric references into GitHub-flavoured footnote links (default: `false`).
     pub footnotes: bool,
+    /// Renumber ordered list items.
+    pub renumber: bool,
     /// Fix emphasis markers adjacent to inline code.
     pub code_emphasis: bool,
     /// Convert Setext-style headings into ATX (`#`) headings.
@@ -82,6 +86,7 @@ pub struct Options {
 ///         ellipsis: false,
 ///         fences: false,
 ///         footnotes: false,
+///         renumber: false,
 ///         code_emphasis: false,
 ///         headings: false,
 ///     },
@@ -153,23 +158,21 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         out = crate::code_emphasis::fix_code_emphasis(&protected_lines);
         out = restore_table_lines(out, &protected);
     }
+    if opts.renumber {
+        out = renumber_lists(&out);
+    }
+    if opts.footnotes {
+        out = convert_footnotes(&out);
+    }
 
-    // The ellipsis pass rewrites text, so it must run before the wrap measures
-    // it. Replacing `...` with `…` shortens the line by two columns, and a wrap
-    // that measured the longer text breaks a line the next pass would have
-    // joined: `format(format(x))` would differ from `format(x)` for any
-    // paragraph with an ellipsis near the wrap boundary.
+    // Layout is the final content-changing step for the blocks it owns. Each
+    // normalizer above runs first so wrapping measures its final text.
     if opts.ellipsis {
         out = replace_ellipsis(&out);
     }
 
-    let mut out = if opts.wrap {
-        wrap_text(&out, WRAP_COLS)
-    } else {
-        out
-    };
-    if opts.footnotes {
-        out = convert_footnotes(&out);
+    if opts.wrap {
+        out = wrap_text(&out, WRAP_COLS);
     }
 
     out
@@ -206,6 +209,7 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
         lines,
         Options {
             wrap: true,
+            renumber: true,
             ..Default::default()
         },
     )
@@ -256,6 +260,7 @@ pub fn process_stream_no_wrap(lines: &[String]) -> Vec<String> {
 ///     ellipsis: false,
 ///     fences: false,
 ///     footnotes: false,
+///     renumber: false,
 ///     code_emphasis: false,
 ///     headings: false,
 /// };

@@ -64,14 +64,17 @@ set the CLI exposes. Seven rules enforce the invariant:
   reparse as a different block: a tail indented by four or more columns
   (indented code), a tail that repeats its blockquote marker, and a footnote
   definition tail stay separate.
-- `--ellipsis` runs before the wrap. For buffered tables, the table-substitution
-  stage runs code-emphasis repair first and ellipsis replacement second, before
-  `reflow_table` measures column widths. For non-table content,
-  `process_stream_inner` performs, in order, Setext heading conversion,
-  code-emphasis repair, ellipsis replacement, paragraph wrapping, and footnote
-  conversion. Replacing `...` with `…` shortens a line by two display columns,
-  so a wrap that measured the source dots emitted a break that the next pass
-  joined.
+- Content normalizers consumed by layout run before the layout they affect. For
+  buffered tables, the table-substitution stage runs code-emphasis repair first
+  and ellipsis replacement second, before `reflow_table` measures column
+  widths. For non-table content, `process_stream_inner` performs, in order,
+  Setext heading conversion, code-emphasis repair, ordered-list renumbering,
+  footnote conversion, ellipsis replacement, and paragraph wrapping. Footnotes,
+  list renumbering, code emphasis, and ellipsis are therefore consumed by
+  layout; they have no downstream preservation obligation. Thematic-break
+  normalization remains last because it is width-independent. Replacing `...`
+  with `…` shortens a line by two display columns, while footnotes and list
+  markers can lengthen text, so wrapping must measure each final form.
 - `--code-emphasis` repairs table cells before reflow measures them. Removing
   emphasis markers around inline code shortens the cell, so applying the repair
   in the table-substitution stage lets the formatter calculate the final

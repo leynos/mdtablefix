@@ -91,6 +91,7 @@ pub(crate) const BASE_MATRIX_CASES: &[BaseCase] = &[
             TransformFlag::Renumber,
             TransformFlag::Fences,
             TransformFlag::Footnotes,
+            TransformFlag::CodeEmphasis,
             TransformFlag::Headings,
         ],
         reporting: &[],

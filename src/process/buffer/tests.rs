@@ -156,6 +156,25 @@ fn flush_table_passes_lines_through_reflow() {
     assert!(!buffer.in_table);
 }
 
+#[test]
+fn flush_repairs_code_emphasis_before_reflow() {
+    let input = owned(&[
+        "| cell |",
+        "| ---- |",
+        "| `StepContext`** Enhancement (in **`context.rs`**)** |",
+    ]);
+    let mut buffer = new_buffer();
+    buffer.buf = input.clone();
+    buffer.in_table = true;
+    buffer.code_emphasis = true;
+
+    buffer.flush();
+
+    let expected = reflow_table(&fix_code_emphasis(&input));
+    assert_eq!(buffer.out, expected);
+    assert_ne!(buffer.out, reflow_table(&input));
+}
+
 #[rstest]
 fn flush_table_applies_code_emphasis_before_reflow(
     mut new_buffer_with_code_emphasis: ProcessBuffer,

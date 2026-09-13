@@ -8,7 +8,7 @@
 mod common;
 use std::sync::LazyLock;
 
-use mdtablefix::{lazy_regex, process_stream, textproc::leading_indent};
+use mdtablefix::{lazy_regex, process_stream, renumber_lists, textproc::leading_indent};
 use proptest::prelude::*;
 use regex::Regex;
 use unicode_width::UnicodeWidthStr;
@@ -201,11 +201,17 @@ proptest! {
         prop_assume!(leading_spaces < 4);
         prop_assume!(line.len() > 80);
         let input = vec![line];
+        let normalized = renumber_lists(&input);
+        let expected_prefix = BULLET_RE
+            .captures(&normalized[0])
+            .and_then(|captures| captures.get(1))
+            .expect("renumbering must preserve a list prefix")
+            .as_str();
         let output = process_stream(&input);
         prop_assert!(output.len() > 1, "expected wrapping to occur");
         prop_assert!(
-            output[0].starts_with(&prefix),
-            "list prefix must be preserved on the first line"
+            output[0].starts_with(expected_prefix),
+            "first line must retain the canonical list prefix"
         );
         prop_assert!(
             output.iter().all(|line| line.len() <= 80),

@@ -4,13 +4,13 @@ expression: stdout_result.envelope(&stdout_case)
 ---
 case: row_100_nowrap
 mode: stdout
-args: --renumber --fences --footnotes --headings
+args: --renumber --fences --footnotes --code-emphasis --headings
 status: code: 0
 
 [stdout]
-| Name  | Notes                                |
-| ----- | ------------------------------------ |
-| alpha | Use *`cargo test`* before merging... |
+| Name  | Notes                              |
+| ----- | ---------------------------------- |
+| alpha | Use `cargo test` before merging... |
 
 1. first item
 2. second item with enough text to wrap around the configured column width when wrapping is enabled for the matrix harness.
