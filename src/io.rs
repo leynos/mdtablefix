@@ -48,6 +48,7 @@ pub use replace::{replace_file, replace_file_if_unchanged, rewrite, rewrite_no_w
 use swap::{
     TEMP_FILE_ATTEMPTS,
     cleanup_failure_seam,
+    competing_writer_seam,
     create_temporary_file,
     rename_failure_seam,
     temporary_path,

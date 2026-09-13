@@ -4,8 +4,10 @@
 //! [`write_and_swap`] writes the temporary file and hands it to
 //! [`swap_into_place`], which applies the target's permissions, checks that the
 //! target still holds the text it was replaced on the strength of, prepares the
-//! destination on the platforms that need it, and renames. A failure after the
-//! temporary file exists is cleaned up by [`remove_temporary_file`].
+//! destination on the platforms that need it, checks the target again, and
+//! renames. The second check is the last comparison before the rename, so the
+//! window a writer can be overwritten in is the rename alone. A failure after
+//! the temporary file exists is cleaned up by [`remove_temporary_file`].
 //!
 //! Every function here takes the directory capability the caller already holds;
 //! nothing in this module opens an ambient path.
@@ -60,12 +62,18 @@ pub(super) fn write_and_swap(
 /// Windows needs before the rename can be attempted at all, and
 /// [`restore_destination`] undoes it when the swap does not complete.
 ///
-/// `expected` is checked here rather than before the temporary file was
-/// written, and before the destination is prepared rather than after: reading
-/// the target back is cheap, but doing it now means nothing is left between the
-/// check and the rename but the swap's own steps, and means a declined swap has
-/// no prepared destination to restore. Returns `Ok(false)` when the target no
-/// longer holds `expected`, having renamed nothing.
+/// `expected` is compared twice, and the two comparisons are not the same one.
+/// The first is made here, after the temporary file is written and before the
+/// destination is prepared, so a target that moved on is declined without the
+/// destination being touched at all: on Windows, where the preparation clears a
+/// read-only attribute, declining early is what keeps a declined swap from
+/// writing to the target. The second is made after the preparation and
+/// immediately before the rename, which is as late as the platform allows: it
+/// is what catches a writer that lands in the window the swap cannot close,
+/// where the rename would otherwise discard what that writer put there.
+///
+/// Returns `Ok(false)` when the target no longer holds `expected`, having
+/// renamed nothing and having put back whatever the preparation changed.
 fn swap_into_place(
     directory: &Dir,
     temp_path: &Utf8Path,
@@ -81,14 +89,34 @@ fn swap_into_place(
         return Ok(false);
     }
     let prepared = prepare_destination(directory, path, permissions)?;
+    // The window no rename closes: no platform's rename compares contents, so a
+    // writer that lands between the comparison above and the one below would be
+    // overwritten rather than declined. A test arms this seam to put one there;
+    // nothing else runs it.
+    #[cfg(test)]
+    competing_writer_seam::run(directory, path);
+    if !holds_expected(directory, path, expected)? {
+        debug!("target changed before the swap; leaving it alone");
+        undo_preparation(directory, path, prepared);
+        return Ok(false);
+    }
     if let Err(error) = rename_over_target(directory, temp_path, path) {
-        if let Some(original) = prepared {
-            restore_destination(directory, path, &original);
-        }
+        undo_preparation(directory, path, prepared);
         return Err(error);
     }
     debug!("target replaced");
     Ok(true)
+}
+
+/// Puts back what [`prepare_destination`] changed, when it changed anything.
+///
+/// Shared by the two ways a swap stops short of the rename — a target that
+/// moved on, and a rename that failed — so the rollback cannot differ between
+/// them.
+fn undo_preparation(directory: &Dir, path: &Utf8Path, prepared: Option<Permissions>) {
+    if let Some(original) = prepared {
+        restore_destination(directory, path, &original);
+    }
 }
 
 /// Whether `path` still reads as `expected`; always true when it is `None`.
@@ -156,13 +184,14 @@ fn prepare_destination(
     Ok(None)
 }
 
-/// Puts the destination's original permissions back after a failed swap.
+/// Puts the destination's original permissions back after a swap that did not
+/// complete.
 ///
-/// Best effort by design: a replacement that failed must not leave the target
-/// writable as its only lasting effect, and the failure to restore must not
-/// mask the reason the swap failed, so it is traced rather than returned. The
-/// category is the `io::ErrorKind`, which is bounded, rather than an error
-/// string or a path.
+/// Best effort by design: a replacement that failed or was declined must not
+/// leave the target writable as its only lasting effect, and a failure to
+/// restore must not mask the reason the swap stopped short, so it is traced
+/// rather than returned. The category is the `io::ErrorKind`, which is bounded,
+/// rather than an error string or a path.
 #[cfg(windows)]
 fn restore_destination(directory: &Dir, path: &Utf8Path, original: &Permissions) {
     if let Err(error) = directory.set_permissions(path, original.clone()) {
@@ -349,4 +378,59 @@ pub(crate) mod cleanup_failure_seam {
     /// One-shot by design: arming fails exactly one removal, so a test that
     /// triggers more than one cleanup cannot have the seam fire twice.
     pub(crate) fn take() -> bool { ARMED.with(|armed| armed.replace(false)) }
+}
+
+#[cfg(test)]
+pub(crate) mod competing_writer_seam {
+    //! A test-only seam that lets a case land another writer inside the swap.
+    //!
+    //! The window it opens is the one no platform lets the swap close: no
+    //! rename compares contents, so a writer that lands between the swap's last
+    //! comparison and its rename is overwritten by it. Without the seam a test
+    //! can only reach that window by racing the scheduler, and a case that wins
+    //! the race on one machine loses it on the next. Here the write is handed
+    //! the directory capability and the target the swap is working with, so it
+    //! lands in the window deterministically and through the same capability as
+    //! every other operation.
+    //!
+    //! The arming is per-thread, because the tests that use it drive the swap on
+    //! the thread that armed it, and it is undone when the value [`arm`] returns
+    //! is dropped, so a failing assertion cannot leave an intrusion armed for
+    //! whatever runs next on that thread.
+
+    use std::cell::Cell;
+
+    use super::{Dir, Utf8Path};
+
+    thread_local! {
+        /// The write this thread's next swap must run before its final comparison.
+        static ARMED: Cell<Option<Box<dyn FnOnce(&Dir, &Utf8Path)>>> = const { Cell::new(None) };
+    }
+
+    /// Arms the seam with the write to run inside the swap, until the returned
+    /// value is dropped.
+    ///
+    /// The write is given the capability and the target as arguments, so the
+    /// arming captures no path and no handle of its own.
+    pub(crate) fn arm(intrude: impl FnOnce(&Dir, &Utf8Path) + 'static) -> Armed {
+        ARMED.with(|armed| armed.set(Some(Box::new(intrude))));
+        Armed
+    }
+
+    /// Disarms the seam when dropped.
+    pub(crate) struct Armed;
+
+    impl Drop for Armed {
+        fn drop(&mut self) { ARMED.with(|armed| armed.set(None)); }
+    }
+
+    /// Runs the armed intrusion, if any, exactly once.
+    ///
+    /// One-shot by design: an intrusion arms exactly one swap, so a test that
+    /// triggers more than one swap cannot have the seam fire twice.
+    pub(crate) fn run(directory: &Dir, path: &Utf8Path) {
+        if let Some(intrude) = ARMED.with(Cell::take) {
+            intrude(directory, path);
+        }
+    }
 }

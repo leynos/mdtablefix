@@ -124,6 +124,59 @@ fn conditional_replacement_declines_a_target_that_moved_on(
     );
 }
 
+/// A writer that lands between the swap's last comparison and its rename is
+/// caught by that comparison rather than overwritten.
+///
+/// The window is the one no supported platform lets the swap close: no rename
+/// compares contents, so without the comparison that follows the seam the
+/// arriving writer's text would be renamed away and its work discarded. The
+/// seam is what makes such a landing deterministic rather than a race, and the
+/// case asserts the three things a decline promises: the replacement reports
+/// that it wrote nothing, the arriving writer's text is what the target holds,
+/// and no temporary file is left beside it.
+#[rstest::rstest]
+fn conditional_replacement_declines_a_writer_that_lands_inside_the_swap(
+    conditional_fixture: ConditionalFixture,
+) {
+    let read = "|A|B|\n|1|2|";
+    let intruder = "|X|Y|\n|3|4|";
+    conditional_fixture
+        .directory
+        .write(&conditional_fixture.target, read)
+        .expect("write fixture");
+    let _armed = competing_writer_seam::arm(move |directory, path| {
+        directory
+            .write(path, intruder)
+            .expect("the arriving write lands in the swap's window");
+    });
+
+    let replaced = replace_file_if_unchanged(
+        &conditional_fixture.directory,
+        &conditional_fixture.target,
+        read,
+        "| A | B |\n| 1 | 2 |\n",
+    )
+    .expect("a declined replacement is not an error");
+
+    assert!(
+        !replaced,
+        "a swap another writer reached first replaces nothing"
+    );
+    assert_eq!(
+        conditional_fixture
+            .directory
+            .read_to_string(&conditional_fixture.target)
+            .expect("read target"),
+        intruder,
+        "the other writer's text must survive the declined swap"
+    );
+    assert_eq!(
+        entry_names(&conditional_fixture.directory),
+        ["sample.md"],
+        "a declined replacement must remove the temporary file it wrote"
+    );
+}
+
 /// A failed cleanup after a declined replacement is reported to the caller.
 #[rstest::rstest]
 fn conditional_replacement_reports_a_failed_cleanup(conditional_fixture: ConditionalFixture) {

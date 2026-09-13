@@ -190,11 +190,13 @@ pub fn replace_file(directory: &Dir, path: &Utf8Path, contents: &str) -> io::Res
 /// separate read before [`replace_file`] would decide on text that a concurrent
 /// writer can change during the temporary file's creation, write, and flush,
 /// and the rename would then discard that writer's work. Here the comparison is
-/// made inside the swap, after everything expensive is done and as close to the
-/// rename as the platform allows, so that window is the rename itself. It is
-/// not a true compare-and-swap: no rename on any supported platform compares
-/// contents, so a writer that lands between the comparison and the rename still
-/// wins. Every earlier window — the whole formatting run — is closed.
+/// made inside the swap — twice, with the last of the two immediately before
+/// the rename, after everything expensive is done and after the destination is
+/// prepared. It is still not a true compare-and-swap: no rename on any
+/// supported platform compares contents, so a writer that lands between that
+/// last comparison and the rename wins, and that window is one system call
+/// wide. Every earlier window — the whole formatting run, and the swap's own
+/// writing, permissions, and preparation — is closed.
 ///
 /// Returns `Ok(false)` when the target no longer holds `expected` and its
 /// temporary file was removed: the target is left exactly as it was, and the
