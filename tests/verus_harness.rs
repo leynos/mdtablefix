@@ -21,6 +21,8 @@ use serde_yaml::{Mapping, Value};
 use tempfile::TempDir;
 
 const VERUS_WORKFLOW: &str = include_str!("../.github/workflows/verus.yml");
+const VERUS_VERSION: &str = include_str!("../tools/verus/VERSION");
+const MAKEFILE: &str = include_str!("../Makefile");
 const MISSING_SYMBOL_DIAGNOSTIC: &str =
     "verification ledger names missing symbol: missing_verified_symbol";
 const PREFIX_ONLY_SYMBOL_DIAGNOSTIC: &str =
@@ -96,6 +98,10 @@ if [[ "$*" == "verus run --repo-root . --proof-file verus/smoke.rs" ]]; then
             exit 1
             ;;
         accepted) exit 0 ;;
+        unrelated_failure)
+            echo "runner unavailable"
+            exit 1
+            ;;
     esac
 fi
 "#;
@@ -181,6 +187,64 @@ fn checkout_does_not_persist_credentials(workflow: &Value) -> Result<bool> {
     }))
 }
 
+fn workflow_has_required_pull_request_triggers(workflow: &Value) -> Result<bool> {
+    let root = mapping(workflow, "workflow")?;
+    let events = mapping(get(root, "on")?, "workflow events")?;
+    let pull_request = mapping(get(events, "pull_request")?, "pull-request event")?;
+    let types = get(pull_request, "types")?
+        .as_sequence()
+        .context("pull-request event types should be a sequence")?;
+    let has_required_types = ["opened", "synchronize", "reopened"]
+        .iter()
+        .all(|required| {
+            types
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|configured| configured == *required)
+        });
+
+    Ok(has_required_types && events.contains_key(Value::String("workflow_dispatch".to_owned())))
+}
+
+fn workflow_uses_pinned_verus_cache(workflow: &Value) -> Result<bool> {
+    let root = mapping(workflow, "workflow")?;
+    let environment = mapping(get(root, "env")?, "workflow environment")?;
+    let version = get(environment, "VERUS_VERSION")?
+        .as_str()
+        .context("Verus version should be a string")?;
+    let expected_version = VERUS_VERSION.trim();
+    if version != expected_version {
+        return Ok(false);
+    }
+
+    let jobs = mapping(get(root, "jobs")?, "jobs")?;
+    let verify = mapping(get(jobs, "verify")?, "verify job")?;
+    let steps = get(verify, "steps")?
+        .as_sequence()
+        .context("verify job steps should be a sequence")?;
+    Ok(steps.iter().filter_map(Value::as_mapping).any(|step| {
+        step.get(Value::String("uses".to_owned()))
+            .and_then(Value::as_str)
+            .is_some_and(|uses| uses.starts_with("actions/cache@"))
+            && step
+                .get(Value::String("with".to_owned()))
+                .and_then(Value::as_mapping)
+                .is_some_and(|config| {
+                    config
+                        .get(Value::String("path".to_owned()))
+                        .and_then(Value::as_str)
+                        == Some(".verus/${{ env.VERUS_VERSION }}")
+                        && config
+                            .get(Value::String("key".to_owned()))
+                            .and_then(Value::as_str)
+                            == Some(
+                                "verus-${{ runner.os }}-${{ runner.arch }}-${{ env.VERUS_VERSION \
+                                 }}",
+                            )
+                })
+    }))
+}
+
 #[test]
 fn workflow_runs_the_proof_and_non_vacuity_targets() -> Result<()> {
     let workflow = parse_workflow()?;
@@ -189,6 +253,11 @@ fn workflow_runs_the_proof_and_non_vacuity_targets() -> Result<()> {
     ensure!(commands.contains(&"make verus"));
     ensure!(commands.contains(&"make verus-selftest"));
     ensure!(checkout_does_not_persist_credentials(&workflow)?);
+    ensure!(workflow_has_required_pull_request_triggers(&workflow)?);
+    ensure!(workflow_uses_pinned_verus_cache(&workflow)?);
+    ensure!(MAKEFILE.contains(
+        "git+https://github.com/leynos/rust-prover-tools@$(shell cat tools/rust-prover-tools/REF)"
+    ));
     Ok(())
 }
 
@@ -242,11 +311,17 @@ fn make_verus_installs_and_runs_the_library_proof() -> Result<()> {
 }
 
 #[rstest]
-#[case::rejected_proof("rejected", true)]
-#[case::accepted_proof("accepted", false)]
+#[case::rejected_proof("rejected", true, None)]
+#[case::accepted_proof("accepted", false, Some("Verus smoke proof unexpectedly succeeded"))]
+#[case::unrelated_runner_failure(
+    "unrelated_failure",
+    false,
+    Some("Verus smoke proof did not reach the verifier")
+)]
 fn make_verus_selftest_accepts_only_a_rejected_smoke_proof(
     #[case] smoke_mode: &'static str,
     #[case] should_succeed: bool,
+    #[case] expected_diagnostic: Option<&str>,
 ) -> Result<()> {
     let runner = fake_prover_tools(smoke_mode)?;
     let output = make_command("verus-selftest", &runner)
@@ -254,6 +329,12 @@ fn make_verus_selftest_accepts_only_a_rejected_smoke_proof(
         .context("run make verus-selftest with fake prover-tools")?;
 
     assert_eq!(output.status.success(), should_succeed);
+    if let Some(expected_diagnostic) = expected_diagnostic {
+        ensure!(
+            String::from_utf8_lossy(&output.stderr).contains(expected_diagnostic),
+            "expected self-test diagnostic: {expected_diagnostic}"
+        );
+    }
     let log = runner_log(&runner)?;
     ensure!(
         log.lines()
