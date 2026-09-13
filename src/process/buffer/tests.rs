@@ -164,12 +164,13 @@ fn finish_flushes_a_table_that_ends_at_end_of_input() {
     assert!(handle_line(&mut buffer, "| --- | --- |").is_none());
     assert!(handle_line(&mut buffer, "| 1 | 2 |").is_none());
 
-    let result = buffer.finish();
+    let (result, table_markers) = buffer.finish();
 
     assert_eq!(
         result,
         owned(&["| a   | b   |", "| --- | --- |", "| 1   | 2   |"]),
     );
+    assert_eq!(table_markers, vec![true; result.len()]);
 }
 
 #[rstest]
