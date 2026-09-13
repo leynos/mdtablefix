@@ -104,6 +104,11 @@ fn selecting<P: PathProbe + ?Sized>(candidates: &[Utf8PathBuf], probe: &P) -> Ve
 #[case(PathKind::Missing, false)]
 #[case(PathKind::Symlink, false)]
 #[case(PathKind::Other, false)]
+// A regular file the selection still refuses, because writing it would write
+// outside the tree the selection was made in. The case matters here rather
+// than only in the probe's own tests: it is the one verdict where "reads as a
+// regular file" and "is selected" part company.
+#[case(PathKind::OutsideRoot, false)]
 fn the_probe_verdict_alone_decides(#[case] verdict: PathKind, #[case] expected: bool) {
     let candidates = [at("docs/guide.md")];
     let selected = selecting(&candidates, &FixedProbe(verdict.clone()));

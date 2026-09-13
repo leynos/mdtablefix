@@ -49,6 +49,7 @@ enum Verdict {
     Missing,
     Symlink,
     Other,
+    OutsideRoot,
 }
 
 fn verdict() -> impl Strategy<Value = Verdict> {
@@ -57,6 +58,7 @@ fn verdict() -> impl Strategy<Value = Verdict> {
         Just(Verdict::Missing),
         Just(Verdict::Symlink),
         Just(Verdict::Other),
+        Just(Verdict::OutsideRoot),
     ]
 }
 
@@ -74,6 +76,7 @@ fn kind_for(verdict: Verdict, path: &Utf8Path) -> PathKind {
         Verdict::Missing => PathKind::Missing,
         Verdict::Symlink => PathKind::Symlink,
         Verdict::Other => PathKind::Other,
+        Verdict::OutsideRoot => PathKind::OutsideRoot,
     }
 }
 
@@ -160,8 +163,10 @@ fn a_path_is_selected_exactly_when_it_matches_and_probes_as_a_regular_file() {
 
     assert!(
         saw_empty.get() && saw_non_empty.get() && saw_probe_only_exclusion.get(),
-        "the run must observe an empty selection ({}), a non-empty one ({}), and a \
-         matching-extension candidate excluded by its verdict alone ({})",
+        concat!(
+            "the run must observe an empty selection ({}), a non-empty one ({}), and a ",
+            "matching-extension candidate excluded by its verdict alone ({})"
+        ),
         saw_empty.get(),
         saw_non_empty.get(),
         saw_probe_only_exclusion.get()

@@ -3,20 +3,19 @@
 //! These run a real program, because what they pin is exactly the part a fake
 //! would assume: NUL-terminated, unquoted, verbatim paths relative to the
 //! process working directory, and the failure Git reports when it is handed a
-//! directory that no repository governs. The fixture inherits the ambient Git
-//! configuration, as the adapter does; it pins the branch name and commits
-//! nothing, so the settings that could perturb it are not in play, and the
-//! listing assertions are on the whole listing rather than on a subset, so a
-//! perturbation would be loud.
+//! directory that no repository governs. The fixture drives `git` through
+//! [`git`], which hardens its own environment rather than inheriting the
+//! developer's — the adapter's env discipline is the subject of the sibling
+//! `git_ls_files_tests`, so the fixture is free to be stricter than it. It pins
+//! the branch name and commits nothing, so the settings that could perturb it
+//! are not in play, and the listing assertions are on the whole listing rather
+//! than on a subset, so a perturbation would be loud.
 //!
 //! The tracing assertions at the end read the events the adapter emits. They
 //! belong to the binary's test target rather than to `tests/`, because a
 //! tracing subscriber is process-global and the install happens per test.
 
-use std::io;
-
 use camino::{Utf8Path, Utf8PathBuf};
-use rstest::rstest;
 
 use super::{GitListError, GitLsFiles};
 use crate::select::git_output::CandidateListing;
@@ -275,35 +274,6 @@ fn the_repository_query_reports_an_absent_program_as_such() {
         matches!(error, GitListError::ProgramNotFound { .. }),
         "{error}"
     );
-}
-
-/// The category of each failure that needs no process to reach.
-///
-/// A closed set of four, so a host aggregating failures cannot be handed a
-/// value that grows with the trees a run was given. The nonzero exit is driven
-/// for real in the traced test below, because an `ExitStatus` cannot be built
-/// portably without a process to produce one.
-#[rstest]
-#[case(
-    GitListError::ProgramNotFound { program: "git".to_string() },
-    "program_not_found"
-)]
-#[case(
-    GitListError::Spawn {
-        command: "git ls-files".to_string(),
-        source: io::Error::new(io::ErrorKind::PermissionDenied, "fixture"),
-    },
-    "spawn"
-)]
-#[case(
-    GitListError::NoGitDir { command: "git rev-parse".to_string() },
-    "no_git_dir"
-)]
-fn a_category_names_the_class_a_host_may_aggregate(
-    #[case] error: GitListError,
-    #[case] expected: &str,
-) {
-    assert_eq!(error.category(), expected);
 }
 
 /// A successful invocation is traced with its operation, its outcome, and how

@@ -182,7 +182,16 @@ fn run() -> anyhow::Result<ExitStatus> {
             }
         };
         match git_inputs::resolve(&cli, mode, &working_directory) {
-            Ok(selection) => (selection.inputs, selection.guard),
+            Ok(selection) => {
+                // Printed here rather than inside `resolve`, which answers
+                // questions: a query that writes to standard error cannot be
+                // reused by a caller that wants the selection without the
+                // commentary. See `GitSelection::skipped_warning`.
+                if let Some(warning) = selection.skipped_warning() {
+                    eprintln!("{warning}");
+                }
+                (selection.inputs, selection.guard)
+            }
             Err(error) => {
                 // One deliberate line: this tool's own wording, with the
                 // underlying reason relayed beside it. See

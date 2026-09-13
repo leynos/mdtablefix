@@ -20,8 +20,10 @@ use crate::{
     driver::{Inputs, Mode},
     select::{
         conflict::ConflictGuard,
+        extensions::ExtensionFilter,
         fs_probe::AmbientPathProbe,
-        git_ls_files::{GitListError, GitLsFiles},
+        git_failure::GitListError,
+        git_ls_files::GitLsFiles,
         policy::{ProbeError, select_files},
     },
 };
@@ -70,6 +72,36 @@ pub struct GitSelection {
     pub inputs: Inputs,
     /// The guard a rewrite must consult before it writes anything.
     pub guard: ConflictGuard,
+    /// How many listed candidates could not be represented as paths.
+    ///
+    /// Carried rather than printed here: resolving a selection is a query, and
+    /// writing a warning is command output. [`GitSelection::skipped_warning`]
+    /// renders it for the boundary that owns standard error.
+    pub skipped_non_utf8: usize,
+}
+
+impl GitSelection {
+    /// The one warning a run with unrepresentable candidates owes the user, or
+    /// `None` when every candidate was a valid UTF-8 path.
+    ///
+    /// Reported rather than dropped in silence: a file the user can see in the
+    /// repository and cannot see in the selection is otherwise a mystery. The
+    /// caller writes it to standard error rather than standard output, because
+    /// standard output is the selection itself — under `--list-files` a reader
+    /// is parsing it, and a warning there would be an entry that is not a path.
+    ///
+    /// The paths themselves are not named: they are not valid UTF-8, so writing
+    /// one to a terminal is exactly the operation this tool declined to
+    /// perform. Only the count is, and it is a structured field on the
+    /// selection for as long as possible, so the wording stays testable without
+    /// a process to print it.
+    #[must_use]
+    pub fn skipped_warning(&self) -> Option<String> {
+        let skipped = self.skipped_non_utf8;
+        (skipped > 0).then(|| {
+            format!("mdtablefix: {skipped} file(s) not selected: their names are not valid UTF-8")
+        })
+    }
 }
 
 /// Resolves `--git` into the paths to act on, and the guard that governs them.
@@ -93,7 +125,6 @@ pub fn resolve(
 ) -> Result<GitSelection, GitInputsError> {
     let extensions = cli.extensions();
     let listing = GitLsFiles::new(cli.includes_untracked()).list_candidates(working_directory)?;
-    report_skipped(listing.skipped_non_utf8);
 
     let selected = select_files(
         &listing.paths,
@@ -101,17 +132,31 @@ pub fn resolve(
         &extensions,
         &AmbientPathProbe,
     )?;
-    debug!(
-        candidates = listing.paths.len(),
-        selected = selected.len(),
-        extensions = %extensions,
-        "selected files from the repository"
-    );
+    report_selection(listing.paths.len(), selected.len(), &extensions);
 
     Ok(GitSelection {
         inputs: Inputs::Files(selected),
         guard: guard(cli, mode, working_directory)?,
+        skipped_non_utf8: listing.skipped_non_utf8,
     })
+}
+
+/// Reports how much the selection narrowed, and nothing the user typed.
+///
+/// The extension values are deliberately absent. `--md-exts` accepts any
+/// string, of any length, any number of times, so `extensions = %extensions`
+/// would put arbitrary caller-controlled text into every event this run emits
+/// and into whatever stores them; the count answers the operator's question —
+/// "was this a default run or a narrowed one, and how narrow?" — without that.
+/// The filter is still rendered in full by `--help` and by the diagnostics that
+/// have a user waiting to read them, which is where an arbitrary value belongs.
+fn report_selection(candidates: usize, selected: usize, extensions: &ExtensionFilter) {
+    debug!(
+        candidates,
+        selected,
+        extension_count = extensions.iter().count(),
+        "selected files from the repository"
+    );
 }
 
 /// The guard a `--git` run must consult before it rewrites anything.
@@ -147,22 +192,6 @@ fn guard(
     Ok(ConflictGuard::guarded(git_dir))
 }
 
-/// Reports, once, that some candidates could not be represented as paths.
-///
-/// Reported rather than dropped in silence: a file the user can see in the
-/// repository and cannot see in the selection is otherwise a mystery. It goes
-/// to standard error because standard output is the selection itself — under
-/// `--list-files` a reader is parsing it, and a warning there would be an entry
-/// that is not a path.
-///
-/// The paths themselves are not printed: they are not valid UTF-8, so writing
-/// one to a terminal is exactly the operation this tool declined to perform.
-fn report_skipped(skipped: usize) {
-    if skipped > 0 {
-        eprintln!("mdtablefix: {skipped} file(s) not selected: their names are not valid UTF-8");
-    }
-}
-
 /// A working directory as a UTF-8 path.
 ///
 /// The conversion `Inputs::resolve` performs for positional arguments, applied
@@ -182,3 +211,7 @@ pub fn working_directory() -> anyhow::Result<Utf8PathBuf> {
         )
     })
 }
+
+#[cfg(test)]
+#[path = "git_inputs_tests.rs"]
+mod tests;

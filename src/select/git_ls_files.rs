@@ -7,9 +7,11 @@
 //! parsed and made safe in [`super::git_output`].
 //!
 //! `git`'s own diagnostics are relayed, never asserted on: they are localised
-//! and version-dependent. Every message this module shows a user is a `Display`
-//! impl this repository owns, and the relayed text is one line of it, scrubbed
-//! by [`relayable`](super::git_output::relayable).
+//! and version-dependent. Every failure here is a [`GitListError`], whose
+//! wording is a `Display` impl this repository owns and whose relayed text is
+//! one line of it, scrubbed by [`relayable`](super::git_output::relayable).
+//! The type itself lives in [`super::git_failure`], beside the reader it is
+//! written for.
 //!
 //! Every invocation is also traced, because it crosses a process boundary: a
 //! `debug` span names the operation ([`Operation::name`]), and one `debug` event
@@ -19,17 +21,15 @@
 //! the same discipline is kept, so a host can chart this path without storing
 //! the tree a run was given.
 
-use std::{
-    ffi::OsString,
-    io,
-    process::{Command, ExitStatus},
-    time::Instant,
-};
+use std::{ffi::OsString, io, process::Command, time::Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use tracing::{Span, debug, field};
 
-use super::git_output::{CandidateListing, relayable, split_nul_delimited};
+use super::{
+    git_failure::GitListError,
+    git_output::{CandidateListing, relayable, split_nul_delimited},
+};
 
 /// The program every invocation runs unless a caller names another.
 const PROGRAM: &str = "git";
@@ -59,6 +59,35 @@ const ABSOLUTE_GIT_DIR: &str = "--absolute-git-dir";
 /// What `--include-untracked` adds: the files Git would commit, and nothing
 /// it is told to ignore.
 const UNTRACKED: [&str; 2] = ["--others", "--exclude-standard"];
+
+/// The environment variables that would point an invocation at another
+/// repository.
+///
+/// `--git` is scoped to the directory the process runs in: the listing is
+/// relative to it, and the index it is read from is the one governing it. Each
+/// of these redirects one of those answers — the Git directory, the working
+/// tree the index is compared against, the index file itself, and the common
+/// directory the repository's shared state lives in. An ambient value is not
+/// hypothetical: a hook, or a script that wraps another `git` command, leaves
+/// one behind, and the result would be a listing of a different repository's
+/// files with the paths still interpreted relative to this directory — a
+/// silent wrong answer, and under `--in-place` a destructive one. Every
+/// invocation therefore removes them.
+///
+/// Deliberately not the whole environment. Discovery-only variables such as
+/// [`GIT_CEILING_DIRECTORIES`] and `GIT_DISCOVERY_ACROSS_FILESYSTEM` can only
+/// stop the search for a repository, which fails honestly with Git's own
+/// diagnostic rather than answering about a tree this run was not given; and
+/// stripping the user's configuration would be a different decision from
+/// stripping their redirection.
+///
+/// [`GIT_CEILING_DIRECTORIES`]: https://git-scm.com/docs/git#Documentation/git.txt-codeGITCEILINGDIRECTORIEScode
+const REDIRECTING: [&str; 4] = [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_COMMON_DIR",
+];
 
 /// One `git` invocation this module makes.
 ///
@@ -215,6 +244,22 @@ impl GitLsFiles {
         result
     }
 
+    /// The command one invocation runs: `args`, in `dir`, and without the
+    /// variables that would redirect it at another repository.
+    ///
+    /// Separate from [`invoke`](Self::invoke) so that what the subprocess is
+    /// given can be asserted without a process to run: the removals are
+    /// visible through [`Command::get_envs`], which is what the test reads.
+    fn command(&self, args: &[&str], dir: &Utf8Path) -> Command {
+        let mut command = Command::new(&self.program);
+        command.args(args).current_dir(dir);
+        for variable in REDIRECTING {
+            command.env_remove(variable);
+        }
+
+        command
+    }
+
     /// Runs `git subcommand` with `args` in `dir`, mapping every failure.
     ///
     /// `output()`, not `spawn()` plus a hand-rolled read: `output()` drains
@@ -226,9 +271,8 @@ impl GitLsFiles {
         args: &[&str],
         dir: &Utf8Path,
     ) -> Result<std::process::Output, GitListError> {
-        let output = Command::new(&self.program)
-            .args(args)
-            .current_dir(dir)
+        let output = self
+            .command(args, dir)
             .output()
             .map_err(|source| {
                 let program = self.program.to_string_lossy().into_owned();
@@ -285,71 +329,6 @@ fn without_line_terminator(reported: &str) -> &str {
 /// make the field grow with the errors it might carry.
 fn outcome_label<T, E>(result: &Result<T, E>) -> &'static str {
     if result.is_ok() { "success" } else { "error" }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum GitListError {
-    #[error("`{program}` is not installed or not on PATH")]
-    ProgramNotFound { program: String },
-    #[error("running `{command}`")]
-    Spawn {
-        /// The command as it would be typed, e.g. `git ls-files`.
-        command: String,
-        #[source]
-        source: io::Error,
-    },
-    // `{status}`, not `exit status {status}`: `ExitStatus`'s own rendering is
-    // already "exit status: 1" on Unix and "exit code: 1" on Windows, so
-    // spelling the words here as well would say it twice.
-    #[error("`{command}` failed with {status}")]
-    Failed {
-        /// The command as it would be typed, e.g. `git ls-files`.
-        command: String,
-        status: ExitStatus,
-        /// Git's own diagnostic, relayed through
-        /// [`relayable`](super::git_output::relayable).
-        stderr: String,
-    },
-    #[error("`{command}` did not report a usable Git directory")]
-    NoGitDir {
-        /// The command as it would be typed, e.g. `git rev-parse`.
-        command: String,
-    },
-}
-
-impl GitListError {
-    /// The one line this failure prints, with Git's own diagnostic appended.
-    ///
-    /// Separate from [`Display`](std::fmt::Display) so that this tool's
-    /// wording stays a message of this repository's own — the part a test may
-    /// assert on, per AX-GIT-NLS — while git's text is relayed beside it rather
-    /// than inside it. The two are one line because a user reading a terminal
-    /// reads one failure, not a failure and an appendix.
-    #[must_use]
-    pub fn diagnostic(&self) -> String {
-        match self {
-            Self::Failed { stderr, .. } if !stderr.is_empty() => format!("{self}: {stderr}"),
-            _ => self.to_string(),
-        }
-    }
-
-    /// The bounded class this failure belongs to.
-    ///
-    /// What a tracing field may carry where [`diagnostic`](Self::diagnostic)
-    /// carries prose: a closed set of four, none of which is a path, a status
-    /// code, or anything Git wrote. `ExitStatus` is deliberately not reported
-    /// as itself — the class of a failure is what a host aggregates, and the
-    /// number of a failing exit code is a detail of Git's, not of ours.
-    #[must_use]
-    pub const fn category(&self) -> &'static str {
-        match self {
-            Self::ProgramNotFound { .. } => "program_not_found",
-            Self::Spawn { .. } => "spawn",
-            Self::Failed { .. } => "nonzero_exit",
-            Self::NoGitDir { .. } => "no_git_dir",
-        }
-    }
 }
 
 #[cfg(test)]
