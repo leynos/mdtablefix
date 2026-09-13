@@ -194,7 +194,14 @@ holds:
   `reflow::row_parsing` already did when it decides what a delimiter cell is.
   `SEP_RE` alone also matches a cell that is empty, so a row of nothing but
   pipes and spaces — a table's empty header row — was read as the alignment row,
-  and the genuine delimiter row was then demoted to a data row.
+  and the genuine delimiter row was then demoted to a data row. A lone dash
+  among empty cells — `|  | - |` above `| --- | --- |` — is the same trap one
+  dash later, and is reachable with no flags at all: the header was taken for
+  the delimiter row and the genuine delimiter row was laid out as a data row
+  beside the synthesized one, so the pass after that read the data row as the
+  delimiter row in turn and the first pass had no fixed point. The predicate is
+  `table::is_delimiter_row`, which splits the line into cells and requires a
+  dash in each.
 
 ## Consequences
 
@@ -242,8 +249,9 @@ holds:
   asserts the shape is reached and its row survives, so removing the generator
   branch fails the sweep rather than leaving the guard unexercised.
   `src/wrap/paragraph_tests.rs` pins the two documents that sweep shrank its
-  drift to, along with a three-line item that reaches the class on its own.
-  Together they guard the invariant against regression.
+  drift to, along with a three-line item that reaches the class on its own, and
+  `src/table.rs` pins the lone-dash header row beside the empty one. Together
+  they guard the invariant against regression.
 
 ## Addendum (2026-09-13)
 

@@ -183,17 +183,28 @@ fn extract_indent_and_trim(lines: &[String]) -> (String, Vec<String>) {
     (indent, trimmed)
 }
 
-/// Removes and returns the first separator line detected in `lines`.
+/// Reports whether `line` is a table delimiter row.
 ///
-/// The dash is required, as it is in `reflow::row_parsing`, because `SEP_RE`
-/// alone also matches a row whose cells are all empty: `|  |  |` is made only of
-/// pipes and spaces, so a table whose header row is empty had that header taken
-/// for the delimiter row, which demoted the real delimiter row to a data row
-/// and left two delimiter-shaped rows for later passes to consume in turn.
+/// Every cell must carry a dash, as `reflow::row_parsing` and
+/// `reflow::second_row_is_separator` require. `SEP_RE` alone matches a cell
+/// that is empty as readily as one that is dashes, so a line-level test admits
+/// rows that only resemble a delimiter row.
+fn is_delimiter_row(line: &str) -> bool {
+    SEP_RE.is_match(line) && split_cells(line).iter().all(|cell| cell.contains('-'))
+}
+/// Removes and returns the first delimiter row detected in `lines`.
+///
+/// The dash is required in every cell, as it is in `reflow::row_parsing`,
+/// because `SEP_RE` alone also matches a row whose cells are all empty: `|  |  |`
+/// is made only of pipes and spaces, so a table whose header row is empty had
+/// that header taken for the delimiter row, which demoted the real delimiter row
+/// to a data row and left two delimiter-shaped rows for later passes to consume
+/// in turn. A lone dash in an otherwise empty header row — `|  | - |` above
+/// `| --- | --- |` — is the same trap one dash later: the header became the
+/// delimiter row, the real delimiter row was laid out as text, and the
+/// synthesized delimiter row grew a column wider on every pass.
 fn extract_separator_line(lines: &mut Vec<String>) -> Option<String> {
-    let sep_idx = lines
-        .iter()
-        .position(|l| l.contains('-') && SEP_RE.is_match(l));
+    let sep_idx = lines.iter().position(|l| is_delimiter_row(l));
     sep_idx.map(|idx| lines.remove(idx))
 }
 
@@ -428,6 +439,43 @@ mod tests {
         assert_eq!(
             reflow_table(&lines),
             vec!["| a   |     |".to_string(), "| --- | --- |".to_string()]
+        );
+    }
+
+    #[rstest]
+    #[case::dashes("| --- | --- |", true)]
+    #[case::alignment_markers("| :--: | ---: |", true)]
+    #[case::single_column("---", true)]
+    #[case::empty_header("|  |  |", false)]
+    #[case::lone_dash_header("|  | - |", false)]
+    #[case::content_row("| a | b |", false)]
+    fn is_delimiter_row_requires_a_dash_in_every_cell(#[case] line: &str, #[case] expected: bool) {
+        assert_eq!(is_delimiter_row(line), expected);
+    }
+
+    #[test]
+    fn reflow_table_keeps_a_header_whose_lone_dash_tempts_the_delimiter_scan() {
+        // The shrunk counter-example the issue #493 sweep raised: a header row
+        // made only of pipes, spaces, and one dash satisfies `SEP_RE` and
+        // carries a dash, so a line-level test took it for the delimiter row.
+        // The real delimiter row was then laid out as text and the synthesized
+        // one measured a column wider on every pass.
+        let lines = vec![
+            "|  | - |".to_string(),
+            "| --- | --- |".to_string(),
+            "|  | aAAa |".to_string(),
+        ];
+        let expected = vec![
+            "|     | -    |".to_string(),
+            "| --- | ---- |".to_string(),
+            "|     | aAAa |".to_string(),
+        ];
+
+        assert_eq!(reflow_table(&lines), expected);
+        assert_eq!(
+            reflow_table(&expected),
+            expected,
+            "reflow is not a fixed point"
         );
     }
 
