@@ -1046,7 +1046,6 @@ classified as atomic by `has_inline_code_structure` in
 an unbreakable unit. No line break is inserted between the closing backtick and
 the following letters.
 
-
 ## Verification strategy
 
 The [verification ledger](verification.md) records each claimed Verus result,

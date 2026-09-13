@@ -70,7 +70,6 @@ formatter sizes columns according to the glyphs that will actually be emitted.
 `format_rows` applies escaping and padding to each cell, and `insert_separator`
 restores the separator row with widths derived from the final table body.
 
-
 ## Verus verification
 
 The verification harness is maintained by the same contributors who maintain
