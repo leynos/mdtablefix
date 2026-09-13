@@ -29,13 +29,7 @@ use super::{
         overlong_code_span_paragraph_strategy,
         table_cell_strategy,
     },
-    idempotence_harness::{
-        FLAG_POOL,
-        SWEEP_DOCUMENTS,
-        TABLE_DELIMITER_ROWS,
-        flags_for,
-        sample,
-    },
+    idempotence_harness::{FLAG_POOL, SWEEP_DOCUMENTS, TABLE_DELIMITER_ROWS, flags_for, sample},
 };
 
 /// Number of values the domain-reachability sweeps draw.
@@ -118,7 +112,9 @@ fn is_three_space_item(line: &str) -> bool {
 /// Returns whether any line of `document` carries a code span longer than the
 /// wrap width.
 fn has_overlong_code_span(document: &str) -> bool {
-    document.lines().any(|line| longest_code_span_len(line) > WRAP_WIDTH)
+    document
+        .lines()
+        .any(|line| longest_code_span_len(line) > WRAP_WIDTH)
 }
 
 /// Asserts the sweep samples every flag both enabled and disabled.
@@ -334,23 +330,33 @@ fn generated_documents_carry_the_widened_shapes() {
         "no generated document contained a hard break",
     );
     assert!(
-        documents.iter().any(|document| document.lines().any(is_fence_run)),
+        documents
+            .iter()
+            .any(|document| document.lines().any(is_fence_run)),
         "no document held a fence run, so the element strategy does not draw on it",
     );
     assert!(
-        documents.iter().any(|document| document.lines().any(is_ordered_item)),
+        documents
+            .iter()
+            .any(|document| document.lines().any(is_ordered_item)),
         "no document held an ordered marker, so the element strategy does not draw on it",
     );
     assert!(
-        documents.iter().any(|document| document.lines().any(is_three_space_item)),
+        documents
+            .iter()
+            .any(|document| document.lines().any(is_three_space_item)),
         "no document held a nested list item, so the element strategy does not draw on it",
     );
     assert!(
-        documents.iter().any(|document| document.contains("-----\n***\n| a | b |\n")),
+        documents
+            .iter()
+            .any(|document| document.contains("-----\n***\n| a | b |\n")),
         "no document held a combined adjacency, so the element strategy does not draw on it",
     );
     assert!(
-        documents.iter().any(|document| has_overlong_code_span(document)),
+        documents
+            .iter()
+            .any(|document| has_overlong_code_span(document)),
         "no document held an overlong code span, so the element strategy does not draw on it",
     );
 }

@@ -174,9 +174,7 @@ pub(crate) static SEP_CELL_RE: std::sync::LazyLock<Regex> = lazy_regex!(
 /// [`format_separator_cells`] then rewrote them into a well-formed dash run,
 /// silently turning malformed source rows into valid delimiter rows instead of
 /// leaving them as data.
-pub(crate) fn is_delimiter_cell(payload: &str) -> bool {
-    SEP_CELL_RE.is_match(payload.trim())
-}
+pub(crate) fn is_delimiter_cell(payload: &str) -> bool { SEP_CELL_RE.is_match(payload.trim()) }
 /// Holds the parsed and validated table data.
 ///
 /// This is produced by [`parse_and_validate`] and passed to

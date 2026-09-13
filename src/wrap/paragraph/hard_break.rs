@@ -30,9 +30,7 @@ pub(super) fn trailing_hard_break_marker_len(line: &str) -> usize {
     let marker = if marker_len == 1 { "backslash" } else { "none" };
     trace!(
         line_len = line.len(),
-        marker_len,
-        marker,
-        "measuring the trailing hard break marker"
+        marker_len, marker, "measuring the trailing hard break marker"
     );
     marker_len
 }
