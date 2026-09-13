@@ -405,9 +405,13 @@ otherwise meet a line that is not a path.
   selected file in one command, so a transform that is not a fixed point is
   correspondingly wider in effect. Issue #478 recorded one such residual, where
   `--code-emphasis` settled on a second pass rather than the first; `b01b999`
-  fixed it. Issue #504 records the residual a `--git` run can still reach: a
-  bracket reference the wrapper splits across lines, which `--wrap` alone
-  carries and every selection therefore inherits.
+  fixed it. Issue #504 recorded a second: a bare bracket reference the wrapper
+  split across lines, which `--wrap` alone carried and every selection therefore
+  inherited. `22a8959` fixed it, and the fixture, property strategy and wrap
+  cases that hold it are listed in the 2026-09-14 addendum to ADR 0006. The
+  residue is that a short alphabetic label such as `[a]` is still ordinary prose
+  the wrapper may break at, so a document containing one can still be reported
+  as needing formatting again after an `--in-place` run.
 - Whether `std::fs::canonicalize` folds case on macOS and Windows is asserted
   from documentation rather than measured on those platforms, so the identity
   rule is only proved case-insensitive-by-canonicalization on Linux. If it is
