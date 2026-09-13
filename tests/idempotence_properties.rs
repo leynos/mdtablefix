@@ -23,6 +23,8 @@ use proptest::{prelude::*, test_runner::Config as ProptestConfig};
 
 #[path = "support/idempotence_harness.rs"]
 mod idempotence_harness;
+#[path = "support/layout_normalization.rs"]
+mod layout_normalization;
 use idempotence_harness::{
     BREAK_SPELLINGS,
     FLAG_POOL,

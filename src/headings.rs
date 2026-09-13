@@ -27,22 +27,16 @@ use crate::wrap::{
 #[must_use]
 pub fn convert_setext_headings(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
+    let setext_text_lines = setext_text_lines(lines);
     let link_matcher = LinkReferenceMatcher::production();
-    let mut fence_tracker = FenceTracker::default();
     let mut idx = 0;
 
     while idx < lines.len() {
         let line = &lines[idx];
 
-        let fence = fence_tracker.observe_source_line(line);
-        if fence.is_fence_marker || fence.is_in_fence {
-            out.push(line.clone());
-            idx += 1;
-            continue;
-        }
-
-        if let Some((level, prefix_len, text)) =
-            detect_setext_heading(line, lines.get(idx + 1).map(String::as_str), link_matcher)
+        if setext_text_lines[idx]
+            && let Some((level, prefix_len, text)) =
+                detect_setext_heading(line, lines.get(idx + 1).map(String::as_str), link_matcher)
         {
             let prefix = &line[..prefix_len];
             out.push(build_heading_line(prefix, level, &text));
@@ -55,6 +49,38 @@ pub fn convert_setext_headings(lines: &[String]) -> Vec<String> {
     }
 
     out
+}
+
+/// Marks source lines that are the text half of valid Setext heading pairs.
+///
+/// The marker respects fenced-code state and uses the same structural predicate
+/// as [`convert_setext_headings`]. Callers that must inspect prose before
+/// heading conversion can therefore preserve Setext text without duplicating
+/// the heading grammar.
+#[must_use]
+pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
+    let mut setext_text_lines = vec![false; lines.len()];
+    let link_matcher = LinkReferenceMatcher::production();
+    let mut fence_tracker = FenceTracker::default();
+    let mut idx = 0;
+
+    while idx < lines.len() {
+        let line = &lines[idx];
+        let fence = fence_tracker.observe_source_line(line);
+
+        if !fence.is_fence_marker
+            && !fence.is_in_fence
+            && detect_setext_heading(line, lines.get(idx + 1).map(String::as_str), link_matcher)
+                .is_some()
+        {
+            setext_text_lines[idx] = true;
+            idx += 2;
+        } else {
+            idx += 1;
+        }
+    }
+
+    setext_text_lines
 }
 
 fn detect_setext_heading(

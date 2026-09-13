@@ -28,8 +28,9 @@ The public stream entry points call `process_with_frontmatter` before invoking
 this function. It is the canonical boundary for leading YAML frontmatter: it
 passes only the post-frontmatter body to a caller-provided closure and restores
 the prefix verbatim after the closure returns. The library pipeline and
-`process_lines` in the binary both use this boundary, with CLI-only transforms
-such as `renumber_lists` and `format_breaks` inside the binary's closure.
+`process_lines` in the binary both use this boundary. The library owns content
+normalization such as `renumber_lists`; the binary applies only the
+width-independent `format_breaks` transform afterwards.
 
 The function combines several helpers documented in `docs/`:
 
@@ -135,14 +136,19 @@ Code fences are passed through verbatim:
 | not | a | table |
 ```
 
-Buffered table runs receive their enabled table substitutions before reflow
-measures their columns. The substitutions run in a fixed order: code-emphasis
-repair, then ellipsis replacement. After scanning and flushing those runs, the
-processor performs its optional post-processing steps for non-table content in
-a fixed order: Setext heading conversion, code-emphasis repair, ellipsis
-replacement, paragraph wrapping, and finally footnote conversion. Ellipsis
-replacement runs before wrapping, so line breaking is computed from the glyphs
-the reader will see. See \
+After fence processing and HTML-table conversion, the optional footnote pass
+runs over the complete normalized stream before Markdown table buffering. This
+preserves document-wide reference-definition mapping and ensures table cells
+enter layout with their final footnote labels. Buffered table runs then receive
+their enabled substitutions before reflow measures their columns. Those
+substitutions retain a fixed order: code-emphasis repair, then ellipsis
+replacement. The processor next performs its optional post-processing steps
+for remaining content in a fixed order: Setext heading conversion,
+code-emphasis repair, ordered-list renumbering, ellipsis replacement, and
+paragraph wrapping. Table reflow and paragraph wrapping consume final content,
+so every pass that can change cell or line width runs first. Thematic-break
+normalization stays at the binary boundary because it is width-independent.
+See \
 [footnote conversion](#footnote-conversion) for details. The function then
 returns the updated stream for writing to disk or further manipulation.
 
@@ -178,7 +184,8 @@ lines before calling `reflow_table`. This ordering ensures that the width
 calculation sees the final cell contents, rather than aligning for markers or
 `...` and shrinking the rendered column after the fact. The later global
 code-emphasis pass handles non-table content only. The same ordering rule
-governs prose: `replace_ellipsis` runs before `--wrap` measures paragraph text.
+governs prose: footnote conversion runs before table buffering, while list
+renumbering and `replace_ellipsis` run before `--wrap` measures paragraph text.
 
 Outside table buffering, `replace_ellipsis` maintains fence and indented-code
 state while it walks the original lines. Its private indented-code tracker is
@@ -477,9 +484,9 @@ rationale is recorded in [ADR 0007](adrs/0007-line-ending-detection.md).
 The `driver` module is binary-private by design: it is declared as
 `mod driver;` in the binary rather than part of the library, and the driver
 holds the CLI's exit-status contract. It sits beside `src/main.rs` rather than
-in the library, whose formatting and filesystem entry points are public and
-return `std::io::Result`: `rewrite` and `rewrite_no_wrap` at the crate root, and
-`mdtablefix::io::replace_file` and
+in the library, whose formatting and filesystem entry points are public,
+return `std::io::Result`, and are therefore fallible: `rewrite` and
+`rewrite_no_wrap` at the crate root, and `mdtablefix::io::replace_file` and
 `mdtablefix::io::replace_file_if_unchanged`. The split is what keeps the CLI's
 filesystem policy and exit status out of the library.
 

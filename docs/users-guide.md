@@ -285,6 +285,10 @@ are recognised using matching marker characters and run lengths; a closer must
 also have no info string. A fence opened inside a blockquote ends when the
 blockquote depth drops below its opening depth.
 
+Footnote conversion runs before Markdown table reflow and paragraph wrapping,
+so table widths and wrapped lines are measured against the final footnote
+labels.
+
 ## Table reflow
 
 `mdtablefix` reformats Markdown pipe tables so each column is aligned to a
@@ -458,6 +462,10 @@ preserved even when a list item contains a long inline code span. The wrapper
 may leave the span on its existing continuation line, but it does not split a
 single list item into new numbered steps or strand code-span fragments as
 separate list items.
+
+Ordered-list renumbering runs before wrapping. Continuation indentation is
+therefore measured from the final marker width, including when renumbering
+changes a marker from one digit to two, such as `9.` to `10.`.
 
 When a footnote reference immediately follows an inline code span or Markdown
 link without intervening whitespace—for example `` `code`.[^ref] `` or
@@ -734,6 +742,13 @@ flushed to storage before the rename, but the rename itself is not, so a power
 loss immediately afterwards can revert the directory entry to the original file.
 
 ## Library API notes
+
+### Stream formatting
+
+`process_stream` reflows tables and wraps paragraphs using the default options;
+it does not enable ordered-list renumbering implicitly. Library callers that
+want renumbering must use `process_stream_opts` with `Options::renumber` set to
+`true`. The command-line `--renumber` flag opts into the same option.
 
 ### Atomic in-place rewrites
 
