@@ -1,10 +1,8 @@
 //! High-level Markdown stream processing.
-
 mod buffer;
 #[cfg(test)]
 mod code_emphasis_tests;
 mod table_line_protection;
-
 use buffer::{ProcessBuffer, TableSubstitutions};
 use table_line_protection::{protect_table_lines, restore_table_lines};
 
@@ -17,10 +15,8 @@ use crate::{
     lists::renumber_lists,
     wrap::{FenceTracker, wrap_text},
 };
-
 /// Column width used when wrapping text.
 pub const WRAP_COLS: usize = 80;
-
 /// Processing options controlling the behaviour of [`process_stream_inner`].
 ///
 /// # Examples
@@ -109,7 +105,10 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         lines.to_vec()
     };
 
-    let pre = convert_html_tables(&lines);
+    let mut pre = convert_html_tables(&lines);
+    if opts.footnotes {
+        pre = convert_footnotes(&pre);
+    }
 
     // Code-emphasis and ellipsis both shorten table cells, so they must run
     // before reflow measures column widths. Non-table text remains handled by
@@ -161,9 +160,6 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     if opts.renumber {
         out = renumber_lists(&out);
     }
-    if opts.footnotes {
-        out = convert_footnotes(&out);
-    }
 
     // Layout is the final content-changing step for the blocks it owns. Each
     // normalizer above runs first so wrapping measures its final text.
@@ -178,7 +174,7 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
     out
 }
 
-/// Processes a Markdown stream with all default options enabled.
+/// Processes a Markdown stream with paragraph wrapping enabled.
 ///
 /// This is the primary convenience function used by the command-line
 /// interface. Paragraphs are wrapped and tables are reflowed.
@@ -209,7 +205,6 @@ pub fn process_stream(lines: &[String]) -> Vec<String> {
         lines,
         Options {
             wrap: true,
-            renumber: true,
             ..Default::default()
         },
     )

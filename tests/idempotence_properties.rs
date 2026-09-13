@@ -23,6 +23,8 @@ use proptest::{prelude::*, test_runner::Config as ProptestConfig};
 
 #[path = "support/idempotence_harness.rs"]
 mod idempotence_harness;
+#[path = "support/layout_normalization.rs"]
+mod layout_normalization;
 use idempotence_harness::{
     BREAK_SPELLINGS,
     FLAG_POOL,
@@ -33,74 +35,6 @@ use idempotence_harness::{
     prose_strategy,
     sample,
 };
-
-const WRAP: u16 = 1;
-const RENUMBER: u16 = 1 << 1;
-const FOOTNOTES: u16 = 1 << 5;
-const CODE_EMPHASIS: u16 = 1 << 6;
-
-#[test]
-fn footnote_conversion_precedes_wrapping_at_the_width_boundary() {
-    let document = include_str!("data/idempotence/issue_484_footnotes_wrap.dat");
-    let source_line = document.lines().next().expect("fixture has prose");
-    assert_eq!(source_line.chars().count(), 78);
-    assert!(source_line.ends_with(".2"));
-
-    let flags = flags_for(WRAP | FOOTNOTES);
-    let (once, twice) = format_twice(document, &flags);
-
-    assert_eq!(twice, once);
-    assert!(
-        once.contains("[^"),
-        "footnote conversion did not run: {once:?}"
-    );
-    assert!(
-        once.lines().all(|line| line.len() <= 80),
-        "wrapping measured pre-conversion content: {once:?}"
-    );
-}
-
-#[test]
-fn list_renumbering_precedes_wrapping_at_the_digit_width_boundary() {
-    let document = include_str!("data/idempotence/issue_484_renumber_wrap.dat");
-    let flags = flags_for(WRAP | RENUMBER);
-    let (once, twice) = format_twice(document, &flags);
-
-    assert_eq!(twice, once);
-    let lines: Vec<&str> = once.lines().collect();
-    let tenth = lines
-        .iter()
-        .position(|line| line.starts_with("10. "))
-        .expect("renumbered output has a tenth item");
-    let continuations = &lines[tenth + 1..];
-    assert!(!continuations.is_empty(), "the tenth item must wrap");
-    assert!(continuations.iter().all(|line| {
-        line.starts_with("    ")
-            && line
-                .chars()
-                .take_while(|character| *character == ' ')
-                .count()
-                == 4
-    }));
-}
-
-#[test]
-fn table_reflow_measures_code_emphasis_repaired_cells() {
-    let document = include_str!("data/cli-matrix/table-prose.dat");
-    let flags = flags_for(CODE_EMPHASIS);
-    let (once, twice) = format_twice(document, &flags);
-
-    assert_eq!(twice, once);
-    let table: Vec<&str> = once.lines().take(3).collect();
-    assert_eq!(
-        table,
-        [
-            "| Name  | Notes                              |",
-            "| ----- | ---------------------------------- |",
-            "| alpha | Use `cargo test` before merging... |",
-        ]
-    );
-}
 
 /// Generates an inline code span shaped like a file path.
 fn code_span_strategy() -> impl Strategy<Value = String> {

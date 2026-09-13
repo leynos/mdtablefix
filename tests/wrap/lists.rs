@@ -18,8 +18,8 @@ fn test_wrap_list_item() {
 #[rstest]
 #[case("- ", "- ", 3)]
 #[case("1. ", "1. ", 3)]
-#[case("10. ", "1. ", 3)]
-#[case("100. ", "1. ", 3)]
+#[case("10. ", "10. ", 3)]
+#[case("100. ", "100. ", 3)]
 fn test_wrap_list_items_with_inline_code(
     #[case] source_prefix: &str,
     #[case] output_prefix: &str,

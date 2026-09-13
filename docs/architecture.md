@@ -136,15 +136,19 @@ Code fences are passed through verbatim:
 | not | a | table |
 ```
 
-Buffered table runs receive their enabled table substitutions before reflow
-measures their columns. The substitutions run in a fixed order: code-emphasis
-repair, then ellipsis replacement. After scanning and flushing those runs, the
-processor performs its optional post-processing steps for non-table content in
-a fixed order: Setext heading conversion, code-emphasis repair, ordered-list
-renumbering, footnote conversion, ellipsis replacement, and paragraph wrapping.
-Table reflow and paragraph wrapping consume final content, so every pass that
-can change cell or line width runs first. Thematic-break normalization stays at
-the binary boundary because it is width-independent. See \
+After fence processing and HTML-table conversion, the optional footnote pass
+runs over the complete normalized stream before Markdown table buffering. This
+preserves document-wide reference-definition mapping and ensures table cells
+enter layout with their final footnote labels. Buffered table runs then receive
+their enabled substitutions before reflow measures their columns. Those
+substitutions retain a fixed order: code-emphasis repair, then ellipsis
+replacement. The processor next performs its optional post-processing steps
+for remaining content in a fixed order: Setext heading conversion,
+code-emphasis repair, ordered-list renumbering, ellipsis replacement, and
+paragraph wrapping. Table reflow and paragraph wrapping consume final content,
+so every pass that can change cell or line width runs first. Thematic-break
+normalization stays at the binary boundary because it is width-independent.
+See \
 [footnote conversion](#footnote-conversion) for details. The function then
 returns the updated stream for writing to disk or further manipulation.
 
@@ -180,8 +184,8 @@ lines before calling `reflow_table`. This ordering ensures that the width
 calculation sees the final cell contents, rather than aligning for markers or
 `...` and shrinking the rendered column after the fact. The later global
 code-emphasis pass handles non-table content only. The same ordering rule
-governs prose: list renumbering, footnote conversion, and `replace_ellipsis`
-all run before `--wrap` measures paragraph text.
+governs prose: footnote conversion runs before table buffering, while list
+renumbering and `replace_ellipsis` run before `--wrap` measures paragraph text.
 
 Outside table buffering, `replace_ellipsis` maintains fence and indented-code
 state while it walks the original lines. Its private indented-code tracker is
