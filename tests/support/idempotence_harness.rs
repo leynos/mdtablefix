@@ -99,10 +99,13 @@ fn case_count() -> u32 { parse_case_count(std::env::var("PROPTEST_CASES").ok().a
 /// Parses a `PROPTEST_CASES` value, falling back to [`DEFAULT_CASES`].
 ///
 /// Split out from the environment read so the fallback is testable without
-/// mutating the environment.
+/// mutating the environment. A zero falls back with the unparseable values: it
+/// is a count `Config` accepts, and a suite configured with it runs no
+/// generated case at all while still reporting success.
 fn parse_case_count(value: Option<&str>) -> u32 {
     value
-        .and_then(|value| value.parse().ok())
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|cases| *cases > 0)
         .unwrap_or(DEFAULT_CASES)
 }
 
@@ -271,15 +274,18 @@ pub fn sample<V>(strategy: &impl Strategy<Value = V>, count: usize) -> Vec<V> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the `PROPTEST_CASES` fallback.
+
     use rstest::rstest;
 
     use super::{DEFAULT_CASES, parse_case_count};
 
-    /// Asserts the case count comes from `PROPTEST_CASES` when it parses and
-    /// from the default when it does not.
+    /// Asserts the case count comes from `PROPTEST_CASES` when it parses to a
+    /// positive number and from the default otherwise.
     #[rstest]
     #[case(Some("1234"), 1234)]
     #[case(Some("1"), 1)]
+    #[case(Some("0"), DEFAULT_CASES)]
     #[case(Some("not-a-number"), DEFAULT_CASES)]
     #[case(Some(""), DEFAULT_CASES)]
     #[case(None, DEFAULT_CASES)]

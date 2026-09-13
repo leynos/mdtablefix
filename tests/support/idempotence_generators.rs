@@ -55,17 +55,34 @@ fn tail_strategy() -> impl Strategy<Value = String> {
     ]
 }
 
-/// Generates an ordered-list marker, sometimes nested.
+/// Generates an ordered-list marker, sometimes indented.
 ///
 /// The number reaches three digits so the renumber pass sees the multi-digit
 /// markers and restarts the single-digit `1.` arm never produced: consecutive
 /// elements of one document draw their own numbers, so a document can hold a
-/// list that jumps or restarts. An indent of one or two two-space steps keeps
-/// the marker a list item rather than an indented code block, matching
-/// `list_prefix_strategy` in `tests/wrap_leading_spaces.rs`.
+/// list that jumps or restarts. The indents are zero, two, and four spaces, and
+/// a four-space form is indented code rather than a list item: `classify_block`
+/// keeps a line a list item only while its indent is below four spaces. Those
+/// deliberately indented markers are domain shapes the formatter has to carry
+/// through, not nesting; `nested_ordered_list_strategy` is the one that
+/// produces a genuine parent-child list.
 pub fn ordered_marker_strategy() -> impl Strategy<Value = String> {
     (1_u32..=999, 0_usize..=2)
         .prop_map(|(number, depth)| format!("{}{number}. ", "  ".repeat(depth)))
+}
+
+/// Generates a parent ordered item with an indented child ordered item below
+/// it.
+///
+/// The child is indented exactly three spaces, the content column of a
+/// single-digit marker, and still below the four-space indent at which
+/// `classify_block` stops treating a line as a list item and calls it indented
+/// code instead; a four-space child would not be a nested list item at all.
+/// The child's number is drawn independently of the parent's, so a child that
+/// restarts at `1.` is reachable alongside a multi-digit one.
+pub fn nested_ordered_list_strategy() -> impl Strategy<Value = String> {
+    (1_u32..=9, 1_u32..=999, prose_strategy(), prose_strategy())
+        .prop_map(|(parent, child, head, tail)| format!("{parent}. {head}\n   {child}. {tail}"))
 }
 
 /// Generates a prefixed line: a bullet, task, ordered, quote, or footnote line.
@@ -267,7 +284,7 @@ fn table_row_strategy() -> impl Strategy<Value = String> {
 ///
 /// The column count is fixed at two because every spelling in
 /// [`TABLE_DELIMITER_ROWS`] has two columns, and a header whose width disagrees
-/// with its delimiter row is not a table the parser recognises.
+/// with its delimiter row is not a table the parser recognizes.
 fn table_strategy() -> impl Strategy<Value = String> {
     (
         proptest::sample::select(TABLE_DELIMITER_ROWS),
@@ -333,6 +350,7 @@ fn element_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
         4 => prose_strategy(),
         4 => prefixed_block_strategy(),
+        2 => nested_ordered_list_strategy(),
         2 => proptest::sample::select(BREAK_SPELLINGS).prop_map(str::to_string),
         2 => adjacency_strategy()
             .prop_map(|(document, _, _)| document.trim_end_matches('\n').to_string()),

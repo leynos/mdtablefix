@@ -167,6 +167,14 @@ fn generated_structural_adjacencies_reach_every_shape() {
             // depending on a document that isolates one of them.
             Shape::CombinedAdjacency => {
                 combined += 1;
+                // The trailing break is asserted for every shape above; the
+                // chain's own `***` is not, and the two boundaries around it are
+                // both guard cases, so the break between them could be absorbed
+                // by either and leave the fixed-point assertion satisfied.
+                assert!(
+                    lines.contains(&"***"),
+                    "the intermediate thematic break was consumed in {document:?}: {lines:?}",
+                );
                 assert!(
                     lines.iter().any(|line| line.starts_with('#')),
                     "the paragraph above a break did not convert: {lines:?}",
