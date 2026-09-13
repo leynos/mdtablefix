@@ -365,3 +365,7 @@ fn rewrite_empty_file_no_extra_newline() {
     let contents = fs::read_to_string(&file).unwrap();
     assert!(contents.is_empty());
 }
+
+#[cfg(test)]
+#[path = "io_conditional_tests.rs"]
+mod conditional_tests;

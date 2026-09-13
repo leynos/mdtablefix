@@ -37,6 +37,12 @@ fn replace_file_public_api_compiles() {
 }
 
 #[test]
+fn conditional_replace_file_public_api_compiles() {
+    let cases = trybuild::TestCases::new();
+    cases.pass("tests/ui/replace_file_if_unchanged_api_pass.rs");
+}
+
+#[test]
 fn line_ending_const_api_compiles() {
     let cases = trybuild::TestCases::new();
     cases.pass("tests/ui/line_ending_const_pass.rs");

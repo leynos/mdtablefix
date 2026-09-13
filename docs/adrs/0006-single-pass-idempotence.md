@@ -8,9 +8,9 @@
 `mdtablefix` was not idempotent: `format(format(x)) != format(x)` held for
 inputs reachable under the `make fmt` flag set (`--wrap`, `--renumber`,
 `--breaks`, `--ellipsis`, `--fences`), and for further inputs once `--headings`
-or `--code-emphasis` was added, so a check-after-fix gate could never
-converge: one `--in-place` pass left a file that the next pass rewrote again.
-Seven defect classes contributed:
+or `--code-emphasis` was added, so a check-after-fix gate could never converge:
+one `--in-place` pass left a file that the next pass rewrote again. Seven
+defect classes contributed:
 
 - A normalized thematic break was absorbed into the following paragraph
   instead of passed through on its own line.
@@ -40,8 +40,14 @@ Seven defect classes contributed:
 
 ## Decision
 
-The formatter is a fixed point: `format(format(x)) == format(x)` for every flag
-set the CLI exposes. Seven rules enforce the invariant:
+The formatter is a fixed point, `format(format(x)) == format(x)`, for the flag
+sets and documents with recorded evidence: the `make fmt` flag set (`--wrap`,
+`--renumber`, `--breaks`, `--ellipsis`, `--fences`), that set with
+`--headings`, and that set with `--code-emphasis`. The guarantee is not
+universal over the inputs the formatter accepts: the one measured exception, a
+bracket reference the wrapper splits across lines, is recorded in the addendum
+below and tracked as issue #504. Seven rules enforce the invariant where it
+holds:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
   `src/wrap/block.rs` recognizes a break with
@@ -75,15 +81,15 @@ set the CLI exposes. Seven rules enforce the invariant:
   conversion, code-emphasis repair, ordered-list renumbering, ellipsis
   replacement, and paragraph wrapping. Footnotes, list renumbering, code
   emphasis, and ellipsis are therefore consumed by layout; they have no
-  downstream preservation obligation. Thematic-break normalization remains
-  last because it is width-independent. Replacing `...` with `…` shortens a
-  line by two display columns, while footnotes and list markers can lengthen
-  text, so wrapping must measure each final form.
+  downstream preservation obligation. Thematic-break normalization remains last
+  because it is width-independent. Replacing `...` with `…` shortens a line by
+  two display columns, while footnotes and list markers can lengthen text, so
+  wrapping must measure each final form.
 - `--code-emphasis` repairs table cells before reflow measures them. Removing
   emphasis markers around inline code shortens the cell, so applying the repair
-  in the table-substitution stage lets the formatter calculate the final
-  column widths. The later global code-emphasis pass handles non-table content;
-  each table cell is repaired once.
+  in the table-substitution stage lets the formatter calculate the final column
+  widths. The later global code-emphasis pass handles non-table content; each
+  table cell is repaired once.
 - Setext conversion accepts only paragraph candidates. `is_setext_text` in
   `src/headings.rs` measures the candidate after the indentation or blockquote
   prefix it shares with the underline has been removed, so a quoted heading
@@ -93,17 +99,15 @@ set the CLI exposes. Seven rules enforce the invariant:
   whole line before the shared prefix is removed: the prefix would otherwise
   swallow the very columns that mark the code block. Blockquote markers and
   their optional single space are consumed before measuring, and tabs count as
-  four columns.
-  A candidate that is itself a block start keeps its underline: an ATX
-  heading, a thematic break, a list item, a blockquote, a footnote definition,
-  a link reference definition, a markdownlint directive, or a fence marker.
-  The kinds are the ones `wrap::classify_block` already reports, so the heading
-  pass and the wrapper agree on what a block start is. A digit-prefixed
+  four columns. A candidate that is itself a block start keeps its underline:
+  an ATX heading, a thematic break, a list item, a blockquote, a footnote
+  definition, a link reference definition, a markdownlint directive, or a fence
+  marker. The kinds are the ones `wrap::classify_block` already reports, so the
+  heading pass and the wrapper agree on what a block start is. A digit-prefixed
   candidate stays eligible, because `BlockKind::DigitPrefix` marks a line the
-  wrapper measures specially rather than a block. The check is limited to
-  the grammar this formatter supports and is not a CommonMark block parser:
-  HTML blocks other than the `<table>` conversion in `src/html.rs` remain
-  outside it.
+  wrapper measures specially rather than a block. The check is limited to the
+  grammar this formatter supports and is not a CommonMark block parser: HTML
+  blocks other than the `<table>` conversion in `src/html.rs` remain outside it.
 - Table delimiter rows are refused separately from the block kinds.
   `is_table_delimiter_row` in `src/headings.rs` refuses a candidate that
   carries a `|` and matches `crate::table::SEP_RE`, the pattern the table
@@ -128,13 +132,12 @@ set the CLI exposes. Seven rules enforce the invariant:
   column widths in the first pass.
 - `tests/idempotence.rs` formats the fixture corpus under
   `tests/data/idempotence/` twice through the real binary and asserts
-  byte-identical output; the class `T` fixtures pin the delimiter-row
-  adjacency and assert that the row survives as table syntax. Its
-  repository-wide drift sweeps live in `tests/idempotence_drift.rs`.
-  The drift sweeps include tables processed with `--code-emphasis`, including
-  the fixture that previously required a second pass.
-  `tests/idempotence_properties.rs` is a `proptest!` property over generated
-  documents and a sampled eight-flag powerset, while
+  byte-identical output; the class `T` fixtures pin the delimiter-row adjacency
+  and assert that the row survives as table syntax. Its repository-wide drift
+  sweeps live in `tests/idempotence_drift.rs`. The drift sweeps include tables
+  processed with `--code-emphasis`, including the fixture that previously
+  required a second pass. `tests/idempotence_properties.rs` is a `proptest!`
+  property over generated documents and a sampled eight-flag powerset, while
   `tests/idempotence_adjacencies.rs` holds the structural-adjacency property
   and its coverage sweep; the generator both suites share lives in
   `tests/support/idempotence_harness.rs`. The property generates structural
@@ -144,3 +147,48 @@ set the CLI exposes. Seven rules enforce the invariant:
   asserts the shape is reached and its row survives, so removing the generator
   branch fails the sweep rather than leaving the guard unexercised. Together
   they guard the invariant against regression.
+
+## Addendum (2026-09-13)
+
+The decision above is scoped to the flag sets and documents with recorded
+evidence. That evidence is the corpus sweep in `tests/idempotence_drift.rs`,
+which runs each of the three sets over every fixture under `tests/data/` and
+asserts the two passes are byte-identical; the `--code-emphasis` set covers the
+table case that once required a second pass, fixed in `b01b999`. It is not a
+universal guarantee over the inputs the formatter accepts.
+
+The measured exception is a bracket reference the wrapper splits across lines.
+Under `--wrap` alone — and so under every set above, since each one contains it
+— the input
+
+```text
+aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht
+abm iqy uxqdkre fz ioelg
+**bold**`code`
+[1]
+```
+
+ends its first pass with the opening bracket left dangling at the end of a line
+and the rest of the reference on the next one:
+
+```text
+aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht abm iqy uxqdkre fz ioelg **bold**`code` [
+1]
+```
+
+Its second pass rejoins the bracket with its text and reflows that line:
+
+```text
+aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht abm iqy uxqdkre fz ioelg **bold**`code`
+[ 1]
+```
+
+The output settles there rather than growing, so it is a one-pass drift and not
+a cycle. The reproduction is recorded as issue #504, and the split lives in the
+inline-wrapping path, which the rules above do not cover.
+
+The impact is that `--git --check` is a sound one-pass drift check for a
+document that does not contain that shape, while a document that does is
+reported as needing formatting again after an `--in-place` run has written the
+first pass's output. This addendum narrows the operational guarantee until the
+inline-wrapping path has evidence of the same fixed-point behaviour.

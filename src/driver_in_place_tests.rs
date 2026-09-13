@@ -11,6 +11,7 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 
 use camino::Utf8Path;
+use mdtablefix::io::SourceDocument;
 
 // `identity` is used by an inode-observing test, which is Unix-only, so the
 // import has to be Unix-only as well: on Windows it would be an unused import,
@@ -18,10 +19,14 @@ use camino::Utf8Path;
 #[cfg(unix)]
 use super::test_support::identity;
 use super::{
+    ConflictGuard,
     Mode,
     analyse,
     test_support::{ALIGNED, RAGGED, align, fixture, read},
 };
+
+/// The text another writer leaves behind, distinct from both fixtures.
+const INTRUDER: &str = "|X|Y|\n|---|---|\n|3|4|\n";
 
 /// `--in-place` is the one mode that writes, and its payload is empty: the
 /// formatted text goes to the file, not to standard output.
@@ -31,6 +36,7 @@ fn in_place_writes_the_formatted_text() {
 
     let (_report, payload) = analyse(
         Mode::InPlace,
+        &ConflictGuard::unguarded(),
         &directory,
         Utf8Path::new("ragged.md"),
         Utf8Path::new("ragged.md"),
@@ -38,6 +44,32 @@ fn in_place_writes_the_formatted_text() {
     )
     .expect("analyse fixture");
 
+    assert_eq!(payload, "");
+    assert_eq!(read(&directory, "ragged.md"), ALIGNED);
+}
+
+/// An ordinary changed document never needs repository state to be read.
+///
+/// A regular file deliberately stands in for the Git directory here: opening
+/// it as a directory would fail, so successful formatting proves that the
+/// marker scan kept the guarded state probe out of this path.
+#[test]
+fn in_place_formats_an_unmarked_file_without_reading_repository_state() {
+    let (dir, directory) = fixture("ragged.md", RAGGED);
+    let regular_file = dir.path().join("ragged.md");
+    let git_dir = Utf8Path::from_path(&regular_file).expect("the fixture path is UTF-8");
+
+    let (report, payload) = analyse(
+        Mode::InPlace,
+        &ConflictGuard::guarded(git_dir),
+        &directory,
+        Utf8Path::new("ragged.md"),
+        Utf8Path::new("ragged.md"),
+        &align,
+    )
+    .expect("an unmarked file does not query repository state");
+
+    assert!(report.is_changed);
     assert_eq!(payload, "");
     assert_eq!(read(&directory, "ragged.md"), ALIGNED);
 }
@@ -57,6 +89,7 @@ fn in_place_replaces_a_drifting_file() {
 
     analyse(
         Mode::InPlace,
+        &ConflictGuard::unguarded(),
         &directory,
         Utf8Path::new("ragged.md"),
         Utf8Path::new("ragged.md"),
@@ -71,6 +104,54 @@ fn in_place_replaces_a_drifting_file() {
         "a drifting file must be replaced through a temporary"
     );
     assert_eq!(read(&directory, "ragged.md"), ALIGNED);
+}
+
+/// A file another writer changed while it was being formatted is not
+/// overwritten.
+///
+/// The seam is the formatter itself, which runs between the read that produced
+/// the assessment and the replacement that would act on it — the whole window
+/// the conditional write exists to close. The other writer is an ambient one,
+/// as a concurrent writer would be: it holds no capability of this run's, and
+/// the run's own read is what goes stale.
+#[test]
+fn in_place_declines_a_file_that_changed_under_it() {
+    let (dir, directory) = fixture("ragged.md", RAGGED);
+    let intruder_path = dir.path().join("ragged.md");
+    let intruder = move |document: &SourceDocument<'_>| {
+        std::fs::write(&intruder_path, INTRUDER).expect("write the concurrent change");
+        align(document)
+    };
+
+    let error = analyse(
+        Mode::InPlace,
+        &ConflictGuard::unguarded(),
+        &directory,
+        Utf8Path::new("ragged.md"),
+        Utf8Path::new("ragged.md"),
+        &intruder,
+    )
+    .expect_err("a file that changed under the run must not be overwritten");
+
+    assert!(
+        error
+            .to_string()
+            .contains("changed while it was being formatted"),
+        "the error must say why the file was left alone: {error}"
+    );
+    assert_eq!(
+        read(&directory, "ragged.md"),
+        INTRUDER,
+        "the other writer's text must survive the run"
+    );
+    assert_eq!(
+        directory
+            .read_dir(".")
+            .expect("read the fixture directory")
+            .count(),
+        1,
+        "a declined write must leave no temporary file behind"
+    );
 }
 
 /// A clean file is left alone byte for byte, and observably so.
@@ -88,6 +169,7 @@ fn in_place_leaves_a_clean_file_untouched() {
 
     let (report, payload) = analyse(
         Mode::InPlace,
+        &ConflictGuard::unguarded(),
         &directory,
         Utf8Path::new("clean.md"),
         Utf8Path::new("clean.md"),

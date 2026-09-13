@@ -37,8 +37,7 @@ pipeline.
 - Multi-row or multi-column degenerate tables (without a separator) keep their
   current behaviour; only the lone single-cell candidate is newly guarded.
 - Whitespace-only info strings on a closing fence still close the fence,
-  matching
-  CommonMark's "spaces and tabs are ignored" allowance.
+  matching CommonMark's "spaces and tabs are ignored" allowance.
 
 ## Risks
 

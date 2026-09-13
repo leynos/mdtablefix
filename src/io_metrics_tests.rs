@@ -11,13 +11,24 @@ use metrics::Unit;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
 use tempfile::tempdir;
 
-use super::{TEMP_FILE_ATTEMPTS, register_metrics, rewrite, temporary_path};
+use super::{
+    TEMP_FILE_ATTEMPTS,
+    register_metrics,
+    replace_file_if_unchanged,
+    rewrite,
+    temporary_path,
+};
 
 /// The outcome label's name.
 const OUTCOME_LABEL: &str = "outcome";
 
 /// The only values the outcome label may take.
-const OUTCOMES: [&str; 2] = ["success", "failure"];
+///
+/// `unchanged` is a replacement that declined rather than one that failed: the
+/// target no longer held the text it was read as, so nothing was written and
+/// the caller was told, which is a different event for an operator reading a
+/// dashboard than a replacement that did not happen.
+const OUTCOMES: [&str; 3] = ["success", "failure", "unchanged"];
 
 /// The counter recording replacement outcomes.
 const REPLACE_TOTAL: &str = "mdtablefix_io_replace_total";
@@ -361,6 +372,10 @@ fn emitted_metric_names_are_stable() {
         "only the outcome metrics are expected for an uncontended replacement"
     );
 }
+
+#[cfg(test)]
+#[path = "io_metrics_conditional_tests.rs"]
+mod conditional_tests;
 
 #[cfg(test)]
 #[path = "io_metrics_failure_tests.rs"]

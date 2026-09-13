@@ -4,7 +4,9 @@
 //! [`rewrite`] and [`rewrite_no_wrap`] read a file, hand its lines to
 //! [`crate::process`] for transformation, and write the result back.
 //! [`replace_file`] is the step the executable calls with the capability it
-//! already holds.
+//! already holds, and [`replace_file_if_unchanged`] is that step for a caller
+//! that has just read the target and must not overwrite a change it has not
+//! seen.
 //!
 //! This is where a document's line-ending style is selected and reported: the
 //! decision is taken at the boundary that produces output, and the policy
@@ -32,7 +34,9 @@ use crate::process::{process_stream, process_stream_no_wrap};
 /// decision is reported at `debug` level under `operation`'s name.
 ///
 /// This helper encapsulates the common pattern used by [`rewrite`] and
-/// [`rewrite_no_wrap`].
+/// [`rewrite_no_wrap`], including the conditional replacement: the text this
+/// function read is what the target must still hold, so a file another process
+/// changed while it was being reformatted is reported rather than overwritten.
 ///
 /// Visible to `super` rather than private so the unit tests can drive it with
 /// an identity transform: [`rewrite`] and [`rewrite_no_wrap`] always transform
@@ -40,7 +44,8 @@ use crate::process::{process_stream, process_stream_no_wrap};
 /// the bytes a transform produces. Nothing else calls it.
 ///
 /// # Errors
-/// Returns an error if reading or writing the file fails.
+/// Returns an error if reading or writing the file fails, or if the file
+/// changed between the read and the replacement.
 pub(super) fn rewrite_with<F>(path: &Path, operation: &str, f: F) -> std::io::Result<()>
 where
     F: Fn(&[String]) -> Vec<String>,
@@ -52,7 +57,12 @@ where
     report_line_endings(document.counts(), operation, path_text.as_ref());
     let lines: Vec<String> = document.body().lines().map(str::to_string).collect();
     let fixed = f(&lines);
-    replace_file(&directory, &name, &document.render(&fixed))
+    if !replace_file_if_unchanged(&directory, &name, &text, &document.render(&fixed))? {
+        return Err(io::Error::other(format!(
+            "{path_text} changed while it was being rewritten; leaving the changed file alone"
+        )));
+    }
+    Ok(())
 }
 
 /// Reports the line-ending decision at the boundary that made it.
@@ -170,13 +180,65 @@ pub(super) fn register_metrics() {
 /// cannot be written, or if the rename fails.
 #[tracing::instrument(level = "debug", skip(directory, contents), fields(path = %path))]
 pub fn replace_file(directory: &Dir, path: &Utf8Path, contents: &str) -> io::Result<()> {
+    replace(directory, path, None, contents).map(|_| ())
+}
+
+/// Atomically replaces `path` in `directory` with `contents`, but only while
+/// `path` still holds `expected`.
+///
+/// This is the replacement a caller that has just read the target wants. A
+/// separate read before [`replace_file`] would decide on text that a concurrent
+/// writer can change during the temporary file's creation, write, and flush,
+/// and the rename would then discard that writer's work. Here the comparison is
+/// made inside the swap — twice, with the last of the two immediately before
+/// the rename, after everything expensive is done and after the destination is
+/// prepared. It is still not a true compare-and-swap: no rename on any
+/// supported platform compares contents, so a writer that lands between that
+/// last comparison and the rename wins, and that window is one system call
+/// wide. Every earlier window — the whole formatting run, and the swap's own
+/// writing, permissions, and preparation — is closed.
+///
+/// Returns `Ok(false)` when the target no longer holds `expected` and its
+/// temporary file was removed: the target is left exactly as it was, and the
+/// caller decides what a target that moved on means for its run. A target that
+/// cannot be read back, or a temporary file that cannot be removed after a
+/// declined replacement, is an error: a caller that asked for a conditional
+/// replacement must not be told it succeeded, or that the condition failed,
+/// when the question could not be put or cleaned up.
+///
+/// # Errors
+/// Returns an error if the target cannot be inspected, if it cannot be read
+/// back for the comparison, if the temporary file cannot be written or removed,
+/// or if the rename fails.
+#[tracing::instrument(level = "debug", skip(directory, expected, contents), fields(path = %path))]
+pub fn replace_file_if_unchanged(
+    directory: &Dir,
+    path: &Utf8Path,
+    expected: &str,
+    contents: &str,
+) -> io::Result<bool> {
+    replace(directory, path, Some(expected), contents)
+}
+
+/// Performs the replacement [`replace_file`] and [`replace_file_if_unchanged`]
+/// report the outcome of.
+///
+/// One implementation for both, so the symlink refusal, the temporary-file
+/// cleanup, and the metrics cannot disagree about what a replacement is: the
+/// conditional entry point only adds the text to compare against.
+fn replace(
+    directory: &Dir,
+    path: &Utf8Path,
+    expected: Option<&str>,
+    contents: &str,
+) -> io::Result<bool> {
     describe_metrics();
     let started = Instant::now();
-    let outcome = replace_file_inner(directory, path, contents);
-    let result = if outcome.is_ok() {
-        "success"
-    } else {
-        "failure"
+    let outcome = replace_inner(directory, path, expected, contents);
+    let result = match &outcome {
+        Ok(true) => "success",
+        Ok(false) => "unchanged",
+        Err(_) => "failure",
     };
     counter!("mdtablefix_io_replace_total", "outcome" => result).increment(1);
     // The duration is recorded for failures too, so a replacement that stalls
@@ -189,8 +251,13 @@ pub fn replace_file(directory: &Dir, path: &Utf8Path, contents: &str) -> io::Res
     outcome
 }
 
-/// Performs the replacement that [`replace_file`] reports the outcome of.
-fn replace_file_inner(directory: &Dir, path: &Utf8Path, contents: &str) -> io::Result<()> {
+/// Performs the replacement that [`replace`] reports the outcome of.
+fn replace_inner(
+    directory: &Dir,
+    path: &Utf8Path,
+    expected: Option<&str>,
+    contents: &str,
+) -> io::Result<bool> {
     let metadata = directory.symlink_metadata(path).inspect_err(|error| {
         debug!(error_category = ?error.kind(), "replacement failed");
     })?;
@@ -207,22 +274,41 @@ fn replace_file_inner(directory: &Dir, path: &Utf8Path, contents: &str) -> io::R
     let (temp_path, file) = create_temporary_file(directory, path).inspect_err(|error| {
         debug!(error_category = ?error.kind(), "replacement failed");
     })?;
-    let outcome = write_and_swap(directory, &temp_path, path, contents, &permissions, file);
-    if let Err(error) = &outcome {
-        debug!(error_category = ?error.kind(), "replacement failed");
-        remove_failed_temporary_file(directory, &temp_path);
+    let outcome = write_and_swap(
+        directory,
+        &temp_path,
+        path,
+        expected,
+        contents,
+        &permissions,
+        file,
+    );
+    match outcome {
+        Ok(true) => Ok(true),
+        Ok(false) => {
+            // Nothing was replaced, so the temporary file is this run's to
+            // remove, exactly as it is after a failure.
+            debug!("replacement declined: the target changed since it was read");
+            remove_temporary_file(directory, &temp_path)?;
+            Ok(false)
+        }
+        Err(error) => {
+            debug!(error_category = ?error.kind(), "replacement failed");
+            remove_failed_temporary_file(directory, &temp_path);
+            Err(error)
+        }
     }
-    outcome
 }
 
-/// Removes the temporary file a failed replacement left behind, counting a
-/// cleanup that does not complete.
+/// Removes the temporary file a replacement that did not complete left behind,
+/// counting a cleanup that does not complete.
 ///
 /// Best effort by design: the failure that prompted the cleanup is the one the
 /// caller must see, so a cleanup that fails is counted and traced rather than
 /// returned, and the next run retries past any stale name it finds. The count
 /// carries no labels — `mdtablefix_io_replace_total` already reports the
-/// replacement as a `failure` — so a recorder's cardinality stays bounded.
+/// replacement as a `failure`, or as `unchanged` when the target was left as it
+/// was — so a recorder's cardinality stays bounded.
 pub(super) fn remove_failed_temporary_file(directory: &Dir, temp_path: &Utf8Path) {
     match remove_temporary_file(directory, temp_path) {
         Ok(()) => trace!("temporary file removed after failure"),
@@ -245,8 +331,12 @@ pub(super) fn remove_failed_temporary_file(directory: &Dir, temp_path: &Utf8Path
 /// over it, so a failure before the rename leaves the original file intact. The
 /// original file mode is preserved. Symbolic links are declined.
 ///
+/// The file must still hold the text this call read: a file another process
+/// changed meanwhile is left as that process wrote it, and the error says so.
+///
 /// # Errors
-/// Returns an error if reading or writing the file fails.
+/// Returns an error if reading or writing the file fails, or if the file
+/// changed between the read and the replacement.
 pub fn rewrite(path: &Path) -> std::io::Result<()> { rewrite_with(path, "rewrite", process_stream) }
 
 /// Rewrite a file in place without wrapping text.
@@ -258,8 +348,12 @@ pub fn rewrite(path: &Path) -> std::io::Result<()> { rewrite_with(path, "rewrite
 /// over it, so a failure before the rename leaves the original file intact. The
 /// original file mode is preserved. Symbolic links are declined.
 ///
+/// The file must still hold the text this call read: a file another process
+/// changed meanwhile is left as that process wrote it, and the error says so.
+///
 /// # Errors
-/// Returns an error if reading or writing the file fails.
+/// Returns an error if reading or writing the file fails, or if the file
+/// changed between the read and the replacement.
 pub fn rewrite_no_wrap(path: &Path) -> std::io::Result<()> {
     rewrite_with(path, "rewrite_no_wrap", process_stream_no_wrap)
 }

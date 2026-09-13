@@ -108,6 +108,7 @@ fn mode_label(mode: Mode) -> &'static str {
         Mode::InPlace => "in_place",
         Mode::Check => "check",
         Mode::Diff => "diff",
+        Mode::ListFiles => "list_files",
     }
 }
 
