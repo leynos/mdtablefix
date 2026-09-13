@@ -146,6 +146,48 @@ fn test_cli_wrap_keeps_inline_citation_links_attached(
     Ok(())
 }
 
+/// Verifies a bare bracket reference survives `--wrap` whole, and that the
+/// wrapped output is a fixed point (issue #504).
+///
+/// The prose and the inline code span fill all but two of the eighty columns, so
+/// the reference is the fragment at the wrap boundary. Before the fix the
+/// opening bracket stayed on the first line and a second pass rejoined the
+/// halves as `[ 1]`.
+#[rstest]
+#[case("[1]")]
+#[case("[12]")]
+fn test_cli_wrap_keeps_bracket_reference_whole(
+    #[case] reference: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let paragraph = format!(
+        concat!(
+            "aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht abm iqy uxqdkre fz ioelg ",
+            "**bold**`code` {}"
+        ),
+        reference,
+    );
+
+    let first = run_cli_with_stdin(&["--wrap"], &format!("{paragraph}\n"))?;
+    let first_output = String::from_utf8_lossy(&first.success().get_output().stdout).into_owned();
+    let second = run_cli_with_stdin(&["--wrap"], &first_output)?;
+    let second_output = String::from_utf8_lossy(&second.success().get_output().stdout).into_owned();
+
+    assert_eq!(
+        second_output, first_output,
+        "wrapping must be a fixed point for {reference:?}",
+    );
+    let lines = first_output.lines().collect::<Vec<_>>();
+    assert!(
+        lines.iter().any(|line| line.contains(reference)),
+        "expected {reference:?} to stay whole in {first_output}",
+    );
+    assert!(
+        lines.iter().all(|line| !line.ends_with('[')),
+        "opening bracket must not be stranded in {first_output}",
+    );
+    Ok(())
+}
+
 /// Extracts link-start markers from `expected_citation`.
 ///
 /// Given an `expected_citation: &str`, this helper returns a `Vec<String>` of
