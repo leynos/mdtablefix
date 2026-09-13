@@ -32,8 +32,14 @@ function trim(value) {
 
 while IFS= read -r symbol; do
     [[ -z "${symbol}" ]] && continue
+    if [[ ! "${symbol}" =~ ^[[:alpha:]_][[:alnum:]_]*$ ]]; then
+        echo "verification ledger names missing symbol: ${symbol}"
+        exit 1
+    fi
+
+    declaration="^[[:space:]]*([^[:space:]]+[[:space:]]+)*fn[[:space:]]+${symbol}([[:space:]<(])"
     status=0
-    "${rg_cmd[@]}" -F --glob '*.rs' -- "${symbol}" "${source_dir}" >/dev/null || status=$?
+    "${rg_cmd[@]}" --glob '*.rs' --regexp "${declaration}" "${source_dir}" >/dev/null || status=$?
     case "${status}" in
         0) ;;
         1)

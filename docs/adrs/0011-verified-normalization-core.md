@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0008: Verify a narrow normalization core
+# Architectural decision record (ADR) 0011: Verify a narrow normalization core
 
 ## Status
 

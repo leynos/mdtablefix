@@ -1051,7 +1051,7 @@ the following letters.
 
 The [verification ledger](verification.md) records each claimed Verus result,
 the production function it verifies, and every contract it trusts at an
-external boundary. [ADR 0008](adrs/0008-verified-normalization-core.md)
+external boundary. [ADR 0011](adrs/0011-verified-normalization-core.md)
 restricts proofs to narrow production-used kernels, so property tests continue
 to cover broad formatter behaviour while proofs establish their stated
 unbounded invariants.
