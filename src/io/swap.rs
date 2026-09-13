@@ -402,9 +402,16 @@ pub(crate) mod competing_writer_seam {
 
     use super::{Dir, Utf8Path};
 
+    /// The write an armed seam runs before the swap's final comparison.
+    ///
+    /// Boxed so the arming can hold one concrete closure of any shape, and
+    /// aliased so the thread-local below states what it holds rather than the
+    /// shape of a boxed trait object.
+    type Intrusion = Box<dyn FnOnce(&Dir, &Utf8Path)>;
+
     thread_local! {
         /// The write this thread's next swap must run before its final comparison.
-        static ARMED: Cell<Option<Box<dyn FnOnce(&Dir, &Utf8Path)>>> = const { Cell::new(None) };
+        static ARMED: Cell<Option<Intrusion>> = const { Cell::new(None) };
     }
 
     /// Arms the seam with the write to run inside the swap, until the returned
