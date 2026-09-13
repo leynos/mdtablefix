@@ -38,6 +38,11 @@ fn handle_line(buffer: &mut ProcessBuffer, line: &str) -> Option<String> {
 }
 
 #[test]
+fn finish_signature_consumes_the_buffer() {
+    let _: fn(ProcessBuffer) -> (Vec<String>, Vec<bool>) = ProcessBuffer::finish;
+}
+
+#[test]
 fn plain_table_line_enters_table_mode() {
     let mut buffer = new_buffer();
 
