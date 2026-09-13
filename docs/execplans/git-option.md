@@ -134,8 +134,9 @@ Otherwise it maps `cli.files.par_iter()` through `open_file_parent`, which
 `src/main.rs` documents as "the only ambient filesystem boundary for CLI file
 processing": it opens the file's parent directory as a `cap_std::fs_utf8::Dir`
 and returns a relative `camino::Utf8PathBuf`. Every read and write goes through
-that capability. `report_results` prints per-file errors to stderr and returns
-the first error, so one bad file does not abort the others.
+that capability. `run_files` prints each per-file error to stderr as it is
+encountered and folds it into the run's exit status, so one bad file does not
+abort the others.
 
 There is no glob expansion, no directory walking, and no extension filtering
 anywhere in the crate. `walkdir`, `glob`, `ignore`, `git2`, and `gix` are all
@@ -948,9 +949,14 @@ impl Default for ExtensionFilter {
 }
 
 impl ExtensionFilter {
-    /// Reports whether `path` ends in one of these extensions.
+    /// Reports whether `candidate` ends in one of these extensions.
+    ///
+    /// Only the last extension is consulted, and case is folded, so
+    /// `docs/guide.MD` matches `md`. A leading dot with no second dot is part
+    /// of the file name rather than an extension, which keeps `.md` from
+    /// matching every dotfile.
     #[must_use]
-    pub fn matches(&self, path: &camino::Utf8Path) -> bool;
+    pub fn matches(&self, candidate: &str) -> bool;
 
     /// Iterates the extensions shortest-first, then byte-wise, without dots.
     ///
@@ -979,7 +985,8 @@ impl std::fmt::Display for ExtensionFilter { /* ... */ }
 /// # Errors
 ///
 /// Returns [`ExtensionSpecError`] for an empty or dot-only value, or one
-/// containing a path separator or a NUL byte.
+/// containing a dot after the optional leading one, a path separator, or a NUL
+/// byte.
 pub fn parse_extension(value: &str) -> Result<String, ExtensionSpecError>;
 
 /// The reason an extension value was rejected.
@@ -1004,6 +1011,10 @@ pub enum InvalidCharacterKind {
     /// A NUL byte, which cannot survive an `OsStr` round trip on all platforms.
     #[error("a NUL byte")]
     Nul,
+    /// A `.` after the optional leading one, which is never part of the
+    /// extension [`ExtensionFilter::matches`] compares against.
+    #[error("a dot")]
+    Dot,
 }
 ```
 
@@ -1020,25 +1031,44 @@ because error enums grow and a struct variant cannot gain a field additively.
 In `src/select/policy.rs`:
 
 ```rust
-/// Identifies a file independently of the path used to reach it.
+/// A candidate name selected from Git's listing.
 ///
-/// The canonicalized path, not `(st_dev, st_ino)`. Replacement writes a new
-/// inode over the target, so an identity keyed on the inode would collapse two
-/// hard links, format one, and leave the other stale. See INV-DEDUP.
+/// The spelling is deliberately opaque to the policy. It is ordered only to
+/// make the externally visible selection deterministic; translating it into a
+/// filesystem path belongs to an adapter.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct FileIdentity(camino::Utf8PathBuf);
+pub struct CandidatePath(String);
 
-impl FileIdentity {
-    /// Wraps a canonicalized path, as the probe obtains it.
+impl CandidatePath {
+    /// Creates a candidate from the spelling supplied by an adapter.
     #[must_use]
-    pub fn from_canonical_path(path: camino::Utf8PathBuf) -> Self;
+    pub fn new(path: String) -> Self;
 
-    /// The canonicalized path this identity was built from.
+    /// Returns the candidate's stable, adapter-supplied spelling.
     #[must_use]
-    pub fn as_path(&self) -> &camino::Utf8Path;
+    pub fn as_str(&self) -> &str;
 }
 
-/// What a candidate path turned out to be in the working tree.
+/// Identifies a file independently of the candidate name used to reach it.
+///
+/// The adapter forms this from its canonical name, not from `(st_dev, st_ino)`.
+/// Replacement writes a new inode over the target, so an inode identity would
+/// collapse two hard links, format one, and leave the other stale. See
+/// INV-DEDUP.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FileIdentity(String);
+
+impl FileIdentity {
+    /// Creates an identity from an adapter's canonical name.
+    #[must_use]
+    pub fn from_canonical_name(name: String) -> Self;
+
+    /// Returns the canonical spelling retained for this identity.
+    #[must_use]
+    pub fn as_str(&self) -> &str;
+}
+
+/// What a candidate turned out to be in the adapter's source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PathKind {
@@ -1049,25 +1079,75 @@ pub enum PathKind {
     /// A symbolic link. Never followed: the link's extension says nothing
     /// about the target's type, and writing through it escapes the selection.
     Symlink,
-    /// Present but neither a regular file nor a symlink, for example a
+    /// Present but neither a regular file nor a symbolic link, for example a
     /// submodule gitlink.
     Other,
+    /// A regular file whose canonical name lies outside the selected root.
+    /// Never selected, because writing it would write outside the tree the
+    /// selection was made in. See `src/select/fs_probe.rs`.
+    OutsideRoot,
+}
+
+/// The domain category for a candidate an adapter could not classify.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProbeFailureKind {
+    /// The adapter could not read enough state to classify the candidate.
+    Unreadable,
+}
+
+/// A candidate whose class could not be established.
+///
+/// Distinct from `PathKind::Missing`, which is an answer: a staged deletion
+/// is absent, and absent is a class the selection has a rule for. This is the
+/// absence of an answer — a permission failure, a path through a file, or a
+/// symbolic-link loop — and a selection that met one cannot say what it
+/// selected.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("reading `{path}` while selecting files: {detail}")]
+pub struct ProbeFailure {
+    /// The candidate the adapter could not classify.
+    pub path: CandidatePath,
+    /// The domain category of the failure.
+    pub kind: ProbeFailureKind,
+    /// The adapter's human-readable detail, for a command-boundary diagnostic.
+    pub detail: String,
+}
+
+impl ProbeFailure {
+    /// Records an unreadable candidate without exposing an adapter error type.
+    #[must_use]
+    pub fn unreadable(path: CandidatePath, detail: String) -> Self;
 }
 
 /// Reports what a candidate path actually is. Implemented by adapters.
 pub trait PathProbe {
-    fn probe(&self, root: &camino::Utf8Path, path: &camino::Utf8Path) -> PathKind;
+    /// Classifies a candidate.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ProbeFailure`] if the candidate cannot be read for a reason
+    /// that is not its absence. Absence itself is [`PathKind::Missing`]: the
+    /// caller has a rule for a candidate that is gone, and none for one it
+    /// could not inspect.
+    fn probe(&self, candidate: &CandidatePath) -> Result<PathKind, ProbeFailure>;
 }
 
-/// Narrows candidates to the sorted, alias-free set of files that exist as
-/// regular files and carry a configured extension.
-#[must_use]
+/// Narrows candidates to the sorted, alias-free set of regular files carrying
+/// a configured extension.
+///
+/// # Errors
+///
+/// Returns the first [`ProbeFailure`] a candidate draws. The selection stops
+/// there rather than returning what it had: a run that cannot classify one
+/// candidate does not know what it is about to format, so the incomplete set
+/// must not be presented as a selection. The caller reports it the way it
+/// reports a failed listing, before any file is analysed.
 pub fn select_files<P>(
-    candidates: &[camino::Utf8PathBuf],
-    root: &camino::Utf8Path,
+    candidates: &[CandidatePath],
     extensions: &ExtensionFilter,
     probe: &P,
-) -> Vec<camino::Utf8PathBuf>
+) -> Result<Vec<CandidatePath>, ProbeFailure>
 where
     P: PathProbe + ?Sized;
 ```
@@ -1076,8 +1156,9 @@ where
 per distinct Markdown candidate and never for a `.rs` file. Keep that ordering
 and comment it: reversing it multiplies the probe count by roughly fifteen on a
 typical repository (28 Markdown files out of 416 paths here). It then probes,
-keeps `RegularFile`, deduplicates on `FileIdentity` retaining the
-lexicographically first path, and sorts.
+returns the first `ProbeFailure` rather than a partial selection, keeps
+`RegularFile`, deduplicates on `FileIdentity` retaining the lexicographically
+first path, and sorts.
 
 In `src/select/git_ls_files.rs`:
 
@@ -1104,6 +1185,16 @@ impl GitLsFiles {
     /// See [`GitListError`].
     pub fn list_candidates(&self, dir: &camino::Utf8Path)
         -> Result<CandidateListing, GitListError>;
+
+    /// Resolves the Git directory that governs `dir`.
+    ///
+    /// # Errors
+    ///
+    /// See [`GitListError`]. This is not a best-effort query: the conflict
+    /// guard has nowhere to look without it, so a caller that needs the guard
+    /// fails the run rather than proceeding unguarded.
+    pub fn resolve_git_dir(&self, dir: &camino::Utf8Path)
+        -> Result<camino::Utf8PathBuf, GitListError>;
 }
 
 /// Candidate paths, with a count of paths that were not valid UTF-8.
@@ -1119,10 +1210,26 @@ pub struct CandidateListing {
 pub enum GitListError {
     #[error("`{program}` is not installed or not on PATH")]
     ProgramNotFound { program: String },
-    #[error("running `{program} ls-files`")]
-    Spawn { program: String, #[source] source: std::io::Error },
-    #[error("`git ls-files` failed with exit status {status}")]
-    Failed { status: std::process::ExitStatus, stderr: String },
+    #[error("running `{command}`")]
+    Spawn {
+        /// The command as it would be typed, e.g. `git ls-files`.
+        command: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("`{command}` failed with {status}")]
+    Failed {
+        /// The command as it would be typed, e.g. `git ls-files`.
+        command: String,
+        status: std::process::ExitStatus,
+        /// Git's own diagnostic, relayed through `relayable`.
+        stderr: String,
+    },
+    #[error("`{command}` did not report a usable Git directory")]
+    NoGitDir {
+        /// The command as it would be typed, e.g. `git rev-parse`.
+        command: String,
+    },
 }
 
 /// Splits a NUL-terminated byte stream, counting entries that are not UTF-8.
@@ -1161,32 +1268,101 @@ In `src/select/fs_probe.rs`:
 /// Probes the real working tree using `std::fs::symlink_metadata`.
 ///
 /// `symlink_metadata`, not `metadata`: see `PathKind::Symlink`.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AmbientPathProbe;
+#[derive(Debug, Clone, Copy)]
+pub struct AmbientPathProbe<'root> {
+    root: &'root camino::Utf8Path,
+}
 
-impl PathProbe for AmbientPathProbe { /* ... */ }
+impl<'root> AmbientPathProbe<'root> {
+    /// Probes candidates beneath `root` using ambient filesystem reads.
+    #[must_use]
+    pub fn new(root: &'root camino::Utf8Path) -> Self;
+}
+
+impl PathProbe for AmbientPathProbe<'_> { /* ... */ }
 ```
 
 In `src/select/conflict.rs`:
 
 ```rust
-/// Reports whether the repository is mid-merge, mid-rebase, mid-revert, or
-/// mid-cherry-pick, by testing for `MERGE_HEAD`, `rebase-merge`,
-/// `rebase-apply`, `CHERRY_PICK_HEAD`, and `REVERT_HEAD` under the Git
-/// directory.
-///
-/// # Errors
-///
-/// Returns an error if a marker cannot be tested for other than by being
-/// absent: an unanswered question is not a licence to write.
-pub fn operation_in_progress(
-    git_dir: &camino::Utf8Path,
-) -> Result<bool, RepositoryStateError>;
+/// Whether a document contains every marker form that makes a rewrite unsafe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConflictMarkerState {
+    /// The document does not carry all three marker forms.
+    Absent,
+    /// The document carries all three marker forms.
+    Present,
+}
+
+/// Whether Git has an operation paused that can leave a conflict unresolved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RepositoryOperationState {
+    /// No merge, rebase, revert, or cherry-pick is paused.
+    Idle,
+    /// A merge, rebase, revert, or cherry-pick is paused.
+    InProgress,
+}
+
+/// Classifies the conflict-marker forms in `content`.
+#[must_use]
+pub fn marker_state(content: &str) -> ConflictMarkerState;
 
 /// Reports whether `content` carries all three conflict-marker forms, each at
 /// the start of a line with a run of at least seven characters.
 #[must_use]
 pub fn has_conflict_markers(content: &str) -> bool;
+
+/// Decides whether the explicit document and repository states refuse a
+/// rewrite.
+#[must_use]
+pub const fn refuses(
+    markers: ConflictMarkerState,
+    repository: RepositoryOperationState,
+) -> bool;
+```
+
+In `src/select/repository_state.rs`:
+
+```rust
+/// Holds the Git directory a writing run must consult.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConflictGuard {
+    /// Nothing to consult for a non-writing run or `--allow-conflicted`.
+    Unguarded,
+    /// The Git directory to consult immediately before each rewrite.
+    Guarded(camino::Utf8PathBuf),
+}
+
+impl ConflictGuard {
+    /// The guard for a run with no repository to consult.
+    #[must_use]
+    pub const fn unguarded() -> Self;
+
+    /// The guard for a run that must ask this Git directory before it writes.
+    #[must_use]
+    pub fn guarded(git_dir: impl Into<camino::Utf8PathBuf>) -> Self;
+
+    /// Reads the state the pure conflict policy must consider.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the guarded Git directory cannot be read.
+    pub fn operation_state(&self)
+        -> Result<RepositoryOperationState, RepositoryStateError>;
+}
+
+/// Reports whether the repository is mid-operation by checking Git's fixed
+/// marker entries — `MERGE_HEAD`, `rebase-merge`, `rebase-apply`,
+/// `CHERRY_PICK_HEAD`, and `REVERT_HEAD` — through an opened directory
+/// capability.
+///
+/// # Errors
+///
+/// Returns an error if the Git directory or a marker cannot be inspected: an
+/// unanswered question is not a licence to write.
+pub fn operation_in_progress(
+    git_dir: &camino::Utf8Path,
+) -> Result<RepositoryOperationState, RepositoryStateError>;
 ```
 
 ### Command-line surface
@@ -1554,9 +1730,10 @@ rejection asserts on the **exit status** rather than on message text, because
 that wording is clap's: an earlier draft asserted `stderr contains "requires"`
 and clap 4.6.6 renders `the following required arguments were not provided:`
 for that error kind, so the scenario would have failed on day one. The other
-two rejections do assert message text, because it is **ours** — `ExtensionSpec`
-renders `extension is empty`, and `--list-files` is rejected by this plan's own
-post-parse check, which emits `--list-files requires --git` verbatim. The
+two rejections do assert message text, because it is **ours** —
+`ExtensionSpecError` renders `extension is empty`, and `--list-files` is
+rejected by this plan's own post-parse check, which emits `--list-files
+requires --git` verbatim. The
 `stdout is empty` line in all three denies a naive implementation the escape of
 treating the flags as inert and formatting the positional as if `--git` were
 absent.
@@ -2921,6 +3098,85 @@ plateau.
       assert on, the `diagnostic` half a user reads, and the bounded `category`
       half a tracing field may carry. Its one process-free test moved with it,
       leaving the invocation module at 340 lines and the boundary tests at 345.
+
+- [x] (2026-09-13) **The conditional swap compares the target twice, so the
+      window it leaves is the rename alone** (`61af2d1`, `53a82bf`). The
+      replacement that declines a target another writer reached compared the
+      target once — after the temporary file was written and synced — and then
+      renamed over it. Everything between was a window in which the arriving
+      writer is overwritten rather than declined, and on Windows the
+      destination's read-only attribute also had to be cleared inside it.
+      `swap_into_place` now compares twice: once where it did before, and once
+      after the destination is prepared and immediately before the rename.
+      Both ways a swap stops short of the rename — a target that moved on, and
+      a rename that failed — undo that preparation through one shared helper,
+      so the rollback cannot differ between them. Nothing here is described as
+      a compare-and-swap: no rename on any supported platform compares
+      contents, so the second comparison closes every window before the rename
+      and leaves the rename itself, one system call wide. An exclusive writer
+      lock was rejected rather than relabelled: `flock` and `fcntl` are
+      advisory, only Windows `LockFileEx` is mandatory, and a writer that does
+      not take a lock is not excluded by it — so a lock would have bought a
+      claim this tool cannot make. The seam that makes the residual window
+      deterministic is `competing_writer_seam`: it arms one write on the arming
+      thread, hands it the directory capability and the target so the write
+      lands through the same capability as every other operation, and disarms
+      when the arming value is dropped, so a failing assertion cannot leave an
+      intrusion armed for whatever runs next. Its closure is held behind a
+      type alias because the spelled-out `Cell<Option<Box<dyn FnOnce(..)>>>`
+      trips `clippy::type_complexity`, which this crate denies (`53a82bf`).
+      `conditional_replacement_declines_a_writer_that_lands_inside_the_swap`
+      asserts what a decline promises: the replacement reports that it wrote
+      nothing, the arriving writer's text is what the target holds, and no
+      temporary file is left beside it.
+- [x] (2026-09-13) **The Git invocation boundary is traced again, under a
+      bounded category** (`dd25b3d`). The review's observability warning was
+      not about a missing decision but about work that had been done and then
+      lost: commit `6540874` carried the span, the event, and the category, and
+      a later rewrite of this branch left it in the object database without an
+      ancestor path to it. Rather than reinvent it, the code was recovered from
+      that commit and ported onto the current shape. `GitLsFiles::run` is now
+      `#[tracing::instrument(level = "debug", name = "git", …)]` with
+      `operation` (`ls_files` or `rev_parse`), `outcome` (`success` or
+      `error`), and `elapsed_seconds` recorded once the process has been
+      reaped, plus one `debug` event per invocation — the span for a host
+      drawing a timeline, the event for a test reading a line, because a span
+      is not a line. A failure adds `failure`, the value of
+      `GitListError::category`: `program_not_found`, `spawn`, `nonzero_exit`,
+      or `no_git_dir`, a closed set of four that no path and no Git diagnostic
+      can enter. The adapter is still `std::process::Command::output` with the
+      redirecting variables removed; what changed is that its invocations are
+      now visible. Three boundary tests pin it, including the failure half
+      driven through `/bin/false`.
+- [x] (2026-09-13) **Two test-hygiene findings and the documents reconciled
+      with the code** (`fa7d764`, `5698ded`, `2b137b1`). The conditional
+      metrics cases had each built their own temporary directory, capability,
+      and fixture; one capability-scoped `conditional_target` fixture now does
+      it once and both cases take it, with the `TempDir` owned by the fixture
+      so the directory outlives the capability opened from it. The Windows job
+      failed on `883027a` with `error: unused import: ProbeFailureKind` in
+      `src/select/fs_probe_tests.rs` (run 34754780726, job 103717213830): the
+      type is named only by the symbolic-link-loop case, which is Unix-only, so
+      the import is now gated exactly as its only use is — the rule being that
+      a `#[cfg]` on the use is not enough while the crate's test targets deny
+      warnings. The documents then caught up. ADR 0006's Decision claimed a
+      fixed point "for every flag set the CLI exposes", which the recorded
+      evidence does not support — `--code-emphasis` can settle on a second
+      pass, and the Addendum said so while the Decision contradicted it — so
+      the Decision now names the proven sets, states the exception including
+      under `--git --check`, and points at the Addendum, whose opening sentence
+      was adjusted to match. The developer guide's selection map named
+      `ProbeError` for `ProbeFailure`, credited the real-`git` boundary tests
+      to the sibling that spawns no process, described a single comparison of
+      the target, and had nothing about the Git span; all four are now as the
+      code is. This plan's normative interface blocks — the policy, extension,
+      `GitLsFiles`, `GitListError`, probe, and conflict contracts — were
+      reconciled against the current signatures, while the dated Progress,
+      Surprises, and Decision-log entries were left as the record they are.
+      The review asked for a "Triage annotation" on the ADR correction; no such
+      convention exists here (a case-insensitive repository-wide grep for
+      "triage" across `*.md`, `*.rs`, `*.toml`, and `*.yml` returns nothing),
+      so the correction was made without inventing one, and the reply says so.
 
 Superseded and deliberately not carried forward: adding `googletest`,
 `pretty_assertions`, `rstest-bdd`, and `rstest-bdd-macros`; adding
