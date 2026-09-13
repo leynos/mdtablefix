@@ -191,4 +191,36 @@ The impact is that `--git --check` is a sound one-pass drift check for a
 document that does not contain that shape, while a document that does is
 reported as needing formatting again after an `--in-place` run has written the
 first pass's output. This addendum narrows the operational guarantee until the
-inline-wrapping path has evidence of the same fixed-point behaviour.
+inline-wrapping path has evidence of the same fixed-point behaviour. That
+evidence now exists for the shape recorded here; see the addendum below.
+
+## Addendum (2026-09-14)
+
+Issue #504 is fixed. The tokenizer emits `[` and `1]` as separate tokens, so
+nothing bound them and the opener was free to end a line on its own. The inline
+wrapping path now couples the pair the way it already couples footnote markers
+and links to their openers: `looks_like_bracketed_reference` recognises the
+closing shape the tokenizer emits, `try_couple_bracketed_reference` sums the two
+widths and absorbs trailing punctuation, and `FragmentKind::BracketedRef` keeps
+the merged span atomic so the post-wrap rebalancing pass cannot separate it
+again. Labels are digit-only by design; the residue is that a short alphabetic
+label such as `[a]` is still ordinary prose the wrapper may break at, which is
+unchanged behaviour rather than a regression.
+
+The evidence for the shape recorded above is the corpus fixture
+`E1_bracket_after_bold_code` under `tests/data/idempotence/`, which is that
+reproduction formatted twice through the real binary under `--wrap` and asserted
+to be byte-identical. The fixture records `[1]` as its structural expectation,
+so a fix that settled the output by dropping the reference fails rather than
+passes. `tests/idempotence_properties.rs` reaches the same shape from generated
+documents: `bracket_reference_seam_strategy` grows the head to one column short
+of the wrap width, which puts the wrap boundary before the reference, and a
+coverage test asserts the shape is actually generated so removing the strategy
+cannot leave the property vacuous. The wrap suites pin the break itself in
+`src/wrap/tests/inline_wrapping.rs`, `tests/wrap_unit/stream.rs` and
+`tests/wrap/lists.rs`, and `tests/wrap/cli.rs` formats twice through the CLI and
+compares the passes. Each of those cases fails against the parent commit.
+
+The narrowing in the previous addendum therefore no longer applies to this
+shape, and `--git --check` is a sound one-pass drift check for documents that
+contain it.

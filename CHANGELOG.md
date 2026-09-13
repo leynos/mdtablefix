@@ -154,6 +154,11 @@
 - Keep reference-style links atomic while wrapping, so an opening bracket cannot
   be stranded before its label.
   ([#374](https://github.com/leynos/mdtablefix/issues/374))
+- Keep bare bracket references atomic while wrapping, so an opening bracket
+  cannot be stranded before its digits. The opener and the reference are
+  recognized across the token boundary the segmenter emits and coupled into one
+  span, so a second pass no longer rejoins the halves as `[ 1]`.
+  ([#504](https://github.com/leynos/mdtablefix/issues/504))
 - Keep colon-suffixed footnote references attached to preceding prose so they
   cannot become column-one footnote definitions.
   ([#372](https://github.com/leynos/mdtablefix/issues/372))
