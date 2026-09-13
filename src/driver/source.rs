@@ -17,7 +17,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use mdtablefix::{
     LineEndingCounts,
-    io::{SourceDocument, replace_file},
+    io::{SourceDocument, replace_file_if_unchanged},
 };
 
 use super::Formatter;
@@ -139,7 +139,8 @@ pub fn assess(
     })
 }
 
-/// Writes the formatted text back.
+/// Writes the formatted text back, if the file still holds the text it was
+/// assessed from.
 ///
 /// Only reachable from [`Mode::InPlace`](super::reporting::Mode::InPlace), and
 /// only for a file whose bytes would change: see [`Assessment::is_changed`].
@@ -147,13 +148,26 @@ pub fn assess(
 /// over the target, so an unconditional call would swap the inode of a file it
 /// left byte-identical. See [`mdtablefix::io::replace_file`].
 ///
+/// The conditional entry point is the one used here rather than a plain
+/// replacement: the assessment is a reading of the file that a concurrent
+/// writer can invalidate while the formatter runs, and writing the formatted
+/// text over the writer's version would discard work this run never saw. A
+/// target that moved on is left exactly as that writer left it, and `Ok(false)`
+/// says so; the boundary decides what that means for the run.
+///
 /// # Errors
 ///
-/// Returns an error if the file cannot be written.
+/// Returns an error if the file cannot be written, or if it cannot be read back
+/// for the comparison.
 pub fn write_back(
     directory: &Dir,
     storage_key: &Utf8Path,
     assessment: &Assessment,
-) -> anyhow::Result<()> {
-    Ok(replace_file(directory, storage_key, &assessment.formatted)?)
+) -> anyhow::Result<bool> {
+    Ok(replace_file_if_unchanged(
+        directory,
+        storage_key,
+        &assessment.original,
+        &assessment.formatted,
+    )?)
 }

@@ -11,6 +11,7 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 
 use camino::Utf8Path;
+use mdtablefix::io::SourceDocument;
 
 // `identity` is used by an inode-observing test, which is Unix-only, so the
 // import has to be Unix-only as well: on Windows it would be an unused import,
@@ -23,6 +24,9 @@ use super::{
     analyse,
     test_support::{ALIGNED, RAGGED, align, fixture, read},
 };
+
+/// The text another writer leaves behind, distinct from both fixtures.
+const INTRUDER: &str = "|X|Y|\n|---|---|\n|3|4|\n";
 
 /// `--in-place` is the one mode that writes, and its payload is empty: the
 /// formatted text goes to the file, not to standard output.
@@ -74,6 +78,54 @@ fn in_place_replaces_a_drifting_file() {
         "a drifting file must be replaced through a temporary"
     );
     assert_eq!(read(&directory, "ragged.md"), ALIGNED);
+}
+
+/// A file another writer changed while it was being formatted is not
+/// overwritten.
+///
+/// The seam is the formatter itself, which runs between the read that produced
+/// the assessment and the replacement that would act on it — the whole window
+/// the conditional write exists to close. The other writer is an ambient one,
+/// as a concurrent writer would be: it holds no capability of this run's, and
+/// the run's own read is what goes stale.
+#[test]
+fn in_place_declines_a_file_that_changed_under_it() {
+    let (dir, directory) = fixture("ragged.md", RAGGED);
+    let intruder_path = dir.path().join("ragged.md");
+    let intruder = move |document: &SourceDocument<'_>| {
+        std::fs::write(&intruder_path, INTRUDER).expect("write the concurrent change");
+        align(document)
+    };
+
+    let error = analyse(
+        Mode::InPlace,
+        &ConflictGuard::unguarded(),
+        &directory,
+        Utf8Path::new("ragged.md"),
+        Utf8Path::new("ragged.md"),
+        &intruder,
+    )
+    .expect_err("a file that changed under the run must not be overwritten");
+
+    assert!(
+        error
+            .to_string()
+            .contains("changed while it was being formatted"),
+        "the error must say why the file was left alone: {error}"
+    );
+    assert_eq!(
+        read(&directory, "ragged.md"),
+        INTRUDER,
+        "the other writer's text must survive the run"
+    );
+    assert_eq!(
+        directory
+            .read_dir(".")
+            .expect("read the fixture directory")
+            .count(),
+        1,
+        "a declined write must leave no temporary file behind"
+    );
 }
 
 /// A clean file is left alone byte for byte, and observably so.

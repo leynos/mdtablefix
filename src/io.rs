@@ -43,7 +43,7 @@ pub use line_endings::{
 /// module reaches them without naming the child module they live in.
 #[cfg(test)]
 use replace::{register_metrics, remove_failed_temporary_file, rewrite_with};
-pub use replace::{replace_file, rewrite, rewrite_no_wrap};
+pub use replace::{replace_file, replace_file_if_unchanged, rewrite, rewrite_no_wrap};
 #[cfg(test)]
 use swap::{
     TEMP_FILE_ATTEMPTS,

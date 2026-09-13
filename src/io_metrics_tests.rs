@@ -11,13 +11,20 @@ use metrics::Unit;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
 use tempfile::tempdir;
 
-use super::{TEMP_FILE_ATTEMPTS, register_metrics, rewrite, temporary_path};
+use super::{
+    TEMP_FILE_ATTEMPTS, register_metrics, replace_file_if_unchanged, rewrite, temporary_path,
+};
 
 /// The outcome label's name.
 const OUTCOME_LABEL: &str = "outcome";
 
 /// The only values the outcome label may take.
-const OUTCOMES: [&str; 2] = ["success", "failure"];
+///
+/// `unchanged` is a replacement that declined rather than one that failed: the
+/// target no longer held the text it was read as, so nothing was written and
+/// the caller was told, which is a different event for an operator reading a
+/// dashboard than a replacement that did not happen.
+const OUTCOMES: [&str; 3] = ["success", "failure", "unchanged"];
 
 /// The counter recording replacement outcomes.
 const REPLACE_TOTAL: &str = "mdtablefix_io_replace_total";
@@ -288,6 +295,82 @@ fn an_occupied_candidate_is_counted_as_a_collision() {
         outcome_count(&recorded, "success"),
         1,
         "a retried replacement still succeeds: {recorded:?}"
+    );
+}
+
+/// A conditional replacement that finds the target unchanged from the text it
+/// was read as writes it and records `success`, like any other replacement.
+#[test]
+fn a_conditional_replacement_of_a_matching_target_is_a_success() {
+    let dir = tempdir().expect("create temporary directory");
+    let file = fixture(&dir);
+    let root = camino::Utf8Path::from_path(dir.path()).expect("the temporary directory is UTF-8");
+    let capability =
+        cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())
+            .expect("open the directory capability");
+
+    let (replaced, recorded) = recorded(|| {
+        replace_file_if_unchanged(
+            &capability,
+            camino::Utf8Path::new("sample.md"),
+            "|A|B|\n|1|2|",
+            "| A | B |\n| 1 | 2 |\n",
+        )
+    });
+
+    replaced.expect("a matching target is replaced");
+    assert_eq!(
+        fs::read_to_string(&file).expect("read the target"),
+        "| A | B |\n| 1 | 2 |\n"
+    );
+    assert_labels_are_bounded(&recorded);
+    assert_eq!(
+        outcome_count(&recorded, "success"),
+        1,
+        "a conditional replacement that wrote is a success: {recorded:?}"
+    );
+}
+
+/// The other half of the case above: a target that moved on before the swap
+/// records `unchanged` rather than `success` or `failure`.
+#[test]
+fn a_declined_replacement_after_the_target_moved_on_is_unchanged() {
+    let dir = tempdir().expect("create temporary directory");
+    let file = fixture(&dir);
+    fs::write(&file, "|X|Y|\n|3|4|").expect("write the other writer's version");
+    let root = camino::Utf8Path::from_path(dir.path()).expect("the temporary directory is UTF-8");
+    let capability =
+        cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())
+            .expect("open the directory capability");
+
+    let (replaced, recorded) = recorded(|| {
+        replace_file_if_unchanged(
+            &capability,
+            camino::Utf8Path::new("sample.md"),
+            "|A|B|\n|1|2|",
+            "| A | B |\n| 1 | 2 |\n",
+        )
+    });
+
+    assert!(
+        !replaced.expect("a declined replacement is not an error"),
+        "the target no longer holds the text it was read as"
+    );
+    assert_labels_are_bounded(&recorded);
+    assert_eq!(
+        outcome_count(&recorded, "unchanged"),
+        1,
+        "a declined replacement is counted under its own outcome: {recorded:?}"
+    );
+    assert_eq!(
+        outcome_samples(&recorded, "unchanged").len(),
+        1,
+        "a declined replacement is timed too, so stalls before the comparison are visible: {recorded:?}"
+    );
+    assert_eq!(
+        outcome_count(&recorded, "success") + outcome_count(&recorded, "failure"),
+        0,
+        "a decline is neither a success nor a failure: {recorded:?}"
     );
 }
 

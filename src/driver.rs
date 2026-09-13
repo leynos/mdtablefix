@@ -125,12 +125,24 @@ pub fn analyse(
                      pass --allow-conflicted to rewrite it anyway."
                 ));
             }
-            write_back(directory, storage_key, &assessment)?;
+            // The write is conditional on the file still holding the text the
+            // assessment read. A file that changed in the meantime is not this
+            // run's to overwrite: another writer's version is newer, and
+            // replacing it would discard work this run never saw. Failing is
+            // the honest answer — the user asked for a rewrite that did not
+            // happen — and the message says which file and why.
+            if !write_back(directory, storage_key, &assessment)? {
+                return Err(anyhow!(
+                    "not rewriting {display_path}: it changed while it was being formatted, so \
+                     the text this run read is no longer there. Run mdtablefix again to format \
+                     the file as it is now."
+                ));
+            }
             String::new()
         }
         // A clean file is left alone byte for byte, and nothing consults the
         // repository for it: the write would be invisible in the text but not
-        // in the file. `replace_file` renames a temporary over the target, so
+        // in the file. The replacement renames a temporary over the target, so
         // it would swap the inode and the modification time of a file it did
         // not change, and `make`-style staleness checks would see a rebuild
         // where there was nothing to rebuild.
