@@ -192,6 +192,73 @@ fn wrap_preserving_code_keeps_opening_bracket_with_inline_code(
     }
 }
 
+/// Prose and an inline code span that together fill 78 of the 80 columns, so a
+/// following bracket reference cannot fit and must move as a unit.
+///
+/// This is the paragraph side of the issue #504 reproduction, where the
+/// reference arrived on its own source line and the two were reflowed together.
+const BRACKET_REFERENCE_SEAM_HEAD: &str = concat!(
+    "aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht abm iqy uxqdkre fz ioelg ",
+    "**bold**`code`",
+);
+
+/// Asserts that `reference` survived wrapping intact.
+fn assert_bracket_reference_whole(lines: &[String], reference: &str) {
+    assert!(
+        lines.iter().any(|line| line.contains(reference)),
+        "expected {reference:?} to stay whole in {lines:?}",
+    );
+    assert!(
+        lines.iter().all(|line| !line.ends_with('[')),
+        "opening bracket must not be stranded at line end: {lines:?}",
+    );
+    assert!(
+        lines.iter().all(|line| !line.trim_start().starts_with(']')),
+        "reference tail must not be detached from its opener: {lines:?}",
+    );
+}
+
+#[rstest]
+#[case("[1]")]
+#[case("[12]")]
+fn wrap_preserving_code_keeps_bracket_reference_whole_after_code_span(#[case] reference: &str) {
+    let text = format!("{BRACKET_REFERENCE_SEAM_HEAD} {reference}");
+    let lines = wrap_preserving_code(&text, 80);
+
+    assert_bracket_reference_whole(&lines, reference);
+    assert_eq!(
+        lines,
+        vec![
+            BRACKET_REFERENCE_SEAM_HEAD.to_string(),
+            reference.to_string()
+        ]
+    );
+}
+
+#[rstest]
+#[case(11)]
+#[case(12)]
+#[case(13)]
+#[case(15)]
+#[case(16)]
+fn wrap_preserving_code_keeps_bracket_reference_whole_across_widths(#[case] width: usize) {
+    // The code span and the reference fill 18 columns together, so every width
+    // under test is too narrow to hold both and forces the reference to move.
+    let text = "**bold**`code` [1] and more prose to force a wrap.";
+    let lines = wrap_preserving_code(text, width);
+
+    assert!(
+        lines.len() > 1,
+        "expected wrapping at width {width}: {lines:?}"
+    );
+    assert!(
+        !lines
+            .iter()
+            .any(|line| line.contains('[') && !line.contains("[1]"))
+    );
+    assert_bracket_reference_whole(&lines, "[1]");
+}
+
 #[test]
 fn wrap_preserving_code_keeps_reference_link_opening_bracket_with_label() {
     let input = concat!(

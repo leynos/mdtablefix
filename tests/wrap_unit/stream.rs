@@ -46,6 +46,37 @@ fn wrap_stream_keeps_opening_bracket_with_inline_code_in_list(
     }
 }
 
+/// Prose and an inline code span that together fill 78 of the 80 columns, so a
+/// following bare bracket reference cannot fit on the line and must move as a
+/// unit rather than leaving `[` behind (issue #504).
+#[rstest]
+#[case("[1]")]
+#[case("[12]")]
+fn wrap_stream_keeps_bracket_reference_whole(#[case] reference: &str) {
+    let input = lines_vec![format!(
+        concat!(
+            "aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht abm iqy uxqdkre fz ioelg ",
+            "**bold**`code` {}"
+        ),
+        reference,
+    )];
+    let output = process_stream(&input);
+    assert!(
+        output.iter().any(|line| line.contains(reference)),
+        "expected {reference:?} to stay whole in {output:?}",
+    );
+    assert!(
+        output.iter().all(|line| !line.ends_with('[')),
+        "opening bracket must not be stranded at line end: {output:?}",
+    );
+    assert!(
+        output
+            .iter()
+            .all(|line| !line.trim_start().starts_with(']')),
+        "reference tail must not be detached from its opener: {output:?}",
+    );
+}
+
 #[test]
 fn wrap_stream_future_attribute_punctuation() {
     let input = lines_vec![concat!(
