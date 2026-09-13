@@ -15,6 +15,9 @@ continuation-row fixes exposed three coupled failure modes:
   literal `|` characters and then split into too many cells on the next parse.
 - Table widths drifted when ellipsis replacement ran after reflow, because `...`
   and `…` occupy different display widths in the rendered output.
+- Table widths also drifted when code-emphasis repair ran after reflow, because
+  removing emphasis markers around inline code shortened a cell after its
+  column width had already been measured.
 
 These regressions produced malformed tables and markdownlint failures,
 including inconsistent column counts and separator widths.
@@ -33,8 +36,9 @@ The table reflow pipeline now follows these rules:
   protected row, so reparsing preserves the original cell boundaries.
 - Measure column widths with `UnicodeWidthStr::width` and keep separator
   columns at a minimum width of three dashes while preserving alignment markers.
-- Apply ellipsis replacement to buffered table lines before calling
-  `reflow_table`, so the formatter sees the final cell contents.
+- Apply the enabled table substitutions to buffered table lines before calling
+  `reflow_table`, with code-emphasis repair first and ellipsis replacement
+  second, so the formatter sees the final cell contents.
 
 ## Consequences
 
@@ -44,6 +48,8 @@ The table reflow pipeline now follows these rules:
   delimiters during reparsing.
 - Tables that contain wide Unicode characters or ellipsis substitutions align
   by rendered width rather than byte length.
+- Tables containing repaired code-emphasis markers align to the shortened cell
+  contents on the first pass.
 - Literal cell content cannot be mistaken for an in-band row-boundary marker.
 - The parser carries a private marker for leading empty continuation cells and
   re-escapes literal pipes in non-leading cells during row rebuilding, which

@@ -144,6 +144,32 @@ fn document_strategy() -> impl Strategy<Value = String> {
         .prop_map(|elements| elements.join("\n") + "\n")
 }
 
+/// Generates a valid table with an emphasis-wrapped inline code span.
+///
+/// This is the shape whose repair shortens a table cell. The marker and prose
+/// vary independently so the property covers both emphasis spellings and
+/// realistic cell widths without generating malformed marker sequences that
+/// the code-emphasis transform intentionally repairs differently on a later
+/// standalone invocation.
+fn code_emphasis_table_strategy() -> impl Strategy<Value = String> {
+    let words = || proptest::collection::vec("[a-z]{2,8}", 1..=3).prop_map(|words| words.join(" "));
+
+    (
+        words(),
+        words(),
+        words(),
+        prop_oneof![Just("*"), Just("_")],
+        words(),
+        words(),
+    )
+        .prop_map(|(header, row, prefix, marker, code, suffix)| {
+            format!(
+                "| {header} | Notes |\n| --- | ----- |\n| {row} | {prefix} \
+                 {marker}`{code}`{marker} {suffix} |\n"
+            )
+        })
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(48))]
 
@@ -164,6 +190,33 @@ proptest! {
             &twice,
             &once,
             "formatting is not a fixed point for flags {:?}\ninput:\n{}\npass 1:\n{}\npass 2:\n{}",
+            flags,
+            document,
+            once,
+            twice,
+        );
+    }
+
+    /// Asserts code-emphasis table repair reaches a fixed point in one pass.
+    #[test]
+    fn code_emphasis_table_repair_reaches_a_fixed_point(
+        document in code_emphasis_table_strategy(),
+        wrap in any::<bool>(),
+        ellipsis in any::<bool>(),
+    ) {
+        let mut flags = vec!["--code-emphasis"];
+        if wrap {
+            flags.push("--wrap");
+        }
+        if ellipsis {
+            flags.push("--ellipsis");
+        }
+        let (once, twice) = format_twice(&document, &flags);
+
+        prop_assert_eq!(
+            &twice,
+            &once,
+            "code-emphasis table formatting is not a fixed point for flags {:?}\\ninput:\\n{}\\npass 1:\\n{}\\npass 2:\\n{}",
             flags,
             document,
             once,

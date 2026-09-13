@@ -8,8 +8,9 @@
 `mdtablefix` was not idempotent: `format(format(x)) != format(x)` held for
 inputs reachable under the `make fmt` flag set (`--wrap`, `--renumber`,
 `--breaks`, `--ellipsis`, `--fences`), and for further inputs once `--headings`
-was added, so a check-after-fix gate could never converge: one `--in-place` pass
-left a file that the next pass rewrote again. Six defect classes contributed:
+or `--code-emphasis` was added, so a check-after-fix gate could never
+converge: one `--in-place` pass left a file that the next pass rewrote again.
+Seven defect classes contributed:
 
 - A normalized thematic break was absorbed into the following paragraph
   instead of passed through on its own line.
@@ -33,11 +34,14 @@ left a file that the next pass rewrote again. Six defect classes contributed:
   width on the next pass. The class was found by the property suite after the
   fifth class was fixed, and is reachable under `--headings`, which the
   `make fmt` flag set does not enable.
+- Code-emphasis repair ran after table reflow. Removing emphasis markers around
+  inline code shortened a cell after its column width had been measured, so a
+  second pass narrowed the table columns.
 
 ## Decision
 
 The formatter is a fixed point: `format(format(x)) == format(x)` for every flag
-set the CLI exposes. Six rules enforce the invariant:
+set the CLI exposes. Seven rules enforce the invariant:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
   `src/wrap/block.rs` recognizes a break with
@@ -60,11 +64,19 @@ set the CLI exposes. Six rules enforce the invariant:
   reparse as a different block: a tail indented by four or more columns
   (indented code), a tail that repeats its blockquote marker, and a footnote
   definition tail stay separate.
-- `--ellipsis` runs before the wrap. `process_stream_inner` performs, in
-  order, Setext heading conversion, code-emphasis repair, ellipsis
-  replacement, paragraph wrapping, and footnote conversion; replacing `...`
-  with `…` shortens a line by two display columns, so a wrap that measured the
-  source dots emitted a break that the next pass joined.
+- `--ellipsis` runs before the wrap. For buffered tables, the table-substitution
+  stage runs code-emphasis repair first and ellipsis replacement second, before
+  `reflow_table` measures column widths. For non-table content,
+  `process_stream_inner` performs, in order, Setext heading conversion,
+  code-emphasis repair, ellipsis replacement, paragraph wrapping, and footnote
+  conversion. Replacing `...` with `…` shortens a line by two display columns,
+  so a wrap that measured the source dots emitted a break that the next pass
+  joined.
+- `--code-emphasis` repairs table cells before reflow measures them. Removing
+  emphasis markers around inline code shortens the cell, so applying the repair
+  in the table-substitution stage lets the formatter calculate the final
+  column widths. The later global code-emphasis pass handles non-table content;
+  each table cell is repaired once.
 - Setext conversion accepts only paragraph candidates. `is_setext_text` in
   `src/headings.rs` measures the candidate after the indentation or blockquote
   prefix it shares with the underline has been removed, so a quoted heading
@@ -105,12 +117,15 @@ set the CLI exposes. Six rules enforce the invariant:
   of consumed, to prefixed blocks that now reflow with their continuation lines
   in one pass, and to candidates that are themselves block starts or table
   delimiter rows, which no longer convert, so the line below them survives as a
-  block of its own.
+  block of its own. Tables with code-emphasis repairs also receive their final
+  column widths in the first pass.
 - `tests/idempotence.rs` formats the fixture corpus under
   `tests/data/idempotence/` twice through the real binary and asserts
   byte-identical output; the class `T` fixtures pin the delimiter-row
   adjacency and assert that the row survives as table syntax. Its
   repository-wide drift sweeps live in `tests/idempotence_drift.rs`.
+  The drift sweeps include tables processed with `--code-emphasis`, including
+  the fixture that previously required a second pass.
   `tests/idempotence_properties.rs` is a `proptest!` property over generated
   documents and a sampled eight-flag powerset, while
   `tests/idempotence_adjacencies.rs` holds the structural-adjacency property

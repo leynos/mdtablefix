@@ -135,11 +135,14 @@ Code fences are passed through verbatim:
 | not | a | table |
 ```
 
-After scanning all lines, the processor performs its optional post-processing
-steps in a fixed order: Setext heading conversion, code-emphasis repair,
-ellipsis replacement, paragraph wrapping, and finally footnote conversion.
-Ellipsis replacement runs before wrapping, so line breaking is computed from
-the glyphs the reader will see. See \
+Buffered table runs receive their enabled table substitutions before reflow
+measures their columns. The substitutions run in a fixed order: code-emphasis
+repair, then ellipsis replacement. After scanning and flushing those runs, the
+processor performs its optional post-processing steps for non-table content in
+a fixed order: Setext heading conversion, code-emphasis repair, ellipsis
+replacement, paragraph wrapping, and finally footnote conversion. Ellipsis
+replacement runs before wrapping, so line breaking is computed from the glyphs
+the reader will see. See \
 [footnote conversion](#footnote-conversion) for details. The function then
 returns the updated stream for writing to disk or further manipulation.
 
@@ -168,12 +171,14 @@ The parse stage converts `Cell` values to strings only after structural row
 recovery. Formatting then uses `emitted_cell_width`, which measures the escaped
 text it emits. No U+001D or U+001F sentinel is stored in payload text.
 
-When `process_stream_inner` flushes a buffered table with `Options::ellipsis`
-enabled, it applies ellipsis replacement before calling `reflow_table`. This
-ordering ensures the width calculation sees the final glyphs, rather than
-aligning for `...` and shrinking the rendered column after the fact. The same
-ordering rule governs prose: `replace_ellipsis` runs before `--wrap` measures
-paragraph text.
+`TableSubstitutions` is the private process-layer interface for transformations
+that must precede table reflow. When enabled, `ProcessBuffer` applies
+code-emphasis repair first and ellipsis replacement second to buffered table
+lines before calling `reflow_table`. This ordering ensures that the width
+calculation sees the final cell contents, rather than aligning for markers or
+`...` and shrinking the rendered column after the fact. The later global
+code-emphasis pass handles non-table content only. The same ordering rule
+governs prose: `replace_ellipsis` runs before `--wrap` measures paragraph text.
 
 Outside table buffering, `replace_ellipsis` maintains fence and indented-code
 state while it walks the original lines. Its private indented-code tracker is
@@ -281,20 +286,6 @@ untouched. The rewritten definitions are then sorted numerically so the
 rendered footnote block mirrors the logical ordering of references in the text.
 
 Before:
-
-```markdown
-Text.
-
-## Footnotes
-
- 1. First note
-
- 2. Second note
-
-10. Final note
-```
-
-After:
 
 ```markdown
 Text.

@@ -1,7 +1,7 @@
 //! Corpus-wide idempotence sweeps over the repository's own files.
 //!
 //! `tests/idempotence.rs` pins the reproduction corpus under
-//! `tests/data/idempotence/`. The two tests here widen the same invariant to
+//! `tests/data/idempotence/`. The tests here widen the same invariant to
 //! every fixture under `tests/data/` and every document under `docs/`: each
 //! file is formatted twice through the real binary and the two passes must be
 //! byte-identical, so a check-after-fix gate cannot report drift indefinitely
@@ -12,6 +12,9 @@
 //! `make fmt` flag set does not enable, so the gate has to hold for the output
 //! `--headings` produces from the fixtures already in `tests/data/`, not only
 //! from a purpose-built reproduction.
+//!
+//! The `--code-emphasis` sweep protects table reflow from substitutions that
+//! shorten a cell after its widths have been measured.
 
 use std::{
     fs,
@@ -35,6 +38,16 @@ const FULL_HEADINGS: &[&str] = &[
     "--ellipsis",
     "--fences",
     "--headings",
+];
+
+/// The `make fmt` flag set plus `--code-emphasis`.
+const FULL_CODE_EMPHASIS: &[&str] = &[
+    "--wrap",
+    "--renumber",
+    "--breaks",
+    "--ellipsis",
+    "--fences",
+    "--code-emphasis",
 ];
 
 /// Formats `text` once with `flags` through the real binary.
@@ -196,6 +209,37 @@ fn repository_fixtures_do_not_drift_under_headings() -> Result<(), Box<dyn std::
         &files,
         FULL_HEADINGS,
         "the `make fmt` flag set with --headings",
+    )?;
+
+    assert!(
+        checked > 100,
+        "expected the whole fixture corpus, checked {checked}"
+    );
+    Ok(())
+}
+
+/// Asserts that no repository fixture drifts under `--code-emphasis`.
+///
+/// Code-emphasis can remove markers from a table cell. The reflow must measure
+/// the shortened cell on the first pass so a check-after-fix gate sees the
+/// output as clean without requiring a second rewrite.
+#[test]
+fn repository_fixtures_do_not_drift_under_code_emphasis() -> Result<(), Box<dyn std::error::Error>>
+{
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let files = data_files(&root.join("tests").join("data"));
+    assert!(!files.is_empty(), "found no fixtures to check for drift");
+    assert!(
+        files
+            .iter()
+            .any(|path| path.ends_with("tests/data/cli-matrix/table-prose.dat")),
+        "the drift check must cover the code-emphasis table reproduction",
+    );
+
+    let checked = assert_no_drift(
+        &files,
+        FULL_CODE_EMPHASIS,
+        "the `make fmt` flag set with --code-emphasis",
     )?;
 
     assert!(

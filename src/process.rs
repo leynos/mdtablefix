@@ -1,8 +1,12 @@
 //! High-level Markdown stream processing.
 
 mod buffer;
+#[cfg(test)]
+mod code_emphasis_tests;
+mod table_line_protection;
 
-use buffer::ProcessBuffer;
+use buffer::{ProcessBuffer, TableSubstitutions};
+use table_line_protection::{protect_table_lines, restore_table_lines};
 
 use crate::{
     ellipsis::replace_ellipsis,
@@ -102,7 +106,14 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     let pre = convert_html_tables(&lines);
 
-    let mut state = ProcessBuffer::new(opts.ellipsis);
+    // Code-emphasis and ellipsis both shorten table cells, so they must run
+    // before reflow measures column widths. Non-table text remains handled by
+    // the pipeline passes below.
+    let table_substitutions = TableSubstitutions {
+        ellipsis: opts.ellipsis,
+        code_emphasis: opts.code_emphasis,
+    };
+    let mut state = ProcessBuffer::new(&table_substitutions);
     // Track fences so subsequent logic respects shared semantics.
     let mut fence_tracker = FenceTracker::default();
 
@@ -127,12 +138,20 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     state.flush();
 
-    let mut out = state.into_out();
+    let (mut out, table_markers) = state.into_out();
+    let table_lines = out
+        .iter()
+        .zip(table_markers)
+        .filter(|(_, is_table_line)| *is_table_line)
+        .map(|(line, _)| line.clone())
+        .collect::<Vec<_>>();
     if opts.headings {
         out = crate::headings::convert_setext_headings(&out);
     }
     if opts.code_emphasis {
-        out = crate::code_emphasis::fix_code_emphasis(&out);
+        let (protected_lines, protected) = protect_table_lines(out, &table_lines);
+        out = crate::code_emphasis::fix_code_emphasis(&protected_lines);
+        out = restore_table_lines(out, &protected);
     }
 
     // The ellipsis pass rewrites text, so it must run before the wrap measures

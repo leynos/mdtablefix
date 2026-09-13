@@ -1,0 +1,23 @@
+---
+source: tests/cli_matrix.rs
+expression: in_place_result.envelope(&in_place_case)
+---
+case: row_000_code_emphasis_wrap
+mode: in_place
+args: --wrap --code-emphasis --in-place
+status: code: 0
+
+[stdout]
+
+[stderr]
+
+[file]
+| Name  | Notes                              |
+| ----- | ---------------------------------- |
+| alpha | Use `cargo test` before merging... |
+
+1. first item
+3. second item with enough text to wrap around the configured column width when
+   wrapping is enabled for the matrix harness.
+
+Title =====

@@ -13,6 +13,12 @@ use crate::{
     wrap::{LinkReferenceMatcher, classify_block, leading_indent},
 };
 
+/// Substitutions that must precede table reflow so it measures final cell text.
+pub(super) struct TableSubstitutions {
+    pub(super) ellipsis: bool,
+    pub(super) code_emphasis: bool,
+}
+
 fn is_indented_content_line(line: &str) -> bool {
     let (indent_width, first_content_byte) = leading_indent(line);
     indent_width >= 4
@@ -37,33 +43,40 @@ fn is_indented_content_line(line: &str) -> bool {
 /// stay encapsulated.
 pub(super) struct ProcessBuffer {
     out: Vec<String>,
+    table_lines: Vec<bool>,
     buf: Vec<String>,
     in_table: bool,
     ellipsis: bool,
+    code_emphasis: bool,
 }
 
 impl ProcessBuffer {
-    /// Creates an empty buffer. `ellipsis` selects whether buffered table
-    /// cells have `...` replaced with `…` during [`flush`](Self::flush).
-    pub(super) fn new(ellipsis: bool) -> Self {
+    /// Creates an empty buffer with the substitutions needed before table
+    /// reflow during [`flush`](Self::flush).
+    pub(super) fn new(substitutions: &TableSubstitutions) -> Self {
         Self {
             out: Vec::new(),
+            table_lines: Vec::new(),
             buf: Vec::new(),
             in_table: false,
-            ellipsis,
+            ellipsis: substitutions.ellipsis,
+            code_emphasis: substitutions.code_emphasis,
         }
     }
 
     /// Appends a finished line directly to the output, without touching the
     /// pending table buffer. Callers that must preserve table/verbatim
     /// ordering call [`flush`](Self::flush) first.
-    pub(super) fn push_out(&mut self, line: String) { self.out.push(line); }
+    pub(super) fn push_out(&mut self, line: String) {
+        self.out.push(line);
+        self.table_lines.push(false);
+    }
 
-    /// Consumes the buffer and returns the accumulated output lines.
+    /// Consumes the buffer and returns output lines with their table markers.
     ///
     /// Call [`flush`](Self::flush) beforehand to drain any pending buffered
     /// lines into the output.
-    pub(super) fn into_out(self) -> Vec<String> { self.out }
+    pub(super) fn into_out(self) -> (Vec<String>, Vec<bool>) { (self.out, self.table_lines) }
 
     pub(super) fn flush(&mut self) {
         debug!(
@@ -76,13 +89,30 @@ impl ProcessBuffer {
         }
         let buffered = std::mem::take(&mut self.buf);
         if self.in_table {
-            let table_lines = if self.ellipsis {
-                replace_ellipsis(&buffered)
+            if !crate::table::is_valid_table(&buffered) {
+                self.table_lines
+                    .extend(std::iter::repeat_n(false, buffered.len()));
+                self.out.extend(buffered);
+                self.in_table = false;
+                return;
+            }
+            let table_lines = if self.code_emphasis {
+                crate::code_emphasis::fix_code_emphasis(&buffered)
             } else {
                 buffered
             };
-            self.out.extend(reflow_table(&table_lines));
+            let table_lines = if self.ellipsis {
+                replace_ellipsis(&table_lines)
+            } else {
+                table_lines
+            };
+            let table_lines = reflow_table(&table_lines);
+            self.table_lines
+                .extend(std::iter::repeat_n(true, table_lines.len()));
+            self.out.extend(table_lines);
         } else {
+            self.table_lines
+                .extend(std::iter::repeat_n(false, buffered.len()));
             self.out.extend(buffered);
         }
         self.in_table = false;
@@ -90,7 +120,7 @@ impl ProcessBuffer {
 
     pub(super) fn push_verbatim(&mut self, line: &str) {
         self.flush();
-        self.out.push(line.to_string());
+        self.push_out(line.to_string());
     }
 
     pub(super) fn handle_fence_line(&mut self, line: &str, is_fence_marker: bool) -> bool {

@@ -1,18 +1,33 @@
 //! Unit tests for the [`ProcessBuffer`](super::ProcessBuffer) table-flush
 //! state machine.
 
-use rstest::rstest;
+use rstest::{fixture, rstest};
 
 use super::*;
+use crate::code_emphasis::fix_code_emphasis;
 
-/// Builds a fresh, empty buffer with table reflow enabled and ellipsis
-/// replacement disabled (the default for these tests).
+/// Builds a fresh, empty buffer with table substitutions disabled.
 fn new_buffer() -> ProcessBuffer {
     ProcessBuffer {
         out: Vec::new(),
+        table_lines: Vec::new(),
         buf: Vec::new(),
         in_table: false,
         ellipsis: false,
+        code_emphasis: false,
+    }
+}
+
+/// Builds a fresh buffer with code-emphasis substitution enabled.
+#[fixture]
+fn new_buffer_with_code_emphasis() -> ProcessBuffer {
+    ProcessBuffer {
+        out: Vec::new(),
+        table_lines: Vec::new(),
+        buf: Vec::new(),
+        in_table: false,
+        ellipsis: false,
+        code_emphasis: true,
     }
 }
 
@@ -139,6 +154,26 @@ fn flush_table_passes_lines_through_reflow() {
     assert_eq!(buffer.out, reflow_table(&input));
     assert_ne!(buffer.out, input, "reflow should normalise column widths");
     assert!(!buffer.in_table);
+}
+
+#[rstest]
+fn flush_table_applies_code_emphasis_before_reflow(
+    mut new_buffer_with_code_emphasis: ProcessBuffer,
+) {
+    let input = owned(&[
+        "| Name  | Notes                      |",
+        "| ----- | -------------------------- |",
+        "| alpha | Use *`cargo test`* to run. |",
+    ]);
+    new_buffer_with_code_emphasis.buf = input.clone();
+    new_buffer_with_code_emphasis.in_table = true;
+
+    new_buffer_with_code_emphasis.flush();
+
+    assert_eq!(
+        new_buffer_with_code_emphasis.out,
+        reflow_table(&fix_code_emphasis(&input))
+    );
 }
 
 #[test]
