@@ -11,6 +11,8 @@ connects it to the production function.
 | Claim | Executable function | Input domain | Unverified external contracts | Result class |
 | ----- | ------------------- | ------------ | ----------------------------- | ------------ |
 
+_Table 1: The verification claim ledger._
+
 No kernel claims have landed yet. Issues #491 and #483 will add the ellipsis and
 `ProcessBuffer::finish` claims after their production-used kernels exist.
 
