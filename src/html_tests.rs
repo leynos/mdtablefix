@@ -52,26 +52,50 @@ mod proptest_tests {
     use std::rc::Rc;
 
     use html5ever::{driver::ParseOpts, parse_document, tendril::TendrilSink};
-    use markup5ever_rcdom::{Handle, RcDom};
+    use markup5ever_rcdom::{Handle, NodeData, RcDom};
     use proptest::prelude::*;
 
     use super::{HtmlTableState, collect_matching, is_element};
 
-    fn html_fragment_strategy() -> impl Strategy<Value = String> {
+    /// Holds generated HTML and its independently constructed pre-order labels.
+    #[derive(Debug)]
+    struct HtmlFragment {
+        source: String,
+        pre_order_labels: Vec<(&'static str, String)>,
+    }
+
+    impl HtmlFragment {
+        /// Returns the pre-order labels expected for elements with `tag`.
+        fn labels_for(&self, tag: &str) -> Vec<String> {
+            self.pre_order_labels
+                .iter()
+                .filter(|(element_tag, _)| *element_tag == tag)
+                .map(|(_, label)| label.clone())
+                .collect()
+        }
+    }
+
+    /// Builds small sibling and nested table fragments with pre-order labels.
+    fn html_fragment_strategy() -> impl Strategy<Value = HtmlFragment> {
         (
             proptest::collection::vec(proptest::collection::vec(0usize..=4, 0..=6), 0..=4),
             0usize..=4,
         )
             .prop_map(|(tables, nested_depth)| {
-                let nested_tables = (0..nested_depth).fold(String::new(), |nested, level| {
-                    format!("<table><tr><td>level-{level}{nested}</td></tr></table>")
-                });
+                let mut pre_order_labels = Vec::new();
+                let mut next_order = 0;
                 let mut html = tables.into_iter().fold(String::new(), |mut html, rows| {
-                    html.push_str("<table>");
+                    append_opening_tag(&mut html, &mut pre_order_labels, &mut next_order, "table");
                     for cell_count in rows {
-                        html.push_str("<tr>");
+                        append_opening_tag(&mut html, &mut pre_order_labels, &mut next_order, "tr");
                         for index in 0..cell_count {
-                            html.push_str("<td>cell-");
+                            append_opening_tag(
+                                &mut html,
+                                &mut pre_order_labels,
+                                &mut next_order,
+                                "td",
+                            );
+                            html.push_str("cell-");
                             html.push_str(&index.to_string());
                             html.push_str("</td>");
                         }
@@ -80,19 +104,63 @@ mod proptest_tests {
                     html.push_str("</table>");
                     html
                 });
-                html.push_str(&nested_tables);
-                html
+                for _ in 0..nested_depth {
+                    append_opening_tag(&mut html, &mut pre_order_labels, &mut next_order, "table");
+                    append_opening_tag(&mut html, &mut pre_order_labels, &mut next_order, "tr");
+                    append_opening_tag(&mut html, &mut pre_order_labels, &mut next_order, "td");
+                }
+                html.push_str("nested");
+                for _ in 0..nested_depth {
+                    html.push_str("</td></tr></table>");
+                }
+
+                HtmlFragment {
+                    source: html,
+                    pre_order_labels,
+                }
             })
     }
 
+    /// Appends a labelled opening tag and records its expected pre-order position.
+    fn append_opening_tag(
+        html: &mut String,
+        pre_order_labels: &mut Vec<(&'static str, String)>,
+        next_order: &mut usize,
+        tag: &'static str,
+    ) {
+        let label = format!("{tag}-{next_order}");
+        html.push('<');
+        html.push_str(tag);
+        html.push_str(" data-order=\"");
+        html.push_str(&label);
+        html.push_str("\">");
+        pre_order_labels.push((tag, label));
+        *next_order += 1;
+    }
+
+    /// Parses generated HTML into the DOM representation used by the walker.
     fn parse_html(source: String) -> RcDom {
         parse_document(RcDom::default(), ParseOpts::default()).one(source)
     }
 
+    /// Collects all nodes matching `tag` from the parsed document.
     fn collect_tag(document: &Handle, tag: &'static str) -> Vec<Handle> {
         let mut matches = Vec::new();
         collect_matching(document, |node| is_element(node, tag), &mut matches);
         matches
+    }
+
+    /// Returns the generated ordering label for an element when it has one.
+    fn order_label(handle: &Handle) -> Option<String> {
+        let NodeData::Element { attrs, .. } = &handle.data else {
+            return None;
+        };
+
+        attrs
+            .borrow()
+            .iter()
+            .find(|attribute| attribute.name.local.as_ref() == "data-order")
+            .map(|attribute| attribute.value.to_string())
     }
 
     proptest! {
@@ -137,26 +205,29 @@ mod proptest_tests {
 
         #[test]
         fn collect_matching_count_equals_source_tag_count(
-            source in html_fragment_strategy(),
+            fragment in html_fragment_strategy(),
             tag in prop_oneof![Just("table"), Just("tr"), Just("td")],
         ) {
-            let expected_count = source.matches(&format!("<{tag}")).count();
-            let dom = parse_html(source);
+            let expected_count = fragment.source.matches(&format!("<{tag}")).count();
+            let dom = parse_html(fragment.source);
 
             prop_assert_eq!(collect_tag(&dom.document, tag).len(), expected_count);
         }
 
         #[test]
         fn collect_matching_order_is_deterministic(
-            source in html_fragment_strategy(),
+            fragment in html_fragment_strategy(),
             tag in prop_oneof![Just("table"), Just("tr"), Just("td")],
         ) {
-            let dom = parse_html(source);
+            let expected_labels = fragment.labels_for(tag);
+            let dom = parse_html(fragment.source);
             let first = collect_tag(&dom.document, tag);
             let second = collect_tag(&dom.document, tag);
 
             prop_assert_eq!(first.len(), second.len());
             prop_assert!(first.iter().zip(&second).all(|(left, right)| Rc::ptr_eq(left, right)));
+            let actual_labels = first.iter().map(order_label).collect::<Vec<_>>();
+            prop_assert_eq!(actual_labels, expected_labels.into_iter().map(Some).collect::<Vec<_>>());
         }
 
         #[test]

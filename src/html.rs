@@ -109,6 +109,18 @@ fn is_table_cell(handle: &Handle) -> bool { is_element(handle, "td") || is_eleme
 /// invariants via random small-tree generation instead.
 ///
 /// Walks the DOM tree in pre-order, cloning nodes that satisfy `pred` into `out`.
+///
+/// # Examples
+///
+/// For a root containing `<table id="outer"><td><table id="inner"></table></td></table>`
+/// followed by `<table id="sibling"></table>`, matching table elements preserves
+/// that pre-order sequence:
+///
+/// ```rust,ignore
+/// let mut tables = Vec::new();
+/// collect_matching(&root, |node| is_element(node, "table"), &mut tables);
+/// assert_eq!(tables, vec![outer, inner, sibling]);
+/// ```
 fn collect_matching<F>(handle: &Handle, pred: F, out: &mut Vec<Handle>)
 where
     F: Fn(&Handle) -> bool + Copy,

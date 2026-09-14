@@ -3,6 +3,7 @@
 use mdtablefix::convert_html_tables;
 use rstest::rstest;
 
+/// Converts an HTML fixture and asserts its stable Markdown snapshot.
 fn snapshot_conversion(name: &str, input: &str) {
     let lines = input.lines().map(ToString::to_string).collect::<Vec<_>>();
     let output = convert_html_tables(&lines).join("\n");
@@ -54,6 +55,7 @@ fn snapshot_conversion(name: &str, input: &str) {
         "</table>",
     )
 )]
+/// Pins representative HTML table conversions to their reviewed output.
 fn snapshots_html_table_conversion(#[case] name: &str, #[case] input: &str) {
     snapshot_conversion(name, input);
 }
