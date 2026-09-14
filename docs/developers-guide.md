@@ -669,7 +669,7 @@ depth-aware tracking.
    `SpanKind::BracketedRef` and `FragmentKind::BracketedRef` keep the merged
    span atomic during fitting and post-processing, so the opening bracket
    cannot be stranded at a line end.
-   At the tokeniser level, `segment_inline` also stops
+   At the tokenizer level, `segment_inline` also stops
    trailing-punctuation and plain-text scans at an unescaped `([` boundary via
    `scan_trailing_punctuation_end` and `scan_plain_text_end`, both using
    `starts_inline_citation`, so the citation opener `(` is emitted as its own
