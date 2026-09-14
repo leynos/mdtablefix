@@ -865,7 +865,6 @@ let owned: Vec<String> = format_breaks(&lines)
     .collect();
 ```
 
-
 ### Footnote stages
 
 The crate root re-exports `convert_footnotes`, the whole-document convenience
