@@ -35,7 +35,7 @@ pub fn convert_setext_headings(lines: &[String]) -> Vec<String> {
                 detect_setext_heading(line, lines.get(idx + 1).map(String::as_str), link_matcher)
         {
             let prefix = &line[..prefix_len];
-            out.push(build_heading_line(prefix, level, &text));
+            out.push(convert_setext(prefix, level, &text));
             idx += 2;
             continue;
         }
@@ -263,7 +263,10 @@ fn prefix_of_indent_or_quote(text: &str) -> usize {
 }
 
 /// Builds an ATX heading while retaining the source indentation or blockquote prefix.
-fn build_heading_line(prefix: &str, level: usize, text: &str) -> String {
+///
+/// The function is the executable form of the Setext conversion contract used
+/// by the verification kernel.
+fn convert_setext(prefix: &str, level: usize, text: &str) -> String {
     let mut heading = String::new();
     heading.push_str(prefix);
     if needs_space_after(prefix) {
