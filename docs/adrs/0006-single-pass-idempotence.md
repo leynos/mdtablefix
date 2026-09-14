@@ -224,3 +224,273 @@ compares the passes. Each of those cases fails against the parent commit.
 The narrowing in the previous addendum therefore no longer applies to this
 shape, and `--git --check` is a sound one-pass drift check for documents that
 contain it.
+
+The findings of issue #493 are recorded below: the defect classes its widened
+generators reached, the rules they produced, and the evidence for them. The
+accepted body above is left as accepted, and the wording this part supersedes
+is listed under "Superseded wording" below.
+
+### Expanded defect classes
+
+The accepted Context records seven defect classes; the work of issue #493
+reached fourteen, and the bracket-reference seam recorded above is a
+fifteenth, fixed under issue #504. The seven added classes are:
+
+- An unmatched code fence was rewritten to its opener's run length on every
+  line of the block. A block whose interior held a shorter fence-shaped run —
+  three backticks inside a four-backtick block — had that interior line widened
+  with the rest, so the next pass read a different interior run and rewrote the
+  block again.
+- Footnote references were converted after the passes that measure text. A
+  reference such as `docs.1` grows into `docs.[^1]`, so the table pass laid out
+  a cell from the shorter source text, and the pass after it measured the same
+  cell one character longer: the delimiter row below `| a | see docs.1 |` was
+  ten dashes wide on the first pass and thirteen on the second, and the two
+  never agreed.
+- Footnote labels were renumbered after the passes that measure text. A label
+  is numbered by first encounter, so it narrows as the document is rewritten:
+  `[^10]` becomes `[^1]`, and a definition header is rewritten from the same
+  mapping. A wrap that measured the longer label broke a line the next pass
+  joined, once the shorter label left the line within the width.
+- A table whose header row was empty had that header taken for the delimiter
+  row. `SEP_RE` matches a row made only of pipes and spaces as readily as one
+  made of dashes, so `|  |  |` was read as the alignment row, the genuine
+  delimiter row was demoted to a data row, and the replacement the table pass
+  synthesized left two delimiter-shaped rows for later passes to consume in
+  turn.
+- Setext conversion consumed a table body row above a thematic break, not only
+  a delimiter row. The row the pass takes is often the table's widest, so once
+  it had become a heading the rows above were measured without it and every one
+  of them was padded a column narrower on the next pass: `| a | b |` over
+  `| --- | --- |` over `| ccccc | d |` over `---` reflowed to a five-column
+  first row on one pass and a three-column one on the pass after.
+- A lazy continuation line below a deferred block's hard break was emitted
+  flush-left on the first pass and indented on the second. A list item whose
+  first line spills past the width is deferred so its tail reflows with the
+  lines below it, and the flush that honours the hard break remembers the
+  item's continuation indent; the flush-left line below the break dropped it,
+  while the next pass re-read the indented tail above and applied the indent to
+  everything after it: `- alpha … beta` over `delta epsilon` (a line ending in
+  the two-space hard break) over `zeta eta`, ended at column one on one pass and
+  two columns in on the pass after.
+- A deferred block's tail was reflowed without the backslash that ends it. The
+  tail of an overlong prefixed line is wrapped on its own and the hard-break
+  marker is put back afterwards, which is correct for the two-space form — the
+  next pass trims trailing spaces before measuring — but a backslash is
+  content. It is glued to the last word of the source line, so wrapping the
+  line without it spent the whole width and the marker then pushed the line one
+  column past it. The next pass did measure the backslash and broke one word
+  earlier: a list item ending `… bbbb bbbbb\` reflowed to two continuation
+  lines on one pass and three on the pass after, the last of them carrying the
+  marker alone.
+
+The unmatched-fence class was reported separately, in issue #480, and reached
+the suite through the corpus rather than through a generator. The
+code-emphasis class was found by the property suite once the flag was added to
+it. The two footnote classes, the empty-header class, and the Setext table-row
+class were found by the widened generators of issue #493, which the suite had
+been unable to reach: it wrote only balanced three-character fences, used `1.`
+as its sole ordered-list marker, left the characters the parser used as
+placeholders out of its cells, and put neither a hard break nor an overlong
+code span in a paragraph. The lazy-continuation class was found by those same
+generators, once their paragraphs carried a hard break at all; a list item wide
+enough to defer, a break inside it, and one prose line below the break reach
+it. The backslash-tail class needed a longer sweep still — it appeared four
+thousand cases in, where the tail's last wrapped line filled the width exactly
+and the marker taken off it was the one column that did not fit.
+
+### New and revised rules
+
+The accepted Decision states seven rules; the work records thirteen: six
+added and two revised. The six added rules are:
+
+- A lazy continuation below a deferred block keeps the block's indent.
+  `ParagraphState::note_indent` in `src/wrap/paragraph.rs` prefers the indent a
+  deferred prefix flush remembered over the line's own, so a flush-left line
+  below the break inherits it rather than clearing it.
+- A deferred tail measures a backslash hard break as content.
+  `ParagraphWriter::append_stable_pending_prefix` in
+  `src/wrap/paragraph/tail_reflow.rs` keeps the backslash inside the text it
+  hands to `wrap_preserving_code`, and still strips and re-appends the
+  two-space marker around the fit.
+- An unmatched code fence is rewritten from its opener alone.
+  `fences::flush_unmatched_block` rewrites the opener and emits the interior
+  lines verbatim, so a shorter fence-shaped run inside the block survives.
+- `--footnotes` is split around the passes that measure text: the inline
+  reference and label stages run before the table pass and the wrap, and the
+  definition stage runs last; the Footnote stages section below sets out the
+  reasons.
+- Footnote labels are renumbered before the passes that measure text.
+  `footnotes::renumber_footnote_labels` rewrites references and definition
+  headers from the mapping numbered by first encounter, ahead of the table
+  pass and the wrap, because a label narrows as it is rewritten.
+- The delimiter-cell grammar is its own rule. `table::is_delimiter_cell`
+  applies it, and `table::is_delimiter_row`, `reflow::second_row_is_separator`
+  and `reflow::row_parsing` require every cell of a row to satisfy it; the
+  grammar is set out under the Delimiter-cell grammar section below.
+
+The two revised rules are:
+
+- The normalizer-ordering rule, extended by the split footnote stage and the
+  definition fold: the inline footnote stage runs before the table pass and the
+  wrap, and the definition stage runs last, after the layout.
+- The table-row refusal rule, now `is_table_syntax` in `src/headings.rs` with
+  the leading-`|` precondition: a candidate is refused when it starts with the
+  `|` the table pass enters its table mode on, or when it carries a `|` and
+  matches `crate::table::SEP_RE`, so a body row above a break is refused as
+  well as a delimiter row.
+
+### Footnote stages
+
+The footnote conversion is split into three stages rather than one.
+`footnotes::convert_inline_footnotes` and
+`footnotes::renumber_footnote_labels` run before the table pass and the wrap,
+because a reference grows — `docs.1` becomes `docs.[^1]` — and a label narrows
+— `[^10]` becomes `[^1]` — so both change the text a later pass measures.
+`footnotes::convert_footnote_definitions` stays last: it appends lines and
+reads the heading structure the heading pass settled, and it settles the
+structure only, keeping the number each header already carries, because a
+second numbering scan would take fresh numbers from the free pool and move
+definitions behind ones the label stage placed earlier.
+`footnotes::convert_footnotes` remains the composition of the three for
+callers that need them in one step.
+
+The label stage also promotes a trailing list item that a reference reaches,
+and it promotes it in that scan rather than last: a bare reference and a list
+item are matched by the number they share — `error.3` and the item `3.` are one
+footnote — so the promotion has to happen before the reference is rewritten,
+and the header it writes is a longer marker than the item's own, which puts it
+on the measuring side of the split as well.
+
+### Delimiter-cell grammar
+
+A delimiter cell is an optional colon, one or more dashes, and an optional
+trailing colon. `table::is_delimiter_cell` applies that grammar to a trimmed
+cell payload, and `table::is_delimiter_row`, `reflow::second_row_is_separator`
+and `reflow::row_parsing` each require every cell of the row to satisfy it, so
+the heading pass and the table pass agree on what table syntax is.
+
+The weaker tests admitted three shapes that are not delimiter cells. `SEP_RE`
+alone also matches an empty cell, so a row of nothing but pipes and spaces — a
+table's empty header row — was read as the alignment row, and the genuine
+delimiter row was then demoted to a data row. A lone dash among empty cells —
+`|  | - |` above `| --- | --- |` — is the same trap one dash later, and is
+reachable with no flags at all: the header was taken for the delimiter row and
+the genuine delimiter row was laid out as a data row beside the synthesized
+one, so the pass after that read the data row as the delimiter row in turn and
+the first pass had no fixed point. A cell test that asked only for a dash was
+weaker still, because `SEP_RE` permits whitespace inside a cell: the malformed
+header `| - - |` was taken for the alignment row and rewritten into `| --- |`,
+which turned malformed source into table syntax instead of leaving it as data.
+
+### Fixes recorded
+
+Four fixes carry the added classes into the rule set:
+
+- The unmatched fence: a four-backtick block whose interior held a
+  three-backtick run had that interior line widened to four backticks on the
+  first pass, so the next pass read a run that was no longer there and rewrote
+  the block again; `fences::flush_unmatched_block` now rewrites the opener
+  alone and emits the interior lines verbatim.
+- The Setext table row: `| a | b |` over `| --- | --- |` over `| ccccc | d |`
+  over `---` had the body row converted, leaving a five-column first row on
+  one pass and a three-column one on the next; `is_table_syntax` refuses the
+  row, and the table keeps its delimiter row and its widths.
+- The lazy continuation: `- alpha … beta` over a hard-broken `delta epsilon`
+  over `zeta eta` ended at column one on the first pass and two columns in on
+  the second; `ParagraphState::note_indent` now carries the block's
+  continuation indent across the flush, so both passes agree.
+- The backslash hard break: a list item ending `… bbbb bbbbb\` wrapped to two
+  continuation lines on one pass and three on the next, the last carrying the
+  marker alone; `ParagraphWriter::append_stable_pending_prefix` measures the
+  backslash as content, so the tail wraps on the marker's column budget.
+
+### Evidence
+
+The evidence for the classes and rules above is the tests the accepted
+Consequences record, extended by this work.
+
+- The fixture corpus under `tests/data/idempotence/` is formatted twice
+  through the real binary by `tests/idempotence.rs` and asserted
+  byte-identical, and `tests/idempotence_drift.rs` runs the three flag sets
+  over every fixture under `tests/data/`, tables processed with
+  `--code-emphasis` included.
+- `tests/idempotence_properties.rs` is a `proptest!` property over generated
+  documents and a sampled eight-flag powerset, and
+  `tests/idempotence_adjacencies.rs` holds the structural-adjacency property
+  and its coverage sweep. The generators both suites draw on live in
+  `tests/support/idempotence_generators.rs` and the harness they share in
+  `tests/support/idempotence_harness.rs`.
+- The case count comes from `PROPTEST_CASES`, through the `proptest_config`
+  helper in that harness, so the 48 both suites run at is a default rather
+  than a ceiling: a longer sweep raises it without a recompile.
+- The generated domain covers the shapes the added classes were reachable
+  through: fence openers of three to five characters in both marker
+  characters, with shorter interior runs and blocks that are never closed;
+  ordered-list markers beyond `1.`, including multi-digit numbers, restarts,
+  and nesting; table cells drawn from the whole `char` range, the characters
+  the parser once used as placeholders included; and paragraphs carrying hard
+  breaks and code spans longer than the wrap width.
+- The structural-adjacency property generates a candidate directly above a
+  thematic break with `--headings` forced on, and a fourth shape chains a
+  converting paragraph, a thematic break, a table, and a delimiter row above
+  the trailing break in one document, so each boundary's guard is exercised
+  where its neighbours are guard cases too. The delimiter row is generated
+  both alone and below a header row, and a deterministic sweep asserts the
+  shape is reached and its row survives, so removing the generator branch
+  fails the sweep rather than leaving the guard unexercised.
+- Three regression pins record the shapes the sweeps shrank the classes to:
+  `T7` in the fixture corpus, for the body row above a break;
+  `src/wrap/paragraph_tests.rs`, for the lazy-continuation and backslash-tail
+  documents the sweeps shrank to alongside a three-line item that reaches the
+  lazy-continuation class on its own; and `src/table.rs`, for the lone-dash
+  header row beside the empty one.
+
+### Scope and exceptions
+
+The guarantee remains scoped to the flag sets with recorded evidence: the
+`make fmt` flag set (`--wrap`, `--renumber`, `--breaks`, `--ellipsis`,
+`--fences`), that set with `--headings`, and that set with `--code-emphasis`.
+The property suites broaden the ground within that claim — they force each
+flag alone and sample the eight-flag powerset — but not outside it. Two
+exceptions are of record:
+
+- `--headings` sits outside the `make fmt` flag set, so the everyday gate does
+  not reach it; the property suites force it on for the structural-adjacency
+  shape instead.
+- Under `--wrap` alone, a short alphabetic label such as `[a]` is not a
+  reference at all: only ASCII digits couple to their opener, so the wrapper
+  may still break between the bracket and the label. Such a document reaches
+  the invariant one pass later than it should: the first pass ends the line
+  with `[`, the second rejoins the two as `[ a]`, and the third reproduces
+  the second. The bracket-reference fix recorded at the top of this addendum
+  covers the digit-only shape; this residue pre-dates it and is tracked as
+  issue #507.
+
+### Superseded wording
+
+The accepted-body wording this addendum replaces is:
+
+- The defect-class count, "Seven defect classes contributed": there are now
+  fifteen, the fourteen the Expanded defect classes section above records and
+  the bracket-reference seam recorded at the top of this addendum.
+- The rule count, "Seven rules enforce the invariant where it holds": there
+  are now thirteen, as the New and revised rules section above records.
+- The rule title "Table delimiter rows are refused separately from the block
+  kinds": the rule is now "Table rows are refused separately from the block
+  kinds", resting on `is_table_syntax` and its leading-`|` precondition.
+- The rule opening "Content normalizers consumed by layout run before the
+  layout they affect", in so far as it describes footnote conversion as one
+  stage: the conversion is split, and the definition stage runs last.
+- The Consequences sentence "Changed output is confined to thematic breaks
+  that are now preserved instead of consumed": the list of changed shapes is
+  now the longer one above, which also names the lazy continuation lines, the
+  deferred tails ending in a backslash hard break, the unmatched fences, the
+  footnote stages, and the delimiter-cell grammar.
+- The Consequences sentences that name the fixture classes, the generator
+  modules, and the sweep evidence: "the class `T` fixtures pin the
+  delimiter-row adjacency", "Its repository-wide drift sweeps live in
+  `tests/idempotence_drift.rs`", and "the generator both suites share lives in
+  `tests/support/idempotence_harness.rs`". The Evidence section above replaces
+  these with the `T7` pin, the two generator and harness modules, and the
+  widened sweeps.
