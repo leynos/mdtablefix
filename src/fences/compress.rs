@@ -313,4 +313,3 @@ pub fn compress_fences(lines: &[String]) -> Vec<String> {
 
     out
 }
-
