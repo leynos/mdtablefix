@@ -965,7 +965,9 @@ sequenceDiagram
     Rewriter->>TempFile: flush()
     Rewriter->>TempFile: sync_all()
     Rewriter->>Directory: set_permissions(temp, target mode)
-    Rewriter->>Target: read back and compare with expected
+    opt Conditional replacement (replace_file_if_unchanged)
+        Rewriter->>Target: read back and compare with expected
+    end
     opt Windows and target is read-only
         Rewriter->>Directory: clear target read-only attribute
     end
