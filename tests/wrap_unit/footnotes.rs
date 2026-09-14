@@ -2,7 +2,8 @@
 
 use mdtablefix::wrap::wrap_text;
 use rstest::rstest;
-use tracing_test::traced_test;
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+use test_macros::traced_test;
 
 /// Keep the pre-split snapshot layout: file names live in `tests/snapshots/`
 /// and use the legacy `wrap_unit__<name>` prefix without the module
