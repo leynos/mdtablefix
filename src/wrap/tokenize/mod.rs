@@ -81,6 +81,11 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
     segment_inline_observed(text, &mut Some(&mut observer))
 }
 
+/// Segments `text` into inline tokens, reporting parsing events.
+///
+/// Identical to [`segment_inline`] except that link, image, and footnote
+/// parsing outcomes are reported to `observer`; with a `None` handle the
+/// segmentation is the same and nothing is emitted.
 pub(super) fn segment_inline_observed(
     text: &str,
     observer: &mut crate::wrap::observer::ObserverHandle<'_>,

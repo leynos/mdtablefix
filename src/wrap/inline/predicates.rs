@@ -153,9 +153,13 @@ pub(in crate::wrap::inline) fn looks_like_footnote_ref(
 /// separate case, so this predicate stays disjoint from `looks_like_link` and
 /// `looks_like_footnote_ref`.
 ///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
+/// This predicate takes no observer, unlike [`looks_like_footnote_ref`]. Its
+/// three callers are all speculative: two probe candidate tokens during span
+/// grouping and one re-tests a trimmed variant while classifying a fragment, so
+/// forwarding an observer would report branch attempts rather than an outcome.
+/// The outcome is already reported once, as a `FragmentClassified` event
+/// carrying `FragmentKind::BracketedRef`, the same way the footnote probes in
+/// `classify_fragment` are handled.
 pub(in crate::wrap::inline) fn looks_like_bracketed_reference(token: &str) -> bool {
     let label = token.strip_prefix('[').unwrap_or(token);
     let Some((digits, tail)) = label.split_once(']') else {

@@ -73,3 +73,14 @@ module or by adding a second adapter alongside `TracingObserver`.
   `parse_rows` in `src/reflow.rs`, which is outside the inline-wrapping
   domain this port covers, keeps its existing `#[tracing::instrument]`
   attribute and is not affected by this decision.
+- New predicates added to the inline domain must report through the port
+  rather than carrying a `#[tracing::instrument]` attribute. When
+  `looks_like_bracketed_reference` arrived from the bare-bracket wrapping
+  work it was instrumented directly; it now takes no observer at all,
+  because each of its callers is speculative — two probe candidate tokens
+  during span grouping and one re-tests a trimmed variant while classifying
+  a fragment. Forwarding an observer there would report branch attempts
+  rather than an outcome, so the outcome is reported once instead, as a
+  `FragmentClassified` event carrying `FragmentKind::BracketedRef`. The
+  footnote probes in `classify_fragment` are handled the same way, and the
+  same reasoning should settle the next such predicate.

@@ -846,8 +846,10 @@ code-span boundary spaces.
 
 `SpanKind` in `src/wrap/observer.rs` records how a grouped token span behaves
 while `determine_token_span` walks the stream: `General` for
-ordinary prose, `Code` and `Link` for atomic inline spans, and `FootnoteRef`
-when a footnote marker has been promoted or grouped with preceding punctuation.
+ordinary prose, `Code` and `Link` for atomic inline spans, `FootnoteRef`
+when a footnote marker has been promoted or grouped with preceding punctuation,
+and `BracketedRef` for a bare numeric bracket reference such as `[1]` that has
+been coupled to its opening bracket.
 
 ### Design constraints
 

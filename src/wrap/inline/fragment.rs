@@ -49,6 +49,11 @@ impl InlineFragment {
         Self::new_observed(text, &mut Some(&mut observer))
     }
 
+    /// Builds a fragment from rendered `text`, reporting the classification.
+    ///
+    /// Identical to [`InlineFragment::new`] except that the computed
+    /// `FragmentKind` is reported to `observer` as a `FragmentClassified`
+    /// event; with a `None` handle nothing is emitted.
     pub(super) fn new_observed(text: String, observer: &mut ObserverHandle<'_>) -> Self {
         let width = UnicodeWidthStr::width(text.as_str());
         let kind = classify_fragment(text.as_str());

@@ -24,14 +24,11 @@ use super::predicates::{
     looks_like_footnote_ref,
     looks_like_link,
 };
-
-use crate::wrap::observer::{Event, ObserverHandle};
-
 // `SpanKind` is domain vocabulary carried on `Event` values, so it lives in the
 // observer port beside `FragmentKind`. Re-exported here so the grouping helpers
 // and their callers keep using the familiar `span_helpers::SpanKind` path.
 pub(in crate::wrap::inline) use crate::wrap::observer::SpanKind;
-
+use crate::wrap::observer::{Event, ObserverHandle};
 
 /// Extends a grouped span over trailing punctuation tokens and updates `width`.
 pub(in crate::wrap::inline) fn extend_punctuation(

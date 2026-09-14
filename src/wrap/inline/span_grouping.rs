@@ -42,10 +42,19 @@ fn has_inline_code_structure(token: &str) -> bool {
     super::fragment::has_inline_code_structure(token)
 }
 
+/// Returns whether `token` is an inline code span, including the bare and
+/// suffixed forms `has_inline_code_structure` recognizes.
 fn is_code_token(token: &str) -> bool {
     is_inline_code_token(token) || has_inline_code_structure(token)
 }
 
+/// Build the first atomic span at `start`, including punctuation and attached
+/// Markdown constructs that cannot be split across a line boundary.
+///
+/// Opening punctuation, hyphen prefixes, code spans, links, bare bracket
+/// references, and footnote references are coupled before the general
+/// continuation loop runs. The returned width is the Unicode display width of
+/// that complete candidate.
 fn initial_token_span(
     tokens: &[String],
     start: usize,

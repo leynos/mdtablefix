@@ -82,51 +82,91 @@ pub(crate) enum SpanKind {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Event<'a> {
     /// A complete footnote reference was parsed.
-    FootnoteReferenceParsed { token: &'a str },
+    FootnoteReferenceParsed {
+        /// The parsed reference token, borrowed from the source.
+        token: &'a str,
+    },
     /// A Markdown link or image was parsed.
-    LinkOrImageParsed { token: &'a str, is_image: bool },
+    LinkOrImageParsed {
+        /// The parsed link or image token, borrowed from the source.
+        token: &'a str,
+        /// Whether the token is an image literal rather than a plain link.
+        is_image: bool,
+    },
     /// A footnote label could not be completed.
-    FootnoteEndNotFound { start: usize, reason: &'static str },
+    FootnoteEndNotFound {
+        /// Byte offset where the candidate label began.
+        start: usize,
+        /// Stable category naming why the label was rejected.
+        reason: &'static str,
+    },
     /// A footnote label span was recognised.
     FootnoteLabelRecognized {
+        /// Byte offset where the label begins.
         start: usize,
+        /// Byte offset one past the label's closing bracket.
         end: usize,
+        /// The recognised label token, borrowed from the source.
         token: &'a str,
     },
     /// A footnote-reference predicate was evaluated.
-    FootnoteRefChecked { token: &'a str, result: bool },
+    FootnoteRefChecked {
+        /// The token the predicate examined, borrowed from the source.
+        token: &'a str,
+        /// The predicate's verdict.
+        result: bool,
+    },
     /// A contiguous day–month–year run matched a recognised date pattern.
     ///
     /// `pattern` is a stable category name, never document text.
     DateSequenceMatched {
+        /// Index of the first token in the matched run.
         start: usize,
+        /// Index one past the last token in the matched run.
         end: usize,
+        /// Stable name of the date pattern that matched.
         pattern: &'static str,
     },
     /// A matched date sequence was grouped into one atomic wrap span.
     DateSequenceGrouped {
+        /// Index of the first token in the grouped span.
         start: usize,
+        /// Index one past the last token in the grouped span.
         end: usize,
+        /// Unicode display width of the grouped span.
         width: usize,
     },
     /// Whitespace before a colon-suffixed footnote reference was considered for
     /// coupling into the current span.
     WhitespaceFootnoteCoupling {
+        /// How the span being extended behaves.
         kind: SpanKind,
+        /// The footnote reference that prompted the decision.
         token: &'a str,
+        /// Whether a colon directly follows the reference.
         has_following_colon: bool,
+        /// Whether the whitespace was coupled into the span.
         coupled: bool,
     },
     /// An adjacent footnote reference was considered for coupling into the
     /// current span.
     FootnoteReferenceCoupling {
+        /// How the span being extended behaves.
         kind: SpanKind,
+        /// The footnote reference that prompted the decision.
         token: &'a str,
+        /// Whether the reference follows whitespace and precedes a colon.
         follows_space_before_colon: bool,
+        /// Whether the reference was coupled into the span.
         coupled: bool,
     },
     /// A rendered fragment was classified.
-    FragmentClassified { token: &'a str, kind: FragmentKind },
+    FragmentClassified {
+        /// The rendered fragment text, borrowed from the caller's buffer.
+        token: &'a str,
+        /// The classification the fragment received.
+        kind: FragmentKind,
+    },
 }
 
 /// Receives domain-level classification events.
