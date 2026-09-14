@@ -53,7 +53,7 @@
   the alternatives rejected in its favour.
 - [Verified normalization core](adrs/0011-verified-normalization-core.md):
   Accepted decision covering production-used Verus kernels and their ledger.
-- [Environment seam taxonomy](adrs/0006-environment-seam-taxonomy.md): Accepted
+- [Environment seam taxonomy](adrs/0012-environment-seam-taxonomy.md): Accepted
   decision prohibiting ambient process-environment access and naming the
   injection shapes that replace it.
 

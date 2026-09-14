@@ -3,9 +3,10 @@
 //! `tests/env_access_policy.rs` runs those readers against this repository,
 //! which exercises only the spellings it uses today. These cases exercise the
 //! rest against inline fixtures: `[lints] workspace = true` inheritance and a
-//! level given as a table, which issues #438 and #439 introduce; a single
-//! `--workspace` Clippy command, which #439 leaves behind; and the command
-//! shapes that mention Clippy without running it.
+//! level given as a table, which issues #438 and #439 introduced; the
+//! `--manifest-path` command shape this repository no longer uses, kept so a
+//! reader that once resolved it still does; and the command shapes that
+//! mention Clippy without running it.
 //!
 //! They live apart from the contract so neither file outgrows the repository's
 //! 400-line limit, and so a failure says plainly whether a reader broke or the
@@ -61,9 +62,9 @@ fn reads_a_package_declared_lint_level(
 }
 
 /// Scenario: a manifest opts into workspace lints with `[lints] workspace = true`,
-/// which is the spelling issue #439 introduces.
+/// which is the spelling every member of this workspace now uses.
 /// Invariant: the level comes from the workspace manifest rather than the
-/// package, so the contract keeps enforcing the deny after that migration.
+/// package, so the contract enforces the deny through the inheritance.
 #[test]
 fn follows_workspace_lint_inheritance() -> Result<()> {
     let manifest = "[package]\nname = \"test-macros\"\n\n[lints]\nworkspace = true\n";
@@ -77,8 +78,8 @@ fn follows_workspace_lint_inheritance() -> Result<()> {
 
 /// Scenario: a manifest inherits workspace lints but the workspace table has
 /// dropped the lint.
-/// Invariant: no level is reported, so weakening the shared table after #439
-/// fails the contract instead of passing through the inheritance path.
+/// Invariant: no level is reported, so weakening the shared table fails the
+/// contract instead of passing through the inheritance path.
 #[test]
 fn reports_no_level_when_the_workspace_table_drops_the_lint() -> Result<()> {
     let manifest = "[package]\nname = \"test-macros\"\n\n[lints]\nworkspace = true\n";
@@ -150,7 +151,7 @@ fn recognizes_only_executable_clippy_invocations(#[case] command: &str, #[case] 
 /// Scenario: package coverage is judged for each shape of Clippy command.
 /// Invariant: a bare command covers only the root package, a `--manifest-path`
 /// command covers only the package it names, and a `--workspace` command covers
-/// both, which is the shape issue #439 leaves behind.
+/// both, which is the shape this repository's `lint` recipe uses.
 #[rstest]
 #[case::bare_covers_root("cargo clippy --all-targets", "Cargo.toml", true)]
 #[case::bare_misses_macros("cargo clippy --all-targets", "test-macros/Cargo.toml", false)]

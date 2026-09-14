@@ -66,6 +66,16 @@
 //!
 //! Adding a second, skipped step running `make lint` alongside the real one was
 //! also applied, and passes: the gate still runs, so there is nothing to fail.
+//!
+//! Two of these were re-run on 2026-09-14, after [`JobName`] and [`Subject`]
+//! replaced the bare `&str` arguments the helpers took, to confirm the
+//! rewording did not weaken what they judge. Wrapping the step's `run` value in
+//! `if false; then make lint; fi` still fails with "no step runs `make lint` as
+//! its whole command", and `if: false` on that step still fails with "every
+//! step that runs `make lint` as its whole command is non-blocking: carries the
+//! condition Bool(false)".
+
+use std::fmt;
 
 use anyhow::{Context, Result, bail, ensure};
 use serde_yaml::{Mapping, Value};
@@ -73,7 +83,30 @@ use serde_yaml::{Mapping, Value};
 const WORKFLOW: &str = include_str!("../.github/workflows/ci.yml");
 
 /// The job whose steps carry the policy into CI.
-const GATE_JOB: &str = "build-test";
+const GATE_JOB: JobName<'static> = JobName("build-test");
+
+/// A job's name, as the workflow spells it.
+///
+/// A newtype rather than a bare `&str` so a job name cannot be passed where a
+/// failure-message subject is wanted, and the other way round: the two are the
+/// same Rust type and read alike at a call site.
+#[derive(Clone, Copy)]
+struct JobName<'a>(&'a str);
+
+impl fmt::Display for JobName<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result { formatter.write_str(self.0) }
+}
+
+/// What a failure message calls the thing being judged.
+///
+/// Carried as its own type for the same reason: it is prose for a human, not a
+/// key to look anything up by.
+#[derive(Clone, Copy)]
+struct Subject<'a>(&'a str);
+
+impl fmt::Display for Subject<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result { formatter.write_str(self.0) }
+}
 
 /// The command the lint step must run.
 const LINT_COMMAND: &str = "make lint";
@@ -100,17 +133,17 @@ fn triggers(workflow: &Mapping) -> Result<&Mapping> {
 }
 
 /// Return a named job's mapping.
-fn job<'a>(workflow: &'a Mapping, name: &str) -> Result<&'a Mapping> {
+fn job<'a>(workflow: &'a Mapping, name: JobName<'_>) -> Result<&'a Mapping> {
     workflow
         .get(Value::from("jobs"))
         .and_then(Value::as_mapping)
-        .and_then(|jobs| jobs.get(Value::from(name)))
+        .and_then(|jobs| jobs.get(Value::from(name.0)))
         .and_then(Value::as_mapping)
         .with_context(|| format!("the workflow should declare a {name} job"))
 }
 
 /// Return a job's steps.
-fn steps<'a>(job: &'a Mapping, name: &str) -> Result<&'a Vec<Value>> {
+fn steps<'a>(job: &'a Mapping, name: JobName<'_>) -> Result<&'a Vec<Value>> {
     job.get(Value::from("steps"))
         .and_then(Value::as_sequence)
         .with_context(|| format!("the {name} job should declare steps"))
@@ -121,9 +154,9 @@ fn steps<'a>(job: &'a Mapping, name: &str) -> Result<&'a Vec<Value>> {
 /// Presence is what is judged, not truth. A condition's value can be a template
 /// that is false only on a pull request, and enumerating the ways to write one
 /// is the same losing game as enumerating the ways to disable a command.
-fn ensure_unconditional(entry: &Mapping, description: &str) -> Result<()> {
+fn ensure_unconditional(entry: &Mapping, subject: Subject<'_>) -> Result<()> {
     if let Some(reason) = non_blocking(entry) {
-        bail!("the {description} {reason}");
+        bail!("the {subject} {reason}");
     }
     Ok(())
 }
@@ -151,7 +184,7 @@ fn the_workflow_runs_on_pull_request() -> Result<()> {
 fn the_gate_job_runs_unconditionally() -> Result<()> {
     let workflow = workflow()?;
     let job = job(&workflow, GATE_JOB)?;
-    ensure_unconditional(job, &format!("{GATE_JOB} job"))
+    ensure_unconditional(job, Subject(&format!("{GATE_JOB} job")))
 }
 
 /// Return why `entry` would not block a merge on failure, if it would not.
@@ -181,7 +214,7 @@ fn non_blocking(entry: &Mapping) -> Option<String> {
 /// command changes nothing: the gate still runs.
 fn ensure_some_step_runs_unconditionally(
     steps: &[Value],
-    description: &str,
+    subject: Subject<'_>,
     selects: impl Fn(&Mapping) -> bool,
 ) -> Result<()> {
     let matching: Vec<&Mapping> = steps
@@ -189,14 +222,14 @@ fn ensure_some_step_runs_unconditionally(
         .filter_map(Value::as_mapping)
         .filter(|step| selects(step))
         .collect();
-    ensure!(!matching.is_empty(), "no step {description}");
+    ensure!(!matching.is_empty(), "no step {subject}");
     let excuses: Vec<String> = matching
         .iter()
         .filter_map(|step| non_blocking(step))
         .collect();
     ensure!(
         matching.len() > excuses.len(),
-        "every step that {description} is non-blocking: {}",
+        "every step that {subject} is non-blocking: {}",
         excuses.join("; ")
     );
     Ok(())
@@ -230,7 +263,7 @@ fn a_step_runs_the_lint_target_unconditionally() -> Result<()> {
     let steps = steps(job, GATE_JOB)?;
     ensure_some_step_runs_unconditionally(
         steps,
-        &format!("runs `{LINT_COMMAND}` as its whole command"),
+        Subject(&format!("runs `{LINT_COMMAND}` as its whole command")),
         |step| runs_command(step, LINT_COMMAND),
     )
 }
@@ -245,7 +278,8 @@ fn a_step_runs_the_test_suite_unconditionally() -> Result<()> {
     let workflow = workflow()?;
     let job = job(&workflow, GATE_JOB)?;
     let steps = steps(job, GATE_JOB)?;
-    ensure_some_step_runs_unconditionally(steps, &format!("uses {COVERAGE_ACTION}"), |step| {
+    let subject = format!("uses {COVERAGE_ACTION}");
+    ensure_some_step_runs_unconditionally(steps, Subject(&subject), |step| {
         uses_action(step, COVERAGE_ACTION)
     })
 }

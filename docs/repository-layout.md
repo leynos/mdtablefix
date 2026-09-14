@@ -58,7 +58,7 @@ _Figure 1: Simplified repository tree._
   Markdown linting, and Mermaid validation.
 - `clippy.toml`: Clippy configuration. It lists the process-environment
   methods the repository prohibits; see
-  [Environment seam taxonomy](adrs/0006-environment-seam-taxonomy.md).
+  [Environment seam taxonomy](adrs/0012-environment-seam-taxonomy.md).
 - `README.md`: Public project overview and quick-start material.
 - `CHANGELOG.md`: User-facing release history.
 

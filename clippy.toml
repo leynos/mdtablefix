@@ -1,4 +1,4 @@
-# Environment-access policy (docs/adrs/0006-environment-seam-taxonomy.md).
+# Environment-access policy (docs/adrs/0012-environment-seam-taxonomy.md).
 #
 # Behaviour that depends on a process environment variable takes that value as
 # an argument instead of reading the process. The reason strings surface in the
