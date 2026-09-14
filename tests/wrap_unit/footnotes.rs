@@ -55,9 +55,12 @@ fn wrap_text_preserves_inline_footnote_references(#[case] marker: &str) {
 
 /// Confirms the inline-classification instrumentation is reachable through the
 /// public `wrap_text` API, not just via the internal helpers exercised in
-/// `src/wrap`. Drives a footnote reference through the wrapping pipeline and
-/// asserts the DEBUG `fragment classified` event fires with the `FootnoteRef`
-/// kind.
+/// `src/wrap`, which attach an observer themselves. The unit tests construct a
+/// `TracingObserver` directly; this test asserts that `wrap_preserving_code`
+/// really does wire that adapter into the production path, so the observer
+/// boundary cannot be left unattached without a test noticing. Drives a
+/// footnote reference through the wrapping pipeline and asserts the DEBUG
+/// `fragment classified` event fires with the `FootnoteRef` kind.
 #[traced_test]
 #[test]
 fn wrap_text_emits_fragment_classification_for_footnote_reference() {
