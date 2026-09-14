@@ -15,8 +15,12 @@
 //! Run with:
 //!
 //! ```sh
-//! cargo bench --features bench-internals --bench wrap_observer
+//! make bench
 //! ```
+//!
+//! Use the Makefile target rather than invoking Cargo directly: it sets
+//! `RUSTFLAGS="-D warnings"`, so a warning introduced in the benchmark or in
+//! the `bench-internals` shims fails the run instead of scrolling past.
 
 use std::hint::black_box;
 

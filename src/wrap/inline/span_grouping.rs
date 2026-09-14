@@ -138,17 +138,20 @@ fn emit_whitespace_footnote_coupling(
     coupled: bool,
     observer: &mut ObserverHandle<'_>,
 ) {
+    // Nothing will consume the event, so skip the probe entirely rather than
+    // paying for it and discarding the result.
+    let Some(observer) = observer.as_deref_mut() else {
+        return;
+    };
     let Some(token) = next_token.filter(|token| looks_like_footnote_ref(token, &mut None)) else {
         return;
     };
-    if let Some(observer) = observer.as_deref_mut() {
-        observer.observe(Event::WhitespaceFootnoteCoupling {
-            kind,
-            token,
-            has_following_colon: following_token.is_some_and(|following| following == ":"),
-            coupled,
-        });
-    }
+    observer.observe(Event::WhitespaceFootnoteCoupling {
+        kind,
+        token,
+        has_following_colon: following_token.is_some_and(|following| following == ":"),
+        coupled,
+    });
 }
 
 /// Reports whether an adjacent footnote reference was coupled into the current
@@ -160,6 +163,11 @@ fn emit_footnote_reference_coupling(
     coupled: bool,
     observer: &mut ObserverHandle<'_>,
 ) {
+    // Nothing will consume the event, so skip the probe and the coupling
+    // context rather than computing them and discarding the result.
+    let Some(observer) = observer.as_deref_mut() else {
+        return;
+    };
     let Some(token) = tokens
         .get(end)
         .filter(|token| looks_like_footnote_ref(token, &mut None))
@@ -173,19 +181,32 @@ fn emit_footnote_reference_coupling(
         && tokens
             .get(end + 1)
             .is_some_and(|following| following == ":");
-    if let Some(observer) = observer.as_deref_mut() {
-        observer.observe(Event::FootnoteReferenceCoupling {
-            kind,
-            token,
-            follows_space_before_colon,
-            coupled,
-        });
-    }
+    observer.observe(Event::FootnoteReferenceCoupling {
+        kind,
+        token,
+        follows_space_before_colon,
+        coupled,
+    });
 }
 
-// `pub(in crate::wrap::inline)` so the span-helper tracing tests can group
-// tokens with a live observer attached; production callers reach this through
-// `wrap_preserving_code_observed`.
+/// Finds the next logical token group starting at `start`, reporting the
+/// grouping decisions that carry diagnostic value.
+///
+/// `tokens` is the segmented inline token stream and `start` is the first token
+/// in the next candidate group. The return value is `(end, width)`, where `end`
+/// is the exclusive end index of the grouped inline code span, link, date
+/// sequence, or plain fragment, and `width` is its Unicode display width.
+///
+/// Like [`determine_token_span`], this assumes `start < tokens.len()` and
+/// panics if called out of bounds.
+///
+/// Events are reported only when `observer` is `Some`; with `None` the grouping
+/// is identical and nothing is emitted, because the observer is a diagnostics
+/// channel and never participates in layout.
+///
+/// `pub(in crate::wrap::inline)` so the span-helper tracing tests can group
+/// tokens with a live observer attached; production callers reach this through
+/// `wrap_preserving_code_observed`.
 pub(in crate::wrap::inline) fn determine_token_span_observed(
     tokens: &[String],
     start: usize,

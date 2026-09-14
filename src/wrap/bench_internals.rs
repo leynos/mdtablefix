@@ -59,11 +59,14 @@ pub fn realistic_markdown_document() -> Vec<String> {
     let mut lines = Vec::with_capacity(DOCUMENT_PARAGRAPHS * 2);
     for index in 0..DOCUMENT_PARAGRAPHS {
         lines.push(format!(
-            "Paragraph {index}: the `wrap_text` routine reflows prose while \
-             keeping the [textwrap {index}](https://example.com/crate/{index}) \
-             link, the `inline-code-{index}` span, and the trailing footnote \
-             reference intact.[^note{index}] Downstream tooling relies on the \
-             stable column budget and content-free diagnostics."
+            concat!(
+                "Paragraph {index}: the `wrap_text` routine reflows prose while ",
+                "keeping the [textwrap {index}](https://example.com/crate/{index}) ",
+                "link, the `inline-code-{index}` span, and the trailing footnote ",
+                "reference intact.[^note{index}] Downstream tooling relies on the ",
+                "stable column budget and content-free diagnostics."
+            ),
+            index = index
         ));
         lines.push(String::new());
     }
@@ -81,9 +84,12 @@ pub fn large_inline_paragraph() -> String {
     let mut clauses = Vec::with_capacity(INLINE_CLAUSES);
     for index in 0..INLINE_CLAUSES {
         clauses.push(format!(
-            "the `code-{index}` value links to \
-             [reference {index}](https://example.com/path/{index}) and cites \
-             the footnote [^fn{index}]"
+            concat!(
+                "the `code-{index}` value links to ",
+                "[reference {index}](https://example.com/path/{index}) and cites ",
+                "the footnote [^fn{index}]"
+            ),
+            index = index
         ));
     }
     clauses.join(", ")
