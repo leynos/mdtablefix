@@ -8,7 +8,7 @@ use crate::wrap::FenceTracker;
 
 pub const THEMATIC_BREAK_LEN: usize = 70;
 
-/// Recognises a Markdown thematic break while allowing up to three columns of indentation.
+/// Recognizes a Markdown thematic break while allowing up to three columns of indentation.
 ///
 /// The expression accepts spaces and tabs between markers because those forms are valid thematic
 /// breaks, while the formatter supplies one canonical replacement line.

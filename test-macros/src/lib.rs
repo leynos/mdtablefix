@@ -4,7 +4,10 @@
 //! `allow_fixture_expansion_lints` contains the `unused_braces` lint that
 //! `rstest` fixture expansion triggers when `fn_single_line = true` keeps an
 //! expression body wrapped in braces. The generated expectation is attached to
-//! the affected fixture, so it becomes stale if the upstream expansion changes.
+//! the affected fixture to contain that warning. Rust does not report
+//! `unfulfilled_lint_expectations` for an expectation introduced by this
+//! attribute macro, so an upstream expansion change does not produce a stale
+//! expectation diagnostic; the reason records that compiler limitation.
 //!
 //! `traced_test` wraps `tracing_test::traced_test`, prepending
 //! `::tracing::callsite::rebuild_interest_cache();` to the body so the rebuild
@@ -23,8 +26,9 @@ use syn::{Item, ItemFn, parse_macro_input, parse_quote};
 /// `rstest` currently emits braces around a single-expression fixture body.
 /// With `fn_single_line = true`, the compiler diagnoses those generated braces
 /// even though the fixture author cannot remove them. The item-scoped
-/// expectation documents that upstream expansion limitation and becomes an
-/// error if the expansion stops needing it.
+/// expectation documents that upstream expansion limitation. Rust does not
+/// report `unfulfilled_lint_expectations` for this generated expectation if
+/// the expansion stops needing it, so its reason records that limitation.
 #[proc_macro_attribute]
 pub fn allow_fixture_expansion_lints(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_item = parse_macro_input!(item as Item);

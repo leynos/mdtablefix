@@ -85,3 +85,9 @@
 - [State-machine abstractions roadmap](state-machine-abstractions-roadmap.md):
   Roadmap turning ADR 0004 into implementation work for the parser and wrapping
   state machines.
+
+## Debugging records
+
+- [Private-doc gate fixed-point debugging plan](debugging/debugging-plan-2026-09-14-private-doc-gate.md):
+  Reproducibility record and hypothesis status for the fixed-point property
+  failure observed during the #440 gate.
