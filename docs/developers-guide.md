@@ -961,7 +961,6 @@ rather than removal (see `docs/execplans/check-option.md`, the "keep
 `googletest`, `pretty_assertions`, and `rstest-bdd` despite the review's
 objection" entry).
 
-
 ### Inline classification observer boundary
 
 The `Observer` trait in
@@ -996,7 +995,7 @@ abstraction/port/helper policy in `AGENTS.md`:
   backend is ever required, it must implement `Observer` rather than
   replacing `TracingObserver` inline.
 
-See [ADR 0006](adrs/0012-observer-boundary-for-tracing.md) for the rationale.
+See [ADR 0012](adrs/0012-observer-boundary-for-tracing.md) for the rationale.
 
 ### Log levels
 
@@ -1009,7 +1008,9 @@ fence marker. Never emit at `info!` or above from library code.
 ### Field naming
 
 Use the stable structured field names `token_length`, `kind`, `start`, `end`,
-`width`, `reason`, `is_image`, `row_index`, `cell_count`, and `error_category`.
+`width`, `reason`, `is_image`, `row_index`, `cell_count`, `error_category`,
+`pattern`, `span_kind`, `has_following_colon`, and
+`follows_space_before_colon`.
 Blockquote and fence events additionally use `line_len`, `prefix_len`, `depth`,
 `inner_len`, `open_depth`, `marker_len`, `open_marker_len`, and `transition`.
 Line-ending events use `crlf_count`, `lone_lf_count`, and `selected_ending`,
@@ -1082,29 +1083,33 @@ telemetry field does not.
 
 Table: Structured field names emitted by tracing instrumentation.
 
-| Field             | Type            | Used in                                                 | Meaning                                                   |
-| ----------------- | --------------- | ------------------------------------------------------- | --------------------------------------------------------- |
-| `token_length`    | `usize`         | fragment, link, footnote events                         | Character count of the text that was classified or parsed |
-| `kind`            | `?FragmentKind` | `fragment classified`                                   | The computed fragment classification                      |
-| `start`           | `usize`         | span events                                             | Byte offset where the span begins                         |
-| `end`             | `usize`         | span events                                             | Byte offset where the span ends (exclusive)               |
-| `width`           | `usize`         | span events                                             | Display-column width of the span                          |
-| `reason`          | `&str`          | rejected, unchanged, or fence-state decisions           | Stable diagnostic category for any decision               |
-| `is_image`        | `bool`          | `link or image parsed`                                  | `true` when the link token is an image literal (`![]()`)  |
-| `row_index`       | `usize`         | table-row events                                        | Zero-based index of the parsed logical row                |
-| `cell_count`      | `usize`         | table-row events                                        | Number of cells in the parsed logical row                 |
-| `error_category`  | `&str`, Debug   | declined, discarded, replacement, and analysis failures | Stable category or I/O error kind for a failure           |
-| `result`          | `bool`          | `footnote reference checked`                            | Whether the checked token is a footnote reference         |
-| `attempt`         | `u32`           | `replace_file` events                                   | Zero-based index of the temporary-file creation attempt   |
-| `bytes`           | `usize`         | `replace_file` events                                   | Byte length of the formatted replacement that was written |
-| `line_len`        | `usize`         | blockquote-prefix events                                | Byte length of the examined source line                   |
-| `prefix_len`      | `usize`         | blockquote-prefix events                                | Byte length of the recognized blockquote prefix           |
-| `depth`           | `usize`         | blockquote and fence events                             | Current blockquote nesting depth                          |
-| `inner_len`       | `usize`         | blockquote-prefix events                                | Byte length after removing the blockquote prefix          |
-| `open_depth`      | `usize`         | fence-state events                                      | Blockquote depth of the active fence opener               |
-| `marker_len`      | `usize`         | fence-state events                                      | Length of the currently recognized fence marker           |
-| `open_marker_len` | `usize`         | fence-state events                                      | Length of the active opening fence marker                 |
-| `transition`      | `&str`          | fence-state events                                      | Stable fence-state transition category                    |
+| Field                        | Type            | Used in                                                 | Meaning                                                           |
+|------------------------------|-----------------|---------------------------------------------------------|-------------------------------------------------------------------|
+| `token_length`               | `usize`         | fragment, link, footnote events                         | Character count of the text that was classified or parsed         |
+| `kind`                       | `?FragmentKind` | `fragment classified`                                   | The computed fragment classification                              |
+| `start`                      | `usize`         | span events                                             | Byte offset where the span begins                                 |
+| `end`                        | `usize`         | span events                                             | Byte offset where the span ends (exclusive)                       |
+| `width`                      | `usize`         | span events                                             | Display-column width of the span                                  |
+| `reason`                     | `&str`          | rejected, unchanged, or fence-state decisions           | Stable diagnostic category for any decision                       |
+| `is_image`                   | `bool`          | `link or image parsed`                                  | `true` when the link token is an image literal (`![]()`)          |
+| `pattern`                    | `&str`          | `matched date sequence`                                 | Stable name of the matched date pattern, never document text      |
+| `span_kind`                  | `?SpanKind`     | footnote-coupling events                                | How the grouped span behaves while tokens are walked              |
+| `has_following_colon`        | `bool`          | whitespace and footnote coupling events                 | `true` when a colon directly follows the footnote reference       |
+| `follows_space_before_colon` | `bool`          | `declined footnote reference coupling`                  | `true` when the reference follows whitespace and precedes a colon |
+| `row_index`                  | `usize`         | table-row events                                        | Zero-based index of the parsed logical row                        |
+| `cell_count`                 | `usize`         | table-row events                                        | Number of cells in the parsed logical row                         |
+| `error_category`             | `&str`, Debug   | declined, discarded, replacement, and analysis failures | Stable category or I/O error kind for a failure                   |
+| `result`                     | `bool`          | `footnote reference checked`                            | Whether the checked token is a footnote reference                 |
+| `attempt`                    | `u32`           | `replace_file` events                                   | Zero-based index of the temporary-file creation attempt           |
+| `bytes`                      | `usize`         | `replace_file` events                                   | Byte length of the formatted replacement that was written         |
+| `line_len`                   | `usize`         | blockquote-prefix events                                | Byte length of the examined source line                           |
+| `prefix_len`                 | `usize`         | blockquote-prefix events                                | Byte length of the recognized blockquote prefix                   |
+| `depth`                      | `usize`         | blockquote and fence events                             | Current blockquote nesting depth                                  |
+| `inner_len`                  | `usize`         | blockquote-prefix events                                | Byte length after removing the blockquote prefix                  |
+| `open_depth`                 | `usize`         | fence-state events                                      | Blockquote depth of the active fence opener                       |
+| `marker_len`                 | `usize`         | fence-state events                                      | Length of the currently recognized fence marker                   |
+| `open_marker_len`            | `usize`         | fence-state events                                      | Length of the active opening fence marker                         |
+| `transition`                 | `&str`          | fence-state events                                      | Stable fence-state transition category                            |
 
 For example, a domain helper emits a borrowed event without touching
 `tracing`, guarding the call so an event is emitted only when the handle is
@@ -1266,6 +1271,13 @@ per emitted event: the overhead per event should stay small and stable, or
 equivalently, total overhead should grow no faster than the event count. A gap
 that grows faster than the event count indicates derived-payload work has
 leaked back onto the hot path.
+
+Before merging a change in this area, run the gates below and treat every
+warning as a failure. `make bench`, `make test`, and `make lint` each deny
+warnings themselves, so a new warning fails the run rather than scrolling past.
+
+- Rust changes: `make check-fmt`, `make lint`, `make test`, and `make bench`.
+- Markdown changes: `make markdownlint`, `make fmt`, and `make nixie`.
 
 ### Security considerations
 

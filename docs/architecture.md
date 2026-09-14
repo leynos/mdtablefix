@@ -730,7 +730,7 @@ Recorded fields are content-free metadata: the adapter derives bounded values
 from borrowed token text but never logs the text itself. This keeps the
 tokenizer and fragment-classification logic free of vendor-specific logging
 concerns. See
-[ADR 0006](adrs/0012-observer-boundary-for-tracing.md) for the rationale and
+[ADR 0012](adrs/0012-observer-boundary-for-tracing.md) for the rationale and
 [the developer's guide](developers-guide.md#inline-classification-observer-boundary)
 for the ownership and reuse policy governing this port.
 
