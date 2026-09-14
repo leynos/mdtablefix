@@ -2,22 +2,18 @@
 mod buffer;
 #[cfg(test)]
 mod code_emphasis_tests;
+mod pipeline;
 mod table_line_protection;
-use buffer::{ProcessBuffer, TableSubstitutions};
+use pipeline::{convert_footnote_references, normalize_fences, walk_fences_and_tables};
 use table_line_protection::{protect_table_lines, restore_table_lines};
 
 use crate::{
     ellipsis::replace_ellipsis,
-    fences::{attach_orphan_specifiers, compress_fences},
-    footnotes::{
-        convert_footnote_definitions,
-        convert_inline_footnotes_with_setext,
-        renumber_footnote_labels,
-    },
+    footnotes::convert_footnote_definitions,
     frontmatter::split_leading_yaml_frontmatter,
     html::convert_html_tables,
     lists::renumber_lists,
-    wrap::{FenceTracker, wrap_text},
+    wrap::wrap_text,
 };
 /// Column width used when wrapping text.
 pub const WRAP_COLS: usize = 80;
@@ -102,82 +98,11 @@ pub struct Options {
 /// ```
 #[must_use]
 pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
-    let lines = if opts.fences {
-        let tmp = compress_fences(lines);
-        attach_orphan_specifiers(&tmp)
-    } else {
-        lines.to_vec()
-    };
+    let pre = convert_html_tables(&normalize_fences(lines, opts));
+    let pre = convert_footnote_references(pre, opts);
 
-    let mut pre = convert_html_tables(&lines);
+    let (mut out, table_lines) = walk_fences_and_tables(pre, opts);
 
-    // Footnote references rewrite text, so they must be rewritten before the
-    // passes that measure it. A reference such as `docs.1` grows into
-    // `docs.[^1]`, and the table pass below lays a cell out from the text it can
-    // see, so converting afterwards leaves the cell wider than the delimiter row
-    // that was measured from it: `| a | see docs.1 |` over `| --- | --- |`
-    // produced a delimiter row of ten dashes on the first pass and of thirteen
-    // on the second, and the two never agreed.
-    //
-    // Renumbering the labels belongs here too, for the same reason: a label
-    // narrows, because `[^10]` becomes `[^1]` once the distinct references are
-    // numbered by first encounter. Renumbering after the wrap measured the
-    // longer label left a line the next pass rejoined, since `[^1]` fits where
-    // `[^10]` did not.
-    //
-    // The inline and label halves run here, and the label half's scan reaches
-    // further than its name suggests: a trailing list item that a reference
-    // points at is promoted to a definition header in the same scan, because
-    // the two are matched by the number they share — `error.3` and the item
-    // `3.` are one footnote — and the header is a longer marker than the item's
-    // own, so it has to be written before the wrap measures the line too.
-    //
-    // Only the block half waits: it reads the heading structure, converts a
-    // heading-led trailing list that no reference reaches, and reorders the
-    // definitions, so it stays where the heading pass has settled and the layout
-    // is done. The ellipsis pass further down is placed by the same rule, and
-    // text the heading pass will read as a Setext heading is left alone.
-    if opts.footnotes {
-        pre = renumber_footnote_labels(&convert_inline_footnotes_with_setext(&pre, opts.headings));
-    }
-
-    // Code-emphasis and ellipsis both shorten table cells, so they must run
-    // before reflow measures column widths. Non-table text remains handled by
-    // the pipeline passes below.
-    let table_substitutions = TableSubstitutions {
-        ellipsis: opts.ellipsis,
-        code_emphasis: opts.code_emphasis,
-    };
-    let mut state = ProcessBuffer::new(&table_substitutions);
-    // Track fences so subsequent logic respects shared semantics.
-    let mut fence_tracker = FenceTracker::default();
-
-    for line in pre {
-        let fence = fence_tracker.observe_source_line(&line);
-        if state.handle_fence_line(&line, fence.is_fence_marker) {
-            continue;
-        }
-
-        if fence.is_in_fence {
-            state.push_out(line);
-            continue;
-        }
-
-        let Some(line) = state.handle_table_line(line) else {
-            continue;
-        };
-
-        state.flush();
-        state.push_out(line);
-    }
-
-    let (mut out, table_markers) = state.finish();
-    let table_lines = out
-        .iter()
-        .zip(table_markers)
-        .filter(|(_, is_table_line)| *is_table_line)
-        .map(|(line, _)| line.clone())
-        .collect::<Vec<_>>();
     if opts.headings {
         out = crate::headings::convert_setext_headings(&out);
     }
@@ -200,6 +125,8 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
         out = wrap_text(&out, WRAP_COLS);
     }
 
+    // The definition fold appends lines to the block structure the layout has
+    // settled, so it runs last of all.
     if opts.footnotes {
         out = convert_footnote_definitions(&out);
     }

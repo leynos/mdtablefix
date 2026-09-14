@@ -53,3 +53,9 @@ fn options_renumber_api_compiles() {
     let cases = trybuild::TestCases::new();
     cases.pass("tests/ui/options_renumber_pass.rs");
 }
+
+#[test]
+fn footnote_stages_public_api_compiles() {
+    let cases = trybuild::TestCases::new();
+    cases.pass("tests/ui/footnote_stages_api_pass.rs");
+}

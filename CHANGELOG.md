@@ -48,6 +48,12 @@
   instead. Both are read-only, both exit `1` when a file would change, and
   neither writes anything.
   ([#452](https://github.com/leynos/mdtablefix/issues/452))
+- The footnote pipeline is split into three stages —
+  `convert_inline_footnotes`, `renumber_footnote_labels` and
+  `convert_footnote_definitions` — so a caller can run the reference stages
+  before its own layout and the definition fold after it. `convert_footnotes`
+  composes them in that order.
+  ([#493](https://github.com/leynos/mdtablefix/issues/493))
 
 ### Changed
 
@@ -99,6 +105,12 @@
 - Write only the files whose bytes would change under `--in-place`. A file that
   is already formatted keeps its inode and its modification time, and a
   symbolic link to such a file succeeds because no write is attempted.
+- Renumber footnote labels before the wrap measures the line. A reference that
+  shares its number with a trailing list item now promotes that item to a
+  definition header before the wrap runs, so `--wrap --footnotes` indents the
+  continuation of such a definition to seven columns rather than four. Both
+  spellings are fixed points; the new indent matches what the formatter already
+  emitted for the same definition written out directly.
 
 ### Fixed
 

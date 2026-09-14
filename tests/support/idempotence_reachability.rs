@@ -69,13 +69,25 @@ fn has_shorter_interior_run(block: &str) -> bool {
     })
 }
 
-/// Returns the length of the longest backtick-delimited run in `paragraph`.
+/// Returns the length of the longest closed backtick-delimited span in
+/// `paragraph`, or zero when it holds none.
+///
+/// Splitting on the delimiter alternates prose and span, so a piece at an odd
+/// index is span content — but only when a further piece follows it, since the
+/// last piece ends at an unclosed delimiter. Prose pieces are never candidates,
+/// and neither is an unclosed tail. Runs of two or more backticks are still
+/// split per character, and a span left open at a line end reads as unclosed,
+/// which matches how the generators draw single-backtick spans on one line.
 fn longest_code_span_len(paragraph: &str) -> usize {
-    paragraph
-        .split('`')
-        .map(str::len)
+    let pieces = paragraph.split('`').collect::<Vec<_>>();
+
+    pieces
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| index % 2 == 1 && index + 1 < pieces.len())
+        .map(|(_, piece)| piece.len())
         .max()
-        .expect("splitting on a delimiter always yields at least one piece")
+        .unwrap_or(0)
 }
 
 /// Returns whether `line` is an ordered-list item.

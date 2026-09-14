@@ -72,51 +72,43 @@ fn collect_definition_updates_rewrites_existing_definitions() {
     );
 }
 
-#[test]
-fn collect_definition_updates_converts_numeric_candidates() {
-    let lines = strings(&["Reference.[^7]", "", "9. Numeric note"]);
-    let mut mapping = HashMap::from([(7, 1)]);
-
-    let updates = collect_definition_updates(&lines, &mut mapping);
-
-    assert_eq!(updates.is_definition_line, vec![false, false, true]);
-    assert_eq!(
-        updates
-            .definitions
-            .iter()
-            .map(|definition| definition.line.as_str())
-            .collect::<Vec<_>>(),
-        vec!["[^2]: Numeric note"]
-    );
-}
-
-#[test]
-fn collect_definition_updates_numbers_candidates_in_scan_order() {
-    let lines = strings(&[
+/// The item a reference reaches takes its number; the items it does not reach
+/// take the pool in the order they were written, so the block still reads the
+/// way the list was authored once it is sorted.
+#[rstest]
+#[case::single_candidate(
+    strings(&["Reference.[^7]", "", "9. Numeric note"]),
+    vec![false, false, true],
+    vec!["[^2]: Numeric note"]
+)]
+#[case::scan_order(
+    strings(&[
         "Reference.[^7]",
         "",
         "1. First note",
         "2. Second note",
         "7. Seventh note",
-    ]);
+    ]),
+    vec![false, false, true, true, true],
+    vec!["[^2]: First note", "[^3]: Second note", "[^1]: Seventh note"]
+)]
+fn collect_definition_updates_numbers_numeric_candidates(
+    #[case] lines: Vec<String>,
+    #[case] expected_flags: Vec<bool>,
+    #[case] expected_lines: Vec<&str>,
+) {
     let mut mapping = HashMap::from([(7, 1)]);
 
     let updates = collect_definition_updates(&lines, &mut mapping);
 
+    assert_eq!(updates.is_definition_line, expected_flags);
     assert_eq!(
         updates
             .definitions
             .iter()
             .map(|definition| definition.line.as_str())
             .collect::<Vec<_>>(),
-        // The item the reference reaches takes its number; the items it does
-        // not reach take the pool in the order they were written, so the block
-        // still reads the way the list was authored once it is sorted.
-        vec![
-            "[^2]: First note",
-            "[^3]: Second note",
-            "[^1]: Seventh note"
-        ]
+        expected_lines
     );
 }
 

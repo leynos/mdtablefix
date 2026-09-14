@@ -230,11 +230,10 @@ fn apply_mapping_to_lines(
 
 /// Plans the renumbering of `lines`: the reference mapping and the definitions.
 ///
-/// Returns [`None`] when there is nothing to renumber, which covers both a
-/// document with neither references nor definitions and a document whose
-/// references are left alone because an explicit `[^n]:` block already exists
-/// elsewhere — such a block is maintained outside the formatter, so rewriting
-/// the references that point into it would clobber it.
+/// Returns [`None`] when there is nothing to renumber: a document with neither
+/// references nor definition updates, or one where no definition updates were
+/// collected while a numeric-list line matching `FOOTNOTE_LINE_RE` remains, so
+/// the references pointing at that list are left alone.
 fn plan_renumbering(lines: &[String]) -> Option<(HashMap<usize, usize>, DefinitionUpdates)> {
     let mut mapping = collect_reference_mapping(lines);
     let definitions = collect_definition_updates(lines, &mut mapping);
