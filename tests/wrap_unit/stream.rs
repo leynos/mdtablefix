@@ -52,6 +52,9 @@ fn wrap_stream_keeps_opening_bracket_with_inline_code_in_list(
 #[rstest]
 #[case("[1]")]
 #[case("[12]")]
+#[case("[1],")]
+#[case("[12].")]
+#[case("[1]]")]
 fn wrap_stream_keeps_bracket_reference_whole(#[case] reference: &str) {
     let input = lines_vec![format!(
         concat!(

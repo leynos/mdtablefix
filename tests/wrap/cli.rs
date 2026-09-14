@@ -156,6 +156,9 @@ fn test_cli_wrap_keeps_inline_citation_links_attached(
 #[rstest]
 #[case("[1]")]
 #[case("[12]")]
+#[case("[1],")]
+#[case("[12].")]
+#[case("[1]]")]
 fn test_cli_wrap_keeps_bracket_reference_whole(
     #[case] reference: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {

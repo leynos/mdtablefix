@@ -140,6 +140,9 @@ pub(in crate::wrap::inline) fn looks_like_footnote_ref(token: &str) -> bool {
 /// opener arrives alone and the reference is recognisable only from its closing
 /// half. Rendered fragments carry the merged form instead, so both are accepted.
 ///
+/// The digits end at the first closing bracket, so further closers there and
+/// punctuation that follows them count as the trailing run, not the label.
+///
 /// Only ASCII digits are recognised. A short label such as `[a]` is ordinary
 /// prose the wrapper may break at, and the `[^` of a footnote reference is a
 /// separate case, so this predicate stays disjoint from `looks_like_link` and
@@ -150,7 +153,7 @@ pub(in crate::wrap::inline) fn looks_like_footnote_ref(token: &str) -> bool {
 #[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn looks_like_bracketed_reference(token: &str) -> bool {
     let label = token.strip_prefix('[').unwrap_or(token);
-    let Some((digits, tail)) = label.rsplit_once(']') else {
+    let Some((digits, tail)) = label.split_once(']') else {
         return false;
     };
 
@@ -271,6 +274,7 @@ mod tests {
         is_trailing_punctuation_token,
         is_whitespace_token,
         is_year,
+        looks_like_bracketed_reference,
         looks_like_footnote_ref,
     };
 
@@ -386,5 +390,32 @@ mod tests {
     #[case(".", false)]
     fn is_year_accepts_sentence_trailing_punctuation(#[case] token: &str, #[case] expected: bool) {
         assert_eq!(is_year(token), expected);
+    }
+
+    #[rstest]
+    #[case("[1]", true)]
+    #[case("1]", true)]
+    #[case("[12]", true)]
+    #[case("[123456]", true)]
+    #[case("[1],", true)]
+    #[case("1].", true)]
+    #[case("[12].", true)]
+    #[case("[1]]", true)]
+    #[case("1],]", true)]
+    #[case("[a]", false)]
+    #[case("[١٢]", false)]
+    #[case("[^1]", false)]
+    #[case("[1](url)", false)]
+    #[case("[]", false)]
+    #[case("]", false)]
+    #[case("[1", false)]
+    #[case("[1]x", false)]
+    #[case("[1 2]", false)]
+    #[case("", false)]
+    fn looks_like_bracketed_reference_classifies_tokens(
+        #[case] token: &str,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(looks_like_bracketed_reference(token), expected);
     }
 }
