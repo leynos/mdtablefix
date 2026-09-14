@@ -996,7 +996,7 @@ abstraction/port/helper policy in `AGENTS.md`:
   backend is ever required, it must implement `Observer` rather than
   replacing `TracingObserver` inline.
 
-See [ADR 0006](adrs/0006-observer-boundary-for-tracing.md) for the rationale.
+See [ADR 0006](adrs/0012-observer-boundary-for-tracing.md) for the rationale.
 
 ### Log levels
 

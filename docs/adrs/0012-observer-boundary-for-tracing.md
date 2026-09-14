@@ -1,4 +1,4 @@
-# Architecture Decision Record (ADR) 0006: Observer boundary for tracing
+# Architecture Decision Record (ADR) 0012: Observer boundary for tracing
 
 - Status: Accepted
 - Date: 2026-07-26

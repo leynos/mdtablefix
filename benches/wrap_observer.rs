@@ -1,7 +1,7 @@
 //! Benchmarks for the inline-wrapping observer boundary.
 //!
 //! These benchmarks protect the performance invariant introduced with the
-//! observer/tracing adapter (see `docs/adrs/0006-observer-boundary-for-tracing.md`):
+//! observer/tracing adapter (see `docs/adrs/0012-observer-boundary-for-tracing.md`):
 //! with tracing disabled, `TracingObserver` must perform no derived-payload
 //! work, such as Unicode length counts.
 //!

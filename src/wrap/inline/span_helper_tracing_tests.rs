@@ -8,7 +8,8 @@
 use std::cell::RefCell;
 
 use rstest::{fixture, rstest};
-use tracing_test::traced_test;
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+use test_macros::traced_test;
 
 use super::{date_token_span, try_match_date_sequence};
 use crate::wrap::{

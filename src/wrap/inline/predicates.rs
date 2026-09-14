@@ -264,7 +264,9 @@ mod tracing_tests {
     //! including its `token_length` and `result` fields, and that the raw token
     //! text never reaches the log.
 
-    use tracing_test::traced_test;
+    // Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+
+    use test_macros::traced_test;
 
     use super::{ends_with_footnote_ref, looks_like_footnote_ref};
     use crate::wrap::tracing_adapter::TracingObserver;

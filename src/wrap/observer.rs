@@ -27,7 +27,7 @@
 //! pays only a branch. Observers must record content-free metadata: borrowed
 //! token text exists so an observer can derive a length, never so it can log
 //! the text. See `docs/developers-guide.md` and
-//! `docs/adrs/0006-observer-boundary-for-tracing.md` for the ownership and
+//! `docs/adrs/0012-observer-boundary-for-tracing.md` for the ownership and
 //! reuse policy governing this port.
 
 use std::fmt;

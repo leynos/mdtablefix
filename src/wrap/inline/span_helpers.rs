@@ -332,7 +332,9 @@ mod tracing_tests {
     //! Verifies that `date_token_span` emits the DEBUG `matched date sequence`
     //! event with its `start` and `end` fields through the tracing adapter.
 
-    use tracing_test::traced_test;
+    // Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+
+    use test_macros::traced_test;
 
     use super::date_token_span;
     use crate::wrap::tracing_adapter::TracingObserver;
