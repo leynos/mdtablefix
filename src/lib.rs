@@ -24,6 +24,7 @@ macro_rules! lazy_regex {
 }
 
 pub mod breaks;
+mod classify;
 pub mod code_emphasis;
 pub mod ellipsis;
 pub mod fences;

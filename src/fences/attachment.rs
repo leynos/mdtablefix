@@ -3,7 +3,10 @@
 use tracing::trace;
 
 use super::{FENCE_RE, is_null_lang};
-use crate::wrap::FenceTracker;
+use crate::{
+    classify::{ClassifyCtx, LineClass, classify_line},
+    wrap::FenceTracker,
+};
 
 /// Result of an orphan fence specifier attachment operation.
 ///
@@ -108,7 +111,7 @@ where
 /// by four columns or more are indented code, not breaks, and keep their
 /// specifier behaviour.
 fn is_thematic_break(line: &str) -> bool {
-    crate::breaks::THEMATIC_BREAK_RE.is_match(line.trim_end())
+    classify_line(line, &ClassifyCtx::default()) == LineClass::ThematicBreak
 }
 
 /// Emit `line` verbatim when it is a thematic break rather than a specifier.
