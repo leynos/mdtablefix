@@ -70,6 +70,33 @@ formatter sizes columns according to the glyphs that will actually be emitted.
 `format_rows` applies escaping and padding to each cell, and `insert_separator`
 restores the separator row with widths derived from the final table body.
 
+## Verus verification
+
+The verification harness is maintained by the same contributors who maintain
+the formatter. The pinned release in `tools/verus/VERSION` is checked against
+the artifact checksums in `tools/verus/SHA256SUMS`;
+`tools/rust-prover-tools/REF` pins the `rust-prover-tools` revision that
+installs and runs it. The local
+prerequisites are `uvx` and `rustup`. The default `PROVER_TOOLS` command uses
+`uvx` to fetch the pinned runner, while `VERUS_RUN` selects the runner's Verus
+execution command. Both variables can be overridden when diagnosing a local
+tooling issue or using a prepared environment.
+
+Run `make verus-install` to resolve the pinned runner, install the matching
+Verus release and Rust toolchain, and populate the repository's `.verus`
+cache. `make verus` then verifies `verus/lib.rs`, the proof entry point for
+production-used kernels. `make verus-selftest` runs `verus/smoke.rs`, whose
+deliberately false assertion must be rejected; it also fails when the runner
+does not reach Verus, so a skipped verifier cannot pass the check.
+
+The pull-request workflow runs both targets on Ubuntu. It caches the
+version-specific `.verus` directory using the runner operating system,
+architecture, and pinned Verus version, then executes the same Makefile
+targets used locally. The [verification ledger](verification.md) records each
+claim and its trusted boundary;
+[ADR 0011](adrs/0011-verified-normalization-core.md) documents why the proof
+scope remains a narrow production-used core.
+
 ## Internal API reference
 
 `Makefile`:
@@ -261,6 +288,10 @@ filesystem access themselves.
   the final cell text in a deterministic order. The non-table branch emits
   buffered lines unchanged; the parent pipeline retains the existing
   post-processing path for those lines.
+- `ProcessBuffer::finish(self) -> (Vec<String>, Vec<bool>)`: Consumes the
+  buffer, flushes any pending table, and returns output lines with table
+  markers. `process_stream_inner` uses it at end of input; callers must not
+  issue a separate final `flush`.
 - `ProcessBuffer`: Owns the stream-processing output buffer, the pending table
   run, and the table-mode state for `process_stream_inner`. The parent process
   module is responsible for orchestration; the buffer owns the boundary rules

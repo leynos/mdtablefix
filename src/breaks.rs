@@ -218,7 +218,7 @@ mod prop_tests {
         fn fenced_thematic_breaks_are_not_normalised(
             fencer in prop_oneof![Just("```".to_string()), Just("~~~".to_string())],
             break_line in thematic_break_line(),
-            prefix in prop::collection::vec(non_thematic_line(), 0..8),
+            prefix in prop::collection::vec(non_fence_line(), 0..8),
             suffix in prop::collection::vec(non_thematic_line(), 0..8),
         ) {
             let mut lines: Vec<String> = prefix.clone();
@@ -252,6 +252,12 @@ mod prop_tests {
     fn non_thematic_line() -> impl Strategy<Value = String> {
         any::<String>().prop_filter("line must not match thematic break regex", |line| {
             !THEMATIC_BREAK_RE.is_match(line.trim_end())
+        })
+    }
+
+    fn non_fence_line() -> impl Strategy<Value = String> {
+        non_thematic_line().prop_filter("line must not be a fence", |line| {
+            crate::wrap::is_fence(line).is_none()
         })
     }
 

@@ -1,0 +1,3 @@
+| Claim | Executable function | Input domain | Unverified external contracts | Result class |
+| ----- | ------------------- | ------------ | ------------------------------ | ------------ |
+| missing process | `missing_verified_symbol` | all source lines | none | local correctness |

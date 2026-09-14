@@ -22,6 +22,8 @@
 
 - [Architecture](architecture.md): Current design for the Markdown parsing,
   wrapping, table reflow, and processing pipeline.
+- [Verification ledger](verification.md): Proof claims, trusted boundaries,
+  and result classes for maintainers reviewing verified formatter kernels.
 
 ## Decision records
 
@@ -49,6 +51,8 @@
 - [Git file selection](adrs/0010-git-file-selection.md): Accepted decision
   covering `--git` selection through `git ls-files`, the conflict guard, and
   the alternatives rejected in its favour.
+- [Verified normalization core](adrs/0011-verified-normalization-core.md):
+  Accepted decision covering production-used Verus kernels and their ledger.
 
 ## Reference material
 
