@@ -111,7 +111,7 @@
 //! has no way to tell a real finding from a spurious one.
 
 use anyhow::{Context, Result, ensure};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 
 #[path = "support/allow_scan.rs"]
 mod allow_scan;
@@ -127,7 +127,19 @@ use allow_scan::{rust_sources, suppressed_lints};
 ///
 /// Fixture sources under `tests/data` keep a `.rs.txt` extension and nothing
 /// compiles them, so they are out of scope by construction.
-const REQUIRED_ROOTS: [&str; 3] = ["src/", "tests/", "test-macros/src/"];
+const REQUIRED_ROOTS: [&str; 3] = ["src", "tests", "test-macros/src"];
+
+/// Return whether `path` lies under `root`, which is written with `/`.
+///
+/// Components are compared rather than the rendered string, because the walk
+/// joins paths with the platform separator: on Windows every path reads
+/// `src\config\mod.rs`, so a `starts_with("src/")` prefix test matched nothing
+/// and this file's coverage assertion failed there while passing on Linux.
+fn is_under(path: &Utf8Path, root: &str) -> bool {
+    let mut components = path.components();
+    root.split('/')
+        .all(|expected| components.next().map(|actual| actual.as_str()) == Some(expected))
+}
 
 /// The crate root, used as the capability root for the scan.
 fn manifest_dir() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
@@ -152,9 +164,7 @@ fn no_source_allows_a_policy_lint() -> Result<()> {
     let sources = rust_sources(&root, ".")?;
     for required in REQUIRED_ROOTS {
         ensure!(
-            sources
-                .iter()
-                .any(|(path, _)| path.as_str().starts_with(required)),
+            sources.iter().any(|(path, _)| is_under(path, required)),
             "the scan should reach {required}, saw {} sources",
             sources.len()
         );
@@ -266,4 +276,37 @@ fn text_resembling_a_suppression_is_not_an_offence(#[case] source: &str) -> Resu
     let found = suppressed_lints(source)?;
     ensure!(found.is_empty(), "expected no offence, found {found:?}");
     Ok(())
+}
+
+/// Scenario: a scanned path is tested against a required root.
+///
+/// Invariant: the answer depends on the path's components, not on the
+/// separator the platform renders them with. The Windows lane on PR #463
+/// failed on exactly this: the walk joins with `\` there, so a
+/// `starts_with("src/")` prefix test matched none of 285 sources and the
+/// coverage assertion reported the scan had missed `src/` entirely.
+///
+/// `Utf8PathBuf::from(..).join(..)` is used rather than a literal so the
+/// separator is the platform's own, which is what the walk produces.
+///
+/// Mutation proof (2026-09-14), run through the build and reverted: putting
+/// `is_under` back to `path.as_str().starts_with(root)` fails
+/// `prefix_is_not_a_component`, which is the Linux-visible half of the same
+/// defect: `src-generated/lib.rs` is not under `src`.
+#[rstest::rstest]
+#[case::direct_child(&["src", "lib.rs"], "src", true)]
+#[case::nested(&["src", "wrap", "fence.rs"], "src", true)]
+#[case::two_deep(&["test-macros", "src", "lib.rs"], "test-macros/src", true)]
+#[case::different_root(&["tests", "cli.rs"], "src", false)]
+#[case::prefix_is_not_a_component(&["src-generated", "lib.rs"], "src", false)]
+#[case::root_deeper_than_path(&["test-macros"], "test-macros/src", false)]
+fn a_path_is_under_a_root_by_component(
+    #[case] segments: &[&str],
+    #[case] root: &str,
+    #[case] expected: bool,
+) {
+    let path = segments
+        .iter()
+        .fold(Utf8PathBuf::new(), |path, segment| path.join(segment));
+    assert_eq!(is_under(&path, root), expected, "{path} under {root}");
 }
