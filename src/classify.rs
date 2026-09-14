@@ -63,8 +63,8 @@ pub(crate) struct ClassifyCtx {
     open_fence: Option<OpenFence>,
     /// Structural class of the immediately preceding source line.
     previous: Option<LineClass>,
-    /// Indentation and blockquote prefix of the immediately preceding line.
-    previous_prefix: Option<String>,
+    /// Whether the current and preceding lines have identical structural prefixes.
+    prefix_agrees: bool,
 }
 
 impl ClassifyCtx {
@@ -75,18 +75,22 @@ impl ClassifyCtx {
             is_in_fence: true,
             open_fence: Some(open_fence),
             previous: None,
-            previous_prefix: None,
+            prefix_agrees: false,
         }
     }
 
-    /// Builds the context used to classify the line immediately after `line`.
+    /// Builds context for the line that follows a classified source line.
+    ///
+    /// The caller supplies `prefix_agrees` after comparing the two source-line
+    /// prefixes. This keeps contextual Setext classification independent of
+    /// string storage while retaining the prefix-agreement precondition.
     #[must_use]
-    pub(crate) fn following(line: &str, previous: LineClass) -> Self {
+    pub(crate) const fn following(previous: LineClass, prefix_agrees: bool) -> Self {
         Self {
             is_in_fence: false,
             open_fence: None,
             previous: Some(previous),
-            previous_prefix: Some(line_parts(line).prefix.to_owned()),
+            prefix_agrees,
         }
     }
 }
@@ -126,8 +130,8 @@ pub fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
     if parts.body.trim_start().starts_with('|') {
         return LineClass::TableRow;
     }
-    if ctx.previous == Some(LineClass::ParagraphText)
-        && ctx.previous_prefix.as_deref() == Some(parts.prefix)
+    if matches!(ctx.previous, Some(LineClass::ParagraphText))
+        && ctx.prefix_agrees
         && is_setext_underline(parts.body)
     {
         return LineClass::SetextUnderline;
@@ -141,10 +145,8 @@ pub fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
     LineClass::ParagraphText
 }
 
-/// Prefix-stripped portions of one line used by structural scanners.
+/// Body and literal-code state extracted from a source line.
 struct LineParts<'a> {
-    /// Leading indentation and blockquote prefix retained by conversions.
-    prefix: &'a str,
     /// Content after the structural prefix.
     body: &'a str,
     /// Whether indentation makes the content literal code.
@@ -156,7 +158,6 @@ fn line_parts(line: &str) -> LineParts<'_> {
     let (outer_width, mut cursor) = indentation_at(line, 0);
     if outer_width >= 4 {
         return LineParts {
-            prefix: "",
             body: line,
             is_literal: true,
         };
@@ -180,7 +181,6 @@ fn line_parts(line: &str) -> LineParts<'_> {
 
     let (content_indent, _) = indentation_at(line, cursor);
     LineParts {
-        prefix: &line[..cursor],
         body: &line[cursor..],
         is_literal: content_indent >= 4,
     }
@@ -359,7 +359,7 @@ mod tests {
         #[case] negative: &str,
     ) {
         let context = if expected == LineClass::SetextUnderline {
-            ClassifyCtx::following("candidate", LineClass::ParagraphText)
+            ClassifyCtx::following(LineClass::ParagraphText, true)
         } else {
             ClassifyCtx::default()
         };
@@ -370,8 +370,12 @@ mod tests {
 
     #[test]
     fn uses_preceding_paragraph_and_prefix_for_setext() {
-        let context = ClassifyCtx::following("> title", LineClass::ParagraphText);
+        let context = ClassifyCtx::following(LineClass::ParagraphText, true);
         assert_eq!(classify_line("> ---", &context), LineClass::SetextUnderline);
-        assert_eq!(classify_line("---", &context), LineClass::ThematicBreak);
+        let mismatched_prefix = ClassifyCtx::following(LineClass::ParagraphText, false);
+        assert_eq!(
+            classify_line("---", &mismatched_prefix),
+            LineClass::ThematicBreak
+        );
     }
 }
