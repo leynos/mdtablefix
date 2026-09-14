@@ -125,6 +125,10 @@ pub(super) fn segment_inline(text: &str) -> Vec<String> {
     tokens
 }
 
+/// Scan punctuation following a link without absorbing an inline citation.
+///
+/// Keeping `([` as a new token boundary preserves citation grouping during
+/// wrapping while ordinary trailing punctuation remains attached to the link.
 fn scan_trailing_punctuation_end(text: &str, mut index: usize) -> usize {
     while index < text.len() {
         let Some(current) = text[index..].chars().next() else {
@@ -141,10 +145,18 @@ fn scan_trailing_punctuation_end(text: &str, mut index: usize) -> usize {
     index
 }
 
+/// Recognise the opening delimiter of an inline parenthetical citation.
+///
+/// The tokenizer treats this pair specially so punctuation scanning cannot
+/// consume the parenthesis that gives the citation its Markdown boundary.
 fn starts_inline_citation(text: &str, index: usize) -> bool {
     text.get(index..).is_some_and(|tail| tail.starts_with("(["))
 }
 
+/// Keep an escaped backtick in the adjoining text token.
+///
+/// It is literal payload, never a code-fence boundary, and joining it avoids
+/// creating a zero-width token merely because the source used an escape.
 fn append_escaped_backtick(tokens: &mut Vec<String>) {
     if let Some(last) = tokens.last_mut() {
         last.push('`');
@@ -153,6 +165,10 @@ fn append_escaped_backtick(tokens: &mut Vec<String>) {
     }
 }
 
+/// Find the next inline construct boundary in otherwise ordinary text.
+///
+/// The scan stops before unescaped links, images, citations, or code fences so
+/// later parsing can preserve each construct as an atomic wrapping unit.
 fn scan_plain_text_end(text: &str, bytes: &[u8], mut index: usize) -> usize {
     if starts_inline_citation(text, index) && !has_odd_backslash_escape_bytes(bytes, index) {
         return index + 1;
@@ -176,6 +192,10 @@ fn scan_plain_text_end(text: &str, bytes: &[u8], mut index: usize) -> usize {
     index
 }
 
+/// Decide whether the current character begins an atomic inline construct.
+///
+/// Escaped delimiters remain text; only real link, image, and citation openers
+/// stop the plain-text scan and hand control to their dedicated parser.
 fn should_stop_plain_text(text: &str, bytes: &[u8], index: usize, current: (char, bool)) -> bool {
     let (ch, is_escaped) = current;
     if ch == '[' {
@@ -189,17 +209,29 @@ fn should_stop_plain_text(text: &str, bytes: &[u8], index: usize, current: (char
     looks_like_image_start(text, index, ch) && !is_escaped
 }
 
+/// Recognise a bracket protected by an escaped parenthesis immediately before it.
+///
+/// That sequence is literal text, so treating its bracket as a link opener
+/// would split a token where Markdown escaping promised it would not.
 fn bracket_follows_escaped_open_paren(bytes: &[u8], index: usize) -> bool {
     index.checked_sub(1).is_some_and(|previous| {
         bytes[previous] == b'(' && has_odd_backslash_escape_bytes(bytes, previous)
     })
 }
 
+/// Confirm that a token begins and ends with the same non-empty code fence.
+///
+/// Suffix absorption is valid only for a completed span; an opener without its
+/// closer must remain ordinary text for the continuation logic to resolve.
 fn is_closed_inline_code_span(token: &str) -> bool {
     let fence_len = token.chars().take_while(|&ch| ch == '`').count();
     fence_len > 0 && token.len() > fence_len * 2 && token.ends_with(&"`".repeat(fence_len))
 }
 
+/// Extend a completed code span through an attached inflectional suffix.
+///
+/// The suffix stays atomic with the span so a line break cannot change how
+/// Markdown readers associate punctuation or prose with the code literal.
 fn extend_closed_code_token(
     text: &str,
     start: usize,
@@ -217,6 +249,10 @@ fn extend_closed_code_token(
     }
 }
 
+/// Produce one token and its consumed byte count from an inline source offset.
+///
+/// Every returned offset is a UTF-8 boundary; the scanner either emits a whole
+/// completed code span or advances through literal text to prevent stalling.
 fn next_token(line: &str, offset: usize) -> Option<(Token<'_>, usize)> {
     if offset >= line.len() {
         return None;
@@ -308,6 +344,10 @@ where
     }
 }
 
+/// Preserve source line boundaries that survive tokenization.
+///
+/// A newline token is retained between lines and after a trailing newline so
+/// wrapping can distinguish paragraph separation from an absent final break.
 fn push_newline_if_needed<I>(
     tokens: &mut Vec<Token<'_>>,
     lines: &mut std::iter::Peekable<I>,

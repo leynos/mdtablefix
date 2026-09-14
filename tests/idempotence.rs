@@ -28,6 +28,14 @@
 //! prose between the delimiter row and the `---` still becomes a heading, so
 //! the class is the adjacency and not Setext conversion itself.
 //!
+//! Class `E` is the inline-wrapping seam recorded in the ADR 0006 addendum. A
+//! paragraph ending in a bolded inline code span, followed by a bare `[1]` on
+//! the line below, put the opener at the end of one line and the digits at the
+//! start of the next, so the second pass read the pair as a single paragraph
+//! again and rejoined them with a space. The reference line is recorded as the
+//! structural expectation, so a fix that settled the output by dropping it
+//! fails rather than passes.
+//!
 //! Every case also records the structural expectation its fix must preserve, so
 //! a fix that reached a fixed point by consuming the break on the *first* pass
 //! fails rather than passing for the wrong reason.
@@ -179,6 +187,16 @@ const CASES: &[IdempotenceCase] = &[
         fixture: "H1_atx_heading_above_break.dat",
         flags: HEADINGS,
         expects: &[Standalone::Literal("---")],
+    },
+    // Class `E`: the inline wrapping path split a bare bracket reference across
+    // the wrap boundary, so the second pass read `[` and `1]` as one paragraph
+    // again and rejoined them with a space. The reference is the whole case, so
+    // a fix that reached a fixed point by dropping it fails here.
+    IdempotenceCase {
+        id: "E1_bracket_after_bold_code",
+        fixture: "E1_bracket_after_bold_code.dat",
+        flags: WRAP,
+        expects: &[Standalone::Literal("[1]")],
     },
     IdempotenceCase {
         id: "L1_footnote_width_boundary",

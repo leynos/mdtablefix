@@ -139,6 +139,10 @@ pub(crate) fn classify_block(
     None
 }
 
+/// Recognise a Markdownlint control comment before wrapping can alter it.
+///
+/// Directives configure validation rather than prose layout, so classifying
+/// them as blocks keeps their spelling and placement verbatim.
 pub(super) fn is_markdownlint_directive(line: &str) -> bool {
     MARKDOWNLINT_DIRECTIVE_RE.is_match(line)
 }

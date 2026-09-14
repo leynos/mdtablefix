@@ -99,6 +99,16 @@ scope remains a narrow production-used core.
 
 ## Internal API reference
 
+`Cargo.toml`:
+
+- The repository is a Cargo workspace containing the root `mdtablefix` package
+  and the `test-macros` proc-macro package. It uses resolver 3 so Cargo applies
+  the current feature-resolution rules across both packages.
+- The shared Clippy policy enables `pedantic` at warning level and denies
+  `missing_docs_in_private_items`. Both packages inherit that policy through
+  `[lints] workspace = true`, so private parsing, layout, test-support, and
+  macro-expansion contracts remain documented as the workspace grows.
+
 `Makefile`:
 
 - `check-static-regexes`: Runs before Clippy as part of `make lint` and uses
@@ -110,6 +120,10 @@ scope remains a narrow production-used core.
   idiom. `tests/static_regex_lint.rs` exercises every supported form.
   Contributors must install ripgrep locally; Continuous Integration (CI)
   installs the pinned version before running the lint gate.
+- `lint`: Runs `check-static-regexes` and then the canonical workspace-wide
+  command
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, so
+  both workspace packages are checked with warnings denied.
 
 `src/lib.rs`:
 
@@ -647,7 +661,15 @@ depth-aware tracking.
    applies the same rule to parenthesized inline citation links such as
    `([1](url))`, grouping the opener and link as one `SpanKind::Link` so
    adjacent citations like `([1](url))([2](url2))` do not split at the
-   boundary. At the tokeniser level, `segment_inline` also stops
+   boundary. `looks_like_bracketed_reference` recognizes the tokenizer's split
+   closing half `1]` as well as the merged `[1]`; only ASCII digits qualify, so
+   the predicate stays disjoint from `looks_like_link` and
+   `looks_like_footnote_ref`. `try_couple_bracketed_reference` couples an
+   opening bracket to its reference and absorbs trailing punctuation.
+   `SpanKind::BracketedRef` and `FragmentKind::BracketedRef` keep the merged
+   span atomic during fitting and post-processing, so the opening bracket
+   cannot be stranded at a line end.
+   At the tokenizer level, `segment_inline` also stops
    trailing-punctuation and plain-text scans at an unescaped `([` boundary via
    `scan_trailing_punctuation_end` and `scan_plain_text_end`, both using
    `starts_inline_citation`, so the citation opener `(` is emitted as its own
@@ -768,8 +790,8 @@ Table: Key types and functions.
 | `classify_block`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/block.rs`                   |
 | `FragmentKind`, `InlineFragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/fragment.rs`         |
 | `classify_fragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/wrap/inline/fragment.rs`         |
-| Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, `is_month_name`, `is_ordinal_day`, `is_numeric_day`, `is_year`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/wrap/inline/predicates.rs`       |
-| `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, `try_match_date_sequence`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `src/wrap/inline/span_helpers.rs`     |
+| Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, `looks_like_bracketed_reference`, `is_month_name`, `is_ordinal_day`, `is_numeric_day`, `is_year`, …)                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/inline/predicates.rs`       |
+| `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, `try_couple_bracketed_reference`, `try_match_date_sequence`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/inline/span_helpers.rs`     |
 | `try_couple_inline_link_after_opener`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/inline/span_helpers.rs`     |
 | `normalize_footnote_ref_spacing`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/normalize.rs`        |
 | `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline.rs`                  |
@@ -994,11 +1016,11 @@ carrying `operation` (`ls_files` or `rev_parse`), `outcome` (`success` or
 `error`), and `elapsed_seconds`, and one `debug` event per invocation repeats
 `operation` and `outcome`; a failing invocation adds `failure`, the bounded
 category `GitListError::category` in `src/select/git_failure.rs` returns:
-`program_not_found`, `spawn`, `nonzero_exit`, or `no_git_dir`. A span is not
-a line, so a test asserting what happened reads the event and a host drawing a
-timeline reads the span. Nothing traced there is a path or Git's own
-diagnostic text: the adapter's own diagnostics relay Git's words to a user,
-while a telemetry field does not.
+`program_not_found`, `spawn`, `nonzero_exit`, or `no_git_dir`. A span is not a
+line, so a test asserting what happened reads the event and a host drawing a
+timeline reads the span. Nothing traced there is a path or Git's own diagnostic
+text: the adapter's own diagnostics relay Git's words to a user, while a
+telemetry field does not.
 
 Table: Structured field names emitted by tracing instrumentation.
 
@@ -1359,8 +1381,8 @@ harness has a self-test that rejects non-`.dat` fixtures, and the staging name
 above is why: a reporting mode echoes the name the file was given, so only a
 `.dat` fixture keeps that name stable in a snapshot.
 
-`make typecheck` runs `cargo check --all-targets --all-features` to verify
-type-correctness without running tests. Use it for rapid feedback during
+`make typecheck` runs `cargo check --workspace --all-targets --all-features` to
+verify type-correctness without running tests. Use it for rapid feedback during
 development before moving on to the full lint and test gates.
 
 Before changing snapshots, run the harness self-tests:
@@ -1520,15 +1542,19 @@ became clear that multiple test binaries depend on them.
 ### 2.3. `test-macros` crate
 
 The `test-macros` workspace crate provides the `allow_fixture_expansion_lints`
-proc-macro attribute. It suppresses the `unused_braces` lint that `rstest`
-fixture expansion triggers when `fn_single_line = true` is set in
+proc-macro attribute. It attaches an item-scoped
+`#[expect(unused_braces, reason = "…")]` to contain the `unused_braces` lint
+that `rstest` fixture expansion triggers when `fn_single_line = true` is set in
 `rustfmt.toml`.
 
-The macro emits `#[allow(unused_braces, …)]` rather than `#[expect(…)]` because
-the Rust proc-macro API delivers a pre-parsed token stream; the emitted lint
-attribute applies to code that the compiler has not yet expanded, making
-`#[expect]` semantically unusable at that site. This is a known consequence of
-the `rstest` fixture expansion and is not a lint-integrity violation.
+The expectation is attached to the affected fixture because `rstest` adds
+braces around a single-expression body during expansion. Its reason records
+that upstream limitation. Rust does not report `unfulfilled_lint_expectations`
+for an expectation introduced by this attribute macro, so a future `rstest`
+expansion that no longer emits the lint does not produce a stale-expectation
+diagnostic. Keeping the expectation item-scoped preserves the workspace policy
+for every other private item. The positive compile fixture runs under
+`#![deny(warnings)]` to verify that the current expansion warning is contained.
 
 Apply it to any fixture function whose single-expression body triggers the lint:
 
@@ -1658,15 +1684,15 @@ Conventions:
 
 ### 2.7. Build and test requirements
 
-`make test` is two `cargo test` invocations, both with `RUSTFLAGS` set so that
-warnings are errors:
+`make test` is two workspace-wide `cargo test` invocations, both with
+`RUSTFLAGS` set so that warnings are errors:
 
 Table: The `make test` recipe, verbatim from the Makefile.
 
-| Step | Command                                                           |
-| ---- | ----------------------------------------------------------------- |
-| 1    | `RUSTFLAGS="-D warnings" cargo test --all-targets --all-features` |
-| 2    | `RUSTFLAGS="-D warnings" cargo test --doc --all-features`         |
+| Step | Command                                                                       |
+| ---- | ----------------------------------------------------------------------------- |
+| 1    | `RUSTFLAGS="-D warnings" cargo test --workspace --all-targets --all-features` |
+| 2    | `RUSTFLAGS="-D warnings" cargo test --workspace --doc --all-features`         |
 
 The first step compiles and runs every test target — the unit tests in `src/`,
 the integration binaries under `tests/`, and the compile fixtures driven by
@@ -1678,9 +1704,10 @@ on `mdtablefix::report` and `mdtablefix::io::SourceDocument`. Because both carry
 fails the gate rather than scrolling past.
 
 The other two commit gates are `make check-fmt` (`cargo fmt --all -- --check`)
-and `make lint` (`cargo clippy --all-targets --all-features -- -D warnings`).
-All three run before a commit. `make markdownlint` covers the documentation
-changes that none of the Rust gates see.
+and `make lint`
+(`cargo clippy --workspace --all-targets --all-features -- -D warnings`). All
+three run before a commit. `make markdownlint` covers the documentation changes
+that none of the Rust gates see.
 
 #### `make mutants`
 

@@ -18,7 +18,15 @@
 //! file shares with it lives in `support/idempotence_harness.rs`. Elements here
 //! still draw on it, so a generated document may contain any of the three
 //! shapes.
+//!
+//! Issue #504 added the bracket reference seam: a paragraph whose prose and
+//! inline code span fill all but one of the first line's columns, with a bare
+//! `[1]` on the line below. The wrap boundary falls between the two, which is
+//! where the opener used to be left behind. Unlike the earlier shapes the seam
+//! needs an exact width, so `bracket_reference_seam_strategy` grows its prose to
+//! that width instead of emitting whatever the prose strategy returns.
 
+use mdtablefix::process::WRAP_COLS;
 use proptest::{prelude::*, test_runner::Config as ProptestConfig};
 
 #[path = "support/idempotence_harness.rs"]
@@ -117,6 +125,35 @@ fn overlong_code_span_block_strategy() -> impl Strategy<Value = String> {
         })
 }
 
+/// Display columns a bracket reference seam head fills.
+///
+/// One column short of the wrap width, so a reference can never join the first
+/// line: the space that would precede it already fills the line.
+const BRACKET_SEAM_HEAD_WIDTH: usize = WRAP_COLS - 1;
+
+/// Generates the issue #504 seam: an inline code span filling the first line,
+/// with a bare bracket reference on the line below.
+///
+/// The two lines are one paragraph, so the wrap boundary falls between the code
+/// span and the reference. Before the fix the opener stayed at the end of the
+/// first line and the next pass rejoined the halves as `[ 1]`. Prose lengths
+/// that do not reach the target width never put the boundary there, so the
+/// strategy grows every head to it.
+fn bracket_reference_seam_strategy() -> impl Strategy<Value = String> {
+    (proptest::collection::vec("[a-z]{2,6}", 1..=6), "[0-9]{1,2}").prop_map(|(words, digits)| {
+        let mut head = format!("{} **bold**`code`", words.join(" "));
+        while head.len() + 5 <= BRACKET_SEAM_HEAD_WIDTH {
+            head.push_str(" aaaa");
+        }
+        if head.len() < BRACKET_SEAM_HEAD_WIDTH {
+            head.push(' ');
+            head.push_str(&"a".repeat(BRACKET_SEAM_HEAD_WIDTH - head.len()));
+        }
+
+        format!("{head}\n[{digits}]")
+    })
+}
+
 /// Generates a fenced code block with either fence spelling.
 fn fenced_block_strategy() -> impl Strategy<Value = String> {
     let fence = prop_oneof![Just("```"), Just("~~~")];
@@ -133,6 +170,7 @@ fn element_strategy() -> impl Strategy<Value = String> {
         2 => adjacency_strategy()
             .prop_map(|(document, _, _)| document.trim_end_matches('\n').to_string()),
         2 => fenced_block_strategy(),
+        2 => bracket_reference_seam_strategy(),
         1 => prose_strategy().prop_map(|title| format!("{title}\n-----")),
         1 => Just("[1] and text... here".to_string()),
         1 => Just("**bold**`code`".to_string()),
@@ -338,6 +376,54 @@ fn generated_corpus_reaches_both_defect_classes() {
     assert!(
         spans > 0,
         "the generator never produced a prefixed line with a code span and a continuation",
+    );
+}
+
+/// Asserts the generated corpus reaches the issue #504 wrapping seam.
+///
+/// The seam is a paragraph whose prose and inline code span fill all but one of
+/// the first line's columns, with the bracket reference on the next source
+/// line, so the wrap boundary falls between the code span and the reference.
+/// Only heads that reach the target width put the boundary there, so the count
+/// is asserted nonzero rather than assuming every sample qualifies: a generator
+/// that stopped growing the prose would leave this shape uncovered.
+#[test]
+fn generated_corpus_reaches_the_bracket_reference_seam() {
+    let seams = sample(&bracket_reference_seam_strategy(), SWEEP_DOCUMENTS);
+    let mut reached = 0_usize;
+
+    for seam in &seams {
+        let mut lines = seam.lines();
+        let Some(head) = lines.next() else {
+            continue;
+        };
+        let Some(reference) = lines.next() else {
+            continue;
+        };
+        if head.len() != BRACKET_SEAM_HEAD_WIDTH || !reference.starts_with('[') {
+            continue;
+        }
+
+        reached += 1;
+        let document = format!("{seam}\n");
+        let (once, twice) = format_twice(&document, &flags_for(1));
+        assert_eq!(
+            twice, once,
+            "the bracket reference seam is not a fixed point: {document:?}",
+        );
+        assert!(
+            once.lines().any(|line| line.trim() == reference),
+            "expected {reference:?} to survive as a line of {once:?}",
+        );
+        assert!(
+            once.lines().all(|line| !line.ends_with('[')),
+            "opening bracket was stranded in {once:?}",
+        );
+    }
+
+    assert!(
+        reached > 0,
+        "the generator never produced a paragraph that fills the line before a bracket reference",
     );
 }
 

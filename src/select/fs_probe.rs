@@ -43,6 +43,7 @@ use super::policy::{CandidatePath, FileIdentity, PathKind, PathProbe, ProbeFailu
 /// `symlink_metadata`, not `metadata`: see [`PathKind::Symlink`].
 #[derive(Debug, Clone, Copy)]
 pub struct AmbientPathProbe<'root> {
+    /// Root used to resolve candidate-relative paths and enforce containment.
     root: &'root Utf8Path,
 }
 

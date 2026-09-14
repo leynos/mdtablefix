@@ -8,6 +8,11 @@ use std::{borrow::Cow, collections::HashSet};
 
 use tracing::trace;
 
+/// Trim only synthetic spaces at the edges of complete inline code spans.
+///
+/// `synthetic_spaces` contains offsets introduced while joining prefixed lines;
+/// authored spaces remain intact. A span is edited only when its closing run
+/// has exactly the opener's length, so shorter literal runs stay content.
 pub(super) fn trim_code_span_edge_spaces<'a>(
     text: &'a str,
     synthetic_spaces: &[usize],
@@ -54,6 +59,7 @@ pub(super) fn trim_code_span_edge_spaces<'a>(
     Cow::Owned(output)
 }
 
+/// Find the next unescaped backtick run beginning at or after `start`.
 fn next_backtick_run(text: &str, start: usize) -> Option<(usize, usize)> {
     let mut index = start;
     while index < text.len() {
@@ -66,6 +72,7 @@ fn next_backtick_run(text: &str, start: usize) -> Option<(usize, usize)> {
     None
 }
 
+/// Find the first candidate closing run with the opener's exact fence length.
 fn matching_backtick_run_start(text: &str, start: usize, fence_len: usize) -> Option<usize> {
     let mut search = start;
     while let Some((run_start, run_end)) = next_backtick_run(text, search) {
@@ -77,6 +84,9 @@ fn matching_backtick_run_start(text: &str, start: usize, fence_len: usize) -> Op
     None
 }
 
+/// Return whether a backtick run is isolated from adjacent backticks.
+///
+/// Isolation prevents treating part of a longer run as a valid closing fence.
 fn is_exact_backtick_run(text: &str, start: usize, end: usize, fence_len: usize) -> bool {
     end - start == fence_len
         && start
@@ -85,6 +95,7 @@ fn is_exact_backtick_run(text: &str, start: usize, end: usize, fence_len: usize)
         && text.as_bytes().get(end).is_none_or(|next| *next != b'`')
 }
 
+/// Return the byte offset immediately after a contiguous backtick run.
 fn backtick_run_end(text: &str, start: usize) -> usize {
     let mut end = start;
     for ch in text[start..].chars() {
@@ -96,6 +107,10 @@ fn backtick_run_end(text: &str, start: usize) -> usize {
     end
 }
 
+/// Return whether the byte at `index` has an odd backslash escape prefix.
+///
+/// Odd parity means the backtick is literal; even parity leaves it eligible as
+/// a code-span delimiter.
 fn has_odd_backslash_escape(bytes: &[u8], mut index: usize) -> bool {
     let mut count = 0;
     while index > 0 {

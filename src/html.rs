@@ -41,6 +41,7 @@ fn node_text(handle: &Handle) -> String {
     out.trim_start().to_string()
 }
 
+/// Reports whether a subtree is metadata or executable content excluded from cell text.
 fn is_ignored_tag(tag: &str) -> bool {
     matches!(
         tag,
@@ -78,6 +79,7 @@ fn collect_text(handle: &Handle, out: &mut String, last_space: &mut bool) {
     }
 }
 
+/// Appends one DOM character while coalescing whitespace between visible text fragments.
 fn push_collapsed_text_char(ch: char, out: &mut String, last_space: &mut bool) {
     if ch.is_whitespace() {
         *last_space = true;
@@ -122,6 +124,7 @@ fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
     }
 }
 
+/// Reports whether a tag marks text as bold for implicit header detection.
 fn is_bold_tag(tag: &str) -> bool {
     matches!(
         tag,
@@ -214,15 +217,20 @@ fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
     out
 }
 
+/// Buffers a contiguous HTML table block while tracking nested table depth.
 #[derive(Default)]
 struct HtmlTableState {
+    /// Original lines retained until the outermost table closes or conversion is abandoned.
     buf: Vec<String>,
+    /// Number of currently open table elements in the buffered block.
     depth: usize,
 }
 
 impl HtmlTableState {
+    /// Reports whether a table block is currently being buffered.
     fn in_html(&self) -> bool { !self.buf.is_empty() }
 
+    /// Flushes buffered source lines unchanged when the block cannot be converted safely.
     fn flush_raw(&mut self, out: &mut Vec<String>) {
         if !self.buf.is_empty() {
             debug!(
@@ -235,6 +243,7 @@ impl HtmlTableState {
         self.depth = 0;
     }
 
+    /// Adds one source line, converting the block when the outermost table closes.
     fn push_html_line(&mut self, line: &str, out: &mut Vec<String>) {
         let trimmed = line.trim_start();
         let previous_depth = self.depth;

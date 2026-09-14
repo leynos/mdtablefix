@@ -127,6 +127,52 @@ fn test_wrap_opening_bracket_variants_before_inline_code(
     }
 }
 
+/// Returns prose of exactly `columns` display columns, ending in a single word.
+///
+/// The wording is the issue #504 reproduction, so the caller can place the wrap
+/// boundary a fixed number of columns before the fragment under test.
+fn seam_prose(columns: usize) -> String {
+    const SEAM_PREFIX: &str = "aaaaa aaaaaa aaaa aa aaaa aamw jkxf ht abm iqy uxqdkre fz";
+    assert!(
+        columns >= SEAM_PREFIX.len() + 2,
+        "prose must be wider than the {SEAM_PREFIX:?} prefix",
+    );
+    let filler = "a".repeat(columns - SEAM_PREFIX.len() - 1);
+    format!("{SEAM_PREFIX} {filler}")
+}
+
+/// Wrapping a list item must not strand the opener of a bare bracket reference
+/// at the end of a line (issue #504).
+///
+/// Every width in the sweep leaves no room for the reference beside the inline
+/// code span, which is the boundary where it used to be split.
+#[rstest]
+#[case(60)]
+#[case(61)]
+#[case(62)]
+#[case(63)]
+#[case(64)]
+fn test_wrap_list_item_keeps_bracket_reference_whole(#[case] prose_columns: usize) {
+    let input = lines_vec![format!(
+        "- {} **bold**`code` [1]",
+        seam_prose(prose_columns),
+    )];
+    let output = process_stream(&input);
+
+    assert!(
+        output.len() > 1,
+        "expected wrapping at {prose_columns} prose columns: {output:?}",
+    );
+    assert!(
+        output.iter().any(|line| line.contains("[1]")),
+        "expected [1] to stay whole at {prose_columns} prose columns: {output:?}",
+    );
+    assert!(
+        output.iter().all(|line| !line.ends_with('[')),
+        "opening bracket must not be stranded at {prose_columns} prose columns: {output:?}",
+    );
+}
+
 #[test]
 fn test_wrap_future_attribute_punctuation() {
     let input = lines_vec![concat!(

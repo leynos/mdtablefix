@@ -14,7 +14,9 @@ use row_parsing::{cell_is_semantically_empty, split_physical_rows};
 /// A parsed cell with leading-empty state kept separately from its payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Cell {
+    /// Cell text without structural delimiters or escaped separator pipes.
     payload: String,
+    /// Whether the parser consumed this empty cell to preserve a continuation column.
     leading_empty: bool,
 }
 
@@ -294,6 +296,7 @@ pub(crate) fn detect_separator(
     (sep_cells, sep_row_idx)
 }
 
+/// Reports whether an explicit separator is absent or has the wrong number of columns.
 fn invalid_separator(sep_cells: Option<&Vec<String>>, max_cols: usize) -> bool {
     match sep_cells {
         Some(c) => c.len() != max_cols,
@@ -311,7 +314,7 @@ fn second_row_is_separator(rows: &[Vec<Cell>]) -> bool {
     rows.len() > 1 && rows[1].iter().all(|cell| SEP_RE.is_match(&cell.payload))
 }
 
-/// Parses one physical source line and keeps its leading-empty cells structural.
+/// Splits one physical row while retaining leading empty cells as column structure.
 fn parse_cells(line: &str) -> Vec<Cell> {
     let cells = split_cells(line);
     let leading_empty_cells = cells.iter().take_while(|cell| cell.is_empty()).count();
@@ -325,14 +328,17 @@ fn parse_cells(line: &str) -> Vec<Cell> {
         .collect()
 }
 
+/// Escapes literal pipes and pads a cell to its measured display width.
 fn pad_cell_to_width(cell: &str, width: usize) -> String {
     let escaped = escape_literal_pipes(cell);
     let padding = width.saturating_sub(emitted_cell_width(cell));
     format!("{escaped}{}", " ".repeat(padding))
 }
 
+/// Escapes payload pipes so reflow cannot mistake them for column separators.
 fn escape_literal_pipes(cell: &str) -> String { cell.replace('|', r"\|") }
 
+/// Measures the rendered width after pipe escaping, matching the formatter output.
 fn emitted_cell_width(cell: &str) -> usize {
     UnicodeWidthStr::width(escape_literal_pipes(cell).as_str())
 }

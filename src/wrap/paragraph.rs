@@ -192,6 +192,10 @@ impl<'a> ParagraphWriter<'a> {
         self.append_wrapped_with_prefix_width(line, available);
     }
 
+    /// Wrap a prefixed segment using an already-reserved content width.
+    ///
+    /// Callers that split deferred code spans supply the original width so the
+    /// emitted fragment aligns with the paragraph that remains pending.
     pub(super) fn append_wrapped_with_prefix_width(
         &mut self,
         line: &PrefixLine<'_>,

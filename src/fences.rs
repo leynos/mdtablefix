@@ -23,11 +23,13 @@ mod properties;
 
 use attachment::attach_to_next_fence;
 
+/// Parses a complete fence delimiter, retaining indentation, marker, and language specifier.
 static FENCE_RE: LazyLock<Regex> = lazy_regex!(
     r"^(\s*)(`{3,}|~{3,})([A-Za-z0-9_+.,-]*)\s*$",
     "fence delimiter and language specifier pattern should compile",
 );
 
+/// Recognises standalone language-specifier lines eligible for fence attachment.
 static ORPHAN_LANG_RE: LazyLock<Regex> = lazy_regex!(
     r"^[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-](?:,[A-Za-z0-9_+.-]*[A-Za-z0-9_+\-])*$",
     "orphaned fence language specifier pattern should compile",
@@ -79,10 +81,12 @@ fn normalize_specifier(line: &str) -> (String, String) {
     (cleaned, indent)
 }
 
-/// Select how a recognized fence marker is normalized.
+/// Selects how a recognised fence marker is normalised.
 #[derive(Clone, Copy)]
 enum Strategy {
+    /// Compress compatible opening and closing markers to three backticks.
     Compress,
+    /// Retain the source marker when interior content could conflict with compression.
     Preserve,
 }
 
@@ -92,19 +96,28 @@ enum Strategy {
 /// Caching `compressed` avoids repeated compression work and supports
 /// `flush_unmatched_block`, which rewrites only the opening delimiter.
 struct CachedLine {
+    /// Original source bytes retained for interior content and fallback emission.
     line: String,
     /// The line rewritten with a compressed three-backtick delimiter, or `None`
     /// when the line is not a normalization-compatible fence delimiter.
     compressed: Option<String>,
 }
+/// Buffers one candidate fenced block until its closing marker determines the rewrite.
 struct PendingFenceBlock {
+    /// Marker family and length from the opening delimiter.
     opening_marker: String,
+    /// Whether an interior marker makes compression change the block's meaning.
     has_conflicting_interior_fence: bool,
+    /// Source lines and any precomputed compatible rewrites in document order.
     lines: Vec<CachedLine>,
 }
 
+/// Returns the marker family used by a fence, if the delimiter is non-empty.
 fn marker_char(marker: &str) -> Option<char> { marker.chars().next() }
 
+/// Rewrites a parsed fence marker according to the selected compression strategy.
+///
+/// Null language specifiers are omitted so a normalised fence does not acquire a literal null tag.
 fn rewrite_marker(line: &str, strategy: Strategy) -> Option<String> {
     let cap = FENCE_RE.captures(line)?;
     let indent = cap.get(1).map_or("", |m| m.as_str());
@@ -121,6 +134,7 @@ fn rewrite_marker(line: &str, strategy: Strategy) -> Option<String> {
     })
 }
 
+/// Reports whether an interior marker would conflict with the opening delimiter after compression.
 fn interior_fence_requires_preserved_delimiters(
     opening_marker: &str,
     parsed: Option<(&str, &str, &str)>,
@@ -137,6 +151,7 @@ fn interior_fence_requires_preserved_delimiters(
     marker_ch == opening_ch || marker_ch == '`'
 }
 
+/// Chooses preservation whenever interior fence-like content would make compression ambiguous.
 fn opening_rewrite(has_conflicting_interior_fence: bool) -> Strategy {
     if has_conflicting_interior_fence {
         Strategy::Preserve
@@ -157,6 +172,8 @@ fn rewrite_fence_line(cached: CachedLine, strategy: Strategy) -> String {
         Strategy::Preserve => rewrite_marker(&line, Strategy::Preserve).unwrap_or(line),
     }
 }
+
+/// Emits an unmatched block, normalising only its opening marker and preserving its body.
 fn flush_unmatched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
     // The block never closed, so its interior lines are literal content of the
     // unclosed fence: normalize only the opening delimiter and emit every
@@ -171,6 +188,7 @@ fn flush_unmatched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
     }
 }
 
+/// Emits a matched block, rewriting both delimiters when the interior is safe.
 fn flush_matched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
     let rewrite = opening_rewrite(block.has_conflicting_interior_fence);
     let closing_index = block.lines.len() - 1;
@@ -184,6 +202,7 @@ fn flush_matched_block(block: PendingFenceBlock, out: &mut Vec<String>) {
     }
 }
 
+/// Emits every line from a block exactly as it appeared in the source.
 fn flush_original_block(block: PendingFenceBlock, out: &mut Vec<String>) {
     out.extend(block.lines.into_iter().map(|cached| cached.line));
 }
@@ -206,9 +225,13 @@ fn flush_completed_block(block: PendingFenceBlock, out: &mut Vec<String>) {
 /// the compressed rewrite so that opening, closing, conflicting-interior, and
 /// flush decisions all draw from a single parse of the line.
 struct ParsedLine<'a> {
+    /// Original source line borrowed until the block is cached.
     line: &'a str,
+    /// Structural fence state produced by the shared tracker.
     observation: FenceObservation,
+    /// Marker components parsed by the tracker, if this line is a fence.
     fence: Option<(&'a str, &'a str, &'a str)>,
+    /// Optional three-backtick rewrite computed from the same source parse.
     compressed: Option<String>,
 }
 
@@ -229,6 +252,7 @@ impl<'a> ParsedLine<'a> {
         }
     }
 
+    /// Owns the borrowed source line for storage in a pending block.
     fn into_cached(self) -> CachedLine {
         CachedLine {
             line: self.line.to_owned(),

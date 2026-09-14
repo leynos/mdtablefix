@@ -149,13 +149,21 @@ fn invalid_character(value: &str) -> Option<InvalidCharacterKind> {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum ExtensionSpecError {
+    /// No extension remains after the optional leading dot is removed.
     #[error("extension is empty")]
     Empty,
+    /// The input was only its optional leading dot and names no extension.
     #[error("extension {value:?} is only a dot")]
-    DotOnly { value: String },
+    DotOnly {
+        /// Original user input retained for an actionable diagnostic.
+        value: String,
+    },
+    /// The candidate contains a character that cannot participate in a suffix.
     #[error("extension {value:?} contains {kind}")]
     InvalidCharacter {
+        /// Original user input retained for an actionable diagnostic.
         value: String,
+        /// Classification that explains why the character is forbidden.
         kind: InvalidCharacterKind,
     },
 }

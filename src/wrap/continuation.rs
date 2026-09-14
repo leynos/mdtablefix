@@ -131,6 +131,10 @@ pub(super) fn apply_continuation_chunk(
     }
 }
 
+/// Split a close-and-reopen chunk into an emitted span and a newly pending one.
+///
+/// Synthetic join offsets and fence state are rebased to the new tail so later
+/// wrapping cannot join text across two logically separate code spans.
 fn reopen_pending_span(
     writer: &mut ParagraphWriter<'_>,
     pending: &mut PendingPrefix,
@@ -173,6 +177,10 @@ fn reopen_pending_span(
     pending.open_fence_len.is_none()
 }
 
+/// Decide whether wrapping a continuation would exceed its protected width.
+///
+/// A verbatim flush preserves source text when an open code span cannot be
+/// safely reflowed without changing its displayed content or prefix alignment.
 fn should_emit_verbatim_for_width(text: &str, state: &ParagraphState) -> bool {
     if text.is_empty() {
         trace!(
@@ -298,6 +306,10 @@ fn leading_run_needs_space(
     }
 }
 
+/// Preserve a tight join after nested parentheses inside an open code span.
+///
+/// The second unmatched opener proves that adding Markdown's usual join space
+/// would become payload rather than a separator between prose tokens.
 fn suppresses_join_space_after_nested_open_paren(existing: &str, open_fence_len: usize) -> bool {
     if open_fence_len == 0 || !existing.ends_with('(') {
         return false;
@@ -310,6 +322,10 @@ fn suppresses_join_space_after_nested_open_paren(existing: &str, open_fence_len:
     unclosed_parenthesis_depth(code_tail) > 1
 }
 
+/// Count unmatched opening parentheses without underflowing on extra closers.
+///
+/// Only nesting depth matters to continuation spacing, so a saturating scan
+/// intentionally treats a leading closer as already balanced.
 fn unclosed_parenthesis_depth(text: &str) -> usize {
     text.chars().fold(0usize, |depth, ch| match ch {
         '(' => depth.saturating_add(1),
@@ -317,6 +333,10 @@ fn unclosed_parenthesis_depth(text: &str) -> usize {
         _ => depth,
     })
 }
+/// Emit the closed prefix segment and advance the continuation indentation.
+///
+/// A split span must retain the original prefix once, then use its continuation
+/// prefix for the reopened tail to keep list and blockquote geometry stable.
 fn emit_pending_prefix_segment(
     writer: &mut ParagraphWriter<'_>,
     pending: &mut PendingPrefix,
@@ -354,11 +374,20 @@ enum SpanStateUpdate {
     /// The span remains open and should keep deferring.
     StillOpen,
     /// The existing span closed and a new one opened at `split_at`.
-    ClosedAndReopened { split_at: usize, new_len: usize },
+    ClosedAndReopened {
+        /// Byte boundary where the completed span leaves the pending buffer.
+        split_at: usize,
+        /// Backtick-run length that opens the replacement pending span.
+        new_len: usize,
+    },
     /// The buffered paragraph should be flushed now.
     Flush,
 }
 
+/// Update deferred span state after appending one continuation chunk.
+///
+/// The result distinguishes an unfinished span, a close-and-reopen boundary,
+/// and a safe flush so callers never merge text across a fence transition.
 fn update_span_state(
     continuation: &str,
     continuation_offset: usize,
@@ -403,6 +432,10 @@ fn update_span_state(
         }
     }
 }
+/// Detect payload immediately after a closing fence that requires verbatim use.
+///
+/// Reflowing a word joined directly to the closer could introduce a space and
+/// change code-span payload, so that boundary selects the verbatim path.
 fn closing_fence_tail_starts_word(continuation: &str, raw_fence: usize) -> bool {
     let Some(close_end) = position_after_close(continuation, 0, raw_fence) else {
         return false;

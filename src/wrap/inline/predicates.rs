@@ -10,10 +10,18 @@
 
 pub(crate) use super::month_names::MONTH_NAMES;
 
+/// Return whether `c` opens a punctuation wrapper around an atomic span.
+///
+/// Both ASCII delimiters and common Unicode opening quotes/brackets are
+/// recognised so the wrapper can keep them with the link or code they open.
 pub(in crate::wrap::inline) fn is_opening_punct(c: char) -> bool {
     matches!(c, '(' | '[' | '"') || "“‘（［【《「『".contains(c)
 }
 
+/// Return whether `c` closes or punctuates an atomic inline span.
+///
+/// This set intentionally includes Unicode sentence punctuation because those
+/// characters must remain attached when a line ends beside a link or code.
 pub(in crate::wrap::inline) fn is_trailing_punct(c: char) -> bool {
     // ASCII closers + common Unicode closers and word-final punctuation
     matches!(
@@ -56,6 +64,10 @@ fn strip_leading_openers(token: &str) -> &str {
     rest
 }
 
+/// Select the month-name table matching the token's byte length.
+///
+/// Length filtering avoids case-insensitive comparisons against every month;
+/// callers then perform the actual spelling check on the returned slice.
 fn month_names_for_len(len: usize) -> &'static [&'static str] {
     match len {
         3 => &MONTH_NAMES[..12],
@@ -109,8 +121,13 @@ pub(in crate::wrap::inline) fn is_year(token: &str) -> bool {
         .is_ok_and(|year| (1000..=2999).contains(&year))
 }
 
+/// Parse a day token after its ordinal suffix has been removed.
+///
+/// The shared range check keeps ordinal and numeric day recognition aligned so
+/// date grouping cannot accept an impossible day in one form only.
 fn is_day_number(token: &str) -> bool { token.parse::<u8>().is_ok_and(is_day) }
 
+/// Return whether a numeric day lies in the inclusive Common date range.
 fn is_day(day: u8) -> bool { (1..=31).contains(&day) }
 
 /// Returns whether `token` already looks like a complete Markdown link.
@@ -130,6 +147,36 @@ pub(in crate::wrap::inline) fn looks_like_footnote_ref(token: &str) -> bool {
         .strip_prefix("[^")
         .and_then(|label| label.strip_suffix(']'))
         .is_some_and(|label| !label.is_empty())
+}
+
+/// Returns whether `token` is a bare numeric bracket reference, or the closing
+/// half of one.
+///
+/// The tokenizer emits a bracket without an inline destination as its own
+/// token, so `[1]` reaches the wrapper as the two tokens `[` and `1]`: the
+/// opener arrives alone and the reference is recognisable only from its closing
+/// half. Rendered fragments carry the merged form instead, so both are accepted.
+///
+/// The digits end at the first closing bracket, so further closers there and
+/// punctuation that follows them count as the trailing run, not the label.
+///
+/// Only ASCII digits are recognised. A short label such as `[a]` is ordinary
+/// prose the wrapper may break at, and the `[^` of a footnote reference is a
+/// separate case, so this predicate stays disjoint from `looks_like_link` and
+/// `looks_like_footnote_ref`.
+///
+/// The `#[tracing::instrument]` attribute records the return value while
+/// excluding document content from the span.
+#[tracing::instrument(level = "trace", skip(token), ret)]
+pub(in crate::wrap::inline) fn looks_like_bracketed_reference(token: &str) -> bool {
+    let label = token.strip_prefix('[').unwrap_or(token);
+    let Some((digits, tail)) = label.split_once(']') else {
+        return false;
+    };
+
+    !digits.is_empty()
+        && digits.chars().all(|digit| digit.is_ascii_digit())
+        && tail.chars().all(is_trailing_punct)
 }
 
 /// Returns whether `token` ends with an inline footnote reference.
@@ -244,6 +291,7 @@ mod tests {
         is_trailing_punctuation_token,
         is_whitespace_token,
         is_year,
+        looks_like_bracketed_reference,
         looks_like_footnote_ref,
     };
 
@@ -359,5 +407,32 @@ mod tests {
     #[case(".", false)]
     fn is_year_accepts_sentence_trailing_punctuation(#[case] token: &str, #[case] expected: bool) {
         assert_eq!(is_year(token), expected);
+    }
+
+    #[rstest]
+    #[case("[1]", true)]
+    #[case("1]", true)]
+    #[case("[12]", true)]
+    #[case("[123456]", true)]
+    #[case("[1],", true)]
+    #[case("1].", true)]
+    #[case("[12].", true)]
+    #[case("[1]]", true)]
+    #[case("1],]", true)]
+    #[case("[a]", false)]
+    #[case("[١٢]", false)]
+    #[case("[^1]", false)]
+    #[case("[1](url)", false)]
+    #[case("[]", false)]
+    #[case("]", false)]
+    #[case("[1", false)]
+    #[case("[1]x", false)]
+    #[case("[1 2]", false)]
+    #[case("", false)]
+    fn looks_like_bracketed_reference_classifies_tokens(
+        #[case] token: &str,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(looks_like_bracketed_reference(token), expected);
     }
 }

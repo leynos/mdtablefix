@@ -27,8 +27,11 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// boundary that acts on the answer reports it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SourceDocument<'a> {
+    /// Whether rendering must restore a leading byte-order mark.
     has_byte_order_mark: bool,
+    /// Content with the leading mark removed, borrowed from the input.
     body: &'a str,
+    /// Counts used to choose the output line-ending style.
     counts: LineEndingCounts,
 }
 

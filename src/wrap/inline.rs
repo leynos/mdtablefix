@@ -22,6 +22,10 @@ mod tracing_events;
 /// followed by a non-whitespace suffix such as an inflectional affix.
 fn has_inline_code_structure(token: &str) -> bool { fragment::has_inline_code_structure(token) }
 
+/// Return whether a token is an atomic code fragment for wrapping purposes.
+///
+/// A complete inline-code token and a code span followed by an attached
+/// inflectional suffix must both stay together when calculating line breaks.
 fn is_code_token(token: &str) -> bool {
     is_inline_code_token(token) || has_inline_code_structure(token)
 }
@@ -41,6 +45,7 @@ pub(in crate::wrap::inline) use predicates::{
     is_trailing_punct,
     is_trailing_punctuation_token,
     is_whitespace_token,
+    looks_like_bracketed_reference,
     looks_like_footnote_ref,
 };
 use span_helpers::{
@@ -50,6 +55,7 @@ use span_helpers::{
     extend_punctuation,
     merge_code_span,
     should_couple_whitespace,
+    try_couple_bracketed_reference,
     try_couple_footnote_reference,
     try_couple_inline_link_after_opener,
 };
@@ -60,6 +66,12 @@ use unicode_width::UnicodeWidthStr;
 
 use super::tokenize;
 
+/// Build the first atomic span at `start`, including punctuation and attached
+/// Markdown constructs that cannot be split across a line boundary.
+///
+/// Opening punctuation, hyphen prefixes, code spans, links, and footnote
+/// references are coupled before the general continuation loop runs. The
+/// returned width is the Unicode display width of that complete candidate.
 fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKind) {
     let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());
@@ -77,6 +89,14 @@ fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKin
             end = extend_punctuation(tokens, end, &mut width);
         } else if looks_like_link(next) {
             kind = SpanKind::Link;
+            end += 1;
+            width += UnicodeWidthStr::width(next.as_str());
+            end = extend_punctuation(tokens, end, &mut width);
+        } else if tokens[start] == "[" && looks_like_bracketed_reference(next) {
+            // Forward-couple a bare bracket reference to its opener so wrapping
+            // never strands `[` at the end of a line before its digits. Only
+            // `[` introduces a reference, so other openers stay ordinary prose.
+            kind = SpanKind::BracketedRef;
             end += 1;
             width += UnicodeWidthStr::width(next.as_str());
             end = extend_punctuation(tokens, end, &mut width);
@@ -164,6 +184,16 @@ pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, u
         let is_code = is_code_token(token);
         if let Some((next_kind, next_end)) =
             try_couple_inline_link_after_opener(tokens, end, &mut width)
+        {
+            kind = next_kind;
+            end = next_end;
+            continue;
+        }
+
+        // A bare bracket reference couples to its opener for the same reason
+        // footnote markers do: the opener can follow an atomic span directly,
+        // and leaving `[` in the preceding span would strand it at a line end.
+        if let Some((next_kind, next_end)) = try_couple_bracketed_reference(tokens, end, &mut width)
         {
             kind = next_kind;
             end = next_end;

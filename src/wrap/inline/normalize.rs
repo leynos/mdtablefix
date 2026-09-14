@@ -40,6 +40,11 @@ pub(in crate::wrap::inline) fn normalize_footnote_ref_spacing(
     Cow::Owned(normalized)
 }
 
+/// Return whether a three-token window contains removable footnote spacing.
+///
+/// The middle token must be whitespace between ordinary trailing punctuation
+/// and a reference token. Definitions such as `[^label]:` stay untouched, and
+/// an already attached reference cannot match this shape.
 fn matches_footnote_ref_spacing(tokens: &[String], index: usize) -> bool {
     tokens.get(index..index + 3).is_some_and(|window| {
         !looks_like_footnote_ref(&window[0])
