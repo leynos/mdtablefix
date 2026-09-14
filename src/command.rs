@@ -30,8 +30,16 @@ use crate::{
     select::extensions::{ExtensionFilter, parse_extension},
 };
 
+/// Parsed command-line request before it is mapped to a formatting mode.
+///
+/// The mutually exclusive input and output groups keep selection, reporting,
+/// and writes from combining into an ambiguous filesystem operation.
 #[derive(Parser)]
-#[command(version, about = "Reflow broken markdown tables")]
+#[command(
+    version,
+    about = "Reflow broken markdown tables",
+    long_about = None
+)]
 #[command(group(
     clap::ArgGroup::new("inputs").args(["files", "git"]).multiple(false)
 ))]
@@ -77,6 +85,7 @@ pub struct Cli {
     /// Rewrite files containing conflict markers during a merge or rebase
     #[arg(long = "allow-conflicted")]
     allow_conflicted: bool,
+    /// Content transformations applied after an input has been selected.
     #[command(flatten)]
     pub opts: FormatOpts,
     /// Markdown files to fix
@@ -168,6 +177,10 @@ impl Cli {
     pub fn extensions(&self) -> ExtensionFilter { self.md_exts.iter().cloned().collect() }
 }
 
+/// Independent content transformations requested by the command-line caller.
+///
+/// These flags are intentionally represented separately so the processing
+/// pipeline can apply its stable normalization order to any selected subset.
 #[derive(clap::Args, Clone, Copy)]
 #[expect(
     clippy::struct_excessive_bools,

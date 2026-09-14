@@ -11,12 +11,17 @@ use tracing::{Level, trace};
 
 use crate::wrap::{has_odd_backslash_escape_bytes, link_or_image_span};
 
+/// Returns non-overlapping source ranges whose ellipses must survive unchanged.
+///
+/// Markdown links and autolinks are combined with semantic URL/path tokens because both forms can
+/// contain literal dots that prose normalisation must not rewrite.
 pub(super) fn literal_spans(text: &str) -> Vec<Range<usize>> {
     let mut spans = markdown_spans(text);
     spans.extend(semantic_token_spans(text));
     merge_spans(spans)
 }
 
+/// Finds links, images, and angle-bracket autolinks using source byte ranges.
 fn markdown_spans(text: &str) -> Vec<Range<usize>> {
     let mut spans = Vec::new();
     for (index, character) in text.char_indices() {
@@ -33,6 +38,7 @@ fn markdown_spans(text: &str) -> Vec<Range<usize>> {
     spans
 }
 
+/// Recognises an unescaped URI or e-mail autolink beginning at the supplied byte offset.
 fn autolink_span(text: &str, start: usize) -> Option<Range<usize>> {
     if has_odd_backslash_escape_bytes(text.as_bytes(), start) {
         return None;
@@ -45,6 +51,7 @@ fn autolink_span(text: &str, start: usize) -> Option<Range<usize>> {
         .or_else(|| is_email_autolink(content).then_some(start..end))
 }
 
+/// Applies the Markdown URI-autolink grammar without decoding or rewriting its payload.
 fn is_uri_autolink(content: &str) -> bool {
     let Some((scheme, destination)) = content.split_once(':') else {
         return false;
@@ -61,6 +68,7 @@ fn is_uri_autolink(content: &str) -> bool {
         && content.chars().all(is_autolink_character)
 }
 
+/// Applies the conservative e-mail-autolink grammar used for protection.
 fn is_email_autolink(content: &str) -> bool {
     let Some((local, domain)) = content.split_once('@') else {
         return false;
@@ -72,10 +80,12 @@ fn is_email_autolink(content: &str) -> bool {
         && content.chars().all(is_autolink_character)
 }
 
+/// Reports whether an autolink character is safe to keep inside an angle span.
 fn is_autolink_character(character: char) -> bool {
     !character.is_whitespace() && !character.is_control() && !matches!(character, '<' | '>')
 }
 
+/// Finds whitespace-delimited URL and path tokens that contain an ellipsis.
 fn semantic_token_spans(text: &str) -> Vec<Range<usize>> {
     let mut spans = Vec::new();
     let mut token_start = None;
@@ -96,6 +106,7 @@ fn semantic_token_spans(text: &str) -> Vec<Range<usize>> {
     spans
 }
 
+/// Classifies a token as a bare URL or filesystem path requiring byte preservation.
 fn is_semantic_token(token: &str) -> bool {
     if !token.contains("...") {
         return false;
@@ -119,11 +130,13 @@ fn is_semantic_token(token: &str) -> bool {
     kind.is_some()
 }
 
+/// Checks URL prefixes after removing one layer of punctuation around links.
 fn looks_like_bare_url(token: &str) -> bool {
     let token = token.trim_start_matches(is_wrapper);
     is_uri_autolink(token) || token.starts_with("www.")
 }
 
+/// Checks Unix, home-relative, and Windows-drive path prefixes.
 fn looks_like_path(token: &str) -> bool {
     let token = token.trim_start_matches(is_wrapper);
     token.starts_with('/')
@@ -133,8 +146,10 @@ fn looks_like_path(token: &str) -> bool {
         || is_windows_drive_path(token)
 }
 
+/// Identifies punctuation that can wrap a URL or path without belonging to it.
 fn is_wrapper(character: char) -> bool { matches!(character, '(' | '[' | '{' | '"' | '\'') }
 
+/// Recognises a drive-letter path while requiring a slash after the colon.
 fn is_windows_drive_path(token: &str) -> bool {
     let bytes = token.as_bytes();
     bytes.len() >= 3
@@ -143,6 +158,7 @@ fn is_windows_drive_path(token: &str) -> bool {
         && matches!(bytes[2], b'/' | b'\\')
 }
 
+/// Sorts and merges overlapping protected ranges before prose replacement walks them.
 fn merge_spans(mut spans: Vec<Range<usize>>) -> Vec<Range<usize>> {
     spans.sort_by_key(|span| (span.start, span.end));
     let mut merged: Vec<Range<usize>> = Vec::with_capacity(spans.len());

@@ -42,6 +42,10 @@ fn split_marks(s: &str) -> (&str, &str, &str) {
     (&s[..first], &s[first..last], &s[last..])
 }
 
+/// Writes inline code with a delimiter longer than every backtick run in its payload.
+///
+/// Choosing the delimiter from the payload keeps the emitted span unambiguous without escaping
+/// or changing the code text itself.
 fn push_code(code: &str, out: &mut String) {
     let mut max_run = 0;
     let mut run = 0;
@@ -60,6 +64,9 @@ fn push_code(code: &str, out: &mut String) {
 }
 
 /// Returns any inflectional suffix absorbed into a closed inline-code token.
+///
+/// The tokenizer can leave text that follows the closing fence in the raw token; recovering that
+/// suffix prevents emphasis repair from changing adjacent prose.
 fn inline_code_suffix<'a>(raw: &'a str, code: &'a str) -> &'a str {
     let fence_len = raw.chars().take_while(|&ch| ch == '`').count();
     if fence_len == 0 {
@@ -77,15 +84,20 @@ fn inline_code_suffix<'a>(raw: &'a str, code: &'a str) -> &'a str {
     raw.get(close_end..).unwrap_or("")
 }
 
+/// Re-emits code using a safe fence and restores text following its closing delimiter.
 fn push_code_with_suffix(raw: &str, code: &str, out: &mut String) {
     push_code(code, out);
     out.push_str(inline_code_suffix(raw, code));
 }
 
+/// Tests whether a source line contains marker adjacency that can cross an inline-code token.
 fn has_code_emphasis_adjacent(source: &str) -> bool {
     source.contains("`*") || source.contains("`_") || source.contains("*`") || source.contains("_`")
 }
 
+/// Handles text before code, holding marker-only text until a matching close marker is seen.
+///
+/// Ordinary text is emitted immediately so unrelated prose remains byte-for-byte unchanged.
 fn handle_text_token<'a>(
     raw: &'a str,
     next: Option<&Token<'a>>,
@@ -108,6 +120,7 @@ fn handle_text_token<'a>(
     *pending = trail;
 }
 
+/// Folds a code token into a pending marker pair when the following token closes that pair.
 fn try_fold_matching_emphasis<'a>(
     tokens: &mut Peekable<IntoIter<Token<'a>>>,
     pending: &mut &'a str,
@@ -130,6 +143,10 @@ fn try_fold_matching_emphasis<'a>(
     false
 }
 
+/// Separates marker affixes around a code token and records whether it needs re-serialisation.
+///
+/// Mixed marker and text tokens are left structurally untouched because moving only part of one
+/// would change emphasis semantics.
 fn consume_code_affixes<'a>(
     tokens: &mut Peekable<IntoIter<Token<'a>>>,
     pending: &mut &'a str,
@@ -159,6 +176,7 @@ fn consume_code_affixes<'a>(
     (prefix, suffix, modified)
 }
 
+/// Emits a code token after applying marker pairing found in surrounding text tokens.
 fn handle_code_token<'a>(
     tokens: &mut Peekable<IntoIter<Token<'a>>>,
     code_token: (&'a str, &'a str),

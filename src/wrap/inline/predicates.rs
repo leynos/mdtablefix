@@ -10,10 +10,18 @@
 
 pub(crate) use super::month_names::MONTH_NAMES;
 
+/// Return whether `c` opens a punctuation wrapper around an atomic span.
+///
+/// Both ASCII delimiters and common Unicode opening quotes/brackets are
+/// recognised so the wrapper can keep them with the link or code they open.
 pub(in crate::wrap::inline) fn is_opening_punct(c: char) -> bool {
     matches!(c, '(' | '[' | '"') || "“‘（［【《「『".contains(c)
 }
 
+/// Return whether `c` closes or punctuates an atomic inline span.
+///
+/// This set intentionally includes Unicode sentence punctuation because those
+/// characters must remain attached when a line ends beside a link or code.
 pub(in crate::wrap::inline) fn is_trailing_punct(c: char) -> bool {
     // ASCII closers + common Unicode closers and word-final punctuation
     matches!(
@@ -56,6 +64,10 @@ fn strip_leading_openers(token: &str) -> &str {
     rest
 }
 
+/// Select the month-name table matching the token's byte length.
+///
+/// Length filtering avoids case-insensitive comparisons against every month;
+/// callers then perform the actual spelling check on the returned slice.
 fn month_names_for_len(len: usize) -> &'static [&'static str] {
     match len {
         3 => &MONTH_NAMES[..12],
@@ -109,8 +121,13 @@ pub(in crate::wrap::inline) fn is_year(token: &str) -> bool {
         .is_ok_and(|year| (1000..=2999).contains(&year))
 }
 
+/// Parse a day token after its ordinal suffix has been removed.
+///
+/// The shared range check keeps ordinal and numeric day recognition aligned so
+/// date grouping cannot accept an impossible day in one form only.
 fn is_day_number(token: &str) -> bool { token.parse::<u8>().is_ok_and(is_day) }
 
+/// Return whether a numeric day lies in the inclusive Common date range.
 fn is_day(day: u8) -> bool { (1..=31).contains(&day) }
 
 /// Returns whether `token` already looks like a complete Markdown link.

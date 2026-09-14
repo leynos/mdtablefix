@@ -58,6 +58,10 @@ pub(crate) use tokenize::{has_odd_backslash_escape_bytes, link_or_image_span};
 // Permit GFM task list markers with flexible spacing and missing post-marker
 // spaces in Markdown.
 
+/// Return whether a line is an indented code block with visible content.
+///
+/// Blank indented lines remain paragraph separators; only four-column
+/// indentation followed by a non-whitespace character is protected here.
 fn is_indented_code_line(line: &str) -> bool {
     let (indent_width, first_content_byte) = leading_indent(line);
     indent_width >= 4
@@ -66,6 +70,10 @@ fn is_indented_code_line(line: &str) -> bool {
             .any(|c| !c.is_whitespace())
 }
 
+/// Return whether a line belongs to a table or a table-separator boundary.
+///
+/// These lines are emitted verbatim because reflowing their pipes or separator
+/// dashes would change the table grammar before the table formatter sees it.
 fn is_table_or_separator(line: &str) -> bool {
     line.trim_start().starts_with('|') || crate::table::SEP_RE.is_match(line.trim())
 }
@@ -93,6 +101,10 @@ fn is_passthrough_block(block_kind: Option<BlockKind>, line: &str) -> bool {
         || is_indented_code_line(line)
 }
 
+/// Parse a list or footnote prefix, retaining any outer blockquote prefix.
+///
+/// The returned `PrefixLine` marks whether a prefix must repeat on subsequent
+/// lines and borrows all source slices so verbatim syntax can be reconstructed.
 fn prefix_line<'a>(
     inner_content: &'a str,
     blockquote: Option<BlockquotePrefix<'a>>,
@@ -144,20 +156,40 @@ fn prefix_line<'a>(
     })
 }
 
+/// Split a source line into its original spelling, inner content, and block
+/// context before any paragraph state is changed.
+///
+/// Keeping both views borrowed from the input lets the dispatcher preserve
+/// verbatim prefixes while sending only inner content to wrapping logic.
 #[derive(Clone, Copy)]
 struct LineContext<'a> {
+    /// The complete source line, retained for verbatim output.
     original: &'a str,
+    /// The content after any blockquote prefix.
     inner: &'a str,
+    /// The parsed blockquote prefix, if this line has one.
     blockquote: Option<BlockquotePrefix<'a>>,
+    /// The recognised block-level construct, if any.
     block_kind: Option<BlockKind>,
 }
 
+/// The line data needed before dispatching a line into fence and link state.
 #[derive(Clone, Copy)]
 struct PreambleLine<'a> {
+    /// The complete source line for verbatim emission.
     original: &'a str,
+    /// The content after a blockquote prefix.
     inner: &'a str,
+    /// The active blockquote nesting depth used by fence tracking.
     depth: usize,
 }
+
+/// Remove Markdown hard-break markers while retaining whether the break was
+/// explicit.
+///
+/// Trailing spaces, an HTML break, or an odd trailing backslash all represent
+/// a hard break. The returned text is safe for paragraph accumulation because
+/// only the marker is removed; authored content remains otherwise unchanged.
 fn line_break_parts(line: &str) -> (String, bool) {
     let trimmed_end = line.trim_end();
     let text_without_html_breaks = trimmed_end
@@ -177,6 +209,11 @@ fn line_break_parts(line: &str) -> (String, bool) {
     (text, hard_break)
 }
 
+/// Collapse whitespace-only passthrough lines to the canonical empty line.
+///
+/// Verbatim constructs keep their source spelling, except that a whitespace
+/// only separator is normalised so repeated formatting does not accumulate
+/// insignificant indentation.
 fn normalized_passthrough_line(line: &str) -> &str {
     if !line.is_empty() && line.trim().is_empty() {
         trace!(
@@ -189,6 +226,10 @@ fn normalized_passthrough_line(line: &str) -> &str {
     }
 }
 
+/// Consume a continuation whose blockquote prefix still matches pending state.
+///
+/// This fast path avoids reparsing the line as a new block and therefore keeps
+/// lazy blockquote continuations in the same paragraph.
 fn try_blockquote_fast_path(
     line: LineContext<'_>,
     writer: &mut ParagraphWriter<'_>,
@@ -209,6 +250,10 @@ fn try_blockquote_fast_path(
     true
 }
 
+/// Emit a line that must remain structurally intact and stop paragraph parsing.
+///
+/// Link-reference definitions are observed before emission so a following
+/// standalone title can be classified without altering the definition itself.
 fn try_passthrough_block(
     line: LineContext<'_>,
     writer: &mut ParagraphWriter<'_>,
@@ -234,6 +279,11 @@ fn try_passthrough_block(
     true
 }
 
+/// Handle fence and link-title context that must be known before paragraph
+/// dispatch.
+///
+/// Returning `true` means the line was emitted or consumed by that preamble
+/// state, so the caller must not also feed it to paragraph wrapping.
 fn handle_line_preamble(
     line: PreambleLine<'_>,
     writer: &mut ParagraphWriter<'_>,
@@ -270,6 +320,11 @@ fn handle_line_preamble(
     false
 }
 
+/// Route a line through pending prefixes, verbatim block boundaries, or a new
+/// list/blockquote prefix.
+///
+/// The boolean result records ownership of the line: a handled line has
+/// already updated writer state and must not be appended as ordinary prose.
 fn dispatch_continuation(
     line: LineContext<'_>,
     writer: &mut ParagraphWriter<'_>,

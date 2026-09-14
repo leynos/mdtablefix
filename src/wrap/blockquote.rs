@@ -25,8 +25,11 @@ use super::block::BLOCKQUOTE_RE;
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BlockquotePrefix<'a> {
+    /// The exact source prefix, including separators and trailing whitespace.
     raw_prefix: &'a str,
+    /// The number of `>` markers, independent of the prefix's spacing.
     depth: usize,
+    /// The source content after all recognised blockquote markers.
     inner: &'a str,
 }
 

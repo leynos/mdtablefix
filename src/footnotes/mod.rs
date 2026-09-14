@@ -33,6 +33,11 @@ pub(crate) fn convert_footnotes_with_setext(
     convert_footnotes_inner(lines, setext_text_lines.as_deref())
 }
 
+/// Applies token-aware inline conversion, trailing-list promotion, and
+/// sequential renumbering while preserving protected heading text.
+///
+/// `setext_text_lines` identifies lines whose numeric text will later become a
+/// Setext heading; those lines must pass through unchanged in this stage.
 fn convert_footnotes_inner(lines: &[String], setext_text_lines: Option<&[bool]>) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
 

@@ -1,8 +1,10 @@
 //! Test-only proc-macros used by this repository's test suite through the
 //! `test-macros` dev-dependency.
 //!
-//! `allow_fixture_expansion_lints` suppresses the `unused_braces` lint that
-//! `rstest` fixture expansion triggers, combined with `fn_single_line = true`.
+//! `allow_fixture_expansion_lints` contains the `unused_braces` lint that
+//! `rstest` fixture expansion triggers when `fn_single_line = true` keeps an
+//! expression body wrapped in braces. The generated expectation is attached to
+//! the affected fixture, so it becomes stale if the upstream expansion changes.
 //!
 //! `traced_test` wraps `tracing_test::traced_test`, prepending
 //! `::tracing::callsite::rebuild_interest_cache();` to the body so the rebuild
@@ -16,27 +18,21 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Item, ItemFn, parse_macro_input, parse_quote};
 
-/// Allows `unused_braces` lint for fixture functions.
+/// Contains `unused_braces` reported from an `rstest` fixture expansion.
 ///
-/// This attribute is used on rstest fixture functions that expand to single-expression
-/// bodies. When combined with `fn_single_line = true` in rustfmt.toml, the generated
-/// code triggers the `unused_braces` lint. This attribute suppresses that lint
-/// specifically for fixture expansions.
+/// `rstest` currently emits braces around a single-expression fixture body.
+/// With `fn_single_line = true`, the compiler diagnoses those generated braces
+/// even though the fixture author cannot remove them. The item-scoped
+/// expectation documents that upstream expansion limitation and becomes an
+/// error if the expansion stops needing it.
 #[proc_macro_attribute]
 pub fn allow_fixture_expansion_lints(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_item = parse_macro_input!(item as Item);
 
     quote! {
-        #[allow(
+        #[expect(
             unused_braces,
-            reason = "fixture macro expansion triggers unused-braces on expression bodies"
-        )]
-        #[cfg_attr(
-            clippy,
-            expect(
-                clippy::allow_attributes,
-                reason = "needed to allow unused_braces for fixture macro expansion"
-            )
+            reason = "rstest fixture expansion retains braces around a single-expression body"
         )]
         #parsed_item
     }

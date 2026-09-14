@@ -16,9 +16,12 @@ use crate::wrap::{
     tokenize::{has_odd_backslash_escape_bytes, position_after_close},
 };
 
+/// A complete inline-code span whose authored line boundaries must be restored.
 #[derive(Debug)]
 struct OverlongSpan {
+    /// Byte range of the complete fenced span in the joined source text.
     range: Range<usize>,
+    /// Pieces split at authored line boundaries, excluding join spaces.
     pieces: Vec<String>,
 }
 
@@ -87,6 +90,11 @@ pub(super) fn conforming_source_lines_for_overlong_span(
     Some(output)
 }
 
+/// Group source segments at authored hard breaks while retaining each group as
+/// one slice of the original segment array.
+///
+/// A hard break belongs to the group that ends with it, so later formatting can
+/// restore its marker after preserving any code-span boundaries.
 fn hard_break_groups(segments: &[(String, bool)]) -> impl Iterator<Item = &[(String, bool)]> {
     let mut start = 0;
     std::iter::from_fn(move || {
@@ -103,6 +111,10 @@ fn hard_break_groups(segments: &[(String, bool)]) -> impl Iterator<Item = &[(Str
     })
 }
 
+/// Join source segments with synthetic spaces and record each insertion point.
+///
+/// The recorded offsets identify boundaries that may be restored inside an
+/// overlong code span; the inserted spaces themselves are never retained.
 fn join_with_boundaries(segments: &[(String, bool)]) -> (String, Vec<usize>) {
     let mut joined = String::new();
     let mut boundaries = Vec::with_capacity(segments.len().saturating_sub(1));
@@ -116,6 +128,10 @@ fn join_with_boundaries(segments: &[(String, bool)]) -> (String, Vec<usize>) {
     (joined, boundaries)
 }
 
+/// Find inline-code spans that cross authored boundaries and exceed `width`.
+///
+/// Only complete, unescaped spans qualify. Unmatched fences are skipped so a
+/// malformed opener cannot cause arbitrary prose boundaries to be preserved.
 fn overlong_code_spans_crossing_boundaries(
     text: &str,
     boundaries: &[usize],
@@ -162,6 +178,10 @@ fn overlong_code_spans_crossing_boundaries(
     spans
 }
 
+/// Split a complete code span at the supplied joined-text boundaries.
+///
+/// Each boundary represents one synthetic space inserted by
+/// [`join_with_boundaries`], so that space is omitted from the returned pieces.
 fn split_span_at_boundaries(
     text: &str,
     start: usize,
@@ -178,6 +198,10 @@ fn split_span_at_boundaries(
     pieces
 }
 
+/// Replace a wrapped overlong span with pieces that retain authored breaks.
+///
+/// Prose before and after the span is reattached only when it still fits; if it
+/// does not, it is wrapped independently around the preserved pieces.
 fn preserve_span_boundaries(
     lines: &mut Vec<String>,
     joined: &str,
@@ -212,6 +236,8 @@ fn preserve_span_boundaries(
     lines.splice(line_index..line_index, replacement);
 }
 
+/// Prepend prose to preserved span pieces, wrapping it if the first line would
+/// exceed the available width.
 fn prepend_prose(lines: &mut Vec<String>, before: &str, width: usize) {
     if before.is_empty() {
         return;
@@ -226,6 +252,8 @@ fn prepend_prose(lines: &mut Vec<String>, before: &str, width: usize) {
     *lines = prose;
 }
 
+/// Append prose to preserved span pieces, wrapping it if the final line would
+/// exceed the available width.
 fn append_prose(lines: &mut Vec<String>, after: &str, width: usize) {
     if after.is_empty() {
         return;
@@ -239,6 +267,7 @@ fn append_prose(lines: &mut Vec<String>, after: &str, width: usize) {
     lines.extend(wrap_preserving_code(after.trim_start(), width));
 }
 
+/// Restore the two-space Markdown hard-break marker after span reflow.
 fn restore_last_hard_break(lines: &mut [String]) {
     if let Some(line) = lines.last_mut()
         && trailing_hard_break_marker_len(line) == 0

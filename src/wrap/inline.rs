@@ -22,6 +22,10 @@ mod tracing_events;
 /// followed by a non-whitespace suffix such as an inflectional affix.
 fn has_inline_code_structure(token: &str) -> bool { fragment::has_inline_code_structure(token) }
 
+/// Return whether a token is an atomic code fragment for wrapping purposes.
+///
+/// A complete inline-code token and a code span followed by an attached
+/// inflectional suffix must both stay together when calculating line breaks.
 fn is_code_token(token: &str) -> bool {
     is_inline_code_token(token) || has_inline_code_structure(token)
 }
@@ -62,6 +66,12 @@ use unicode_width::UnicodeWidthStr;
 
 use super::tokenize;
 
+/// Build the first atomic span at `start`, including punctuation and attached
+/// Markdown constructs that cannot be split across a line boundary.
+///
+/// Opening punctuation, hyphen prefixes, code spans, links, and footnote
+/// references are coupled before the general continuation loop runs. The
+/// returned width is the Unicode display width of that complete candidate.
 fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKind) {
     let mut end = start + 1;
     let mut width = UnicodeWidthStr::width(tokens[start].as_str());

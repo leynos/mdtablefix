@@ -7,10 +7,17 @@
 
 use std::collections::HashMap;
 
+/// Placeholder mapping that keeps already reflowed table rows out of later
+/// non-table transformations.
 pub(super) struct ProtectedTableLines {
+    /// Collision-resistant placeholder to original table-line mapping.
     replacements: HashMap<String, String>,
 }
 
+/// Replaces table rows with unique placeholders before a later text pass.
+///
+/// Duplicate table rows are consumed in source order, and the generated
+/// placeholder prefix is selected not to occur in the existing text.
 pub(super) fn protect_table_lines(
     mut lines: Vec<String>,
     table_lines: &[String],
@@ -47,6 +54,10 @@ pub(super) fn protect_table_lines(
     (lines, ProtectedTableLines { replacements })
 }
 
+/// Restores protected table rows after non-table transformations finish.
+///
+/// Lines without a placeholder are passed through unchanged, which allows the
+/// surrounding processing stages to add or remove ordinary rows safely.
 pub(super) fn restore_table_lines(
     lines: Vec<String>,
     protected_table_lines: &ProtectedTableLines,

@@ -18,7 +18,9 @@ use similar::{ChangeTag, TextDiff};
 /// ```
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct LineDelta {
+    /// Number of inserted lines, including the inserted side of replacements.
     insertions: usize,
+    /// Number of deleted lines, including the deleted side of replacements.
     deletions: usize,
 }
 

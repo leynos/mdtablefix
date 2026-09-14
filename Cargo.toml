@@ -9,6 +9,10 @@ description = """
 `mdtablefix` unb0rks and reflows Markdown tables so that each column has a uniform width. When \
 the `--wrap` option is used, it also wraps paragraphs and list items to 80 columns."""
 
+[workspace]
+members = [".", "test-macros"]
+resolver = "3"
+
 # Applies to every target: the release workflow publishes one archive shape for
 # Linux, macOS and Windows alike, so no per-target override is needed. `bin-dir`
 # names the binary at the archive root; `.` resolves to an empty source path and
@@ -61,5 +65,14 @@ pretty_assertions = "1"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.5.0", features = ["strict-compile-time-validation"] }
 
-[lints.clippy]
-pedantic = "warn"
+[workspace.lints.clippy]
+# A lower group priority lets the explicit contract deny override its warning
+# level; Cargo does not use table order to resolve overlapping lint settings.
+pedantic = { level = "warn", priority = -1 }
+# Private helpers carry parsing and layout invariants that public API docs do
+# not expose. Check every workspace member so the proc-macro crate cannot
+# become an undocumented exception.
+missing_docs_in_private_items = "deny"
+
+[lints]
+workspace = true

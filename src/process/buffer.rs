@@ -15,10 +15,14 @@ use crate::{
 
 /// Substitutions that must precede table reflow so it measures final cell text.
 pub(super) struct TableSubstitutions {
+    /// Whether ellipsis replacement must run before table widths are measured.
     pub(super) ellipsis: bool,
+    /// Whether code-emphasis repair must run before table widths are measured.
     pub(super) code_emphasis: bool,
 }
 
+/// Identifies a non-empty line whose indentation makes it an indented code
+/// block rather than a table row.
 fn is_indented_content_line(line: &str) -> bool {
     let (indent_width, first_content_byte) = leading_indent(line);
     indent_width >= 4
@@ -42,11 +46,17 @@ fn is_indented_content_line(line: &str) -> bool {
 /// and [`into_out`](Self::into_out) API so the table-detection invariants
 /// stay encapsulated.
 pub(super) struct ProcessBuffer {
+    /// Completed output rows, including rows flushed from the pending buffer.
     out: Vec<String>,
+    /// Parallel markers identifying rows that came from a valid table.
     table_lines: Vec<bool>,
+    /// Lines awaiting classification as table content or ordinary output.
     buf: Vec<String>,
+    /// Whether the pending buffer currently represents a table candidate.
     in_table: bool,
+    /// Whether ellipsis replacement is enabled for the next table flush.
     ellipsis: bool,
+    /// Whether code-emphasis repair is enabled for the next table flush.
     code_emphasis: bool,
 }
 
@@ -78,6 +88,10 @@ impl ProcessBuffer {
     /// lines into the output.
     pub(super) fn into_out(self) -> (Vec<String>, Vec<bool>) { (self.out, self.table_lines) }
 
+    /// Drains pending lines, reflowing a valid table after enabled substitutions.
+    ///
+    /// Invalid table candidates are emitted verbatim and marked as ordinary
+    /// rows, so later stages never mistake a failed candidate for a table.
     pub(super) fn flush(&mut self) {
         debug!(
             in_table = self.in_table,
@@ -118,11 +132,19 @@ impl ProcessBuffer {
         self.in_table = false;
     }
 
+    /// Flushes pending state and appends `line` without table processing.
+    ///
+    /// Fence markers and other protected lines use this boundary to prevent
+    /// content from one Markdown block entering a neighbouring table run.
     pub(super) fn push_verbatim(&mut self, line: &str) {
         self.flush();
         self.push_out(line.to_string());
     }
 
+    /// Handles a fence marker and reports whether it consumed the line.
+    ///
+    /// A marker always flushes pending content first; non-markers are returned
+    /// to the caller for ordinary block classification.
     pub(super) fn handle_fence_line(&mut self, line: &str, is_fence_marker: bool) -> bool {
         if !is_fence_marker {
             return false;
@@ -132,6 +154,11 @@ impl ProcessBuffer {
         true
     }
 
+    /// Adds a line to table state or returns it when it begins another block.
+    ///
+    /// The pipe heuristic is applied only after indentation and block markers
+    /// have been checked, preventing quoted, list, or definition lines that
+    /// contain pipes from corrupting a table candidate.
     pub(super) fn handle_table_line(&mut self, line: String) -> Option<String> {
         // A leading indent of four or more columns marks a Markdown indented
         // code block, so such a line must stay verbatim and never enter table

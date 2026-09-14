@@ -17,10 +17,23 @@ pub(super) enum AttachmentOutcome {
     Preserved,
 }
 
+/// Describes whether lookahead found an unlabelled fence after blank lines.
 #[derive(Debug, PartialEq, Eq)]
 enum NextFence {
-    Attachable { blank_count: usize },
-    NotAttachable { blank_count: usize },
+    /// The next non-blank line is a fence that can receive the specifier.
+    ///
+    /// The field records blank lines that must be emitted before the attachment.
+    Attachable {
+        /// Number of blank lines between the orphan specifier and the fence.
+        blank_count: usize,
+    },
+    /// Lookahead reached a non-attachable line or the end of input.
+    ///
+    /// The field records blank lines already consumed by the cloned iterator.
+    NotAttachable {
+        /// Number of blank lines already skipped by lookahead.
+        blank_count: usize,
+    },
 }
 
 /// Combine an opening fence with a language specifier.
@@ -38,6 +51,10 @@ enum NextFence {
 /// assert_eq!(attach_specifier_to_fence("```", "rust", "  "), "  ```rust");
 /// assert_eq!(attach_specifier_to_fence("  ```", "rust", "    "), "    ```rust");
 /// ```
+/// Combines an orphan specifier with a fence while preserving compatible indentation.
+///
+/// When the two indentations do not nest cleanly, the fence indentation wins so the attachment
+/// cannot move a block across a Markdown structure boundary.
 fn attach_specifier_to_fence(fence_line: &str, specifier: &str, spec_indent: &str) -> String {
     let Some(cap) = FENCE_RE.captures(fence_line) else {
         return fence_line.to_owned();
@@ -52,6 +69,7 @@ fn attach_specifier_to_fence(fence_line: &str, specifier: &str, spec_indent: &st
     format!("{final_indent}{fence_marker}{specifier}")
 }
 
+/// Peeks past blank lines to classify the next fence without consuming the source iterator.
 fn next_attachable_fence<'a, I>(mut lines: std::iter::Peekable<I>) -> NextFence
 where
     I: Iterator<Item = &'a String>,

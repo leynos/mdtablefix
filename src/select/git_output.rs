@@ -13,7 +13,9 @@ use camino::Utf8PathBuf;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct CandidateListing {
+    /// UTF-8 paths returned by Git, in the order received from its NUL stream.
     pub paths: Vec<Utf8PathBuf>,
+    /// Number of non-empty Git entries that could not be represented as UTF-8.
     pub skipped_non_utf8: usize,
 }
 

@@ -89,6 +89,11 @@ pub(in crate::wrap::inline) fn try_match_date_sequence(
     }
 }
 
+/// Return the first token span representing a complete date, optionally
+/// coupled with its following footnote reference.
+///
+/// The width is calculated over every token in the date so the wrapping stage
+/// treats the date as one indivisible display unit.
 #[tracing::instrument(level = "trace", skip(tokens), ret)]
 pub(in crate::wrap::inline) fn date_token_span(
     tokens: &[String],
@@ -107,30 +112,41 @@ pub(in crate::wrap::inline) fn date_token_span(
     Some((date_end, date_width))
 }
 
+/// Match an ordinal day, month name, and year separated by whitespace.
 fn match_ordinal_day_month_year(tokens: &[String], start: usize) -> Option<usize> {
     let tokens = extract_five(tokens, start)?;
     match_pattern(tokens, is_ordinal_day, is_whitespace_token, is_month_name).then_some(start + 5)
 }
 
+/// Match a numeric day, month name, and year separated by whitespace.
 fn match_numeric_day_month_year(tokens: &[String], start: usize) -> Option<usize> {
     let tokens = extract_five(tokens, start)?;
     match_pattern(tokens, is_numeric_day, is_whitespace_token, is_month_name).then_some(start + 5)
 }
 
+/// Match a month name, numeric day, and year separated by whitespace.
 fn match_month_numeric_day_year(tokens: &[String], start: usize) -> Option<usize> {
     let tokens = extract_five(tokens, start)?;
     match_pattern(tokens, is_month_name, is_whitespace_token, is_numeric_day).then_some(start + 5)
 }
 
+/// Borrow the five tokens needed for a day/month/year pattern check.
 #[derive(Clone, Copy)]
 struct FiveTokens<'a> {
+    /// The first date component.
     first: &'a str,
+    /// Whitespace separating the first and second components.
     space1: &'a str,
+    /// The second date component.
     second: &'a str,
+    /// Whitespace separating the second component and year.
     space2: &'a str,
+    /// The four-digit year candidate.
     year: &'a str,
 }
 
+/// Extract a contiguous five-token window without allocating or indexing past
+/// the end of the stream.
 fn extract_five(tokens: &[String], start: usize) -> Option<FiveTokens<'_>> {
     Some(FiveTokens {
         first: tokens.get(start)?.as_str(),
@@ -141,6 +157,10 @@ fn extract_five(tokens: &[String], start: usize) -> Option<FiveTokens<'_>> {
     })
 }
 
+/// Apply component predicates to a borrowed date window.
+///
+/// The separator predicate is used for both whitespace positions, which keeps
+/// all accepted date forms consistent about requiring token boundaries.
 fn match_pattern<F1, F2, F3>(
     tokens: FiveTokens<'_>,
     first_matches: F1,

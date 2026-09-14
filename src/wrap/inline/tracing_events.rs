@@ -4,6 +4,10 @@ use tracing::debug;
 
 use super::{SpanKind, predicates::looks_like_footnote_ref};
 
+/// Record why whitespace before a footnote reference was coupled or retained.
+///
+/// Only token lengths and structural flags enter the event; source text stays
+/// out of tracing so diagnostics cannot disclose document content.
 pub(super) fn emit_whitespace_footnote_coupling(
     kind: SpanKind,
     next_token: Option<&String>,
@@ -33,6 +37,10 @@ pub(super) fn emit_whitespace_footnote_coupling(
     }
 }
 
+/// Record the decision to attach an adjacent footnote reference to a span.
+///
+/// The colon and preceding-whitespace flags make a declined coupling
+/// diagnosable without duplicating the grouping algorithm in the logger.
 pub(super) fn emit_footnote_reference_coupling(
     tokens: &[String],
     end: usize,

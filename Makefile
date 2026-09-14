@@ -6,7 +6,7 @@ BUILD_JOBS ?=
 MUTANTS_JOBS ?= 3
 # Where `cargo-mutants` builds. Per worktree, so two runs cannot collide.
 MUTANTS_TMPDIR ?= $(HOME)/.cache/mdtablefix/mutants/$(notdir $(CURDIR))
-CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
+CLIPPY_FLAGS ?= --workspace --all-targets --all-features -- -D warnings
 MDLINT ?= $(or $(shell command -v markdownlint-cli2 2>/dev/null),$(HOME)/.bun/bin/markdownlint-cli2)
 NIXIE ?= nixie
 RG ?= rg
