@@ -2,24 +2,20 @@
 
 use std::borrow::Cow;
 
-use regex::Regex;
-
-use crate::wrap::FenceTracker;
+use crate::{
+    classify::{ClassifyCtx, LineClass, OpenFence, classify_line},
+    wrap::FenceTracker,
+};
 
 pub const THEMATIC_BREAK_LEN: usize = 70;
-
-/// Recognizes a Markdown thematic break while allowing up to three columns of indentation.
-///
-/// The expression accepts spaces and tabs between markers because those forms are valid thematic
-/// breaks, while the formatter supplies one canonical replacement line.
-pub(crate) static THEMATIC_BREAK_RE: std::sync::LazyLock<Regex> = lazy_regex!(
-    r"^[ ]{0,3}((?:[ \t]*\*){3,}|(?:[ \t]*-){3,}|(?:[ \t]*_){3,})[ \t]*$",
-    "thematic break pattern should compile",
-);
 
 /// Shared replacement line so every thematic break can be returned without allocation.
 static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| "_".repeat(THEMATIC_BREAK_LEN));
+
+/// Returns the canonical thematic break emitted by [`format_breaks`].
+#[must_use]
+pub fn canonical_break() -> &'static str { THEMATIC_BREAK_LINE.as_str() }
 
 /// Normalize thematic breaks outside fenced code blocks.
 ///
@@ -59,8 +55,13 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
             continue;
         }
 
-        if !fence.is_in_fence && THEMATIC_BREAK_RE.is_match(line.trim_end()) {
-            out.push(Cow::Borrowed(THEMATIC_BREAK_LINE.as_str()));
+        let context = if let Some((marker, marker_len)) = fences.open_marker() {
+            ClassifyCtx::in_fence(OpenFence::new(marker, marker_len))
+        } else {
+            ClassifyCtx::default()
+        };
+        if !fence.is_in_fence && classify_line(line, &context) == LineClass::ThematicBreak {
+            out.push(Cow::Borrowed(canonical_break()));
         } else {
             out.push(Cow::Borrowed(line.as_str()));
         }
@@ -255,8 +256,8 @@ mod prop_tests {
     }
 
     fn non_thematic_line() -> impl Strategy<Value = String> {
-        any::<String>().prop_filter("line must not match thematic break regex", |line| {
-            !THEMATIC_BREAK_RE.is_match(line.trim_end())
+        any::<String>().prop_filter("line must not classify as a thematic break", |line| {
+            classify_line(line, &ClassifyCtx::default()) != LineClass::ThematicBreak
         })
     }
 
