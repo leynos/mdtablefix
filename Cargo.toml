@@ -42,7 +42,7 @@ unicode-width = "0.2"
 
 
 [dev-dependencies]
-rstest = "0.26"
+rstest = "0.27"
 assert_cmd = "2"
 insta = "1.47"
 # Only the debugging recorder is wanted, so the default `recency` feature (and
