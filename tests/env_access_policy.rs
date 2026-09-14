@@ -1,18 +1,23 @@
 //! Contract coverage for the environment-access lint policy.
 //!
 //! The policy has three parts and no single file holds all of them, so nothing
-//! in the build connects them: `clippy.toml` names the prohibited methods, each
-//! package manifest raises `clippy::disallowed_methods` to `deny` and closes
-//! the `#[allow]` route around it, and the Makefile's `lint` recipe runs Clippy
-//! over both packages, every target, and every feature with warnings denied.
-//! Drop any one part and the other two still look correct while the policy
-//! stops being enforced. These tests tie the three together.
+//! in the build connects them: `clippy.toml` names the prohibited methods, the
+//! workspace lint table raises `clippy::disallowed_methods` to `deny` and
+//! closes the `#[allow]` route around it, and the Makefile's `lint` recipe runs
+//! Clippy over every member, every target, and every feature with warnings
+//! denied. Drop any one part and the other two still look correct while the
+//! policy stops being enforced. These tests tie the three together.
 //!
 //! They assert the policy's *shape*. `tests/env_access_enforcement.rs` asserts
 //! that it *fires*, by running Clippy over a fixture package that calls all six
 //! methods. Neither test subsumes the other: a configuration can have the right
 //! shape and lint nothing, and a lint can fire while the gate that runs it has
 //! stopped covering a package.
+//!
+//! Each package is still checked by name rather than assumed to inherit.
+//! `[lints] workspace = true` is a line a member can lose without anything else
+//! noticing, and losing it drops that member out of the policy while the
+//! workspace table still reads correctly.
 //!
 //! The Makefile check parses the `lint` recipe rather than searching the file
 //! for a command string, and judges each command as an invocation rather than
@@ -27,75 +32,66 @@
 //! looks like a bare invocation on a line of its own.
 //!
 //! The policy itself is recorded in
-//! `docs/adrs/0006-environment-seam-taxonomy.md`.
+//! `docs/adrs/0012-environment-seam-taxonomy.md`.
 //!
 //! Repository files are pulled in with `include_str!`, so deleting one is a
 //! compile error rather than a silent skip, and the tests need no filesystem
 //! access of their own. The parsing lives in `tests/support/lint_policy.rs`;
 //! the readers there are also exercised against inline fixtures at the end of
-//! this file, so the spellings issues #438 and #439 introduce are covered
-//! before the repository uses them.
+//! this file.
 //!
-//! Mutation proof (2026-09-06). Each mutation was applied alone, the suite run,
-//! and the mutation reverted. Every one failed, with the message shown:
+//! Mutation proof, re-run on 2026-09-14 after issue #439 made the two packages
+//! one workspace. The mechanism these mutations were made against changed:
+//! the lint level moved from a `[lints.clippy]` table in each manifest to one
+//! `[workspace.lints.clippy]` table each member inherits, and the recipe's
+//! second `--manifest-path test-macros/Cargo.toml` invocation gave way to the
+//! `--workspace` one it always anticipated. Each mutation below was applied
+//! alone to the current tree, run through the build, and reverted. Every one
+//! failed, with the message shown:
 //!
 //! ```text
 //! delete the std::env::set_var entry from clippy.toml
 //!   -> clippy_configuration_disallows_every_environment_method
 //!      clippy.toml must disallow std::env::set_var, found [...]
-//! change the root manifest's disallowed_methods level from "deny" to "warn"
+//! delete allow_attributes from the workspace lint table
 //!   -> every_package_denies_the_policy_lints
-//!      Cargo.toml must set clippy disallowed_methods to deny, found Some("warn")
-//! delete allow_attributes from the test-macros manifest
+//!      Cargo.toml must set clippy allow_attributes to deny, found None
+//! delete `[lints] workspace = true` from the test-macros manifest, so it
+//! stops inheriting
 //!   -> every_package_denies_the_policy_lints
-//!      test-macros/Cargo.toml must set clippy allow_attributes to deny,
+//!      test-macros/Cargo.toml must set clippy disallowed_methods to deny,
 //!      found None
-//! delete -D warnings from CLIPPY_FLAGS
+//! delete --workspace from CLIPPY_FLAGS
 //!   -> clippy_gate_denies_warnings_across_targets_and_features
-//!      the Clippy command [...] must contain -D warnings
-//! delete --all-targets from CLIPPY_FLAGS
-//!   -> clippy_gate_denies_warnings_across_targets_and_features
-//!      the Clippy command [...] must contain --all-targets
-//! delete the --manifest-path test-macros/Cargo.toml command from the recipe
-//!   -> clippy_gate_denies_warnings_across_targets_and_features
-//!      the lint target must run Clippy over test-macros/Cargo.toml, found [...]
-//! comment out both Clippy commands in the recipe
-//!   -> clippy_gate_denies_warnings_across_targets_and_features
-//!      the lint target should have a recipe
-//! prefix the test-macros command with `echo`, so it runs nothing
-//!   -> clippy_gate_denies_warnings_across_targets_and_features
-//!      the lint target must run Clippy over test-macros/Cargo.toml, found [...]
-//! prefix both commands with `echo`
+//!      the lint target must run Clippy over test-macros/Cargo.toml, found
+//!      ["... clippy --all-targets --all-features -- -D warnings"]
+//! prefix the Clippy command with `echo`, so it runs nothing
 //!   -> clippy_gate_denies_warnings_across_targets_and_features
 //!      the lint target must invoke Cargo Clippy
+//! wrap the invocation in `if false; then ... ; fi` across continuation lines
+//!   -> clippy_gate_denies_warnings_across_targets_and_features
+//!      the lint target must invoke Cargo Clippy
+//! append `|| true` to the invocation
+//!   -> no_construct_can_mask_a_failing_clippy_command
+//!      has a `||` fallback other than `exit 1`, which substitutes a success
+//! give the invocation Make's `-` prefix
+//!   -> no_construct_can_mask_a_failing_clippy_command
+//!      carries Make's `-` prefix, so its failure is ignored
+//! pipe the invocation into `tail -5`
+//!   -> no_construct_can_mask_a_failing_clippy_command
+//!      is piped, so the reported status is the last stage's
 //! add `.ONESHELL:` to the Makefile
 //!   -> no_construct_can_mask_a_failing_clippy_command
 //!      .ONESHELL puts the whole recipe in one shell, where only the last
 //!      command's status is reported
-//! chain the two Clippy commands on one line with `;`
-//!   -> no_construct_can_mask_a_failing_clippy_command
-//!      the Clippy command [...] chains another with `;`
-//! wrap both invocations in `if false; then ... ; fi` across continuation lines
-//!   -> clippy_gate_denies_warnings_across_targets_and_features
-//!      the lint target must invoke Cargo Clippy
-//! wrap only the test-macros invocation the same way
-//!   -> clippy_gate_denies_warnings_across_targets_and_features
-//!      the lint target must run Clippy over test-macros/Cargo.toml, found [...]
-//! append `|| true` to the root invocation
-//!   -> no_construct_can_mask_a_failing_clippy_command
-//!      has a `||` fallback other than `exit 1`, which substitutes a success
-//! give the root invocation Make's `-` prefix
-//!   -> no_construct_can_mask_a_failing_clippy_command
-//!      carries Make's `-` prefix, so its failure is ignored
-//! pipe the root invocation into `tail -5`
-//!   -> no_construct_can_mask_a_failing_clippy_command
-//!      is piped, so the reported status is the last stage's
-//! append `|| true || exit 1` to the root invocation
-//!   -> no_construct_can_mask_a_failing_clippy_command
-//!      has a `||` fallback other than `exit 1`, which substitutes a success
-//! add a second `lint:` target further down the Makefile
-//!   -> the lint target should be declared once, found 2 declarations
 //! ```
+//!
+//! Three more, measured on 2026-09-06 against the two-invocation recipe this
+//! replaced, and not re-run because the construct they exercise is gone or
+//! unchanged: `-D warnings` and `--all-targets` deleted from `CLIPPY_FLAGS`
+//! each fail `clippy_gate_denies_warnings_across_targets_and_features` on the
+//! flag they name, and a second `lint:` target further down the Makefile fails
+//! with "the lint target should be declared once, found 2 declarations".
 //!
 //! That last one is a live hole, not a hypothetical: GNU Make keeps the later
 //! recipe for a target, warning that it overrides the earlier, so the added
@@ -110,17 +106,19 @@
 //! Each of `|| true`, `|| true || exit 1`, the `-` prefix and the pipe was
 //! confirmed to be a live hole before it was closed: with a `std::env::var`
 //! call in the root package, `make lint` exited 0 under all four while this
-//! file's tests passed. The chained form matters because the last fallback is
-//! `exit 1`, so judging only the final one clears it while `true` has already
-//! swallowed the failure.
+//! file's tests passed.
 //!
-//! Enforcement itself was proven separately, in each package: a temporary
-//! `std::env::var` call in `src/lib.rs`, and another in
-//! `test-macros/src/lib.rs`, each failed `make lint` with "use of a disallowed
-//! method" and the configured reason string. Adding a bare
-//! `#[allow(clippy::disallowed_methods)]` above the first, the obvious way to
-//! defeat the ban, failed `make lint` in its own right with "#[allow] attribute
-//! found" and "`allow` attribute without specifying a reason". All were
+//! Enforcement itself was re-proven on 2026-09-14 through the single
+//! `--workspace` invocation, which is the claim the restructure rests on. A
+//! `std::env::var` call inside `allow_fixture_expansion_lints` in
+//! `test-macros/src/lib.rs` fails `cargo clippy --workspace --all-targets
+//! --all-features -- -D warnings` with "use of a disallowed method
+//! `std::env::var`" and the configured reason "inject an environment reader",
+//! so the member is linted in its own right rather than as a capped
+//! dependency. Adding `#[allow(clippy::disallowed_methods)]` above it, the
+//! obvious way to defeat the ban, fails in its own right with "#[allow]
+//! attribute found" and "`allow` attribute without specifying a reason",
+//! which shows the inherited hygiene denies reach the member too. Both were
 //! reverted.
 use anyhow::{Context, Result, bail, ensure};
 
@@ -155,10 +153,12 @@ const PROHIBITED_ENVIRONMENT_METHODS: [&str; 6] = [
 
 /// Each package manifest that must enforce the policy, with its source.
 ///
-/// Both packages are listed by name because `test-macros` compiles its own
-/// targets and so needs the lint level in its own right; issue #439 will make
-/// them one workspace, at which point `[lints] workspace = true` becomes the
-/// expected spelling and [`clippy_lint_level`] resolves it.
+/// Both members are listed by name even though the level now lives in one
+/// `[workspace.lints.clippy]` table. `[lints] workspace = true` is a line a
+/// member can lose on its own, and losing it drops that member out of the
+/// policy while the workspace table still reads correctly.
+/// [`clippy_lint_level`] follows the inheritance, so each entry is judged on
+/// the level that actually applies to it.
 const PACKAGE_MANIFESTS: [(&str, &str); 2] = [
     ("Cargo.toml", include_str!("../Cargo.toml")),
     (
@@ -200,9 +200,9 @@ const REQUIRED_DENIED_LINTS: [&str; 3] = [
     "allow_attributes_without_reason",
 ];
 
-/// Scenario: each package manifest is read for the level it gives each lint the
+/// Scenario: each member manifest is read for the level it gives each lint the
 /// policy depends on.
-/// Invariant: both packages deny all three, whether declared in the package or
+/// Invariant: both members deny all three, whether declared in the package or
 /// inherited from the workspace, so neither a configured-but-warned method nor
 /// a bare `#[allow]` can pass the gate.
 #[test]

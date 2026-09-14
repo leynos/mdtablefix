@@ -58,9 +58,11 @@ mentioning it, and `#![cfg_attr(all(), allow(clippy::disallowed_methods))]` is
 honoured too. All three were measured against this repository.
 
 Clippy cannot close that itself, so `tests/env_access_suppressions.rs` parses
-every compiled Rust source with `syn` and fails if any attribute allows a
-protected lint. It walks the whole repository rather than a list of source
-directories, so a target added outside the usual ones is covered. It follows
+every `.rs` file below the repository root with `syn` and fails if any
+attribute allows a protected lint. The walk starts at the root rather than at a
+list of source directories, skipping only `target` and dotted directories, so
+it covers build scripts, benches, examples, second binaries and anything added
+outside the usual places, compiled or not. It follows
 `cfg_attr`, reaches attributes on nested and function-local items, walks macro
 token streams, and compares lint paths rather than substrings. Parsing
 rather than searching is deliberate: a text scan cannot follow `cfg_attr`, and
@@ -68,17 +70,23 @@ cannot tell an attribute from attribute-shaped text in a string literal or a
 doc comment, which is how its first draft reported this repository's own
 mutation records as violations.
 
-The lint level is declared in each package's own `[lints.clippy]` table, and
-`lint` runs Clippy twice: once for the root package and once with
-`--manifest-path test-macros/Cargo.toml`. Both are interim measures forced by
-the repository not yet being a Cargo workspace. `test-macros` is a path
-dev-dependency rather than a member, so the root invocation does not lint it and
-Cargo caps its `deny` while it compiles as a dependency; the second invocation
-lints it in its own right. Issue #439 makes the two packages one workspace and
-moves lint policy to `[workspace.lints.*]`, and issue #438 aligns the wider lint
-baseline with `netsuke`. Once #439 lands, each package inherits the level with
-`[lints] workspace = true` and a single `--workspace` run replaces both
-invocations.
+The lint level is declared once, in the workspace's `[workspace.lints.clippy]`
+table, and each member inherits it with `[lints] workspace = true`. One
+`cargo clippy --workspace` run then lints every member in its own right, so
+`test-macros` is governed as a package rather than as a capped dependency.
+Issue #439 made the two packages one workspace and retired the earlier
+arrangement, a per-package `[lints.clippy]` table in each manifest and a second
+`--manifest-path test-macros/Cargo.toml` invocation in the `lint` recipe.
+Issue #438 aligns the wider lint baseline with `netsuke`.
+
+The test suite has two composition roots of its own, each carrying the
+item-scoped `expect`. `write_failure_child` in `tests/rewrite_atomic.rs` is the
+child half of a test that re-execs this binary under `ulimit -f`, so the
+environment its parent composed is the only channel into that process.
+`ambient_variable` in `tests/support/idempotence_harness.rs` reads
+`PROPTEST_CASES`, which proptest's own configuration honours and whoever runs
+the suite sets; `case_count` takes the reader as an argument, so the parsing and
+the fallback are exercised without any read at all.
 
 ### Choose a seam by call-site count
 

@@ -1486,13 +1486,15 @@ Clippy's own check does not cover an inner attribute, so
 would switch the ban off and still pass `make lint`. Nor does the suppression
 have to name the lint: `disallowed_methods` sits in the `style` group, so
 `clippy::style` and `clippy::all` each do the same, as does a `cfg_attr`
-wrapper. `tests/env_access_suppressions.rs` parses every compiled source with
-`syn` and rejects all of them, following `cfg_attr`, reaching attributes inside
-function bodies, and walking macro token streams, since an attribute written in
-a `macro_rules!` arm is honoured on expansion while never being parsed as an
-attribute. The walk starts at the repository root rather than at a list of
-source directories, so a build script, bench, example or second binary added
-outside `src`, `tests` and `test-macros/src` is scanned like anything else. An
+wrapper. `tests/env_access_suppressions.rs` parses every `.rs` file below the
+repository root with `syn` and rejects all of them, following `cfg_attr`,
+reaching attributes inside function bodies, and walking macro token streams,
+since an attribute written in a `macro_rules!` arm is honoured on expansion
+while never being parsed as an attribute. The walk starts at the root rather
+than at a list of source directories and skips only `target` and dotted
+directories, so a build script, bench, example or second binary added outside
+`src`, `tests` and `test-macros/src` is scanned like anything else, whether or
+not Cargo compiles it. An
 item-scoped `#[expect]` carrying a reason is left alone, since that is the
 sanctioned form. A crate-scoped `#![expect(...)]` is
 not: one call anywhere in the crate fulfils it, so it reports nothing and never
@@ -1500,13 +1502,13 @@ warns, which is `allow` by another name. Raw identifiers are normalized before
 comparison, because `r#allow` and `clippy::r#style` are the plain identifiers to
 the compiler.
 
-`lint` runs Clippy twice, once for the root package and once with
-`--manifest-path test-macros/Cargo.toml`. `test-macros` is a path
-dev-dependency rather than a workspace member, so the root invocation does not
-lint it. Issue #439 replaces both invocations with a single `--workspace` run.
+`lint` runs Clippy once, with `--workspace`, which lints every member in its
+own right rather than as a capped dependency. Issue #439 made the two packages
+one workspace and retired the second, `--manifest-path test-macros/Cargo.toml`
+invocation this recipe used to carry.
 
-The two commands are separate recipe lines, which is what makes a failure in
-either one fail the target: Make runs each line in its own shell and stops at
+Clippy is its own recipe line, which is what makes its failure fail the
+target: Make runs each line in its own shell and stops at
 the first non-zero status. Nothing may stand between a Clippy command and that
 status. In particular, do not give one Make's `-` prefix, do not chain commands
 on one line with `;`, do not append a `||` fallback other than `|| exit 1`, do
@@ -1542,6 +1544,16 @@ a function it calls directly to assemble the application. Such a site carries
 `allow` and never a module- or crate-wide suppression. The expectation warns
 once the site is migrated, so the exception removes itself.
 
+A test harness has composition roots of its own, and the repository has two.
+`write_failure_child` in `tests/rewrite_atomic.rs` is the child half of a test
+that re-execs this test binary under `ulimit -f`: the process boundary is a
+fresh `main`, so the environment the parent composed is the only channel into
+it and there is no argument to take instead. `ambient_variable` in
+`tests/support/idempotence_harness.rs` reads `PROPTEST_CASES`, proptest's own
+knob, set by whoever runs the suite rather than by a caller in this repository;
+`case_count` takes the reader as an argument so the fallback is exercised
+without it, which is the narrow reader closure from the table above.
+
 ### Environment variables in subprocess tests
 
 Integration tests spawn the binary through `assert_cmd`. A test that needs a
@@ -1551,9 +1563,10 @@ clears it with `Command::env_remove`; `tests/static_regex_lint.rs` does this for
 not an alternative, and no test should be serialized to make such a change safe.
 
 Two tests guard this. `tests/env_access_policy.rs` checks the policy's shape:
-it fails if any of the six entries leaves `clippy.toml`, if either package stops
-denying one of the three policy lints, or if the `lint` recipe stops running
-Clippy over both packages, every target, and every feature with warnings denied.
+it fails if any of the six entries leaves `clippy.toml`, if either member stops
+denying one of the three policy lints, whether declared or inherited, or if the
+`lint` recipe stops running Clippy over every member, every target, and every
+feature with warnings denied.
 `tests/env_access_enforcement.rs` checks that the policy fires, by running
 Clippy over a fixture package that calls all six methods and asserting one
 diagnostic per method with its reason string. A configuration can keep its shape
@@ -1563,7 +1576,7 @@ and lint nothing, so the second test is not redundant.
 the lint target and the test suite carry a condition. A step keeps its `run`
 value when it is skipped, so nothing else here would notice an `if: false`. The
 full rationale is in
-[Environment seam taxonomy](adrs/0006-environment-seam-taxonomy.md).
+[Environment seam taxonomy](adrs/0012-environment-seam-taxonomy.md).
 
 ## 1. Stateful pipeline helpers
 

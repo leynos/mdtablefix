@@ -87,14 +87,34 @@ pub const SWEEP_DOCUMENTS: usize = 64;
 /// from the environment.
 pub fn proptest_config() -> Config {
     Config {
-        cases: case_count(),
+        cases: case_count(ambient_variable),
         ..Config::default()
     }
 }
 
 /// Returns `PROPTEST_CASES` as a case count, or [`DEFAULT_CASES`] when it is
 /// unset or unparseable.
-fn case_count() -> u32 { parse_case_count(std::env::var("PROPTEST_CASES").ok().as_deref()) }
+///
+/// The variable is read through `read` rather than directly, so a caller can
+/// supply the value and the environment-access policy has one place to
+/// sanction rather than one per call site.
+fn case_count(read: impl FnOnce(&str) -> Option<String>) -> u32 {
+    parse_case_count(read("PROPTEST_CASES").as_deref())
+}
+
+/// Reads one variable from the process environment.
+///
+/// This is the idempotence harness's composition root: `PROPTEST_CASES` is
+/// proptest's own knob, set by whoever runs the suite, so there is no caller
+/// inside the repository to take it as an argument from. The read is sanctioned
+/// here with an item-scoped `expect`, which warns if the seam ever becomes
+/// available, rather than an `allow`, which would not. See
+/// `docs/adrs/0012-environment-seam-taxonomy.md`.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: PROPTEST_CASES is set by whoever runs the suite"
+)]
+fn ambient_variable(name: &str) -> Option<String> { std::env::var(name).ok() }
 
 /// Parses a `PROPTEST_CASES` value, falling back to [`DEFAULT_CASES`].
 ///
@@ -278,7 +298,7 @@ mod tests {
 
     use rstest::rstest;
 
-    use super::{DEFAULT_CASES, parse_case_count};
+    use super::{DEFAULT_CASES, case_count, parse_case_count};
 
     /// Asserts the case count comes from `PROPTEST_CASES` when it parses to a
     /// positive number and from the default otherwise.
@@ -294,5 +314,27 @@ mod tests {
         #[case] expected: u32,
     ) {
         assert_eq!(parse_case_count(value), expected);
+    }
+
+    /// Scenario: the case count is resolved through the injected reader rather
+    /// than the process environment.
+    ///
+    /// Invariant: the reader is asked for `PROPTEST_CASES` and its answer
+    /// decides the count, so the suite can be configured without a test
+    /// mutating the parent environment and forcing the others to serialize.
+    #[rstest]
+    #[case(Some("512"), 512)]
+    #[case(None, DEFAULT_CASES)]
+    fn case_count_reads_proptest_cases_through_its_reader(
+        #[case] value: Option<&str>,
+        #[case] expected: u32,
+    ) {
+        let mut asked = None;
+        let counted = case_count(|name| {
+            asked = Some(name.to_owned());
+            value.map(str::to_owned)
+        });
+        assert_eq!(asked.as_deref(), Some("PROPTEST_CASES"));
+        assert_eq!(counted, expected);
     }
 }

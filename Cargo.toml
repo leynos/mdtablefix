@@ -77,7 +77,7 @@ pedantic = { level = "warn", priority = -1 }
 # become an undocumented exception.
 missing_docs_in_private_items = "deny"
 # Enforce the environment-access policy in every target of every member.
-# See `clippy.toml` and `docs/adrs/0006-environment-seam-taxonomy.md`.
+# See `clippy.toml` and `docs/adrs/0012-environment-seam-taxonomy.md`.
 disallowed_methods = "deny"
 # Keep `#[allow]` from silently defeating the deny above: a suppression must
 # be an `#[expect]` carrying a reason, so it warns once it stops applying.

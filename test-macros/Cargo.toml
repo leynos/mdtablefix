@@ -16,6 +16,6 @@ syn = { version = "3", features = ["full"] }
 
 # The environment-access policy is denied once in the workspace lint table and
 # inherited here. See `clippy.toml` and
-# `docs/adrs/0006-environment-seam-taxonomy.md`.
+# `docs/adrs/0012-environment-seam-taxonomy.md`.
 [lints]
 workspace = true

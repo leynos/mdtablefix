@@ -133,8 +133,21 @@ fn read_only_target_is_replaced(#[case] rewrite_fn: fn(&Path) -> std::io::Result
 ///
 /// Runs only when the parent set [`CHILD_OPERATION`]; the parent asserts on the
 /// file this process leaves behind.
+///
+/// This function is a composition root for the environment-access policy. The
+/// parent re-execs this test binary under `ulimit -f`, so the process boundary
+/// is a fresh `main` and the environment the parent composed is the only
+/// channel into it; there is no argument or seam to inject through. The reads
+/// are therefore permitted here under an item-scoped `expect`, which warns if
+/// the seam ever becomes available, rather than an `allow`, which would not.
+/// See `docs/adrs/0012-environment-seam-taxonomy.md`.
 #[cfg(unix)]
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: the parent re-execs this binary, so its environment is the only \
+              channel in"
+)]
 fn write_failure_child() {
     let Ok(operation) = std::env::var(CHILD_OPERATION) else {
         return;
