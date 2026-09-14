@@ -82,9 +82,10 @@ fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKin
             end += 1;
             width += UnicodeWidthStr::width(next.as_str());
             end = extend_punctuation(tokens, end, &mut width);
-        } else if looks_like_bracketed_reference(next) {
+        } else if tokens[start] == "[" && looks_like_bracketed_reference(next) {
             // Forward-couple a bare bracket reference to its opener so wrapping
-            // never strands `[` at the end of a line before its digits.
+            // never strands `[` at the end of a line before its digits. Only
+            // `[` introduces a reference, so other openers stay ordinary prose.
             kind = SpanKind::BracketedRef;
             end += 1;
             width += UnicodeWidthStr::width(next.as_str());

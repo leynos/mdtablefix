@@ -236,7 +236,7 @@ pub(in crate::wrap::inline) fn try_couple_inline_link_after_opener(
     Some((SpanKind::Link, extend_punctuation(tokens, end + 2, width)))
 }
 
-/// Couples an opening bracket to the numeric reference that closes it.
+/// Couples a `[` opener to the numeric reference that closes it.
 ///
 /// The tokenizer emits a bracket without an inline destination as its own
 /// token, so `[1]` reaches this module as `[` followed by `1]`. Treated as two
@@ -250,7 +250,7 @@ pub(in crate::wrap::inline) fn try_couple_bracketed_reference(
 ) -> Option<(SpanKind, usize)> {
     let opener = tokens.get(end)?;
     let reference = tokens.get(end + 1)?;
-    if !opener.chars().all(is_opening_punct) || !looks_like_bracketed_reference(reference) {
+    if opener != "[" || !looks_like_bracketed_reference(reference) {
         return None;
     }
 
@@ -299,6 +299,10 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
         SpanKind::FootnoteRef | SpanKind::BracketedRef => None,
     }
 }
+
+#[cfg(test)]
+#[path = "span_helper_coupling_tests.rs"]
+mod coupling_tests;
 
 #[cfg(test)]
 #[path = "span_helper_props.rs"]
