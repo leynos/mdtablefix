@@ -6,16 +6,25 @@ function, input domain, external contracts, and result class. A kernel may not
 be represented by a separate `proofs/` implementation unless a refinement proof
 connects it to the production function.
 
+## Current status
+
+Issue #485 has no production-linked proof claims yet. The current
+`verus/lib.rs` exercises a structural model, but it does not refine the runtime
+scanner or consumer functions and is therefore deliberately excluded from the
+claim ledger.
+
+The pinned Verus release cannot compile the production scanner's `&str` range
+operations inside `verus!`; the exact missing refinement obligation and the
+required shared character-sequence kernel are tracked in [#512][issue-512]. The
+production scanner and its consumers remain the source of truth. No
+`#[verifier::external_body]` contract is used to assert their correctness.
+
 ## Claim ledger
 
 | Claim | Executable function | Input domain | Unverified external contracts | Result class |
 | ----- | ------------------- | ------------ | ----------------------------- | ------------ |
 
 <!-- markdownlint-disable MD013 -->
-| LEM-SETEXT-CONSUMES-ONLY-PARAGRAPH | `convert_setext` | Setext candidates and underlines | None | Local correctness |
-| LEM-ATX-OUTPUT-IS-NOT-SETEXT-CANDIDATE | `convert_setext` | Emitted ATX headings | None | Cross-pass preservation |
-| LEM-CANONICAL-BREAK-REMAINS-STRUCTURAL | `canonical_break` | Canonical seventy-underscore break | None | Cross-pass preservation |
-| Scanner refinement surface | `classify_line` | Structural line classifications | None | Local correctness |
 <!-- markdownlint-enable MD013 -->
 
 _Table 1: The verification claim ledger._
@@ -31,9 +40,11 @@ _Table 1: The verification claim ledger._
   and display columns. No proof substitutes `String::len()` for display width.
 - Existing property tests remain in place. Verus proofs complement them and do
   not replace them.
-- `make verus-mutation` removes the space after the emitted `#` in an isolated
-  proof copy and must fail verification. This guards the ATX-output lemma
-  against a prefix specification that checks only for the hash marker.
+- `make verus-mutation` currently mutates the exploratory model only. It does
+  not satisfy the production-linked mutation obligation from #485. That work is
+  part of [#512][issue-512].
 
 The ledger check invoked by `make lint` rejects a claim whose executable
 function name does not occur in `src/`.
+
+[issue-512]: https://github.com/leynos/mdtablefix/issues/512
