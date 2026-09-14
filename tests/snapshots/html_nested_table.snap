@@ -1,0 +1,12 @@
+---
+source: tests/html_snapshots.rs
+expression: output
+---
+| Outer | Value |
+| --- | --- |
+| Inner Nested  | Tail |
+| Inner |
+| Nested |
+| Inner  |
+| ------ |
+| Nested |

@@ -104,24 +104,42 @@ fn is_element(handle: &Handle, tag: &str) -> bool {
 /// Returns `true` if `handle` represents a `<td>` or `<th>` element.
 fn is_table_cell(handle: &Handle) -> bool { is_element(handle, "td") || is_element(handle, "th") }
 
-/// Walks the DOM tree collecting `<table>` nodes under `handle`.
-fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
-    if is_element(handle, "table") {
-        tables.push(handle.clone());
+/// DOM input is unbounded; bounded model checking is not a good fit for
+/// verifying traversal over arbitrary tree depth. Property tests cover
+/// invariants via random small-tree generation instead.
+///
+/// Walks the DOM tree in pre-order, cloning nodes that satisfy `pred` into `out`.
+///
+/// # Examples
+///
+/// For a root containing `<table id="outer"><td><table id="inner"></table></td></table>`
+/// followed by `<table id="sibling"></table>`, matching table elements preserves
+/// that pre-order sequence:
+///
+/// ```rust,ignore
+/// let mut tables = Vec::new();
+/// collect_matching(&root, |node| is_element(node, "table"), &mut tables);
+/// assert_eq!(tables, vec![outer, inner, sibling]);
+/// ```
+fn collect_matching<F>(handle: &Handle, pred: F, out: &mut Vec<Handle>)
+where
+    F: Fn(&Handle) -> bool + Copy,
+{
+    if pred(handle) {
+        out.push(handle.clone());
     }
     for child in handle.children.borrow().iter() {
-        collect_tables(child, tables);
+        collect_matching(child, pred, out);
     }
+}
+/// Walks the DOM tree collecting `<table>` nodes under `handle`.
+fn collect_tables(handle: &Handle, tables: &mut Vec<Handle>) {
+    collect_matching(handle, |node| is_element(node, "table"), tables);
 }
 
 /// Collects all `<tr>` nodes beneath `handle`.
 fn collect_rows(handle: &Handle, rows: &mut Vec<Handle>) {
-    if is_element(handle, "tr") {
-        rows.push(handle.clone());
-    }
-    for child in handle.children.borrow().iter() {
-        collect_rows(child, rows);
-    }
+    collect_matching(handle, |node| is_element(node, "tr"), rows);
 }
 
 /// Reports whether a tag marks text as bold for implicit header detection.
