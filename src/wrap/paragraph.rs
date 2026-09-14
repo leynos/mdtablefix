@@ -28,6 +28,7 @@ pub(super) use pending::{
 #[cfg(test)]
 #[path = "paragraph_tests.rs"]
 mod tests;
+
 /// Returns whether `text` spills past the first wrapped line.
 ///
 /// A block that wraps onto a tail line is reflowed with the lines below it on
