@@ -1242,7 +1242,6 @@ Run it with:
 ```sh
 make bench
 
-
 # or, equivalently:
 cargo bench --features bench-internals --bench wrap_observer
 ```
