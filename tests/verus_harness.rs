@@ -275,6 +275,7 @@ fn workflow_runs_the_proof_and_non_vacuity_targets() -> Result<()> {
 #[case::valid("valid", 0, None)]
 #[case::missing_symbol("missing_symbol", 1, Some(MISSING_SYMBOL_DIAGNOSTIC))]
 #[case::prefix_only("prefix_only", 1, Some(PREFIX_ONLY_SYMBOL_DIAGNOSTIC))]
+#[case::multiline_literal("multiline_literal", 1, Some(PREFIX_ONLY_SYMBOL_DIAGNOSTIC))]
 fn ledger_check_requires_an_exact_declaration(
     #[case] fixture_name: &str,
     #[case] expected_status: i32,
