@@ -90,15 +90,6 @@ impl ClassifyCtx {
         }
     }
 }
-/// Prefix-stripped portions of one line used by structural scanners.
-struct LineParts<'a> {
-    /// Leading indentation and blockquote prefix retained by conversions.
-    prefix: &'a str,
-    /// Content after the structural prefix.
-    body: &'a str,
-    /// Whether indentation makes the content literal code.
-    is_literal: bool,
-}
 /// Classifies one source line using the shared structural precedence.
 #[must_use]
 pub fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
@@ -149,6 +140,17 @@ pub fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
     }
     LineClass::ParagraphText
 }
+
+/// Prefix-stripped portions of one line used by structural scanners.
+struct LineParts<'a> {
+    /// Leading indentation and blockquote prefix retained by conversions.
+    prefix: &'a str,
+    /// Content after the structural prefix.
+    body: &'a str,
+    /// Whether indentation makes the content literal code.
+    is_literal: bool,
+}
+
 /// Splits a line into a blockquote-aware prefix and its structural body.
 fn line_parts(line: &str) -> LineParts<'_> {
     let (outer_width, mut cursor) = indentation_at(line, 0);
@@ -231,13 +233,16 @@ fn is_atx_heading(body: &str) -> bool {
             .is_none_or(char::is_whitespace)
 }
 
-/// Reports whether `body` contains only table delimiter syntax.
+/// Reports whether `body` has valid table delimiter cells.
 fn is_table_delimiter(body: &str) -> bool {
     let trimmed = body.trim();
-    let Some(without_trailing_pipe) = trimmed.strip_suffix('|') else {
+    if !trimmed.contains('|') {
         return false;
-    };
-    let cells = without_trailing_pipe.trim_start_matches('|');
+    }
+    let without_leading_pipe = trimmed.trim_start_matches('|');
+    let cells = without_leading_pipe
+        .strip_suffix('|')
+        .unwrap_or(without_leading_pipe);
     !cells.is_empty() && cells.split('|').all(is_table_delimiter_cell)
 }
 
@@ -253,7 +258,9 @@ fn is_table_delimiter_cell(cell: &str) -> bool {
         .strip_suffix(':')
         .unwrap_or(without_leading_colon);
     !without_trailing_colon.is_empty()
-        && without_trailing_colon.chars().all(|character| character == '-')
+        && without_trailing_colon
+            .chars()
+            .all(|character| character == '-')
 }
 
 /// Reports whether `body` is one uniform three-or-more Setext marker run.
