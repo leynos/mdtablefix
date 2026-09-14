@@ -9,8 +9,6 @@
 //! for Setext conversion.  A leading tab before an otherwise valid thematic
 //! break keeps the formatter's historic break-normalisation compatibility.
 
-use tracing::trace;
-
 /// The structural role of a line after its indentation and blockquote prefix.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum LineClass {
@@ -37,7 +35,7 @@ pub(crate) enum LineClass {
 }
 
 /// Fence state needed to distinguish literal fenced contents from markers.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) struct OpenFence {
     marker: char,
     marker_len: usize,
@@ -55,7 +53,7 @@ impl OpenFence {
 /// Setext underline from a thematic break.  A fence context marks ordinary
 /// fenced contents as [`LineClass::Literal`], while still recognising a valid
 /// matching closing marker.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub(crate) struct ClassifyCtx {
     is_in_fence: bool,
     open_fence: Option<OpenFence>,
@@ -86,16 +84,14 @@ impl ClassifyCtx {
         }
     }
 }
-
 struct LineParts<'a> {
     prefix: &'a str,
     body: &'a str,
     is_literal: bool,
 }
-
 /// Classifies one source line using the shared structural precedence.
 #[must_use]
-pub(crate) fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
+pub fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
     if line.trim().is_empty() {
         return LineClass::Blank;
     }
@@ -105,10 +101,6 @@ pub(crate) fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
         if line.starts_with('\t') && is_thematic_break(line) {
             return LineClass::ThematicBreak;
         }
-        trace!(
-            line_len = line.len(),
-            "classifying indented source as literal"
-        );
         return LineClass::Literal;
     }
     if ctx.is_in_fence {
@@ -147,7 +139,6 @@ pub(crate) fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
     }
     LineClass::ParagraphText
 }
-
 fn line_parts(line: &str) -> LineParts<'_> {
     let (outer_width, mut cursor) = indentation_at(line, 0);
     if outer_width >= 4 {
@@ -322,6 +313,33 @@ mod tests {
     #[case("    code", LineClass::Literal)]
     fn classifies_structural_lines(#[case] line: &str, #[case] expected: LineClass) {
         assert_eq!(classify_line(line, &ClassifyCtx::default()), expected);
+    }
+
+    /// Gives every class a positive witness and a close non-member witness.
+    #[rstest]
+    #[case(LineClass::ParagraphText, "2024 revenue", "# heading")]
+    #[case(LineClass::AtxHeading, "# heading", "#heading")]
+    #[case(LineClass::SetextUnderline, "---", "--")]
+    #[case(LineClass::TableDelimiter, "|---|---|", "| value |")]
+    #[case(LineClass::TableRow, "| value |", "value | value")]
+    #[case(LineClass::FenceMarker, "```rust", "``rust")]
+    #[case(LineClass::ThematicBreak, "___", "__")]
+    #[case(LineClass::ListItem, "- item", "-item")]
+    #[case(LineClass::Blank, "   ", "text")]
+    #[case(LineClass::Literal, "    code", " code")]
+    fn every_class_has_positive_and_negative_examples(
+        #[case] expected: LineClass,
+        #[case] positive: &str,
+        #[case] negative: &str,
+    ) {
+        let context = if expected == LineClass::SetextUnderline {
+            ClassifyCtx::following("candidate", LineClass::ParagraphText)
+        } else {
+            ClassifyCtx::default()
+        };
+
+        assert_eq!(classify_line(positive, &context), expected);
+        assert_ne!(classify_line(negative, &context), expected);
     }
 
     #[test]

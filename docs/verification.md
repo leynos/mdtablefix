@@ -11,10 +11,14 @@ connects it to the production function.
 | Claim | Executable function | Input domain | Unverified external contracts | Result class |
 | ----- | ------------------- | ------------ | ----------------------------- | ------------ |
 
-_Table 1: The verification claim ledger._
+<!-- markdownlint-disable MD013 -->
+| LEM-SETEXT-CONSUMES-ONLY-PARAGRAPH | `convert_setext` | Setext candidates and underlines | None | Local correctness |
+| LEM-ATX-OUTPUT-IS-NOT-SETEXT-CANDIDATE | `convert_setext` | Emitted ATX headings | None | Cross-pass preservation |
+| LEM-CANONICAL-BREAK-REMAINS-STRUCTURAL | `canonical_break` | Canonical seventy-underscore break | None | Cross-pass preservation |
+| Scanner refinement surface | `classify_line` | Structural line classifications | None | Local correctness |
+<!-- markdownlint-enable MD013 -->
 
-No kernel claims have landed yet. Issues #491 and #483 will add the ellipsis and
-`ProcessBuffer::finish` claims after their production-used kernels exist.
+_Table 1: The verification claim ledger._
 
 ## Policy
 
@@ -27,6 +31,9 @@ No kernel claims have landed yet. Issues #491 and #483 will add the ellipsis and
   and display columns. No proof substitutes `String::len()` for display width.
 - Existing property tests remain in place. Verus proofs complement them and do
   not replace them.
+- `make verus-mutation` removes the space after the emitted `#` in an isolated
+  proof copy and must fail verification. This guards the ATX-output lemma
+  against a prefix specification that checks only for the hash marker.
 
 The ledger check invoked by `make lint` rejects a claim whose executable
 function name does not occur in `src/`.
