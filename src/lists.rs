@@ -5,7 +5,10 @@ use std::collections::HashMap;
 use regex::Regex;
 use tracing::debug;
 
-use crate::{breaks::THEMATIC_BREAK_RE, wrap::FenceTracker};
+use crate::{
+    classify::{ClassifyCtx, LineClass, classify_line},
+    wrap::FenceTracker,
+};
 
 /// Characters that mark formatted text at the start of a line.
 const FORMATTING_CHARS: [char; 3] = ['*', '_', '`'];
@@ -169,7 +172,9 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             .map_or_else(|| line.len(), |(i, _)| i);
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
-        if HEADING_RE.is_match(line) || THEMATIC_BREAK_RE.is_match(line.trim_end()) {
+        if HEADING_RE.is_match(line)
+            || classify_line(line, &ClassifyCtx::default()) == LineClass::ThematicBreak
+        {
             state.reset();
             out.push(line.clone());
             prev_blank = false;

@@ -11,13 +11,9 @@
 
 use tracing::trace;
 
-use crate::wrap::{
-    BlockKind,
-    FenceTracker,
-    LinkReferenceMatcher,
-    classify_block,
-    is_fence,
-    leading_indent,
+use crate::{
+    classify::{ClassifyCtx, LineClass, classify_line},
+    wrap::{BlockKind, FenceTracker, LinkReferenceMatcher, classify_block, leading_indent},
 };
 
 /// Convert Setext-style headings into ATX (`#`) headings.
@@ -122,30 +118,24 @@ fn detect_setext_heading(
         return None;
     }
 
+    let candidate_class = classify_line(line, &ClassifyCtx::default());
     let text = line[prefix_len..].trim();
     if text.is_empty() {
         return None;
     }
-    if !is_setext_text(text, link_matcher) {
+    if !is_setext_text(text, candidate_class, link_matcher) {
         return None;
     }
 
-    let underline_body = underline[prefix_len..].trim();
-    if underline_body.is_empty() {
+    if classify_line(
+        underline,
+        &ClassifyCtx::following(line, LineClass::ParagraphText),
+    ) != LineClass::SetextUnderline
+    {
         return None;
     }
 
-    let marker = underline_body.chars().next()?;
-    if marker != '=' && marker != '-' {
-        return None;
-    }
-    if !underline_body.chars().all(|c| c == marker) {
-        return None;
-    }
-    if underline_body.len() < 3 {
-        return None;
-    }
-
+    let marker = underline[prefix_len..].trim().chars().next()?;
     let level = if marker == '=' { 1 } else { 2 };
     Some((level, prefix_len, text.to_string()))
 }
@@ -170,18 +160,12 @@ fn detect_setext_heading(
 /// The only HTML support the project has is the `<table>` conversion in
 /// `crate::html`, which runs before this pass and replaces the lines it
 /// recognizes.
-fn is_setext_text(text: &str, link_matcher: LinkReferenceMatcher) -> bool {
-    if is_fence(text).is_some() {
+fn is_setext_text(text: &str, line_class: LineClass, link_matcher: LinkReferenceMatcher) -> bool {
+    if line_class != LineClass::ParagraphText {
         trace!(
+            ?line_class,
             payload_len = text.len(),
-            "refusing a Setext candidate that is a fence marker"
-        );
-        return false;
-    }
-    if is_table_syntax(text) {
-        trace!(
-            payload_len = text.len(),
-            "refusing a Setext candidate that is table syntax"
+            "refusing a Setext candidate with a structural line class"
         );
         return false;
     }
@@ -205,48 +189,6 @@ fn is_setext_text(text: &str, link_matcher: LinkReferenceMatcher) -> bool {
         }
     }
 }
-
-/// Determine whether a stripped candidate is table syntax.
-///
-/// A table row is table syntax rather than paragraph text, so the `---` below
-/// it is a thematic break and not an underline for it. `| --- | --- |` above
-/// `---` was converted into the single line `## | --- | --- |`: the break was
-/// consumed, the table above lost its delimiter row, and the orphaned header row
-/// was then padded differently on the next pass, so the output never settled.
-/// A body row above a break fails the same way, one row further down, and is
-/// quieter about it: the row the Setext pass takes is often the table's widest,
-/// and once it is gone the table above is measured without it, so every
-/// remaining row is padded a column narrower than the pass before made it.
-/// `| a | b |` over `| --- | --- |` over `| ccccc | d |` over `---` reflowed to
-/// a five-column first row and a three-column one on the pass after.
-///
-/// Both spellings are ones the table pass itself recognizes. A line that starts
-/// with a pipe opens table mode in `ProcessBuffer::handle_table_line`, so a
-/// pipe-leading candidate is a row of the table that pass has just laid out. The
-/// delimiter row test is repeated for the rows that omit the leading pipe, such
-/// as `--- | ---`, which the table pass still reads as a delimiter row.
-///
-/// A paragraph that merely contains a pipe, such as `Text with > inside | here`,
-/// is not table syntax and still converts, and a bare `---` stays a thematic
-/// break, which [`classify_block`] already refuses.
-fn is_table_syntax(text: &str) -> bool { is_table_row(text) || is_table_delimiter_row(text) }
-
-/// Determine whether a stripped candidate is a row of a table.
-///
-/// The `|` is the marker the table pass enters table mode on, and it is
-/// required: a paragraph that merely contains a pipe still converts.
-fn is_table_row(text: &str) -> bool { text.starts_with('|') }
-/// Determine whether a stripped candidate is a table delimiter row.
-///
-/// Alignment markers and dashes alone are covered by the delimiter row's own
-/// pipe, so `|---|---|`, `| --- | --- |`, and `--- | ---` are all refused.
-///
-/// The pattern is the one the table parser already uses to find the delimiter
-/// row, so the heading pass and the table pass agree on what one is.
-fn is_table_delimiter_row(text: &str) -> bool {
-    text.contains('|') && crate::table::SEP_RE.is_match(text)
-}
-
 /// Returns the indentation width of a line's content, in columns.
 ///
 /// Blockquote markers are consumed before the width is measured, so
