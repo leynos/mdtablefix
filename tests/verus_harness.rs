@@ -216,6 +216,16 @@ fn workflow_has_required_pull_request_triggers(workflow: &Value) -> Result<bool>
     Ok(has_required_types && events.contains_key(Value::String("workflow_dispatch".to_owned())))
 }
 
+fn workflow_has_read_only_contents_permission(workflow: &Value) -> Result<bool> {
+    let root = mapping(workflow, "workflow")?;
+    let permissions = mapping(get(root, "permissions")?, "workflow permissions")?;
+    Ok(permissions.len() == 1
+        && permissions
+            .get(Value::String("contents".to_owned()))
+            .and_then(Value::as_str)
+            == Some("read"))
+}
+
 fn workflow_uses_pinned_verus_cache(workflow: &Value) -> Result<bool> {
     let root = mapping(workflow, "workflow")?;
     let environment = mapping(get(root, "env")?, "workflow environment")?;
@@ -264,6 +274,7 @@ fn workflow_runs_the_proof_and_non_vacuity_targets() -> Result<()> {
     ensure!(commands.contains(&"make verus-selftest"));
     ensure!(checkout_does_not_persist_credentials(&workflow)?);
     ensure!(workflow_has_required_pull_request_triggers(&workflow)?);
+    ensure!(workflow_has_read_only_contents_permission(&workflow)?);
     ensure!(workflow_uses_pinned_verus_cache(&workflow)?);
     ensure!(MAKEFILE.contains(
         "git+https://github.com/leynos/rust-prover-tools@$(shell cat tools/rust-prover-tools/REF)"
