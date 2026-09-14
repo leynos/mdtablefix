@@ -50,10 +50,15 @@ pub(super) static INLINE_TITLE_SUFFIX_RE: std::sync::LazyLock<Regex> = lazy_rege
 /// Injected regex set for link reference definition queries.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct LinkReferenceMatcher {
+    /// Full link-reference definition matcher.
     link_ref: &'static Regex,
+    /// Matcher for a label-only definition awaiting a destination.
     bare_label: &'static Regex,
+    /// Matcher for an indented destination continuation.
     url_continuation: &'static Regex,
+    /// Matcher for a standalone title on the following line.
     link_title: &'static Regex,
+    /// Matcher for a title already attached to a continued destination.
     inline_title_suffix: &'static Regex,
 }
 
@@ -101,11 +106,19 @@ impl LinkReferenceMatcher {
         self.url_continuation.is_match(line) && !is_markdown_prefixed_continuation(line)
     }
 
+    /// Return whether a destination continuation already carries its title.
+    ///
+    /// A continuation with an inline title closes the state window; one
+    /// without it leaves the next line eligible for a standalone title.
     fn url_continuation_has_inline_title(&self, line: &str) -> bool {
         self.inline_title_suffix.is_match(line)
     }
 }
 
+/// Return whether a trimmed line begins a Markdown list marker.
+///
+/// List-like continuations are excluded from link-reference destination state
+/// so normal wrapping can process them as structural Markdown instead.
 fn is_markdown_prefixed_continuation(line: &str) -> bool {
     let trimmed = line.trim_start();
     is_bullet_marker(trimmed)
@@ -114,11 +127,16 @@ fn is_markdown_prefixed_continuation(line: &str) -> bool {
         || trimmed.starts_with('#')
 }
 
+/// Return whether `trimmed` starts with a bullet marker followed by whitespace.
 fn is_bullet_marker(trimmed: &str) -> bool {
     let mut chars = trimmed.chars();
     matches!(chars.next(), Some('-' | '*' | '+')) && chars.next().is_some_and(char::is_whitespace)
 }
 
+/// Return whether `trimmed` starts with a numeric ordered-list marker.
+///
+/// The marker must end in `.` or `)` and be followed by whitespace; this keeps
+/// URLs and ordinary prose from being treated as list continuations.
 fn is_ordered_list_marker(trimmed: &str) -> bool {
     let mut end_idx = 0;
     for (idx, ch) in trimmed.char_indices() {

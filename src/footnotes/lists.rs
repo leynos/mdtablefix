@@ -71,6 +71,11 @@ pub(super) fn has_existing_footnote_block(lines: &[String], start: usize) -> boo
     false
 }
 
+/// Converts one ordered-list item into a definition while preserving indent
+/// and the whitespace before its body.
+///
+/// The capture boundaries are used instead of trimming so list formatting and
+/// continuation alignment remain stable after conversion.
 fn replace_footnote_line(line: &str) -> String {
     FOOTNOTE_LINE_RE
         .replace(line, |caps: &Captures| {

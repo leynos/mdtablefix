@@ -58,6 +58,12 @@ impl ParagraphWriter<'_> {
         self.emit_tail_segment(&mut tail_segment, "", &continuation_prefix, available);
     }
 
+    /// Rewrap one deferred tail and apply its hard-break marker to the last
+    /// emitted line.
+    ///
+    /// `tail_segment` is cleared after emission so each source hard break is
+    /// handled independently; the continuation prefix is applied only to the
+    /// lines produced for this segment.
     fn emit_tail_segment(
         &mut self,
         tail_segment: &mut String,

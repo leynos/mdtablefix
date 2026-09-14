@@ -81,7 +81,9 @@ pub(super) fn collect_range(text: &str, start: usize, end: usize) -> String {
     text[start..end].to_string()
 }
 
+/// Byte value used when checking whether Markdown punctuation is escaped.
 pub(super) const BACKSLASH_BYTE: u8 = b'\\';
+/// Byte value used to ensure a fence run is not part of a longer run.
 const BACKTICK_BYTE: u8 = b'`';
 
 /// Returns the end index when `search` starts an exact backtick fence run.
@@ -131,6 +133,10 @@ pub(crate) fn opening_fence_run_len(bytes: &[u8], text: &str) -> Option<usize> {
     Some(fence_len)
 }
 
+/// Find an unmatched inline-code opener and return its fence length and tail.
+///
+/// Escaped backticks are skipped, and already-closed spans are traversed before
+/// reporting the first opener that remains active at the end of `text`.
 pub(crate) fn parse_open_code_span(text: &str) -> Option<(usize, &str)> {
     let bytes = text.as_bytes();
     let mut index = 0;
@@ -277,6 +283,11 @@ pub(crate) fn position_after_close(
     escaped_candidate_end
 }
 
+/// Track the active code-span fence while scanning a continuation fragment.
+///
+/// `Some(length)` means a span remains open with that fence length; `None`
+/// means every opener encountered has been closed. Runs must be isolated and
+/// unescaped before they can change state.
 pub(crate) fn scan_continuation_span_state(continuation: &str, fence_len: usize) -> Option<usize> {
     let bytes = continuation.as_bytes();
     let mut index = 0;

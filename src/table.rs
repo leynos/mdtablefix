@@ -114,6 +114,10 @@ pub(crate) fn format_separator_cells(widths: &[usize], sep_cells: &[String]) -> 
         .collect()
 }
 
+/// Retain a detected separator index only while it still names an output row.
+///
+/// Parsing may consume or omit rows before formatting, so this guard prevents
+/// a stale separator position from removing unrelated table content.
 fn sep_index_within(idx: Option<usize>, len: usize) -> Option<usize> {
     match idx {
         Some(i) if i < len => Some(i),
@@ -121,6 +125,10 @@ fn sep_index_within(idx: Option<usize>, len: usize) -> Option<usize> {
     }
 }
 
+/// Decide whether rows invalidate the table's rectangular layout invariant.
+///
+/// A physical-line split may legitimately create uneven intermediate rows;
+/// otherwise every non-separator row must retain the first row's column count.
 fn rows_mismatched(rows: &[Vec<String>], split_within_line: bool) -> bool {
     if split_within_line {
         return false;
@@ -153,8 +161,11 @@ pub(crate) static SEP_RE: std::sync::LazyLock<Regex> = lazy_regex!(
 /// * `sep_cells` - optional separator cells for formatting
 /// * `max_cols` - maximum column count across all rows
 struct ParsedTable {
+    /// Content rows whose cell count and payload survived validation.
     output_rows: Vec<Vec<String>>,
+    /// Alignment row held apart until final widths are known.
     sep_cells: Option<Vec<String>>,
+    /// Widest validated row, which defines the output table's column count.
     max_cols: usize,
 }
 
@@ -271,6 +282,10 @@ pub fn reflow_table(lines: &[String]) -> Vec<String> {
 /// Returns whether `lines` form a table that can be reflowed.
 pub(crate) fn is_valid_table(lines: &[String]) -> bool { reflow_valid_table(lines).is_some() }
 
+/// Reflow only structurally valid table input, preserving invalid candidates.
+///
+/// Returning `None` is the deliberate safety boundary used by `reflow_table`
+/// to leave prose, shell pipelines, and malformed tables byte-for-byte intact.
 fn reflow_valid_table(lines: &[String]) -> Option<Vec<String>> {
     if lines.is_empty() {
         return Some(Vec::new());

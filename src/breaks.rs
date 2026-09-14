@@ -8,11 +8,16 @@ use crate::wrap::FenceTracker;
 
 pub const THEMATIC_BREAK_LEN: usize = 70;
 
+/// Recognizes a Markdown thematic break while allowing up to three columns of indentation.
+///
+/// The expression accepts spaces and tabs between markers because those forms are valid thematic
+/// breaks, while the formatter supplies one canonical replacement line.
 pub(crate) static THEMATIC_BREAK_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^[ ]{0,3}((?:[ \t]*\*){3,}|(?:[ \t]*-){3,}|(?:[ \t]*_){3,})[ \t]*$",
     "thematic break pattern should compile",
 );
 
+/// Shared replacement line so every thematic break can be returned without allocation.
 static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| "_".repeat(THEMATIC_BREAK_LEN));
 

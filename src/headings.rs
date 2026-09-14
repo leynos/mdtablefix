@@ -83,6 +83,11 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
     setext_text_lines
 }
 
+/// Parses a Setext heading pair and returns its level, shared prefix length, and text.
+///
+/// The candidate is rejected when the underline prefix differs, the text is a block start, or
+/// either line belongs to an indented code block; those checks prevent structural lines from being
+/// consumed as heading text.
 fn detect_setext_heading(
     line: &str,
     underline: Option<&str>,
@@ -254,6 +259,7 @@ fn strip_blockquote_marker(line: &str) -> Option<&str> {
     Some(marker.strip_prefix(' ').unwrap_or(marker))
 }
 
+/// Returns the byte length of the character-aligned prefix shared by a heading and its underline.
 fn shared_prefix_len(a: &str, b: &str) -> usize {
     let mut end = 0;
     let mut iter_a = a.char_indices();
@@ -282,6 +288,7 @@ fn has_unmatched_prefix(line: &str, underline: &str) -> bool {
     line_prefix != underline_prefix && (line_prefix > 0 || underline_prefix > 0)
 }
 
+/// Returns the byte length of leading indentation and blockquote markers.
 fn prefix_of_indent_or_quote(text: &str) -> usize {
     let mut last = 0;
     for (idx, ch) in text.char_indices() {
@@ -294,6 +301,7 @@ fn prefix_of_indent_or_quote(text: &str) -> usize {
     last
 }
 
+/// Builds an ATX heading while retaining the source indentation or blockquote prefix.
 fn build_heading_line(prefix: &str, level: usize, text: &str) -> String {
     let mut heading = String::new();
     heading.push_str(prefix);
@@ -308,6 +316,7 @@ fn build_heading_line(prefix: &str, level: usize, text: &str) -> String {
     heading
 }
 
+/// Reports whether an ATX marker needs a separator after a non-whitespace prefix.
 fn needs_space_after(prefix: &str) -> bool {
     !prefix.is_empty() && !prefix.chars().last().is_some_and(char::is_whitespace)
 }

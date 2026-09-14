@@ -19,28 +19,42 @@ use std::{io, process::ExitStatus};
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
+/// Failure returned when a Git-backed candidate query cannot complete.
+///
+/// Variants distinguish process startup, command failure, and repository
+/// discovery so callers can report or aggregate the failure without parsing
+/// diagnostic text.
 pub enum GitListError {
+    /// The configured Git program could not be found.
     #[error("`{program}` is not installed or not on PATH")]
-    ProgramNotFound { program: String },
+    ProgramNotFound {
+        /// Program name supplied to the attempted process invocation.
+        program: String,
+    },
+    /// The Git process could not be started for an I/O reason.
     #[error("running `{command}`")]
     Spawn {
         /// The command as it would be typed, e.g. `git ls-files`.
         command: String,
         #[source]
+        /// Operating-system error reported while starting Git.
         source: io::Error,
     },
     // `{status}`, not `exit status {status}`: `ExitStatus`'s own rendering is
     // already "exit status: 1" on Unix and "exit code: 1" on Windows, so
     // spelling the words here as well would say it twice.
+    /// Git started but returned a non-success status.
     #[error("`{command}` failed with {status}")]
     Failed {
         /// The command as it would be typed, e.g. `git ls-files`.
         command: String,
+        /// Exit status returned by Git after the command ran.
         status: ExitStatus,
         /// Git's own diagnostic, relayed through
         /// [`relayable`](super::git_output::relayable).
         stderr: String,
     },
+    /// Git ran but did not return a usable repository directory.
     #[error("`{command}` did not report a usable Git directory")]
     NoGitDir {
         /// The command as it would be typed, e.g. `git rev-parse`.

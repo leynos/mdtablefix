@@ -71,6 +71,11 @@ fn pending_continuation_text<'a>(
     None
 }
 
+/// Flush the pending paragraph when its prefix cannot continue, or append the
+/// matching continuation text when it can.
+///
+/// The boolean reports whether this line was consumed by the pending state;
+/// `false` leaves the caller free to dispatch it as a new paragraph.
 fn resolve_or_fallback_continuation(
     line: LineContext<'_>,
     writer: &mut ParagraphWriter<'_>,
@@ -90,6 +95,11 @@ fn resolve_or_fallback_continuation(
     true
 }
 
+/// Dispatch a line while a list, footnote, or blockquote prefix is pending.
+///
+/// Matching prefixes extend the existing paragraph, structural boundaries are
+/// emitted verbatim, and a mismatched lazy continuation is resolved according
+/// to the fixed-point tail rule in [`pending_continuation_text`].
 pub(super) fn handle_pending_continuation(
     line: LineContext<'_>,
     writer: &mut ParagraphWriter<'_>,

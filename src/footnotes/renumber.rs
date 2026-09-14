@@ -35,11 +35,19 @@ use crate::{
     wrap::FenceTracker,
 };
 
+/// Finds numeric GFM references that may need sequential renumbering.
+///
+/// Definition headers use the same shape, so callers must run the match
+/// through [`is_definition_like`] before treating it as prose.
 static FOOTNOTE_REF_RE: LazyLock<Regex> = lazy_regex!(
     r"\[\^(?P<num>\d+)\]",
     "footnote reference pattern should compile",
 );
 
+/// Checks that text before a reference contains only definition prefixes.
+///
+/// Whitespace and blockquote markers are valid before a definition header;
+/// other prose means the matching reference is ordinary document content.
 fn matches_definition_prefix(prefix: &str) -> bool {
     let mut remaining = prefix;
     loop {
@@ -55,6 +63,10 @@ fn matches_definition_prefix(prefix: &str) -> bool {
     }
 }
 
+/// Determines whether a reference-shaped match is part of a definition header.
+///
+/// This guard prevents renumbering the identifier in `[^n]:` before the
+/// definition rewrite has applied the shared mapping.
 fn is_definition_like(text: &str, mat: &Match) -> bool {
     if !matches_definition_prefix(&text[..mat.start()]) {
         return false;
@@ -70,6 +82,10 @@ fn is_definition_like(text: &str, mat: &Match) -> bool {
     parse_definition(text.trim_end()).is_some()
 }
 
+/// Rewrites prose references in one token text segment using `mapping`.
+///
+/// Definition-shaped matches are retained so headers and their bodies can be
+/// rewritten as a unit by the definition scanner.
 fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<usize, usize>) -> String {
     FOOTNOTE_REF_RE
         .replace_all(text, |caps: &Captures| {
@@ -91,6 +107,10 @@ fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<usize, usize>) -> Strin
         .into_owned()
 }
 
+/// Rewrites references in text tokens while preserving non-text Markdown.
+///
+/// Code and other protected tokens are copied byte-for-byte so a footnote-like
+/// string inside them remains literal content.
 fn rewrite_tokens(text: &str, mapping: &HashMap<usize, usize>) -> String {
     let mut rewritten = String::with_capacity(text.len());
     for token in tokenize_markdown(text) {
@@ -126,6 +146,10 @@ fn collect_reference_mapping(lines: &[String]) -> HashMap<usize, usize> {
     mapping
 }
 
+/// Adds first-seen references from a text segment to the shared mapping.
+///
+/// Definition headers are excluded because their numbers describe definitions,
+/// not the document order in which references are encountered.
 fn collect_reference_mapping_from_text(
     text: &str,
     mapping: &mut HashMap<usize, usize>,
@@ -149,6 +173,10 @@ fn collect_reference_mapping_from_text(
     }
 }
 
+/// Locates the trailing contiguous block containing footnote definitions.
+///
+/// Continuation and blank lines stay with the block, while unrelated trailing
+/// prose prevents reordering a partial or non-footnote suffix.
 fn footnote_definition_block_range(lines: &[String]) -> Option<(usize, usize)> {
     let (mut start, end) = trimmed_range(lines, |line| {
         line.trim().is_empty()

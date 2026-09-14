@@ -25,6 +25,10 @@ use crate::{
 
 mod protected;
 
+/// Finds runs long enough to contain at least one prose ellipsis.
+///
+/// Replacement is performed one run at a time so complete triples become a Unicode ellipsis while
+/// a remainder of one or two dots remains literal.
 static DOT_RE: LazyLock<Regex> = lazy_regex!(r"\.{3,}", "ellipsis pattern regex should compile");
 
 /// Tracks whether a line belongs to a top-level indented code block.
@@ -34,7 +38,9 @@ static DOT_RE: LazyLock<Regex> = lazy_regex!(r"\.{3,}", "ellipsis pattern regex 
 /// lines must remain byte-for-byte unchanged.
 #[derive(Debug)]
 struct IndentedCodeTracker {
+    /// Whether the previous non-blank line established the current indented code block.
     is_in_block: bool,
+    /// Whether the next indented line may start a block after the preceding structure.
     may_start_block: bool,
 }
 
@@ -48,6 +54,10 @@ impl Default for IndentedCodeTracker {
 }
 
 impl IndentedCodeTracker {
+    /// Classifies one source line and preserves indented-code lines byte-for-byte.
+    ///
+    /// A paragraph keeps the tracker from treating the next indented line as code, whereas a
+    /// completed leaf block permits that transition. Blank lines retain the current block state.
     fn observe(&mut self, line: &str, completes_leaf_block: bool) -> bool {
         if line.trim().is_empty() {
             self.may_start_block = true;
@@ -72,12 +82,14 @@ impl IndentedCodeTracker {
         belongs_to_block
     }
 
+    /// Ends the tracked block after a fence or link continuation takes ownership of the line.
     fn observe_completed_block(&mut self) {
         self.is_in_block = false;
         self.may_start_block = true;
     }
 }
 
+/// Reports whether a block leaves no paragraph open before the next source line.
 fn completes_leaf_block(block_kind: Option<BlockKind>) -> bool {
     matches!(
         block_kind,
@@ -89,6 +101,7 @@ fn completes_leaf_block(block_kind: Option<BlockKind>) -> bool {
     )
 }
 
+/// Tokenises one prose line and changes only text tokens, preserving Markdown literals verbatim.
 fn replace_ellipsis_in_prose(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     for token in tokenize_markdown(line) {
@@ -100,6 +113,7 @@ fn replace_ellipsis_in_prose(line: &str) -> String {
     out
 }
 
+/// Replaces ellipses between protected literal spans while copying those spans unchanged.
 fn replace_text_ellipsis(text: &str, out: &mut String) {
     let mut cursor = 0;
     for span in protected::literal_spans(text) {
@@ -110,6 +124,7 @@ fn replace_text_ellipsis(text: &str, out: &mut String) {
     replace_dot_runs(&text[cursor..], out);
 }
 
+/// Converts complete dot triples in one text fragment and leaves an incomplete suffix unchanged.
 fn replace_dot_runs(text: &str, out: &mut String) {
     if !DOT_RE.is_match(text) {
         out.push_str(text);

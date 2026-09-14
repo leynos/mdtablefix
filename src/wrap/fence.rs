@@ -1,4 +1,8 @@
 //! Fenced code block helpers.
+//!
+//! Fence state is keyed by marker character, marker length, and blockquote
+//! depth. Keeping those values together prevents a closing marker from a
+//! shallower quote or a different marker family from ending the wrong block.
 
 use regex::Regex;
 use tracing::{debug, trace};
@@ -8,6 +12,10 @@ use super::{
     paragraph::{ParagraphState, ParagraphWriter},
 };
 
+/// Match indentation, a three-or-more marker run, and its complete info text.
+///
+/// The info string is retained verbatim because only a closing fence with
+/// spaces or tabs after its marker may terminate an existing fenced block.
 pub(super) static FENCE_RE: std::sync::LazyLock<Regex> =
     // Capture: indent, fence run of 3+ backticks/tilde, and the full info string (incl. leading
     // spaces)
@@ -44,6 +52,10 @@ pub fn is_fence(line: &str) -> Option<(&str, &str, &str)> {
     })
 }
 
+/// Match a fence after any blockquote prefix has been removed.
+///
+/// Returning borrowed capture slices keeps the original info string available
+/// for the closing-fence whitespace check.
 #[rustfmt::skip]
 fn is_inner_fence(line: &str) -> Option<(&str, &str, &str)> {
     FENCE_RE.captures(line).map(|cap| {
@@ -54,13 +66,21 @@ fn is_inner_fence(line: &str) -> Option<(&str, &str, &str)> {
     })
 }
 
+/// The prefix-stripped view needed while classifying a source fence line.
+///
+/// `prefix_len` lets the caller rebuild an indentation slice spanning both
+/// blockquote and inner indentation without allocating a new prefix.
 struct FenceLine<'a> {
+    /// Content after the optional blockquote prefix.
     inner: &'a str,
+    /// Blockquote nesting depth at which this line appears.
     depth: usize,
+    /// Byte length of the source blockquote prefix.
     prefix_len: usize,
 }
 
 impl<'a> FenceLine<'a> {
+    /// Parse the optional blockquote prefix while preserving source offsets.
     fn parse(line: &'a str) -> Self {
         BlockquotePrefix::parse(line).map_or(
             Self {
@@ -95,17 +115,25 @@ pub(crate) fn handle_fence_line(
     true
 }
 
+/// Opening-fence identity used to validate later closing markers.
 #[derive(Clone, Copy, Debug)]
 struct FenceState {
+    /// Marker family used by the opener (backtick or tilde).
     marker: char,
+    /// Marker run length required of a closing fence.
     marker_len: usize,
+    /// Blockquote depth at which the fence was opened.
     open_depth: usize,
 }
 
+/// The state transition observed while processing one source line.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FenceObservation {
+    /// Whether the current depth was already inside a fence before this line.
     pub(crate) was_in_fence: bool,
+    /// Whether this line matched a fence marker at the current depth.
     pub(crate) is_fence_marker: bool,
+    /// Whether the current depth is inside a fence after this line.
     pub(crate) is_in_fence: bool,
 }
 
@@ -117,6 +145,7 @@ pub(crate) struct FenceObservation {
 /// [`FenceTracker`] the single authority for the line's fence classification.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ObservedFence<'a> {
+    /// The tracker transition for the complete source line.
     pub(crate) observation: FenceObservation,
     /// The `(indent, marker, info)` components when the line is a fence marker,
     /// with `indent` spanning any blockquote prefix, as [`is_fence`] returns.
@@ -142,6 +171,7 @@ pub(crate) struct ObservedFence<'a> {
 /// ```
 #[derive(Default, Debug)]
 pub struct FenceTracker {
+    /// The active opener, or `None` between fenced blocks.
     state: Option<FenceState>,
 }
 
@@ -164,6 +194,10 @@ impl FenceTracker {
         self.observe_inner(FenceLine::parse(line).inner, depth)
     }
 
+    /// Observe a fence after its blockquote prefix has already been removed.
+    ///
+    /// The caller supplies `depth` separately because the inner text no longer
+    /// carries enough information to recover the quote nesting.
     fn observe_inner(&mut self, line: &str, depth: usize) -> bool {
         self.observe_parsed(depth, is_inner_fence(line))
     }
@@ -282,6 +316,10 @@ impl FenceTracker {
         self.observe_source_line(line).is_fence_marker
     }
 
+    /// Observe a complete source line and return only its state transition.
+    ///
+    /// This is the compact adapter used by callers that do not need the parsed
+    /// marker components returned by [`Self::observe_source_fence`].
     pub(crate) fn observe_source_line(&mut self, line: &str) -> FenceObservation {
         self.observe_source_fence(line).observation
     }

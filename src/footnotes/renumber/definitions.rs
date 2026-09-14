@@ -72,13 +72,24 @@ pub(super) struct DefinitionUpdates {
     pub(super) is_definition_line: Vec<bool>,
 }
 
+/// Mutable state shared by the definition scan and candidate finalisation.
+///
+/// The vectors are kept aligned with source rows so later passes can update
+/// headers without rewriting prose or fenced code payload.
 struct DefinitionScanState<'a> {
+    /// Mapping from source footnote numbers to their sequential replacements.
     mapping: &'a mut HashMap<usize, usize>,
+    /// Next sequential number available to a newly discovered definition.
     next_number: &'a mut usize,
+    /// Trailing ordered-list range eligible for promotion into definitions.
     numeric_list_range: Option<(usize, usize)>,
+    /// Whether an existing definition block disables numeric-list promotion.
     skip_numeric_conversion: bool,
+    /// Rewrite plans for explicit and promoted definition headers.
     definitions: Vec<DefinitionLine>,
+    /// Bitmap marking source rows whose headers must not receive prose rewrites.
     is_definition_line: Vec<bool>,
+    /// Numeric-list candidates held until explicit mappings are assigned.
     numeric_candidates: Vec<NumericCandidate>,
 }
 
@@ -113,6 +124,10 @@ pub(super) fn definition_segment_end(lines: &[String], start: usize, block_end: 
     idx
 }
 
+/// Returns the existing mapping for `number`, or assigns the next free number.
+///
+/// Keeping assignment in one helper ensures explicit definitions and promoted
+/// list items share the same sequence and never receive conflicting numbers.
 fn assign_new_number(
     mapping: &mut HashMap<usize, usize>,
     number: usize,
@@ -128,6 +143,10 @@ fn assign_new_number(
     }
 }
 
+/// Checks whether a row belongs to the eligible numeric-list range.
+///
+/// Existing definition blocks disable promotion even when the row otherwise
+/// looks like a footnote list item, preserving externally maintained blocks.
 fn should_convert_numeric_line(
     index: usize,
     numeric_range: Option<(usize, usize)>,
@@ -139,6 +158,10 @@ fn should_convert_numeric_line(
     numeric_range.is_some_and(|(start, end)| index >= start && index < end)
 }
 
+/// Builds a rewritten definition header from parsed source parts.
+///
+/// The prefix remains byte-for-byte intact while the identifier and body are
+/// rewritten through the shared mapping.
 fn definition_line_from_parts(
     index: usize,
     parts: super::parsing::DefinitionParts<'_>,
@@ -234,6 +257,10 @@ fn collect_scan_updates(lines: &[String], state: &mut DefinitionScanState<'_>) {
     }
 }
 
+/// Promotes buffered numeric candidates after explicit mappings are known.
+///
+/// Candidates are drained from the bottom so their continuation rows remain
+/// associated with the source item when the resulting definitions are sorted.
 fn finalize_numeric_candidates(state: &mut DefinitionScanState<'_>) {
     // Drain from the bottom so wrapped continuation lines stay attached to the
     // correct definition when numeric candidates are later reordered by their

@@ -23,12 +23,20 @@ use super::{
 /// that must travel with it.
 type DefinitionSegment = (usize, usize, Vec<String>);
 
+/// Collects source rows that begin definitions in the selected block.
+///
+/// Segment construction depends on these exact headers so continuation rows
+/// can move with the definition that owns them.
 fn collect_header_positions(lines: &[String], start: usize, end: usize) -> Vec<usize> {
     (start..end)
         .filter(|&idx| parse_definition(&lines[idx]).is_some())
         .collect()
 }
 
+/// Indexes rewrite plans by their original source row within the block.
+///
+/// Plans outside the selected range are ignored because this pass must not
+/// move definitions belonging to another block.
 fn build_def_lookup(
     definitions: &[DefinitionLine],
     start: usize,
@@ -41,6 +49,10 @@ fn build_def_lookup(
         .collect()
 }
 
+/// Finds blank prefix rows that should travel with the next definition segment.
+///
+/// Indented continuation rows are excluded: they belong to the preceding
+/// definition even when they contain whitespace.
 fn leading_segment_start(lines: &[String], consumed: usize, position: usize) -> usize {
     let mut leading_start = position;
     while leading_start > consumed
@@ -52,6 +64,10 @@ fn leading_segment_start(lines: &[String], consumed: usize, position: usize) -> 
     leading_start
 }
 
+/// Builds a definition header together with its prefix and continuation rows.
+///
+/// The tuple retains the new number and original row so sorting is stable when
+/// two definitions resolve to the same number.
 fn build_definition_segment(
     lines: &[String],
     definition: &DefinitionLine,
@@ -69,6 +85,10 @@ fn build_definition_segment(
     (definition.new_number, definition.index, segment)
 }
 
+/// Builds all movable definition segments in their original order.
+///
+/// Rows before the first header become a block prefix and are not attached to
+/// any segment, preserving spacing and unrelated content.
 fn build_segments(
     lines: &[String],
     header_positions: &[usize],
@@ -102,6 +122,10 @@ fn build_segments(
     segments
 }
 
+/// Removes leading blank rows from the first segment for boundary restoration.
+///
+/// Reordering cannot leave those rows before the first definition without
+/// changing the block shape, so the caller appends them at the first boundary.
 fn migrate_first_leading(segments: &mut [DefinitionSegment]) -> Vec<String> {
     if let Some((_, _, first_segment)) = segments.first_mut() {
         let first_content = first_segment
@@ -113,6 +137,10 @@ fn migrate_first_leading(segments: &mut [DefinitionSegment]) -> Vec<String> {
     Vec::new()
 }
 
+/// Reassembles a reordered block while preserving its original row count.
+///
+/// The prefix remains at the front and migrated blank rows are inserted after
+/// the first sorted segment to keep block-level spacing stable.
 fn compose_reordered_block(
     lines: &[String],
     start: usize,

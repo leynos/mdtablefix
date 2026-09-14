@@ -48,6 +48,7 @@ const PROGRAM: &str = "git";
 /// relative to the directory the command runs in, so `--git` is
 /// subtree-scoped.
 const SUBCOMMAND: &str = "ls-files";
+/// Arguments that make the tracked listing NUL-delimited and duplicate-free.
 const FRAMING: [&str; 3] = ["-z", "--deduplicate", "--cached"];
 
 /// The subcommand that reports where the Git directory is.
@@ -59,6 +60,7 @@ const FRAMING: [&str; 3] = ["-z", "--deduplicate", "--cached"];
 /// paused in. It also answers for a bare repository, where the working tree
 /// has no `.git` entry at all.
 const REV_PARSE: &str = "rev-parse";
+/// Argument that asks Git for the governing directory in an absolute form.
 const ABSOLUTE_GIT_DIR: &str = "--absolute-git-dir";
 
 /// What `--include-untracked` adds: the files Git would commit, and nothing
@@ -130,11 +132,17 @@ impl Operation {
 /// Lists candidates by running `git ls-files`.
 #[derive(Debug, Clone)]
 pub struct GitLsFiles {
+    /// Executable used for the process boundary, injectable for tests.
     program: OsString,
+    /// Whether the listing should include untracked, non-ignored candidates.
     include_untracked: bool,
 }
 
 impl GitLsFiles {
+    /// Creates a Git candidate source using the system `git` executable.
+    ///
+    /// The flag is retained on the adapter so both tracked-only and inclusive
+    /// listings share the same command and error handling path.
     #[must_use]
     pub fn new(include_untracked: bool) -> Self { Self::with_program(PROGRAM, include_untracked) }
 

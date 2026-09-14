@@ -70,6 +70,10 @@ pub(super) fn parse_link_or_image(text: &str, mut idx: usize) -> (String, usize)
     fallback_single_char(text, start)
 }
 
+/// Find the closing bracket of a GFM footnote reference from `idx`.
+///
+/// Escaped characters do not terminate the label, and an unterminated label
+/// returns `None` so the tokenizer can fall back to ordinary character input.
 #[tracing::instrument(level = "trace", skip(text), ret)]
 fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
     if idx >= text.len() || !text[idx..].starts_with("[^") {
@@ -118,6 +122,10 @@ fn find_footnote_end(text: &str, idx: usize) -> Option<usize> {
     None
 }
 
+/// Find the first unescaped closing bracket of a link or image label.
+///
+/// The returned byte offset is exclusive and is suitable for continuing into
+/// an inline destination or reference label.
 pub(super) fn parse_link_text(text: &str, idx: usize) -> Option<usize> {
     if idx >= text.len() || !text[idx..].starts_with('[') {
         return None;
@@ -135,6 +143,10 @@ pub(super) fn parse_link_text(text: &str, idx: usize) -> Option<usize> {
     None
 }
 
+/// Find the matching closing parenthesis for a link destination.
+///
+/// Nested parentheses are counted, while escaped parentheses remain literal;
+/// an unbalanced destination returns `None` for the caller's fallback path.
 pub(super) fn parse_link_url(text: &str, mut idx: usize) -> Option<usize> {
     if idx >= text.len() || !text[idx..].starts_with('(') {
         return None;
@@ -163,6 +175,10 @@ pub(super) fn parse_link_url(text: &str, mut idx: usize) -> Option<usize> {
     None
 }
 
+/// Consume exactly one Unicode scalar when a larger Markdown token fails.
+///
+/// Returning a character boundary keeps tokenisation valid even when the
+/// apparent construct begins with malformed or incomplete syntax.
 fn fallback_single_char(text: &str, start: usize) -> (String, usize) {
     let next = text[start..]
         .chars()
@@ -206,6 +222,10 @@ pub(super) fn is_trailing_punctuation(c: char) -> bool {
     )
 }
 
+/// Consume a backtick opener and its matching close, if one exists.
+///
+/// An unmatched opener is emitted as the opener run alone so the tokenizer can
+/// continue scanning the remaining text rather than swallowing the whole line.
 pub(super) fn handle_backtick_fence(text: &str, start_idx: usize) -> (String, usize) {
     let start = start_idx;
     let fence_end = scan_while(text, start_idx, |ch| ch == '`');

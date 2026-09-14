@@ -12,11 +12,16 @@ const FORMATTING_CHARS: [char; 3] = ['*', '_', '`'];
 
 // Lines starting with optional indentation followed by '#' characters denote
 // Markdown ATX headings. A space or end of line must follow the hashes.
+/// Recognises ATX headings that reset ordered-list numbering.
 static HEADING_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     r"^[ ]{0,3}#{1,6}(?:\s|$)",
     "ATX heading prefix pattern should compile",
 );
 
+/// Splits a numbered list item into indentation, separator, and content slices.
+///
+/// The returned indentation width treats a tab as four columns so nested counters use the same
+/// depth model as the Markdown block parser.
 fn parse_numbered(line: &str) -> Option<(usize, &str, &str, &str)> {
     static NUMBERED_RE: std::sync::LazyLock<Regex> = lazy_regex!(
         r"^(\s*)(?:[1-9][0-9]*)\.(\s+)(.*)",
@@ -30,8 +35,7 @@ fn parse_numbered(line: &str) -> Option<(usize, &str, &str, &str)> {
     Some((indent, indent_str, sep, rest))
 }
 
-/// Remove counters for indents deeper than the given level.
-/// When `inclusive` is true, levels equal to `indent` are also removed.
+/// Removes counters deeper than the current list item, optionally including its own depth.
 fn prune_deeper(
     indent: usize,
     inclusive: bool,
@@ -48,12 +52,14 @@ fn prune_deeper(
     }
 }
 
+/// Measures indentation in parser columns, expanding tabs to four columns.
 fn indent_len(indent: &str) -> usize {
     indent
         .chars()
         .fold(0, |acc, ch| acc + if ch == '\t' { 4 } else { 1 })
 }
 
+/// Reports whether a non-list line begins with ordinary alphanumeric paragraph text.
 fn is_plain_paragraph_line(line: &str) -> bool {
     matches!(
         line.trim_start()
@@ -64,13 +70,17 @@ fn is_plain_paragraph_line(line: &str) -> bool {
     )
 }
 
+/// Holds ordered-list counters keyed by indentation depth.
 #[derive(Default)]
 struct ListState {
+    /// Active list indentation levels ordered from outermost to innermost.
     indent_stack: Vec<usize>,
+    /// Next item number for each active indentation level.
     counters: HashMap<usize, usize>,
 }
 
 impl ListState {
+    /// Clears all counters after a heading, break, or other list boundary.
     fn reset(&mut self) {
         debug!(
             indent_depths = self.indent_stack.len(),
@@ -81,6 +91,7 @@ impl ListState {
         self.counters.clear();
     }
 
+    /// Removes nested counters before handling a new item or paragraph restart.
     fn prune_deeper(&mut self, indent: usize, inclusive: bool) {
         prune_deeper(
             indent,
@@ -90,6 +101,7 @@ impl ListState {
         );
     }
 
+    /// Allocates the next number at an indentation level, starting at one.
     fn next_number(&mut self, indent: usize) -> usize {
         self.prune_deeper(indent, false);
         if self.indent_stack.last().is_none_or(|&d| d < indent) {
@@ -101,6 +113,7 @@ impl ListState {
         current
     }
 
+    /// Resets the current level after a blank line followed by a plain paragraph.
     fn handle_paragraph_restart(&mut self, indent: usize, line: &str, prev_blank: bool) -> bool {
         let inclusive = prev_blank
             && self
