@@ -95,7 +95,8 @@ fn detect_setext_heading(
     }
 
     let prefix_len = shared_prefix_len(line, underline);
-    if has_unmatched_prefix(line, underline) {
+    let prefixes_agree = !has_unmatched_prefix(line, underline);
+    if !prefixes_agree {
         return None;
     }
     if prefix_len > 0
@@ -129,7 +130,7 @@ fn detect_setext_heading(
 
     if classify_line(
         underline,
-        &ClassifyCtx::following(line, LineClass::ParagraphText),
+        &ClassifyCtx::following(LineClass::ParagraphText, prefixes_agree),
     ) != LineClass::SetextUnderline
     {
         return None;
