@@ -4,6 +4,8 @@
 //! footnote links and normalizes footnote numbering and ordering by
 //! orchestrating specialised submodules.
 
+#[cfg(test)]
+mod blockquote_tests;
 mod inline;
 mod lists;
 mod parsing;
