@@ -486,6 +486,13 @@ as `（` and `「`) that immediately precede an inline code span or Markdown lin
 stay coupled to that span during wrapping. This prevents a lone opener from
 being stranded at the end of a line before the code or link that follows it.
 
+A bare numeric bracket reference such as `[1]` or `[12]` is likewise unbreakable
+under `--wrap`: the opening bracket is never left stranded at the end of a line,
+the reference moves as a unit, and trailing punctuation after the closing
+bracket stays attached. The same rule applies when the reference immediately
+follows an inline code span. Only ASCII digits qualify, so a short alphabetic
+label such as `[a]` remains ordinary breakable prose.
+
 Inflectional affixes and possessives that appear immediately after a closing
 inline code fence — for example `` `VarGuard`s ``, `` `class`'s ``,
 `` `fetch`ed ``, or `` `run`ning `` — are kept on the same line as the code

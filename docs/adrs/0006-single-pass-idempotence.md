@@ -199,7 +199,7 @@ evidence now exists for the shape recorded here; see the addendum below.
 Issue #504 is fixed. The tokenizer emits `[` and `1]` as separate tokens, so
 nothing bound them and the opener was free to end a line on its own. The inline
 wrapping path now couples the pair the way it already couples footnote markers
-and links to their openers: `looks_like_bracketed_reference` recognises the
+and links to their openers: `looks_like_bracketed_reference` recognizes the
 closing shape the tokenizer emits, `try_couple_bracketed_reference` sums the two
 widths and absorbs trailing punctuation, and `FragmentKind::BracketedRef` keeps
 the merged span atomic so the post-wrap rebalancing pass cannot separate it

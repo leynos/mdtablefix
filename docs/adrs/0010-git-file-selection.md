@@ -407,7 +407,7 @@ otherwise meet a line that is not a path.
   `--code-emphasis` settled on a second pass rather than the first; `b01b999`
   fixed it. Issue #504 recorded a second: a bare bracket reference the wrapper
   split across lines, which `--wrap` alone carried and every selection therefore
-  inherited. `22a8959` fixed it, and the fixture, property strategy and wrap
+  inherited. That is now fixed, and the fixture, property strategy and wrap
   cases that hold it are listed in the 2026-09-14 addendum to ADR 0006. The
   residue is that a short alphabetic label such as `[a]` is still ordinary prose
   the wrapper may break at, so a document containing one can still be reported
