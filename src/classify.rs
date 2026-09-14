@@ -37,7 +37,9 @@ pub(crate) enum LineClass {
 /// Fence state needed to distinguish literal fenced contents from markers.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) struct OpenFence {
+    /// Character repeated by the fence marker.
     marker: char,
+    /// Number of marker characters in the opening fence.
     marker_len: usize,
 }
 
@@ -55,9 +57,13 @@ impl OpenFence {
 /// matching closing marker.
 #[derive(Clone, Default)]
 pub(crate) struct ClassifyCtx {
+    /// Whether the line is within an already-open fenced region.
     is_in_fence: bool,
+    /// Opening marker whose compatible closing marker may end that region.
     open_fence: Option<OpenFence>,
+    /// Structural class of the immediately preceding source line.
     previous: Option<LineClass>,
+    /// Indentation and blockquote prefix of the immediately preceding line.
     previous_prefix: Option<String>,
 }
 
@@ -84,9 +90,13 @@ impl ClassifyCtx {
         }
     }
 }
+/// Prefix-stripped portions of one line used by structural scanners.
 struct LineParts<'a> {
+    /// Leading indentation and blockquote prefix retained by conversions.
     prefix: &'a str,
+    /// Content after the structural prefix.
     body: &'a str,
+    /// Whether indentation makes the content literal code.
     is_literal: bool,
 }
 /// Classifies one source line using the shared structural precedence.
@@ -139,6 +149,7 @@ pub fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
     }
     LineClass::ParagraphText
 }
+/// Splits a line into a blockquote-aware prefix and its structural body.
 fn line_parts(line: &str) -> LineParts<'_> {
     let (outer_width, mut cursor) = indentation_at(line, 0);
     if outer_width >= 4 {
@@ -173,6 +184,7 @@ fn line_parts(line: &str) -> LineParts<'_> {
     }
 }
 
+/// Measures indentation columns and the following byte offset from `start`.
 fn indentation_at(line: &str, start: usize) -> (usize, usize) {
     let mut width = 0;
     let mut cursor = start;
@@ -192,6 +204,7 @@ fn indentation_at(line: &str, start: usize) -> (usize, usize) {
     (width, cursor)
 }
 
+/// Reports whether `body` begins with a three-or-more marker fence.
 fn is_fence_marker(body: &str) -> bool {
     let trimmed = body.trim_start_matches([' ', '\t']);
     let Some(marker) = trimmed.chars().next().filter(|c| matches!(c, '`' | '~')) else {
@@ -200,12 +213,14 @@ fn is_fence_marker(body: &str) -> bool {
     trimmed.chars().take_while(|c| *c == marker).count() >= 3
 }
 
+/// Reports whether `body` is a compatible closing marker for `open`.
 fn is_closing_fence(body: &str, open: OpenFence) -> bool {
     let trimmed = body.trim();
     let marker_len = trimmed.chars().take_while(|c| *c == open.marker).count();
     marker_len >= open.marker_len && marker_len == trimmed.len()
 }
 
+/// Reports whether `body` starts with a valid ATX marker and separator.
 fn is_atx_heading(body: &str) -> bool {
     let trimmed = body.trim_start_matches([' ', '\t']);
     let hash_len = trimmed.chars().take_while(|c| *c == '#').count();
@@ -216,6 +231,7 @@ fn is_atx_heading(body: &str) -> bool {
             .is_none_or(char::is_whitespace)
 }
 
+/// Reports whether `body` contains only table delimiter syntax.
 fn is_table_delimiter(body: &str) -> bool {
     let trimmed = body.trim();
     let Some(without_trailing_pipe) = trimmed.strip_suffix('|') else {
@@ -240,6 +256,7 @@ fn is_table_delimiter_cell(cell: &str) -> bool {
         && without_trailing_colon.chars().all(|character| character == '-')
 }
 
+/// Reports whether `body` is one uniform three-or-more Setext marker run.
 fn is_setext_underline(body: &str) -> bool {
     let trimmed = body.trim();
     let Some(marker) = trimmed.chars().next().filter(|c| matches!(c, '=' | '-')) else {
@@ -248,6 +265,7 @@ fn is_setext_underline(body: &str) -> bool {
     trimmed.chars().count() >= 3 && trimmed.chars().all(|c| c == marker)
 }
 
+/// Reports whether `body` is a three-or-more thematic-break marker run.
 fn is_thematic_break(body: &str) -> bool {
     let trimmed = body.trim();
     let Some(marker) = trimmed
@@ -264,6 +282,7 @@ fn is_thematic_break(body: &str) -> bool {
             .all(|c| c == marker || matches!(c, ' ' | '\t'))
 }
 
+/// Reports whether `body` begins an ordered or unordered list item.
 fn is_list_item(body: &str) -> bool {
     let trimmed = body.trim_start_matches([' ', '\t']);
     let mut chars = trimmed.chars();
