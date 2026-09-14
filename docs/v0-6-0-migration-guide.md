@@ -241,3 +241,33 @@ pub fn replace_file_if_unchanged(
   `metrics::set_global_recorder(...)`. The
   [Metrics](developers-guide.md#metrics) section of the developer's guide lists
   the metric names and labels.
+
+## Footnote stages are split
+
+- **What changed:** Footnote conversion is now three public functions in
+  `mdtablefix::footnotes`: `convert_inline_footnotes` rewrites bare numeric
+  references as Markdown footnote references, `renumber_footnote_labels`
+  renumbers the labels, and `convert_footnote_definitions` folds a trailing
+  ordered list into definitions and reorders the block. `convert_footnotes`
+  keeps its previous signature and remains the compatibility wrapper that
+  composes the three stages in their required order.
+- **Who is affected:** Library consumers that call the
+  `mdtablefix::footnotes` functions directly. The command-line interface is
+  unaffected, because it already runs the three stages in this order around
+  its own passes.
+- **Migration action:** No action is required for a caller of
+  `convert_footnotes`, which performs the three stages in order. A caller that
+  uses the individual functions must run them in this order.
+  `convert_inline_footnotes` and `renumber_footnote_labels` run first, ahead of
+  any pass that measures text — the table reflow and the paragraph wrap, in
+  particular — because a reference such as `docs.1` grows into `docs.[^1]` and
+  a label narrows as it is renumbered (`[^10]` becomes `[^1]`), so both change
+  the width a later pass measures. `renumber_footnote_labels` also promotes a
+  trailing list item that a reference reaches — a bare reference and a list
+  item are matched by the number they share — so it must run in the same pass
+  over the document as `convert_inline_footnotes`, ahead of the layout.
+  `convert_footnote_definitions` runs last, after the layout and after the
+  heading pass, because it appends lines, reads the settled block structure,
+  and reorders the definition block. See the
+  [Footnote stages](users-guide.md#footnote-stages) section of the user's guide
+  for the required order.

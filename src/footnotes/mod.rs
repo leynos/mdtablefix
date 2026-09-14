@@ -11,34 +11,48 @@ mod renumber;
 
 use inline::{convert_inline, is_atx_heading_prefix};
 use lists::convert_block;
-use renumber::renumber_footnotes;
+use renumber::{renumber_labels, reorder_footnotes};
+use tracing::debug;
 
 use crate::textproc::{Token, push_original_token, tokenize_markdown};
 
-/// Convert bare numeric footnote references to Markdown footnote syntax.
-#[must_use]
-pub fn convert_footnotes(lines: &[String]) -> Vec<String> { convert_footnotes_inner(lines, None) }
-
-/// Converts footnotes while preserving valid Setext heading text.
+/// Rewrite bare numeric references as Markdown footnote references.
 ///
-/// `process_stream_inner` invokes this when it will subsequently convert
-/// Setext headings. Standalone callers retain the historical behaviour of
-/// [`convert_footnotes`], which has no heading-conversion context.
+/// This is the length-changing half of [`convert_footnotes`]: a reference such
+/// as `docs.1` grows into `docs.[^1]`, so any pass that measures text — the table
+/// reflow and the paragraph wrap — has to run after it rather than before. It is
+/// separate from the rest so the caller can place the two halves either side of
+/// those passes; see `process_stream_inner`.
 #[must_use]
-pub(crate) fn convert_footnotes_with_setext(
+pub fn convert_inline_footnotes(lines: &[String]) -> Vec<String> {
+    convert_inline_footnotes_inner(lines, None)
+}
+
+/// Rewrites bare numeric references while preserving Setext heading text.
+///
+/// `process_stream_inner` invokes this when it will subsequently convert Setext
+/// headings, so a line the heading pass will read as heading text keeps its bare
+/// references: `docs.1` above an underline is heading text, not a reference.
+/// Standalone callers keep the historical behaviour of
+/// [`convert_inline_footnotes`], which has no heading-conversion context.
+#[must_use]
+pub(crate) fn convert_inline_footnotes_with_setext(
     lines: &[String],
     headings_enabled: bool,
 ) -> Vec<String> {
     let setext_text_lines = headings_enabled.then(|| crate::headings::setext_text_lines(lines));
-    convert_footnotes_inner(lines, setext_text_lines.as_deref())
+    convert_inline_footnotes_inner(lines, setext_text_lines.as_deref())
 }
 
-/// Applies token-aware inline conversion, trailing-list promotion, and
-/// sequential renumbering while preserving protected heading text.
+/// Applies token-aware inline conversion while preserving protected heading
+/// text.
 ///
 /// `setext_text_lines` identifies lines whose numeric text will later become a
 /// Setext heading; those lines must pass through unchanged in this stage.
-fn convert_footnotes_inner(lines: &[String], setext_text_lines: Option<&[bool]>) -> Vec<String> {
+fn convert_inline_footnotes_inner(
+    lines: &[String],
+    setext_text_lines: Option<&[bool]>,
+) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
 
     for (index, line) in lines.iter().enumerate() {
@@ -58,257 +72,84 @@ fn convert_footnotes_inner(lines: &[String], setext_text_lines: Option<&[bool]>)
         }
     }
 
-    convert_block(&mut out);
-    renumber_footnotes(&mut out);
+    debug!(
+        phase = "inline",
+        lines_in = lines.len(),
+        lines_out = out.len(),
+        "converting inline footnote references"
+    );
     out
 }
 
-#[cfg(test)]
-mod tests {
-    //! Unit tests for footnote conversion.
-
-    use super::convert_footnotes;
-
-    #[test]
-    fn converts_inline_numbers() {
-        let input = vec!["See the docs.2".to_string()];
-        let expected = vec!["See the docs.[^1]".to_string()];
-        assert_eq!(convert_footnotes(&input), expected);
-    }
-
-    #[test]
-    fn converts_final_list() {
-        let input = vec![
-            "Text.".to_string(),
-            String::new(),
-            "## Footnotes".to_string(),
-            String::new(),
-            " 1. First".to_string(),
-            " 2. Second".to_string(),
-        ];
-        let expected = vec![
-            "Text.".to_string(),
-            String::new(),
-            "## Footnotes".to_string(),
-            String::new(),
-            " [^1]: First".to_string(),
-            " [^2]: Second".to_string(),
-        ];
-        assert_eq!(convert_footnotes(&input), expected);
-    }
-
-    #[test]
-    fn converts_list_with_blank_lines() {
-        let input = vec![
-            "Text.".to_string(),
-            String::new(),
-            "## Footnotes".to_string(),
-            String::new(),
-            " 1. First".to_string(),
-            String::new(),
-            " 2. Second".to_string(),
-            String::new(),
-            "10. Tenth".to_string(),
-        ];
-        let expected = vec![
-            "Text.".to_string(),
-            String::new(),
-            "## Footnotes".to_string(),
-            String::new(),
-            " [^1]: First".to_string(),
-            String::new(),
-            " [^2]: Second".to_string(),
-            String::new(),
-            "[^3]: Tenth".to_string(),
-        ];
-        assert_eq!(convert_footnotes(&input), expected);
-    }
-
-    #[test]
-    fn idempotent_on_existing_block() {
-        let input = vec![" [^1]: First".to_string()];
-        assert_eq!(convert_footnotes(&input), input);
-    }
-
-    #[test]
-    fn skips_with_existing_block() {
-        let input = vec![
-            "[^1]: Old".to_string(),
-            "## Footnotes".to_string(),
-            " 2. New".to_string(),
-        ];
-        assert_eq!(convert_footnotes(&input), input);
-    }
-
-    #[test]
-    fn skips_without_h2() {
-        let input = vec!["Text.".to_string(), " 1. First".to_string()];
-        assert_eq!(convert_footnotes(&input), input);
-    }
-
-    #[test]
-    fn skips_when_list_not_last() {
-        let input = vec![
-            "## Footnotes".to_string(),
-            " 1. First".to_string(),
-            String::new(),
-            "Tail.".to_string(),
-        ];
-        assert_eq!(convert_footnotes(&input), input);
-    }
-
-    #[test]
-    fn skips_when_block_has_only_blanks() {
-        let input = vec!["## Footnotes".to_string(), String::new()];
-        assert_eq!(convert_footnotes(&input), input);
-    }
-
-    #[test]
-    fn multiple_inline_notes_in_one_line() {
-        let input = vec!["First.1 Then?2".to_string()];
-        let expected = vec!["First.[^1] Then?[^2]".to_string()];
-        assert_eq!(convert_footnotes(&input), expected);
-    }
-
-    #[test]
-    fn ignores_non_numeric_footnote_block() {
-        let input = vec!["Text.".to_string(), " a. note".to_string()];
-        assert_eq!(convert_footnotes(&input), input);
-    }
-
-    #[test]
-    fn empty_input_returns_empty_vec() {
-        let input: Vec<String> = Vec::new();
-        assert!(convert_footnotes(&input).is_empty());
-    }
-
-    #[test]
-    fn converts_only_final_contiguous_block() {
-        let input = vec![
-            "Intro.".to_string(),
-            "1. not a footnote".to_string(),
-            "More text.".to_string(),
-            "## Footnotes".to_string(),
-            "2. final".to_string(),
-        ];
-        let expected = vec![
-            "Intro.".to_string(),
-            "1. not a footnote".to_string(),
-            "More text.".to_string(),
-            "## Footnotes".to_string(),
-            "[^1]: final".to_string(),
-        ];
-        assert_eq!(convert_footnotes(&input), expected);
-    }
-
-    #[test]
-    fn renumbers_references_and_definitions() {
-        let input = vec![
-            "First reference.[^7]".to_string(),
-            "Second reference.[^3]".to_string(),
-            String::new(),
-            "  [^3]: Third footnote".to_string(),
-            "  [^7]: Seventh footnote".to_string(),
-        ];
-        let expected = vec![
-            "First reference.[^1]".to_string(),
-            "Second reference.[^2]".to_string(),
-            String::new(),
-            "  [^1]: Seventh footnote".to_string(),
-            "  [^2]: Third footnote".to_string(),
-        ];
-        assert_eq!(convert_footnotes(&input), expected);
-    }
-
-    #[test]
-    fn preserves_multiline_definition_blocks() {
-        let input = vec![
-            "Intro.[^2]".to_string(),
-            String::new(),
-            "[^1]: Legacy footnote".to_string(),
-            "    More legacy context.".to_string(),
-            String::new(),
-            "[^2]: Current footnote".to_string(),
-            "    Additional context.".to_string(),
-        ];
-        let expected = vec![
-            "Intro.[^1]".to_string(),
-            String::new(),
-            "[^1]: Current footnote".to_string(),
-            "    Additional context.".to_string(),
-            String::new(),
-            "[^2]: Legacy footnote".to_string(),
-            "    More legacy context.".to_string(),
-        ];
-        assert_eq!(convert_footnotes(&input), expected);
-    }
-
-    #[test]
-    fn assigns_new_numbers_to_unreferenced_definitions() {
-        let input = vec![
-            "Alpha.[^5]".to_string(),
-            "Beta.[^2]".to_string(),
-            String::new(),
-            "[^1]: Legacy footnote".to_string(),
-            "[^2]: Beta footnote".to_string(),
-            "[^5]: Alpha footnote".to_string(),
-        ];
-        let expected = vec![
-            "Alpha.[^1]".to_string(),
-            "Beta.[^2]".to_string(),
-            String::new(),
-            "[^1]: Alpha footnote".to_string(),
-            "[^2]: Beta footnote".to_string(),
-            "[^3]: Legacy footnote".to_string(),
-        ];
-        assert_eq!(convert_footnotes(&input), expected);
-    }
-
-    #[test]
-    fn updates_references_inside_definitions() {
-        let input = vec![
-            "Intro.[^4]".to_string(),
-            String::new(),
-            "[^4]: See [^2] for context".to_string(),
-            "[^2]: Base note".to_string(),
-        ];
-        let expected = vec![
-            "Intro.[^1]".to_string(),
-            String::new(),
-            "[^1]: See [^2] for context".to_string(),
-            "[^2]: Base note".to_string(),
-        ];
-        assert_eq!(convert_footnotes(&input), expected);
-    }
-
-    #[test]
-    fn renumbers_numeric_list_without_heading() {
-        let input = vec![
-            "First reference.[^7]".to_string(),
-            "Second reference.[^3]".to_string(),
-            String::new(),
-            "1. Legacy footnote".to_string(),
-            "3. Third footnote".to_string(),
-            "7. Seventh footnote".to_string(),
-        ];
-        let expected = vec![
-            "First reference.[^1]".to_string(),
-            "Second reference.[^2]".to_string(),
-            String::new(),
-            "[^1]: Seventh footnote".to_string(),
-            "[^2]: Third footnote".to_string(),
-            "[^3]: Legacy footnote".to_string(),
-        ];
-        assert_eq!(convert_footnotes(&input), expected);
-    }
-
-    #[test]
-    fn leaves_numeric_list_without_references_unchanged() {
-        let input = vec![
-            "Ordinary list:".to_string(),
-            "1. Apples".to_string(),
-            "2. Bananas".to_string(),
-        ];
-        assert_eq!(convert_footnotes(&input), input);
-    }
+/// Rewrite footnote labels to their sequential numbers.
+///
+/// This is the second length-changing half of [`convert_footnotes`]: a reference
+/// such as `[^10]` becomes `[^1]` once the distinct references are numbered by
+/// first encounter, and a definition header is rewritten from the same mapping,
+/// so both narrow the line they sit on and any pass that measures text has to
+/// run after them. The same scan promotes a trailing ordered-list item that a
+/// reference shares its number with into a definition header, which widens the
+/// line instead, and for the same reason belongs on this side of those passes.
+/// It is separate from [`convert_footnote_definitions`], which settles the
+/// block structure — converting a trailing ordered list that no reference
+/// reaches, and reordering the definitions — so the caller can place the two
+/// halves either side of those passes; see `process_stream_inner`.
+///
+/// Lines inside fenced code blocks are left alone.
+#[must_use]
+pub fn renumber_footnote_labels(lines: &[String]) -> Vec<String> {
+    let mut out = lines.to_vec();
+    renumber_labels(&mut out);
+    debug!(
+        phase = "labels",
+        lines_in = lines.len(),
+        lines_out = out.len(),
+        "renumbering footnote labels"
+    );
+    out
 }
+
+/// Fold a trailing ordered list into definitions and reorder the block.
+///
+/// This is the structural half of [`convert_footnotes`]: it settles the block
+/// and keeps the number each header already carries, because those are
+/// [`renumber_footnote_labels`]'s work. Numbering them here as well would take
+/// fresh numbers from the pool for the definitions no reference points at, in
+/// line order, which moves a definition the label stage had placed earlier to
+/// the end of the block.
+///
+/// The one list it does number is the one it folds itself, and it numbers that
+/// from one: `convert_block` converts a heading-led trailing list only when no
+/// reference and no definition has claimed a number, so the items are the only
+/// definitions in the document and the list's own marker numbers say nothing
+/// about where they belong. It reads the block structure around that list, so
+/// it runs after the heading pass has settled the structure, and it rewrites
+/// list items as definition headers, so it runs after the passes that lay lines
+/// out.
+#[must_use]
+pub fn convert_footnote_definitions(lines: &[String]) -> Vec<String> {
+    let mut out = lines.to_vec();
+    convert_block(&mut out);
+    reorder_footnotes(&mut out);
+    debug!(
+        phase = "definitions",
+        lines_in = lines.len(),
+        lines_out = out.len(),
+        "converting footnote definitions"
+    );
+    out
+}
+
+/// Convert bare numeric footnote references to Markdown footnote syntax.
+///
+/// Equivalent to running [`convert_inline_footnotes`],
+/// [`renumber_footnote_labels`], and [`convert_footnote_definitions`] in that
+/// order; the CLI splits the three around its layout passes, and this
+/// whole-document form stays for callers that need them in one step.
+#[must_use]
+pub fn convert_footnotes(lines: &[String]) -> Vec<String> {
+    convert_footnote_definitions(&renumber_footnote_labels(&convert_inline_footnotes(lines)))
+}
+
+#[cfg(test)]
+mod tests;

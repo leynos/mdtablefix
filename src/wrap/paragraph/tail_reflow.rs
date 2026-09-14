@@ -41,15 +41,30 @@ impl ParagraphWriter<'_> {
         for wrapped_line in lines {
             let marker_len = trailing_hard_break_marker_len(&wrapped_line);
             let content_end = wrapped_line.len() - marker_len;
+            let marker = &wrapped_line[content_end..];
             if !tail_segment.is_empty() {
                 tail_segment.push(' ');
             }
             tail_segment.push_str(&wrapped_line[..content_end]);
 
             if marker_len > 0 {
+                // A backslash hard break is content: it stays glued to the last
+                // word of the source line, so the wrap must measure it. Stripping
+                // it filled the last line to `available` and then appended the
+                // backslash past the budget, and the next pass — which measures
+                // it — re-wrapped that line one word earlier. A whitespace marker
+                // is different: the next pass trims it before measuring, so it is
+                // stripped here and appended afterwards, keeping it out of the
+                // fit exactly as the re-read does.
+                let (measured, appended) = if marker.trim().is_empty() {
+                    ("", marker)
+                } else {
+                    (marker, "")
+                };
+                tail_segment.push_str(measured);
                 self.emit_tail_segment(
                     &mut tail_segment,
-                    &wrapped_line[content_end..],
+                    appended,
                     continuation_prefix.as_str(),
                     available,
                 );

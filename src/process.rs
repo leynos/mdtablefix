@@ -2,18 +2,18 @@
 mod buffer;
 #[cfg(test)]
 mod code_emphasis_tests;
+mod pipeline;
 mod table_line_protection;
-use buffer::{ProcessBuffer, TableSubstitutions};
+use pipeline::{convert_footnote_references, normalize_fences, walk_fences_and_tables};
 use table_line_protection::{protect_table_lines, restore_table_lines};
 
 use crate::{
     ellipsis::replace_ellipsis,
-    fences::{attach_orphan_specifiers, compress_fences},
-    footnotes::convert_footnotes_with_setext,
+    footnotes::convert_footnote_definitions,
     frontmatter::split_leading_yaml_frontmatter,
     html::convert_html_tables,
     lists::renumber_lists,
-    wrap::{FenceTracker, wrap_text},
+    wrap::wrap_text,
 };
 /// Column width used when wrapping text.
 pub const WRAP_COLS: usize = 80;
@@ -98,55 +98,11 @@ pub struct Options {
 /// ```
 #[must_use]
 pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
-    let lines = if opts.fences {
-        let tmp = compress_fences(lines);
-        attach_orphan_specifiers(&tmp)
-    } else {
-        lines.to_vec()
-    };
+    let pre = convert_html_tables(&normalize_fences(lines, opts));
+    let pre = convert_footnote_references(pre, opts);
 
-    let mut pre = convert_html_tables(&lines);
-    if opts.footnotes {
-        pre = convert_footnotes_with_setext(&pre, opts.headings);
-    }
+    let (mut out, table_lines) = walk_fences_and_tables(pre, opts);
 
-    // Code-emphasis and ellipsis both shorten table cells, so they must run
-    // before reflow measures column widths. Non-table text remains handled by
-    // the pipeline passes below.
-    let table_substitutions = TableSubstitutions {
-        ellipsis: opts.ellipsis,
-        code_emphasis: opts.code_emphasis,
-    };
-    let mut state = ProcessBuffer::new(&table_substitutions);
-    // Track fences so subsequent logic respects shared semantics.
-    let mut fence_tracker = FenceTracker::default();
-
-    for line in pre {
-        let fence = fence_tracker.observe_source_line(&line);
-        if state.handle_fence_line(&line, fence.is_fence_marker) {
-            continue;
-        }
-
-        if fence.is_in_fence {
-            state.push_out(line);
-            continue;
-        }
-
-        let Some(line) = state.handle_table_line(line) else {
-            continue;
-        };
-
-        state.flush();
-        state.push_out(line);
-    }
-
-    let (mut out, table_markers) = state.finish();
-    let table_lines = out
-        .iter()
-        .zip(table_markers)
-        .filter(|(_, is_table_line)| *is_table_line)
-        .map(|(line, _)| line.clone())
-        .collect::<Vec<_>>();
     if opts.headings {
         out = crate::headings::convert_setext_headings(&out);
     }
@@ -167,6 +123,12 @@ pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String> {
 
     if opts.wrap {
         out = wrap_text(&out, WRAP_COLS);
+    }
+
+    // The definition fold appends lines to the block structure the layout has
+    // settled, so it runs last of all.
+    if opts.footnotes {
+        out = convert_footnote_definitions(&out);
     }
 
     out
@@ -306,93 +268,4 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for Markdown processing.
-
-    use super::*;
-
-    #[test]
-    fn processes_html_and_tables() {
-        let input = vec![
-            "<table><tr><td>A</td><td>B</td></tr></table>".to_string(),
-            "| X | Y |".to_string(),
-            "|---|---|".to_string(),
-            "| 1 | 2 |".to_string(),
-        ];
-        let output = process_stream(&input);
-        assert!(output.iter().any(|l| l.contains("| A   | B   |")));
-        assert!(output.iter().any(|l| l.contains("| X   | Y   |")));
-    }
-
-    #[test]
-    fn no_wrap_option() {
-        let input = vec!["| a | b |".to_string(), "| 1 | 2 |".to_string()];
-        let out = process_stream_no_wrap(&input);
-        assert_eq!(out, vec!["| a | b |", "| 1 | 2 |"]);
-    }
-
-    #[test]
-    fn integrates_code_emphasis_flag() {
-        let input = vec!["`X`** Y (in **`Z`**)**".to_string()];
-        let out = process_stream_inner(
-            &input,
-            Options {
-                code_emphasis: true,
-                ..Default::default()
-            },
-        );
-        assert_eq!(out, vec!["**`X` Y (in `Z`)**"]);
-    }
-
-    #[test]
-    fn converts_headings_when_enabled() {
-        let input = vec![
-            "Heading".to_string(),
-            "====".to_string(),
-            "Paragraph".to_string(),
-        ];
-        let disabled = process_stream_inner(
-            &input,
-            Options {
-                headings: false,
-                ..Default::default()
-            },
-        );
-        assert_eq!(disabled, input);
-
-        let enabled = process_stream_inner(
-            &input,
-            Options {
-                headings: true,
-                ..Default::default()
-            },
-        );
-        assert_eq!(
-            enabled,
-            vec!["# Heading".to_string(), "Paragraph".to_string()]
-        );
-    }
-
-    #[test]
-    fn process_stream_inner_applies_table_ellipsis_before_reflow() {
-        let input = vec![
-            "| example | value |".to_string(),
-            "| ------- | ----- |".to_string(),
-            "| ... | tail |".to_string(),
-        ];
-
-        let with_ellipsis = process_stream_inner(
-            &input,
-            Options {
-                ellipsis: true,
-                ..Default::default()
-            },
-        );
-        let without_ellipsis = process_stream_inner(&input, Options::default());
-
-        assert!(with_ellipsis.iter().any(|line| line.contains('…')));
-        assert!(!with_ellipsis.iter().any(|line| line.contains("...")));
-        assert!(without_ellipsis.iter().any(|line| line.contains("...")));
-        assert!(!without_ellipsis.iter().any(|line| line.contains('…')));
-    }
-}
+mod tests;

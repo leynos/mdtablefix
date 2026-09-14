@@ -152,6 +152,29 @@ pub(crate) static SEP_RE: std::sync::LazyLock<Regex> = lazy_regex!(
     "Markdown table separator row pattern should compile",
 );
 
+/// Matches a single Markdown delimiter cell: an optional leading colon, one or
+/// more dashes, and an optional trailing colon.
+///
+/// The row-level [`SEP_RE`] cannot judge a cell on its own, because it also
+/// matches an empty cell and permits whitespace inside one. A cell that merely
+/// contains a dash, such as `- -`, is therefore not a delimiter cell.
+pub(crate) static SEP_CELL_RE: std::sync::LazyLock<Regex> = lazy_regex!(
+    r"^:?-+:?$",
+    "Markdown table separator cell pattern should compile",
+);
+
+/// Reports whether `payload` is a single Markdown delimiter cell.
+///
+/// A delimiter cell is an optional colon, one or more dashes, and an optional
+/// trailing colon, with no whitespace anywhere. The payload is trimmed first,
+/// because the padding spaces that surround a cell in the source row are not
+/// part of its content and the grammar admits no whitespace at all. Testing for
+/// a dash alone was too weak: the row-level [`SEP_RE`] permits embedded
+/// whitespace, so `- -` and `:- :` passed for delimiter cells and
+/// [`format_separator_cells`] then rewrote them into a well-formed dash run,
+/// silently turning malformed source rows into valid delimiter rows instead of
+/// leaving them as data.
+pub(crate) fn is_delimiter_cell(payload: &str) -> bool { SEP_CELL_RE.is_match(payload.trim()) }
 /// Holds the parsed and validated table data.
 ///
 /// This is produced by [`parse_and_validate`] and passed to
@@ -183,9 +206,36 @@ fn extract_indent_and_trim(lines: &[String]) -> (String, Vec<String>) {
     (indent, trimmed)
 }
 
-/// Removes and returns the first separator line detected in `lines`.
+/// Reports whether `line` is a table delimiter row.
+///
+/// Every cell must be a delimiter cell as [`is_delimiter_cell`] defines it: an
+/// optional colon, one or more dashes, and an optional trailing colon, the same
+/// rule `reflow::row_parsing` and `reflow::second_row_is_separator` apply.
+/// `SEP_RE` is only a row-level sieve, because it matches an empty cell as
+/// readily as one that is dashes and permits whitespace between them, so a
+/// line-level test would admit rows that merely resemble a delimiter row — and
+/// [`format_separator_cells`] would then rewrite them into valid ones.
+fn is_delimiter_row(line: &str) -> bool {
+    SEP_RE.is_match(line) && split_cells(line).iter().all(|cell| is_delimiter_cell(cell))
+}
+/// Removes and returns the first delimiter row detected in `lines`.
+///
+/// Every cell must be a well-formed delimiter cell rather than one that merely
+/// carries a dash, as it is in `reflow::row_parsing`, because `SEP_RE` alone
+/// also matches a row whose cells are all empty: `|  |  |` is made only of
+/// pipes and spaces, so a table whose header row is empty had that header taken
+/// for the delimiter row, which demoted the real delimiter row to a data row
+/// and left two delimiter-shaped rows for later passes to consume in turn. A
+/// lone dash in an otherwise empty header row — `|  | - |` above
+/// `| --- | --- |` — is the same trap one dash later: the header became the
+/// delimiter row, the real delimiter row was laid out as text, and the
+/// synthesized delimiter row grew a column wider on every pass. A cell that
+/// holds both a dash and whitespace, as in the header `| - - |`, is the same
+/// trap again: `SEP_RE` admits the whitespace where the cell grammar does not,
+/// so the malformed header was taken for the delimiter row and rewritten into
+/// `| --- |`.
 fn extract_separator_line(lines: &mut Vec<String>) -> Option<String> {
-    let sep_idx = lines.iter().position(|l| SEP_RE.is_match(l));
+    let sep_idx = lines.iter().position(|l| is_delimiter_row(l));
     sep_idx.map(|idx| lines.remove(idx))
 }
 
@@ -299,120 +349,4 @@ fn reflow_valid_table(lines: &[String]) -> Option<Vec<String>> {
     calculate_and_format(&parsed, &indent)
 }
 #[cfg(test)]
-mod tests {
-    //! Unit tests for table parsing and formatting.
-
-    use rstest::rstest;
-
-    use super::*;
-
-    mod split_cells;
-
-    #[test]
-    fn sep_index_within_bounds() {
-        assert_eq!(sep_index_within(Some(1), 3), Some(1));
-        assert_eq!(sep_index_within(Some(3), 3), None);
-        assert_eq!(sep_index_within(None, 3), None);
-    }
-
-    #[test]
-    fn reflow_table_preserves_leading_empty_marker_character_as_payload() {
-        let lines = vec![
-            "| Header |".to_string(),
-            "| --- |".to_string(),
-            "| \u{1d} |".to_string(),
-        ];
-
-        assert_eq!(
-            reflow_table(&lines),
-            vec![
-                "| Header |".to_string(),
-                "| ------ |".to_string(),
-                "| \u{1d}      |".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn reflow_table_preserves_escaped_pipe_sentinel_character_as_payload() {
-        let lines = vec![
-            "| Header | Value |".to_string(),
-            "| --- | --- |".to_string(),
-            "| \u{1f} | data |".to_string(),
-        ];
-
-        assert_eq!(
-            reflow_table(&lines),
-            vec![
-                "| Header | Value |".to_string(),
-                "| ------ | ----- |".to_string(),
-                "| \u{1f}      | data  |".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn detect_row_mismatch() {
-        let rows = vec![
-            vec!["a".to_string(), "b".to_string()],
-            vec!["1".to_string(), "2".to_string()],
-        ];
-        assert!(!rows_mismatched(&rows, false));
-
-        let mismatch = vec![
-            vec!["a".to_string(), "b".to_string()],
-            vec!["1".to_string()],
-        ];
-        assert!(rows_mismatched(&mismatch, false));
-
-        let with_sep = vec![
-            vec!["a".to_string(), "b".to_string()],
-            vec!["---".to_string(), "---".to_string()],
-            vec!["1".to_string(), "2".to_string()],
-        ];
-        assert!(!rows_mismatched(&with_sep, false));
-
-        assert!(!rows_mismatched(&mismatch, true));
-    }
-
-    #[rstest]
-    #[case(vec![2], vec!["---".to_string()], vec!["---".to_string()])]
-    #[case(vec![5], vec![":---".to_string()], vec![":----".to_string()])]
-    #[case(vec![5], vec!["---:".to_string()], vec!["----:".to_string()])]
-    #[case(vec![5], vec![":--:".to_string()], vec![":---:".to_string()])]
-    fn format_separator_cells_preserves_alignment_markers(
-        #[case] widths: Vec<usize>,
-        #[case] cells: Vec<String>,
-        #[case] expected: Vec<String>,
-    ) {
-        assert_eq!(format_separator_cells(&widths, &cells), expected);
-    }
-
-    #[test]
-    fn format_separator_cells_returns_empty_when_counts_mismatch() {
-        let sep_cells = vec!["---".to_string()];
-
-        assert!(format_separator_cells(&[3, 4], &sep_cells).is_empty());
-    }
-
-    #[test]
-    fn reflow_table_returns_lone_single_cell_line_unchanged() {
-        // A single pipe-prefixed line with no separator row is a stray pipe
-        // (for example a shell pipeline continuation), not a table. It must pass
-        // through verbatim rather than gaining a fabricated trailing pipe.
-        let lines = vec!["| tee /tmp/test.log".to_string()];
-
-        assert_eq!(reflow_table(&lines), lines);
-    }
-
-    #[test]
-    fn reflow_table_returns_original_lines_for_mismatched_separator_columns() {
-        let lines = vec![
-            "| head |".to_string(),
-            "| --- | --- |".to_string(),
-            "| body |".to_string(),
-        ];
-
-        assert_eq!(reflow_table(&lines), lines);
-    }
-}
+mod tests;

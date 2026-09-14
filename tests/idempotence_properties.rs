@@ -19,6 +19,14 @@
 //! still draw on it, so a generated document may contain any of the three
 //! shapes.
 //!
+//! Issue #493 widened the document domain past the three-marker, perfectly
+//! balanced shapes the generators used to emit, because the longer openers,
+//! mismatched interior fences, multi-digit markers, control-character cells, and
+//! hard breaks behind the recent defects were all outside it. The generators
+//! moved to `support/idempotence_generators.rs`, which no other binary draws on;
+//! the properties stay here, and the reachability sweeps that hold the
+//! generators to account live in `support/idempotence_reachability.rs`.
+//!
 //! Issue #504 added the bracket reference seam: a paragraph whose prose and
 //! inline code span fill all but one of the first line's columns, with a bare
 //! `[1]` on the line below. The wrap boundary falls between the two, which is
@@ -27,103 +35,29 @@
 //! that width instead of emitting whatever the prose strategy returns.
 
 use mdtablefix::process::WRAP_COLS;
-use proptest::{prelude::*, test_runner::Config as ProptestConfig};
+use proptest::prelude::*;
+
+#[path = "support/idempotence_generators.rs"]
+mod idempotence_generators;
 
 #[path = "support/idempotence_harness.rs"]
 mod idempotence_harness;
 #[path = "support/layout_normalization.rs"]
 mod layout_normalization;
+
+// The reachability sweeps share this binary, so the generator items they import stay used.
+#[path = "support/idempotence_reachability.rs"]
+mod idempotence_reachability;
+
+use idempotence_generators::{document_strategy, overlong_code_span_block_strategy};
 use idempotence_harness::{
     BREAK_SPELLINGS,
-    FLAG_POOL,
     SWEEP_DOCUMENTS,
-    adjacency_strategy,
     flags_for,
     format_twice,
-    prose_strategy,
+    proptest_config,
     sample,
 };
-
-/// Generates an inline code span shaped like a file path.
-fn code_span_strategy() -> impl Strategy<Value = String> {
-    proptest::collection::vec("[a-z]{2,6}", 1..=3)
-        .prop_map(|segments| format!("`{}`", segments.join("/")))
-}
-
-/// Generates the tail that follows a prefix marker.
-///
-/// A parenthesised code span is the class B shape: the wrap's line breaking
-/// depends on that trailing token, so it decides whether the block reflows with
-/// the lines below it.
-fn tail_strategy() -> impl Strategy<Value = String> {
-    prop_oneof![
-        2 => Just(String::new()),
-        3 => prose_strategy().prop_map(|prose| format!(" {prose}")),
-        3 => prose_strategy().prop_map(|prose| format!(" ({prose})")),
-        3 => code_span_strategy().prop_map(|span| format!(" ({span})")),
-    ]
-}
-
-/// Generates a prefixed line: a bullet, task, ordered, quote, or footnote line.
-fn prefixed_line_strategy() -> impl Strategy<Value = String> {
-    let marker = prop_oneof![
-        3 => Just("- "),
-        1 => Just("- [ ] "),
-        2 => Just("1. "),
-        2 => Just("> "),
-        1 => Just("[^1]: "),
-        1 => Just("  - "),
-    ];
-
-    (marker, prose_strategy(), tail_strategy())
-        .prop_map(|(marker, prose, tail)| format!("{marker}{prose}{tail}"))
-}
-
-/// Generates the line below a prefixed line: indented, lazy, code, or a quote.
-fn continuation_strategy() -> impl Strategy<Value = String> {
-    prop_oneof![
-        3 => prose_strategy().prop_map(|prose| format!("  {prose}")),
-        2 => prose_strategy(),
-        1 => prose_strategy().prop_map(|prose| format!("    {prose}")),
-        1 => prose_strategy().prop_map(|prose| format!("> {prose}")),
-        1 => Just(String::new()),
-    ]
-}
-
-/// Generates a prefixed block, sometimes with a continuation line below it.
-fn prefixed_block_strategy() -> impl Strategy<Value = String> {
-    (
-        prefixed_line_strategy(),
-        prop::option::of(continuation_strategy()),
-    )
-        .prop_map(|(line, continuation)| match continuation {
-            Some(continuation) => format!("{line}\n{continuation}"),
-            None => line,
-        })
-}
-
-/// Generates a prefixed block whose first line overflows the target width and
-/// ends with a parenthesised inline code span, plus a continuation line.
-///
-/// This is the class B shape: the first line spills past the wrap width, so the
-/// block is deferred and must reflow with the continuation below it. The prose
-/// is grown until the line exceeds the width, because a short line never
-/// reaches the deferral path.
-fn overlong_code_span_block_strategy() -> impl Strategy<Value = String> {
-    (
-        prose_strategy(),
-        code_span_strategy(),
-        continuation_strategy(),
-    )
-        .prop_map(|(prose, span, continuation)| {
-            let mut line = format!("- {prose}");
-            while line.len() + span.len() + 3 <= 80 {
-                line.push_str(" and more prose");
-            }
-
-            format!("{line} ({span})\n{continuation}")
-        })
-}
 
 /// Display columns a bracket reference seam head fills.
 ///
@@ -154,36 +88,6 @@ fn bracket_reference_seam_strategy() -> impl Strategy<Value = String> {
     })
 }
 
-/// Generates a fenced code block with either fence spelling.
-fn fenced_block_strategy() -> impl Strategy<Value = String> {
-    let fence = prop_oneof![Just("```"), Just("~~~")];
-
-    (fence, prose_strategy()).prop_map(|(fence, body)| format!("{fence}\n{body}\n{fence}"))
-}
-
-/// Generates one element of a document; elements are joined by newlines.
-fn element_strategy() -> impl Strategy<Value = String> {
-    prop_oneof![
-        4 => prose_strategy(),
-        4 => prefixed_block_strategy(),
-        2 => proptest::sample::select(BREAK_SPELLINGS).prop_map(str::to_string),
-        2 => adjacency_strategy()
-            .prop_map(|(document, _, _)| document.trim_end_matches('\n').to_string()),
-        2 => fenced_block_strategy(),
-        2 => bracket_reference_seam_strategy(),
-        1 => prose_strategy().prop_map(|title| format!("{title}\n-----")),
-        1 => Just("[1] and text... here".to_string()),
-        1 => Just("**bold**`code`".to_string()),
-        1 => Just(String::new()),
-    ]
-}
-
-/// Generates a whole document with a trailing newline.
-fn document_strategy() -> impl Strategy<Value = String> {
-    proptest::collection::vec(element_strategy(), 1..=10)
-        .prop_map(|elements| elements.join("\n") + "\n")
-}
-
 /// Generates a valid table with an emphasis-wrapped inline code span.
 ///
 /// This is the shape whose repair shortens a table cell. The marker and prose
@@ -211,7 +115,7 @@ fn code_emphasis_table_strategy() -> impl Strategy<Value = String> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+    #![proptest_config(proptest_config())]
 
     /// Asserts the CLI formatter is a fixed point for generated documents.
     ///
@@ -261,39 +165,6 @@ proptest! {
             document,
             once,
             twice,
-        );
-    }
-}
-
-/// Asserts the sweep samples every flag both enabled and disabled.
-///
-/// A flag that is never enabled would make the sweep vacuous for that
-/// transform, and one that is never disabled would hide interactions between
-/// the flags.
-#[test]
-fn generated_corpus_reaches_every_flag() {
-    let masks = sample(&(0u16..=255u16), SWEEP_DOCUMENTS);
-    let mut seen_enabled = std::collections::BTreeSet::new();
-    for mask in &masks {
-        for flag in flags_for(*mask) {
-            seen_enabled.insert(flag);
-        }
-    }
-
-    let missing: Vec<_> = FLAG_POOL
-        .iter()
-        .filter(|flag| !seen_enabled.contains(**flag))
-        .collect();
-    assert!(
-        missing.is_empty(),
-        "the sweep never enabled {missing:?} across {SWEEP_DOCUMENTS} samples",
-    );
-
-    for (index, flag) in FLAG_POOL.iter().enumerate() {
-        let bit = 1 << index;
-        assert!(
-            masks.iter().any(|mask| mask & bit == 0),
-            "the sweep never disabled {flag}",
         );
     }
 }
@@ -425,19 +296,4 @@ fn generated_corpus_reaches_the_bracket_reference_seam() {
         reached > 0,
         "the generator never produced a paragraph that fills the line before a bracket reference",
     );
-}
-
-/// Asserts generated documents are newline terminated without carriage returns.
-#[test]
-fn generated_documents_are_line_terminated() {
-    for document in sample(&document_strategy(), 16) {
-        assert!(
-            document.ends_with('\n'),
-            "generated document is not newline terminated: {document:?}",
-        );
-        assert!(
-            !document.contains('\r'),
-            "generated document contains a carriage return: {document:?}",
-        );
-    }
 }

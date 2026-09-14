@@ -37,10 +37,10 @@ pub(super) struct DefinitionLine {
 
 /// Buffered numeric-list line that may become a footnote definition.
 ///
-/// Candidates are collected on the first pass and finalized in reverse so
-/// they pick up sequential numbers after explicit `[^n]:` definitions have
-/// been assigned. All fields are populated at construction and not mutated
-/// afterwards.
+/// Candidates are collected on the first pass and finalized once the scan has
+/// found every definition, so they take the numbers left over after the
+/// explicit `[^n]:` definitions have claimed theirs. All fields are populated
+/// at construction and not mutated afterwards.
 pub(super) struct NumericCandidate {
     /// Zero-based row in the original `lines` slice.
     index: usize,
@@ -62,9 +62,9 @@ pub(super) struct NumericCandidate {
 /// `definitions` is keyed by `DefinitionLine::index`.
 pub(super) struct DefinitionUpdates {
     /// Rewrite plans for every definition encountered. Explicit `[^n]:`
-    /// definitions appear in scan order; promoted numeric candidates follow
-    /// in reverse scan order (bottom-up), as required by
-    /// `finalize_numeric_candidates`.
+    /// definitions appear in scan order, and promoted numeric candidates
+    /// follow them, also in scan order, as `finalize_numeric_candidates`
+    /// appends them once the scan is done.
     pub(super) definitions: Vec<DefinitionLine>,
     /// `is_definition_line[i]` is `true` when row `i` of the source slice is
     /// the header of a footnote definition (existing or freshly promoted),
@@ -262,10 +262,12 @@ fn collect_scan_updates(lines: &[String], state: &mut DefinitionScanState<'_>) {
 /// Candidates are drained from the bottom so their continuation rows remain
 /// associated with the source item when the resulting definitions are sorted.
 fn finalize_numeric_candidates(state: &mut DefinitionScanState<'_>) {
-    // Drain from the bottom so wrapped continuation lines stay attached to the
-    // correct definition when numeric candidates are later reordered by their
-    // assigned footnote numbers.
-    for candidate in state.numeric_candidates.drain(..).rev() {
+    // Number the candidates in line order. The block is sorted by number once
+    // the scan is done, so an item no reference reaches — which is the item
+    // that takes the next number from the pool — keeps the position it was
+    // written in, and only the items a reference reaches move ahead of it.
+    // Numbering them bottom-up would reverse every run of unreferenced items.
+    for candidate in state.numeric_candidates.drain(..) {
         let new_number = assign_new_number(state.mapping, candidate.number, state.next_number);
         let rewritten_rest = rewrite_tokens(&candidate.rest, state.mapping);
         let mut line = String::with_capacity(
@@ -318,6 +320,37 @@ pub(super) fn collect_definition_updates(
         definitions: state.definitions,
         is_definition_line: state.is_definition_line,
     }
+}
+
+/// Collects the definition headers of a document whose labels are already
+/// final.
+///
+/// [`renumber_labels`](super::renumber_labels) applies the reference mapping to
+/// the headers as well as the references, so each header already carries the
+/// number it keeps and only the block's order is left to settle. Numbering the
+/// headers from the free pool here would move every definition no reference
+/// points at, because those are the ones the pool reaches, and it would do so
+/// in line order: a definition the label stage had placed ahead of another
+/// would come out behind it.
+pub(super) fn settled_definitions(lines: &[String]) -> Vec<DefinitionLine> {
+    let mut definitions = Vec::new();
+    let mut fences = FenceTracker::default();
+
+    for (index, line) in lines.iter().enumerate() {
+        let fence = fences.observe_source_line(line);
+        if fence.is_fence_marker || fence.is_in_fence {
+            continue;
+        }
+        if let Some(parts) = parse_definition(line) {
+            definitions.push(DefinitionLine {
+                index,
+                new_number: parts.number,
+                line: line.clone(),
+            });
+        }
+    }
+
+    definitions
 }
 
 /// Applies the rewrite plan in `definitions` to `lines`, replacing each

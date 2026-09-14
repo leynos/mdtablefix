@@ -1,6 +1,6 @@
 //! Provenance-aware recovery of logical table rows from physical source lines.
 
-use super::{Cell, SEP_RE};
+use super::{Cell, is_delimiter_cell};
 
 /// Reports whether a cell has no content after accounting for leading emptiness.
 pub(super) fn cell_is_semantically_empty(cell: &Cell) -> bool {
@@ -70,7 +70,7 @@ fn has_embedded_separator_row(row: &[Cell], width: usize) -> bool {
         let start = index * (width + 1);
         row[start..start + width]
             .iter()
-            .all(|cell| cell.payload.contains('-') && SEP_RE.is_match(&cell.payload))
+            .all(|cell| is_delimiter_cell(&cell.payload))
     })
 }
 

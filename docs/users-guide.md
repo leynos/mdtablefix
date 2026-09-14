@@ -285,9 +285,21 @@ are recognised using matching marker characters and run lengths; a closer must
 also have no info string. A fence opened inside a blockquote ends when the
 blockquote depth drops below its opening depth.
 
-Footnote conversion runs before Markdown table reflow and paragraph wrapping,
-so table widths and wrapped lines are measured against the final footnote
-labels.
+Conversion runs in three stages, and the order is part of the behaviour. Bare
+numeric references are rewritten first, and both references and definition
+headers are then renumbered in the order readers meet them, so `[^10]` becomes
+`[^1]`. Because those rewrites change the length of the line, they run before
+the table reflow and the paragraph wrap measure it, so a single pass settles.
+A numbered item in the final list is folded into a definition in the same early
+stage when a reference points at it, because the two are matched by the number
+they share. Folding the rest of the final list, and reordering the definition
+block, runs last, after the layout, because both read the document's settled
+block structure. The numbers are final by then, so that last stage leaves them
+as they are.
+
+The definition block is sorted by those numbers, so it reads in the order the
+text reaches its references, and the definitions no reference reaches follow at
+the end, in the order they were written.
 
 ## Table reflow
 
@@ -295,6 +307,13 @@ labels.
 uniform width. The formatter measures each cell using Unicode display width,
 which means accented characters, CJK glyphs, and emoji stay visually aligned
 after reflow.
+
+A row is a delimiter row only when every cell consists of an optional leading
+colon, one or more dashes, and an optional trailing colon. A row of pipes and
+spaces (`|  |  |`), a lone dash among empty cells (`|  | - |`), `| - - |`, and
+`| :- : |` are therefore ordinary rows, not alignment rows. This is what keeps a
+table with an empty header row from being restructured, and the same rule is
+applied wherever the formatter looks for an alignment row.
 
 Continuation rows are preserved during reflow. When a row starts with empty
 leading cells because its content continues from the previous row, those empty
@@ -551,6 +570,12 @@ Two trailing spaces at the end of a line produce a hard line break in rendered
 Markdown. `mdtablefix --wrap` preserves those trailing spaces on the final
 wrapped line, so hard-break semantics are not lost after reformatting.
 
+A line ending in a backslash is also a Markdown hard break. Because the
+backslash is content, it stays glued to the last word and is measured by the
+wrap, so a wrapped line never exceeds the target width by the marker's column.
+The two-space form is trimmed before measuring and re-applied after, which is
+why it stays outside the fit.
+
 Lines that consist entirely of whitespace — spaces, tabs, or any mixture — are
 normalized to empty strings during wrapping. Such lines act as paragraph
 boundaries and are never passed through with their original whitespace content,
@@ -597,12 +622,14 @@ part of the `make fmt` flag set.
 A candidate line is converted only when it is paragraph text. A line that is
 already a Markdown block start keeps its underline, so the line below it
 survives: an ATX heading, a thematic break, a list item, a blockquote, a
-footnote or link reference definition, a markdownlint directive, or a
-fenced-code marker.
+footnote or link reference definition, a markdownlint directive, a fenced-code
+marker, or a table row.
 
 A table delimiter row is refused too. It is table syntax rather than paragraph
 text, so the `---` beneath it is a thematic break and not an underline, and the
-table above it keeps its alignment row.
+table above it keeps its alignment row. A line beginning with `|` is table
+syntax as well, so `| Title` above `---` is not converted and the `---` stays a
+thematic break.
 
 Indentation and blockquote markers shared by the heading and its underline are
 preserved, so `> Title` above `> -----` becomes `> ## Title`.
@@ -634,6 +661,12 @@ normalization would turn an inner literal fence into a structural close, the
 outer fence is kept, so the inner content remains literal. Preservation applies
 when the inner fence uses the same marker character as the outer fence, or when
 a tilde outer fence wraps a literal inner backtick fence.
+
+When the document ends inside an unclosed fence, `--fences` still normalizes
+the opening marker, under the same preserved-delimiter rule: the marker's own
+run length is kept whenever compressing it to three backticks would make a
+fence-shaped line inside the block structural. Every interior line is emitted
+verbatim, so fence-shaped content inside an unclosed block is never rewritten.
 
 A fence closes only on a bare marker line (`` ``` `` or `~~~`) optionally
 followed by ASCII spaces or tabs. A same-marker line that also carries an info
@@ -831,6 +864,17 @@ let owned: Vec<String> = format_breaks(&lines)
     .map(|c| c.into_owned())
     .collect();
 ```
+
+### Footnote stages
+
+The crate root re-exports `convert_footnotes`, the whole-document convenience
+form. It runs three public stages in order:
+`footnotes::convert_inline_footnotes`, then
+`footnotes::renumber_footnote_labels`, then
+`footnotes::convert_footnote_definitions`. Callers that interleave passes of
+their own run the first two ahead of any pass that lays text out, and the third
+once the block structure and the layout have settled. See
+[footnote conversion](#footnote-conversion) for why the order is forced.
 
 ### Line-ending helpers
 

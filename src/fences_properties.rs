@@ -8,7 +8,7 @@
 
 use proptest::{prelude::*, strategy::Strategy as ProptestStrategy};
 
-use super::{Strategy, rewrite_marker};
+use super::compress::{Strategy, rewrite_marker};
 
 fn fence_line_strategy() -> impl ProptestStrategy<Value = (String, String, char, usize, String)> {
     (

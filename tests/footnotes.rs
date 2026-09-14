@@ -319,6 +319,9 @@ fn test_renumbers_numeric_list_without_heading() {
     assert_eq!(convert_footnotes(&input), expected);
 }
 
+/// The definition a reference reaches takes the reference's number and leads
+/// the block; the definitions it does not reach keep the order they were
+/// written in, with a wrapped item's continuation lines still attached to it.
 #[test]
 fn test_renumbers_numeric_list_with_wrapped_items_and_duplicates_without_heading() {
     let input = lines_vec!(
@@ -333,9 +336,9 @@ fn test_renumbers_numeric_list_with_wrapped_items_and_duplicates_without_heading
         "First ref.[^1] and again [^1]",
         "",
         "[^1]: Seventh footnote",
-        "[^2]: Third footnote wraps",
+        "[^2]: Legacy footnote",
+        "[^3]: Third footnote wraps",
         "   over two lines.",
-        "[^3]: Legacy footnote",
     );
     assert_eq!(convert_footnotes(&input), expected);
 }

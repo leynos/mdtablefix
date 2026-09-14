@@ -37,9 +37,10 @@ must run inside the closure. The library-owned `renumber_lists` pass runs inside
 the only CLI-only transform and runs after that pipeline.
 
 The normalization-before-layout order is recorded in
-[`ADR 0006`](adrs/0006-single-pass-idempotence.md). Keep content normalizers,
-including footnotes and list markers, before table reflow and paragraph
-wrapping so layout measures the final text.
+[`ADR 0006`](adrs/0006-single-pass-idempotence.md). Inline footnotes, table
+substitutions, list markers, and ellipsis run before the passes that measure
+their text, so layout measures final content; only the footnote-definition
+fold runs after the wrap, appending lines to the settled block structure.
 
 When working in this area:
 
@@ -528,8 +529,15 @@ selected for the branch.
   fence line structural. This covers same-marker inner fences and the
   cross-marker case where an inner backtick fence would become structural after
   an outer tilde fence is converted to backticks. If so, it preserves the
-  original outer delimiter width and marker family. Unmatched or malformed
-  delimiter runs fall through the legacy stateless normalization path.
+  original outer delimiter width and marker family. Matched fenced blocks
+  rewrite both delimiters; a block the document ends inside (no matching
+  closing delimiter, including a closer in the other marker family) rewrites
+  only the opening delimiter and emits every interior line verbatim. The
+  preserved-delimiter rule above applies to both, so an unclosed block whose
+  interior holds a fence-shaped line also keeps its original outer delimiter
+  width and marker family. Lines that are not fence delimiters at all are
+  still emitted with their stateless compressed rewrite, which is a no-op for
+  non-fence lines.
 - `attach_orphan_specifiers(lines: &[String]) -> Vec<String>` attaches a lone
   language identifier line to the following unlabelled fence, but only when the
   scanner is outside any active fenced block. It uses `FenceTracker` to skip
@@ -1258,8 +1266,10 @@ variants have the following effects:
   interior fence would otherwise become structural.
 
 All fence-marker rewriting must dispatch on `Strategy` through `rewrite_marker`.
-`flush_matched_block` selects the matched-block strategy, while
-`rewrite_fence_line` only dispatches it and falls back to the original line.
+Both `flush_matched_block` and `flush_unmatched_block` select the strategy from
+whether the block has a conflicting interior fence, while `rewrite_fence_line`
+only dispatches the chosen strategy and falls back to the original line when
+the line is not a normalization-compatible delimiter.
 
 ### Architecture
 
@@ -1475,8 +1485,8 @@ explicit reference rewrites. Explicit `[^n]:` headers are appended to
 header in scan order. Ordered-list items that look like candidate footnote
 definitions are buffered as `NumericCandidate` entries during the scan and
 finalized at the end via `finalize_numeric_candidates`, which drains the buffer
-in reverse, so the assigned numbers reflect bottom-up ordering rather than the
-order in which the candidates were discovered.
+in the order the candidates were discovered, so an item no reference reaches
+keeps the position it was written in once the block is sorted by number.
 
 Footnote reference collection, definition scanning, and reference rewriting
 classify each source line with `FenceTracker::observe_source_line`. The shared
@@ -1506,16 +1516,26 @@ Integration-test helpers are organized under `tests/support/`:
 
 Table: Integration-test support modules and their purposes.
 
-| Module                   | Purpose                                                               |
-| ------------------------ | --------------------------------------------------------------------- |
-| `cli_args.rs`            | `run_cli_with_args` — invokes the binary with argument-only tests     |
-| `cli_stdin.rs`           | `run_cli_with_stdin` — invokes the binary feeding stdin               |
-| `fixtures.rs`            | Shared rstest fixtures (e.g. `broken_table`)                          |
-| `wrap_assertions.rs`     | Higher-level assertions for wrapping output                           |
-| `idempotence_harness.rs` | Shared proptest generators and CLI harness for the idempotence suites |
+| Module                        | Purpose                                                                          |
+| ----------------------------- | -------------------------------------------------------------------------------- |
+| `cli_args.rs`                 | `run_cli_with_args` — invokes the binary with argument-only tests                |
+| `cli_stdin.rs`                | `run_cli_with_stdin` — invokes the binary feeding stdin                          |
+| `fixtures.rs`                 | Shared rstest fixtures (e.g. `broken_table`)                                     |
+| `wrap_assertions.rs`          | Higher-level assertions for wrapping output                                      |
+| `idempotence_harness.rs`      | Shared vocabulary and CLI harness for the idempotence property suites            |
+| `idempotence_generators.rs`   | Document-level proptest strategies                                               |
+| `idempotence_reachability.rs` | Reachability sweeps and their helper predicates, used by the property suite only |
 
 Each integration-test file declares the modules it needs via explicit
 `#[path = "support/…"]` attributes, keeping inter-test coupling minimal.
+
+The two idempotence suites read their case count from the `PROPTEST_CASES`
+environment variable through the `proptest_config` helper in
+`tests/support/idempotence_harness.rs`, falling back to 48 when it is unset or
+unparseable. The other property suites — `tests/check_properties.rs`,
+`tests/check_prediction.rs`, and `tests/static_regex_lint.rs` — pin their own
+counts and ignore the variable, so a longer sweep is an environment variable
+for the idempotence suites only.
 
 ### 2.2. Exported test macros (`tests/common/mod.rs`)
 
