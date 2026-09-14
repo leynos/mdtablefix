@@ -152,13 +152,16 @@ fn test_cli_wrap_keeps_inline_citation_links_attached(
 /// The prose and the inline code span fill all but two of the eighty columns, so
 /// the reference is the fragment at the wrap boundary. Before the fix the
 /// opening bracket stayed on the first line and a second pass rejoined the
-/// halves as `[ 1]`.
+/// halves as `[ 1]`. The `[[1]]` case is a bracket run whose second bracket is
+/// the reference's opener, which the same coupling has to keep whole; declining
+/// it there strands the first bracket at a line end.
 #[rstest]
 #[case("[1]")]
 #[case("[12]")]
 #[case("[1],")]
 #[case("[12].")]
 #[case("[1]]")]
+#[case("[[1]]")]
 fn test_cli_wrap_keeps_bracket_reference_whole(
     #[case] reference: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
