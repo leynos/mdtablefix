@@ -12,8 +12,8 @@ use unicode_width::UnicodeWidthStr;
 
 use super::hard_break::trailing_hard_break_marker_len;
 use crate::wrap::{
-    inline::wrap_preserving_code,
     tokenize::{has_odd_backslash_escape_bytes, position_after_close},
+    wiring::wrap_preserving_code,
 };
 
 /// A complete inline-code span whose authored line boundaries must be restored.

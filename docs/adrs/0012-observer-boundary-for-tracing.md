@@ -41,9 +41,10 @@ lives in `src/wrap/tracing_adapter.rs` and translates each `Event` into the
 crate's existing `tracing` records. It owns every vendor-specific concern:
 the `tracing::enabled!` level gate for each event and any derived value that
 costs more than a copy, such as the `chars().count()` used to report
-`token_length`. Diagnostics are metadata-only: the adapter derives bounded
-values from the borrowed token text but never records the text itself, so no
-raw document content reaches a subscriber. A `#[cfg(test)]`-only
+`token_length`. Diagnostics are metadata-only: the adapter derives content-free
+scalar values, such as counts, indices, flags, and stable category names, from
+the borrowed token text but never records the text itself, so no raw document
+content reaches a subscriber. A `#[cfg(test)]`-only
 `NoOpObserver` in `observer.rs` is the crate's other `Observer`
 implementation; it discards every event for tests that need an
 `ObserverHandle` without a subscriber.
@@ -84,3 +85,12 @@ module or by adding a second adapter alongside `TracingObserver`.
   `FragmentClassified` event carrying `FragmentKind::BracketedRef`. The
   footnote probes in `classify_fragment` are handled the same way, and the
   same reasoning should settle the next such predicate.
+- The concrete adapter is chosen once, at the composition point in
+  `src/wrap/wiring.rs`, never inside the wrapping domain itself: `wiring.rs`
+  is the only production module that constructs `TracingObserver`, and it
+  does so only to hand the resulting `ObserverHandle` to the domain's
+  `wrap_preserving_code_observed`. This keeps the dependency arrow pointing
+  the right way — the domain still knows nothing beyond the `Observer`
+  trait — and yields a checkable invariant: no module under
+  `src/wrap/inline/` or `src/wrap/tokenize/` names `tracing` or
+  `TracingObserver` outside its own test modules.

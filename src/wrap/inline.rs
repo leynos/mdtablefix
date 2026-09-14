@@ -45,14 +45,10 @@ pub(super) use span_grouping::determine_token_span;
 /// line when `current` is empty.
 #[cfg(test)]
 pub(super) use test_support::attach_punctuation_to_previous_line;
-// Public wrapping entry points, defined in `wrapping` and surfaced here so
-// `paragraph` and the wrap test suites keep using `inline::…` paths.
-pub(super) use wrapping::wrap_preserving_code;
-// The observer-threaded entry point is only reached directly by the
-// benchmark-only shims in `bench_internals`; production code goes through
-// `wrap_preserving_code`, which wires up the `TracingObserver`.
-#[cfg(feature = "bench-internals")]
-pub(super) use wrapping::wrap_preserving_code_observed;
+// The observer-threaded wrapping entry point. It depends only on the `Observer`
+// port; `wrap::wiring` supplies the concrete adapter, and the benchmark shims in
+// `bench_internals` pass their own handle.
+pub(in crate::wrap) use wrapping::wrap_preserving_code_observed;
 
 #[cfg(test)]
 mod date_strategies;

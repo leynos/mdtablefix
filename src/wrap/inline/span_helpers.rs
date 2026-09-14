@@ -46,24 +46,14 @@ pub(in crate::wrap::inline) fn extend_punctuation(
 /// Returns the exclusive end of a date-like token run beginning at `start`.
 ///
 /// The matched pattern is reported through `observer` as a stable category
-/// name, so callers can tell which of the three shapes was recognised without
+/// name, so callers can tell which of the three shapes was recognized without
 /// the helper touching a logging vendor.
 pub(in crate::wrap::inline) fn try_match_date_sequence(
     tokens: &[String],
     start: usize,
     observer: &mut ObserverHandle<'_>,
 ) -> Option<usize> {
-    let (end, pattern) = if let Some(end) = match_ordinal_day_month_year(tokens, start) {
-        (end, "ordinal_day_month_year")
-    } else if let Some(end) = match_numeric_day_month_year(tokens, start) {
-        (end, "numeric_day_month_year")
-    } else {
-        (
-            match_month_numeric_day_year(tokens, start)?,
-            "month_numeric_day_year",
-        )
-    };
-
+    let (end, pattern) = match_date_pattern(tokens, start)?;
     if let Some(observer) = observer.as_deref_mut() {
         observer.observe(Event::DateSequenceMatched {
             start,
@@ -72,6 +62,33 @@ pub(in crate::wrap::inline) fn try_match_date_sequence(
         });
     }
     Some(end)
+}
+
+/// The date shapes recognized, paired with the stable name each reports.
+///
+/// Order is the precedence: the first matcher to accept decides the span and
+/// the reported pattern. It is significant rather than incidental, because the
+/// shapes overlap on their leading tokens.
+type DateMatcher = (fn(&[String], usize) -> Option<usize>, &'static str);
+
+/// The ordered matcher table backing [`match_date_pattern`].
+const DATE_MATCHERS: [DateMatcher; 3] = [
+    (match_ordinal_day_month_year, "ordinal_day_month_year"),
+    (match_numeric_day_month_year, "numeric_day_month_year"),
+    (match_month_numeric_day_year, "month_numeric_day_year"),
+];
+
+/// Returns the exclusive end and stable pattern name of the first date shape
+/// matching at `start`, or `None` when none of them does.
+///
+/// This is the pure predicate half of [`try_match_date_sequence`], separated so
+/// the matcher precedence is one readable table rather than a branch chain, and
+/// so the pattern name travels with the match instead of being attached by the
+/// caller.
+fn match_date_pattern(tokens: &[String], start: usize) -> Option<(usize, &'static str)> {
+    DATE_MATCHERS
+        .iter()
+        .find_map(|(matcher, pattern)| matcher(tokens, start).map(|end| (end, *pattern)))
 }
 
 /// Return the first token span representing a complete date, optionally
@@ -322,33 +339,3 @@ mod span_helper_props;
 #[cfg(test)]
 #[path = "span_helper_tracing_tests.rs"]
 mod span_helper_tracing_tests;
-#[cfg(test)]
-mod tracing_tests {
-    //! Traced-event test for date-sequence grouping.
-    //!
-    //! Verifies that `date_token_span` emits the DEBUG `matched date sequence`
-    //! event with its `start` and `end` fields through the tracing adapter.
-
-    // Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
-
-    use test_macros::traced_test;
-
-    use super::date_token_span;
-    use crate::wrap::tracing_adapter::TracingObserver;
-
-    #[traced_test]
-    #[test]
-    fn date_token_span_logs_matched_sequence() {
-        let tokens: Vec<String> = ["1st", " ", "January", " ", "2020"]
-            .iter()
-            .map(ToString::to_string)
-            .collect();
-        let mut observer = TracingObserver;
-        let span = date_token_span(&tokens, 0, &mut Some(&mut observer));
-
-        assert_eq!(span.map(|(end, _)| end), Some(5));
-        assert!(logs_contain("matched date sequence"));
-        assert!(logs_contain("start=0"));
-        assert!(logs_contain("end=5"));
-    }
-}

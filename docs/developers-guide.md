@@ -664,9 +664,11 @@ depth-aware tracking.
    non-obvious decision boundaries.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
-   `src/wrap/inline/wrapping.rs` tokenizes prose with
-   `tokenize::segment_inline`, groups the tokens into `InlineFragment` values
-   via `determine_token_span` in `src/wrap/inline/span_grouping.rs`, and calls
+   `src/wrap/wiring.rs` builds the `TracingObserver` adapter and delegates to
+   `wrap_preserving_code_observed` in `src/wrap/inline/wrapping.rs`, which
+   tokenizes prose with `tokenize::segment_inline`, groups the tokens into
+   `InlineFragment` values via `determine_token_span` in
+   `src/wrap/inline/span_grouping.rs`, and calls
    `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
    buffer. Token predicates in `src/wrap/inline/predicates.rs` classify
    punctuation, links, code spans, and footnote markers. Span grouping helpers
@@ -814,7 +816,8 @@ Table: Key types and functions.
 | Span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, `try_couple_bracketed_reference`, `try_match_date_sequence`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/wrap/inline/span_helpers.rs`     |
 | `try_couple_inline_link_after_opener`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/inline/span_helpers.rs`     |
 | `normalize_footnote_ref_spacing`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/normalize.rs`        |
-| `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline/wrapping.rs`         |
+| `build_fragments`, `render_line`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/wrapping.rs`         |
+| `wrap_preserving_code` (wires `TracingObserver`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/wiring.rs`                  |
 | `determine_token_span`, `determine_token_span_observed`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `src/wrap/inline/span_grouping.rs`    |
 | `merge_whitespace_only_lines`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/inline/postprocess.rs`      |
 | `rebalance_atomic_tails`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline/postprocess.rs`      |
@@ -991,6 +994,12 @@ abstraction/port/helper policy in `AGENTS.md`:
   classification domain helpers under `src/wrap/tokenize/` and
   `src/wrap/inline/` may accept an `ObserverHandle` parameter and call
   `observer.observe(...)`.
+- **Composition point:** `src/wrap/wiring.rs` is the only production module
+  that constructs `TracingObserver`; its `wrap_preserving_code` builds the
+  adapter and delegates to `wrap_preserving_code_observed` in
+  `src/wrap/inline/wrapping.rs`. No module under `src/wrap/inline/` or
+  `src/wrap/tokenize/` names `tracing` or `TracingObserver` outside its own
+  test modules.
 - **Composition rule:** when a new diagnostics need arises, add an `Event`
   variant and a matching arm in `TracingObserver::observe`. Do not import
   `tracing` into a domain module, and do not add a second adapter; if another
@@ -1282,8 +1291,9 @@ warnings themselves, so a new warning fails the run rather than scrolling past.
 
 ### Security considerations
 
-Tracing events must not include raw document content. Record bounded metadata
-such as indices, lengths, fragment kinds, and stable error categories instead.
+Tracing events must not include raw document content. Record content-free
+scalar metadata instead, such as indices, lengths, fragment kinds, and stable
+error categories.
 In particular, do not rely on downstream subscribers to redact link, footnote,
 table-row, or token text.
 

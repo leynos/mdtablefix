@@ -336,9 +336,16 @@ mod tracing_tests {
         assert!(!logs_contain("unmistakable-path"));
     }
 
+    // Deliberately not `#[traced_test]`: `tracing_test` installs its subscriber
+    // only for the test it decorates, so this test drives `TracingObserver` with
+    // no subscriber active — the configuration production callers use. Going
+    // through `InlineFragment::new` instead would attach `NoOpObserver` and
+    // exercise a different path entirely, never reaching the adapter.
     #[test]
-    fn fragment_classification_does_not_require_subscriber() {
-        let fragment = InlineFragment::new("[^1]".to_string());
+    fn fragment_classification_with_observer_but_no_subscriber_returns_kind() {
+        let mut observer = TracingObserver;
+        let mut handle = Some(&mut observer as &mut dyn crate::wrap::observer::Observer);
+        let fragment = InlineFragment::new_observed("[^1]".to_string(), &mut handle);
         assert_eq!(fragment.kind, FragmentKind::FootnoteRef);
     }
 }

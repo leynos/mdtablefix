@@ -109,9 +109,11 @@ fn log_footnote_reference_coupling(
 /// Domain emitters hand over only borrowed slices, so a disabled subscriber
 /// pays nothing beyond the branch below.
 ///
-/// Every field emitted here is content-free metadata. Borrowed token text is
-/// used only to derive bounded values such as `token_length`; the text itself
-/// never reaches a subscriber.
+/// Every field emitted here is content-free metadata: scalar counts, indices,
+/// flags, and stable category names. Borrowed token text is used only to derive
+/// scalars such as `token_length`, which is an uncapped `chars().count()` and so
+/// is content-free rather than bounded in magnitude; the text itself never
+/// reaches a subscriber.
 pub(crate) struct TracingObserver;
 
 impl Observer for TracingObserver {

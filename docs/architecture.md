@@ -726,8 +726,9 @@ owns the `tracing::enabled!` level gates and any derived computation, such as
 Unicode length counts. A `#[cfg(test)]`-only `NoOpObserver` in
 `observer.rs` is the crate's other `Observer` implementation, discarding
 every event for tests that need an `ObserverHandle` without a subscriber.
-Recorded fields are content-free metadata: the adapter derives bounded values
-from borrowed token text but never logs the text itself. This keeps the
+Recorded fields are content-free metadata: the adapter derives scalar values,
+such as counts, indices, flags, and stable category names, from borrowed token
+text but never logs the text itself. This keeps the
 tokenizer and fragment-classification logic free of vendor-specific logging
 concerns. See
 [ADR 0012](adrs/0012-observer-boundary-for-tracing.md) for the rationale and

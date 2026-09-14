@@ -9,7 +9,7 @@ use code_span_trim::trim_code_span_edge_spaces;
 use tracing::trace;
 use unicode_width::UnicodeWidthStr;
 
-use super::{inline::wrap_preserving_code, tokenize::parse_open_code_span};
+use super::{tokenize::parse_open_code_span, wiring::wrap_preserving_code};
 
 mod code_span_trim;
 mod hard_break;
