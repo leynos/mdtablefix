@@ -70,6 +70,27 @@ cannot tell an attribute from attribute-shaped text in a string literal or a
 doc comment, which is how its first draft reported this repository's own
 mutation records as violations.
 
+Two shapes are refused structurally rather than by the meta they carry,
+because neither is a complete attribute where it is written. A `macro_rules!`
+arm may forward the attribute's *path*, writing `#[$attr]` and letting its
+caller supply `allow`: the arm's attribute does not parse and the invocation
+carries no `#`, so neither half is a suppression alone. And `rustc` parses an
+`include!` target as Rust whatever its extension, so an `allow` inside a
+`.rs.txt` fixture silences the calls around the inclusion while an enclosing
+`expect` stays fulfilled and warns about nothing.
+
+Both rules are narrow on purpose, since a contract that reports a false
+positive gets switched off and then reports nothing. A forwarded path is
+refused at inner scope, which applies to everything around it, and at outer
+scope only where the arm writes an `env` access itself or forwards a fragment
+the caller fills with code; `$(#[$meta:meta])*` carrying doc comments onto a
+generated setter is left alone, as are `#[doc = $text]` and
+`#[derive($traits)]`, whose paths are written out. An `include!` is a finding
+unless its target is a literal `.rs` path, which the scan reads in its own
+right; `include_str!` and `include_bytes!` embed bytes rather than compiling
+source. The walk descends only into `macro_rules!` transcribers, an attribute
+handed to an invocation being the macro's to discard.
+
 The lint level is declared once, in the workspace's `[workspace.lints.clippy]`
 table, and each member inherits it with `[lints] workspace = true`. One
 `cargo clippy --workspace` run then lints every member in its own right, so

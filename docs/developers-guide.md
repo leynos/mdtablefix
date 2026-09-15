@@ -1456,9 +1456,21 @@ directories, so a build script, bench, example or second binary added outside
 `src`, `tests` and `test-macros/src` is scanned like anything else, whether or
 not Cargo compiles it. An
 item-scoped `#[expect]` carrying a reason is left alone, since that is the
-sanctioned form. A crate-scoped `#![expect(...)]` is
-not: one call anywhere in the crate fulfils it, so it reports nothing and never
-warns, which is `allow` by another name. Raw identifiers are normalized before
+sanctioned form.
+
+Two shapes are refused structurally, neither being a complete attribute where
+it is written. A `macro_rules!` arm that forwards the attribute's *path*
+(`#[$attr]`) lets its caller supply `allow`, so it is refused at inner scope,
+and at outer scope where the arm writes an `env` access or forwards a fragment
+the caller fills with code; the `$(#[$meta:meta])*` doc-forwarding idiom,
+`#[doc = $text]` and `#[derive($traits)]` are untouched. An `include!` is
+refused unless its target is a literal `.rs` path, since `rustc` parses an
+included file as Rust whatever its extension; `include_str!` and
+`include_bytes!` embed bytes and are not inclusions.
+
+A crate-scoped `#![expect(...)]` is not the sanctioned form: one call anywhere
+in the crate fulfils it, so it reports nothing and never warns, which is
+`allow` by another name. Raw identifiers are normalized before
 comparison, because `r#allow` and `clippy::r#style` are the plain identifiers to
 the compiler.
 
