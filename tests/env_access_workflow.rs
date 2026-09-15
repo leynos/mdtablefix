@@ -120,16 +120,36 @@ const COVERAGE_ACTION: &str = "leynos/shared-actions/.github/actions/generate-co
 /// Parse the workflow into its top-level mapping.
 fn workflow() -> Result<Mapping> { serde_yaml::from_str(WORKFLOW).context("parse the CI workflow") }
 
-/// Return the workflow's trigger mapping.
+/// Return the workflow's trigger declaration.
 ///
 /// YAML 1.1 reads a bare `on` key as the boolean `true`, so the key is looked
 /// up both ways rather than relying on the file continuing to quote it.
-fn triggers(workflow: &Mapping) -> Result<&Mapping> {
+fn triggers(workflow: &Mapping) -> Result<&Value> {
     workflow
         .get(Value::from("on"))
         .or_else(|| workflow.get(Value::Bool(true)))
-        .and_then(Value::as_mapping)
         .context("the workflow should declare its triggers")
+}
+
+/// Return the event names a trigger declaration names.
+///
+/// GitHub accepts three forms and a workflow runs on a pull request under all
+/// of them: a scalar (`on: pull_request`), a sequence
+/// (`on: [pull_request, workflow_dispatch]`), and a mapping whose keys are the
+/// events. Requiring the mapping form failed the two other spellings, which
+/// satisfy the rule this contract exists to enforce. A contract that rejects
+/// what the rule permits is a contract that gets rewritten rather than obeyed,
+/// and the reachability it was guarding goes with it.
+///
+/// A form that names nothing yields nothing, which fails the assertion rather
+/// than passing it vacuously.
+fn trigger_events(triggers: &Value) -> Vec<&str> {
+    match triggers {
+        Value::String(name) => vec![name.as_str()],
+        Value::Sequence(entries) => entries.iter().filter_map(Value::as_str).collect(),
+        Value::Mapping(entries) => entries.keys().filter_map(Value::as_str).collect(),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Tagged(_) => Vec::new(),
+    }
 }
 
 /// Return a named job's mapping.
@@ -169,9 +189,9 @@ fn ensure_unconditional(entry: &Mapping, subject: Subject<'_>) -> Result<()> {
 fn the_workflow_runs_on_pull_request() -> Result<()> {
     let workflow = workflow()?;
     let triggers = triggers(&workflow)?;
-    let names: Vec<&str> = triggers.keys().filter_map(Value::as_str).collect();
+    let names = trigger_events(triggers);
     ensure!(
-        triggers.contains_key(Value::from("pull_request")),
+        names.contains(&"pull_request"),
         "the workflow must run on pull_request, found {names:?}"
     );
     Ok(())
@@ -197,9 +217,29 @@ fn non_blocking(entry: &Mapping) -> Option<String> {
     if let Some(condition) = entry.get(Value::from("if")) {
         return Some(format!("carries the condition {condition:?}"));
     }
-    entry
-        .get(Value::from("continue-on-error"))
-        .map(|value| format!("sets continue-on-error to {value:?}, so its failure is ignored"))
+    let value = entry.get(Value::from("continue-on-error"))?;
+    if is_false(value) {
+        return None;
+    }
+    Some(format!(
+        "sets continue-on-error to {value:?}, so its failure is ignored"
+    ))
+}
+
+/// Return whether a workflow value is provably the boolean false.
+///
+/// `continue-on-error: false` is what GitHub does anyway, and it preserves
+/// failure propagation, so treating every present value as non-blocking
+/// rejected jobs and steps that block exactly as the policy requires.
+///
+/// Only the boolean and its unambiguous string spelling qualify. An expression
+/// such as `${{ github.event_name == 'push' }}` is decided at run time and
+/// cannot be judged here; a contract that guesses at one is worse than a
+/// contract that refuses it, which is the same reason a condition is judged by
+/// presence rather than by value. Measured on femtologging #455: reading the
+/// key as a plain boolean let `${{ true }}` through.
+fn is_false(value: &Value) -> bool {
+    matches!(value, Value::Bool(false)) || value.as_str() == Some("false")
 }
 
 /// Fail unless some step matching `selects` carries no condition.
@@ -283,3 +323,9 @@ fn a_step_runs_the_test_suite_unconditionally() -> Result<()> {
         uses_action(step, COVERAGE_ACTION)
     })
 }
+
+// The fixture cases for the trigger forms and for `continue-on-error` live in
+// their own file, per the repository's 400-line cap. The path is relative to
+// this file's own directory, `tests/`.
+#[path = "env_access_workflow/forms.rs"]
+mod forms;
