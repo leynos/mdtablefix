@@ -109,6 +109,48 @@
 //! The last is the control that keeps this contract honest: that name begins
 //! with `clippy::all`, so a substring comparison reports it and a contributor
 //! has no way to tell a real finding from a spurious one.
+//!
+//! Two further routes were closed on 2026-09-14, each measured against Clippy
+//! elsewhere in the estate before being closed here. Neither is an attribute
+//! where it is written, so neither is judged by a `Meta`.
+//!
+//! A `macro_rules!` arm may forward the attribute's *path*: `#[$attr]` is
+//! written by the arm and completed by the caller, so the arm's attribute does
+//! not parse and the invocation carries no `#` for a walk to notice. Invoked as
+//! `forward!(allow(clippy::disallowed_methods))`, the expansion silences every
+//! call the item contains. And `rustc` parses an `include!` target as Rust
+//! whatever its extension, so an `allow` inside a `.rs.txt` fixture silences
+//! the calls around the inclusion while an enclosing `expect` stays fulfilled
+//! and warns about nothing.
+//!
+//! Both rules are deliberately narrow, because a contract that reports a false
+//! positive gets switched off and then reports nothing at all. A forwarded path
+//! is refused at inner scope, which applies to everything around it, and at
+//! outer scope only where the arm writes an `env` access itself or forwards a
+//! fragment the caller fills with code. `$(#[$meta:meta])*` over an `ident`, an
+//! `ident` and a `ty` is the ordinary idiom for carrying doc comments onto a
+//! generated setter and is left alone, as are `#[doc = $text]` and
+//! `#[derive($traits)]`, whose paths are written out. The walk now descends
+//! only into `macro_rules!` transcribers, since an attribute handed to an
+//! invocation may be discarded by the macro it reaches; that narrowing is safe
+//! only because the forwarded-path rule covers what the transcriber writes.
+//!
+//! Each rule was proved in both directions through the build, because a rule
+//! that reaches nothing and a rule that reaches everything both pass a
+//! one-sided proof:
+//!
+//! ```text
+//! forwarded_path declines after reaching its guards
+//!   -> the three forwarding cases fail with "expected one offence, found []"
+//! refuse every forwarded path, not only a reachable or inner one
+//!   -> doc_forwarding_setter fails; the idiom is not an offence
+//! refuse any metavariable in the attribute, not only in its path
+//!   -> forwards_only_a_doc_argument fails; #[doc = $text] is not an offence
+//! accept .txt alongside .rs as an include! target
+//!   -> includes_a_foreign_extension fails; the fixture route reopens
+//! judge include_str! as source inclusion
+//!   -> includes_a_string and includes_bytes fail; embedding is not compiling
+//! ```
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -172,10 +214,8 @@ fn no_source_allows_a_policy_lint() -> Result<()> {
 
     let mut offences = Vec::new();
     for (path, contents) in &sources {
-        for (lint, attribute) in
-            suppressed_lints(contents).with_context(|| format!("scan {path}"))?
-        {
-            offences.push(format!("{path} allows {lint} via {attribute}"));
+        for finding in suppressed_lints(contents).with_context(|| format!("scan {path}"))? {
+            offences.push(format!("{path} {finding}"));
         }
     }
 
@@ -250,6 +290,31 @@ fn a_sanctioned_expect_is_not_an_offence() -> Result<()> {
         "() => {\n#![allow(clippy::all)]\n            };\n        }\n    };\n}\n"
     )
 )]
+// A transcriber that writes the attribute but forwards its path. The arm
+// cannot be read for what it applies, and the invocation carries no `#`, so
+// neither half is a suppression alone.
+#[case::forwards_its_path_over_a_call(
+    concat!(
+        "macro_rules! forward {\n    ($attr:meta) => {\n        #[$attr]\n        ",
+        "pub fn probe() { let _ = std::env::var(\"X\"); }\n    };\n}\n",
+        "forward!(allow(clippy::disallowed_methods));\n"
+    )
+)]
+// The same forwarding at inner scope, which applies to everything around it.
+#[case::forwards_its_path_at_inner_scope(
+    "macro_rules! forward {\n    ($attr:meta) => {\n        #![$attr]\n    };\n}\n"
+)]
+// Forwarding over an item the caller supplies: the arm names no `env` itself,
+// but whatever it is handed comes under the forwarded attribute.
+#[case::forwards_its_path_over_a_supplied_item(
+    "macro_rules! forward {\n    ($attr:meta, $body:item) => {\n        #[$attr] $body\n    \
+     };\n}\n"
+)]
+// `include!` of a target the scan cannot see: rustc parses it as Rust whatever
+// the extension, so an `allow` written there reaches the compiler.
+#[case::includes_a_foreign_extension("include!(\"tests/data/probe.rs.txt\");\n")]
+// An `include!` whose target is not a literal cannot be judged at all.
+#[case::includes_a_computed_path("include!(concat!(env!(\"OUT_DIR\"), \"/probe\"));\n")]
 fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Result<()> {
     let found = suppressed_lints(source)?;
     ensure!(found.len() == 1, "expected one offence, found {found:?}");
@@ -271,6 +336,36 @@ fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Resu
 #[case::unrelated_lint("#![allow(dead_code, reason = \"shared module\")]\n")]
 #[case::item_scoped_expect(
     "#[expect(clippy::disallowed_methods, reason = \"composition root\")]\nfn f() {}\n"
+)]
+// The ordinary idiom for carrying doc comments onto a generated setter. It
+// forwards the path, but over an `ident`, an `ident` and a `ty`, none of which
+// can carry a call.
+#[case::doc_forwarding_setter(
+    concat!(
+        "macro_rules! option_setter {\n    ($(#[$meta:meta])* $name:ident, $field:ident, ",
+        "$ty:ty) => {\n        $(#[$meta])*\n        pub fn $name(mut self, value: $ty) ",
+        "-> Self { self.$field = Some(value); self }\n    };\n}\n"
+    )
+)]
+// Attributes whose own path is written out, forwarding only an argument.
+#[case::forwards_only_a_doc_argument(
+    "macro_rules! documented { ($text:expr) => { #[doc = $text] pub fn f() {} }; }\n"
+)]
+#[case::forwards_only_a_derive_argument(
+    "macro_rules! derived { ($traits:path) => { #[derive($traits)] pub struct H; }; }\n"
+)]
+// A transcriber emitting an allow of a lint the policy does not protect.
+#[case::generated_allow_of_an_unprotected_lint(
+    "macro_rules! generated { () => { #[allow(dead_code, reason = \"generated\")] fn f() {} }; }\n"
+)]
+// Embedding bytes is not compiling source, whatever the extension.
+#[case::includes_a_string("const S: &str = include_str!(\"data/table.dat\");\n")]
+#[case::includes_bytes("const B: &[u8] = include_bytes!(\"data/table.dat\");\n")]
+// An `include!` of a literal `.rs` path names a file the scan reads itself.
+#[case::includes_rust_source("include!(\"generated.rs\");\n")]
+// An attribute handed to a macro that may discard it is not a suppression.
+#[case::attribute_handed_to_an_invocation(
+    "assert_shape!(#[allow(clippy::disallowed_methods)] fn f() {});\n"
 )]
 fn text_resembling_a_suppression_is_not_an_offence(#[case] source: &str) -> Result<()> {
     let found = suppressed_lints(source)?;
