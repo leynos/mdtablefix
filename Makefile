@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest markdownlint nixie mutants
+.PHONY: help all clean test bench build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest markdownlint nixie mutants
 
 APP ?= mdtablefix
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
@@ -24,6 +24,9 @@ clean: ## Remove build artifacts
 test: ## Run tests with warnings treated as errors
 	RUSTFLAGS="-D warnings" $(CARGO) test --workspace --all-targets --all-features $(BUILD_JOBS)
 	RUSTFLAGS="-D warnings" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
+
+bench: ## Run the observer-boundary wrapping benchmarks with warnings denied
+	RUSTFLAGS="$$RUSTFLAGS -D warnings" $(CARGO) bench --features bench-internals --bench wrap_observer
 
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)

@@ -362,8 +362,9 @@ refactoring audit covering issues `#357`–`#367` in PR `#368`.
 - `has_inline_code_structure(text: &str) -> bool` returns `true` when `text`
   begins with a backtick fence (optionally preceded by an opening bracket or
   punctuation) and contains a corresponding closing fence, with or without a
-  trailing inflectional suffix. Used by `classify_fragment` and `inline.rs` to
-  identify combined code+suffix tokens as atomic inline code.
+  trailing inflectional suffix. Used by `classify_fragment` and
+  `src/wrap/inline/span_grouping.rs` to identify combined code+suffix tokens
+  as atomic inline code.
 
 ## CLI driver and reporting architecture
 
@@ -663,14 +664,21 @@ depth-aware tracking.
    non-obvious decision boundaries.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
-   `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
-   the tokens into `InlineFragment` values via `determine_token_span`, and calls
-    `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
-   buffer. Token predicates in `src/wrap/inline/predicates.rs` classify
+   `src/wrap/wiring.rs` builds the `TracingObserver` adapter and delegates to
+   `wrap_preserving_code_observed` in `src/wrap/inline/wrapping.rs`, which
+   tokenizes prose with `tokenize::segment_inline_observed`, groups the
+   tokens into `InlineFragment` values via `determine_token_span_observed` in
+   `src/wrap/inline/span_grouping.rs`, and calls
+   `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
+   buffer. The unsuffixed `segment_inline` and `determine_token_span` are
+   `#[cfg(test)]`-only wrappers that call their `_observed` counterparts with
+   no observer; they do not exist in a production build, and are kept only
+   because they keep test call sites readable. Token predicates in
+   `src/wrap/inline/predicates.rs` classify
    punctuation, links, code spans, and footnote markers. Span grouping helpers
    in `src/wrap/inline/span_helpers.rs` extend grouped spans over trailing
    punctuation, couple adjacent footnote references, and merge chained inline
-   code or link tokens. `determine_token_span` forward-couples opening
+   code or link tokens. `determine_token_span_observed` forward-couples opening
    punctuation tokens (`(`, `[`, and CJK openers) and hyphen-prefix tokens to
    the next inline code span or Markdown link so wrapping never leaves a lone
    opener or prefix at the end of a line. `try_couple_inline_link_after_opener`
@@ -685,12 +693,12 @@ depth-aware tracking.
    `SpanKind::BracketedRef` and `FragmentKind::BracketedRef` keep the merged
    span atomic during fitting and post-processing, so the opening bracket
    cannot be stranded at a line end.
-   At the tokenizer level, `segment_inline` also stops
+   At the tokenizer level, `segment_inline_observed` also stops
    trailing-punctuation and plain-text scans at an unescaped `([` boundary via
    `scan_trailing_punctuation_end` and `scan_plain_text_end`, both using
    `starts_inline_citation`, so the citation opener `(` is emitted as its own
    token instead of being swallowed into the preceding token's punctuation
-   cluster. That boundary gives `determine_token_span` and
+   cluster. That boundary gives `determine_token_span_observed` and
    `try_couple_inline_link_after_opener` a clean opener token to couple with
    the following inline link, making the full `([n](url))` span atomic, while
    escaped sequences such as `\([` bypass the early exit and remain plain text.
@@ -702,8 +710,8 @@ depth-aware tracking.
    immediately follow inline code or links (including opener-coupled spans)
    stay attached to the preceding punctuation cluster. Date-component
    predicates are applied by `try_match_date_sequence` in `span_helpers.rs`
-   before `determine_token_span` performs the standard punctuation and link
-   grouping pass.
+   before `determine_token_span_observed` performs the standard punctuation
+   and link grouping pass.
 
 4. **Post-processing and rendering.** The `postprocess` module applies
    `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
@@ -712,11 +720,12 @@ depth-aware tracking.
    its configured wrap width into `merge_whitespace_only_lines`; that pass must
    compare any projected inline-code tail carry against the same width before
    moving an atomic code span onto a following content line. `render_line` in
-   `src/wrap/inline.rs` converts each finished fragment line into Markdown
-   text. Its `strip_leading_carry_whitespace` flag removes carry whitespace
-   that the fitter attaches to the start of wrapped continuation lines; it is
-   set only when `wrap_preserving_code` has already emitted at least one line,
-   so intentional leading whitespace on the first output line is preserved.
+   `src/wrap/inline/wrapping.rs` converts each finished fragment line into
+   Markdown text. Its `strip_leading_carry_whitespace` flag removes carry
+   whitespace that the fitter attaches to the start of wrapped continuation
+   lines; it is set only when `wrap_preserving_code` has already emitted at
+   least one line, so intentional leading whitespace on the first output line is
+   preserved.
    Non-final lines may also drop a single trailing space unless the line ends
    with a hard-break double space.
 
@@ -800,18 +809,20 @@ Table: Key types and functions.
 
 <!-- markdownlint-disable MD013 MD055 MD056 MD060 -->
 | Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | File                                  |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------|
 | `LinkReferenceMatcher`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/link_reference.rs`          |
 | `LinkTitleWindow`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `src/wrap/link_reference.rs`          |
 | `classify_block`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/block.rs`                   |
-| `FragmentKind`, `InlineFragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/fragment.rs`         |
+| `InlineFragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/fragment.rs`         |
+| `Event`, `Observer`, `ObserverHandle`, `FragmentKind`, `SpanKind`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `src/wrap/observer.rs`                |
 | `classify_fragment`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/wrap/inline/fragment.rs`         |
 | Character and fragment predicates (`is_inline_code_token`, `looks_like_link`, `looks_like_footnote_ref`, `looks_like_bracketed_reference`, `is_month_name`, `is_ordinal_day`, `is_numeric_day`, `is_year`, …)                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/inline/predicates.rs`       |
-| `SpanKind`, span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, `try_couple_bracketed_reference`, `try_match_date_sequence`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/inline/span_helpers.rs`     |
+| Span grouping helpers (`merge_code_span`, `try_couple_footnote_reference`, `try_couple_bracketed_reference`, `try_match_date_sequence`, …)                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/wrap/inline/span_helpers.rs`     |
 | `try_couple_inline_link_after_opener`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/inline/span_helpers.rs`     |
 | `normalize_footnote_ref_spacing`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/normalize.rs`        |
-| `build_fragments`, `wrap_preserving_code`, `render_line`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline.rs`                  |
-| `determine_token_span`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/wrap/inline.rs`                  |
+| `build_fragments`, `render_line`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/inline/wrapping.rs`         |
+| `wrap_preserving_code` (wires `TracingObserver`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/wrap/wiring.rs`                  |
+| `determine_token_span`, `determine_token_span_observed`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `src/wrap/inline/span_grouping.rs`    |
 | `merge_whitespace_only_lines`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/wrap/inline/postprocess.rs`      |
 | `rebalance_atomic_tails`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/wrap/inline/postprocess.rs`      |
 | `ParagraphWriter`, `wrap_with_prefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/wrap/paragraph.rs`               |
@@ -840,10 +851,12 @@ opener-at-EOL tight joining, or original-line verbatim flushing for
 `trim_code_span_edge_spaces` for metadata-guided trimming of synthetic
 code-span boundary spaces.
 
-`SpanKind` in `src/wrap/inline/span_helpers.rs` records how a grouped token
-span behaves while `determine_token_span` walks the stream: `General` for
-ordinary prose, `Code` and `Link` for atomic inline spans, and `FootnoteRef`
-when a footnote marker has been promoted or grouped with preceding punctuation.
+`SpanKind` in `src/wrap/observer.rs` records how a grouped token span behaves
+while `determine_token_span_observed` walks the stream: `General` for
+ordinary prose, `Code` and `Link` for atomic inline spans, `FootnoteRef`
+when a footnote marker has been promoted or grouped with preceding punctuation,
+and `BracketedRef` for a bare numeric bracket reference such as `[1]` that has
+been coupled to its opening bracket.
 
 ### Design constraints
 
@@ -881,8 +894,9 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   at least one alphabetic character (for example `pre-`, `LLM-`, `(API-`) — are
   coupled forward to the next inline code span during span grouping by the
   `ends_with_hyphen_prefix` predicate in `src/wrap/inline/predicates.rs`,
-  applied in `determine_token_span` in `src/wrap/inline.rs`. The coupling
-  mirrors the existing opening-punctuation pattern, so compounds such as
+  applied in `determine_token_span_observed` in
+  `src/wrap/inline/span_grouping.rs`. The coupling mirrors the existing
+  opening-punctuation pattern, so compounds such as
   `` pre-`LLMPort` `` and `` (API-`Foo`) `` remain atomic during wrapping.
   Internal hyphen chains (e.g. `state-of-the-art-`) are accepted by design;
   bare dash runs such as `-` or `---` are rejected. Unicode alphabetic
@@ -956,6 +970,59 @@ rather than removal (see `docs/execplans/check-option.md`, the "keep
 `googletest`, `pretty_assertions`, and `rstest-bdd` despite the review's
 objection" entry).
 
+`tracing-test` is enabled with its `no-env-filter` feature. By default the
+`tracing_test::traced_test` attribute that `test_macros::traced_test` wraps
+installs a per-crate environment filter capturing only events emitted from the
+test's own crate. Cargo builds each integration test under `tests/` as its own
+crate, so such a test would silently miss events emitted from the `mdtablefix`
+library crate and its `logs_contain(...)` assertions would fail even when the
+event fires. The `no-env-filter` feature removes that filter, so
+integration-level traced tests observe the library's instrumentation. Keep this
+feature enabled when adding end-to-end traced tests that assert on library
+events.
+
+### Inline classification observer boundary
+
+The `Observer` trait in
+[src/wrap/observer.rs](../src/wrap/observer.rs) is the sole boundary between
+inline-wrapping domain logic (tokenizing, span grouping, and fragment
+classification under `src/wrap/tokenize/` and `src/wrap/inline/`) and any
+diagnostics backend. Domain helpers never reference `tracing` directly; they
+emit a domain-level `Event` through a `&mut ObserverHandle<'_>` — an alias for
+`Option<&mut dyn Observer>` — threaded through the wrapping pipeline. `Event`
+variants carry only cheap, borrowed data: indices, flags, and `&str` slices.
+`TracingObserver` in
+[src/wrap/tracing_adapter.rs](../src/wrap/tracing_adapter.rs) is the only
+production adapter and translates each `Event` into the crate's `tracing`
+records; it owns every vendor-specific concern, including the
+`tracing::enabled!` level gate and any derived value that costs more than a
+copy. `NoOpObserver`, also declared in `observer.rs`, is the crate's other
+`Observer` implementation; it is `#[cfg(test)]`-only and discards every
+event.
+
+This is the abstraction's ownership and reuse policy, per the
+abstraction/port/helper policy in `AGENTS.md`:
+
+- **Ownership:** the `Observer` port and the `Event`/`FragmentKind` types are
+  owned by `crate::wrap`. They are not exposed outside the crate.
+- **Permitted call sites:** only the inline wrapping, tokenizing, and
+  classification domain helpers under `src/wrap/tokenize/` and
+  `src/wrap/inline/` may accept an `ObserverHandle` parameter and call
+  `observer.observe(...)`.
+- **Composition point:** `src/wrap/wiring.rs` is the only production module
+  that constructs `TracingObserver`; its `wrap_preserving_code` builds the
+  adapter and delegates to `wrap_preserving_code_observed` in
+  `src/wrap/inline/wrapping.rs`. No module under `src/wrap/inline/` or
+  `src/wrap/tokenize/` names `tracing` or `TracingObserver` outside its own
+  test modules.
+- **Composition rule:** when a new diagnostics need arises, add an `Event`
+  variant and a matching arm in `TracingObserver::observe`. Do not import
+  `tracing` into a domain module, and do not add a second adapter; if another
+  backend is ever required, it must implement `Observer` rather than
+  replacing `TracingObserver` inline.
+
+See [ADR 0012](adrs/0012-observer-boundary-for-tracing.md) for the rationale.
+
 ### Log levels
 
 Use `debug!` for high-value classification outcomes: fragment kind, parsed
@@ -967,7 +1034,9 @@ fence marker. Never emit at `info!` or above from library code.
 ### Field naming
 
 Use the stable structured field names `token_length`, `kind`, `start`, `end`,
-`width`, `reason`, `is_image`, `row_index`, `cell_count`, and `error_category`.
+`width`, `reason`, `is_image`, `row_index`, `cell_count`, `error_category`,
+`pattern`, `span_kind`, `has_following_colon`, and
+`follows_space_before_colon`.
 Blockquote and fence events additionally use `line_len`, `prefix_len`, `depth`,
 `inner_len`, `open_depth`, `marker_len`, `open_marker_len`, and `transition`.
 Line-ending events use `crlf_count`, `lone_lf_count`, and `selected_ending`,
@@ -1040,33 +1109,54 @@ telemetry field does not.
 
 Table: Structured field names emitted by tracing instrumentation.
 
-| Field             | Type            | Used in                                                 | Meaning                                                   |
-| ----------------- | --------------- | ------------------------------------------------------- | --------------------------------------------------------- |
-| `token_length`    | `usize`         | fragment, link, footnote events                         | Character count of the text that was classified or parsed |
-| `kind`            | `?FragmentKind` | `fragment classified`                                   | The computed fragment classification                      |
-| `start`           | `usize`         | span events                                             | Byte offset where the span begins                         |
-| `end`             | `usize`         | span events                                             | Byte offset where the span ends (exclusive)               |
-| `width`           | `usize`         | span events                                             | Display-column width of the span                          |
-| `reason`          | `&str`          | rejected, unchanged, or fence-state decisions           | Stable diagnostic category for any decision               |
-| `is_image`        | `bool`          | `link or image parsed`                                  | `true` when the link token is an image literal (`![]()`)  |
-| `row_index`       | `usize`         | table-row events                                        | Zero-based index of the parsed logical row                |
-| `cell_count`      | `usize`         | table-row events                                        | Number of cells in the parsed logical row                 |
-| `error_category`  | `&str`, Debug   | declined, discarded, replacement, and analysis failures | Stable category or I/O error kind for a failure           |
-| `attempt`         | `u32`           | `replace_file` events                                   | Zero-based index of the temporary-file creation attempt   |
-| `bytes`           | `usize`         | `replace_file` events                                   | Byte length of the formatted replacement that was written |
-| `line_len`        | `usize`         | blockquote-prefix events                                | Byte length of the examined source line                   |
-| `prefix_len`      | `usize`         | blockquote-prefix events                                | Byte length of the recognized blockquote prefix           |
-| `depth`           | `usize`         | blockquote and fence events                             | Current blockquote nesting depth                          |
-| `inner_len`       | `usize`         | blockquote-prefix events                                | Byte length after removing the blockquote prefix          |
-| `open_depth`      | `usize`         | fence-state events                                      | Blockquote depth of the active fence opener               |
-| `marker_len`      | `usize`         | fence-state events                                      | Length of the currently recognized fence marker           |
-| `open_marker_len` | `usize`         | fence-state events                                      | Length of the active opening fence marker                 |
-| `transition`      | `&str`          | fence-state events                                      | Stable fence-state transition category                    |
+| Field                        | Type            | Used in                                                 | Meaning                                                           |
+|------------------------------|-----------------|---------------------------------------------------------|-------------------------------------------------------------------|
+| `token_length`               | `usize`         | fragment, link, footnote events                         | Character count of the text that was classified or parsed         |
+| `kind`                       | `?FragmentKind` | `fragment classified`                                   | The computed fragment classification                              |
+| `start`                      | `usize`         | span events                                             | Byte offset where the span begins                                 |
+| `end`                        | `usize`         | span events                                             | Byte offset where the span ends (exclusive)                       |
+| `width`                      | `usize`         | span events                                             | Display-column width of the span                                  |
+| `reason`                     | `&str`          | rejected, unchanged, or fence-state decisions           | Stable diagnostic category for any decision                       |
+| `is_image`                   | `bool`          | `link or image parsed`                                  | `true` when the link token is an image literal (`![]()`)          |
+| `pattern`                    | `&str`          | `matched date sequence`                                 | Stable name of the matched date pattern, never document text      |
+| `span_kind`                  | `?SpanKind`     | footnote-coupling events                                | How the grouped span behaves while tokens are walked              |
+| `has_following_colon`        | `bool`          | whitespace and footnote coupling events                 | `true` when a colon directly follows the footnote reference       |
+| `follows_space_before_colon` | `bool`          | `declined footnote reference coupling`                  | `true` when the reference follows whitespace and precedes a colon |
+| `row_index`                  | `usize`         | table-row events                                        | Zero-based index of the parsed logical row                        |
+| `cell_count`                 | `usize`         | table-row events                                        | Number of cells in the parsed logical row                         |
+| `error_category`             | `&str`, Debug   | declined, discarded, replacement, and analysis failures | Stable category or I/O error kind for a failure                   |
+| `result`                     | `bool`          | `footnote reference checked`                            | Whether the checked token is a footnote reference                 |
+| `attempt`                    | `u32`           | `replace_file` events                                   | Zero-based index of the temporary-file creation attempt           |
+| `bytes`                      | `usize`         | `replace_file` events                                   | Byte length of the formatted replacement that was written         |
+| `line_len`                   | `usize`         | blockquote-prefix events                                | Byte length of the examined source line                           |
+| `prefix_len`                 | `usize`         | blockquote-prefix events                                | Byte length of the recognized blockquote prefix                   |
+| `depth`                      | `usize`         | blockquote and fence events                             | Current blockquote nesting depth                                  |
+| `inner_len`                  | `usize`         | blockquote-prefix events                                | Byte length after removing the blockquote prefix                  |
+| `open_depth`                 | `usize`         | fence-state events                                      | Blockquote depth of the active fence opener                       |
+| `marker_len`                 | `usize`         | fence-state events                                      | Length of the currently recognized fence marker                   |
+| `open_marker_len`            | `usize`         | fence-state events                                      | Length of the active opening fence marker                         |
+| `transition`                 | `&str`          | fence-state events                                      | Stable fence-state transition category                            |
 
-For example:
+For example, a domain helper emits a borrowed event without touching
+`tracing`, guarding the call so an event is emitted only when the handle is
+`Some`:
 
 ```rust
-debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified");
+if let Some(observer) = observer.as_deref_mut() {
+    observer.observe(Event::FragmentClassified {
+        token: text.as_str(),
+        kind,
+    });
+}
+```
+
+`TracingObserver` then gates it and derives content-free metadata from the
+borrowed token, which is never itself recorded:
+
+```rust
+Event::FragmentClassified { token, kind } if tracing::enabled!(tracing::Level::DEBUG) => {
+    debug!(token_length = token.chars().count(), kind = ?kind, "fragment classified");
+}
 ```
 
 ### Metrics
@@ -1162,44 +1252,137 @@ tests do the same for `mdtablefix_run_total`.
 
 Guard any expression that performs non-trivial work with
 `tracing::enabled!(Level::DEBUG)` or `tracing::enabled!(Level::TRACE)` before
-computing the value.
+computing the value. Domain emitters hand `TracingObserver` only cheap
+borrowed data — indices, flags, and `&str` slices copied by reference — never
+a pre-computed `chars().count()`. The adapter performs that derived work, such
+as Unicode length counts, only inside the guarded match arm, so a disabled
+subscriber performs no derived-payload work at all.
+
+#### Benchmarking the observer boundary
+
+The `benches/wrap_observer.rs` Criterion benchmark protects that invariant.
+Run it with:
+
+```sh
+make bench
+
+# or, equivalently:
+cargo bench --features bench-internals --bench wrap_observer
+```
+
+The `bench-internals` feature exposes `#[doc(hidden)]` shims in
+`src/wrap/bench_internals.rs`; it is never enabled in production. The benchmark
+covers three cases over large, realistic wrapping inputs (prose mixed with
+inline links, inline code, and footnote references):
+
+- `wrap_text_realistic_document` — the public `wrap_text` path over a
+  multi-paragraph document, which always runs through `TracingObserver`.
+- `inline_wrapping/observer_none` — the inline hot path with no observer
+  attached (`ObserverHandle` is `None`), the pure-domain baseline.
+- `inline_wrapping/tracing_observer_disabled` — the same inline input through
+  `TracingObserver` with no DEBUG or TRACE subscriber installed.
+
+The last two cases are not expected to produce identical timings.
+`tracing_observer_disabled` still pays, per event, a dynamic dispatch through
+`dyn Observer`, the match over `Event`, and one `tracing::enabled!` check —
+costs `observer_none` avoids entirely because it emits no events. The invariant
+under test is narrower: with tracing disabled, **no derived-payload work** runs
+(the Unicode length counts stay inside `TracingObserver` behind its
+`tracing::enabled!` gates), so the residual overhead stays small and roughly
+constant per event rather than scaling with token length.
+
+Read the pair as a bounded-overhead check, not an equality check, and judge it
+per emitted event: the overhead per event should stay small and stable, or
+equivalently, total overhead should grow no faster than the event count. A gap
+that grows faster than the event count indicates derived-payload work has
+leaked back onto the hot path.
+
+Before merging a change in this area, run the gates below and treat every
+warning as a failure. `make bench`, `make test`, and `make lint` each deny
+warnings themselves, so a new warning fails the run rather than scrolling past.
+
+- Rust changes: `make check-fmt`, `make lint`, `make test`, and `make bench`.
+- Markdown changes: `make markdownlint`, `make fmt`, and `make nixie`.
 
 ### Security considerations
 
-Tracing events must not include raw document content. Record bounded metadata
-such as indices, lengths, fragment kinds, and stable error categories instead.
+Tracing events must not include raw document content. Record content-free
+scalar metadata instead, such as indices, lengths, fragment kinds, and stable
+error categories.
 In particular, do not rely on downstream subscribers to redact link, footnote,
 table-row, or token text.
 
 ### Instrumented functions
 
-Functions decorated with `#[tracing::instrument]` are listed below with their
-level and notable fields. Update this list when adding new instrumented entry
-points.
+The inline-wrapping, tokenizing, and classification helpers under
+`src/wrap/tokenize/` and `src/wrap/inline/` are no longer decorated with
+`#[tracing::instrument]`; they emit `Event` values through the `Observer`
+port described in
+["Inline classification observer boundary"](#inline-classification-observer-boundary)
+instead. The instrumented entry points that remain all sit outside the wrap
+domain, at the reflow, I/O, metrics, and process boundaries. Update the tables
+below when adding new domain events or new instrumented entry points.
 
 Table: Instrumented functions and their logging levels and fields.
 
-| Function                  | Level        | Fields                                                                                            |
-| ------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
-| `looks_like_footnote_ref` | trace        | `skip(token)`, return value (out)                                                                 |
-| `ends_with_footnote_ref`  | trace        | `skip(token)`, return value (out)                                                                 |
-| `ends_with_hyphen_prefix` | trace        | `skip(token)`, return value (out)                                                                 |
-| `is_month_name`           | trace        | `skip(token)`, return value (out)                                                                 |
-| `is_ordinal_day`          | trace        | `skip(token)`, return value (out)                                                                 |
-| `is_numeric_day`          | trace        | `skip(token)`, return value (out)                                                                 |
-| `is_year`                 | trace        | `skip(token)`, return value (out)                                                                 |
-| `try_match_date_sequence` | trace, debug | `start` (in), `skip(tokens)`, return value (out); matched date pattern                            |
-| `date_token_span`         | trace        | `start` (in), `skip(tokens)`, return value (out); over-width date fallback remains behaviour-only |
-| `parse_link_or_image`     | debug        | `idx` (in), `skip(text)`; `token_length` and `is_image` events                                    |
-| `find_footnote_end`       | trace        | `idx` (in), `skip(text)`, return value (out)                                                      |
-| `parse_rows`              | trace, debug | `skip(trimmed)`; `row_index`, `cell_count`, and `error_category` events                           |
-| `replace_file`            | debug        | `path` (in); emits the in-place rewrite events                                                    |
+| Function                   | Level        | Fields                                                                  |
+| -------------------------- | ------------ | ----------------------------------------------------------------------- |
+| `parse_rows`               | trace, debug | `skip(trimmed)`; `row_index`, `cell_count`, and `error_category` events |
+| `replace_file`             | debug        | `path` (in); emits the in-place rewrite events                          |
+| `replace_file_if_unchanged`| debug        | `path` (in); emits the in-place rewrite events                          |
+| `record_analysis`          | debug        | `mode`, `path` (in); `outcome`, `elapsed_seconds` (recorded)            |
+| `GitLsFiles::run`          | debug        | span `git`: `operation` (in); `outcome`, `elapsed_seconds` (recorded)   |
+
+Table: Domain events and their tracing output.
+
+Events whose outcome varies emit one of two messages, so they appear once per
+message.
+
+| Event                        | tracing message                                               | Level | Fields                                                                      |
+| ---------------------------- | ------------------------------------------------------------- | ----- | --------------------------------------------------------------------------- |
+| `FootnoteReferenceParsed`    | `footnote reference parsed`                                   | debug | `token_length`                                                              |
+| `LinkOrImageParsed`          | `link or image parsed`                                        | debug | `token_length`, `is_image`                                                  |
+| `FootnoteEndNotFound`        | `footnote end not found`                                      | trace | `start`, `reason`                                                           |
+| `FootnoteLabelRecognized`    | `footnote label span recognized`                              | trace | `start`, `end`, `token_length`                                              |
+| `FootnoteRefChecked`         | `footnote reference checked`                                  | trace | `token_length`, `result`                                                    |
+| `DateSequenceMatched`        | `matched date sequence`                                       | debug | `start`, `end`, `pattern`                                                   |
+| `DateSequenceGrouped`        | `determine_token_span grouped date sequence`                  | trace | `start`, `end`, `width`                                                     |
+| `WhitespaceFootnoteCoupling` | `coupled whitespace before colon-suffixed footnote reference` | debug | `span_kind`, `token_length`, `has_following_colon`                          |
+| `WhitespaceFootnoteCoupling` | `declined whitespace coupling before footnote reference`      | debug | `span_kind`, `token_length`, `has_following_colon`, `error_category`        |
+| `FootnoteReferenceCoupling`  | `coupled colon-suffixed footnote reference after whitespace`  | debug | `span_kind`, `token_length`, `has_following_colon`                          |
+| `FootnoteReferenceCoupling`  | `coupled footnote reference into current span`                | debug | `span_kind`, `token_length`, `has_following_colon`                          |
+| `FootnoteReferenceCoupling`  | `declined footnote reference coupling`                        | debug | `span_kind`, `token_length`, `follows_space_before_colon`, `error_category` |
+| `FragmentClassified`         | `fragment classified`                                         | debug | `token_length`, `kind`                                                      |
+
+`FootnoteReferenceParsed` and `LinkOrImageParsed` are emitted from
+`parse_link_or_image` and `find_footnote_end` in
+`src/wrap/tokenize/parsing.rs`; `FootnoteEndNotFound` and
+`FootnoteLabelRecognized` are emitted from `find_footnote_end` in the same
+module. `FootnoteRefChecked` is emitted from `looks_like_footnote_ref` and
+`ends_with_footnote_ref` in `src/wrap/inline/predicates.rs`.
+`DateSequenceMatched` is emitted from `try_match_date_sequence` in
+`src/wrap/inline/span_helpers.rs`, where the matched pattern is known; the
+over-width date fallback remains behaviour-only and emits no event.
+`DateSequenceGrouped`, `WhitespaceFootnoteCoupling`, and
+`FootnoteReferenceCoupling` are emitted from `determine_token_span_observed` in
+`src/wrap/inline/span_grouping.rs`, which is where those grouping decisions
+are made. The two coupling events report only when the token concerned really
+is a footnote reference, so they describe grouping decisions rather than every
+whitespace run. `FragmentClassified` is emitted from
+`InlineFragment::new_observed` in `src/wrap/inline/fragment.rs`.
+
+Because the adapter owns every `tracing` call, all of these records carry
+`mdtablefix::wrap::tracing_adapter` as their target rather than the module that
+made the decision, and none of them sit inside a `#[tracing::instrument]` span.
+The snapshots below pin that shape.
 
 ### Tracing-event snapshot tests
 
 The stable structured fields above are pinned by `insta` snapshots so that
 accidental changes to a tracing event's level, target, message, or field set
-are caught in review. These tests live next to the instrumented code:
+are caught in review. Each test attaches a `TracingObserver` so the events pass
+through the adapter exactly as they do in production. They live next to the
+code whose events they pin:
 
 - `src/wrap/inline/fragment_tracing_snapshots.rs` – `fragment classified`.
 - `src/wrap/inline/span_helper_tracing_tests.rs` – date-span events.

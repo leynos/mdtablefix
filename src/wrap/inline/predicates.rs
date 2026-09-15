@@ -9,6 +9,7 @@
 //! tokens, and four-digit year tokens before wrapping.
 
 pub(crate) use super::month_names::MONTH_NAMES;
+use crate::wrap::observer::{Event, ObserverHandle};
 
 /// Return whether `c` opens a punctuation wrapper around an atomic span.
 ///
@@ -40,10 +41,6 @@ pub(in crate::wrap::inline) fn is_trailing_punctuation_token(token: &str) -> boo
 }
 
 /// Returns whether `token` is a full or abbreviated English month name.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_month_name(token: &str) -> bool {
     let token = strip_leading_openers(token);
     month_names_for_len(token.len())
@@ -82,10 +79,6 @@ fn month_names_for_len(len: usize) -> &'static [&'static str] {
 }
 
 /// Returns whether `token` is an ordinal day number from 1st through 31st.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
     let token = strip_leading_openers(token);
     ["st", "nd", "rd", "th"]
@@ -95,10 +88,6 @@ pub(in crate::wrap::inline) fn is_ordinal_day(token: &str) -> bool {
 }
 
 /// Returns whether `token` is a numeric day number from 1 through 31.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
     let token = strip_leading_openers(token);
     token
@@ -110,10 +99,6 @@ pub(in crate::wrap::inline) fn is_numeric_day(token: &str) -> bool {
 
 /// Returns whether `token` is a year from 1000 through 2999, optionally
 /// followed by trailing prose punctuation.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn is_year(token: &str) -> bool {
     token
         .trim_end_matches(is_trailing_punct)
@@ -138,15 +123,18 @@ pub(in crate::wrap::inline) fn looks_like_link(token: &str) -> bool {
 }
 
 /// Returns whether `token` looks like a complete GFM footnote reference.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
-pub(in crate::wrap::inline) fn looks_like_footnote_ref(token: &str) -> bool {
-    token
+pub(in crate::wrap::inline) fn looks_like_footnote_ref(
+    token: &str,
+    observer: &mut ObserverHandle<'_>,
+) -> bool {
+    let result = token
         .strip_prefix("[^")
         .and_then(|label| label.strip_suffix(']'))
-        .is_some_and(|label| !label.is_empty())
+        .is_some_and(|label| !label.is_empty());
+    if let Some(observer) = observer.as_deref_mut() {
+        observer.observe(Event::FootnoteRefChecked { token, result });
+    }
+    result
 }
 
 /// Returns whether `token` is a bare numeric bracket reference, or the closing
@@ -165,9 +153,13 @@ pub(in crate::wrap::inline) fn looks_like_footnote_ref(token: &str) -> bool {
 /// separate case, so this predicate stays disjoint from `looks_like_link` and
 /// `looks_like_footnote_ref`.
 ///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
+/// This predicate takes no observer, unlike [`looks_like_footnote_ref`]. Its
+/// three callers are all speculative: two probe candidate tokens during span
+/// grouping and one re-tests a trimmed variant while classifying a fragment, so
+/// forwarding an observer would report branch attempts rather than an outcome.
+/// The outcome is already reported once, as a `FragmentClassified` event
+/// carrying `FragmentKind::BracketedRef`, the same way the footnote probes in
+/// `classify_fragment` are handled.
 pub(in crate::wrap::inline) fn looks_like_bracketed_reference(token: &str) -> bool {
     let label = token.strip_prefix('[').unwrap_or(token);
     let Some((digits, tail)) = label.split_once(']') else {
@@ -180,16 +172,15 @@ pub(in crate::wrap::inline) fn looks_like_bracketed_reference(token: &str) -> bo
 }
 
 /// Returns whether `token` ends with an inline footnote reference.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
-pub(in crate::wrap::inline) fn ends_with_footnote_ref(token: &str) -> bool {
+pub(in crate::wrap::inline) fn ends_with_footnote_ref(
+    token: &str,
+    observer: &mut ObserverHandle<'_>,
+) -> bool {
     let Some(start) = token.rfind("[^") else {
         return false;
     };
 
-    looks_like_footnote_ref(&token[start..])
+    looks_like_footnote_ref(&token[start..], observer)
 }
 
 /// Returns whether `token` contains only Unicode whitespace.
@@ -211,10 +202,6 @@ pub(in crate::wrap::inline) fn is_inline_code_token(token: &str) -> bool {
 /// `字-`) are intentionally accepted alongside ASCII prefixes. Internal hyphen
 /// chains (`state-of-the-art-`) are also accepted because such compounds
 /// remain a single atomic wrap token by design.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
 pub(in crate::wrap::inline) fn ends_with_hyphen_prefix(token: &str) -> bool {
     token.ends_with('-') && token.chars().any(char::is_alphabetic)
 }
@@ -273,166 +260,9 @@ pub(in crate::wrap::inline) fn fragment_is_link(text: &str) -> bool {
 mod predicate_date_props;
 
 #[cfg(test)]
-#[path = "predicate_tracing_tests.rs"]
-mod predicate_tracing_tests;
+#[path = "predicates_tracing_tests.rs"]
+mod tracing_tests;
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for inline-token predicates.
-
-    use proptest::prelude::*;
-    use rstest::rstest;
-
-    use super::{
-        ends_with_hyphen_prefix,
-        is_inline_code_token,
-        is_opening_punct,
-        is_trailing_punct,
-        is_trailing_punctuation_token,
-        is_whitespace_token,
-        is_year,
-        looks_like_bracketed_reference,
-        looks_like_footnote_ref,
-    };
-
-    fn backtick_run_strategy() -> BoxedStrategy<String> {
-        prop::collection::vec(Just('`'), 1..8)
-            .prop_map(|chars| chars.into_iter().collect::<String>())
-            .boxed()
-    }
-
-    fn arbitrary_short_string_strategy() -> BoxedStrategy<String> {
-        prop::collection::vec(any::<char>(), 0..24)
-            .prop_map(|chars| chars.into_iter().collect::<String>())
-            .boxed()
-    }
-
-    fn footnote_label_strategy() -> BoxedStrategy<String> {
-        prop::string::string_regex("[a-zA-Z0-9_-]+")
-            .expect("failed to build footnote label regex strategy")
-            .boxed()
-    }
-
-    #[test]
-    fn is_inline_code_token_rejects_lone_backtick_delimiter() {
-        let delimiter = char::from(b'`');
-        assert!(!is_inline_code_token(&delimiter.to_string()));
-    }
-
-    #[test]
-    fn is_inline_code_token_accepts_complete_span() {
-        let delimiter = char::from(b'`');
-        let token = format!("{delimiter}code{delimiter}");
-        assert!(is_inline_code_token(&token));
-    }
-
-    #[test]
-    fn is_inline_code_token_matches_backtick_delimited_length_rule() {
-        proptest!(|(token in backtick_run_strategy())| {
-            let expected = token.len() > 1 && token.starts_with('`') && token.ends_with('`');
-            prop_assert_eq!(is_inline_code_token(&token), expected);
-        });
-    }
-
-    #[test]
-    fn is_whitespace_token_matches_char_classification() {
-        proptest!(|(token in arbitrary_short_string_strategy())| {
-            prop_assert_eq!(
-                is_whitespace_token(&token),
-                token.chars().all(char::is_whitespace)
-            );
-        });
-    }
-
-    #[test]
-    fn opening_and_trailing_punct_are_mutually_exclusive_for_ascii_letters() {
-        for c in 'a'..='z' {
-            assert!(!is_opening_punct(c));
-            assert!(!is_trailing_punct(c));
-        }
-    }
-
-    #[test]
-    fn looks_like_footnote_ref_implies_non_empty_label() {
-        proptest!(|(label in footnote_label_strategy())| {
-            let token = format!("[^{label}]");
-            prop_assert!(looks_like_footnote_ref(&token));
-        });
-    }
-
-    #[test]
-    fn looks_like_footnote_ref_rejects_empty_label() {
-        assert!(!looks_like_footnote_ref("[^]"));
-    }
-
-    #[rstest]
-    #[case("pre-", true)]
-    #[case("LLM-", true)]
-    #[case("(pre-", true)]
-    #[case("pré-", true)]
-    #[case("字-", true)]
-    #[case("state-of-the-art-", true)]
-    #[case("-", false)]
-    #[case("---", false)]
-    #[case("foo", false)]
-    #[case("2024-", false)]
-    fn ends_with_hyphen_prefix_classifies_tokens(#[case] token: &str, #[case] expected: bool) {
-        assert_eq!(ends_with_hyphen_prefix(token), expected);
-    }
-
-    #[rstest]
-    #[case(".", true)]
-    #[case("!?", true)]
-    #[case("...", true)]
-    #[case("", false)]
-    #[case("abc", false)]
-    #[case(".x", false)]
-    fn is_trailing_punctuation_token_classifies_tokens(
-        #[case] token: &str,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(is_trailing_punctuation_token(token), expected);
-    }
-
-    #[rstest]
-    #[case("2025", true)]
-    #[case("2025.", true)]
-    #[case("2025,", true)]
-    #[case("2008)", true)]
-    #[case("2008).", true)]
-    #[case("2008,)", true)]
-    #[case("999", false)]
-    #[case("3000", false)]
-    #[case("2025th.", false)]
-    #[case(".", false)]
-    fn is_year_accepts_sentence_trailing_punctuation(#[case] token: &str, #[case] expected: bool) {
-        assert_eq!(is_year(token), expected);
-    }
-
-    #[rstest]
-    #[case("[1]", true)]
-    #[case("1]", true)]
-    #[case("[12]", true)]
-    #[case("[123456]", true)]
-    #[case("[1],", true)]
-    #[case("1].", true)]
-    #[case("[12].", true)]
-    #[case("[1]]", true)]
-    #[case("1],]", true)]
-    #[case("[a]", false)]
-    #[case("[١٢]", false)]
-    #[case("[^1]", false)]
-    #[case("[1](url)", false)]
-    #[case("[]", false)]
-    #[case("]", false)]
-    #[case("[1", false)]
-    #[case("[1]x", false)]
-    #[case("[1 2]", false)]
-    #[case("", false)]
-    fn looks_like_bracketed_reference_classifies_tokens(
-        #[case] token: &str,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(looks_like_bracketed_reference(token), expected);
-    }
-}
+#[path = "predicates_tests.rs"]
+mod tests;

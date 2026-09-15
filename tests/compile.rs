@@ -59,3 +59,13 @@ fn footnote_stages_public_api_compiles() {
     let cases = trybuild::TestCases::new();
     cases.pass("tests/ui/footnote_stages_api_pass.rs");
 }
+
+// Gated on the feature the fixture needs: without `bench-internals` the
+// `wrap::bench_internals` module does not exist, so the fixture could not
+// compile and the case would fail for the wrong reason.
+#[cfg(feature = "bench-internals")]
+#[test]
+fn bench_internals_surface_compiles() {
+    let cases = trybuild::TestCases::new();
+    cases.pass("tests/ui/bench_internals_pass.rs");
+}

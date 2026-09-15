@@ -844,6 +844,28 @@ Metric names are stable, and labels are bounded: `outcome` is the only label
 key, carried only by the two replacement metrics above. No path, file name, or
 error text is ever used as a label, so a recorder's cardinality stays bounded.
 
+### Inline-wrapping tracing events
+
+Inline paragraph wrapping emits `tracing` events at `debug` and `trace`
+levels when the host application installs a subscriber. The library installs
+none of its own, so a host that installs nothing sees no behavioural change.
+
+Every field on these events is content-free scalar metadata: counts, byte
+offsets, boolean flags, and stable category names. No document text — link
+URLs, footnote labels, or token text — ever reaches a subscriber.
+
+This is a deliberate narrowing. The `fragment classified` event previously
+carried a `token` field holding a truncated, up-to-80-byte snippet of the
+actual document text, plus a `truncated` flag. It now carries `token_length`,
+a character count, and `kind`, the computed classification, so document text
+no longer reaches a subscriber through this event. A consumer that was
+reading `token=` from these logs must change: no replacement snippet of
+document content is available, only the count.
+
+See [Observability](developers-guide.md#observability) in the
+developer's guide for the full event and field reference; this section does
+not repeat it.
+
 ### `format_breaks` return type
 
 `format_breaks` returns `Vec<Cow<'_, str>>` rather than `Vec<String>`. Lines

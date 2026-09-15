@@ -119,7 +119,7 @@ fn preceding_tokens_strategy() -> BoxedStrategy<Vec<String>> {
 
 #[test]
 fn try_match_date_sequence_rejects_empty_slice() {
-    assert_eq!(try_match_date_sequence(&[], 0), None);
+    assert_eq!(try_match_date_sequence(&[], 0, &mut None), None);
 }
 
 /// Assert that replacing the month/day component with a non-date token defeats
@@ -132,7 +132,7 @@ fn assert_non_date_component_rejected(
     let mut non_date_component = tokens.to_vec();
     non_date_component[start + 2] = "not-a-date".to_string();
     prop_assert_eq!(
-        try_match_date_sequence(&non_date_component, start),
+        try_match_date_sequence(&non_date_component, start, &mut None),
         None,
         "non-date component in layout {} must be rejected",
         layout_index,
@@ -151,7 +151,7 @@ fn assert_wrong_separators_rejected(
         let mut wrong_separator = tokens.to_vec();
         wrong_separator[start + separator_offset] = "-".to_string();
         prop_assert_eq!(
-            try_match_date_sequence(&wrong_separator, start),
+            try_match_date_sequence(&wrong_separator, start, &mut None),
             None,
             "wrong separator {} in layout {} must be rejected",
             separator_offset,
@@ -171,7 +171,7 @@ fn assert_wrong_order_rejected(
     let mut wrong_order = tokens.to_vec();
     wrong_order.swap(start, start + 4);
     prop_assert_eq!(
-        try_match_date_sequence(&wrong_order, start),
+        try_match_date_sequence(&wrong_order, start, &mut None),
         None,
         "wrong token order in layout {} must be rejected",
         layout_index,
@@ -190,7 +190,7 @@ fn assert_wrong_opener_rejected(
     let mut wrong_opener = tokens.to_vec();
     wrong_opener[start].insert(0, invalid_opener);
     prop_assert_eq!(
-        try_match_date_sequence(&wrong_opener, start),
+        try_match_date_sequence(&wrong_opener, start, &mut None),
         None,
         "wrong opener in layout {} must be rejected",
         layout_index,
@@ -220,7 +220,7 @@ proptest! {
             tokens.extend(date_tokens);
 
             prop_assert_eq!(
-                try_match_date_sequence(&tokens, start),
+                try_match_date_sequence(&tokens, start, &mut None),
                 Some(start + 5),
                 "valid date layout {} must match",
                 layout_index,
@@ -252,6 +252,6 @@ proptest! {
         let start = tokens.len();
         tokens.extend(date_tokens);
 
-        prop_assert_eq!(try_match_date_sequence(&tokens, start), None);
+        prop_assert_eq!(try_match_date_sequence(&tokens, start, &mut None), None);
     }
 }

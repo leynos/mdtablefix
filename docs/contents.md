@@ -53,6 +53,9 @@
   the alternatives rejected in its favour.
 - [Verified normalization core](adrs/0011-verified-normalization-core.md):
   Accepted decision covering production-used Verus kernels and their ledger.
+- [Observer boundary for tracing](adrs/0012-observer-boundary-for-tracing.md):
+  Accepted decision covering the `Observer` port and `TracingObserver`
+  adapter for inline-wrapping domain diagnostics.
 
 ## Reference material
 

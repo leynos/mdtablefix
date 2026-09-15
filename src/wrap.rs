@@ -18,11 +18,14 @@ mod continuation;
 mod fence;
 mod inline;
 mod link_reference;
+mod observer;
 mod paragraph;
 mod pending;
 mod tokenize;
+mod tracing_adapter;
 #[cfg(test)]
 pub(crate) mod tracing_snapshot_support;
+mod wiring;
 use block::{BULLET_RE, FOOTNOTE_RE};
 pub(crate) use block::{BlockKind, classify_block, leading_indent};
 pub use blockquote::BlockquotePrefix;
@@ -408,3 +411,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "bench-internals")]
+#[doc(hidden)]
+pub mod bench_internals;
