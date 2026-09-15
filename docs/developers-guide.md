@@ -666,15 +666,19 @@ depth-aware tracking.
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/wiring.rs` builds the `TracingObserver` adapter and delegates to
    `wrap_preserving_code_observed` in `src/wrap/inline/wrapping.rs`, which
-   tokenizes prose with `tokenize::segment_inline`, groups the tokens into
-   `InlineFragment` values via `determine_token_span` in
+   tokenizes prose with `tokenize::segment_inline_observed`, groups the
+   tokens into `InlineFragment` values via `determine_token_span_observed` in
    `src/wrap/inline/span_grouping.rs`, and calls
    `textwrap::wrap_algorithms::wrap_first_fit` over the accumulated fragment
-   buffer. Token predicates in `src/wrap/inline/predicates.rs` classify
+   buffer. The unsuffixed `segment_inline` and `determine_token_span` are
+   `#[cfg(test)]`-only wrappers that call their `_observed` counterparts with
+   no observer; they do not exist in a production build, and are kept only
+   because they keep test call sites readable. Token predicates in
+   `src/wrap/inline/predicates.rs` classify
    punctuation, links, code spans, and footnote markers. Span grouping helpers
    in `src/wrap/inline/span_helpers.rs` extend grouped spans over trailing
    punctuation, couple adjacent footnote references, and merge chained inline
-   code or link tokens. `determine_token_span` forward-couples opening
+   code or link tokens. `determine_token_span_observed` forward-couples opening
    punctuation tokens (`(`, `[`, and CJK openers) and hyphen-prefix tokens to
    the next inline code span or Markdown link so wrapping never leaves a lone
    opener or prefix at the end of a line. `try_couple_inline_link_after_opener`
@@ -689,12 +693,12 @@ depth-aware tracking.
    `SpanKind::BracketedRef` and `FragmentKind::BracketedRef` keep the merged
    span atomic during fitting and post-processing, so the opening bracket
    cannot be stranded at a line end.
-   At the tokenizer level, `segment_inline` also stops
+   At the tokenizer level, `segment_inline_observed` also stops
    trailing-punctuation and plain-text scans at an unescaped `([` boundary via
    `scan_trailing_punctuation_end` and `scan_plain_text_end`, both using
    `starts_inline_citation`, so the citation opener `(` is emitted as its own
    token instead of being swallowed into the preceding token's punctuation
-   cluster. That boundary gives `determine_token_span` and
+   cluster. That boundary gives `determine_token_span_observed` and
    `try_couple_inline_link_after_opener` a clean opener token to couple with
    the following inline link, making the full `([n](url))` span atomic, while
    escaped sequences such as `\([` bypass the early exit and remain plain text.
@@ -706,8 +710,8 @@ depth-aware tracking.
    immediately follow inline code or links (including opener-coupled spans)
    stay attached to the preceding punctuation cluster. Date-component
    predicates are applied by `try_match_date_sequence` in `span_helpers.rs`
-   before `determine_token_span` performs the standard punctuation and link
-   grouping pass.
+   before `determine_token_span_observed` performs the standard punctuation
+   and link grouping pass.
 
 4. **Post-processing and rendering.** The `postprocess` module applies
    `merge_whitespace_only_lines` and then `rebalance_atomic_tails` so
@@ -848,7 +852,7 @@ opener-at-EOL tight joining, or original-line verbatim flushing for
 code-span boundary spaces.
 
 `SpanKind` in `src/wrap/observer.rs` records how a grouped token span behaves
-while `determine_token_span` walks the stream: `General` for
+while `determine_token_span_observed` walks the stream: `General` for
 ordinary prose, `Code` and `Link` for atomic inline spans, `FootnoteRef`
 when a footnote marker has been promoted or grouped with preceding punctuation,
 and `BracketedRef` for a bare numeric bracket reference such as `[1]` that has
@@ -890,9 +894,9 @@ been coupled to its opening bracket.
   at least one alphabetic character (for example `pre-`, `LLM-`, `(API-`) — are
   coupled forward to the next inline code span during span grouping by the
   `ends_with_hyphen_prefix` predicate in `src/wrap/inline/predicates.rs`,
-  applied in `determine_token_span` in `src/wrap/inline/span_grouping.rs`. The
-  coupling
-  mirrors the existing opening-punctuation pattern, so compounds such as
+  applied in `determine_token_span_observed` in
+  `src/wrap/inline/span_grouping.rs`. The coupling mirrors the existing
+  opening-punctuation pattern, so compounds such as
   `` pre-`LLMPort` `` and `` (API-`Foo`) `` remain atomic during wrapping.
   Internal hyphen chains (e.g. `state-of-the-art-`) are accepted by design;
   bare dash runs such as `-` or `---` are rejected. Unicode alphabetic

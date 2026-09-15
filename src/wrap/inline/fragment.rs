@@ -336,16 +336,24 @@ mod tracing_tests {
         assert!(!logs_contain("unmistakable-path"));
     }
 
-    // Deliberately not `#[traced_test]`: `tracing_test` installs its subscriber
-    // only for the test it decorates, so this test drives `TracingObserver` with
-    // no subscriber active — the configuration production callers use. Going
-    // through `InlineFragment::new` instead would attach `NoOpObserver` and
-    // exercise a different path entirely, never reaching the adapter.
+    // Drives `TracingObserver` with no subscriber active — the configuration
+    // production callers use. Going through `InlineFragment::new` instead would
+    // attach `NoOpObserver` and exercise a different path entirely, never
+    // reaching the adapter.
+    //
+    // The no-subscriber state is established explicitly rather than by omitting
+    // `#[traced_test]`. `tracing_test` installs a *global* dispatcher behind a
+    // `Once`, and this module's own traced tests share this binary, so by the
+    // time this test runs one is likely already installed. A thread-local
+    // `NoSubscriber` takes precedence over that global.
     #[test]
     fn fragment_classification_with_observer_but_no_subscriber_returns_kind() {
-        let mut observer = TracingObserver;
-        let mut handle = Some(&mut observer as &mut dyn crate::wrap::observer::Observer);
-        let fragment = InlineFragment::new_observed("[^1]".to_string(), &mut handle);
+        let fragment =
+            tracing::subscriber::with_default(tracing::subscriber::NoSubscriber::default(), || {
+                let mut observer = TracingObserver;
+                let mut handle = Some(&mut observer as &mut dyn crate::wrap::observer::Observer);
+                InlineFragment::new_observed("[^1]".to_string(), &mut handle)
+            });
         assert_eq!(fragment.kind, FragmentKind::FootnoteRef);
     }
 }

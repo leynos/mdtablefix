@@ -53,14 +53,22 @@ fn footnote_ref_check_without_observer_returns_result() {
     assert!(!looks_like_footnote_ref("plain", &mut None));
 }
 
-// Deliberately not `#[traced_test]`: `tracing_test` installs its subscriber
-// only for the test it decorates, so this test exercises `TracingObserver`
-// with no subscriber active — the configuration production callers use.
+// Exercises `TracingObserver` with no subscriber active — the configuration
+// production callers use.
+//
+// The no-subscriber state is established explicitly rather than by omitting
+// `#[traced_test]`. `tracing_test` installs a *global* dispatcher behind a
+// `Once`, so a sibling traced test anywhere in this binary leaves it installed
+// for the rest of the process; simply not annotating this test would leave what
+// it exercises up to test ordering. A thread-local `NoSubscriber` takes
+// precedence over that global, making the configuration deterministic.
 #[test]
 fn footnote_ref_check_with_observer_but_no_subscriber_returns_result() {
-    let mut observer = TracingObserver;
-    let mut handle = Some(&mut observer as &mut dyn crate::wrap::observer::Observer);
-    assert!(looks_like_footnote_ref("[^1]", &mut handle));
-    assert!(!looks_like_footnote_ref("plain", &mut handle));
-    assert!(ends_with_footnote_ref("word.[^1]", &mut handle));
+    tracing::subscriber::with_default(tracing::subscriber::NoSubscriber::default(), || {
+        let mut observer = TracingObserver;
+        let mut handle = Some(&mut observer as &mut dyn crate::wrap::observer::Observer);
+        assert!(looks_like_footnote_ref("[^1]", &mut handle));
+        assert!(!looks_like_footnote_ref("plain", &mut handle));
+        assert!(ends_with_footnote_ref("word.[^1]", &mut handle));
+    });
 }

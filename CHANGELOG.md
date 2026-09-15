@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Inline-wrapping `tracing` events no longer carry document text. The
+  `fragment classified` event now reports `token_length` instead of a
+  truncated `token` snippet.
+  ([#309](https://github.com/leynos/mdtablefix/issues/309))
+
 ## v0.6.0
 
 ### Added
