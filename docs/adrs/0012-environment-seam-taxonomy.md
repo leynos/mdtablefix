@@ -10,12 +10,14 @@ Accepted.
 
 ## Context
 
-`mdtablefix` reads nothing from the process environment. An audit of `src/`,
-`tests/`, and `test-macros/` found no call to `std::env::var`, `var_os`,
-`vars`, `vars_os`, `set_var`, or `remove_var`; the only environment references
-are the compile-time `env!("CARGO_PKG_VERSION")` and
-`env!("CARGO_MANIFEST_DIR")` macros, which read Cargo's build-time values
-rather than the running process.
+`mdtablefix`'s production code reads nothing from the process environment. An
+audit of `src/`, `tests/`, and `test-macros/` found no call to `std::env::var`,
+`var_os`, `vars`, `vars_os`, `set_var`, or `remove_var` outside two sanctioned
+test composition roots, described under
+[Permit one exception, scoped to an item](#permit-one-exception-scoped-to-an-item);
+the only other environment references are the compile-time
+`env!("CARGO_PKG_VERSION")` and `env!("CARGO_MANIFEST_DIR")` macros, which read
+Cargo's build-time values rather than the running process.
 
 That is a property worth keeping rather than a coincidence worth ignoring.
 Ambient environment access is a shared-mutable-state problem: a test that sets
@@ -133,9 +135,12 @@ variable or one precedence ladder.
 
 ### Permit one exception, scoped to an item
 
-A direct read is permitted only at a genuine executable composition root, which
-in this repository means `main` or a function it calls directly to assemble the
-command-line application. Such a site carries
+A direct read is permitted only at a genuine executable composition root: in
+the application, `main` or a function it calls directly to assemble the
+command-line tool; in the test suite, the two harness roots named under
+[Build child environments explicitly](#build-child-environments-explicitly),
+each of which is a composition root for the same reason, having no caller in
+this repository to take the value as an argument from. Such a site carries
 `#[expect(clippy::disallowed_methods, reason = "...")]` on the item, never
 `allow` and never a module- or crate-wide suppression. `expect` is deliberate:
 once the site is migrated to a seam, the expectation goes unfulfilled and warns,

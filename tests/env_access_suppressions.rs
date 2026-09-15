@@ -151,6 +151,23 @@
 //! judge include_str! as source inclusion
 //!   -> includes_a_string and includes_bytes fail; embedding is not compiling
 //! ```
+//!
+//! The include! target is judged by its decoded value and by the extension the
+//! walk selects on, proved in both directions on 2026-09-15:
+//!
+//! ```text
+//! read the literal as written, trimming quotes off Literal::to_string
+//!   -> includes_a_raw_string_path and includes_an_escaped_path fail, and
+//!      includes_a_bare_extension with them
+//! accept a .rs literal found anywhere in the argument
+//!   -> includes_a_computed_rust_path fails, alone
+//! report no include! target at all
+//!   -> the four refused include cases fail
+//! compare the rendered path with ends_with(".rs")
+//!   -> includes_a_bare_extension fails, alone
+//! ```
+//!
+//! The two mutations above were re-run against the changed mechanism.
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -158,7 +175,19 @@ use camino::{Utf8Path, Utf8PathBuf};
 #[path = "support/allow_scan.rs"]
 mod allow_scan;
 
-use allow_scan::{rust_sources, suppressed_lints};
+use allow_scan::{roots::SANCTIONED_ROOTS, rust_sources, suppressed_lints};
+
+/// The path an inline fixture pretends to be.
+///
+/// Every fixture below is judged as an ordinary source, not as one of the
+/// sanctioned composition roots, so a rule that depends on the path is
+/// exercised on the side that has to hold everywhere.
+const FIXTURE_PATH: &str = "src/fixture.rs";
+
+/// Judge one inline fixture as if it were an ordinary source file.
+fn scan(source: &str) -> Result<Vec<String>> {
+    suppressed_lints(Utf8Path::new(FIXTURE_PATH), source)
+}
 
 /// Directories that must be represented in the scan.
 ///
@@ -214,7 +243,7 @@ fn no_source_allows_a_policy_lint() -> Result<()> {
 
     let mut offences = Vec::new();
     for (path, contents) in &sources {
-        for finding in suppressed_lints(contents).with_context(|| format!("scan {path}"))? {
+        for finding in suppressed_lints(path, contents).with_context(|| format!("scan {path}"))? {
             offences.push(format!("{path} {finding}"));
         }
     }
@@ -234,13 +263,67 @@ fn no_source_allows_a_policy_lint() -> Result<()> {
 /// Invariant: `expect` is not an offence. Rejecting it would push contributors
 /// toward `allow`, which is the attribute that never warns once the site is
 /// migrated.
-#[test]
-fn a_sanctioned_expect_is_not_an_offence() -> Result<()> {
-    let sanctioned = concat!(
-        "#[expect(clippy::disallowed_methods, reason = \"composition root\")]\n",
-        "fn read() -> Option<String> { std::env::var(\"HOME\").ok() }\n",
+///
+/// The exemption is pinned to the documented roots. Exempting every
+/// item-scoped `expect` honoured the attribute but not the rule ADR-0012
+/// states: a contributor could write the same attribute over any function, add
+/// a `std::env` read beneath it, and pass both Clippy and this scan. The scan
+/// therefore asks which item, in which file, and
+/// [`a_sanctioned_expect_elsewhere_is_an_offence`] is the other half.
+#[rstest::rstest]
+#[case::write_failure_child(0)]
+#[case::ambient_variable(1)]
+fn a_sanctioned_expect_is_not_an_offence(#[case] index: usize) -> Result<()> {
+    let (file, item) = SANCTIONED_ROOTS[index];
+    let sanctioned = format!(
+        concat!(
+            "#[expect(clippy::disallowed_methods, reason = \"composition root\")]\n",
+            "fn {item}() -> Option<String> {{ std::env::var(\"HOME\").ok() }}\n",
+        ),
+        item = item
     );
-    ensure!(suppressed_lints(sanctioned)?.is_empty());
+    let found = suppressed_lints(Utf8Path::new(file), &sanctioned)?;
+    ensure!(found.is_empty(), "expected no offence, found {found:?}");
+    Ok(())
+}
+
+/// Scenario: the sanctioned attribute, written somewhere it was not sanctioned.
+/// Invariant: it is an offence. The two cases are the same attribute over the
+/// same function body, differing only in the file and the item it sits on,
+/// which is exactly the discrimination the rule claims to make. Without both,
+/// the rule could be satisfied by a reader that answered the same way whatever
+/// it was asked.
+///
+/// Mutation proof (2026-09-15), each applied alone and reverted: exempting
+/// every outer `expect`, as the scan did before, fails both cases with
+/// `expected an offence`; refusing every outer `expect` fails
+/// [`a_sanctioned_expect_is_not_an_offence`] on both roots.
+///
+/// A third mutation was applied and is recorded as not discriminating, because
+/// a mutation that survives proves nothing and saying so is the point.
+/// Comparing the path by its rendered string rather than by its components
+/// passes every case on Linux: the walk joins with `/` here, so the two
+/// readings agree on every path it can produce. They part only on Windows,
+/// where the walk joins with `\` and a `/`-written expectation matches
+/// nothing, which is the platform this host cannot exercise. The components
+/// reading is kept for the reason the sibling `is_under` reader already uses
+/// it, not on the strength of a proof run here.
+#[rstest::rstest]
+#[case::the_right_item_in_the_wrong_file("src/lib.rs", "write_failure_child")]
+#[case::the_wrong_item_in_the_right_file("tests/rewrite_atomic.rs", "some_other_test")]
+fn a_sanctioned_expect_elsewhere_is_an_offence(
+    #[case] file: &str,
+    #[case] item: &str,
+) -> Result<()> {
+    let source = format!(
+        concat!(
+            "#[expect(clippy::disallowed_methods, reason = \"composition root\")]\n",
+            "fn {item}() -> Option<String> {{ std::env::var(\"HOME\").ok() }}\n",
+        ),
+        item = item
+    );
+    let found = suppressed_lints(Utf8Path::new(file), &source)?;
+    ensure!(found.len() == 1, "expected an offence, found {found:?}");
     Ok(())
 }
 
@@ -315,18 +398,30 @@ fn a_sanctioned_expect_is_not_an_offence() -> Result<()> {
 #[case::includes_a_foreign_extension("include!(\"tests/data/probe.rs.txt\");\n")]
 // An `include!` whose target is not a literal cannot be judged at all.
 #[case::includes_a_computed_path("include!(concat!(env!(\"OUT_DIR\"), \"/probe\"));\n")]
+// A computed target holding a `.rs` literal is still one the scan cannot
+// resolve; the whole argument has to be a single literal.
+#[case::includes_a_computed_rust_path("include!(concat!(env!(\"OUT_DIR\"), \"/probe.rs\"));\n")]
+// A bare extension is a name the walk never collects, so the file it reaches is
+// never scanned however the inclusion reads.
+#[case::includes_a_bare_extension("include!(\".rs\");\n")]
 fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Result<()> {
-    let found = suppressed_lints(source)?;
+    let found = scan(source)?;
     ensure!(found.len() == 1, "expected one offence, found {found:?}");
     Ok(())
 }
 
 /// Scenario: text that resembles a suppression but is not one.
 /// Invariant: none is an offence. A doc comment describing the policy, a string
-/// literal quoting it, an item-scoped `expect`, and a lint whose name merely
-/// contains a protected one must all pass. This file and its siblings quote the attribute they
-/// prohibit, and `clippy::alloc_instead_of_core` begins with `clippy::all`, so a
+/// literal quoting it, and a lint whose name merely contains a protected one
+/// must all pass. This file and its siblings quote the attribute they prohibit,
+/// and `clippy::alloc_instead_of_core` begins with `clippy::all`, so a
 /// substring comparison would report both.
+///
+/// An item-scoped `expect` was among these cases and is not any longer: it is
+/// sanctioned at a named composition root and an offence anywhere else, so it
+/// cannot be judged without a path. [`a_sanctioned_expect_is_not_an_offence`]
+/// and [`a_sanctioned_expect_elsewhere_is_an_offence`] hold the two halves,
+/// each naming the file and item it is judged against.
 #[rstest::rstest]
 #[case::prose(
     "//! Never write #![allow(clippy::disallowed_methods)] at a crate root.\nfn f() {}\n"
@@ -334,9 +429,6 @@ fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Resu
 #[case::string_literal("const EXAMPLE: &str = \"#![allow(warnings)]\";\n")]
 #[case::longer_name("#[allow(clippy::alloc_instead_of_core)]\nfn f() {}\n")]
 #[case::unrelated_lint("#![allow(dead_code, reason = \"shared module\")]\n")]
-#[case::item_scoped_expect(
-    "#[expect(clippy::disallowed_methods, reason = \"composition root\")]\nfn f() {}\n"
-)]
 // The ordinary idiom for carrying doc comments onto a generated setter. It
 // forwards the path, but over an `ident`, an `ident` and a `ty`, none of which
 // can carry a call.
@@ -361,14 +453,17 @@ fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Resu
 // Embedding bytes is not compiling source, whatever the extension.
 #[case::includes_a_string("const S: &str = include_str!(\"data/table.dat\");\n")]
 #[case::includes_bytes("const B: &[u8] = include_bytes!(\"data/table.dat\");\n")]
-// An `include!` of a literal `.rs` path names a file the scan reads itself.
+// An `include!` of a literal `.rs` path names a file the scan reads itself,
+// whichever way the literal is spelled: the rule judges what it means.
 #[case::includes_rust_source("include!(\"generated.rs\");\n")]
+#[case::includes_a_raw_string_path("include!(r\"generated.rs\");\n")]
+#[case::includes_an_escaped_path("include!(\"generated\\x2Ers\");\n")]
 // An attribute handed to a macro that may discard it is not a suppression.
 #[case::attribute_handed_to_an_invocation(
     "assert_shape!(#[allow(clippy::disallowed_methods)] fn f() {});\n"
 )]
 fn text_resembling_a_suppression_is_not_an_offence(#[case] source: &str) -> Result<()> {
-    let found = suppressed_lints(source)?;
+    let found = scan(source)?;
     ensure!(found.is_empty(), "expected no offence, found {found:?}");
     Ok(())
 }

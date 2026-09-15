@@ -1428,8 +1428,10 @@ and arguments before accepting the new output.
 
 ## Environment access policy
 
-Nothing in this repository reads or writes the process environment at run time,
-and `make lint` keeps it that way. `clippy.toml` lists `std::env::var`,
+No production code in this repository reads or writes the process environment
+at run time, and the only run-time reads anywhere are the two sanctioned test
+composition roots described under [Choosing a seam](#choosing-a-seam).
+`make lint` keeps it that way. `clippy.toml` lists `std::env::var`,
 `var_os`, `vars`, `vars_os`, `set_var`, and `remove_var` under
 `disallowed-methods`, and both package manifests raise
 `clippy::disallowed_methods` to `deny`, so a new call fails the lint gate on
@@ -1510,8 +1512,10 @@ Table: Injection shapes and when to use each.
 Do not introduce a trait for one variable read by one caller. Each seam is owned
 by the module that needs its value and stays private to it.
 
-A direct read is permitted only at a genuine composition root, meaning `main` or
-a function it calls directly to assemble the application. Such a site carries
+A direct read is permitted only at a genuine composition root: `main` or a
+function it calls directly to assemble the application, and the two test-harness
+roots described below, which are composition roots for the same reason. Such a
+site carries
 `#[expect(clippy::disallowed_methods, reason = "…")]` on the item itself, never
 `allow` and never a module- or crate-wide suppression. The expectation warns
 once the site is migrated, so the exception removes itself.
