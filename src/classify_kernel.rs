@@ -4,6 +4,41 @@
 //! context. It has no borrowed-string ranges, regular expressions, I/O, or
 //! ambient state, so `verus/lib.rs` can compile this production body directly.
 
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::verus;
+
+/// Emits the ordinary Rust form of a kernel function for Cargo builds.
+#[cfg(not(verus_keep_ghost))]
+macro_rules! verified_kernel_function {
+    (
+        $(#[$attribute:meta])*
+        $visibility:vis fn $name:ident($($arguments:tt)*) -> $result:ty;
+        ensures($result_name:ident => $($postcondition:tt)*);
+        $body:block
+    ) => {
+        $(#[$attribute])*
+        $visibility fn $name($($arguments)*) -> $result $body
+    };
+}
+
+/// Emits the contracted Verus form of the same kernel function body.
+#[cfg(verus_keep_ghost)]
+macro_rules! verified_kernel_function {
+    (
+        $(#[$attribute:meta])*
+        $visibility:vis fn $name:ident($($arguments:tt)*) -> $result:ty;
+        ensures($result_name:ident => $($postcondition:tt)*);
+        $body:block
+    ) => {
+        verus! {
+            $(#[$attribute])*
+            $visibility fn $name($($arguments)*) -> ($result_name: $result)
+                ensures $($postcondition)*
+                $body
+        }
+    };
+}
+
 #[path = "classify_kernel_predicates.rs"]
 mod predicates;
 
@@ -22,11 +57,13 @@ use predicates::{
 };
 
 /// A Unicode scalar offset into the character sequence supplied to the kernel.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy)]
+#[cfg_attr(not(verus_keep_ghost), derive(Debug, Eq, PartialEq))]
 pub(crate) struct CharIndex(pub(crate) usize);
 
 /// The structural role of a line after its indentation and blockquote prefix.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy)]
+#[cfg_attr(not(verus_keep_ghost), derive(Debug, Eq, PartialEq))]
 pub(crate) enum LineClass {
     /// Text that can form a paragraph and may be the candidate of a Setext pair.
     ParagraphText,
@@ -51,7 +88,8 @@ pub(crate) enum LineClass {
 }
 
 /// Fence state needed to distinguish literal fenced contents from markers.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy)]
+#[cfg_attr(not(verus_keep_ghost), derive(Debug, Eq, PartialEq))]
 pub(crate) struct OpenFence {
     /// Character repeated by the fence marker.
     pub(crate) marker: char,
@@ -66,7 +104,7 @@ impl OpenFence {
 }
 
 /// Context that makes a line classification independent of its caller.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[cfg_attr(not(verus_keep_ghost), derive(Clone, Debug, Default, Eq, PartialEq))]
 pub(crate) struct ClassifyCtxKernel {
     /// Whether the line is within an already-open fenced region.
     pub(crate) is_in_fence: bool,
@@ -103,7 +141,8 @@ impl ClassifyCtxKernel {
 }
 
 /// A structural result and the scalar offset of the scanner's body.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy)]
+#[cfg_attr(not(verus_keep_ghost), derive(Debug, Eq, PartialEq))]
 pub(crate) struct KernelClassification {
     /// Structural class selected by [`classify_seq`].
     pub(crate) class: LineClass,
@@ -113,9 +152,12 @@ pub(crate) struct KernelClassification {
     pub(crate) body_start: CharIndex,
 }
 
+verified_kernel_function! {
 /// Classifies one character sequence using the shared structural precedence.
 #[must_use]
-pub(crate) fn classify_seq(chars: &[char], ctx: &ClassifyCtxKernel) -> KernelClassification {
+pub(crate) fn classify_seq(chars: &[char], ctx: &ClassifyCtxKernel) -> KernelClassification;
+ensures(result => true);
+{
     let (body_start, is_literal) = line_parts(chars);
     if ctx.is_in_fence {
         return classify_within_fence(chars, body_start, ctx);
@@ -128,6 +170,7 @@ pub(crate) fn classify_seq(chars: &[char], ctx: &ClassifyCtxKernel) -> KernelCla
     }
     classify_open_text(chars, body_start, ctx)
 }
+}
 
 /// Classifies a line inside an open fenced region.
 fn classify_within_fence(
@@ -135,11 +178,11 @@ fn classify_within_fence(
     body_start: usize,
     ctx: &ClassifyCtxKernel,
 ) -> KernelClassification {
-    if ctx
-        .open_fence
-        .is_some_and(|open| is_closing_fence(chars, body_start, open))
-    {
-        return classified(LineClass::FenceMarker, body_start);
+    match ctx.open_fence {
+        Some(open) if is_closing_fence(chars, body_start, open) => {
+            return classified(LineClass::FenceMarker, body_start);
+        }
+        Some(_) | None => {}
     }
     classified(LineClass::Literal, body_start)
 }
@@ -186,6 +229,7 @@ fn classified(class: LineClass, body_start: usize) -> KernelClassification {
 }
 
 /// Locates the structural body and determines whether it is indented code.
+#[cfg_attr(verus_keep_ghost, verifier::external_body)]
 fn line_parts(chars: &[char]) -> (usize, bool) {
     let (outer_width, mut cursor) = indentation_at(chars, 0, 0);
     if outer_width >= 4 {
@@ -195,12 +239,12 @@ fn line_parts(chars: &[char]) -> (usize, bool) {
     let mut column = outer_width;
     loop {
         let (indent_width, after_indent) = indentation_at(chars, cursor, column);
-        if indent_width >= 4 || char_at(chars, after_indent) != Some('>') {
+        if indent_width >= 4 || !matches!(char_at(chars, after_indent), Some('>')) {
             break;
         }
         cursor = after_indent + 1;
         column += indent_width + 1;
-        if char_at(chars, cursor) == Some(' ') {
+        if matches!(char_at(chars, cursor), Some(' ')) {
             cursor += 1;
             column += 1;
         }
@@ -211,11 +255,12 @@ fn line_parts(chars: &[char]) -> (usize, bool) {
 }
 
 /// Measures indentation columns and the following scalar offset from `start`.
+#[cfg_attr(verus_keep_ghost, verifier::external_body)]
 fn indentation_at(chars: &[char], start: usize, column: usize) -> (usize, usize) {
     let mut width = 0;
     let mut cursor = start;
-    while let Some(character) = char_at(chars, cursor) {
-        match character {
+    while cursor < chars.len() {
+        match chars[cursor] {
             ' ' => {
                 width += 1;
                 cursor += 1;

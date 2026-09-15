@@ -6,14 +6,10 @@
 
 use vstd::prelude::*;
 
-// The production scanner is compiled by the verifier from its actual source
-// file. Its `std` implementation stays outside `verus!` while the proof kernel
-// below uses Verus ghost data, because Verus cannot refine `str` slicing and
-// `tracing` calls directly.
-#[path = "../src/classify.rs"]
-mod production_classify;
-
 verus! {
+
+#[path = "../src/classify_kernel.rs"]
+mod production_classify;
 
 /// Ghost counterpart of the production structural roles.
 pub enum LineClass {
