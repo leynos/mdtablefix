@@ -78,14 +78,23 @@ pub(super) fn could_cover_a_policy_call(pattern: &TokenStream, transcriber: &Tok
         return true;
     }
     let trees: Vec<TokenTree> = pattern.clone().into_iter().collect();
-    trees.iter().enumerate().any(|(index, tree)| {
-        matches!(tree, TokenTree::Punct(punct) if punct.as_char() == ':')
-            && matches!(
-                trees.get(index + 1),
-                Some(TokenTree::Ident(ident))
-                    if CODE_FRAGMENTS.contains(&ident.to_string().as_str())
-            )
-    })
+    (0..trees.len()).any(|index| declares_code_fragment(&trees, index))
+}
+
+/// Return whether a fragment specifier at `index` names something that can
+/// carry code.
+///
+/// A specifier is written `$name:kind`, so the colon is what marks one and the
+/// identifier after it is the kind. An `ident`, a `ty`, a `lifetime` or a
+/// `literal` cannot carry a call; the kinds that can are in [`CODE_FRAGMENTS`].
+fn declares_code_fragment(trees: &[TokenTree], index: usize) -> bool {
+    if !matches!(trees.get(index), Some(TokenTree::Punct(punct)) if punct.as_char() == ':') {
+        return false;
+    }
+    matches!(
+        trees.get(index + 1),
+        Some(TokenTree::Ident(ident)) if CODE_FRAGMENTS.contains(&ident.to_string().as_str())
+    )
 }
 
 /// Return a finding if an attribute in a transcriber forwards its own path.
@@ -178,7 +187,20 @@ pub(super) struct AttributeShape {
 /// covers everything else, including a group that does not parse: a macro body
 /// may hold token sequences that are not Rust until they are expanded.
 pub(super) fn attribute_at(trees: &[TokenTree], index: usize) -> Option<(AttributeShape, usize)> {
-    let Some(TokenTree::Punct(hash)) = trees.get(index) else {
+    let (inner, group, after) = attribute_shape_at(trees, index)?;
+    let meta = syn::parse2::<Meta>(group.stream()).ok()?;
+    Some((AttributeShape { inner, meta }, after))
+}
+
+/// Return the scope, bracketed group and end of the attribute at `index`.
+///
+/// An attribute is `#`, optionally `!`, then a bracketed group. Both readers
+/// below need exactly that much of it and differ only in what they do with the
+/// group: one parses it as a `Meta`, the other judges it as tokens, because
+/// `$attr` is not a `Meta` and that is why the route existed. Reading the shape
+/// once keeps them from drifting into two spellings of the same rule.
+fn attribute_shape_at(trees: &[TokenTree], index: usize) -> Option<(bool, &Group, usize)> {
+    let TokenTree::Punct(hash) = trees.get(index)? else {
         return None;
     };
     if hash.as_char() != '#' {
@@ -189,14 +211,13 @@ pub(super) fn attribute_at(trees: &[TokenTree], index: usize) -> Option<(Attribu
     if inner {
         next += 1;
     }
-    let Some(TokenTree::Group(group)) = trees.get(next) else {
+    let TokenTree::Group(group) = trees.get(next)? else {
         return None;
     };
     if group.delimiter() != Delimiter::Bracket {
         return None;
     }
-    let meta = syn::parse2::<Meta>(group.stream()).ok()?;
-    Some((AttributeShape { inner, meta }, next + 1))
+    Some((inner, group, next + 1))
 }
 
 /// Return a forwarded-path finding for the attribute beginning at `index`.
@@ -209,22 +230,6 @@ pub(super) fn forwarded_attribute_at(
     index: usize,
     reachable: bool,
 ) -> Option<String> {
-    let Some(TokenTree::Punct(hash)) = trees.get(index) else {
-        return None;
-    };
-    if hash.as_char() != '#' {
-        return None;
-    }
-    let mut next = index + 1;
-    let inner = matches!(trees.get(next), Some(TokenTree::Punct(bang)) if bang.as_char() == '!');
-    if inner {
-        next += 1;
-    }
-    let Some(TokenTree::Group(group)) = trees.get(next) else {
-        return None;
-    };
-    if group.delimiter() != Delimiter::Bracket {
-        return None;
-    }
+    let (inner, group, _) = attribute_shape_at(trees, index)?;
     forwarded_path(group, inner, reachable)
 }

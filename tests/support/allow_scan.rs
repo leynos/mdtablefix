@@ -129,6 +129,22 @@ fn impl_item_name(item: &ImplItem) -> Option<String> {
 }
 
 impl AttributeCollector {
+    /// Visit `walk` with `named` on the scope, if it names anything.
+    ///
+    /// Shared by the two visitors that introduce a name, which otherwise differ
+    /// only in the `syn` function they call and would read as two copies of the
+    /// same push, walk and pop.
+    fn within(&mut self, named: Option<String>, walk: impl FnOnce(&mut Self)) {
+        let pushed = named.is_some();
+        if let Some(name) = named {
+            self.scope.push(name);
+        }
+        walk(self);
+        if pushed {
+            self.scope.pop();
+        }
+    }
+
     /// Record any attribute-shaped token sequence in a transcriber.
     ///
     /// Every group is descended into, so a suppression nested through more than
@@ -171,25 +187,15 @@ impl<'ast> Visit<'ast> for AttributeCollector {
     }
 
     fn visit_item(&mut self, item: &'ast Item) {
-        let named = item_name(item);
-        if let Some(name) = &named {
-            self.scope.push(name.clone());
-        }
-        syn::visit::visit_item(self, item);
-        if named.is_some() {
-            self.scope.pop();
-        }
+        self.within(item_name(item), |collector| {
+            syn::visit::visit_item(collector, item);
+        });
     }
 
     fn visit_impl_item(&mut self, item: &'ast ImplItem) {
-        let named = impl_item_name(item);
-        if let Some(name) = &named {
-            self.scope.push(name.clone());
-        }
-        syn::visit::visit_impl_item(self, item);
-        if named.is_some() {
-            self.scope.pop();
-        }
+        self.within(impl_item_name(item), |collector| {
+            syn::visit::visit_impl_item(collector, item);
+        });
     }
 
     fn visit_macro(&mut self, mac: &'ast Macro) {

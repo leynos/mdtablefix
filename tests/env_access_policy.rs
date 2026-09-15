@@ -278,33 +278,47 @@ const ASSIGNMENTS: [&str; 5] = ["::=", ":=", "+=", "?=", "="];
 /// continuations are not joined, which would understate a value split across
 /// lines rather than overstate it.
 fn effective_shellflags(makefile: &str) -> Option<String> {
-    let mut value: Option<String> = None;
-    for line in makefile.lines() {
-        if line.starts_with('\t') {
-            continue;
-        }
-        let Some(rest) = line.trim_start().strip_prefix(".SHELLFLAGS") else {
-            continue;
-        };
-        let rest = rest.trim_start();
-        let Some((operator, argument)) = ASSIGNMENTS
-            .iter()
-            .find_map(|operator| rest.strip_prefix(operator).map(|rest| (*operator, rest)))
-        else {
-            continue;
-        };
-        let argument = argument.split('#').next().unwrap_or_default().trim();
-        value = match operator {
-            "+=" => Some(match value {
-                Some(existing) if existing.is_empty() => argument.to_owned(),
-                Some(existing) => format!("{existing} {argument}"),
-                None => argument.to_owned(),
-            }),
-            "?=" => value.or_else(|| Some(argument.to_owned())),
-            _ => Some(argument.to_owned()),
-        };
+    makefile
+        .lines()
+        .filter_map(shellflags_assignment)
+        .fold(None, apply_assignment)
+}
+
+/// Return the operator and argument of a `.SHELLFLAGS` assignment on `line`.
+///
+/// The name is matched exactly, so `.SHELLFLAGS_NOTE` is an ordinary variable
+/// and says nothing about the shell. A tab makes a line a recipe line rather
+/// than an assignment, and a trailing comment is not part of the value.
+fn shellflags_assignment(line: &str) -> Option<(&'static str, &str)> {
+    if line.starts_with('\t') {
+        return None;
     }
-    value
+    let rest = line.trim_start().strip_prefix(".SHELLFLAGS")?.trim_start();
+    let (operator, argument) = ASSIGNMENTS
+        .iter()
+        .find_map(|operator| rest.strip_prefix(operator).map(|rest| (*operator, rest)))?;
+    Some((
+        operator,
+        argument.split('#').next().unwrap_or_default().trim(),
+    ))
+}
+
+/// Fold one assignment into the value so far, as Make defines the operators.
+///
+/// `+=` appends to what is there, `?=` assigns only when unset, and the rest
+/// replace. Folding in file order is what makes the last assignment the one
+/// that counts.
+fn apply_assignment(value: Option<String>, assignment: (&str, &str)) -> Option<String> {
+    let (operator, argument) = assignment;
+    match operator {
+        "+=" => Some(match value {
+            Some(existing) if existing.is_empty() => argument.to_owned(),
+            Some(existing) => format!("{existing} {argument}"),
+            None => argument.to_owned(),
+        }),
+        "?=" => value.or_else(|| Some(argument.to_owned())),
+        _ => Some(argument.to_owned()),
+    }
 }
 
 /// Return whether the shell Make runs a recipe in aborts on the first failure.
