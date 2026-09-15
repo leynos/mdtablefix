@@ -54,14 +54,17 @@ fn wrap_text_preserves_inline_footnote_references(#[case] marker: &str) {
     );
 }
 
-/// Confirms the inline-classification instrumentation is reachable through the
-/// public `wrap_text` API, not just via the internal helpers exercised in
-/// `src/wrap`, which attach an observer themselves. The unit tests construct a
-/// `TracingObserver` directly; this test asserts that `wrap_preserving_code`
-/// really does wire that adapter into the production path, so the observer
-/// boundary cannot be left unattached without a test noticing. Drives a
-/// footnote reference through the wrapping pipeline and asserts the DEBUG
-/// `fragment classified` event fires with the `FootnoteRef` kind.
+/// Confirms the inline-classification instrumentation survives the crate
+/// boundary.
+///
+/// `wrap/wiring_tracing_tests.rs` already drives the public entry point with a
+/// subscriber installed, so it, not this test, is what catches the adapter
+/// being unwired from the production path. This test adds the two things that
+/// one cannot: it runs from a separate crate, reaching `wrap_text` only through
+/// the published API, and it pins the `kind` field's value rather than just the
+/// event message, so a fragment misclassified as `Plain` fails here. It is also
+/// the only traced test outside the library crate, which is what the
+/// `no-env-filter` feature on `tracing-test` exists to serve.
 #[traced_test]
 #[test]
 fn wrap_text_emits_fragment_classification_for_footnote_reference() {
