@@ -6,14 +6,24 @@ use super::OpenFence;
 pub(super) fn char_at(chars: &[char], index: usize) -> Option<char> { chars.get(index).copied() }
 
 /// Reports whether every scalar is whitespace.
-pub(super) fn is_blank(chars: &[char]) -> bool {
-    chars.iter().all(|character| character.is_whitespace())
+pub(super) fn is_blank(chars: &[char]) -> bool { is_blank_from(chars, 0) }
+
+/// Reports whether the remaining scalars are Markdown indentation whitespace.
+pub(super) fn is_blank_from(chars: &[char], start: usize) -> bool {
+    let mut cursor = start;
+    while cursor < chars.len() {
+        if !is_markdown_whitespace(chars[cursor]) {
+            return false;
+        }
+        cursor += 1;
+    }
+    true
 }
 
 /// Finds the range after leading and trailing whitespace.
 pub(super) fn trimmed_range(chars: &[char], start: usize) -> (usize, usize) {
     let mut first = start;
-    while char_at(chars, first).is_some_and(char::is_whitespace) {
+    while char_at(chars, first).is_some_and(is_markdown_whitespace) {
         first += 1;
     }
     trim_range(chars, first, chars.len())
@@ -22,11 +32,11 @@ pub(super) fn trimmed_range(chars: &[char], start: usize) -> (usize, usize) {
 /// Trims whitespace inside an already-bounded scalar range.
 pub(super) fn trim_range(chars: &[char], start: usize, end: usize) -> (usize, usize) {
     let mut first = start;
-    while first < end && chars[first].is_whitespace() {
+    while first < end && is_markdown_whitespace(chars[first]) {
         first += 1;
     }
     let mut last = end;
-    while last > first && chars[last - 1].is_whitespace() {
+    while last > first && is_markdown_whitespace(chars[last - 1]) {
         last -= 1;
     }
     (first, last)
@@ -51,7 +61,9 @@ pub(super) fn is_closing_fence(chars: &[char], start: usize, open: OpenFence) ->
 pub(super) fn is_atx_heading(chars: &[char], start: usize) -> bool {
     let (first, end) = trimmed_range(chars, start);
     let hashes = marker_run_len(chars, first, end, '#');
-    hashes > 0 && hashes <= 6 && (first + hashes == end || chars[first + hashes].is_whitespace())
+    hashes > 0
+        && hashes <= 6
+        && (first + hashes == end || is_markdown_whitespace(chars[first + hashes]))
 }
 
 /// Reports whether every pipe-separated cell has table delimiter grammar.
@@ -106,7 +118,7 @@ pub(super) fn is_thematic_break(chars: &[char], start: usize) -> bool {
 pub(super) fn is_list_item(chars: &[char], start: usize) -> bool {
     let (first, end) = trimmed_range(chars, start);
     match char_at(chars, first) {
-        Some('-' | '*' | '+') => char_at(chars, first + 1).is_some_and(char::is_whitespace),
+        Some('-' | '*' | '+') => char_at(chars, first + 1).is_some_and(is_markdown_whitespace),
         Some(digit) if digit.is_ascii_digit() => ordered_list_item(chars, first + 1, end),
         _ => false,
     }
@@ -120,6 +132,9 @@ fn marker_run_len(chars: &[char], start: usize, end: usize, marker: char) -> usi
     }
     cursor - start
 }
+
+/// Reports whether a scalar is Markdown's space or tab indentation whitespace.
+fn is_markdown_whitespace(character: char) -> bool { matches!(character, ' ' | '\t') }
 
 /// Reports whether a scalar range contains the target character.
 fn contains(chars: &[char], start: usize, end: usize, target: char) -> bool {
@@ -175,7 +190,7 @@ fn is_table_delimiter_cell(chars: &[char], start: usize, end: usize) -> bool {
 fn ordered_list_item(chars: &[char], mut cursor: usize, end: usize) -> bool {
     while cursor < end {
         match chars[cursor] {
-            '.' | ')' => return char_at(chars, cursor + 1).is_some_and(char::is_whitespace),
+            '.' | ')' => return char_at(chars, cursor + 1).is_some_and(is_markdown_whitespace),
             character if character.is_ascii_digit() => cursor += 1,
             _ => return false,
         }

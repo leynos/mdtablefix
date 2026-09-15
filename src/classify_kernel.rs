@@ -12,6 +12,7 @@ use predicates::{
     char_at,
     is_atx_heading,
     is_blank,
+    is_blank_from,
     is_closing_fence,
     is_fence_marker,
     is_list_item,
@@ -115,16 +116,15 @@ pub(crate) struct KernelClassification {
 /// Classifies one character sequence using the shared structural precedence.
 #[must_use]
 pub(crate) fn classify_seq(chars: &[char], ctx: &ClassifyCtxKernel) -> KernelClassification {
-    if is_blank(chars) {
-        return classified(LineClass::Blank, indentation_at(chars, 0).1);
-    }
-
     let (body_start, is_literal) = line_parts(chars);
-    if is_literal {
-        return classified(LineClass::Literal, body_start);
-    }
     if ctx.is_in_fence {
         return classify_within_fence(chars, body_start, ctx);
+    }
+    if is_blank(chars) || is_blank_from(chars, body_start) {
+        return classified(LineClass::Blank, body_start);
+    }
+    if is_literal {
+        return classified(LineClass::Literal, body_start);
     }
     classify_open_text(chars, body_start, ctx)
 }
@@ -187,28 +187,31 @@ fn classified(class: LineClass, body_start: usize) -> KernelClassification {
 
 /// Locates the structural body and determines whether it is indented code.
 fn line_parts(chars: &[char]) -> (usize, bool) {
-    let (outer_width, mut cursor) = indentation_at(chars, 0);
+    let (outer_width, mut cursor) = indentation_at(chars, 0, 0);
     if outer_width >= 4 {
         return (0, true);
     }
 
+    let mut column = outer_width;
     loop {
-        let (indent_width, after_indent) = indentation_at(chars, cursor);
+        let (indent_width, after_indent) = indentation_at(chars, cursor, column);
         if indent_width >= 4 || char_at(chars, after_indent) != Some('>') {
             break;
         }
         cursor = after_indent + 1;
+        column += indent_width + 1;
         if char_at(chars, cursor) == Some(' ') {
             cursor += 1;
+            column += 1;
         }
     }
 
-    let (content_indent, _) = indentation_at(chars, cursor);
+    let (content_indent, _) = indentation_at(chars, cursor, column);
     (cursor, content_indent >= 4)
 }
 
 /// Measures indentation columns and the following scalar offset from `start`.
-fn indentation_at(chars: &[char], start: usize) -> (usize, usize) {
+fn indentation_at(chars: &[char], start: usize, column: usize) -> (usize, usize) {
     let mut width = 0;
     let mut cursor = start;
     while let Some(character) = char_at(chars, cursor) {
@@ -218,7 +221,7 @@ fn indentation_at(chars: &[char], start: usize) -> (usize, usize) {
                 cursor += 1;
             }
             '\t' => {
-                width += 4;
+                width += 4 - ((column + width) % 4);
                 cursor += 1;
             }
             _ => break,

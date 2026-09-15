@@ -10,6 +10,7 @@ fn classify(line: &str, ctx: &ClassifyCtxKernel) -> LineClass {
     classify_seq(&line.chars().collect::<Vec<_>>(), ctx).class
 }
 
+/// Checks representative structural classes and close grammar boundaries.
 #[rstest]
 #[case("2024 revenue", LineClass::ParagraphText)]
 #[case("# heading", LineClass::AtxHeading)]
@@ -21,18 +22,21 @@ fn classify(line: &str, ctx: &ClassifyCtxKernel) -> LineClass {
 #[case("___", LineClass::ThematicBreak)]
 #[case("- item", LineClass::ListItem)]
 #[case("   ", LineClass::Blank)]
+#[case(">", LineClass::Blank)]
+#[case(">   ", LineClass::Blank)]
 #[case("    code", LineClass::Literal)]
 #[case("\t_\t_\t_\t", LineClass::Literal)]
 #[case(">     > code", LineClass::Literal)]
-/// Checks representative structural classes and close grammar boundaries.
+#[case("> \ttext", LineClass::ParagraphText)]
+#[case("\u{00a0}", LineClass::ParagraphText)]
 fn classifies_structural_lines(#[case] line: &str, #[case] expected: LineClass) {
     assert_eq!(classify(line, &ClassifyCtxKernel::default()), expected);
 }
 
+/// Checks that Setext classification requires prefix agreement.
 #[rstest]
 #[case(true, LineClass::SetextUnderline)]
 #[case(false, LineClass::ThematicBreak)]
-/// Checks that Setext classification requires prefix agreement.
 fn classifies_setext_according_to_prefix_agreement(
     #[case] prefix_agrees: bool,
     #[case] expected: LineClass,
@@ -42,11 +46,12 @@ fn classifies_setext_according_to_prefix_agreement(
     assert_eq!(classify("---", &context), expected);
 }
 
+/// Checks matching and non-matching fence contents against open-fence state.
 #[rstest]
 #[case("```", LineClass::FenceMarker)]
 #[case("``", LineClass::Literal)]
 #[case("~~~", LineClass::Literal)]
-/// Checks matching and non-matching fence contents against open-fence state.
+#[case("", LineClass::Literal)]
 fn classifies_lines_inside_an_open_fence(#[case] line: &str, #[case] expected: LineClass) {
     let context = ClassifyCtxKernel::in_fence(OpenFence::new('`', 3));
 
@@ -54,8 +59,8 @@ fn classifies_lines_inside_an_open_fence(#[case] line: &str, #[case] expected: L
 }
 
 proptest! {
-    #[test]
     /// Keeps every scalar body offset inside its input sequence.
+    #[test]
     fn body_start_stays_within_its_character_sequence(chars in prop::collection::vec(any::<char>(), 0..128)) {
         let classified = classify_seq(&chars, &ClassifyCtxKernel::default());
 
