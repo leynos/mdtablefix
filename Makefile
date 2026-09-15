@@ -28,6 +28,10 @@ test: ## Run tests with warnings treated as errors
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
 
+# `CLIPPY_FLAGS` carries `--workspace`, so this one invocation lints every
+# member, `test-macros` included, in its own right rather than as a capped
+# dependency. Issue #439 made the two packages one workspace and retired the
+# second, `--manifest-path` invocation this recipe used to carry.
 lint: check-static-regexes check-verification-ledger ## Run Clippy with warnings denied
 	$(CARGO) clippy $(CLIPPY_FLAGS)
 
