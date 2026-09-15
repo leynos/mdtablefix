@@ -258,6 +258,87 @@ fn clippy_gate_denies_warnings_across_targets_and_features() -> Result<()> {
     Ok(())
 }
 
+/// Assignment operators Make recognises, longest first so `::=` is not read as
+/// `:=`, nor `:=` as `=`.
+const ASSIGNMENTS: [&str; 5] = ["::=", ":=", "+=", "?=", "="];
+
+/// Return the effective value of `.SHELLFLAGS`, or `None` if it is never set.
+///
+/// Two things a prefix search got wrong, both of which let `.ONESHELL` mask a
+/// failing Clippy command while this contract stayed green. `.SHELLFLAGS_NOTE`
+/// begins with the variable's name and is an ordinary variable that says
+/// nothing about the shell; and Make's later assignment wins, so an earlier
+/// `.SHELLFLAGS = -e -c` followed by `.SHELLFLAGS = -c` leaves no `-e` in the
+/// shell Make actually runs. The name is therefore matched exactly and the
+/// assignments are folded in file order.
+///
+/// `+=` appends to what is there and `?=` assigns only when unset, as Make
+/// defines them. A tab makes a line a recipe line rather than an assignment, so
+/// those are skipped; a trailing comment is not part of the value. Line
+/// continuations are not joined, which would understate a value split across
+/// lines rather than overstate it.
+fn effective_shellflags(makefile: &str) -> Option<String> {
+    let mut value: Option<String> = None;
+    for line in makefile.lines() {
+        if line.starts_with('\t') {
+            continue;
+        }
+        let Some(rest) = line.trim_start().strip_prefix(".SHELLFLAGS") else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some((operator, argument)) = ASSIGNMENTS
+            .iter()
+            .find_map(|operator| rest.strip_prefix(operator).map(|rest| (*operator, rest)))
+        else {
+            continue;
+        };
+        let argument = argument.split('#').next().unwrap_or_default().trim();
+        value = match operator {
+            "+=" => Some(match value {
+                Some(existing) if existing.is_empty() => argument.to_owned(),
+                Some(existing) => format!("{existing} {argument}"),
+                None => argument.to_owned(),
+            }),
+            "?=" => value.or_else(|| Some(argument.to_owned())),
+            _ => Some(argument.to_owned()),
+        };
+    }
+    value
+}
+
+/// Return whether the shell Make runs a recipe in aborts on the first failure.
+///
+/// Judged on the value Make ends up with. Make's default `.SHELLFLAGS` is
+/// `-c`, so an unset variable is not an aborting shell.
+///
+/// `-e` is not the only spelling. A single-dash bundle carries each of its
+/// letters as a separate option, so `-eo pipefail -c` sets `errexit` as surely
+/// as `-e -c` does, and that bundle is the form this estate's Makefiles use.
+/// `-o errexit` sets it by name. Comparing whole tokens to `-e` called the
+/// bundle non-aborting, which would fail a Makefile that is correct: a contract
+/// wrong in that direction gets deleted rather than obeyed.
+fn aborts_on_error(flags: &str) -> bool {
+    let tokens: Vec<&str> = flags.split_whitespace().collect();
+    tokens.iter().enumerate().any(|(index, token)| {
+        if let Some(letters) = token.strip_prefix('-') {
+            if letters.starts_with('-') {
+                return false;
+            }
+            if letters == "o" {
+                return tokens.get(index + 1) == Some(&"errexit");
+            }
+            return letters.contains('e');
+        }
+        false
+    })
+}
+
+/// Return whether the Makefile's effective `.SHELLFLAGS` abort on failure.
+fn shell_aborts_on_error(makefile: &str) -> bool {
+    effective_shellflags(makefile).is_some_and(|flags| aborts_on_error(&flags))
+}
+
 /// Scenario: the `lint` recipe is judged for whether a failing Clippy command
 /// could be reported as success.
 /// Invariant: nothing between each Clippy command and Make swallows its exit
@@ -276,17 +357,20 @@ fn clippy_gate_denies_warnings_across_targets_and_features() -> Result<()> {
 /// tree exited 0 under each of `.ONESHELL:`, a `-` prefix, `|| true`, and a
 /// pipe into `tail`, which is the class of regression this test exists to
 /// catch.
+///
+/// The `.SHELLFLAGS` half of the guard is decided by
+/// [`shell_aborts_on_error`], whose own cases are in
+/// `tests/env_access_policy/shell_flags.rs`. It reads the effective value
+/// rather than searching the file for a line carrying `-e`: a prefix match
+/// accepted `.SHELLFLAGS_NOTE`, and a search over every assignment accepted a
+/// value that a later assignment had already replaced.
 #[test]
 fn no_construct_can_mask_a_failing_clippy_command() -> Result<()> {
     let one_shell = MAKEFILE
         .lines()
         .any(|line| line.trim_start().starts_with(".ONESHELL:"));
-    let errors_abort = MAKEFILE
-        .lines()
-        .filter_map(|line| line.strip_prefix(".SHELLFLAGS"))
-        .any(|flags| flags.split_whitespace().any(|flag| flag == "-e"));
     ensure!(
-        !one_shell || errors_abort,
+        !one_shell || shell_aborts_on_error(MAKEFILE),
         concat!(
             ".ONESHELL puts the whole recipe in one shell, where only the last command's ",
             "status is reported; pair it with -e in .SHELLFLAGS, or give every Clippy command ",
@@ -303,3 +387,9 @@ fn no_construct_can_mask_a_failing_clippy_command() -> Result<()> {
     }
     Ok(())
 }
+
+// The fixture cases for `.SHELLFLAGS` live in their own file, per the
+// repository's 400-line cap. The path is relative to this file's own
+// directory, `tests/`.
+#[path = "env_access_policy/shell_flags.rs"]
+mod shell_flags;
