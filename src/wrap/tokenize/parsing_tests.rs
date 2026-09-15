@@ -294,6 +294,18 @@ mod tracing_tests {
 
     #[traced_test]
     #[test]
+    fn find_footnote_end_logs_label_span_recognized() {
+        let mut observer = TracingObserver;
+        let _ = find_footnote_end("[^4] tail", 0, &mut Some(&mut observer));
+        assert!(logs_contain("footnote label span recognized"));
+        assert!(logs_contain("start=0"));
+        assert!(logs_contain("end=4"));
+        assert!(logs_contain("token_length=4"));
+        assert!(!logs_contain("[^4]"));
+    }
+
+    #[traced_test]
+    #[test]
     fn find_footnote_end_logs_unterminated_bracket() {
         let mut observer = TracingObserver;
         let _ = find_footnote_end("[^unterminated", 0, &mut Some(&mut observer));

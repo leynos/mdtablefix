@@ -2,6 +2,8 @@
 
 use mdtablefix::wrap::wrap_text;
 use rstest::rstest;
+// Wrapper over `tracing_test::traced_test`; see `test_macros` for why.
+use test_macros::traced_test;
 
 /// Keep the pre-split snapshot layout: file names live in `tests/snapshots/`
 /// and use the legacy `wrap_unit__<name>` prefix without the module
@@ -50,6 +52,28 @@ fn wrap_text_preserves_inline_footnote_references(#[case] marker: &str) {
             .iter()
             .any(|line| line.contains(&format!(".{marker}")))
     );
+}
+
+/// Confirms the inline-classification instrumentation survives the crate
+/// boundary.
+///
+/// `wrap/wiring_tracing_tests.rs` already drives the public entry point with a
+/// subscriber installed, so it, not this test, is what catches the adapter
+/// being unwired from the production path. This test adds the two things that
+/// one cannot: it runs from a separate crate, reaching `wrap_text` only through
+/// the published API, and it pins the `kind` field's value rather than just the
+/// event message, so a fragment misclassified as `Plain` fails here. It is also
+/// the only traced test outside the library crate, which is what the
+/// `no-env-filter` feature on `tracing-test` exists to serve.
+#[traced_test]
+#[test]
+fn wrap_text_emits_fragment_classification_for_footnote_reference() {
+    let input = lines_vec!["Some text.[^1]"];
+
+    let _ = wrap_text(&input, 80);
+
+    assert!(logs_contain("fragment classified"));
+    assert!(logs_contain("kind=FootnoteRef"));
 }
 
 #[test]
