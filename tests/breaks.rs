@@ -62,12 +62,13 @@ fn test_format_breaks_with_spaces_and_indent() {
     assert_borrowed_break!(output[0]);
 }
 
+/// Leaves a tab-prefixed apparent break untouched as indented code.
 #[test]
-fn test_format_breaks_with_tabs_and_underscores() {
+fn leaves_tab_prefixed_break_as_indented_code() {
     let input = lines_vec!["\t_\t_\t_\t"];
     let output = format_breaks(&input);
 
-    assert_borrowed_break!(output[0]);
+    assert_borrowed_value!(output[0], "\t_\t_\t_\t");
 }
 
 #[test]
