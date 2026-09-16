@@ -21,6 +21,8 @@ fn classify(line: &str, ctx: &ClassifyCtxKernel) -> LineClass {
 #[case("```rust", LineClass::FenceMarker)]
 #[case("___", LineClass::ThematicBreak)]
 #[case("- item", LineClass::ListItem)]
+#[case("123456789. item", LineClass::ListItem)]
+#[case("1234567890. item", LineClass::ParagraphText)]
 #[case("   ", LineClass::Blank)]
 #[case(">", LineClass::Blank)]
 #[case(">   ", LineClass::Blank)]
@@ -52,6 +54,7 @@ fn classifies_setext_according_to_prefix_agreement(
 #[case("``", LineClass::Literal)]
 #[case("~~~", LineClass::Literal)]
 #[case("", LineClass::Literal)]
+#[case("    ```", LineClass::Literal)]
 fn classifies_lines_inside_an_open_fence(#[case] line: &str, #[case] expected: LineClass) {
     let context = ClassifyCtxKernel::in_fence(OpenFence::new('`', 3));
 

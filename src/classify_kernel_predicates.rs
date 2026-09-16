@@ -220,10 +220,12 @@ fn is_table_delimiter_cell(chars: &[char], start: usize, end: usize) -> bool {
 /// Reports whether a digit run closes with ordered-list punctuation and space.
 #[cfg_attr(verus_keep_ghost, verifier::external_body)]
 fn ordered_list_item(chars: &[char], mut cursor: usize, end: usize) -> bool {
+    let mut digit_count = 1;
     while cursor < end {
         match chars[cursor] {
             '.' | ')' => return matches!(char_at(chars, cursor + 1), Some(' ' | '\t')),
-            '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => {
+            '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' if digit_count < 9 => {
+                digit_count += 1;
                 cursor += 1;
             }
             _ => return false,

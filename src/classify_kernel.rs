@@ -160,6 +160,9 @@ ensures(result => true);
 {
     let (body_start, is_literal) = line_parts(chars);
     if ctx.is_in_fence {
+        if is_literal {
+            return classified(LineClass::Literal, body_start);
+        }
         return classify_within_fence(chars, body_start, ctx);
     }
     if is_blank(chars) || is_blank_from(chars, body_start) {

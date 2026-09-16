@@ -24,9 +24,6 @@ production scanner and its consumers remain the source of truth. No
 | Claim | Executable function | Input domain | Unverified external contracts | Result class |
 | ----- | ------------------- | ------------ | ----------------------------- | ------------ |
 
-<!-- markdownlint-disable MD013 -->
-<!-- markdownlint-enable MD013 -->
-
 _Table 1: The verification claim ledger._
 
 ## Policy

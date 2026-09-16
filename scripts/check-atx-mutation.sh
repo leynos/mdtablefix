@@ -14,9 +14,11 @@ trap cleanup EXIT
 
 sed "s/\.push('#')\.push(' ')/.push('#')/" "${repo_root}/verus/lib.rs" > "${proof_file}"
 
-if env -u RUSTUP_TOOLCHAIN \
-    uvx --from "git+https://github.com/leynos/rust-prover-tools@$(cat "${repo_root}/tools/rust-prover-tools/REF")" \
-    prover-tools verus run --repo-root "${repo_root}" --proof-file "${proof_file}" > "${output_file}" 2>&1; then
+# `PROVER_TOOLS` deliberately carries a command and its fixed arguments, as it
+# does in the Makefile. Its expansion must therefore remain unquoted here.
+# shellcheck disable=SC2086
+if env -u RUSTUP_TOOLCHAIN ${PROVER_TOOLS:?PROVER_TOOLS must be set} verus run \
+    --repo-root "${repo_root}" --proof-file "${proof_file}" > "${output_file}" 2>&1; then
     cat "${output_file}"
     echo "ATX mutation unexpectedly verified" >&2
     exit 1
