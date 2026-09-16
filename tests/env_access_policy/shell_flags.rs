@@ -9,7 +9,7 @@
 use anyhow::{Result, ensure};
 use rstest::rstest;
 
-use super::{aborts_on_error, effective_shellflags, shell_aborts_on_error};
+use super::{aborts_on_error, declares_one_shell, effective_shellflags, shell_aborts_on_error};
 
 /// Scenario: a Makefile that puts its whole recipe in one shell is read for
 /// whether that shell aborts on the first failure.
@@ -82,6 +82,38 @@ fn errexit_counts_however_it_is_spelled(#[case] flags: &str, #[case] aborts: boo
     ensure!(
         aborts_on_error(flags) == aborts,
         "expected aborts={aborts} for {flags:?}"
+    );
+    Ok(())
+}
+
+/// Scenario: a Makefile is read for whether it declares `.ONESHELL`.
+///
+/// Invariant: the declaration is recognised however Make would parse it, and
+/// nothing else is. Make separates a target from its colon with optional
+/// whitespace, so `.ONESHELL :` puts the recipe in one shell just as
+/// `.ONESHELL:` does; a test for the two characters together reads the spaced
+/// spelling as an ordinary line and skips the `.SHELLFLAGS` guard entirely.
+///
+/// Mutation proof (2026-09-15), each applied alone to [`declares_one_shell`]
+/// and reverted: restoring `starts_with(".ONESHELL:")` fails `spaced_colon`
+/// and `tab_before_colon`; dropping the colon test altogether, so any line
+/// beginning with the name counts, fails `similarly_named_variable`.
+#[rstest]
+#[case::absent("lint:\n\tcargo clippy\n", false)]
+#[case::plain(".ONESHELL:\n", true)]
+#[case::spaced_colon(".ONESHELL :\n", true)]
+#[case::tab_before_colon(".ONESHELL\t:\n", true)]
+#[case::indented("  .ONESHELL:\n", true)]
+#[case::with_a_prerequisite(".ONESHELL: lint\n", true)]
+#[case::similarly_named_variable(".ONESHELL_NOTE := not a declaration\n", false)]
+#[case::mentioned_in_a_comment("# .ONESHELL would go here\n", false)]
+fn one_shell_is_recognised_however_make_would_parse_it(
+    #[case] makefile: &str,
+    #[case] declared: bool,
+) -> Result<()> {
+    ensure!(
+        declares_one_shell(makefile) == declared,
+        "expected declared={declared} for {makefile:?}"
     );
     Ok(())
 }

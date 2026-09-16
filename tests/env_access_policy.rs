@@ -353,6 +353,26 @@ fn shell_aborts_on_error(makefile: &str) -> bool {
     effective_shellflags(makefile).is_some_and(|flags| aborts_on_error(&flags))
 }
 
+/// Return whether the Makefile declares the `.ONESHELL` special target.
+///
+/// Make parses `.ONESHELL` as a target, and a target may be separated from its
+/// colon by whitespace, so `.ONESHELL :` enables one-shell recipes exactly as
+/// `.ONESHELL:` does. The name and the colon are therefore matched separately.
+/// A test for the two characters together reads the spaced spelling as an
+/// ordinary line, leaves the `.SHELLFLAGS` guard unasked, and lets a failing
+/// Clippy command be masked by a later successful one: the whole of what this
+/// guard exists to prevent.
+///
+/// A line that merely begins with the name is not a declaration, so
+/// `.ONESHELL_NOTE := ...` reads as the ordinary variable it is.
+fn declares_one_shell(makefile: &str) -> bool {
+    makefile.lines().any(|line| {
+        line.trim_start()
+            .strip_prefix(".ONESHELL")
+            .is_some_and(|rest| rest.trim_start().starts_with(':'))
+    })
+}
+
 /// Scenario: the `lint` recipe is judged for whether a failing Clippy command
 /// could be reported as success.
 /// Invariant: nothing between each Clippy command and Make swallows its exit
@@ -380,9 +400,7 @@ fn shell_aborts_on_error(makefile: &str) -> bool {
 /// value that a later assignment had already replaced.
 #[test]
 fn no_construct_can_mask_a_failing_clippy_command() -> Result<()> {
-    let one_shell = MAKEFILE
-        .lines()
-        .any(|line| line.trim_start().starts_with(".ONESHELL:"));
+    let one_shell = declares_one_shell(MAKEFILE);
     ensure!(
         !one_shell || shell_aborts_on_error(MAKEFILE),
         concat!(

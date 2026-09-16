@@ -138,9 +138,9 @@ variable or one precedence ladder.
 A direct read is permitted only at a genuine executable composition root: in
 the application, `main` or a function it calls directly to assemble the
 command-line tool; in the test suite, the two harness roots named under
-[Build child environments explicitly](#build-child-environments-explicitly),
-each of which is a composition root for the same reason, having no caller in
-this repository to take the value as an argument from. Such a site carries
+[Prohibit ambient access](#prohibit-ambient-access), each of which is a
+composition root for the same reason, having no caller in this repository to
+take the value as an argument from. Such a site carries
 `#[expect(clippy::disallowed_methods, reason = "...")]` on the item, never
 `allow` and never a module- or crate-wide suppression. `expect` is deliberate:
 once the site is migrated to a seam, the expectation goes unfulfilled and warns,

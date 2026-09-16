@@ -1497,8 +1497,17 @@ than at a list of source directories and skips only `target` and dotted
 directories, so a build script, bench, example or second binary added outside
 `src`, `tests` and `test-macros/src` is scanned like anything else, whether or
 not Cargo compiles it. An
-item-scoped `#[expect]` carrying a reason is left alone, since that is the
-sanctioned form.
+item-scoped `#[expect]` carrying a reason is left alone at a sanctioned
+composition root, and nowhere else. The scan matches the source path and the
+enclosing item against `SANCTIONED_ROOTS` in
+`tests/support/allow_scan/roots.rs`, which currently names
+`write_failure_child` in `tests/rewrite_atomic.rs` and `ambient_variable` in
+`tests/support/idempotence_harness.rs`. The same attribute on any other item
+is an offence, because exempting every item-scoped `expect` would honour the
+attribute rather than the rule: a contributor could write it on any function
+and read the environment beneath it. Adding a root is a policy decision, so it
+goes in the allowlist, in ADR-0012 and in this section together, with the
+argument for why that site can have no seam.
 
 Two shapes are refused structurally, neither being a complete attribute where
 it is written. A `macro_rules!` arm that forwards the attribute's *path*
