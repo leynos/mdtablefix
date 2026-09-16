@@ -39,8 +39,8 @@ the only CLI-only transform and runs after that pipeline.
 The normalization-before-layout order is recorded in
 [`ADR 0006`](adrs/0006-single-pass-idempotence.md). Inline footnotes, table
 substitutions, list markers, and ellipsis run before the passes that measure
-their text, so layout measures final content; only the footnote-definition
-fold runs after the wrap, appending lines to the settled block structure.
+their text, so layout measures final content; only the footnote-definition fold
+runs after the wrap, appending lines to the settled block structure.
 
 When working in this area:
 
@@ -77,26 +77,25 @@ The verification harness is maintained by the same contributors who maintain
 the formatter. The pinned release in `tools/verus/VERSION` is checked against
 the artifact checksums in `tools/verus/SHA256SUMS`;
 `tools/rust-prover-tools/REF` pins the `rust-prover-tools` revision that
-installs and runs it. The local
-prerequisites are `uvx` and `rustup`. The default `PROVER_TOOLS` command uses
-`uvx` to fetch the pinned runner, while `VERUS_RUN` selects the runner's Verus
-execution command. Both variables can be overridden when diagnosing a local
-tooling issue or using a prepared environment.
+installs and runs it. The local prerequisites are `uvx` and `rustup`. The
+default `PROVER_TOOLS` command uses `uvx` to fetch the pinned runner, while
+`VERUS_RUN` selects the runner's Verus execution command. Both variables can be
+overridden when diagnosing a local tooling issue or using a prepared
+environment.
 
 Run `make verus-install` to resolve the pinned runner, install the matching
-Verus release and Rust toolchain, and populate the repository's `.verus`
-cache. `make verus` then verifies `verus/lib.rs`, the proof entry point for
+Verus release and Rust toolchain, and populate the repository's `.verus` cache.
+`make verus` then verifies `verus/lib.rs`, the proof entry point for
 production-used kernels. `make verus-selftest` runs `verus/smoke.rs`, whose
 deliberately false assertion must be rejected; it also fails when the runner
 does not reach Verus, so a skipped verifier cannot pass the check.
 
 The pull-request workflow runs both targets on Ubuntu. It caches the
 version-specific `.verus` directory using the runner operating system,
-architecture, and pinned Verus version, then executes the same Makefile
-targets used locally. The [verification ledger](verification.md) records each
-claim and its trusted boundary;
-[ADR 0011](adrs/0011-verified-normalization-core.md) documents why the proof
-scope remains a narrow production-used core.
+architecture, and pinned Verus version, then executes the same Makefile targets
+used locally. The [verification ledger](verification.md) records each claim and
+its trusted boundary; [ADR 0011](adrs/0011-verified-normalization-core.md)
+documents why the proof scope remains a narrow production-used core.
 
 ## Internal API reference
 
@@ -543,8 +542,8 @@ selected for the branch.
   only the opening delimiter and emits every interior line verbatim. The
   preserved-delimiter rule above applies to both, so an unclosed block whose
   interior holds a fence-shaped line also keeps its original outer delimiter
-  width and marker family. Lines that are not fence delimiters at all are
-  still emitted with their stateless compressed rewrite, which is a no-op for
+  width and marker family. Lines that are not fence delimiters at all are still
+  emitted with their stateless compressed rewrite, which is a no-op for
   non-fence lines.
 - `attach_orphan_specifiers(lines: &[String]) -> Vec<String>` attaches a lone
   language identifier line to the following unlabelled fence, but only when the
@@ -676,20 +675,19 @@ depth-aware tracking.
    opener or prefix at the end of a line. `try_couple_inline_link_after_opener`
    applies the same rule to parenthesized inline citation links such as
    `([1](url))`, grouping the opener and link as one `SpanKind::Link` so
-   adjacent citations like `([1](url))([2](url2))` do not split at the
-   boundary. `looks_like_bracketed_reference` recognizes the tokenizer's split
-   closing half `1]` as well as the merged `[1]`; only ASCII digits qualify, so
-   the predicate stays disjoint from `looks_like_link` and
+   adjacent citations like `([1](url))([2](url2))` do not split at the boundary.
+   `looks_like_bracketed_reference` recognizes the tokenizer's split closing
+   half `1]` as well as the merged `[1]`; only ASCII digits qualify, so the
+   predicate stays disjoint from `looks_like_link` and
    `looks_like_footnote_ref`. `try_couple_bracketed_reference` couples an
    opening bracket to its reference and absorbs trailing punctuation.
    `SpanKind::BracketedRef` and `FragmentKind::BracketedRef` keep the merged
    span atomic during fitting and post-processing, so the opening bracket
-   cannot be stranded at a line end.
-   At the tokenizer level, `segment_inline` also stops
-   trailing-punctuation and plain-text scans at an unescaped `([` boundary via
-   `scan_trailing_punctuation_end` and `scan_plain_text_end`, both using
-   `starts_inline_citation`, so the citation opener `(` is emitted as its own
-   token instead of being swallowed into the preceding token's punctuation
+   cannot be stranded at a line end. At the tokenizer level, `segment_inline`
+   also stops trailing-punctuation and plain-text scans at an unescaped `([`
+   boundary via `scan_trailing_punctuation_end` and `scan_plain_text_end`, both
+   using `starts_inline_citation`, so the citation opener `(` is emitted as its
+   own token instead of being swallowed into the preceding token's punctuation
    cluster. That boundary gives `determine_token_span` and
    `try_couple_inline_link_after_opener` a clean opener token to couple with
    the following inline link, making the full `([n](url))` span atomic, while
@@ -1273,11 +1271,11 @@ variants have the following effects:
 - `Preserve` retains the original marker character and run length when an
   interior fence would otherwise become structural.
 
-All fence-marker rewriting must dispatch on `Strategy` through `rewrite_marker`.
-Both `flush_matched_block` and `flush_unmatched_block` select the strategy from
-whether the block has a conflicting interior fence, while `rewrite_fence_line`
-only dispatches the chosen strategy and falls back to the original line when
-the line is not a normalization-compatible delimiter.
+All fence-marker rewriting must dispatch on `Strategy` through
+`rewrite_marker`. Both `flush_matched_block` and `flush_unmatched_block` select
+the strategy from whether the block has a conflicting interior fence, while
+`rewrite_fence_line` only dispatches the chosen strategy and falls back to the
+original line when the line is not a normalization-compatible delimiter.
 
 ### Architecture
 

@@ -289,8 +289,8 @@ Conversion runs in three stages, and the order is part of the behaviour. Bare
 numeric references are rewritten first, and both references and definition
 headers are then renumbered in the order readers meet them, so `[^10]` becomes
 `[^1]`. Because those rewrites change the length of the line, they run before
-the table reflow and the paragraph wrap measure it, so a single pass settles.
-A numbered item in the final list is folded into a definition in the same early
+the table reflow and the paragraph wrap measure it, so a single pass settles. A
+numbered item in the final list is folded into a definition in the same early
 stage when a reference points at it, because the two are matched by the number
 they share. Folding the rest of the final list, and reordering the definition
 block, runs last, after the layout, because both read the document's settled
@@ -311,8 +311,8 @@ after reflow.
 A row is a delimiter row only when every cell consists of an optional leading
 colon, one or more dashes, and an optional trailing colon. A row of pipes and
 spaces (`|  |  |`), a lone dash among empty cells (`|  | - |`), `| - - |`, and
-`| :- : |` are therefore ordinary rows, not alignment rows. This is what keeps a
-table with an empty header row from being restructured, and the same rule is
+`| :- : |` are therefore ordinary rows, not alignment rows. This is what keeps
+a table with an empty header row from being restructured, and the same rule is
 applied wherever the formatter looks for an alignment row.
 
 Continuation rows are preserved during reflow. When a row starts with empty
@@ -505,12 +505,12 @@ as `（` and `「`) that immediately precede an inline code span or Markdown lin
 stay coupled to that span during wrapping. This prevents a lone opener from
 being stranded at the end of a line before the code or link that follows it.
 
-A bare numeric bracket reference such as `[1]` or `[12]` is likewise unbreakable
-under `--wrap`: the opening bracket is never left stranded at the end of a line,
-the reference moves as a unit, and trailing punctuation after the closing
-bracket stays attached. The same rule applies when the reference immediately
-follows an inline code span. Only ASCII digits qualify, so a short alphabetic
-label such as `[a]` remains ordinary breakable prose.
+A bare numeric bracket reference such as `[1]` or `[12]` is likewise
+unbreakable under `--wrap`: the opening bracket is never left stranded at the
+end of a line, the reference moves as a unit, and trailing punctuation after
+the closing bracket stays attached. The same rule applies when the reference
+immediately follows an inline code span. Only ASCII digits qualify, so a short
+alphabetic label such as `[a]` remains ordinary breakable prose.
 
 Inflectional affixes and possessives that appear immediately after a closing
 inline code fence — for example `` `VarGuard`s ``, `` `class`'s ``,

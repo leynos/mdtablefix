@@ -253,8 +253,8 @@ pub fn replace_file_if_unchanged(
   composes the three stages in their required order.
 - **Who is affected:** Library consumers that call the
   `mdtablefix::footnotes` functions directly. The command-line interface is
-  unaffected, because it already runs the three stages in this order around
-  its own passes.
+  unaffected, because it already runs the three stages in this order around its
+  own passes.
 - **Migration action:** No action is required for a caller of
   `convert_footnotes`, which performs the three stages in order. A caller that
   uses the individual functions must run them in this order.

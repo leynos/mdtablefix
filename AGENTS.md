@@ -139,10 +139,13 @@ project:
   - `make check-fmt` executes:
 
     ```sh
-    cargo fmt --workspace -- --check
+    cargo fmt --all -- --check
+    mdtablefix --check --git --include-untracked --wrap --renumber --breaks --ellipsis --fences
     ```
 
-    validating formatting across the entire workspace without modifying files.
+    validating Rust formatting across the entire workspace, and Markdown
+    formatting across every tracked and untracked document, without modifying
+    files. `make fmt` applies both, then `markdownlint-cli2 --fix`.
   - `make lint` executes:
 
     ```sh

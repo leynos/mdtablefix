@@ -427,12 +427,12 @@ ADR 0006.
 The evidence is the corpus fixture `E1_bracket_after_bold_code` under
 `tests/data/idempotence/`, which is the reproduction formatted twice through
 the real binary under `--wrap` and asserted byte-identical, the
-`bracket_reference_seam_strategy` property in `tests/idempotence_properties.rs`,
-and the wrap cases in `src/wrap/tests/inline_wrapping.rs`,
-`tests/wrap_unit/stream.rs`, `tests/wrap/lists.rs` and `tests/wrap/cli.rs`.
+`bracket_reference_seam_strategy` property in
+`tests/idempotence_properties.rs`, and the wrap cases in
+`src/wrap/tests/inline_wrapping.rs`, `tests/wrap_unit/stream.rs`,
+`tests/wrap/lists.rs` and `tests/wrap/cli.rs`.
 
 The limitation that remains is the one ADR 0006 records: a short alphabetic
 label such as `[a]` is still ordinary prose the wrapper may break at, so a
-document containing one can still be reported as needing formatting again
-after an `--in-place` run. That pre-dates this fix and is tracked as
-issue #507.
+document containing one can still be reported as needing formatting again after
+an `--in-place` run. That pre-dates this fix and is tracked as issue #507.

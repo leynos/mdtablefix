@@ -145,16 +145,17 @@ text they sit on: `docs.1` grows into `docs.[^1]`, while `[^10]` narrows to
 `[^1]`, so any pass that lays a line out has to measure the final text and a
 table cell enters layout with its final footnote labels. After scanning and
 flushing those runs, the processor performs its optional post-processing steps
-for non-table content in a fixed order: Setext heading conversion, code-emphasis
-repair, ordered-list renumbering, ellipsis replacement, and paragraph wrapping,
-and finally the footnote-definition fold, which reads the settled block
-structure and appends definition lines. Table reflow and paragraph wrapping
-consume final content, so every pass that can change cell or line width runs
-first. Thematic-break normalization stays at the binary boundary because it is
-width-independent. Ellipsis replacement runs before wrapping, so line breaking
-is computed from the glyphs the reader will see. See
-[footnote conversion](#footnote-conversion) for details. The function then
-returns the updated stream for writing to disk or further manipulation.
+for non-table content in a fixed order: Setext heading conversion,
+code-emphasis repair, ordered-list renumbering, ellipsis replacement, and
+paragraph wrapping, and finally the footnote-definition fold, which reads the
+settled block structure and appends definition lines. Table reflow and
+paragraph wrapping consume final content, so every pass that can change cell or
+line width runs first. Thematic-break normalization stays at the binary
+boundary because it is width-independent. Ellipsis replacement runs before
+wrapping, so line breaking is computed from the glyphs the reader will see. See
+[footnote conversion](#footnote-conversion)
+for details. The function then returns the updated stream for writing to disk
+or further manipulation.
 
 ## Table reflow pipeline
 
@@ -260,8 +261,8 @@ structure:
   the two are matched by the number they share, and the header the fold writes
   is longer than the item's marker.
 
-`convert_footnotes` remains as the whole-document convenience form that runs the
-three in that order, and it is exposed via the higher-level
+`convert_footnotes` remains as the whole-document convenience form that runs
+the three in that order, and it is exposed via the higher-level
 `process_stream_opts` helper. Set
 `Options { footnotes: true, ..Default::default() }` when calling
 `process_stream_opts` to enable the conversion logic. The parameter defaults to
@@ -521,9 +522,9 @@ rationale is recorded in [ADR 0007](adrs/0007-line-ending-detection.md).
 The `driver` module is binary-private by design: it is declared as
 `mod driver;` in the binary rather than part of the library, and the driver
 holds the CLI's exit-status contract. It sits beside `src/main.rs` rather than
-in the library, whose formatting and filesystem entry points are public,
-return `std::io::Result`, and are therefore fallible: `rewrite` and
-`rewrite_no_wrap` at the crate root, and `mdtablefix::io::replace_file` and
+in the library, whose formatting and filesystem entry points are public, return
+`std::io::Result`, and are therefore fallible: `rewrite` and `rewrite_no_wrap`
+at the crate root, and `mdtablefix::io::replace_file` and
 `mdtablefix::io::replace_file_if_unchanged`. The split is what keeps the CLI's
 filesystem policy and exit status out of the library.
 
