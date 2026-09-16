@@ -36,8 +36,7 @@
   exhausted, temporary files a failed replacement could not remove, and
   symbolic-link targets declined rather than replaced. The crate installs no
   recorder itself.
-  ([#465](https://github.com/leynos/mdtablefix/issues/465),
-  [#471](https://github.com/leynos/mdtablefix/issues/471))
+  ([#465](https://github.com/leynos/mdtablefix/issues/465), [#471](https://github.com/leynos/mdtablefix/issues/471))
 - Add the line-ending helpers `LineEnding`, `LineEndingCounts`,
   `count_line_endings`, `detect_line_ending`, and `serialize_lines`, so a
   caller can select and apply the majority line-ending style of an input

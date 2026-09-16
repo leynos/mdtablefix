@@ -63,7 +63,8 @@ const WRAP_FOOTNOTES: &[&str] = &["--wrap", "--footnotes"];
 const WRAP_RENUMBER: &[&str] = &["--wrap", "--renumber"];
 /// Flag set recorded for the class A cases that need break normalisation.
 const WRAP_BREAKS: &[&str] = &["--wrap", "--breaks"];
-/// Flag set `make fmt` runs through `mdformat-all`.
+/// Flag set `make fmt` runs, matching the estate `markdown-formatting-baseline`
+/// rule's `MDTABLEFIX_RULES`.
 const FULL: &[&str] = &["--wrap", "--renumber", "--breaks", "--ellipsis", "--fences"];
 /// Flag set recorded for the heading cases, which `make fmt` does not enable.
 const HEADINGS: &[&str] = &["--footnotes", "--code-emphasis", "--headings"];

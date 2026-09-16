@@ -200,26 +200,27 @@ Issue #504 is fixed. The tokenizer emits `[` and `1]` as separate tokens, so
 nothing bound them and the opener was free to end a line on its own. The inline
 wrapping path now couples the pair the way it already couples footnote markers
 and links to their openers: `looks_like_bracketed_reference` recognizes the
-closing shape the tokenizer emits, `try_couple_bracketed_reference` sums the two
-widths and absorbs trailing punctuation, and `FragmentKind::BracketedRef` keeps
-the merged span atomic so the post-wrap rebalancing pass cannot separate it
-again. Labels are digit-only by design; the residue is that a short alphabetic
-label such as `[a]` is still ordinary prose the wrapper may break at, which is
-unchanged behaviour rather than a regression.
+closing shape the tokenizer emits, `try_couple_bracketed_reference` sums the
+two widths and absorbs trailing punctuation, and `FragmentKind::BracketedRef`
+keeps the merged span atomic so the post-wrap rebalancing pass cannot separate
+it again. Labels are digit-only by design; the residue is that a short
+alphabetic label such as `[a]` is still ordinary prose the wrapper may break
+at, which is unchanged behaviour rather than a regression.
 
 The evidence for the shape recorded above is the corpus fixture
 `E1_bracket_after_bold_code` under `tests/data/idempotence/`, which is that
-reproduction formatted twice through the real binary under `--wrap` and asserted
-to be byte-identical. The fixture records `[1]` as its structural expectation,
-so a fix that settled the output by dropping the reference fails rather than
-passes. `tests/idempotence_properties.rs` reaches the same shape from generated
-documents: `bracket_reference_seam_strategy` grows the head to one column short
-of the wrap width, which puts the wrap boundary before the reference, and a
-coverage test asserts the shape is actually generated so removing the strategy
-cannot leave the property vacuous. The wrap suites pin the break itself in
-`src/wrap/tests/inline_wrapping.rs`, `tests/wrap_unit/stream.rs` and
-`tests/wrap/lists.rs`, and `tests/wrap/cli.rs` formats twice through the CLI and
-compares the passes. Each of those cases fails against the parent commit.
+reproduction formatted twice through the real binary under `--wrap` and
+asserted to be byte-identical. The fixture records `[1]` as its structural
+expectation, so a fix that settled the output by dropping the reference fails
+rather than passes. `tests/idempotence_properties.rs` reaches the same shape
+from generated documents: `bracket_reference_seam_strategy` grows the head to
+one column short of the wrap width, which puts the wrap boundary before the
+reference, and a coverage test asserts the shape is actually generated so
+removing the strategy cannot leave the property vacuous. The wrap suites pin
+the break itself in `src/wrap/tests/inline_wrapping.rs`,
+`tests/wrap_unit/stream.rs` and `tests/wrap/lists.rs`, and `tests/wrap/cli.rs`
+formats twice through the CLI and compares the passes. Each of those cases
+fails against the parent commit.
 
 The narrowing in the previous addendum therefore no longer applies to this
 shape, and `--git --check` is a sound one-pass drift check for documents that
@@ -233,8 +234,8 @@ is listed under "Superseded wording" below.
 ### Expanded defect classes
 
 The accepted Context records seven defect classes; the work of issue #493
-reached fourteen, and the bracket-reference seam recorded above is a
-fifteenth, fixed under issue #504. The seven added classes are:
+reached fourteen, and the bracket-reference seam recorded above is a fifteenth,
+fixed under issue #504. The seven added classes are:
 
 - An unmatched code fence was rewritten to its opener's run length on every
   line of the block. A block whose interior held a shorter fence-shaped run —
@@ -271,8 +272,8 @@ fifteenth, fixed under issue #504. The seven added classes are:
   item's continuation indent; the flush-left line below the break dropped it,
   while the next pass re-read the indented tail above and applied the indent to
   everything after it: `- alpha … beta` over `delta epsilon` (a line ending in
-  the two-space hard break) over `zeta eta`, ended at column one on one pass and
-  two columns in on the pass after.
+  the two-space hard break) over `zeta eta`, ended at column one on one pass
+  and two columns in on the pass after.
 - A deferred block's tail was reflowed without the backslash that ends it. The
   tail of an overlong prefixed line is wrapped on its own and the hard-break
   marker is put back afterwards, which is correct for the two-space form — the
@@ -285,24 +286,24 @@ fifteenth, fixed under issue #504. The seven added classes are:
   marker alone.
 
 The unmatched-fence class was reported separately, in issue #480, and reached
-the suite through the corpus rather than through a generator. The
-code-emphasis class was found by the property suite once the flag was added to
-it. The two footnote classes, the empty-header class, and the Setext table-row
-class were found by the widened generators of issue #493, which the suite had
-been unable to reach: it wrote only balanced three-character fences, used `1.`
-as its sole ordered-list marker, left the characters the parser used as
-placeholders out of its cells, and put neither a hard break nor an overlong
-code span in a paragraph. The lazy-continuation class was found by those same
-generators, once their paragraphs carried a hard break at all; a list item wide
-enough to defer, a break inside it, and one prose line below the break reach
-it. The backslash-tail class needed a longer sweep still — it appeared four
-thousand cases in, where the tail's last wrapped line filled the width exactly
-and the marker taken off it was the one column that did not fit.
+the suite through the corpus rather than through a generator. The code-emphasis
+class was found by the property suite once the flag was added to it. The two
+footnote classes, the empty-header class, and the Setext table-row class were
+found by the widened generators of issue #493, which the suite had been unable
+to reach: it wrote only balanced three-character fences, used `1.` as its sole
+ordered-list marker, left the characters the parser used as placeholders out of
+its cells, and put neither a hard break nor an overlong code span in a
+paragraph. The lazy-continuation class was found by those same generators, once
+their paragraphs carried a hard break at all; a list item wide enough to defer,
+a break inside it, and one prose line below the break reach it. The
+backslash-tail class needed a longer sweep still — it appeared four thousand
+cases in, where the tail's last wrapped line filled the width exactly and the
+marker taken off it was the one column that did not fit.
 
 ### New and revised rules
 
-The accepted Decision states seven rules; the work records thirteen: six
-added and two revised. The six added rules are:
+The accepted Decision states seven rules; the work records thirteen: six added
+and two revised. The six added rules are:
 
 - A lazy continuation below a deferred block keeps the block's indent.
   `ParagraphState::note_indent` in `src/wrap/paragraph.rs` prefers the indent a
@@ -322,8 +323,8 @@ added and two revised. The six added rules are:
   reasons.
 - Footnote labels are renumbered before the passes that measure text.
   `footnotes::renumber_footnote_labels` rewrites references and definition
-  headers from the mapping numbered by first encounter, ahead of the table
-  pass and the wrap, because a label narrows as it is rewritten.
+  headers from the mapping numbered by first encounter, ahead of the table pass
+  and the wrap, because a label narrows as it is rewritten.
 - The delimiter-cell grammar is its own rule. `table::is_delimiter_cell`
   applies it, and `table::is_delimiter_row`, `reflow::second_row_is_separator`
   and `reflow::row_parsing` require every cell of a row to satisfy it; the
@@ -343,17 +344,17 @@ The two revised rules are:
 ### Footnote stages
 
 The footnote conversion is split into three stages rather than one.
-`footnotes::convert_inline_footnotes` and
-`footnotes::renumber_footnote_labels` run before the table pass and the wrap,
-because a reference grows — `docs.1` becomes `docs.[^1]` — and a label narrows
-— `[^10]` becomes `[^1]` — so both change the text a later pass measures.
+`footnotes::convert_inline_footnotes` and `footnotes::renumber_footnote_labels`
+run before the table pass and the wrap, because a reference grows — `docs.1`
+becomes `docs.[^1]` — and a label narrows — `[^10]` becomes `[^1]` — so both
+change the text a later pass measures.
 `footnotes::convert_footnote_definitions` stays last: it appends lines and
 reads the heading structure the heading pass settled, and it settles the
 structure only, keeping the number each header already carries, because a
 second numbering scan would take fresh numbers from the free pool and move
 definitions behind ones the label stage placed earlier.
-`footnotes::convert_footnotes` remains the composition of the three for
-callers that need them in one step.
+`footnotes::convert_footnotes` remains the composition of the three for callers
+that need them in one step.
 
 The label stage also promotes a trailing list item that a reference reaches,
 and it promotes it in that scan rather than last: a bare reference and a list
@@ -393,9 +394,9 @@ Four fixes carry the added classes into the rule set:
   the block again; `fences::flush_unmatched_block` now rewrites the opener
   alone and emits the interior lines verbatim.
 - The Setext table row: `| a | b |` over `| --- | --- |` over `| ccccc | d |`
-  over `---` had the body row converted, leaving a five-column first row on
-  one pass and a three-column one on the next; `is_table_syntax` refuses the
-  row, and the table keeps its delimiter row and its widths.
+  over `---` had the body row converted, leaving a five-column first row on one
+  pass and a three-column one on the next; `is_table_syntax` refuses the row,
+  and the table keeps its delimiter row and its widths.
 - The lazy continuation: `- alpha … beta` over a hard-broken `delta epsilon`
   over `zeta eta` ended at column one on the first pass and two columns in on
   the second; `ParagraphState::note_indent` now carries the block's
@@ -422,23 +423,23 @@ Consequences record, extended by this work.
   `tests/support/idempotence_generators.rs` and the harness they share in
   `tests/support/idempotence_harness.rs`.
 - The case count comes from `PROPTEST_CASES`, through the `proptest_config`
-  helper in that harness, so the 48 both suites run at is a default rather
-  than a ceiling: a longer sweep raises it without a recompile.
+  helper in that harness, so the 48 both suites run at is a default rather than
+  a ceiling: a longer sweep raises it without a recompile.
 - The generated domain covers the shapes the added classes were reachable
-  through: fence openers of three to five characters in both marker
-  characters, with shorter interior runs and blocks that are never closed;
-  ordered-list markers beyond `1.`, including multi-digit numbers, restarts,
-  and nesting; table cells drawn from the whole `char` range, the characters
-  the parser once used as placeholders included; and paragraphs carrying hard
-  breaks and code spans longer than the wrap width.
+  through: fence openers of three to five characters in both marker characters,
+  with shorter interior runs and blocks that are never closed; ordered-list
+  markers beyond `1.`, including multi-digit numbers, restarts, and nesting;
+  table cells drawn from the whole `char` range, the characters the parser once
+  used as placeholders included; and paragraphs carrying hard breaks and code
+  spans longer than the wrap width.
 - The structural-adjacency property generates a candidate directly above a
   thematic break with `--headings` forced on, and a fourth shape chains a
   converting paragraph, a thematic break, a table, and a delimiter row above
   the trailing break in one document, so each boundary's guard is exercised
-  where its neighbours are guard cases too. The delimiter row is generated
-  both alone and below a header row, and a deterministic sweep asserts the
-  shape is reached and its row survives, so removing the generator branch
-  fails the sweep rather than leaving the guard unexercised.
+  where its neighbours are guard cases too. The delimiter row is generated both
+  alone and below a header row, and a deterministic sweep asserts the shape is
+  reached and its row survives, so removing the generator branch fails the
+  sweep rather than leaving the guard unexercised.
 - Three regression pins record the shapes the sweeps shrank the classes to:
   `T7` in the fixture corpus, for the body row above a break;
   `src/wrap/paragraph_tests.rs`, for the lazy-continuation and backslash-tail
@@ -451,9 +452,9 @@ Consequences record, extended by this work.
 The guarantee remains scoped to the flag sets with recorded evidence: the
 `make fmt` flag set (`--wrap`, `--renumber`, `--breaks`, `--ellipsis`,
 `--fences`), that set with `--headings`, and that set with `--code-emphasis`.
-The property suites broaden the ground within that claim — they force each
-flag alone and sample the eight-flag powerset — but not outside it. Two
-exceptions are of record:
+The property suites broaden the ground within that claim — they force each flag
+alone and sample the eight-flag powerset — but not outside it. Two exceptions
+are of record:
 
 - `--headings` sits outside the `make fmt` flag set, so the everyday gate does
   not reach it; the property suites force it on for the structural-adjacency
@@ -461,11 +462,10 @@ exceptions are of record:
 - Under `--wrap` alone, a short alphabetic label such as `[a]` is not a
   reference at all: only ASCII digits couple to their opener, so the wrapper
   may still break between the bracket and the label. Such a document reaches
-  the invariant one pass later than it should: the first pass ends the line
-  with `[`, the second rejoins the two as `[ a]`, and the third reproduces
-  the second. The bracket-reference fix recorded at the top of this addendum
-  covers the digit-only shape; this residue pre-dates it and is tracked as
-  issue #507.
+  the invariant one pass later than it should: the first pass ends the line with
+  `[`, the second rejoins the two as `[ a]`, and the third reproduces the
+  second. The bracket-reference fix recorded at the top of this addendum covers
+  the digit-only shape; this residue pre-dates it and is tracked as issue #507.
 
 ### Superseded wording
 

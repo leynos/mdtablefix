@@ -7,7 +7,15 @@ MUTANTS_JOBS ?= 3
 # Where `cargo-mutants` builds. Per worktree, so two runs cannot collide.
 MUTANTS_TMPDIR ?= $(HOME)/.cache/mdtablefix/mutants/$(notdir $(CURDIR))
 CLIPPY_FLAGS ?= --workspace --all-targets --all-features -- -D warnings
-MDLINT ?= $(or $(shell command -v markdownlint-cli2 2>/dev/null),$(HOME)/.bun/bin/markdownlint-cli2)
+MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
+# `make fmt` and `make check-fmt` call mdtablefix directly. `--git` selects the
+# Markdown files Git tracks and `--include-untracked` adds the untracked files
+# Git does not ignore, so a new document is formatted before it is staged.
+# Both modes need mdtablefix 0.6.0 or later; CI pins the version at the
+# install-mdtablefix step.
+MDTABLEFIX ?= mdtablefix
+MDTABLEFIX_SELECT = --git --include-untracked
+MDTABLEFIX_RULES = --wrap --renumber --breaks --ellipsis --fences
 NIXIE ?= nixie
 RG ?= rg
 PROVER_TOOLS ?= uvx --from git+https://github.com/leynos/rust-prover-tools@$(shell cat tools/rust-prover-tools/REF) prover-tools
@@ -36,10 +44,12 @@ typecheck: ## Type-check all targets and features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
-	mdformat-all
+	$(MDTABLEFIX) --in-place $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
+	$(MDLINT) --fix "**/*.md"
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
+	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
 check-ripgrep: ## Verify ripgrep is available
 	@command -v "$(firstword $(RG))" >/dev/null 2>&1 || { \
@@ -83,7 +93,7 @@ verus-selftest: verus-install ## Confirm Verus rejects the deliberately false sm
 	rm -f "$$output"
 
 markdownlint: ## Lint Markdown files
-	$(MDLINT) "**/*.md" "!**/.verus/**"
+	$(MDLINT) "**/*.md"
 
 nixie: ## Validate Mermaid diagrams
 	nixie --no-sandbox

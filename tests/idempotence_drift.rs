@@ -24,7 +24,8 @@ use std::{
 use assert_cmd::Command;
 use tempfile::TempDir;
 
-/// Flag set `make fmt` runs through `mdformat-all`.
+/// Flag set `make fmt` runs, matching the estate `markdown-formatting-baseline`
+/// rule's `MDTABLEFIX_RULES`.
 const FULL: &[&str] = &["--wrap", "--renumber", "--breaks", "--ellipsis", "--fences"];
 /// The `make fmt` flag set plus `--headings`.
 ///
