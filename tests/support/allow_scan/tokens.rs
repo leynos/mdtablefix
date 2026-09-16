@@ -1,16 +1,15 @@
 //! Reading attributes out of token streams, where `syn` sees none.
 //!
 //! A `macro_rules!` transcriber is an opaque token stream to `syn`, yet Clippy
-//! expands it and honours whatever attribute it writes. Two further shapes are
-//! not complete attributes where they are written at all, and are refused
-//! structurally rather than by their `Meta`: an attribute whose path the caller
-//! supplies, and an `include!` of a file the scan cannot read.
+//! expands it and honours whatever attribute it writes. One further shape is
+//! not a complete attribute where it is written at all, and is refused
+//! structurally rather than by its `Meta`: an attribute whose path the caller
+//! supplies. The other structural refusal, an `include!` of a file the scan
+//! cannot read, is in `inclusion` beside this module, because it is judged by
+//! the walk's rule for reachable paths rather than by reading tokens.
 
-use camino::Utf8Path;
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
-use syn::{LitStr, Meta};
-
-use super::SOURCE_EXTENSION;
+use syn::Meta;
 
 /// Fragment specifiers whose value can carry an environment access.
 ///
@@ -124,48 +123,6 @@ fn forwarded_path(group: &Group, inner: bool, reachable: bool) -> Option<String>
     Some(format!(
         "#{bang}[{stream}] forwards its own path, which the caller can complete with `allow`; \
          write the attribute out, or take the item rather than the attribute"
-    ))
-}
-
-/// Return a finding if an `include!` names a target that is not Rust source.
-///
-/// `rustc` parses an included file as Rust whatever its extension, so
-/// `include!("fixture.rs.txt")` compiles that fixture's contents into this
-/// crate. An `allow` written there suppresses the policy for the calls around
-/// the inclusion, and an enclosing `expect` stays fulfilled, so nothing warns.
-/// The scan cannot read the target, which need not exist when the scan runs, so
-/// the inclusion itself is the finding.
-///
-/// A literal `.rs` path is not a finding: such a file is scanned in its own
-/// right. `include_str!` and `include_bytes!` embed bytes rather than compiling
-/// source and never reach here.
-///
-/// The target is parsed as one [`LitStr`] and judged by its *value*, not by how
-/// it was written. `r"support.rs"` and `"support\x2Ers"` name the same file as
-/// `"support.rs"`, and rendering the literal back to text would report two of
-/// the three as targets the scan cannot see. Parsing the whole argument as a
-/// single literal is also what keeps a computed target refused, including one
-/// that holds a `.rs` literal somewhere inside.
-///
-/// The extension is compared the way the walk selects sources, against
-/// [`SOURCE_EXTENSION`], rather than by a suffix test on the rendered path. A
-/// suffix test is case-sensitive in a way the path reader is not, and it
-/// accepts `include!(".rs")`, a bare extension that the walk never collects, so
-/// the file it reaches would go unread.
-pub(super) fn foreign_inclusion(tokens: &TokenStream) -> Option<String> {
-    let Ok(target) = syn::parse2::<LitStr>(tokens.clone()) else {
-        return Some(format!(
-            "include!({tokens}) names a target the scan cannot resolve; name a literal `.rs` \
-             path, which is scanned in its own right"
-        ));
-    };
-    let path = target.value();
-    if Utf8Path::new(&path).extension() == Some(SOURCE_EXTENSION) {
-        return None;
-    }
-    Some(format!(
-        "include!(\"{path}\") compiles a file the scan cannot see as Rust; name a `.rs` path, \
-         which is scanned in its own right"
     ))
 }
 

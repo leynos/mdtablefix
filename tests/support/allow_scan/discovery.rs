@@ -35,7 +35,7 @@ pub(super) enum Found {
 /// as `.git`. Neither is a place a contributor writes a source Cargo compiles.
 /// Everything else is walked, so a build script, bench, example or second
 /// binary is seen wherever it is added.
-fn is_walkable(name: &str) -> bool { !name.starts_with('.') && name != "target" }
+pub(super) fn is_walkable(name: &str) -> bool { !name.starts_with('.') && name != "target" }
 
 /// Render a walk prefix for a message, naming the root rather than showing an
 /// empty string.

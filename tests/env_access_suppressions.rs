@@ -404,6 +404,15 @@ fn a_sanctioned_expect_elsewhere_is_an_offence(
 // A bare extension is a name the walk never collects, so the file it reaches is
 // never scanned however the inclusion reads.
 #[case::includes_a_bare_extension("include!(\".rs\");\n")]
+// A `.rs` target is not enough on its own: rustc resolves it against the file
+// that writes it, and the walk skips `target` and every dot-prefixed directory.
+// Each of these names a real Rust file the compiler reads and the scan does not.
+#[case::includes_under_a_dot_directory("include!(\".generated/bypass.rs\");\n")]
+#[case::includes_under_target("include!(\"../target/debug/bypass.rs\");\n")]
+// A target that climbs out of the tree the walk was handed is reachable by the
+// compiler and by no walk rooted there.
+#[case::includes_above_the_root("include!(\"../../bypass.rs\");\n")]
+#[case::includes_an_absolute_path("include!(\"/tmp/bypass.rs\");\n")]
 fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Result<()> {
     let found = scan(source)?;
     ensure!(found.len() == 1, "expected one offence, found {found:?}");
@@ -458,6 +467,12 @@ fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Resu
 #[case::includes_rust_source("include!(\"generated.rs\");\n")]
 #[case::includes_a_raw_string_path("include!(r\"generated.rs\");\n")]
 #[case::includes_an_escaped_path("include!(\"generated\\x2Ers\");\n")]
+// A target in a directory the walk descends into is read in its own right, so
+// the depth of the path is not what decides.
+#[case::includes_a_nested_rust_source("include!(\"sub/generated.rs\");\n")]
+// Only directories are judged by the walk's rule. The walk collects a file by
+// its extension alone, so a dot-prefixed file name is read like any other.
+#[case::includes_a_dot_prefixed_file("include!(\".hidden.rs\");\n")]
 // An attribute handed to a macro that may discard it is not a suppression.
 #[case::attribute_handed_to_an_invocation(
     "assert_shape!(#[allow(clippy::disallowed_methods)] fn f() {});\n"

@@ -1506,9 +1506,16 @@ it is written. A `macro_rules!` arm that forwards the attribute's *path*
 and at outer scope where the arm writes an `env` access or forwards a fragment
 the caller fills with code; the `$(#[$meta:meta])*` doc-forwarding idiom,
 `#[doc = $text]` and `#[derive($traits)]` are untouched. An `include!` is
-refused unless its target is a literal `.rs` path, since `rustc` parses an
-included file as Rust whatever its extension; `include_str!` and
-`include_bytes!` embed bytes and are not inclusions.
+refused unless its target is a literal `.rs` path that the walk would reach,
+since `rustc` parses an included file as Rust whatever its extension and
+resolves it against the file that writes it. A `.rs` extension alone is not
+enough: `include!(".generated/bypass.rs")` names a real Rust file under a
+directory the walk skips, so the target is resolved against the including
+source and every directory it passes through is judged by the same function
+the walk descends with. A target that climbs out of the tree is refused for
+the same reason. Only directories are judged, because the walk collects a file
+by its extension alone. `include_str!` and `include_bytes!` embed bytes and are
+not inclusions.
 
 A crate-scoped `#![expect(...)]` is not the sanctioned form: one call anywhere
 in the crate fulfils it, so it reports nothing and never warns, which is

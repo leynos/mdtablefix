@@ -11,13 +11,15 @@
 //! in a helper.
 
 use anyhow::{Context, Result};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use proc_macro2::{TokenStream, TokenTree};
 use syn::{AttrStyle, Attribute, ImplItem, Item, Macro, Meta, visit::Visit};
 
 // The paths are relative to this file's own directory, `tests/support/`.
 #[path = "allow_scan/discovery.rs"]
 mod discovery;
+#[path = "allow_scan/inclusion.rs"]
+mod inclusion;
 #[path = "allow_scan/meta.rs"]
 mod meta;
 #[path = "allow_scan/roots.rs"]
@@ -34,15 +36,10 @@ mod tokens;
 pub(crate) const SOURCE_EXTENSION: &str = "rs";
 
 pub use discovery::rust_sources;
+use inclusion::foreign_inclusion;
 use meta::{render_attribute, render_path, suppressed_by};
 use roots::is_sanctioned;
-use tokens::{
-    attribute_at,
-    could_cover_a_policy_call,
-    foreign_inclusion,
-    forwarded_attribute_at,
-    macro_arms,
-};
+use tokens::{attribute_at, could_cover_a_policy_call, forwarded_attribute_at, macro_arms};
 
 /// Lint names whose suppression disarms the environment-access policy.
 ///
@@ -94,6 +91,12 @@ struct AttributeCollector {
     scope: Vec<String>,
     /// Each finding no `Meta` describes, already worded as a report line.
     structural: Vec<String>,
+    /// The file being visited, relative to the repository root.
+    ///
+    /// `rustc` resolves an `include!` against the file that writes it, so the
+    /// inclusion rule cannot judge a target without knowing where it was
+    /// written.
+    path: Utf8PathBuf,
 }
 
 /// Return the name an item declares, if it declares one.
@@ -207,7 +210,7 @@ impl<'ast> Visit<'ast> for AttributeCollector {
                 }
             }
             Some("include") => {
-                if let Some(finding) = foreign_inclusion(&mac.tokens) {
+                if let Some(finding) = foreign_inclusion(&mac.tokens, &self.path) {
                     self.structural.push(finding);
                 }
             }
@@ -226,7 +229,10 @@ impl<'ast> Visit<'ast> for AttributeCollector {
 /// fixtures pass the path they are pretending to be.
 pub fn suppressed_lints(path: &Utf8Path, contents: &str) -> Result<Vec<String>> {
     let parsed = syn::parse_file(contents).context("parse the source as Rust")?;
-    let mut collector = AttributeCollector::default();
+    let mut collector = AttributeCollector {
+        path: path.to_owned(),
+        ..AttributeCollector::default()
+    };
     collector.visit_file(&parsed);
 
     let mut found = collector.structural.clone();
