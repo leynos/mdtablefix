@@ -1,0 +1,76 @@
+name: Coverage (main)
+
+# Main owns both persistent coverage outputs: the CodeScene upload and the
+# ratchet baseline. Pull requests generate coverage only for their own local
+# ratchet check, in `ci.yml`; they neither publish a report nor contact
+# CodeScene.
+#
+# The split is not only hygiene. CodeScene accepts `cs-coverage upload` for an
+# analysed branch, which a pull request head is not, and a pull request from a
+# fork cannot read `secrets.CS_ACCESS_TOKEN` at all, so the upload step this
+# workflow inherits was inert for forks and unnecessary everywhere else. Caches
+# and baselines written on `main` are readable by every pull-request run, so the
+# baseline written here is the one those ratchet checks compare against.
+
+'on':
+  push:
+    branches: [main]
+  # A dispatch reads the baseline without advancing it: the shared action
+  # publishes a new baseline only on a push to `refs/heads/main`, so a manual
+  # run can measure this lane without moving the figure it is measuring.
+  workflow_dispatch:
+
+# Runs queue rather than cancel. A cancelled publisher abandons both its upload
+# and its ratchet baseline write, so a burst of merges would leave `main` with
+# whichever run happened to survive; a queued one publishes later, and the
+# latest push's baseline wins. The pull-request lanes cancel superseded runs;
+# this one must not, and `tests/coverage_workflows.rs` refuses it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  coverage-upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      BUILD_PROFILE: debug
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
+      - name: Install ripgrep
+        # The suite shells out to `rg`, and `make check-ripgrep` refuses to run
+        # without it, so the instrumented run needs the same tool the merge
+        # gate installs and at the same pin: a baseline measured with a
+        # different ripgrep is not comparable with what the ratchet checks.
+        run: cargo binstall --no-confirm --locked ripgrep@15.2.0
+      - name: Test and Measure Coverage
+        # The same action, format and output path as the pull-request lane, and
+        # the same default baseline files, so the figure written here is the
+        # figure a pull request is measured against. `with-ratchet` is set on
+        # both sides for that reason: this lane is the writer and the
+        # pull-request lane the reader, and the action decides which by the
+        # event rather than by an input.
+        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        with:
+          output-path: lcov.info
+          format: lcov
+          with-ratchet: 'true'
+      - name: Upload coverage data to CodeScene
+        env:
+          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        # An unset secret leaves the upload out rather than failing the lane,
+        # which is what lets a fork of this repository run the workflow at all.
+        # The ref conjunct is what keeps the dispatch trigger above from
+        # uploading a branch CodeScene does not analyse: the push trigger is
+        # restricted to `main`, but a dispatch may name any branch.
+        if: ${{ env.CS_ACCESS_TOKEN != '' && github.ref == 'refs/heads/main' }}
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        with:
+          path: lcov.info
+          format: lcov
+          mode: upload
+          access-token: ${{ env.CS_ACCESS_TOKEN }}
