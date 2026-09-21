@@ -48,7 +48,6 @@ jobs:
         with:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
-          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
 
   windows-atomic-contract:
     # The atomic replacement contract is platform-sensitive. The swap depends
