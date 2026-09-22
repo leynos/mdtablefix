@@ -37,25 +37,32 @@ jobs:
       - name: Format
         run: make check-fmt
       - name: Markdown lint
-        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff  # v20
+        # The comment said v20 and the SHA does not: `21c1be1b` is the commit
+        # the `v24.2.0` tag object points at, whose message is "Update to
+        # version 24.2.0." The pin is unchanged; only the label was wrong.
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff  # v24.2.0
         with:
           globs: '**/*.md'
       - name: Lint
         run: make lint
       - name: Test and Measure Coverage
+        # Coverage here is for the local ratchet and nothing else. The report
+        # is neither published (`publish-artefact: 'false'` keeps the action
+        # from archiving it) nor sent to CodeScene: a pull request from a
+        # fork cannot read `secrets.CS_ACCESS_TOKEN`, so an upload step here is
+        # silently inert for exactly the changes that most need reviewing, and
+        # a lane that holds the token at all is a lane a fork's workflow edit
+        # could try to reach. `coverage-main.yml` owns both persistent outputs.
+        #
+        # The baseline paths are the action's defaults, which is what makes
+        # this ratchet comparable with the one the main publisher writes: both
+        # read and write `.coverage-baseline.rust`.
         uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           output-path: lcov.info
           format: lcov
-      - name: Upload coverage data to CodeScene
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        if: ${{ env.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
-
-        with:
-          format: lcov
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          with-ratchet: 'true'
+          publish-artefact: 'false'
 
   windows-atomic-contract:
     # The atomic replacement contract is platform-sensitive. The swap depends

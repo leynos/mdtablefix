@@ -1607,6 +1607,80 @@ run the lint target and the test suite carry a condition. A step keeps its
 `if: false`. The full rationale is in
 [Environment seam taxonomy](adrs/0012-environment-seam-taxonomy.md).
 
+## Coverage publication belongs to `main`
+
+Coverage has two persistent outputs, the CodeScene upload and the ratchet
+baseline, and both are written only by `.github/workflows/coverage-main.yml`,
+which runs on a push to `main`. The pull-request lane in `ci.yml` still
+measures coverage, with `with-ratchet: 'true'` so a regression fails the pull
+request, but it neither archives the report (`publish-artefact: 'false'`) nor
+contacts CodeScene. This is concordat's CV-005.
+
+The split is not tidiness. A pull request from a fork cannot read
+`secrets.CS_ACCESS_TOKEN`, so an upload on that lane is silently inert for the
+changes that most need review, and CodeScene accepts uploads only for a branch
+it analyses, which a pull request head is not.
+
+Three details of the publisher are load-bearing:
+
+- **The upload is guarded by `github.ref == 'refs/heads/main'` as its own
+  conjunct.** The push trigger is restricted to `main`, but the workflow also
+  answers `workflow_dispatch`, which can name any branch.
+- **A run in progress is never cancelled.** The workflow's concurrency group
+  sets `cancel-in-progress: false`. A cancelled publisher abandons both its
+  upload and its baseline write. With cancellation off, a newer push waits for
+  the running one and replaces any run still pending rather than queueing
+  behind it, so the newest baseline wins. The pull-request cancellation above
+  deliberately does not reach this workflow.
+- **Only the upload step holds the token.** The secret sits in that step's
+  `env` and nowhere wider, so no other step, and no step added later, receives
+  it by inheritance. A job calling a reusable workflow has no steps for that
+  rule to see, so the contract also refuses one that forwards the token through
+  `with:`, a named `secrets:` entry or `secrets: inherit`. An upload through
+  the CLI is recognised as the shell reads it, across a backslash-newline
+  continuation.
+
+### The coverage publication contract
+
+`tests/coverage_workflows.rs` holds all of this, with its readers and rules in
+`tests/coverage_workflows/`. Every pull-request clause runs over the closure of
+workflows a pull request can reach: the ones it triggers, plus every local
+workflow they call through a job-level `uses:`, followed transitively. A
+workflow declaring only `workflow_call` names no pull request, yet a
+pull-request job can call it with `secrets: inherit`, so enumerating triggers
+alone would leave it outside every clause. Within that closure the contract
+refuses the token by any reference, a secret reached by a computed name
+(`secrets[...]`) or the whole context (`toJSON(secrets)`), a blanket
+`secrets: inherit`, the upload action, a direct `cs-coverage` call, the
+`codescene.io` host, and a coverage step that does not ratchet or that
+publishes its report. A local call to a workflow file that is not there is
+reported too, since the closure cannot follow it.
+
+The readers err towards seeing more: both extensions in either case, the `on`
+key as a string or as the boolean YAML 1.1 makes of it, a trigger written as a
+scalar, a sequence or a mapping, and a local call written with `./`, with
+GitHub's documented `$/`, or bare. A local-shaped call carrying an `@ref` or
+naming a subdirectory resolves to no file the contract can read, so it is
+refused rather than treated as a call into another repository, where whatever
+it ran would escape the closure. Every workflow is parsed through one reader
+that refuses a mapping declaring a key twice, since a parser keeping the last
+duplicate would let a lane say one thing in the file and another in the parse.
+The publisher's upload condition is split on `&&` and refused outright if it
+contains an unquoted `||`, because `&&` binds tighter and a leading disjunct
+would upload a dispatch from any branch while the ref check still appeared as a
+conjunct.
+
+The publisher's upload must also read the file and format its coverage step
+writes, and pass the token its step holds as `access-token`; either mistake
+leaves every per-step clause passing while CodeScene receives nothing useful.
+
+The rules are driven directly against complying and breaching fixtures, because
+every real workflow here complies and a rule exercised only over correct
+sources passes whether or not it detects anything. The closure is also checked
+against generated call graphs, with branches, cycles and every call spelling,
+by comparison with reachability computed on the adjacency matrix. Run it with
+`make test`.
+
 ## 1. Stateful pipeline helpers
 
 Internal state carriers centralize the buffered state used by the conversion
