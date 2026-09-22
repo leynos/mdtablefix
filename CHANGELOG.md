@@ -4,6 +4,19 @@
 
 ### Added
 
+- An enforced environment-access policy. `clippy.toml` prohibits the six
+  `std::env` read and mutation methods, the workspace lint table denies
+  `clippy::disallowed_methods` along with `clippy::allow_attributes` and
+  `clippy::allow_attributes_without_reason` so a bare `#[allow]` cannot silence
+  it, and four tests guard the result: one over the configuration's shape, one
+  that runs Clippy over a fixture calling all six methods, one that rejects the
+  module-level `allow` that Clippy's own check misses, and one that keeps CI
+  running them. The two reads the lint reports are test composition roots, each
+  carrying an item-scoped `expect` with its reason: the child half of the
+  re-exec'd write-failure test, and the idempotence harness's `PROPTEST_CASES`
+  reader, which is injected so its fallback is exercised without a read.
+  Recorded in `docs/adrs/0012-environment-seam-taxonomy.md`.
+  ([#441](https://github.com/leynos/mdtablefix/issues/441))
 - Release assets for `x86_64-apple-darwin`, `aarch64-apple-darwin` and
   `x86_64-pc-windows-msvc`, so `cargo binstall` can install `mdtablefix` on
   macOS and Windows without compiling it.

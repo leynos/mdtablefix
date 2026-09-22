@@ -64,6 +64,9 @@ googletest = "0.14"
 pretty_assertions = "1"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.5.0", features = ["strict-compile-time-validation"] }
+toml = "1.1.2"
+syn = { version = "3.0.3", features = ["full", "visit", "extra-traits"] }
+proc-macro2 = "1.0.106"
 
 [workspace.lints.clippy]
 # A lower group priority lets the explicit contract deny override its warning
@@ -73,6 +76,13 @@ pedantic = { level = "warn", priority = -1 }
 # not expose. Check every workspace member so the proc-macro crate cannot
 # become an undocumented exception.
 missing_docs_in_private_items = "deny"
+# Enforce the environment-access policy in every target of every member.
+# See `clippy.toml` and `docs/adrs/0012-environment-seam-taxonomy.md`.
+disallowed_methods = "deny"
+# Keep `#[allow]` from silently defeating the deny above: a suppression must
+# be an `#[expect]` carrying a reason, so it warns once it stops applying.
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
 
 [lints]
 workspace = true
