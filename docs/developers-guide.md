@@ -1626,11 +1626,12 @@ Three details of the publisher are load-bearing:
 - **The upload is guarded by `github.ref == 'refs/heads/main'` as its own
   conjunct.** The push trigger is restricted to `main`, but the workflow also
   answers `workflow_dispatch`, which can name any branch.
-- **Runs queue; they never cancel.** The workflow's concurrency group sets
-  `cancel-in-progress: false`. A cancelled publisher abandons both its upload
-  and its baseline write; a queued one publishes later, and the latest push's
-  baseline wins. The pull-request cancellation above deliberately does not
-  reach this workflow.
+- **A run in progress is never cancelled.** The workflow's concurrency group
+  sets `cancel-in-progress: false`. A cancelled publisher abandons both its
+  upload and its baseline write. With cancellation off, a newer push waits for
+  the running one and replaces any run still pending rather than queueing
+  behind it, so the newest baseline wins. The pull-request cancellation above
+  deliberately does not reach this workflow.
 - **Only the upload step holds the token.** The secret sits in that step's
   `env` and nowhere wider, so no other step, and no step added later, receives
   it by inheritance.
@@ -1650,13 +1651,17 @@ step that does not ratchet or that publishes its report.
 
 The readers err towards seeing more: both extensions in either case, the `on`
 key as a string or as the boolean YAML 1.1 makes of it, a trigger written as a
-scalar, a sequence or a mapping, and a local call with or without its `./`
-prefix. Every workflow is parsed through one reader that refuses a mapping
-declaring a key twice, since a parser keeping the last duplicate would let a
-lane say one thing in the file and another in the parse. The publisher's upload
-condition is split on `&&` and refused outright if it contains an unquoted
-`||`, because `&&` binds tighter and a leading disjunct would upload a dispatch
-from any branch while the ref check still appeared as a conjunct.
+scalar, a sequence or a mapping, and a local call written with `./`, with
+GitHub's documented `$/`, or bare. A local-shaped call carrying an `@ref` or
+naming a subdirectory resolves to no file the contract can read, so it is
+refused rather than treated as a call into another repository, where whatever
+it ran would escape the closure. Every workflow is parsed through one reader
+that refuses a mapping declaring a key twice, since a parser keeping the last
+duplicate would let a lane say one thing in the file and another in the parse.
+The publisher's upload condition is split on `&&` and refused outright if it
+contains an unquoted `||`, because `&&` binds tighter and a leading disjunct
+would upload a dispatch from any branch while the ref check still appeared as a
+conjunct.
 
 The rules are driven directly against complying and breaching fixtures, because
 every real workflow here complies and a rule exercised only over correct

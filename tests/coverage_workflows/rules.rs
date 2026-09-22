@@ -91,6 +91,13 @@ pub fn pull_request_findings(workflow: &Value) -> Vec<String> {
             ));
         }
     }
+    for (id, reference) in reader::job_calls(workflow) {
+        if reader::classify_call(reference) == reader::Call::Refused {
+            findings.push(format!(
+                "job {id} calls `{reference}`, which resolves to no workflow here"
+            ));
+        }
+    }
     for step in reader::steps(workflow) {
         if uses(step).is_some_and(|r| r.starts_with(UPLOAD_ACTION)) {
             findings.push(format!("a pull-request lane invokes {UPLOAD_ACTION}"));
@@ -221,7 +228,9 @@ fn token_findings(workflow: &Value) -> Vec<String> {
 /// Returns the reasons the publisher's runs could cancel one another.
 ///
 /// A cancelled publisher abandons both its upload and its baseline write, so
-/// runs queue behind a group instead. Any `cancel-in-progress` other than an
+/// runs share a group that never cancels the run in progress: a newer push
+/// replaces a pending run rather than queueing behind it, and the newest
+/// baseline wins. Any `cancel-in-progress` other than an
 /// absent key or a literal `false` is refused, an expression included: the
 /// question is whether a push to `main` can ever be cancelled, and only the
 /// literal answers it without evaluation.
@@ -231,7 +240,7 @@ fn concurrency_findings(workflow: &Value) -> Vec<String> {
         .as_mapping()
         .and_then(|root| get(root, "concurrency"));
     if group.is_none() {
-        findings.push("the publisher declares no concurrency group to queue behind".to_owned());
+        findings.push("the publisher declares no concurrency group".to_owned());
     }
     let job_groups = reader::jobs(workflow)
         .into_iter()

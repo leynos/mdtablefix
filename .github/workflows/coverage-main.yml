@@ -20,11 +20,12 @@ name: Coverage (main)
   # run can measure this lane without moving the figure it is measuring.
   workflow_dispatch:
 
-# Runs queue rather than cancel. A cancelled publisher abandons both its upload
-# and its ratchet baseline write, so a burst of merges would leave `main` with
-# whichever run happened to survive; a queued one publishes later, and the
-# latest push's baseline wins. The pull-request lanes cancel superseded runs;
-# this one must not, and `tests/coverage_workflows.rs` refuses it.
+# A run in progress is never cancelled. A cancelled publisher abandons both its
+# upload and its ratchet baseline write, so a burst of merges could leave `main`
+# with no complete run at all. With cancellation off, a newer push waits for
+# the running one and replaces any run still pending, so the newest baseline
+# wins. The pull-request lanes cancel superseded runs; this one must not, and
+# `tests/coverage_workflows.rs` refuses it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false

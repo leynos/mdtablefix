@@ -170,16 +170,46 @@ pub fn steps(workflow: &Value) -> Vec<&Mapping> {
 /// Returns a step's `uses` reference, when it has one.
 pub fn uses(step: &Mapping) -> Option<&str> { get(step, "uses").and_then(Value::as_str) }
 
-/// Returns the workflow file a job-level `uses` names in this repository.
+/// What a job-level `uses:` reference names.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Call<'a> {
+    /// A workflow file directly under this repository's workflow directory.
+    Local(&'a str),
+    /// A local-shaped reference the contract cannot resolve to one file.
+    Refused,
+    /// A reusable workflow in another repository, or not a workflow call.
+    Remote,
+}
+
+/// Classifies a job-level `uses` reference.
 ///
-/// Matched by shape rather than by an enumerated list of prefixes: a leading
-/// `./` is stripped, and what remains is local when it is a path directly
-/// under `.github/workflows/`. A call into another repository carries an
-/// owner first and so never matches.
-pub fn local_call(reference: &str) -> Option<&str> {
-    let path = reference.strip_prefix("./").unwrap_or(reference);
-    let file = path.strip_prefix(WORKFLOW_PREFIX)?;
-    (!file.is_empty() && !file.contains('/')).then_some(file)
+/// Matched by shape rather than by an enumerated list of spellings: a leading
+/// `./` or GitHub's documented `$/` is stripped, and what remains is local
+/// when it is a path under `.github/workflows/`. A call into another
+/// repository carries an owner first and so never matches. A local-shaped
+/// reference carrying an `@ref`, or naming a subdirectory, is refused rather
+/// than read as remote: it resolves to no file here, so reading it as "not
+/// local" would let whatever it runs escape the closure in silence.
+pub fn classify_call(reference: &str) -> Call<'_> {
+    let path = reference
+        .strip_prefix("./")
+        .or_else(|| reference.strip_prefix("$/"))
+        .unwrap_or(reference);
+    let Some(file) = path.strip_prefix(WORKFLOW_PREFIX) else {
+        return Call::Remote;
+    };
+    if file.is_empty() || file.contains('/') || file.contains('@') {
+        return Call::Refused;
+    }
+    Call::Local(file)
+}
+
+/// Returns each job's `uses` reference in a workflow, with the job's id.
+pub fn job_calls(workflow: &Value) -> Vec<(&str, &str)> {
+    jobs(workflow)
+        .into_iter()
+        .filter_map(|(id, job)| Some((id, get(job, "uses")?.as_str()?)))
+        .collect()
 }
 
 /// Returns the workflows a pull request can reach, by file name.
@@ -201,11 +231,8 @@ pub fn pull_request_closure(all: &Workflows) -> BTreeSet<String> {
         let Some(workflow) = all.get(&name) else {
             continue;
         };
-        for (_, job) in jobs(workflow) {
-            let Some(callee) = get(job, "uses")
-                .and_then(Value::as_str)
-                .and_then(local_call)
-            else {
+        for (_, reference) in job_calls(workflow) {
+            let Call::Local(callee) = classify_call(reference) else {
                 continue;
             };
             if all.contains_key(callee) && reached.insert(callee.to_owned()) {

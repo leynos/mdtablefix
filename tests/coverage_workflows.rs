@@ -9,7 +9,7 @@
 //!    paths matching the main publisher's;
 //! 3. exactly one workflow triggered by a push restricted to `main` generates ratcheted coverage
 //!    and uploads it, from the one step holding the token, behind a `github.ref ==
-//!    'refs/heads/main'` conjunct, in a concurrency group that queues rather than cancels.
+//!    'refs/heads/main'` conjunct, in a concurrency group that never cancels a run in progress.
 //!
 //! Why each clause is worth a test rather than a convention: a pull request
 //! from a fork cannot read `secrets.CS_ACCESS_TOKEN`, so an upload step on the
@@ -25,15 +25,18 @@
 //! reached, and every pull-request clause runs over what it returns.
 //!
 //! The judgements live in [`rules`] and are driven directly against complying
-//! and breaching fixtures in `cases`, because a rule exercised only over this
-//! repository's own correct workflows would pass whether or not it detects
-//! anything. The tests below then apply the same functions to the real files.
+//! and breaching fixtures in `pull_request_cases` and `publisher_cases`,
+//! because a rule exercised only over this repository's own correct workflows
+//! would pass whether or not it detects anything. The tests below then apply
+//! the same functions to the real files.
 
 use anyhow::{Result, ensure};
 use serde_yaml::Value;
 
-#[path = "coverage_workflows/cases.rs"]
-mod cases;
+#[path = "coverage_workflows/publisher_cases.rs"]
+mod publisher_cases;
+#[path = "coverage_workflows/pull_request_cases.rs"]
+mod pull_request_cases;
 #[path = "coverage_workflows/reader.rs"]
 mod reader;
 #[path = "coverage_workflows/rules.rs"]
