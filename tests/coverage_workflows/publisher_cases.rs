@@ -238,3 +238,78 @@ fn quoted_operators_are_not_operators(#[case] condition: &str, #[case] expected:
         "for {condition}"
     );
 }
+
+/// A publisher wired as this repository wires it: the upload reads what the
+/// coverage step writes and passes the token its step was given.
+const WIRED: &str = r"
+on:
+  push:
+    branches: [main]
+jobs:
+  coverage:
+    steps:
+      - uses: leynos/shared-actions/.github/actions/generate-coverage@abc
+        with:
+          output-path: lcov.info
+          format: lcov
+      - env:
+          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@abc
+        with:
+          path: lcov.info
+          format: lcov
+          access-token: ${{ env.CS_ACCESS_TOKEN }}
+";
+
+/// Scenario: the upload is rewired away from what was measured, or from the
+/// token.
+///
+/// Invariant: each variation is named, and the wired publisher has none.
+/// Every other publisher clause passes all four variations, because each
+/// judges one step at a time.
+#[rstest]
+#[case::wired("", "", None)]
+#[case::other_path(
+    "path: lcov.info",
+    "path: other.info",
+    Some("which no coverage step writes")
+)]
+#[case::other_format(
+    "          format: lcov\n          access",
+    "          format: cobertura\n          access",
+    Some("which no coverage step writes")
+)]
+#[case::no_token(
+    "          access-token: ${{ env.CS_ACCESS_TOKEN }}\n",
+    "",
+    Some("not the token it was given")
+)]
+#[case::other_token(
+    "${{ env.CS_ACCESS_TOKEN }}",
+    "${{ env.OTHER }}",
+    Some("not the token it was given")
+)]
+fn the_upload_sends_what_was_measured(
+    #[case] from: &str,
+    #[case] to: &str,
+    #[case] expected: Option<&str>,
+) -> Result<()> {
+    let source = if from.is_empty() {
+        WIRED.to_owned()
+    } else {
+        WIRED.replacen(from, to, 1)
+    };
+    ensure!(
+        source != WIRED || from.is_empty(),
+        "the case changed nothing"
+    );
+    let findings = rules::wiring_findings(&parse(&source)?);
+    match expected {
+        None => ensure!(findings.is_empty(), "unexpected findings: {findings:?}"),
+        Some(clause) => ensure!(
+            findings.len() == 1 && findings[0].contains(clause),
+            "expected one finding naming {clause:?}, saw {findings:?}"
+        ),
+    }
+    Ok(())
+}

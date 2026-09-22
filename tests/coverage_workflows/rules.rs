@@ -6,7 +6,10 @@
 
 use serde_yaml::{Mapping, Value};
 
-use super::reader::{self, get, uses};
+use super::{
+    reader::{self, get, uses},
+    text::{computes_a_secret, rendered, rendered_mapping},
+};
 
 /// The action the estate uses to publish coverage to `CodeScene`.
 pub const UPLOAD_ACTION: &str = "leynos/shared-actions/.github/actions/upload-codescene-coverage";
@@ -27,19 +30,6 @@ const COVERAGE_CLI: &str = "cs-coverage";
 const CODESCENE_HOST: &str = "codescene.io";
 /// The conjunct that restricts the publisher's upload to the trunk.
 const MAIN_REF_GUARD: &str = "github.ref == 'refs/heads/main'";
-
-/// Renders a parsed value back to YAML text.
-///
-/// Rendering the parse rather than reading the file is deliberate: comments
-/// are gone by this point, so prose explaining why the token is absent does
-/// not read as the token being present. It also reaches every place a value
-/// can sit, at workflow, job or step scope, in a `run` body, an action
-/// input, an `env` value, an `if:` or a `secrets:` forwarding, without a
-/// walker that has to be told about each.
-fn rendered(value: &Value) -> String { serde_yaml::to_string(value).unwrap_or_default() }
-
-/// Renders one step or job mapping, as [`rendered`] does a whole value.
-fn rendered_mapping(mapping: &Mapping) -> String { rendered(&Value::Mapping(mapping.clone())) }
 
 /// Reads a workflow input as a boolean, accepting the string and native forms.
 fn input_is(step: &Mapping, key: &str, expected: bool) -> bool {
@@ -86,28 +76,6 @@ fn runs_cli_upload(run: &str) -> bool {
     words.windows(2).any(|pair| {
         (pair[0] == COVERAGE_CLI || pair[0].ends_with(&format!("/{COVERAGE_CLI}")))
             && pair[1] == "upload"
-    })
-}
-
-/// Returns whether `text` reaches the `secrets` context other than by name.
-///
-/// `secrets['CS_' + ...]`, `secrets[format('CS_{0}', 'ACCESS_TOKEN')]` and
-/// `toJSON(secrets)` all hand a step the token without spelling it, so a
-/// search for the name alone passes them. Every `secrets` word is therefore
-/// judged by what follows it: `.` is a named reference, which the name search
-/// already judges, and `:` is a YAML key (`secrets: inherit` or a named
-/// forwarding), which the job clauses judge. Anything else is a computed or
-/// whole-context access and is refused.
-fn computes_a_secret(text: &str) -> bool {
-    let bytes = text.as_bytes();
-    text.match_indices("secrets").any(|(start, word)| {
-        let before = start.checked_sub(1).map(|index| bytes[index]);
-        let is_word_start = before
-            .is_none_or(|byte| !(byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'.'));
-        let next = text[start + word.len()..].trim_start().chars().next();
-        is_word_start
-            && !matches!(next, Some('.' | ':') | None)
-            && !next.is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
     })
 }
 
@@ -343,5 +311,59 @@ pub fn publisher_findings(workflow: &Value) -> Vec<String> {
     }
     findings.extend(token_findings(workflow));
     findings.extend(concurrency_findings(workflow));
+    findings
+}
+
+/// Returns a step's `with` input as written, if present.
+fn input<'a>(step: &'a Mapping, key: &str) -> Option<&'a str> {
+    get(step, "with")
+        .and_then(Value::as_mapping)
+        .and_then(|with| get(with, key))
+        .and_then(Value::as_str)
+}
+
+/// The inputs an upload may pass as its access token, whitespace normalized.
+const TOKEN_INPUTS: [&str; 2] = [
+    "${{ env.CS_ACCESS_TOKEN }}",
+    "${{ secrets.CS_ACCESS_TOKEN }}",
+];
+
+/// Returns the reasons the publisher's upload would not send what it measured.
+///
+/// Kept apart from [`publisher_findings`] because it compares two steps of a
+/// complete publisher: each upload must read the file, in the format, that a
+/// coverage step writes, or it uploads nothing useful while every other
+/// clause passes; and it must pass the token it was given as its
+/// `access-token`, or its own guard holds while the action runs
+/// unauthenticated.
+pub fn wiring_findings(workflow: &Value) -> Vec<String> {
+    let steps = reader::steps(workflow);
+    let written: Vec<(Option<&str>, Option<&str>)> = steps
+        .iter()
+        .filter(|step| is_coverage(step))
+        .map(|step| (input(step, "output-path"), input(step, "format")))
+        .collect();
+    let mut findings = Vec::new();
+    for upload in steps
+        .iter()
+        .filter(|step| uses(step).is_some_and(|r| r.starts_with(UPLOAD_ACTION)))
+    {
+        let read = (input(upload, "path"), input(upload, "format"));
+        if !written.contains(&read) {
+            findings.push(format!(
+                "the upload reads {read:?}, which no coverage step writes; written: {written:?}"
+            ));
+        }
+        let token = input(upload, "access-token")
+            .map(|value| value.split_whitespace().collect::<Vec<_>>().join(" "));
+        if !token
+            .as_deref()
+            .is_some_and(|value| TOKEN_INPUTS.contains(&value))
+        {
+            findings.push(format!(
+                "the upload's access-token is {token:?}, not the token it was given"
+            ));
+        }
+    }
     findings
 }

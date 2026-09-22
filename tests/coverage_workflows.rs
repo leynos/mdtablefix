@@ -25,7 +25,8 @@
 //! reached, and every pull-request clause runs over what it returns.
 //!
 //! The judgements live in [`rules`] and are driven directly against complying
-//! and breaching fixtures in `pull_request_cases` and `publisher_cases`,
+//! and breaching fixtures in `pull_request_cases` and `publisher_cases`, and
+//! the closure against generated call graphs in `closure_properties`,
 //! because a rule exercised only over this repository's own correct workflows
 //! would pass whether or not it detects anything. The tests below then apply
 //! the same functions to the real files.
@@ -33,6 +34,8 @@
 use anyhow::{Result, ensure};
 use serde_yaml::Value;
 
+#[path = "coverage_workflows/closure_properties.rs"]
+mod closure_properties;
 #[path = "coverage_workflows/publisher_cases.rs"]
 mod publisher_cases;
 #[path = "coverage_workflows/pull_request_cases.rs"]
@@ -41,6 +44,8 @@ mod pull_request_cases;
 mod reader;
 #[path = "coverage_workflows/rules.rs"]
 mod rules;
+#[path = "coverage_workflows/text.rs"]
+mod text;
 
 /// Workflows a pull request is known to start.
 ///
@@ -81,8 +86,9 @@ fn no_workflow_a_pull_request_reaches_touches_codescene() -> Result<()> {
 /// Scenario: the repository is asked whether anything publishes coverage.
 ///
 /// Invariant: exactly one workflow is triggered by a push restricted to
-/// `main`, and it publishes as clause 3 requires. Without this, the first
-/// clause is satisfied by deleting the upload altogether.
+/// `main`, and it publishes as clause 3 requires, uploading the file and
+/// format its coverage step writes with the token it was given. Without
+/// this, the first clause is satisfied by deleting the upload altogether.
 #[test]
 fn exactly_one_main_publisher_uploads_ratcheted_coverage() -> Result<()> {
     let all = reader::workflows()?;
@@ -98,7 +104,8 @@ fn exactly_one_main_publisher_uploads_ratcheted_coverage() -> Result<()> {
         !reader::pull_request_closure(&all).contains(*name),
         "{name} publishes from main but a pull request can reach it"
     );
-    let findings = rules::publisher_findings(workflow);
+    let mut findings = rules::publisher_findings(workflow);
+    findings.extend(rules::wiring_findings(workflow));
     ensure!(findings.is_empty(), "{name}: {findings:?}");
     Ok(())
 }

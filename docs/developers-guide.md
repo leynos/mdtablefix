@@ -1670,9 +1670,16 @@ contains an unquoted `||`, because `&&` binds tighter and a leading disjunct
 would upload a dispatch from any branch while the ref check still appeared as a
 conjunct.
 
+The publisher's upload must also read the file and format its coverage step
+writes, and pass the token its step holds as `access-token`; either mistake
+leaves every per-step clause passing while CodeScene receives nothing useful.
+
 The rules are driven directly against complying and breaching fixtures, because
 every real workflow here complies and a rule exercised only over correct
-sources passes whether or not it detects anything. Run it with `make test`.
+sources passes whether or not it detects anything. The closure is also checked
+against generated call graphs, with branches, cycles and every call spelling,
+by comparison with reachability computed on the adjacency matrix. Run it with
+`make test`.
 
 ## 1. Stateful pipeline helpers
 
