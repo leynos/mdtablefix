@@ -82,6 +82,8 @@ fn the_pull_request_rule_reports_what_it_should(
      }}\n"
 )]
 #[case::inherit("uses: ./.github/workflows/c.yml\nsecrets: inherit\n")]
+#[case::computed_name("steps:\n  - run: echo ${{ secrets[format('CS_{0}', 'ACCESS_TOKEN')] }}\n")]
+#[case::whole_context("steps:\n  - run: echo '${{ toJSON(secrets) }}'\n")]
 fn every_route_to_the_token_is_reported(#[case] job: &str) -> Result<()> {
     let indented: String = job
         .lines()
@@ -90,6 +92,41 @@ fn every_route_to_the_token_is_reported(#[case] job: &str) -> Result<()> {
     let source = format!("on: pull_request\njobs:\n  lane:\n{indented}");
     let findings = rules::pull_request_findings(&parse(&source)?);
     ensure!(!findings.is_empty(), "the route was not reported: {source}");
+    Ok(())
+}
+
+/// Scenario: a pull-request lane names another secret, and mentions secrets in
+/// prose.
+///
+/// Invariant: neither is read as a computed reference. The computed-name
+/// clause judges what follows the word `secrets`, and a named reference or an
+/// ordinary word must not trip it, or the clause would be deleted rather than
+/// obeyed.
+#[test]
+fn a_named_secret_and_prose_are_not_computed_references() -> Result<()> {
+    let source = concat!(
+        "on: pull_request\njobs:\n  lane:\n    steps:\n",
+        "      - run: echo ${{ secrets.GITHUB_TOKEN }} keeps secrets out of logs\n",
+    );
+    let findings = rules::pull_request_findings(&parse(source)?);
+    ensure!(findings.is_empty(), "unexpected findings: {findings:?}");
+    Ok(())
+}
+
+/// Scenario: a pull-request workflow calls a local workflow that is not there.
+///
+/// Invariant: the call is reported. The closure can only follow a file it
+/// has read, so a missing callee would otherwise drop out of every
+/// pull-request clause in silence, along with whatever it runs once added.
+#[test]
+fn a_call_to_a_missing_workflow_is_reported() -> Result<()> {
+    let caller = "on: pull_request\njobs:\n  call:\n    uses: ./.github/workflows/missing.yml\n";
+    let all: reader::Workflows = [("caller.yml".to_owned(), parse(caller)?)].into();
+    let missing = reader::missing_callees(&all, &reader::pull_request_closure(&all));
+    ensure!(
+        missing.len() == 1 && missing[0].contains("missing.yml"),
+        "expected the missing callee, saw {missing:?}"
+    );
     Ok(())
 }
 

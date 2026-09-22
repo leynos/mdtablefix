@@ -136,6 +136,9 @@ const UPLOAD_TOKEN: &str =
 /// A scope-wide declaration of the token, indented for the workflow root.
 const WIDE_TOKEN: &str = "env:\n  CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}\n";
 
+/// A job calling a reusable workflow, awaiting the mapping a case gives it.
+const REUSABLE: &str = "  forward:\n    uses: ./.github/workflows/elsewhere.yml\n";
+
 /// Scenario: the token is moved off the upload step, or declared more widely.
 ///
 /// Invariant: each placement is named. Moving the token to the coverage step
@@ -154,6 +157,22 @@ const WIDE_TOKEN: &str = "env:\n  CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }
     |source: String| source.replace("    steps:\n", &format!("    {}    steps:\n", WIDE_TOKEN.replace("\n  ", "\n      "))),
     &["for every step"][..],
 )]
+#[case::forwarded_as_an_input(
+    |source: String| source.replace("jobs:\n", &format!("jobs:\n{REUSABLE}    with:\n      token: ${{{{ secrets.CS_ACCESS_TOKEN }}}}\n")),
+    &["to a reusable workflow"][..],
+)]
+#[case::forwarded_by_name(
+    |source: String| source.replace("jobs:\n", &format!("jobs:\n{REUSABLE}    secrets:\n      CS_ACCESS_TOKEN: ${{{{ secrets.CS_ACCESS_TOKEN }}}}\n")),
+    &["to a reusable workflow"][..],
+)]
+#[case::forwarded_by_inheritance(
+    |source: String| source.replace("jobs:\n", &format!("jobs:\n{REUSABLE}    secrets: inherit\n")),
+    &["to a reusable workflow"][..],
+)]
+#[case::computed_elsewhere(
+    |source: String| source.replace("        with:\n          with-ratchet", "        env:\n          T: ${{ secrets['CS_ACCESS_TOKEN'] }}\n        with:\n          with-ratchet"),
+    &["computed name"][..],
+)]
 fn the_token_sits_on_the_upload_alone(
     #[case] vary: fn(String) -> String,
     #[case] expected: &[&str],
@@ -166,6 +185,23 @@ fn the_token_sits_on_the_upload_alone(
                 .iter()
                 .all(|clause| findings.iter().any(|f| f.contains(clause))),
         "expected findings naming {expected:?}, saw {findings:?}"
+    );
+    Ok(())
+}
+
+/// Scenario: a publisher gains a second upload, through the CLI, with its
+/// command split across a shell continuation.
+///
+/// Invariant: it is read as an upload, so its missing guard is reported. The
+/// shell joins `cs-coverage \` and `upload` into one command; a contiguous
+/// text search would not, and the unguarded upload would pass unjudged.
+#[test]
+fn a_continued_cli_upload_is_still_an_upload() -> Result<()> {
+    let extra = "      - run: |\n          cs-coverage \\\n            upload --format lcov\n";
+    let findings = rules::publisher_findings(&parse(&publisher(NEVER_CANCEL, GUARD, extra))?);
+    ensure!(
+        findings.iter().any(|f| f.contains("not guarded")),
+        "the continued upload was not judged: {findings:?}"
     );
     Ok(())
 }

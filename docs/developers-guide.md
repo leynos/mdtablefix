@@ -1634,7 +1634,11 @@ Three details of the publisher are load-bearing:
   deliberately does not reach this workflow.
 - **Only the upload step holds the token.** The secret sits in that step's
   `env` and nowhere wider, so no other step, and no step added later, receives
-  it by inheritance.
+  it by inheritance. A job calling a reusable workflow has no steps for that
+  rule to see, so the contract also refuses one that forwards the token through
+  `with:`, a named `secrets:` entry or `secrets: inherit`. An upload through
+  the CLI is recognised as the shell reads it, across a backslash-newline
+  continuation.
 
 ### The coverage publication contract
 
@@ -1645,9 +1649,12 @@ workflow they call through a job-level `uses:`, followed transitively. A
 workflow declaring only `workflow_call` names no pull request, yet a
 pull-request job can call it with `secrets: inherit`, so enumerating triggers
 alone would leave it outside every clause. Within that closure the contract
-refuses the token by any reference, a blanket `secrets: inherit`, the upload
-action, a direct `cs-coverage` call, the `codescene.io` host, and a coverage
-step that does not ratchet or that publishes its report.
+refuses the token by any reference, a secret reached by a computed name
+(`secrets[...]`) or the whole context (`toJSON(secrets)`), a blanket
+`secrets: inherit`, the upload action, a direct `cs-coverage` call, the
+`codescene.io` host, and a coverage step that does not ratchet or that
+publishes its report. A local call to a workflow file that is not there is
+reported too, since the closure cannot follow it.
 
 The readers err towards seeing more: both extensions in either case, the `on`
 key as a string or as the boolean YAML 1.1 makes of it, a trigger written as a

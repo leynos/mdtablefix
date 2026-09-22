@@ -70,8 +70,45 @@ fn is_upload(step: &Mapping) -> bool {
         && matches!(mode, None | Some("upload"));
     let cli = get(step, "run")
         .and_then(Value::as_str)
-        .is_some_and(|run| run.contains(&format!("{COVERAGE_CLI} upload")));
+        .is_some_and(runs_cli_upload);
     action || cli
+}
+
+/// Returns whether a `run` body invokes `cs-coverage upload`.
+///
+/// Read as the shell reads it rather than as text: a backslash-newline
+/// continuation joins `cs-coverage \` and `upload` into one command, and any
+/// run of whitespace separates the words, so a contiguous-text search would
+/// miss an upload the shell still performs. A path to the binary counts too.
+fn runs_cli_upload(run: &str) -> bool {
+    let joined = run.replace("\\\n", " ").replace("\\\r\n", " ");
+    let words: Vec<&str> = joined.split_whitespace().collect();
+    words.windows(2).any(|pair| {
+        (pair[0] == COVERAGE_CLI || pair[0].ends_with(&format!("/{COVERAGE_CLI}")))
+            && pair[1] == "upload"
+    })
+}
+
+/// Returns whether `text` reaches the `secrets` context other than by name.
+///
+/// `secrets['CS_' + ...]`, `secrets[format('CS_{0}', 'ACCESS_TOKEN')]` and
+/// `toJSON(secrets)` all hand a step the token without spelling it, so a
+/// search for the name alone passes them. Every `secrets` word is therefore
+/// judged by what follows it: `.` is a named reference, which the name search
+/// already judges, and `:` is a YAML key (`secrets: inherit` or a named
+/// forwarding), which the job clauses judge. Anything else is a computed or
+/// whole-context access and is refused.
+fn computes_a_secret(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    text.match_indices("secrets").any(|(start, word)| {
+        let before = start.checked_sub(1).map(|index| bytes[index]);
+        let is_word_start = before
+            .is_none_or(|byte| !(byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'.'));
+        let next = text[start + word.len()..].trim_start().chars().next();
+        is_word_start
+            && !matches!(next, Some('.' | ':') | None)
+            && !next.is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+    })
 }
 
 /// Returns the reasons a workflow a pull request can reach breaches CV-005.
@@ -80,6 +117,9 @@ pub fn pull_request_findings(workflow: &Value) -> Vec<String> {
     let text = rendered(workflow);
     if text.contains(ACCESS_TOKEN) {
         findings.push(format!("a pull-request lane receives {ACCESS_TOKEN}"));
+    }
+    if computes_a_secret(&text) {
+        findings.push("a pull-request lane reaches a secret by a computed name".to_owned());
     }
     if text.to_ascii_lowercase().contains(CODESCENE_HOST) {
         findings.push(format!("a pull-request lane contacts {CODESCENE_HOST}"));
@@ -210,6 +250,14 @@ fn token_findings(workflow: &Value) -> Vec<String> {
         if get(job, "env").is_some_and(|env| rendered(env).contains(SECRET_REFERENCE)) {
             findings.push(format!("job {id} declares {ACCESS_TOKEN} for every step"));
         }
+        if forwards_the_token(job) {
+            findings.push(format!(
+                "job {id} forwards {ACCESS_TOKEN} to a reusable workflow"
+            ));
+        }
+    }
+    if computes_a_secret(&rendered(workflow)) {
+        findings.push("the publisher reaches a secret by a computed name".to_owned());
     }
     for step in reader::steps(workflow) {
         let holds = rendered_mapping(step).contains(SECRET_REFERENCE);
@@ -223,6 +271,24 @@ fn token_findings(workflow: &Value) -> Vec<String> {
         }
     }
     findings
+}
+
+/// Returns whether a job calling a reusable workflow hands it the token.
+///
+/// Such a job has no steps, so the step clauses never see it: the token can
+/// travel through its `with:` inputs, a named `secrets:` entry, or
+/// `secrets: inherit`, and the called workflow then holds it outside the one
+/// upload step the publisher is allowed.
+fn forwards_the_token(job: &Mapping) -> bool {
+    if get(job, "uses").is_none() {
+        return false;
+    }
+    let inherits = get(job, "secrets").and_then(Value::as_str) == Some("inherit");
+    let names_it = ["with", "secrets"]
+        .iter()
+        .filter_map(|key| get(job, key))
+        .any(|value| rendered(value).contains(SECRET_REFERENCE));
+    inherits || names_it
 }
 
 /// Returns the reasons the publisher's runs could cancel one another.

@@ -242,3 +242,24 @@ pub fn pull_request_closure(all: &Workflows) -> BTreeSet<String> {
     }
     reached
 }
+
+/// Returns each local call, from the named workflows, to a file that is not there.
+///
+/// The closure can only follow a call to a workflow it has read, so a call
+/// to a missing file would otherwise drop out of it in silence, and with it
+/// whatever that file would run once it exists. Each entry names the caller
+/// and the reference as written.
+pub fn missing_callees(all: &Workflows, names: &BTreeSet<String>) -> Vec<String> {
+    names
+        .iter()
+        .filter_map(|name| Some((name, all.get(name)?)))
+        .flat_map(|(name, workflow)| {
+            job_calls(workflow)
+                .into_iter()
+                .filter(|(_, reference)| {
+                    matches!(classify_call(reference), Call::Local(file) if !all.contains_key(file))
+                })
+                .map(move |(_, reference)| format!("{name} calls `{reference}`, which is not there"))
+        })
+        .collect()
+}

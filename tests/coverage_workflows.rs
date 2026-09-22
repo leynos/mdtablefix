@@ -72,6 +72,7 @@ fn no_workflow_a_pull_request_reaches_touches_codescene() -> Result<()> {
                 .into_iter()
                 .map(move |finding| format!("{name}: {finding}"))
         })
+        .chain(reader::missing_callees(&all, &closure))
         .collect();
     ensure!(breaches.is_empty(), "CV-005 breaches: {breaches:?}");
     Ok(())
