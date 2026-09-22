@@ -63,7 +63,7 @@ test-macros = { path = "test-macros" }
 googletest = "0.14"
 pretty_assertions = "1"
 rstest-bdd = "0.5.0"
-rstest-bdd-macros = { version = "0.5.0", features = ["strict-compile-time-validation"] }
+rstest-bdd-macros = { version = "0.6.0", features = ["strict-compile-time-validation"] }
 toml = "1.1.2"
 syn = { version = "3.0.3", features = ["full", "visit", "extra-traits"] }
 proc-macro2 = "1.0.106"
