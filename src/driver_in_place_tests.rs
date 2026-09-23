@@ -31,8 +31,8 @@ const INTRUDER: &str = "|X|Y|\n|---|---|\n|3|4|\n";
 /// `--in-place` is the one mode that writes, and its payload is empty: the
 /// formatted text goes to the file, not to standard output.
 #[test]
-fn in_place_writes_the_formatted_text() {
-    let (_dir, directory) = fixture("ragged.md", RAGGED);
+fn in_place_writes_the_formatted_text() -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("ragged.md", RAGGED)?;
 
     let (_report, payload) = analyse(
         Mode::InPlace,
@@ -45,7 +45,8 @@ fn in_place_writes_the_formatted_text() {
     .expect("analyse fixture");
 
     assert_eq!(payload, "");
-    assert_eq!(read(&directory, "ragged.md"), ALIGNED);
+    assert_eq!(read(&directory, "ragged.md")?, ALIGNED);
+    Ok(())
 }
 
 /// An ordinary changed document never needs repository state to be read.
@@ -54,8 +55,8 @@ fn in_place_writes_the_formatted_text() {
 /// it as a directory would fail, so successful formatting proves that the
 /// marker scan kept the guarded state probe out of this path.
 #[test]
-fn in_place_formats_an_unmarked_file_without_reading_repository_state() {
-    let (dir, directory) = fixture("ragged.md", RAGGED);
+fn in_place_formats_an_unmarked_file_without_reading_repository_state() -> anyhow::Result<()> {
+    let (dir, directory) = fixture("ragged.md", RAGGED)?;
     let regular_file = dir.path().join("ragged.md");
     let git_dir = Utf8Path::from_path(&regular_file).expect("the fixture path is UTF-8");
 
@@ -71,7 +72,8 @@ fn in_place_formats_an_unmarked_file_without_reading_repository_state() {
 
     assert!(report.is_changed);
     assert_eq!(payload, "");
-    assert_eq!(read(&directory, "ragged.md"), ALIGNED);
+    assert_eq!(read(&directory, "ragged.md")?, ALIGNED);
+    Ok(())
 }
 
 /// A drifting file is replaced, not edited in place.
@@ -82,8 +84,8 @@ fn in_place_formats_an_unmarked_file_without_reading_repository_state() {
 /// implementation that never wrote anything would satisfy the invariance test.
 #[cfg(unix)]
 #[test]
-fn in_place_replaces_a_drifting_file() {
-    let (dir, directory) = fixture("ragged.md", RAGGED);
+fn in_place_replaces_a_drifting_file() -> anyhow::Result<()> {
+    let (dir, directory) = fixture("ragged.md", RAGGED)?;
     let target = dir.path().join("ragged.md");
     let before = fs::metadata(&target).expect("read the metadata before the write");
 
@@ -103,7 +105,8 @@ fn in_place_replaces_a_drifting_file() {
         after.ino(),
         "a drifting file must be replaced through a temporary"
     );
-    assert_eq!(read(&directory, "ragged.md"), ALIGNED);
+    assert_eq!(read(&directory, "ragged.md")?, ALIGNED);
+    Ok(())
 }
 
 /// A file another writer changed while it was being formatted is not
@@ -115,8 +118,8 @@ fn in_place_replaces_a_drifting_file() {
 /// as a concurrent writer would be: it holds no capability of this run's, and
 /// the run's own read is what goes stale.
 #[test]
-fn in_place_declines_a_file_that_changed_under_it() {
-    let (dir, directory) = fixture("ragged.md", RAGGED);
+fn in_place_declines_a_file_that_changed_under_it() -> anyhow::Result<()> {
+    let (dir, directory) = fixture("ragged.md", RAGGED)?;
     let intruder_path = dir.path().join("ragged.md");
     let intruder = move |document: &SourceDocument<'_>| {
         std::fs::write(&intruder_path, INTRUDER).expect("write the concurrent change");
@@ -140,7 +143,7 @@ fn in_place_declines_a_file_that_changed_under_it() {
         "the error must say why the file was left alone: {error}"
     );
     assert_eq!(
-        read(&directory, "ragged.md"),
+        read(&directory, "ragged.md")?,
         INTRUDER,
         "the other writer's text must survive the run"
     );
@@ -152,6 +155,7 @@ fn in_place_declines_a_file_that_changed_under_it() {
         1,
         "a declined write must leave no temporary file behind"
     );
+    Ok(())
 }
 
 /// A clean file is left alone byte for byte, and observably so.
@@ -162,8 +166,8 @@ fn in_place_declines_a_file_that_changed_under_it() {
 /// downstream would see a rebuild where there was nothing to rebuild.
 #[cfg(unix)]
 #[test]
-fn in_place_leaves_a_clean_file_untouched() {
-    let (dir, directory) = fixture("clean.md", ALIGNED);
+fn in_place_leaves_a_clean_file_untouched() -> anyhow::Result<()> {
+    let (dir, directory) = fixture("clean.md", ALIGNED)?;
     let target = dir.path().join("clean.md");
     let before = fs::metadata(&target).expect("read the metadata before the analysis");
 
@@ -198,5 +202,6 @@ fn in_place_leaves_a_clean_file_untouched() {
         after.mtime_nsec(),
         "a clean file's modification time must not move"
     );
-    assert_eq!(read(&directory, "clean.md"), ALIGNED);
+    assert_eq!(read(&directory, "clean.md")?, ALIGNED);
+    Ok(())
 }
