@@ -7,8 +7,8 @@
 //! rewritten to line feeds.
 //!
 //! [`SourceDocument`] binds both to the document they were read from, so a
-//! caller cannot render one document's lines with another's style. The
-//! line-ending policy behind it lives in [`super::line_endings`].
+//! caller cannot render one document's lines with another's style. The sibling
+//! `line_endings` module owns the policy behind it.
 //!
 //! Splitting the mark off matters for more than fidelity. Left attached to the
 //! first line it defeats every content transform, which would make `--check`
