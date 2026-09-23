@@ -12,7 +12,7 @@
 //! same gate, so the registry and the feature file stay consistent rather than
 //! one referring to a step the other does not define.
 
-#[path = "steps/git_selection.rs"]
+#[path = "steps/git_selection/mod.rs"]
 mod steps;
 
 use rstest_bdd_macros::scenario;

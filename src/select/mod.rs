@@ -30,5 +30,5 @@ pub(crate) mod repository_state;
 pub(crate) use repository_state::ConflictGuard;
 
 #[cfg(test)]
-#[path = "select/conflict_tests.rs"]
+#[path = "conflict_tests.rs"]
 mod conflict_tests;
