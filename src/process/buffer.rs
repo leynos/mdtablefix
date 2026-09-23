@@ -8,7 +8,7 @@
 use tracing::debug;
 
 use crate::{
-    classify::{ClassifyCtx, LineClass, classify_line},
+    classify::{ClassifyCtx, LineClass, classify_line_with_body},
     ellipsis::replace_ellipsis,
     table::reflow_table,
     wrap::{LinkReferenceMatcher, classify_block, leading_indent},
@@ -169,8 +169,11 @@ impl ProcessBuffer {
         // code block, so such a line must stay verbatim and never enter table
         // mode (otherwise `reflow_table` would rewrite its contents). This
         // mirrors the `indent_width < 4` gate in `classify_block`.
-        let line_class = classify_line(&line, &ClassifyCtx::default());
-        if line_class == LineClass::TableRow {
+        let classified = classify_line_with_body(&line, &ClassifyCtx::default());
+        let prefix = &line[..line.len() - classified.body.len()];
+        let is_quoted = prefix.contains('>');
+        let line_class = classified.class;
+        if line_class == LineClass::TableRow && !is_quoted {
             debug!(
                 line_len = line.len(),
                 buffered_lines = self.buf.len(),

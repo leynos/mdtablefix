@@ -37,6 +37,15 @@ fn test_format_breaks_basic() {
 }
 
 #[test]
+fn test_format_breaks_preserves_blockquote_prefix() {
+    let input = lines_vec!["> ---", "> > ***"];
+    let output = format_breaks(&input);
+
+    assert_eq!(output[0], format!("> {}", "_".repeat(THEMATIC_BREAK_LEN)));
+    assert_eq!(output[1], format!("> > {}", "_".repeat(THEMATIC_BREAK_LEN)));
+}
+
+#[test]
 fn test_format_breaks_ignores_code() {
     let input = lines_vec!["```", "---", "```"];
     let output = format_breaks(&input);

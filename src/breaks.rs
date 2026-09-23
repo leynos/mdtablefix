@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use crate::{
-    classify::{ClassifyCtx, LineClass, OpenFence, classify_line},
+    classify::{ClassifyCtx, LineClass, OpenFence, classify_line_with_body},
     wrap::FenceTracker,
 };
 
@@ -60,8 +60,18 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         } else {
             ClassifyCtx::default()
         };
-        if !fence.is_in_fence && classify_line(line, &context) == LineClass::ThematicBreak {
-            out.push(Cow::Borrowed(canonical_break()));
+        let classified = classify_line_with_body(line, &context);
+        if !fence.is_in_fence && classified.class == LineClass::ThematicBreak {
+            let prefix_len = line.len() - classified.body.len();
+            if line[..prefix_len].contains('>') {
+                out.push(Cow::Owned(format!(
+                    "{}{}",
+                    &line[..prefix_len],
+                    canonical_break()
+                )));
+            } else {
+                out.push(Cow::Borrowed(canonical_break()));
+            }
         } else {
             out.push(Cow::Borrowed(line.as_str()));
         }
@@ -174,6 +184,7 @@ mod prop_tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::classify::classify_line;
 
     proptest! {
         #[test]

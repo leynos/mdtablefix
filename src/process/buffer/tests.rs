@@ -55,6 +55,18 @@ fn plain_table_line_enters_table_mode() {
 }
 
 #[rstest]
+#[case::plain_quote("> | quoted | row |")]
+#[case::indented_quote("  > | quoted | row |")]
+fn quoted_table_row_does_not_enter_table_mode(
+    #[case] line: &str,
+    #[from(new_buffer)] mut buffer: ProcessBuffer,
+) {
+    assert_eq!(handle_line(&mut buffer, line), Some(line.to_string()));
+    assert!(!buffer.in_table);
+    assert!(buffer.buf.is_empty());
+}
+
+#[rstest]
 #[case::four_spaces("    | not | a | table |")]
 #[case::leading_tab("\t| not | a | table |")]
 fn indented_code_block_line_does_not_enter_table_mode(

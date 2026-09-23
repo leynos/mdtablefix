@@ -13,11 +13,12 @@ Issue #485 has no production-linked proof claims yet. The current
 scanner or consumer functions and is therefore deliberately excluded from the
 claim ledger.
 
-The pinned Verus release cannot compile the production scanner's `&str` range
-operations inside `verus!`; the exact missing refinement obligation and the
-required shared character-sequence kernel are tracked in [#512][issue-512]. The
-production scanner and its consumers remain the source of truth. No
-`#[verifier::external_body]` contract is used to assert their correctness.
+The pinned Verus release cannot compile `&str` range operations inside
+`verus!`. The production scanner now delegates to a character-sequence kernel
+that `verus/lib.rs` compiles, but `classify_seq` still has a trivial
+postcondition, its scanner predicates use `#[verifier::external_body]`, and
+`spec_classify` is not connected to the executable result. The missing
+refinement and consumer obligations are tracked in [#512][issue-512].
 
 ## Claim ledger
 

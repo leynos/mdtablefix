@@ -3,16 +3,19 @@
 set -euo pipefail
 
 repo_root="${1:-.}"
-proof_file="$(mktemp /tmp/mdtablefix-atx-mutation-XXXXXX.rs)"
-output_file="$(mktemp /tmp/mdtablefix-atx-mutation-XXXXXX.out)"
+proof_dir="$(mktemp -d "${repo_root}/verus/.atx-mutation-XXXXXX")"
+proof_file="${proof_dir}/lib.rs"
+output_file="${proof_dir}/verus.out"
 
 cleanup() {
-    unlink "${proof_file}"
-    unlink "${output_file}"
+    rm -f "${proof_file}" "${output_file}"
+    rmdir "${proof_dir}"
 }
 trap cleanup EXIT
 
-sed "s/\.push('#')\.push(' ')/.push('#')/" "${repo_root}/verus/lib.rs" > "${proof_file}"
+sed -e "s/\.push('#')\.push(' ')/.push('#')/" \
+    -e 's@../src/classify_kernel.rs@../../src/classify_kernel.rs@' \
+    "${repo_root}/verus/lib.rs" > "${proof_file}"
 
 # `PROVER_TOOLS` deliberately carries a command and its fixed arguments, as it
 # does in the Makefile. Its expansion must therefore remain unquoted here.
@@ -24,4 +27,5 @@ if env -u RUSTUP_TOOLCHAIN ${PROVER_TOOLS:?PROVER_TOOLS must be set} verus run \
     exit 1
 fi
 
-grep -Fq "Verus proofs failed" "${output_file}"
+grep -Fq "verification results::" "${output_file}"
+grep -Fq "assertion failed" "${output_file}"

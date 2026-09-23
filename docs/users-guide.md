@@ -46,6 +46,9 @@ each formatting flag is described in the sections that follow.
 
 _Table 1: The command-line flags._
 
+With `--breaks`, a thematic break inside a blockquote keeps its quote prefix;
+for example, `> ---` becomes a `>` marker, a space, and 70 underscores.
+
 ### The four file modes
 
 `--in-place`, `--check`, `--diff`, and `--list-files` act on the files a run
@@ -849,8 +852,9 @@ error text is ever used as a label, so a recorder's cardinality stays bounded.
 `format_breaks` returns `Vec<Cow<'_, str>>` rather than `Vec<String>`. Lines
 that are not thematic breaks are returned as `Cow::Borrowed` slices into the
 input, avoiding heap allocations for unchanged content. Synthesized
-thematic-break lines are also `Cow::Borrowed`, borrowing from a shared static
-buffer.
+thematic-break lines without a prefix are also `Cow::Borrowed`, borrowing from
+a shared static buffer. Quoted thematic breaks retain their quote prefix and
+are returned as `Cow::Owned`.
 
 Callers that need owned `String` values must call `.into_owned()`:
 
