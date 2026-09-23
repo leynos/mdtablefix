@@ -7,7 +7,7 @@ use rstest::{fixture, rstest};
 use test_macros::traced_test;
 
 use super::{date_token_span, try_match_date_sequence};
-use crate::wrap::{inline::determine_token_span, tracing_snapshot_support::normalise_event_lines};
+use crate::wrap::{inline::determine_token_span, tracing_snapshot_support::normalize_event_lines};
 
 #[fixture]
 fn date_tokens() -> Vec<String> {
@@ -117,7 +117,7 @@ fn snapshots_grouped_date_sequence_event(date_tokens: Vec<String>) {
     assert_eq!(date_tokens[..end].join(""), "25th December 2025");
     assert_eq!(width, 18);
     logs_assert(|lines| {
-        captured.replace(normalise_event_lines(
+        captured.replace(normalize_event_lines(
             lines,
             "determine_token_span grouped date sequence",
         ));
@@ -141,7 +141,7 @@ fn snapshots_matched_date_sequence_event(date_tokens: Vec<String>) {
     assert_eq!(date_tokens[..end].join(""), "25th December 2025");
     assert_eq!(width, 18);
     logs_assert(|lines| {
-        captured.replace(normalise_event_lines(lines, "matched date sequence"));
+        captured.replace(normalize_event_lines(lines, "matched date sequence"));
         (!captured.borrow().is_empty())
             .then_some(())
             .ok_or_else(|| "expected matched date sequence event".to_string())

@@ -20,13 +20,13 @@
 ///     "2026-07-26T00:00:00Z  DEBUG snapshots: mdtablefix::wrap: fragment classified kind=Plain  ",
 ///     "2026-07-26T00:00:00Z  TRACE snapshots: mdtablefix::wrap: predicate matched",
 /// ];
-/// let normalized = normalise_event_lines(&lines, "fragment classified");
+/// let normalized = normalize_event_lines(&lines, "fragment classified");
 /// assert_eq!(
 ///     normalized,
 ///     "DEBUG snapshots: mdtablefix::wrap: fragment classified kind=Plain",
 /// );
 /// ```
-pub(crate) fn normalise_event_lines(lines: &[&str], message: &str) -> String {
+pub(crate) fn normalize_event_lines(lines: &[&str], message: &str) -> String {
     lines
         .iter()
         .filter(|line| line.contains(message))
@@ -53,18 +53,18 @@ fn stable_event_start(line: &str) -> &str {
 
 #[cfg(test)]
 mod proptests {
-    //! Property tests for the normalisation helpers.
+    //! Property tests for the normalization helpers.
     //!
     //! These prove the prefix-stripping and suffix-preserving contract holds
     //! over arbitrary log lines, complementing the fixed event snapshots.
 
     use proptest::prelude::*;
 
-    use super::{normalise_event_lines, stable_event_start};
+    use super::{normalize_event_lines, stable_event_start};
 
     proptest! {
-        /// The normalised event start is always a suffix of the input line, and
-        /// re-normalising it is a no-op (the level already sits at the front).
+        /// The normalized event start is always a suffix of the input line, and
+        /// re-normalizing it is a no-op (the level already sits at the front).
         #[test]
         fn stable_event_start_returns_idempotent_suffix(line in "[^\n]*") {
             let start = stable_event_start(&line);
@@ -87,17 +87,17 @@ mod proptests {
             prop_assert_eq!(stable_event_start(&line), stable.as_str());
         }
 
-        /// `normalise_event_lines` keeps exactly the lines containing `message`,
+        /// `normalize_event_lines` keeps exactly the lines containing `message`,
         /// leaves no trailing whitespace, and neither invents nor drops lines.
         /// Each output segment must equal the stable-prefix slice of its
         /// corresponding matching line, trailing whitespace trimmed.
         #[test]
-        fn normalise_event_lines_filters_and_trims(
+        fn normalize_event_lines_filters_and_trims(
             lines in prop::collection::vec("[^\n]*", 0..8),
             message in "[^\n]{1,4}",
         ) {
             let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
-            let out = normalise_event_lines(&refs, &message);
+            let out = normalize_event_lines(&refs, &message);
             // The ordered subsequence of input lines that should survive.
             let matched: Vec<&str> = refs
                 .iter()
