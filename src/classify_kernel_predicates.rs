@@ -47,28 +47,67 @@ after {
 }
 }
 
+verified_kernel_function! {
 /// Finds the range after leading and trailing whitespace.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn trimmed_range(chars: &[char], start: usize) -> (usize, usize) {
-    let mut first = start;
-    while first < chars.len() && is_markdown_whitespace(chars[first]) {
-        first += 1;
-    }
-    trim_range(chars, first, chars.len())
+pub(super) fn trimmed_range(chars: &[char], start: usize) -> (usize, usize);
+requires(start <= chars@.len());
+ensures(result =>
+    result.0 == crate::spec_trim_start(chars@, start as int, chars@.len() as int),
+    result.1 == crate::spec_trim_end(chars@, result.0 as int, chars@.len() as int),
+);
+{ trim_range(chars, start, chars.len()) }
 }
 
+verified_kernel_function! {
 /// Trims whitespace inside an already-bounded scalar range.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn trim_range(chars: &[char], start: usize, end: usize) -> (usize, usize) {
-    let mut first = start;
-    while first < end && is_markdown_whitespace(chars[first]) {
-        first += 1;
-    }
-    let mut last = end;
-    while last > first && is_markdown_whitespace(chars[last - 1]) {
-        last -= 1;
-    }
+pub(super) fn trim_range(chars: &[char], start: usize, end: usize) -> (usize, usize);
+requires(start <= end, end <= chars@.len());
+ensures(result =>
+    result.0 == crate::spec_trim_start(chars@, start as int, end as int),
+    result.1 == crate::spec_trim_end(chars@, result.0 as int, end as int),
+);
+{
+    let first = trim_start(chars, start, end);
+    let last = trim_end(chars, first, end);
     (first, last)
+}
+}
+
+verified_loop_function! {
+/// Skips whitespace at the beginning of a bounded scalar range.
+fn trim_start(chars: &[char], start: usize, end: usize) -> usize;
+requires(start <= end, end <= chars@.len());
+ensures(result =>
+    start <= result <= end,
+    result == crate::spec_trim_start(chars@, start as int, end as int),
+);
+before { let mut first = start; }
+while (first < end && is_markdown_whitespace(chars[first])) invariant(
+    start <= first <= end,
+    end <= chars@.len(),
+    crate::spec_trim_start(chars@, first as int, end as int)
+        == crate::spec_trim_start(chars@, start as int, end as int),
+) {
+    first += 1;
+}
+after { first }
+}
+
+verified_loop_function! {
+/// Skips whitespace at the end of a bounded scalar range.
+fn trim_end(chars: &[char], start: usize, end: usize) -> usize;
+requires(start <= end, end <= chars@.len());
+ensures(result => result == crate::spec_trim_end(chars@, start as int, end as int));
+before { let mut last = end; }
+while (last > start && is_markdown_whitespace(chars[last - 1])) invariant(
+    start <= last <= end,
+    end <= chars@.len(),
+    crate::spec_trim_end(chars@, start as int, last as int)
+        == crate::spec_trim_end(chars@, start as int, end as int),
+) {
+    last -= 1;
+}
+after { last }
 }
 
 /// Reports whether a trimmed body starts with a three-character fence.

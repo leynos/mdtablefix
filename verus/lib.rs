@@ -54,6 +54,30 @@ pub open spec fn spec_all_equal(s: Seq<char>, start: int, end: int, target: char
     forall|i: int| start <= i < end ==> s[i] == target
 }
 
+/// First non-whitespace scalar in a bounded range, or its end.
+pub open spec fn spec_trim_start(s: Seq<char>, start: int, end: int) -> int
+    recommends 0 <= start <= end <= s.len()
+    decreases end - start
+{
+    if start < end && spec_is_markdown_whitespace(s[start]) {
+        spec_trim_start(s, start + 1, end)
+    } else {
+        start
+    }
+}
+
+/// End of a bounded range after removing trailing whitespace.
+pub open spec fn spec_trim_end(s: Seq<char>, start: int, end: int) -> int
+    recommends 0 <= start <= end <= s.len()
+    decreases end - start
+{
+    if start < end && spec_is_markdown_whitespace(s[end - 1]) {
+        spec_trim_end(s, start, end - 1)
+    } else {
+        end
+    }
+}
+
 pub open spec fn is_atx_heading(s: Seq<char>) -> bool {
     s.len() >= 2 && s[0] == '#' && s[1] == ' '
 }
