@@ -130,7 +130,7 @@ fn assert_non_date_component_rejected(
     layout_index: usize,
 ) -> Result<(), TestCaseError> {
     let mut non_date_component = tokens.to_vec();
-    non_date_component[start + 2] = "not-a-date".to_string();
+    non_date_component[start + 2] = "not-a-date".to_owned();
     prop_assert_eq!(
         try_match_date_sequence(&non_date_component, start),
         None,
@@ -149,7 +149,7 @@ fn assert_wrong_separators_rejected(
 ) -> Result<(), TestCaseError> {
     for separator_offset in [1usize, 3] {
         let mut wrong_separator = tokens.to_vec();
-        wrong_separator[start + separator_offset] = "-".to_string();
+        wrong_separator[start + separator_offset] = "-".to_owned();
         prop_assert_eq!(
             try_match_date_sequence(&wrong_separator, start),
             None,

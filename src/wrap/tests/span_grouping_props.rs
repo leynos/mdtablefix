@@ -12,17 +12,17 @@ fn inline_text_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
         prop::string::string_regex(r"[\w\s.,;:!?`()\[\]^-]{0,80}")
             .expect("invalid regex for span grouping property strategy"),
-        Just("`code`.[^1]".to_string()),
-        Just("[text](url).[^2]".to_string()),
-        Just("(`code`).[^3]".to_string()),
-        Just("See (`code`).[^4] for details.".to_string()),
-        Just("pattern([1](https://github.com/leynos/mdtablefix/pull/url))".to_string()),
+        Just("`code`.[^1]".to_owned()),
+        Just("[text](url).[^2]".to_owned()),
+        Just("(`code`).[^3]".to_owned()),
+        Just("See (`code`).[^4] for details.".to_owned()),
+        Just("pattern([1](https://github.com/leynos/mdtablefix/pull/url))".to_owned()),
         Just(
             concat!(
                 "pattern([1](https://github.com/leynos/mdtablefix/pull/url))",
                 "([2](https://github.com/leynos/mdtablefix/issues/325))"
             )
-            .to_string()
+            .to_owned()
         ),
     ]
 }
@@ -37,15 +37,15 @@ fn inline_text_strategy() -> impl Strategy<Value = String> {
 /// validate citation coupling.
 fn inline_citation_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
-        Just("pattern([1](https://github.com/leynos/mdtablefix/pull/url))".to_string()),
+        Just("pattern([1](https://github.com/leynos/mdtablefix/pull/url))".to_owned()),
         Just(
             concat!(
                 "pattern([1](https://github.com/leynos/mdtablefix/pull/url))",
                 "([2](https://github.com/leynos/mdtablefix/issues/325))"
             )
-            .to_string()
+            .to_owned()
         ),
-        Just("reference([42](https://github.com/leynos/mdtablefix/tree/main))".to_string()),
+        Just("reference([42](https://github.com/leynos/mdtablefix/tree/main))".to_owned()),
     ]
 }
 

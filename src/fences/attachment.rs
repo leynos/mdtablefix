@@ -156,7 +156,7 @@ where
             AttachmentOutcome::Attached
         }
         NextFence::NotAttachable { blank_count } => {
-            out.push(specifier_line.to_string());
+            out.push(specifier_line.to_owned());
             for _ in 0..blank_count {
                 if let Some(blank_line) = lines.next() {
                     out.push(blank_line.clone());

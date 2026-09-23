@@ -53,13 +53,13 @@ pub(super) fn apply_continuation_chunk(
                 ?pending.continuation_mode,
                 "flushing original lines for width-triggered verbatim continuation"
             );
-            pending.original_lines.push(source_line.to_string());
+            pending.original_lines.push(source_line.to_owned());
             writer.flush_paragraph(state);
             return;
         }
 
         if let Some(mut pending) = state.pending_prefix.take() {
-            pending.original_lines.push(source_line.to_string());
+            pending.original_lines.push(source_line.to_owned());
             writer.emit_pending_with_verbatim_continuation(pending, source_line, hard_break);
             return;
         }
@@ -68,7 +68,7 @@ pub(super) fn apply_continuation_chunk(
     let Some(pending) = state.pending_prefix.as_mut() else {
         return;
     };
-    pending.original_lines.push(source_line.to_string());
+    pending.original_lines.push(source_line.to_owned());
 
     let open_fence_len = pending.open_fence_len.unwrap_or(0);
     let should_join_verbatim = pending.continuation_mode == ContinuationMode::TightCodeSpan;
