@@ -8,7 +8,7 @@ use test_macros::traced_test;
 use super::InlineFragment;
 use crate::wrap::{
     tracing_adapter::TracingObserver,
-    tracing_snapshot_support::normalise_event_lines,
+    tracing_snapshot_support::normalize_event_lines,
 };
 
 #[traced_test]
@@ -24,7 +24,7 @@ fn snapshots_fragment_classified_event() {
     assert!(fragment.is_plain(), "a bare word must classify as Plain");
     assert_eq!(fragment.text, "plain");
     logs_assert(|lines| {
-        captured.replace(normalise_event_lines(lines, "fragment classified"));
+        captured.replace(normalize_event_lines(lines, "fragment classified"));
         (!captured.borrow().is_empty())
             .then_some(())
             .ok_or_else(|| "expected fragment classification event".to_string())

@@ -8,7 +8,7 @@ use test_macros::traced_test;
 use super::parse_link_or_image;
 use crate::wrap::{
     tracing_adapter::TracingObserver,
-    tracing_snapshot_support::normalise_event_lines,
+    tracing_snapshot_support::normalize_event_lines,
 };
 
 #[traced_test]
@@ -22,7 +22,7 @@ fn snapshots_footnote_reference_parsed_event() {
     assert_eq!(token, "[^4]");
     assert_eq!(idx, token.len());
     logs_assert(|lines| {
-        captured.replace(normalise_event_lines(lines, "footnote reference parsed"));
+        captured.replace(normalize_event_lines(lines, "footnote reference parsed"));
         (!captured.borrow().is_empty())
             .then_some(())
             .ok_or_else(|| "expected footnote reference parsed event".to_string())
@@ -45,7 +45,7 @@ fn snapshots_link_or_image_parsed_event() {
     assert_eq!(token, "[link](url)");
     assert_eq!(idx, token.len());
     logs_assert(|lines| {
-        captured.replace(normalise_event_lines(lines, "link or image parsed"));
+        captured.replace(normalize_event_lines(lines, "link or image parsed"));
         (!captured.borrow().is_empty())
             .then_some(())
             .ok_or_else(|| "expected link or image parsed event".to_string())

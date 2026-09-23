@@ -12,7 +12,7 @@ use tempfile::tempdir;
 use test_macros::traced_test;
 
 use super::replace_file;
-use crate::wrap::tracing_snapshot_support::normalise_event_lines;
+use crate::wrap::tracing_snapshot_support::normalize_event_lines;
 
 /// Opens a directory capability for `path`.
 fn open_dir(path: &std::path::Path) -> Dir {
@@ -32,7 +32,7 @@ fn snapshots_successful_replacement_events() {
 
     let written = RefCell::new(String::new());
     logs_assert(|lines| {
-        written.replace(normalise_event_lines(lines, "temporary file written"));
+        written.replace(normalize_event_lines(lines, "temporary file written"));
         (!written.borrow().is_empty())
             .then_some(())
             .ok_or_else(|| "expected temporary file written event".to_string())
@@ -41,7 +41,7 @@ fn snapshots_successful_replacement_events() {
 
     let replaced = RefCell::new(String::new());
     logs_assert(|lines| {
-        replaced.replace(normalise_event_lines(lines, "target replaced"));
+        replaced.replace(normalize_event_lines(lines, "target replaced"));
         (!replaced.borrow().is_empty())
             .then_some(())
             .ok_or_else(|| "expected target replaced event".to_string())
@@ -93,7 +93,7 @@ fn snapshots_declined_symlink_event() {
 
     let declined = RefCell::new(String::new());
     logs_assert(|lines| {
-        declined.replace(normalise_event_lines(lines, "rewrite declined"));
+        declined.replace(normalize_event_lines(lines, "rewrite declined"));
         (!declined.borrow().is_empty())
             .then_some(())
             .ok_or_else(|| "expected rewrite declined event".to_string())
