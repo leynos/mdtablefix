@@ -13,7 +13,7 @@ use crate::wrap::wrap_text;
 const NORMALISED_BREAK: &str =
     "______________________________________________________________________";
 
-fn lines(text: &str) -> Vec<String> { text.lines().map(str::to_string).collect() }
+fn lines(text: &str) -> Vec<String> { text.lines().map(str::to_owned).collect() }
 
 #[rstest]
 #[case("---")]
@@ -30,11 +30,7 @@ fn wrap_text_keeps_thematic_break_on_its_own_line(#[case] break_line: &str) {
 
     assert_eq!(
         wrapped,
-        vec![
-            "alpha".to_string(),
-            break_line.to_string(),
-            "beta".to_string(),
-        ]
+        vec!["alpha".to_owned(), break_line.to_owned(), "beta".to_owned(),]
     );
 }
 
@@ -47,9 +43,9 @@ fn wrap_text_keeps_normalised_break_on_its_own_line() {
     assert_eq!(
         wrapped,
         vec![
-            "prose words here".to_string(),
-            NORMALISED_BREAK.to_string(),
-            "more prose".to_string(),
+            "prose words here".to_owned(),
+            NORMALISED_BREAK.to_owned(),
+            "more prose".to_owned(),
         ]
     );
 }
@@ -62,9 +58,9 @@ fn wrap_text_keeps_break_after_an_open_code_span() {
     // body line keep their order.
     let input = lines("- item with `open span\n- - -\nbody");
     let expected = vec![
-        "- item with `open span".to_string(),
-        "- - -".to_string(),
-        "body".to_string(),
+        "- item with `open span".to_owned(),
+        "- - -".to_owned(),
+        "body".to_owned(),
     ];
 
     let wrapped = wrap_text(&input, 80);

@@ -15,7 +15,7 @@ use rstest::rstest;
 
 use crate::wrap::wrap_text;
 
-fn lines(text: &str) -> Vec<String> { text.lines().map(str::to_string).collect() }
+fn lines(text: &str) -> Vec<String> { text.lines().map(str::to_owned).collect() }
 
 /// Asserts that wrapping `input` again reproduces the first pass.
 fn assert_fixed_point(input: &[String]) {

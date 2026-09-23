@@ -77,7 +77,7 @@ pub(in crate::wrap) fn continuation_prefix_for(
     outer_prefix: Option<&str>,
 ) -> String {
     if repeat_prefix {
-        return prefix.to_string();
+        return prefix.to_owned();
     }
 
     let prefix_width = UnicodeWidthStr::width(prefix);
@@ -106,11 +106,11 @@ impl ParagraphWriter<'_> {
         open_fence_len: Option<usize>,
         continuation_mode: ContinuationMode,
     ) {
-        let prefix = prefix_line.prefix.as_ref().to_string();
+        let prefix = prefix_line.prefix.as_ref().to_owned();
         let prefix_width = UnicodeWidthStr::width(prefix.as_str());
         state.pending_prefix = Some(PendingPrefix {
             prefix,
-            rest: prefix_line.rest.to_string(),
+            rest: prefix_line.rest.to_owned(),
             original_lines: vec![format!(
                 "{prefix}{rest}",
                 prefix = prefix_line.prefix.as_ref(),

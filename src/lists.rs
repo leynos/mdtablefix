@@ -210,11 +210,11 @@ mod tests {
     fn simple_renumber() {
         let input = vec!["1. a", "3. b"]
             .into_iter()
-            .map(str::to_string)
+            .map(str::to_owned)
             .collect::<Vec<_>>();
         let expected = vec!["1. a", "2. b"]
             .into_iter()
-            .map(str::to_string)
+            .map(str::to_owned)
             .collect::<Vec<_>>();
         assert_eq!(renumber_lists(&input), expected);
     }
@@ -223,11 +223,11 @@ mod tests {
     fn nested_renumber() {
         let input = vec!["1. a", "    1. sub", "    3. sub2", "2. b"]
             .into_iter()
-            .map(str::to_string)
+            .map(str::to_owned)
             .collect::<Vec<_>>();
         let expected = vec!["1. a", "    1. sub", "    2. sub2", "2. b"]
             .into_iter()
-            .map(str::to_string)
+            .map(str::to_owned)
             .collect::<Vec<_>>();
         assert_eq!(renumber_lists(&input), expected);
     }

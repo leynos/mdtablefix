@@ -11,28 +11,28 @@ use super::{
 
 #[test]
 fn converts_inline_numbers() {
-    let input = vec!["See the docs.2".to_string()];
-    let expected = vec!["See the docs.[^1]".to_string()];
+    let input = vec!["See the docs.2".to_owned()];
+    let expected = vec!["See the docs.[^1]".to_owned()];
     assert_eq!(convert_footnotes(&input), expected);
 }
 
 #[test]
 fn converts_final_list() {
     let input = vec![
-        "Text.".to_string(),
+        "Text.".to_owned(),
         String::new(),
-        "## Footnotes".to_string(),
+        "## Footnotes".to_owned(),
         String::new(),
-        " 1. First".to_string(),
-        " 2. Second".to_string(),
+        " 1. First".to_owned(),
+        " 2. Second".to_owned(),
     ];
     let expected = vec![
-        "Text.".to_string(),
+        "Text.".to_owned(),
         String::new(),
-        "## Footnotes".to_string(),
+        "## Footnotes".to_owned(),
         String::new(),
-        " [^1]: First".to_string(),
-        " [^2]: Second".to_string(),
+        " [^1]: First".to_owned(),
+        " [^2]: Second".to_owned(),
     ];
     assert_eq!(convert_footnotes(&input), expected);
 }
@@ -40,79 +40,79 @@ fn converts_final_list() {
 #[test]
 fn converts_list_with_blank_lines() {
     let input = vec![
-        "Text.".to_string(),
+        "Text.".to_owned(),
         String::new(),
-        "## Footnotes".to_string(),
+        "## Footnotes".to_owned(),
         String::new(),
-        " 1. First".to_string(),
+        " 1. First".to_owned(),
         String::new(),
-        " 2. Second".to_string(),
+        " 2. Second".to_owned(),
         String::new(),
-        "10. Tenth".to_string(),
+        "10. Tenth".to_owned(),
     ];
     let expected = vec![
-        "Text.".to_string(),
+        "Text.".to_owned(),
         String::new(),
-        "## Footnotes".to_string(),
+        "## Footnotes".to_owned(),
         String::new(),
-        " [^1]: First".to_string(),
+        " [^1]: First".to_owned(),
         String::new(),
-        " [^2]: Second".to_string(),
+        " [^2]: Second".to_owned(),
         String::new(),
-        "[^3]: Tenth".to_string(),
+        "[^3]: Tenth".to_owned(),
     ];
     assert_eq!(convert_footnotes(&input), expected);
 }
 
 #[test]
 fn idempotent_on_existing_block() {
-    let input = vec![" [^1]: First".to_string()];
+    let input = vec![" [^1]: First".to_owned()];
     assert_eq!(convert_footnotes(&input), input);
 }
 
 #[test]
 fn skips_with_existing_block() {
     let input = vec![
-        "[^1]: Old".to_string(),
-        "## Footnotes".to_string(),
-        " 2. New".to_string(),
+        "[^1]: Old".to_owned(),
+        "## Footnotes".to_owned(),
+        " 2. New".to_owned(),
     ];
     assert_eq!(convert_footnotes(&input), input);
 }
 
 #[test]
 fn skips_without_h2() {
-    let input = vec!["Text.".to_string(), " 1. First".to_string()];
+    let input = vec!["Text.".to_owned(), " 1. First".to_owned()];
     assert_eq!(convert_footnotes(&input), input);
 }
 
 #[test]
 fn skips_when_list_not_last() {
     let input = vec![
-        "## Footnotes".to_string(),
-        " 1. First".to_string(),
+        "## Footnotes".to_owned(),
+        " 1. First".to_owned(),
         String::new(),
-        "Tail.".to_string(),
+        "Tail.".to_owned(),
     ];
     assert_eq!(convert_footnotes(&input), input);
 }
 
 #[test]
 fn skips_when_block_has_only_blanks() {
-    let input = vec!["## Footnotes".to_string(), String::new()];
+    let input = vec!["## Footnotes".to_owned(), String::new()];
     assert_eq!(convert_footnotes(&input), input);
 }
 
 #[test]
 fn multiple_inline_notes_in_one_line() {
-    let input = vec!["First.1 Then?2".to_string()];
-    let expected = vec!["First.[^1] Then?[^2]".to_string()];
+    let input = vec!["First.1 Then?2".to_owned()];
+    let expected = vec!["First.[^1] Then?[^2]".to_owned()];
     assert_eq!(convert_footnotes(&input), expected);
 }
 
 #[test]
 fn ignores_non_numeric_footnote_block() {
-    let input = vec!["Text.".to_string(), " a. note".to_string()];
+    let input = vec!["Text.".to_owned(), " a. note".to_owned()];
     assert_eq!(convert_footnotes(&input), input);
 }
 
@@ -125,18 +125,18 @@ fn empty_input_returns_empty_vec() {
 #[test]
 fn converts_only_final_contiguous_block() {
     let input = vec![
-        "Intro.".to_string(),
-        "1. not a footnote".to_string(),
-        "More text.".to_string(),
-        "## Footnotes".to_string(),
-        "2. final".to_string(),
+        "Intro.".to_owned(),
+        "1. not a footnote".to_owned(),
+        "More text.".to_owned(),
+        "## Footnotes".to_owned(),
+        "2. final".to_owned(),
     ];
     let expected = vec![
-        "Intro.".to_string(),
-        "1. not a footnote".to_string(),
-        "More text.".to_string(),
-        "## Footnotes".to_string(),
-        "[^1]: final".to_string(),
+        "Intro.".to_owned(),
+        "1. not a footnote".to_owned(),
+        "More text.".to_owned(),
+        "## Footnotes".to_owned(),
+        "[^1]: final".to_owned(),
     ];
     assert_eq!(convert_footnotes(&input), expected);
 }
@@ -144,18 +144,18 @@ fn converts_only_final_contiguous_block() {
 #[test]
 fn renumbers_references_and_definitions() {
     let input = vec![
-        "First reference.[^7]".to_string(),
-        "Second reference.[^3]".to_string(),
+        "First reference.[^7]".to_owned(),
+        "Second reference.[^3]".to_owned(),
         String::new(),
-        "  [^3]: Third footnote".to_string(),
-        "  [^7]: Seventh footnote".to_string(),
+        "  [^3]: Third footnote".to_owned(),
+        "  [^7]: Seventh footnote".to_owned(),
     ];
     let expected = vec![
-        "First reference.[^1]".to_string(),
-        "Second reference.[^2]".to_string(),
+        "First reference.[^1]".to_owned(),
+        "Second reference.[^2]".to_owned(),
         String::new(),
-        "  [^1]: Seventh footnote".to_string(),
-        "  [^2]: Third footnote".to_string(),
+        "  [^1]: Seventh footnote".to_owned(),
+        "  [^2]: Third footnote".to_owned(),
     ];
     assert_eq!(convert_footnotes(&input), expected);
 }
@@ -163,22 +163,22 @@ fn renumbers_references_and_definitions() {
 #[test]
 fn preserves_multiline_definition_blocks() {
     let input = vec![
-        "Intro.[^2]".to_string(),
+        "Intro.[^2]".to_owned(),
         String::new(),
-        "[^1]: Legacy footnote".to_string(),
-        "    More legacy context.".to_string(),
+        "[^1]: Legacy footnote".to_owned(),
+        "    More legacy context.".to_owned(),
         String::new(),
-        "[^2]: Current footnote".to_string(),
-        "    Additional context.".to_string(),
+        "[^2]: Current footnote".to_owned(),
+        "    Additional context.".to_owned(),
     ];
     let expected = vec![
-        "Intro.[^1]".to_string(),
+        "Intro.[^1]".to_owned(),
         String::new(),
-        "[^1]: Current footnote".to_string(),
-        "    Additional context.".to_string(),
+        "[^1]: Current footnote".to_owned(),
+        "    Additional context.".to_owned(),
         String::new(),
-        "[^2]: Legacy footnote".to_string(),
-        "    More legacy context.".to_string(),
+        "[^2]: Legacy footnote".to_owned(),
+        "    More legacy context.".to_owned(),
     ];
     assert_eq!(convert_footnotes(&input), expected);
 }
@@ -186,20 +186,20 @@ fn preserves_multiline_definition_blocks() {
 #[test]
 fn assigns_new_numbers_to_unreferenced_definitions() {
     let input = vec![
-        "Alpha.[^5]".to_string(),
-        "Beta.[^2]".to_string(),
+        "Alpha.[^5]".to_owned(),
+        "Beta.[^2]".to_owned(),
         String::new(),
-        "[^1]: Legacy footnote".to_string(),
-        "[^2]: Beta footnote".to_string(),
-        "[^5]: Alpha footnote".to_string(),
+        "[^1]: Legacy footnote".to_owned(),
+        "[^2]: Beta footnote".to_owned(),
+        "[^5]: Alpha footnote".to_owned(),
     ];
     let expected = vec![
-        "Alpha.[^1]".to_string(),
-        "Beta.[^2]".to_string(),
+        "Alpha.[^1]".to_owned(),
+        "Beta.[^2]".to_owned(),
         String::new(),
-        "[^1]: Alpha footnote".to_string(),
-        "[^2]: Beta footnote".to_string(),
-        "[^3]: Legacy footnote".to_string(),
+        "[^1]: Alpha footnote".to_owned(),
+        "[^2]: Beta footnote".to_owned(),
+        "[^3]: Legacy footnote".to_owned(),
     ];
     assert_eq!(convert_footnotes(&input), expected);
 }
@@ -207,16 +207,16 @@ fn assigns_new_numbers_to_unreferenced_definitions() {
 #[test]
 fn updates_references_inside_definitions() {
     let input = vec![
-        "Intro.[^4]".to_string(),
+        "Intro.[^4]".to_owned(),
         String::new(),
-        "[^4]: See [^2] for context".to_string(),
-        "[^2]: Base note".to_string(),
+        "[^4]: See [^2] for context".to_owned(),
+        "[^2]: Base note".to_owned(),
     ];
     let expected = vec![
-        "Intro.[^1]".to_string(),
+        "Intro.[^1]".to_owned(),
         String::new(),
-        "[^1]: See [^2] for context".to_string(),
-        "[^2]: Base note".to_string(),
+        "[^1]: See [^2] for context".to_owned(),
+        "[^2]: Base note".to_owned(),
     ];
     assert_eq!(convert_footnotes(&input), expected);
 }
@@ -224,20 +224,20 @@ fn updates_references_inside_definitions() {
 #[test]
 fn renumbers_numeric_list_without_heading() {
     let input = vec![
-        "First reference.[^7]".to_string(),
-        "Second reference.[^3]".to_string(),
+        "First reference.[^7]".to_owned(),
+        "Second reference.[^3]".to_owned(),
         String::new(),
-        "1. Legacy footnote".to_string(),
-        "3. Third footnote".to_string(),
-        "7. Seventh footnote".to_string(),
+        "1. Legacy footnote".to_owned(),
+        "3. Third footnote".to_owned(),
+        "7. Seventh footnote".to_owned(),
     ];
     let expected = vec![
-        "First reference.[^1]".to_string(),
-        "Second reference.[^2]".to_string(),
+        "First reference.[^1]".to_owned(),
+        "Second reference.[^2]".to_owned(),
         String::new(),
-        "[^1]: Seventh footnote".to_string(),
-        "[^2]: Third footnote".to_string(),
-        "[^3]: Legacy footnote".to_string(),
+        "[^1]: Seventh footnote".to_owned(),
+        "[^2]: Third footnote".to_owned(),
+        "[^3]: Legacy footnote".to_owned(),
     ];
     assert_eq!(convert_footnotes(&input), expected);
 }
@@ -245,9 +245,9 @@ fn renumbers_numeric_list_without_heading() {
 #[test]
 fn leaves_numeric_list_without_references_unchanged() {
     let input = vec![
-        "Ordinary list:".to_string(),
-        "1. Apples".to_string(),
-        "2. Bananas".to_string(),
+        "Ordinary list:".to_owned(),
+        "1. Apples".to_owned(),
+        "2. Bananas".to_owned(),
     ];
     assert_eq!(convert_footnotes(&input), input);
 }
@@ -340,4 +340,4 @@ fn definition_stage_keeps_the_numbers_the_label_stage_settled() {
 }
 
 /// Owns a case's lines for the stages, which take `&[String]`.
-fn owned(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_string()).collect() }
+fn owned(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_owned()).collect() }
