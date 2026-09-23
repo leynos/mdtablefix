@@ -39,7 +39,7 @@ fn detect_line_ending_selects_the_majority_style(#[case] text: &str, #[case] exp
 
 #[test]
 fn serialize_lines_uses_the_chosen_ending() {
-    let lines = vec!["| A | B |".to_string(), "| 1 | 2 |".to_string()];
+    let lines = vec!["| A | B |".to_owned(), "| 1 | 2 |".to_owned()];
     assert_eq!(
         serialize_lines(&lines, LineEnding::Lf),
         "| A | B |\n| 1 | 2 |\n"

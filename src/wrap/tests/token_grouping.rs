@@ -104,5 +104,5 @@ fn segment_inline_splits_before_embedded_links(#[case] input: &str, #[case] expe
 #[case(r"\([link](url))")]
 #[case(r"word\([link](url))")]
 fn segment_inline_preserves_escaped_link_literals(#[case] input: &str) {
-    assert_eq!(segment_inline(input), vec![input.to_string()]);
+    assert_eq!(segment_inline(input), vec![input.to_owned()]);
 }

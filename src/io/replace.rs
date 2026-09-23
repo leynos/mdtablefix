@@ -55,7 +55,7 @@ where
     let document = SourceDocument::parse(&text);
     let path_text = path.to_string_lossy();
     report_line_endings(document.counts(), operation, path_text.as_ref());
-    let lines: Vec<String> = document.body().lines().map(str::to_string).collect();
+    let lines: Vec<String> = document.body().lines().map(str::to_owned).collect();
     let fixed = f(&lines);
     if !replace_file_if_unchanged(&directory, &name, &text, &document.render(&fixed))? {
         return Err(io::Error::other(format!(

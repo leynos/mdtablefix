@@ -14,7 +14,7 @@ use super::{
     should_convert_numeric_line,
 };
 
-fn strings(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_string()).collect() }
+fn strings(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_owned()).collect() }
 
 #[test]
 fn assign_new_number_reuses_existing_mapping() {
@@ -118,7 +118,7 @@ fn rewrite_definition_headers_updates_only_known_definition_lines() {
     let definitions = vec![DefinitionLine {
         index: 0,
         new_number: 1,
-        line: "[^1]: New".to_string(),
+        line: "[^1]: New".to_owned(),
     }];
 
     rewrite_definition_headers(&mut lines, &definitions);
