@@ -44,6 +44,16 @@ pub open spec fn spec_is_blank_from(s: Seq<char>, start: int) -> bool {
     forall|i: int| start <= i < s.len() ==> spec_is_markdown_whitespace(s[i])
 }
 
+/// Whether a bounded scalar range contains the requested marker.
+pub open spec fn spec_contains(s: Seq<char>, start: int, end: int, target: char) -> bool {
+    exists|i: int| start <= i < end && s[i] == target
+}
+
+/// Whether every scalar in a bounded range is the same marker.
+pub open spec fn spec_all_equal(s: Seq<char>, start: int, end: int, target: char) -> bool {
+    forall|i: int| start <= i < end ==> s[i] == target
+}
+
 pub open spec fn is_atx_heading(s: Seq<char>) -> bool {
     s.len() >= 2 && s[0] == '#' && s[1] == ' '
 }

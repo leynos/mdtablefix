@@ -13,6 +13,7 @@ macro_rules! verified_kernel_function {
     (
         $(#[$attribute:meta])*
         $visibility:vis fn $name:ident($($arguments:tt)*) -> $result:ty;
+        $(requires($($precondition:tt)*);)?
         ensures($result_name:ident => $($postcondition:tt)*);
         $body:block
     ) => {
@@ -27,6 +28,7 @@ macro_rules! verified_loop_function {
     (
         $(#[$attribute:meta])*
         $visibility:vis fn $name:ident($($arguments:tt)*) -> $result:ty;
+        $(requires($($precondition:tt)*);)?
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
         while ($condition:expr) invariant($($invariant:tt)*) $loop_body:block
@@ -47,6 +49,7 @@ macro_rules! verified_loop_function {
     (
         $(#[$attribute:meta])*
         $visibility:vis fn $name:ident($($arguments:tt)*) -> $result:ty;
+        $(requires($($precondition:tt)*);)?
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
         while ($condition:expr) invariant($($invariant:tt)*) $loop_body:block
@@ -55,6 +58,7 @@ macro_rules! verified_loop_function {
         verus! {
             $(#[$attribute])*
             $visibility fn $name($($arguments)*) -> ($result_name: $result)
+                $(requires $($precondition)*)?
                 ensures $($postcondition)*
             {
                 $($before)*
@@ -73,12 +77,14 @@ macro_rules! verified_kernel_function {
     (
         $(#[$attribute:meta])*
         $visibility:vis fn $name:ident($($arguments:tt)*) -> $result:ty;
+        $(requires($($precondition:tt)*);)?
         ensures($result_name:ident => $($postcondition:tt)*);
         $body:block
     ) => {
         verus! {
             $(#[$attribute])*
             $visibility fn $name($($arguments)*) -> ($result_name: $result)
+                $(requires $($precondition)*)?
                 ensures $($postcondition)*
                 $body
         }

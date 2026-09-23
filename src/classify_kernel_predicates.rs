@@ -182,30 +182,50 @@ ensures(result => result == crate::spec_is_markdown_whitespace(character));
 { matches!(character, ' ' | '\t') }
 }
 
+verified_loop_function! {
 /// Reports whether a scalar range contains the target character.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-fn contains(chars: &[char], start: usize, end: usize, target: char) -> bool {
+fn contains(chars: &[char], start: usize, end: usize, target: char) -> bool;
+requires(start <= end, end <= chars@.len());
+ensures(result => result == crate::spec_contains(chars@, start as int, end as int, target));
+before {
     let mut cursor = start;
-    while cursor < end {
+}
+while (cursor < end) invariant(
+    start <= cursor <= end,
+    end <= chars@.len(),
+    forall|i: int| start <= i < cursor ==> chars@[i] != target,
+) {
         if chars[cursor] == target {
             return true;
         }
         cursor += 1;
-    }
+}
+after {
     false
 }
+}
 
+verified_loop_function! {
 /// Reports whether every scalar in a range equals the expected character.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-fn all_equal(chars: &[char], start: usize, end: usize, expected: char) -> bool {
+fn all_equal(chars: &[char], start: usize, end: usize, expected: char) -> bool;
+requires(start <= end, end <= chars@.len());
+ensures(result => result == crate::spec_all_equal(chars@, start as int, end as int, expected));
+before {
     let mut cursor = start;
-    while cursor < end {
+}
+while (cursor < end) invariant(
+    start <= cursor <= end,
+    end <= chars@.len(),
+    forall|i: int| start <= i < cursor ==> chars@[i] == expected,
+) {
         if chars[cursor] != expected {
             return false;
         }
         cursor += 1;
-    }
+}
+after {
     true
+}
 }
 
 /// Reports whether each cell in a pipe-separated range is a delimiter cell.
