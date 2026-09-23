@@ -2,8 +2,9 @@
 
 use super::*;
 
+#[track_caller]
 fn assert_uniform_column_widths(output: &[String]) {
-    assert!(!output.is_empty());
+    assert!(!output.is_empty(), "reflowed table must contain rows");
     let widths: Vec<usize> = output[0]
         .trim_matches('|')
         .split('|')
@@ -12,7 +13,11 @@ fn assert_uniform_column_widths(output: &[String]) {
     for row in output {
         let cols: Vec<&str> = row.trim_matches('|').split('|').collect();
         for (i, col) in cols.iter().enumerate() {
-            assert_eq!(col.len(), widths[i]);
+            assert_eq!(
+                col.len(),
+                widths[i],
+                "column {i} has a different width in row {row:?}"
+            );
         }
     }
 }
