@@ -4,7 +4,6 @@
 //! Each case varies one clause of an otherwise complying publisher and
 //! asserts the rule names that clause and nothing else.
 
-use anyhow::{Result, ensure};
 use rstest::rstest;
 
 use super::{pull_request_cases::parse, rules};
@@ -19,15 +18,11 @@ use super::{pull_request_cases::parse, rules};
 #[case::tags("on:\n  push:\n    tags: ['v*']\njobs: {}\n", false)]
 #[case::another_branch("on:\n  push:\n    branches: [develop]\njobs: {}\n", false)]
 #[case::main_and_another("on:\n  push:\n    branches: [main, develop]\njobs: {}\n", false)]
-fn only_a_push_restricted_to_main_is_the_publisher(
-    #[case] source: &str,
-    #[case] expected: bool,
-) -> Result<()> {
-    ensure!(
-        rules::publishes_from_main(&parse(source)?) == expected,
+fn only_a_push_restricted_to_main_is_the_publisher(#[case] source: &str, #[case] expected: bool) {
+    assert!(
+        rules::publishes_from_main(&parse(source).expect("valid push fixture")) == expected,
         "expected {expected} for {source:?}"
     );
-    Ok(())
 }
 
 /// A publisher, with the three pieces the cases vary left as placeholders.
@@ -117,17 +112,16 @@ fn the_publisher_rule_names_the_clause_broken(
     #[case] upload_if: &str,
     #[case] extra_step: &str,
     #[case] expected: Option<&str>,
-) -> Result<()> {
+) {
     let source = publisher(concurrency, upload_if, extra_step);
-    let findings = rules::publisher_findings(&parse(&source)?);
+    let findings = rules::publisher_findings(&parse(&source).expect("valid publisher fixture"));
     match expected {
-        None => ensure!(findings.is_empty(), "unexpected findings: {findings:?}"),
-        Some(clause) => ensure!(
+        None => assert!(findings.is_empty(), "unexpected findings: {findings:?}"),
+        Some(clause) => assert!(
             findings.len() == 1 && findings[0].contains(clause),
             "expected one finding naming {clause:?}, saw {findings:?}"
         ),
     }
-    Ok(())
 }
 
 /// The upload step's token, as [`PUBLISHER`] writes it.
@@ -176,17 +170,17 @@ const REUSABLE: &str = "  forward:\n    uses: ./.github/workflows/elsewhere.yml\
 fn the_token_sits_on_the_upload_alone(
     #[case] vary: fn(String) -> String,
     #[case] expected: &[&str],
-) -> Result<()> {
+) {
     let source = vary(publisher(NEVER_CANCEL, GUARD, ""));
-    let findings = rules::publisher_findings(&parse(&source)?);
-    ensure!(
+    let findings =
+        rules::publisher_findings(&parse(&source).expect("valid token placement fixture"));
+    assert!(
         findings.len() == expected.len()
             && expected
                 .iter()
                 .all(|clause| findings.iter().any(|f| f.contains(clause))),
         "expected findings naming {expected:?}, saw {findings:?}"
     );
-    Ok(())
 }
 
 /// Scenario: a publisher gains a second upload, through the CLI, with its
@@ -196,31 +190,31 @@ fn the_token_sits_on_the_upload_alone(
 /// shell joins `cs-coverage \` and `upload` into one command; a contiguous
 /// text search would not, and the unguarded upload would pass unjudged.
 #[test]
-fn a_continued_cli_upload_is_still_an_upload() -> Result<()> {
+fn a_continued_cli_upload_is_still_an_upload() {
     let extra = "      - run: |\n          cs-coverage \\\n            upload --format lcov\n";
-    let findings = rules::publisher_findings(&parse(&publisher(NEVER_CANCEL, GUARD, extra))?);
-    ensure!(
+    let findings = rules::publisher_findings(
+        &parse(&publisher(NEVER_CANCEL, GUARD, extra)).expect("valid continued CLI fixture"),
+    );
+    assert!(
         findings.iter().any(|f| f.contains("not guarded")),
         "the continued upload was not judged: {findings:?}"
     );
-    Ok(())
 }
 
 /// Scenario: a publisher that runs the upload action in `check` mode.
 ///
 /// Invariant: that is not an upload, so the omission is reported.
 #[test]
-fn check_mode_is_not_an_upload() -> Result<()> {
+fn check_mode_is_not_an_upload() {
     let source = publisher(NEVER_CANCEL, GUARD, "").replace(
         "upload-codescene-coverage@abc\n",
         "upload-codescene-coverage@abc\n        with:\n          mode: check\n",
     );
-    let findings = rules::publisher_findings(&parse(&source)?);
-    ensure!(
+    let findings = rules::publisher_findings(&parse(&source).expect("valid check-mode fixture"));
+    assert!(
         findings.iter().any(|f| f.contains("uploads nothing")),
         "check mode read as an upload: {findings:?}"
     );
-    Ok(())
 }
 
 /// Scenario: conditions whose operators sit inside quoted literals.
@@ -293,23 +287,22 @@ fn the_upload_sends_what_was_measured(
     #[case] from: &str,
     #[case] to: &str,
     #[case] expected: Option<&str>,
-) -> Result<()> {
+) {
     let source = if from.is_empty() {
         WIRED.to_owned()
     } else {
         WIRED.replacen(from, to, 1)
     };
-    ensure!(
+    assert!(
         source != WIRED || from.is_empty(),
         "the case changed nothing"
     );
-    let findings = rules::wiring_findings(&parse(&source)?);
+    let findings = rules::wiring_findings(&parse(&source).expect("valid upload wiring fixture"));
     match expected {
-        None => ensure!(findings.is_empty(), "unexpected findings: {findings:?}"),
-        Some(clause) => ensure!(
+        None => assert!(findings.is_empty(), "unexpected findings: {findings:?}"),
+        Some(clause) => assert!(
             findings.len() == 1 && findings[0].contains(clause),
             "expected one finding naming {clause:?}, saw {findings:?}"
         ),
     }
-    Ok(())
 }

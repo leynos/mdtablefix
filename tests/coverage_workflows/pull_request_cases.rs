@@ -6,7 +6,7 @@
 //! fixtures assert the rule stays quiet where it should. The publisher's
 //! cases are in `publisher_cases.rs`.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::Result;
 use rstest::rstest;
 use serde_yaml::Value;
 
@@ -53,16 +53,13 @@ jobs:
 #[rstest]
 #[case::breaching(BREACHING_PULL_REQUEST, 6)]
 #[case::compliant(COMPLIANT_PULL_REQUEST, 0)]
-fn the_pull_request_rule_reports_what_it_should(
-    #[case] source: &str,
-    #[case] expected: usize,
-) -> Result<()> {
-    let findings = rules::pull_request_findings(&parse(source)?);
-    ensure!(
+fn the_pull_request_rule_reports_what_it_should(#[case] source: &str, #[case] expected: usize) {
+    let findings =
+        rules::pull_request_findings(&parse(source).expect("valid pull-request fixture"));
+    assert!(
         findings.len() == expected,
         "expected {expected}, saw {findings:?}"
     );
-    Ok(())
 }
 
 /// Scenario: the token reaches a pull-request job by each route GitHub offers.
@@ -84,15 +81,15 @@ fn the_pull_request_rule_reports_what_it_should(
 #[case::inherit("uses: ./.github/workflows/c.yml\nsecrets: inherit\n")]
 #[case::computed_name("steps:\n  - run: echo ${{ secrets[format('CS_{0}', 'ACCESS_TOKEN')] }}\n")]
 #[case::whole_context("steps:\n  - run: echo '${{ toJSON(secrets) }}'\n")]
-fn every_route_to_the_token_is_reported(#[case] job: &str) -> Result<()> {
+fn every_route_to_the_token_is_reported(#[case] job: &str) {
     let indented: String = job
         .lines()
         .map(|line| ["    ", line, "\n"].concat())
         .collect();
     let source = format!("on: pull_request\njobs:\n  lane:\n{indented}");
-    let findings = rules::pull_request_findings(&parse(&source)?);
-    ensure!(!findings.is_empty(), "the route was not reported: {source}");
-    Ok(())
+    let findings =
+        rules::pull_request_findings(&parse(&source).expect("valid token route fixture"));
+    assert!(!findings.is_empty(), "the route was not reported: {source}");
 }
 
 /// Scenario: a pull-request lane names another secret, and mentions secrets in
@@ -103,14 +100,14 @@ fn every_route_to_the_token_is_reported(#[case] job: &str) -> Result<()> {
 /// ordinary word must not trip it, or the clause would be deleted rather than
 /// obeyed.
 #[test]
-fn a_named_secret_and_prose_are_not_computed_references() -> Result<()> {
+fn a_named_secret_and_prose_are_not_computed_references() {
     let source = concat!(
         "on: pull_request\njobs:\n  lane:\n    steps:\n",
         "      - run: echo ${{ secrets.GITHUB_TOKEN }} keeps secrets out of logs\n",
     );
-    let findings = rules::pull_request_findings(&parse(source)?);
-    ensure!(findings.is_empty(), "unexpected findings: {findings:?}");
-    Ok(())
+    let findings =
+        rules::pull_request_findings(&parse(source).expect("valid named secret fixture"));
+    assert!(findings.is_empty(), "unexpected findings: {findings:?}");
 }
 
 /// Scenario: a pull-request workflow calls a local workflow that is not there.
@@ -119,15 +116,18 @@ fn a_named_secret_and_prose_are_not_computed_references() -> Result<()> {
 /// has read, so a missing callee would otherwise drop out of every
 /// pull-request clause in silence, along with whatever it runs once added.
 #[test]
-fn a_call_to_a_missing_workflow_is_reported() -> Result<()> {
+fn a_call_to_a_missing_workflow_is_reported() {
     let caller = "on: pull_request\njobs:\n  call:\n    uses: ./.github/workflows/missing.yml\n";
-    let all: reader::Workflows = [("caller.yml".to_owned(), parse(caller)?)].into();
+    let all: reader::Workflows = [(
+        "caller.yml".to_owned(),
+        parse(caller).expect("valid missing-callee fixture"),
+    )]
+    .into();
     let missing = reader::missing_callees(&all, &reader::pull_request_closure(&all));
-    ensure!(
+    assert!(
         missing.len() == 1 && missing[0].contains("missing.yml"),
         "expected the missing callee, saw {missing:?}"
     );
-    Ok(())
 }
 
 /// Scenario: a pull-request job calls a `workflow_call`-only workflow with
@@ -139,7 +139,7 @@ fn a_call_to_a_missing_workflow_is_reported() -> Result<()> {
 #[rstest]
 #[case::dot_prefixed("./.github/workflows/called.yml")]
 #[case::bare(".github/workflows/called.yml")]
-fn a_called_workflow_is_inside_the_pull_request_closure(#[case] call: &str) -> Result<()> {
+fn a_called_workflow_is_inside_the_pull_request_closure(#[case] call: &str) {
     let caller =
         format!("on: [pull_request]\njobs:\n  call:\n    uses: {call}\n    secrets: inherit\n");
     let callee = r#"
@@ -151,21 +151,29 @@ jobs:
           curl -H "Authorization: ${{ secrets.CS_ACCESS_TOKEN }}" https://codescene.io/api
 "#;
     let all: reader::Workflows = [
-        ("caller.yml".to_owned(), parse(&caller)?),
-        ("called.yml".to_owned(), parse(callee)?),
+        (
+            "caller.yml".to_owned(),
+            parse(&caller).expect("valid caller fixture"),
+        ),
+        (
+            "called.yml".to_owned(),
+            parse(callee).expect("valid callee fixture"),
+        ),
     ]
     .into();
     let closure = reader::pull_request_closure(&all);
-    ensure!(
+    assert!(
         closure.contains("called.yml"),
         "the callee escaped: {closure:?}"
     );
-    let callee_findings = rules::pull_request_findings(all.get("called.yml").context("callee")?);
-    ensure!(
+    let callee_findings = rules::pull_request_findings(
+        all.get("called.yml")
+            .expect("fixture includes called workflow"),
+    );
+    assert!(
         callee_findings.len() == 2,
         "expected token and host, saw {callee_findings:?}"
     );
-    Ok(())
 }
 
 /// Scenario: job-level `uses` references in each spelling.
@@ -198,14 +206,14 @@ fn each_call_spelling_is_classified(#[case] reference: &str, #[case] expected: r
 /// Invariant: the pull-request rule reports it, naming the job and the
 /// reference.
 #[test]
-fn a_refused_call_is_a_finding() -> Result<()> {
+fn a_refused_call_is_a_finding() {
     let source = "on: pull_request\njobs:\n  call:\n    uses: $/.github/workflows/c.yml@main\n";
-    let findings = rules::pull_request_findings(&parse(source)?);
-    ensure!(
+    let findings =
+        rules::pull_request_findings(&parse(source).expect("valid refused-call fixture"));
+    assert!(
         findings.len() == 1 && findings[0].contains("resolves to no workflow"),
         "expected one refused call, saw {findings:?}"
     );
-    Ok(())
 }
 
 /// Scenario: a pull request reaches the host two calls deep, through a
@@ -215,27 +223,36 @@ fn a_refused_call_is_a_finding() -> Result<()> {
 /// would take in the middle workflow, which is clean, and stop before the one
 /// that contacts `codescene.io`.
 #[test]
-fn the_closure_follows_a_chain_of_calls() -> Result<()> {
+fn the_closure_follows_a_chain_of_calls() {
     let caller = "on: pull_request\njobs:\n  first:\n    uses: ./.github/workflows/middle.yml\n";
     let middle = "on: workflow_call\njobs:\n  second:\n    uses: $/.github/workflows/leaf.yml\n";
     let leaf = "on: workflow_call\njobs:\n  leak:\n    steps:\n      - run: curl https://codescene.io/api\n";
     let all: reader::Workflows = [
-        ("caller.yml".to_owned(), parse(caller)?),
-        ("middle.yml".to_owned(), parse(middle)?),
-        ("leaf.yml".to_owned(), parse(leaf)?),
+        (
+            "caller.yml".to_owned(),
+            parse(caller).expect("valid caller fixture"),
+        ),
+        (
+            "middle.yml".to_owned(),
+            parse(middle).expect("valid middle fixture"),
+        ),
+        (
+            "leaf.yml".to_owned(),
+            parse(leaf).expect("valid leaf fixture"),
+        ),
     ]
     .into();
     let closure = reader::pull_request_closure(&all);
-    ensure!(
+    assert!(
         closure.contains("middle.yml") && closure.contains("leaf.yml"),
         "the chain was not followed: {closure:?}"
     );
-    let leaf_findings = rules::pull_request_findings(all.get("leaf.yml").context("leaf")?);
-    ensure!(
+    let leaf_findings =
+        rules::pull_request_findings(all.get("leaf.yml").expect("fixture includes leaf workflow"));
+    assert!(
         leaf_findings.len() == 1,
         "expected the host, saw {leaf_findings:?}"
     );
-    Ok(())
 }
 
 /// Scenario: a pull-request trigger in each form GitHub accepts.
@@ -250,12 +267,11 @@ fn the_closure_follows_a_chain_of_calls() -> Result<()> {
 #[case::quoted_key("'on':\n  pull_request:\njobs: {}\n")]
 #[case::boolean_key("true:\n  pull_request:\njobs: {}\n")]
 #[case::target("on: [pull_request_target]\njobs: {}\n")]
-fn every_trigger_form_is_read(#[case] source: &str) -> Result<()> {
-    ensure!(
-        reader::starts_on_pull_request(&parse(source)?),
+fn every_trigger_form_is_read(#[case] source: &str) {
+    assert!(
+        reader::starts_on_pull_request(&parse(source).expect("valid trigger fixture")),
         "not read as a pull request: {source:?}"
     );
-    Ok(())
 }
 
 /// Scenario: a workflow declares the same key twice in one mapping.

@@ -6,7 +6,7 @@
 //! and a rule the repository exercises in only one direction is a rule nobody
 //! has tested: these cases supply the spellings the workflow does not use.
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 use rstest::rstest;
 use serde_yaml::{Mapping, Value};
 
@@ -32,14 +32,13 @@ fn parse_mapping(source: &str) -> Result<Mapping> { Ok(serde_yaml::from_str(sour
 #[case::sequence("[pull_request, workflow_dispatch]")]
 #[case::mapping("pull_request:\n  branches: [main]\npush:\n  branches: [main]")]
 #[case::mapping_without_configuration("pull_request:\nworkflow_dispatch:")]
-fn every_accepted_trigger_form_names_pull_request(#[case] source: &str) -> Result<()> {
-    let triggers = parse(source)?;
+fn every_accepted_trigger_form_names_pull_request(#[case] source: &str) {
+    let triggers = parse(source).expect("the trigger fixture should be valid YAML");
     let events = trigger_events(&triggers);
-    ensure!(
+    assert!(
         events.contains(&"pull_request"),
         "pull_request not among {events:?}"
     );
-    Ok(())
 }
 
 /// Scenario: trigger declarations that do not reach a pull request.
@@ -55,14 +54,13 @@ fn every_accepted_trigger_form_names_pull_request(#[case] source: &str) -> Resul
 #[case::scalar("push")]
 #[case::sequence("[push, workflow_dispatch]")]
 #[case::mapping("push:\n  branches: [main]")]
-fn a_trigger_form_without_pull_request_names_none(#[case] source: &str) -> Result<()> {
-    let triggers = parse(source)?;
+fn a_trigger_form_without_pull_request_names_none(#[case] source: &str) {
+    let triggers = parse(source).expect("the trigger fixture should be valid YAML");
     let events = trigger_events(&triggers);
-    ensure!(
+    assert!(
         !events.contains(&"pull_request"),
         "pull_request among {events:?}"
     );
-    Ok(())
 }
 
 /// Scenario: the values `continue-on-error` can carry on a job or a step.
@@ -82,18 +80,14 @@ fn a_trigger_form_without_pull_request_names_none(#[case] source: &str) -> Resul
 #[case::boolean_true("continue-on-error: true", false)]
 #[case::expression("continue-on-error: ${{ github.event_name == 'push' }}", false)]
 #[case::string_true("continue-on-error: \"true\"", false)]
-fn continue_on_error_blocks_only_when_it_is_false(
-    #[case] source: &str,
-    #[case] blocking: bool,
-) -> Result<()> {
-    let entry = parse_mapping(source)?;
+fn continue_on_error_blocks_only_when_it_is_false(#[case] source: &str, #[case] blocking: bool) {
+    let entry = parse_mapping(source).expect("the continue-on-error fixture should be valid YAML");
     let reason = non_blocking(&entry);
-    ensure!(
+    assert!(
         reason.is_none() == blocking,
         "expected {} for {source}, got {reason:?}",
         if blocking { "blocking" } else { "non-blocking" }
     );
-    Ok(())
 }
 
 /// Scenario: a value is asked whether it is provably false.
@@ -107,14 +101,10 @@ fn continue_on_error_blocks_only_when_it_is_false(
 #[case::boolean_true("true", false)]
 #[case::string_off("\"off\"", false)]
 #[case::expression("${{ false }}", false)]
-fn only_a_written_false_is_provably_false(
-    #[case] source: &str,
-    #[case] expected: bool,
-) -> Result<()> {
-    let value = parse(source)?;
-    ensure!(
+fn only_a_written_false_is_provably_false(#[case] source: &str, #[case] expected: bool) {
+    let value = parse(source).expect("the false-value fixture should be valid YAML");
+    assert!(
         is_false(&value) == expected,
         "is_false({source}) should be {expected}"
     );
-    Ok(())
 }
