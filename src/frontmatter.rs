@@ -35,12 +35,8 @@
 /// ```
 #[must_use]
 pub(crate) fn split_leading_yaml_frontmatter(lines: &[String]) -> (&[String], &[String]) {
-    if lines.is_empty() {
-        return (&[], &[]);
-    }
-
     // First line must be exactly the YAML opener (no leading/trailing whitespace)
-    if lines[0] != "---" {
+    if lines.first().map(String::as_str) != Some("---") {
         return (&[], lines);
     }
 
@@ -51,8 +47,7 @@ pub(crate) fn split_leading_yaml_frontmatter(lines: &[String]) -> (&[String], &[
         let trimmed_end = line.trim_end();
         if trimmed_end == "---" || trimmed_end == "..." {
             // Found valid closer - split after this line
-            let split_at = idx + 1;
-            return (&lines[..split_at], &lines[split_at..]);
+            return lines.split_at(idx + 1);
         }
     }
 
@@ -69,7 +64,7 @@ mod tests {
     use super::*;
 
     /// Helper to convert `&[&str]` → `Vec<String>`.
-    fn s(v: &[&str]) -> Vec<String> { v.iter().copied().map(str::to_string).collect() }
+    fn s(v: &[&str]) -> Vec<String> { v.iter().copied().map(str::to_owned).collect() }
 
     struct PrefixEmptyCase {
         lines: Vec<String>,
@@ -118,10 +113,10 @@ mod tests {
         assert_eq!(prefix.len(), case.prefix_len);
         assert_eq!(body.len(), case.body_len);
         for (idx, expected) in case.prefix_spot_checks {
-            assert_eq!(prefix[idx], expected);
+            assert_eq!(prefix.get(idx).map(String::as_str), Some(expected));
         }
         if let Some(expected) = case.body_spot_check {
-            assert_eq!(body[0], expected);
+            assert_eq!(body.first().map(String::as_str), Some(expected));
         }
     }
 }
