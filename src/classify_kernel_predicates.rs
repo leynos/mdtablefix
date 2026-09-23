@@ -52,6 +52,7 @@ verified_kernel_function! {
 pub(super) fn trimmed_range(chars: &[char], start: usize) -> (usize, usize);
 requires(start <= chars@.len());
 ensures(result =>
+    start <= result.0 <= result.1 <= chars@.len(),
     result.0 == crate::spec_trim_start(chars@, start as int, chars@.len() as int),
     result.1 == crate::spec_trim_end(chars@, result.0 as int, chars@.len() as int),
 );
@@ -63,6 +64,7 @@ verified_kernel_function! {
 pub(super) fn trim_range(chars: &[char], start: usize, end: usize) -> (usize, usize);
 requires(start <= end, end <= chars@.len());
 ensures(result =>
+    start <= result.0 <= result.1 <= end,
     result.0 == crate::spec_trim_start(chars@, start as int, end as int),
     result.1 == crate::spec_trim_end(chars@, result.0 as int, end as int),
 );
@@ -97,7 +99,10 @@ verified_loop_function! {
 /// Skips whitespace at the end of a bounded scalar range.
 fn trim_end(chars: &[char], start: usize, end: usize) -> usize;
 requires(start <= end, end <= chars@.len());
-ensures(result => result == crate::spec_trim_end(chars@, start as int, end as int));
+ensures(result =>
+    start <= result <= end,
+    result == crate::spec_trim_end(chars@, start as int, end as int),
+);
 before { let mut last = end; }
 while (last > start && is_markdown_whitespace(chars[last - 1])) invariant(
     start <= last <= end,
@@ -110,32 +115,44 @@ while (last > start && is_markdown_whitespace(chars[last - 1])) invariant(
 after { last }
 }
 
+verified_kernel_function! {
 /// Reports whether a trimmed body starts with a three-character fence.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn is_fence_marker(chars: &[char], start: usize) -> bool {
+pub(super) fn is_fence_marker(chars: &[char], start: usize) -> bool;
+requires(start <= chars@.len());
+ensures(result => result == crate::spec_fence_marker(chars@, start as int));
+{
     let (first, end) = trimmed_range(chars, start);
     match char_at(chars, first) {
         Some(marker @ ('`' | '~')) => marker_run_len(chars, first, end, marker) >= 3,
         _ => false,
     }
 }
+}
 
+verified_kernel_function! {
 /// Reports whether a trimmed body is a compatible closing fence.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn is_closing_fence(chars: &[char], start: usize, open: OpenFence) -> bool {
+pub(super) fn is_closing_fence(chars: &[char], start: usize, open: OpenFence) -> bool;
+requires(start <= chars@.len());
+ensures(result => result == crate::spec_closing_fence(chars@, start as int, open));
+{
     let (first, end) = trimmed_range(chars, start);
     let markers = marker_run_len(chars, first, end, open.marker);
     markers >= open.marker_len && markers == end - first
 }
+}
 
+verified_kernel_function! {
 /// Reports whether a trimmed body starts with an ATX marker and separator.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn is_atx_heading(chars: &[char], start: usize) -> bool {
+pub(super) fn is_atx_heading(chars: &[char], start: usize) -> bool;
+requires(start <= chars@.len());
+ensures(result => result == crate::spec_atx_heading(chars@, start as int));
+{
     let (first, end) = trimmed_range(chars, start);
     let hashes = marker_run_len(chars, first, end, '#');
     hashes > 0
         && hashes <= 6
         && (first + hashes == end || is_markdown_whitespace(chars[first + hashes]))
+}
 }
 
 /// Reports whether every pipe-separated cell has table delimiter grammar.
@@ -154,30 +171,42 @@ pub(super) fn is_table_delimiter(chars: &[char], start: usize) -> bool {
     first < end && table_cells_are_delimiters(chars, first, end)
 }
 
+verified_kernel_function! {
 /// Reports whether a body starts with a pipe after whitespace.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn body_starts_with_pipe(chars: &[char], start: usize) -> bool {
+pub(super) fn body_starts_with_pipe(chars: &[char], start: usize) -> bool;
+requires(start <= chars@.len());
+ensures(result => result == crate::spec_body_starts_with_pipe(chars@, start as int));
+{
     matches!(char_at(chars, trimmed_range(chars, start).0), Some('|'))
 }
+}
 
+verified_kernel_function! {
 /// Reports whether a body is one uniform Setext marker run.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn is_setext_underline(chars: &[char], start: usize) -> bool {
+pub(super) fn is_setext_underline(chars: &[char], start: usize) -> bool;
+requires(start <= chars@.len());
+ensures(result => result == crate::spec_setext_underline(chars@, start as int));
+{
     let (first, end) = trimmed_range(chars, start);
     match char_at(chars, first) {
         Some(marker @ ('=' | '-')) => end - first >= 3 && all_equal(chars, first, end, marker),
         _ => false,
     }
 }
+}
 
+verified_kernel_function! {
 /// Reports whether a body is a thematic-break marker run.
 #[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn is_thematic_break(chars: &[char], start: usize) -> bool {
+pub(super) fn is_thematic_break(chars: &[char], start: usize) -> bool;
+requires(start <= chars@.len());
+ensures(result => result == crate::spec_thematic_break(chars@, start as int));
+{
     let (first, end) = trimmed_range(chars, start);
     let Some(marker @ ('*' | '-' | '_')) = char_at(chars, first) else {
         return false;
     };
-    let mut count = 0;
+    let mut count: usize = 0;
     let mut cursor = first;
     while cursor < end {
         let character = chars[cursor];
@@ -190,18 +219,26 @@ pub(super) fn is_thematic_break(chars: &[char], start: usize) -> bool {
     }
     count >= 3
 }
+}
 
+verified_kernel_function! {
 /// Reports whether a body begins an ordered or unordered list item.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn is_list_item(chars: &[char], start: usize) -> bool {
+pub(super) fn is_list_item(chars: &[char], start: usize) -> bool;
+requires(start <= chars@.len());
+ensures(result => result == crate::spec_list_item(chars@, start as int));
+{
     let (first, end) = trimmed_range(chars, start);
-    match char_at(chars, first) {
-        Some('-' | '*' | '+') => matches!(char_at(chars, first + 1), Some(' ' | '\t')),
-        Some('0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9') => {
+    if first == chars.len() {
+        return false;
+    }
+    match chars[first] {
+        '-' | '*' | '+' => matches!(char_at(chars, first + 1), Some(' ' | '\t')),
+        '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => {
             ordered_list_item(chars, first + 1, end)
         }
         _ => false,
     }
+}
 }
 
 verified_loop_function! {
@@ -210,6 +247,7 @@ fn marker_run_len(chars: &[char], start: usize, end: usize, marker: char) -> usi
 requires(start <= end, end <= chars@.len());
 ensures(result =>
     result <= end - start,
+    result == crate::spec_marker_run_len(chars@, start as int, end as int, marker),
     forall|i: int| start <= i < start + result ==> chars@[i] == marker,
     start + result == end || chars@[start + result] != marker,
 );
@@ -219,6 +257,8 @@ before {
 while (cursor < end && chars[cursor] == marker) invariant(
     start <= cursor <= end,
     end <= chars@.len(),
+    cursor - start + crate::spec_marker_run_len(chars@, cursor as int, end as int, marker)
+        == crate::spec_marker_run_len(chars@, start as int, end as int, marker),
     forall|i: int| start <= i < cursor ==> chars@[i] == marker,
 ) {
         cursor += 1;
@@ -311,10 +351,15 @@ fn is_table_delimiter_cell(chars: &[char], start: usize, end: usize) -> bool {
     first < last && all_equal(chars, first, last, '-')
 }
 
+verified_kernel_function! {
 /// Reports whether a digit run closes with ordered-list punctuation and space.
 #[cfg_attr(verus_keep_ghost, verifier::external_body)]
-fn ordered_list_item(chars: &[char], mut cursor: usize, end: usize) -> bool {
+fn ordered_list_item(chars: &[char], start: usize, end: usize) -> bool;
+requires(start <= chars@.len(), end <= chars@.len());
+ensures(result => result == crate::spec_ordered_list_item(chars@, start as int, end as int, 1));
+{
     let mut digit_count = 1;
+    let mut cursor = start;
     while cursor < end {
         match chars[cursor] {
             '.' | ')' => return matches!(char_at(chars, cursor + 1), Some(' ' | '\t')),
@@ -326,4 +371,5 @@ fn ordered_list_item(chars: &[char], mut cursor: usize, end: usize) -> bool {
         }
     }
     false
+}
 }

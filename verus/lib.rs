@@ -34,48 +34,30 @@ impl View for production_classify::ClassifyCtxKernel {
     }
 }
 
-/// The two scalar values that Markdown treats as indentation whitespace.
-pub open spec fn spec_is_markdown_whitespace(character: char) -> bool {
-    character == ' ' || character == '\t'
-}
+#[path = "classify_spec.rs"]
+pub mod classify_spec;
+pub use classify_spec::*;
 
-/// Whether the suffix beginning at `start` contains only indentation whitespace.
-pub open spec fn spec_is_blank_from(s: Seq<char>, start: int) -> bool {
-    forall|i: int| start <= i < s.len() ==> spec_is_markdown_whitespace(s[i])
-}
-
-/// Whether a bounded scalar range contains the requested marker.
-pub open spec fn spec_contains(s: Seq<char>, start: int, end: int, target: char) -> bool {
-    exists|i: int| start <= i < end && s[i] == target
-}
-
-/// Whether every scalar in a bounded range is the same marker.
-pub open spec fn spec_all_equal(s: Seq<char>, start: int, end: int, target: char) -> bool {
-    forall|i: int| start <= i < end ==> s[i] == target
-}
-
-/// First non-whitespace scalar in a bounded range, or its end.
-pub open spec fn spec_trim_start(s: Seq<char>, start: int, end: int) -> int
-    recommends 0 <= start <= end <= s.len()
-    decreases end - start
+/// A leading tab occupies four columns and leaves the line literal.
+proof fn lemma_leading_tab_is_literal(s: Seq<char>)
+    requires s.len() > 0, s[0] == '\t'
+    ensures spec_line_parts(s) == (0int, true)
 {
-    if start < end && spec_is_markdown_whitespace(s[start]) {
-        spec_trim_start(s, start + 1, end)
-    } else {
-        start
-    }
+    assert(spec_indentation_at(s, 1, 0, 4) == (4int, 1int));
+    assert(spec_indentation_at(s, 0, 0, 0) == (4int, 1int));
 }
 
-/// End of a bounded range after removing trailing whitespace.
-pub open spec fn spec_trim_end(s: Seq<char>, start: int, end: int) -> int
-    recommends 0 <= start <= end <= s.len()
-    decreases end - start
+/// Four leading spaces likewise preclude structural classification.
+proof fn lemma_four_spaces_are_literal(s: Seq<char>)
+    requires s.len() >= 4,
+        s[0] == ' ', s[1] == ' ', s[2] == ' ', s[3] == ' '
+    ensures spec_line_parts(s) == (0int, true)
 {
-    if start < end && spec_is_markdown_whitespace(s[end - 1]) {
-        spec_trim_end(s, start, end - 1)
-    } else {
-        end
-    }
+    assert(spec_indentation_at(s, 4, 0, 4).0 == 4);
+    assert(spec_indentation_at(s, 3, 0, 3).0 == 4);
+    assert(spec_indentation_at(s, 2, 0, 2).0 == 4);
+    assert(spec_indentation_at(s, 1, 0, 1).0 == 4);
+    assert(spec_indentation_at(s, 0, 0, 0).0 == 4);
 }
 
 pub open spec fn is_atx_heading(s: Seq<char>) -> bool {

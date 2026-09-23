@@ -15,6 +15,7 @@ trap cleanup EXIT
 sed -e "s/\.push('#')\.push(' ')/.push('#')/" \
     -e 's@../src/classify_kernel.rs@../../src/classify_kernel.rs@' \
     "${repo_root}/verus/lib.rs" > "${proof_file}"
+cp "${repo_root}/verus/classify_spec.rs" "${proof_dir}/classify_spec.rs"
 
 # `PROVER_TOOLS` deliberately carries a command and its fixed arguments, as it
 # does in the Makefile. Its expansion must therefore remain unquoted here.

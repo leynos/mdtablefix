@@ -5,7 +5,7 @@
 //! ambient state, so `verus/lib.rs` can compile this production body directly.
 
 #[cfg(verus_keep_ghost)]
-use vstd::prelude::verus;
+use vstd::prelude::*;
 
 /// Emits the ordinary Rust form of a kernel function for Cargo builds.
 #[cfg(not(verus_keep_ghost))]
@@ -32,6 +32,7 @@ macro_rules! verified_loop_function {
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
         while ($condition:expr) invariant($($invariant:tt)*) $loop_body:block
+        $(proof_after { $($proof_after:tt)* })?
         after { $($after:tt)* }
     ) => {
         $(#[$attribute])*
@@ -53,6 +54,7 @@ macro_rules! verified_loop_function {
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
         while ($condition:expr) invariant($($invariant:tt)*) $loop_body:block
+        $(proof_after { $($proof_after:tt)* })?
         after { $($after:tt)* }
     ) => {
         verus! {
@@ -65,6 +67,7 @@ macro_rules! verified_loop_function {
                 while $condition
                     invariant $($invariant)*
                     $loop_body
+                $(proof { $($proof_after)* })?
                 $($after)*
             }
         }
@@ -96,7 +99,6 @@ mod predicates;
 
 use predicates::{
     body_starts_with_pipe,
-    char_at,
     is_atx_heading,
     is_blank,
     is_blank_from,
@@ -227,12 +229,16 @@ ensures(result => true);
 }
 }
 
+verified_kernel_function! {
 /// Classifies a line inside an open fenced region.
 fn classify_within_fence(
     chars: &[char],
     body_start: usize,
     ctx: &ClassifyCtxKernel,
-) -> KernelClassification {
+) -> KernelClassification;
+requires(body_start <= chars@.len());
+ensures(result => true);
+{
     match ctx.open_fence {
         Some(open) if is_closing_fence(chars, body_start, open) => {
             return classified(LineClass::FenceMarker, body_start);
@@ -241,13 +247,18 @@ fn classify_within_fence(
     }
     classified(LineClass::Literal, body_start)
 }
+}
 
+verified_kernel_function! {
 /// Applies structural precedence outside fenced regions.
 fn classify_open_text(
     chars: &[char],
     body_start: usize,
     ctx: &ClassifyCtxKernel,
-) -> KernelClassification {
+) -> KernelClassification;
+requires(body_start <= chars@.len());
+ensures(result => true);
+{
     if is_fence_marker(chars, body_start) {
         return classified(LineClass::FenceMarker, body_start);
     }
@@ -274,6 +285,7 @@ fn classify_open_text(
     }
     classified(LineClass::ParagraphText, body_start)
 }
+}
 
 /// Constructs a result without allowing the scalar offset to become implicit.
 fn classified(class: LineClass, body_start: usize) -> KernelClassification {
@@ -283,49 +295,95 @@ fn classified(class: LineClass, body_start: usize) -> KernelClassification {
     }
 }
 
+verified_loop_function! {
 /// Locates the structural body and determines whether it is indented code.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-fn line_parts(chars: &[char]) -> (usize, bool) {
+fn line_parts(chars: &[char]) -> (usize, bool);
+ensures(result =>
+    result.0 <= chars@.len(),
+    result.0 as int == crate::spec_line_parts(chars@).0,
+    result.1 == crate::spec_line_parts(chars@).1,
+);
+before {
     let (outer_width, mut cursor) = indentation_at(chars, 0, 0);
     if outer_width >= 4 {
         return (0, true);
     }
 
     let mut column = outer_width;
-    loop {
+    let mut fuel = chars.len() - cursor;
+}
+while (cursor < chars.len() && fuel > 0 && has_quote_prefix(chars, cursor, column)) invariant(
+    cursor <= chars@.len(),
+    column < 4,
+    fuel >= chars@.len() - cursor,
+    crate::spec_line_parts_from(chars@, cursor as int, column as int, fuel as nat)
+        == crate::spec_line_parts(chars@),
+) {
         let (indent_width, after_indent) = indentation_at(chars, cursor, column);
-        if indent_width >= 4 || !matches!(char_at(chars, after_indent), Some('>')) {
-            break;
-        }
         cursor = after_indent + 1;
-        column += indent_width + 1;
-        if matches!(char_at(chars, cursor), Some(' ')) {
+        column = (column + indent_width + 1) % 4;
+        if cursor < chars.len() && chars[cursor] == ' ' {
             cursor += 1;
-            column += 1;
+            column = (column + 1) % 4;
         }
+        fuel -= 1;
+}
+proof_after {
+    assert(cursor == chars@.len() || fuel > 0);
+    let expected = (cursor as int,
+        crate::spec_indentation_at(chars@, cursor as int, column as int, 0).0 >= 4);
+    assert(crate::spec_line_parts_from(chars@, cursor as int, column as int, fuel as nat)
+        == expected);
+}
+after {
+    if cursor == chars.len() {
+        return (cursor, false);
     }
-
     let (content_indent, _) = indentation_at(chars, cursor, column);
     (cursor, content_indent >= 4)
 }
+}
 
+verified_kernel_function! {
+/// Checks a blockquote marker without consuming the cursor.
+fn has_quote_prefix(chars: &[char], cursor: usize, column: usize) -> bool;
+requires(cursor <= chars@.len(), column < 4);
+ensures(result => result == crate::spec_has_quote_prefix(chars@, cursor as int, column as int));
+{
+    let (indent_width, after_indent) = indentation_at(chars, cursor, column);
+    indent_width < 4 && after_indent < chars.len() && chars[after_indent] == '>'
+}
+}
+
+verified_loop_function! {
 /// Measures indentation columns and the following scalar offset from `start`.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-fn indentation_at(chars: &[char], start: usize, column: usize) -> (usize, usize) {
+fn indentation_at(chars: &[char], start: usize, column: usize) -> (usize, usize);
+requires(start <= chars@.len(), column < 4);
+ensures(result =>
+    result.0 <= 4,
+    start <= result.1 <= chars@.len(),
+    result.0 as int == crate::spec_indentation_at(chars@, start as int, column as int, 0).0,
+    result.1 as int == crate::spec_indentation_at(chars@, start as int, column as int, 0).1,
+);
+before {
     let mut width = 0;
     let mut cursor = start;
-    while cursor < chars.len() {
-        match chars[cursor] {
-            ' ' => {
-                width += 1;
-                cursor += 1;
-            }
-            '\t' => {
-                width += 4 - ((column + width) % 4);
-                cursor += 1;
-            }
-            _ => break,
+}
+while (cursor < chars.len() && width < 4 && matches!(chars[cursor], ' ' | '\t')) invariant(
+    start <= cursor <= chars@.len(),
+    column < 4,
+    width <= 7,
+    crate::spec_indentation_at(chars@, cursor as int, column as int, width as int)
+        == crate::spec_indentation_at(chars@, start as int, column as int, 0),
+) {
+        if chars[cursor] == ' ' {
+            width += 1;
+        } else {
+            width += 4 - ((column + width) % 4);
         }
-    }
-    (width, cursor)
+        cursor += 1;
+}
+after {
+    (if width >= 4 { 4 } else { width }, cursor)
+}
 }
