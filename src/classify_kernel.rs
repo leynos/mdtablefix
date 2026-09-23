@@ -64,7 +64,7 @@ pub(crate) struct CharIndex(pub(crate) usize);
 /// The structural role of a line after its indentation and blockquote prefix.
 #[derive(Clone, Copy)]
 #[cfg_attr(not(verus_keep_ghost), derive(Debug, Eq, PartialEq))]
-pub(crate) enum LineClass {
+pub enum LineClass {
     /// Text that can form a paragraph and may be the candidate of a Setext pair.
     ParagraphText,
     /// An ATX heading with a hash run followed by whitespace or end of line.
@@ -90,11 +90,11 @@ pub(crate) enum LineClass {
 /// Fence state needed to distinguish literal fenced contents from markers.
 #[derive(Clone, Copy)]
 #[cfg_attr(not(verus_keep_ghost), derive(Debug, Eq, PartialEq))]
-pub(crate) struct OpenFence {
+pub struct OpenFence {
     /// Character repeated by the fence marker.
-    pub(crate) marker: char,
+    pub marker: char,
     /// Number of marker characters in the opening fence.
-    pub(crate) marker_len: usize,
+    pub marker_len: usize,
 }
 
 impl OpenFence {
@@ -105,15 +105,15 @@ impl OpenFence {
 
 /// Context that makes a line classification independent of its caller.
 #[cfg_attr(not(verus_keep_ghost), derive(Clone, Debug, Default, Eq, PartialEq))]
-pub(crate) struct ClassifyCtxKernel {
+pub struct ClassifyCtxKernel {
     /// Whether the line is within an already-open fenced region.
-    pub(crate) is_in_fence: bool,
+    pub is_in_fence: bool,
     /// Opening marker whose compatible closing marker may end that region.
-    pub(crate) open_fence: Option<OpenFence>,
+    pub open_fence: Option<OpenFence>,
     /// Structural class of the immediately preceding source line.
-    pub(crate) previous: Option<LineClass>,
+    pub previous: Option<LineClass>,
     /// Whether the current and preceding lines have identical structural prefixes.
-    pub(crate) prefix_agrees: bool,
+    pub prefix_agrees: bool,
 }
 
 impl ClassifyCtxKernel {

@@ -9,27 +9,29 @@ use vstd::prelude::*;
 verus! {
 
 #[path = "../src/classify_kernel.rs"]
-mod production_classify;
+pub mod production_classify;
 
-/// Ghost counterpart of the production structural roles.
-pub enum LineClass {
-    ParagraphText,
-    AtxHeading,
-    SetextUnderline,
-    TableDelimiter,
-    TableRow,
-    FenceMarker,
-    ThematicBreak,
-    ListItem,
-    Blank,
-    Literal,
-}
+use production_classify::LineClass;
 
 /// State relevant to a structural decision after source scanning.
-pub struct ClassifyCtx {
-    pub in_fence: bool,
+pub struct ClassifyCtxView {
+    pub is_in_fence: bool,
+    pub open_fence: Option<production_classify::OpenFence>,
     pub previous: Option<LineClass>,
     pub prefix_agrees: bool,
+}
+
+impl View for production_classify::ClassifyCtxKernel {
+    type V = ClassifyCtxView;
+
+    open spec fn view(&self) -> ClassifyCtxView {
+        ClassifyCtxView {
+            is_in_fence: self.is_in_fence,
+            open_fence: self.open_fence,
+            previous: self.previous,
+            prefix_agrees: self.prefix_agrees,
+        }
+    }
 }
 
 pub open spec fn is_atx_heading(s: Seq<char>) -> bool {
@@ -77,10 +79,10 @@ pub open spec fn is_paragraph_text(s: Seq<char>) -> bool {
 }
 
 /// Verus model of the scanner's structural precedence.
-pub open spec fn spec_classify(s: Seq<char>, ctx: ClassifyCtx) -> LineClass {
+pub open spec fn spec_classify(s: Seq<char>, ctx: ClassifyCtxView) -> LineClass {
     if s.len() == 0 {
         LineClass::Blank
-    } else if ctx.in_fence {
+    } else if ctx.is_in_fence {
         LineClass::Literal
     } else if is_fence_marker(s) {
         LineClass::FenceMarker
@@ -109,12 +111,13 @@ proof fn convert_setext(candidate: Seq<char>, underline: Seq<char>) -> (result: 
     requires
         spec_classify(
             candidate,
-            ClassifyCtx { in_fence: false, previous: None, prefix_agrees: true },
+            canonical_context(),
         ) == LineClass::ParagraphText,
         spec_classify(
             underline,
-            ClassifyCtx {
-                in_fence: false,
+            ClassifyCtxView {
+                is_in_fence: false,
+                open_fence: None,
                 previous: Some(LineClass::ParagraphText),
                 prefix_agrees: true,
             },
@@ -122,7 +125,7 @@ proof fn convert_setext(candidate: Seq<char>, underline: Seq<char>) -> (result: 
     ensures
         spec_classify(
             result,
-            ClassifyCtx { in_fence: false, previous: None, prefix_agrees: true },
+            canonical_context(),
         ) == LineClass::AtxHeading,
 {
     let emitted = Seq::<char>::empty().push('#').push(' ').add(candidate);
@@ -132,33 +135,33 @@ proof fn convert_setext(candidate: Seq<char>, underline: Seq<char>) -> (result: 
 
 pub open spec fn canonical_break() -> Seq<char> { Seq::<char>::new(70, |i: int| '_') }
 
-pub open spec fn canonical_context() -> ClassifyCtx {
-    ClassifyCtx { in_fence: false, previous: None, prefix_agrees: true }
+pub open spec fn canonical_context() -> ClassifyCtxView {
+    ClassifyCtxView { is_in_fence: false, open_fence: None, previous: None, prefix_agrees: true }
 }
 
 proof fn lemma_canonical_break_remains_structural()
     ensures
         spec_classify(
             canonical_break(),
-            ClassifyCtx { in_fence: false, previous: None, prefix_agrees: true },
+            canonical_context(),
         ) == LineClass::ThematicBreak,
 {
     assert(is_thematic_break(canonical_break()));
 }
 
-pub open spec fn wrapper_accepts(s: Seq<char>, ctx: ClassifyCtx) -> bool {
+pub open spec fn wrapper_accepts(s: Seq<char>, ctx: ClassifyCtxView) -> bool {
     spec_classify(s, ctx) == LineClass::ParagraphText
 }
 
-pub open spec fn heading_accepts(s: Seq<char>, ctx: ClassifyCtx) -> bool {
+pub open spec fn heading_accepts(s: Seq<char>, ctx: ClassifyCtxView) -> bool {
     spec_classify(s, ctx) == LineClass::ParagraphText
 }
 
-pub open spec fn table_accepts(s: Seq<char>, ctx: ClassifyCtx) -> bool {
+pub open spec fn table_accepts(s: Seq<char>, ctx: ClassifyCtxView) -> bool {
     matches!(spec_classify(s, ctx), LineClass::TableRow | LineClass::TableDelimiter)
 }
 
-pub open spec fn orphan_specifier_accepts(s: Seq<char>, ctx: ClassifyCtx) -> bool {
+pub open spec fn orphan_specifier_accepts(s: Seq<char>, ctx: ClassifyCtxView) -> bool {
     spec_classify(s, ctx) == LineClass::ParagraphText
 }
 

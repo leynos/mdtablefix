@@ -24,7 +24,7 @@ mod tokenize;
 #[cfg(test)]
 pub(crate) mod tracing_snapshot_support;
 use block::{BULLET_RE, FOOTNOTE_RE};
-pub(crate) use block::{BlockKind, classify_block, leading_indent};
+pub(crate) use block::{BlockKind, classify_block, classify_residual_block, leading_indent};
 pub use blockquote::BlockquotePrefix;
 use continuation::apply_continuation_chunk;
 pub(crate) use fence::{FenceObservation, ObservedFence};

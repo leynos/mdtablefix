@@ -117,22 +117,39 @@ pub(crate) fn classify_block(
         LineClass::ListItem => return Some(BlockKind::Bullet),
         _ => {}
     }
-    if indent_width < 4 && BLOCKQUOTE_RE.is_match(line) {
-        return Some(BlockKind::Blockquote);
-    }
-    if indent_width < 4 && FOOTNOTE_RE.is_match(line) {
-        return Some(BlockKind::FootnoteDefinition);
-    }
-    if indent_width < 4
-        && (link_matcher.is_definition(line) || link_matcher.is_bare_label_only(line))
-    {
-        return Some(BlockKind::LinkReferenceDefinition);
-    }
-    if indent_width < 4 && is_markdownlint_directive(line) {
-        return Some(BlockKind::MarkdownlintDirective);
+    if let Some(kind) = classify_residual_block(line, link_matcher) {
+        return Some(kind);
     }
     if indent_width < 4 && trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         return Some(BlockKind::DigitPrefix);
+    }
+    None
+}
+
+/// Recognizes block starts that the shared line classifier does not represent.
+///
+/// Wrapping and Setext conversion call this only after obtaining their
+/// structural decision from the production line classifier. It is the sole
+/// boundary for regex and link-reference checks that remain outside that
+/// classifier.
+pub(crate) fn classify_residual_block(
+    line: &str,
+    link_matcher: super::link_reference::LinkReferenceMatcher,
+) -> Option<BlockKind> {
+    if leading_indent(line).0 >= 4 {
+        return None;
+    }
+    if BLOCKQUOTE_RE.is_match(line) {
+        return Some(BlockKind::Blockquote);
+    }
+    if FOOTNOTE_RE.is_match(line) {
+        return Some(BlockKind::FootnoteDefinition);
+    }
+    if link_matcher.is_definition(line) || link_matcher.is_bare_label_only(line) {
+        return Some(BlockKind::LinkReferenceDefinition);
+    }
+    if is_markdownlint_directive(line) {
+        return Some(BlockKind::MarkdownlintDirective);
     }
     None
 }

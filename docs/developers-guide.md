@@ -594,6 +594,14 @@ depth-aware tracking.
    blocks, headings, tables, directives, thematic breaks, link reference
    definitions, and blank lines stop paragraph accumulation.
 
+   `classify_residual_block` in the same module owns only blockquote, footnote,
+   link-reference, and markdownlint recognition. Wrapping calls it after the
+   shared line classifier; Setext conversion calls it after its candidate has
+   been classified as paragraph text. Callers must not use it in place of the
+   shared classifier for headings, lists, thematic breaks, or tables. This
+   keeps the regex and link-matcher boundary separate from the character
+   scanner's structural decision.
+
 2. **Prefix-aware paragraph handling.** `ParagraphWriter` in
    `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.
    `wrap_with_prefix` computes the available content width once from the

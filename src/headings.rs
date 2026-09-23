@@ -13,7 +13,13 @@ use tracing::trace;
 
 use crate::{
     classify::{ClassifyCtx, LineClass, classify_line},
-    wrap::{BlockKind, FenceTracker, LinkReferenceMatcher, classify_block, leading_indent},
+    wrap::{
+        BlockKind,
+        FenceTracker,
+        LinkReferenceMatcher,
+        classify_residual_block,
+        leading_indent,
+    },
 };
 
 /// Convert Setext-style headings into ATX (`#`) headings.
@@ -150,8 +156,8 @@ fn detect_setext_heading(
 /// The candidate is measured after [`shared_prefix_len`] has removed the
 /// indentation or blockquote prefix shared with the underline, so a valid
 /// quoted heading such as `> Title` above `> -----` still reads as paragraph
-/// text. Block kinds come from [`crate::wrap::classify_block`], so this pass and
-/// the wrapper agree on what a block start is.
+/// text. The shared classifier decides structural roles; the residual block
+/// matcher checks only forms the classifier does not represent.
 ///
 /// A digit-prefixed candidate stays eligible.
 /// [`BlockKind::DigitPrefix`] marks a line the wrapper measures specially, not
@@ -171,13 +177,10 @@ fn is_setext_text(text: &str, line_class: LineClass, link_matcher: LinkReference
         return false;
     }
 
-    match classify_block(text, link_matcher) {
-        None | Some(BlockKind::DigitPrefix) => true,
+    match classify_residual_block(text, link_matcher) {
+        None => true,
         Some(
-            kind @ (BlockKind::Heading
-            | BlockKind::ThematicBreak
-            | BlockKind::Bullet
-            | BlockKind::Blockquote
+            kind @ (BlockKind::Blockquote
             | BlockKind::FootnoteDefinition
             | BlockKind::LinkReferenceDefinition
             | BlockKind::MarkdownlintDirective),
@@ -188,6 +191,7 @@ fn is_setext_text(text: &str, line_class: LineClass, link_matcher: LinkReference
             );
             false
         }
+        Some(_) => false,
     }
 }
 /// Returns the indentation width of a line's content, in columns.
