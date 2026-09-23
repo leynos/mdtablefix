@@ -31,7 +31,7 @@
 //! lint job.
 #![cfg(unix)]
 
-use std::process::Command;
+use std::{io, process::Command};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -63,18 +63,20 @@ const PROHIBITED_FORMS: &[&str] = &[
 
 /// Adapt an ambient [`std::path::Path`] — as produced by [`TempDir::path`] —
 /// into a UTF-8 path, failing loudly rather than lossily if it is not UTF-8.
-fn utf8(path: &std::path::Path) -> &Utf8Path {
-    Utf8Path::from_path(path).expect("temporary directory path should be UTF-8")
+fn utf8(path: &std::path::Path) -> io::Result<&Utf8Path> {
+    Utf8Path::from_path(path).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("non-UTF-8 temporary path: {}", path.display()),
+        )
+    })
 }
 
 /// Open a filesystem capability scoped to `dir`.
 ///
 /// Every subsequent operation names a path relative to this handle, so it
 /// cannot reach outside `dir`.
-fn open_dir(dir: &Utf8Path) -> Dir {
-    Dir::open_ambient_dir(dir, ambient_authority())
-        .unwrap_or_else(|e| panic!("failed to open directory {dir}: {e}"))
-}
+fn open_dir(dir: &Utf8Path) -> io::Result<Dir> { Dir::open_ambient_dir(dir, ambient_authority()) }
 
 /// The crate root, used as the capability root for reading fixtures.
 fn manifest_dir() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
@@ -83,20 +85,16 @@ fn manifest_dir() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 fn script_path() -> Utf8PathBuf { manifest_dir().join("scripts/check-static-regexes.sh") }
 
 /// Read `label`'s fixture through a capability scoped to the crate root.
-fn fixture(label: &str) -> String {
+fn fixture(label: &str) -> io::Result<String> {
     let relative = format!("tests/data/static_regex/{label}.rs.txt");
-    open_dir(&manifest_dir())
-        .read_to_string(&relative)
-        .unwrap_or_else(|e| panic!("failed to read fixture {relative}: {e}"))
+    open_dir(&manifest_dir())?.read_to_string(&relative)
 }
 
 /// Materialize `label`'s fixture as a `.rs` file inside a fresh temp directory.
-fn scan_dir_with(label: &str) -> TempDir {
-    let dir = TempDir::new().expect("failed to create temp dir");
-    open_dir(utf8(dir.path()))
-        .write(format!("{label}.rs"), fixture(label))
-        .expect("failed to write fixture into temp dir");
-    dir
+fn scan_dir_with(label: &str) -> io::Result<TempDir> {
+    let dir = TempDir::new()?;
+    open_dir(utf8(dir.path())?)?.write(format!("{label}.rs"), fixture(label)?)?;
+    Ok(dir)
 }
 
 /// Run the guard against `scan_dir`, optionally overriding the `RG` ripgrep
@@ -106,7 +104,7 @@ fn scan_dir_with(label: &str) -> TempDir {
 /// `rg --pcre2`); the guard splits it on whitespace. Passing `None` clears any
 /// ambient `RG` so default-path runs exercise the guard's own `rg` default
 /// deterministically.
-fn run_guard(scan_dir: &Utf8Path, rg: Option<&str>) -> std::process::Output {
+fn run_guard(scan_dir: &Utf8Path, rg: Option<&str>) -> io::Result<std::process::Output> {
     let mut cmd = Command::new(script_path());
     cmd.arg(scan_dir);
     match rg {
@@ -114,32 +112,30 @@ fn run_guard(scan_dir: &Utf8Path, rg: Option<&str>) -> std::process::Output {
         None => cmd.env_remove("RG"),
     };
     cmd.output()
-        .expect("failed to execute check-static-regexes.sh")
 }
 
 /// Write `script` to `<dir>/<name>`, mark it executable, and return its path.
 ///
 /// Both operations go through a capability scoped to `dir`, so `name` is
 /// resolved relative to that directory rather than against ambient authority.
-fn write_stub(dir: &Utf8Path, name: &str, script: &str) -> Utf8PathBuf {
-    let handle = open_dir(dir);
-    handle.write(name, script).expect("failed to write stub");
+fn write_stub(dir: &Utf8Path, name: &str, script: &str) -> io::Result<Utf8PathBuf> {
+    let handle = open_dir(dir)?;
+    handle.write(name, script)?;
     #[cfg(unix)]
     {
         use cap_std::fs::{Permissions, PermissionsExt};
-        handle
-            .set_permissions(name, Permissions::from_mode(0o755))
-            .expect("failed to chmod stub");
+        handle.set_permissions(name, Permissions::from_mode(0o755))?;
     }
-    dir.join(name)
+    Ok(dir.join(name))
 }
 
 #[rstest]
 fn rejects_prohibited_lazy_wrapper_form(#[values(0, 1, 2, 3, 4, 5)] index: usize) {
     let label = PROHIBITED_FORMS[index];
-    let dir = scan_dir_with(label);
+    let dir = scan_dir_with(label).expect("stage the labelled fixture");
 
-    let output = run_guard(utf8(dir.path()), None);
+    let output = run_guard(utf8(dir.path()).expect("temporary path is UTF-8"), None)
+        .expect("execute the guard");
 
     assert_eq!(
         output.status.code(),
@@ -157,9 +153,10 @@ fn rejects_prohibited_lazy_wrapper_form(#[values(0, 1, 2, 3, 4, 5)] index: usize
 fn accepts_clean_sources() {
     // The sanctioned `lazy_regex!` idiom plus an unrelated non-static
     // `Regex::new` call that must not trip the guard.
-    let dir = scan_dir_with("clean");
+    let dir = scan_dir_with("clean").expect("stage clean fixture");
 
-    let output = run_guard(utf8(dir.path()), None);
+    let output = run_guard(utf8(dir.path()).expect("temporary path is UTF-8"), None)
+        .expect("execute the guard");
 
     assert_eq!(
         output.status.code(),
@@ -172,11 +169,12 @@ fn accepts_clean_sources() {
 #[test]
 fn propagates_ripgrep_scan_failure() {
     let dir = TempDir::new().expect("failed to create temp dir");
-    let scan_dir = utf8(dir.path());
+    let scan_dir = utf8(dir.path()).expect("temporary path is UTF-8");
     // A stub standing in for ripgrep that fails with a distinctive status.
-    let stub = write_stub(scan_dir, "rg-stub.sh", "#!/bin/sh\nexit 3\n");
+    let stub = write_stub(scan_dir, "rg-stub.sh", "#!/bin/sh\nexit 3\n")
+        .expect("write the failing ripgrep stub");
 
-    let output = run_guard(scan_dir, Some(stub.as_str()));
+    let output = run_guard(scan_dir, Some(stub.as_str())).expect("execute the guard");
 
     assert_eq!(
         output.status.code(),
@@ -207,8 +205,9 @@ fn preserves_arguments_supplied_through_rg(#[case] dir_name: &str) {
     const STUB_NAME: &str = "rg-stub.sh";
 
     let root = TempDir::new().expect("failed to create temp dir");
-    let root_dir = utf8(root.path());
+    let root_dir = utf8(root.path()).expect("temporary path is UTF-8");
     open_dir(root_dir)
+        .expect("open the temporary root")
         .create_dir(dir_name)
         .expect("failed to create scan dir");
     let dir = root_dir.join(dir_name);
@@ -220,9 +219,10 @@ fn preserves_arguments_supplied_through_rg(#[case] dir_name: &str) {
         &dir,
         STUB_NAME,
         "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > \"$0.argv\"\nexit 1\n",
-    );
+    )
+    .expect("write the argument-recording ripgrep stub");
 
-    let output = run_guard(&dir, Some(&format!("{stub} --pcre2")));
+    let output = run_guard(&dir, Some(&format!("{stub} --pcre2"))).expect("execute the guard");
 
     assert_eq!(
         output.status.code(),
@@ -232,6 +232,7 @@ fn preserves_arguments_supplied_through_rg(#[case] dir_name: &str) {
     );
 
     let argv: Vec<String> = open_dir(&dir)
+        .expect("open the scan directory")
         .read_to_string(format!("{STUB_NAME}.argv"))
         .expect("stub should have recorded its argv")
         .lines()
@@ -253,22 +254,17 @@ fn preserves_arguments_supplied_through_rg(#[case] dir_name: &str) {
     );
 }
 
-// ---------------------------------------------------------------------------
 // Property-based coverage
-//
-// The fixtures above pin the specific spellings named in the issue. The guard's
-// real contract, though, is a syntax-matching invariant over a whole family of
+// The fixtures pin specific spellings. The guard's contract covers a family of
 // declarations: either supported wrapper, any module qualification, any
 // `\s*`-legal whitespace (including newlines, since the scan runs with `-U`),
 // with or without `move`, and with or without a braced closure body. The
 // properties below generate across that space and assert rejection, and
 // generate across clearly-sanctioned forms and assert acceptance.
-//
 // Each case writes several generated declarations into one directory and runs
 // the guard once, then asserts every generated file is named in the output.
 // That keeps process spawns proportional to cases rather than declarations
 // while still checking each declaration individually.
-// ---------------------------------------------------------------------------
 
 /// Whitespace runs for positions where the guard's pattern allows `\s*`.
 fn optional_ws() -> impl Strategy<Value = String> {
@@ -338,16 +334,14 @@ prop_compose! {
 }
 
 /// Write each declaration to its own `.rs` file and scan the directory once.
-fn scan_generated(declarations: &[String]) -> (TempDir, std::process::Output) {
-    let dir = TempDir::new().expect("failed to create temp dir");
-    let handle = open_dir(utf8(dir.path()));
+fn scan_generated(declarations: &[String]) -> io::Result<(TempDir, std::process::Output)> {
+    let dir = TempDir::new()?;
+    let handle = open_dir(utf8(dir.path())?)?;
     for (index, declaration) in declarations.iter().enumerate() {
-        handle
-            .write(format!("case{index}.rs"), declaration)
-            .expect("failed to write generated source");
+        handle.write(format!("case{index}.rs"), declaration)?;
     }
-    let output = run_guard(utf8(dir.path()), None);
-    (dir, output)
+    let output = run_guard(utf8(dir.path())?, None)?;
+    Ok((dir, output))
 }
 
 proptest! {
@@ -359,7 +353,8 @@ proptest! {
     fn rejects_generated_prohibited_declarations(
         declarations in prop::collection::vec(prohibited_declaration(), 1..5),
     ) {
-        let (_dir, output) = scan_generated(&declarations);
+        let (_dir, output) = scan_generated(&declarations)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
         prop_assert_eq!(
             output.status.code(),
@@ -385,7 +380,8 @@ proptest! {
     fn accepts_generated_clean_declarations(
         declarations in prop::collection::vec(clean_declaration(), 1..5),
     ) {
-        let (_dir, output) = scan_generated(&declarations);
+        let (_dir, output) = scan_generated(&declarations)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
         prop_assert_eq!(
             output.status.code(),
