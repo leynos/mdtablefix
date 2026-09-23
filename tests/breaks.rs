@@ -4,6 +4,7 @@
 
 use assert_cmd::Command;
 use mdtablefix::{THEMATIC_BREAK_LEN, format_breaks};
+use rstest::rstest;
 
 #[macro_use]
 #[path = "common/mod.rs"]
@@ -43,6 +44,29 @@ fn test_format_breaks_preserves_blockquote_prefix() {
 
     assert_eq!(output[0], format!("> {}", "_".repeat(THEMATIC_BREAK_LEN)));
     assert_eq!(output[1], format!("> > {}", "_".repeat(THEMATIC_BREAK_LEN)));
+}
+
+/// A Setext underline remains borrowed source text without the headings pass.
+#[rstest]
+#[case("Title", "---")]
+#[case("> Title", "> ---")]
+fn leaves_setext_underlines_unchanged(#[case] title: &str, #[case] underline: &str) {
+    let input = lines_vec![title, underline];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[0], title);
+    assert_borrowed_value!(output[1], underline);
+    assert!(std::ptr::eq(output[1].as_ref(), input[1].as_str()));
+}
+
+/// A blank line breaks the Setext pair, leaving a standalone thematic break.
+#[test]
+fn normalizes_break_after_blank_line() {
+    let input = lines_vec!["Title", "", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[1], "");
+    assert_borrowed_break!(output[2]);
 }
 
 #[test]

@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use crate::{
-    classify::{ClassifyCtx, OpenFence, classify_line_with_body, is_canonical_break_line},
+    classify::{ClassifyCtx, LineClass, classify_line_with_body, is_canonical_break_line},
     wrap::FenceTracker,
 };
 
@@ -47,22 +47,36 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     let mut out = Vec::with_capacity(lines.len());
     // Track fenced code blocks consistently while formatting breaks.
     let mut fences = FenceTracker::default();
+    let mut previous: Option<(LineClass, String)> = None;
 
     for line in lines {
         let fence = fences.observe_source_line(line);
-        if fence.is_fence_marker {
+        if fence.is_fence_marker || fence.is_in_fence {
+            previous = None;
             out.push(Cow::Borrowed(line.as_str()));
             continue;
         }
 
-        let context = if let Some((marker, marker_len)) = fences.open_marker() {
-            ClassifyCtx::in_fence(OpenFence::new(marker, marker_len))
+        let first_pass = classify_line_with_body(line, &ClassifyCtx::default());
+        let prefix_len = line.len() - first_pass.body.len();
+        let prefix = &line[..prefix_len];
+        let context = previous
+            .as_ref()
+            .map_or_else(ClassifyCtx::default, |(class, old_prefix)| {
+                ClassifyCtx::following(*class, old_prefix == prefix)
+            });
+        let classified = if previous.is_some() {
+            classify_line_with_body(line, &context)
         } else {
-            ClassifyCtx::default()
+            first_pass
         };
-        if !fence.is_in_fence && is_canonical_break_line(line, &context) {
-            let classified = classify_line_with_body(line, &context);
-            let prefix_len = line.len() - classified.body.len();
+        previous = if classified.class == LineClass::Blank {
+            None
+        } else {
+            Some((classified.class, prefix.to_owned()))
+        };
+
+        if classified.class == LineClass::ThematicBreak && is_canonical_break_line(line, &context) {
             if line[..prefix_len].contains('>') {
                 out.push(Cow::Owned(format!(
                     "{}{}",

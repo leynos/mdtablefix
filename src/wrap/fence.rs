@@ -180,12 +180,6 @@ impl FenceTracker {
     #[must_use]
     pub fn new() -> Self { Self::default() }
 
-    /// Returns the delimiter that currently opens the active fenced region.
-    #[must_use]
-    pub(crate) fn open_marker(&self) -> Option<(char, usize)> {
-        self.state.map(|state| (state.marker, state.marker_len))
-    }
-
     /// Update the tracker with a potential fence line.
     ///
     /// Returns `true` when the line is treated as a fence marker and updates

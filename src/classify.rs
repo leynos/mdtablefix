@@ -10,7 +10,6 @@ pub(crate) use crate::classify_kernel::{
     ClassifyCtxKernel as ClassifyCtx,
     KernelClassification,
     LineClass,
-    OpenFence,
     classify_seq,
 };
 

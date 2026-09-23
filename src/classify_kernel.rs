@@ -155,6 +155,7 @@ pub struct OpenFence {
 impl OpenFence {
     /// Records the marker that opened the current fenced region.
     #[must_use]
+    #[cfg(test)]
     pub(crate) const fn new(marker: char, marker_len: usize) -> Self { Self { marker, marker_len } }
 }
 
@@ -174,6 +175,7 @@ pub struct ClassifyCtxKernel {
 impl ClassifyCtxKernel {
     /// Builds a context for a fenced region.
     #[must_use]
+    #[cfg(test)]
     pub(crate) fn in_fence(open_fence: OpenFence) -> Self {
         Self {
             is_in_fence: true,

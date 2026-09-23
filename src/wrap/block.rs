@@ -67,7 +67,7 @@ pub(super) static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = lazy_r
 pub(crate) enum BlockKind {
     /// Lines that begin with `#`, `##`, and similar heading prefixes.
     Heading,
-    /// Thematic breaks recognised by [`crate::classify::classify_line`].
+    /// Thematic breaks recognized by [`crate::classify::classify_line`].
     ///
     /// This covers `***`, `___`, `---`, spaced runs such as `- - -`, and the
     /// underscore run emitted by `--breaks`, none of which are table
