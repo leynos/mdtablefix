@@ -12,7 +12,6 @@
 //! 400-line limit, and so a failure says plainly whether a reader broke or the
 //! repository drifted.
 
-use anyhow::{Result, ensure};
 use rstest::rstest;
 
 #[path = "support/make_reader.rs"]
@@ -49,16 +48,14 @@ const WORKSPACE_MANIFEST: &str = concat!(
 #[case::warned("[lints.clippy]\ndisallowed_methods = \"warn\"\n", Some("warn"))]
 #[case::absent("[lints.clippy]\npedantic = \"warn\"\n", None)]
 #[case::no_lint_table("[package]\nname = \"example\"\n", None)]
-fn reads_a_package_declared_lint_level(
-    #[case] manifest: &str,
-    #[case] expected: Option<&str>,
-) -> Result<()> {
-    let level = clippy_lint_level(manifest, WORKSPACE_MANIFEST, "disallowed_methods")?;
-    ensure!(
-        level.as_deref() == expected,
-        "expected {expected:?} from `{manifest}`, found {level:?}"
+fn reads_a_package_declared_lint_level(#[case] manifest: &str, #[case] expected: Option<&str>) {
+    let level = clippy_lint_level(manifest, WORKSPACE_MANIFEST, "disallowed_methods")
+        .expect("inline package and workspace manifests should parse");
+    assert_eq!(
+        level.as_deref(),
+        expected,
+        "unexpected lint level from `{manifest}`"
     );
-    Ok(())
 }
 
 /// Scenario: a manifest opts into workspace lints with `[lints] workspace = true`,
@@ -66,14 +63,11 @@ fn reads_a_package_declared_lint_level(
 /// Invariant: the level comes from the workspace manifest rather than the
 /// package, so the contract enforces the deny through the inheritance.
 #[test]
-fn follows_workspace_lint_inheritance() -> Result<()> {
+fn follows_workspace_lint_inheritance() {
     let manifest = "[package]\nname = \"test-macros\"\n\n[lints]\nworkspace = true\n";
-    let level = clippy_lint_level(manifest, WORKSPACE_MANIFEST, "disallowed_methods")?;
-    ensure!(
-        level.as_deref() == Some("deny"),
-        "inherited level should be deny, found {level:?}"
-    );
-    Ok(())
+    let level = clippy_lint_level(manifest, WORKSPACE_MANIFEST, "disallowed_methods")
+        .expect("inline package and workspace manifests should parse");
+    assert_eq!(level.as_deref(), Some("deny"), "inherited lint level");
 }
 
 /// Scenario: a manifest inherits workspace lints but the workspace table has
@@ -81,13 +75,13 @@ fn follows_workspace_lint_inheritance() -> Result<()> {
 /// Invariant: no level is reported, so weakening the shared table fails the
 /// contract instead of passing through the inheritance path.
 #[test]
-fn reports_no_level_when_the_workspace_table_drops_the_lint() -> Result<()> {
+fn reports_no_level_when_the_workspace_table_drops_the_lint() {
     let manifest = "[package]\nname = \"test-macros\"\n\n[lints]\nworkspace = true\n";
     let workspace =
         "[workspace]\nmembers = [\".\"]\n\n[workspace.lints.clippy]\npedantic = \"warn\"\n";
-    let level = clippy_lint_level(manifest, workspace, "disallowed_methods")?;
-    ensure!(level.is_none(), "expected no level, found {level:?}");
-    Ok(())
+    let level = clippy_lint_level(manifest, workspace, "disallowed_methods")
+        .expect("inline package and workspace manifests should parse");
+    assert!(level.is_none(), "expected no level, found {level:?}");
 }
 
 /// Scenario: a `lint` recipe is read from a Makefile that also names Clippy in
@@ -95,7 +89,7 @@ fn reports_no_level_when_the_workspace_table_drops_the_lint() -> Result<()> {
 /// Invariant: only the recipe's own uncommented commands are returned, as
 /// written, so none of those three can satisfy the coverage requirement.
 #[test]
-fn reads_only_the_targets_own_uncommented_commands() -> Result<()> {
+fn reads_only_the_targets_own_uncommented_commands() {
     let makefile = concat!(
         "CLIPPY_FLAGS ?= --all-targets -- -D warnings\n",
         "DECOY = $(CARGO) clippy --all-features\n",
@@ -107,13 +101,14 @@ fn reads_only_the_targets_own_uncommented_commands() -> Result<()> {
         "typecheck:\n",
         "\tcargo clippy --manifest-path test-macros/Cargo.toml\n",
     );
-    let parsed = recipe_commands(makefile, "lint")?;
+    let parsed =
+        recipe_commands(makefile, "lint").expect("inline Makefile should have one lint recipe");
     let commands = command_texts(&parsed);
-    ensure!(
-        commands == ["cargo clippy $(CLIPPY_FLAGS)"],
-        "expected the single uncommented lint command, found {commands:?}"
+    assert_eq!(
+        commands,
+        ["cargo clippy $(CLIPPY_FLAGS)"],
+        "lint recipe should return only its uncommented command"
     );
-    Ok(())
 }
 
 /// Scenario: each shape a recipe command can take is judged for whether it runs
@@ -192,7 +187,7 @@ fn command_texts(commands: &[RecipeCommand]) -> Vec<&str> {
 /// that field is skipped rather than failing the read, so a malformed entry
 /// cannot masquerade as a ban.
 #[test]
-fn reads_every_disallowed_method_path() -> Result<()> {
+fn reads_every_disallowed_method_path() {
     let configuration = concat!(
         "disallowed-methods = [\n",
         "  { path = \"std::env::var\", reason = \"inject an environment reader\" },\n",
@@ -200,12 +195,13 @@ fn reads_every_disallowed_method_path() -> Result<()> {
         "  \"std::env::set_var\",\n",
         "]\n",
     );
-    let paths = disallowed_method_paths(configuration)?;
-    ensure!(
-        paths == vec!["std::env::var".to_owned()],
-        "expected the one entry carrying a path, found {paths:?}"
+    let paths = disallowed_method_paths(configuration)
+        .expect("inline Clippy configuration should parse and contain disallowed-methods");
+    assert_eq!(
+        paths,
+        ["std::env::var"],
+        "only entries carrying a path should be returned"
     );
-    Ok(())
 }
 
 /// Scenario: a Clippy configuration declares no `disallowed-methods` array.
@@ -251,24 +247,28 @@ fn expands_make_variable_references(#[case] command: &str, #[case] expected: &st
 /// line to a single shell, so reading the physical lines separately would
 /// certify a recipe that runs no Clippy at all.
 #[test]
-fn joins_backslash_continuations_into_one_command() -> Result<()> {
+fn joins_backslash_continuations_into_one_command() {
     let makefile = concat!(
         "lint: ## Run Clippy\n",
         "\tif false; then \\\n",
         "\t\t$(CARGO) clippy $(CLIPPY_FLAGS) \\\n",
         "\t; fi\n",
     );
-    let commands = recipe_commands(makefile, "lint")?;
+    let commands =
+        recipe_commands(makefile, "lint").expect("inline Makefile should have one lint recipe");
     let texts = command_texts(&commands);
-    ensure!(
-        texts == ["if false; then $(CARGO) clippy $(CLIPPY_FLAGS) ; fi"],
-        "expected one joined command, found {texts:?}"
+    assert_eq!(
+        texts,
+        ["if false; then $(CARGO) clippy $(CLIPPY_FLAGS) ; fi"],
+        "continued recipe lines should form one command"
     );
-    ensure!(
-        !is_cargo_clippy_invocation(makefile, &commands[0].text),
+    let command = commands
+        .first()
+        .expect("one joined command was asserted above");
+    assert!(
+        !is_cargo_clippy_invocation(makefile, &command.text),
         "a Clippy call inside a never-taken branch must not count as an invocation"
     );
-    Ok(())
 }
 
 /// Scenario: a recipe's final line ends in a backslash, so its continuation is
@@ -277,15 +277,16 @@ fn joins_backslash_continuations_into_one_command() -> Result<()> {
 /// malformed recipe must not become an invisible one, since a dropped command
 /// is a command no assertion can judge.
 #[test]
-fn returns_a_command_whose_continuation_is_missing() -> Result<()> {
+fn returns_a_command_whose_continuation_is_missing() {
     let makefile = "lint:\n\t$(CARGO) clippy $(CLIPPY_FLAGS) \\\n";
-    let parsed = recipe_commands(makefile, "lint")?;
+    let parsed =
+        recipe_commands(makefile, "lint").expect("inline Makefile should have one lint recipe");
     let commands = command_texts(&parsed);
-    ensure!(
-        commands == ["$(CARGO) clippy $(CLIPPY_FLAGS)"],
-        "expected the unterminated command, found {commands:?}"
+    assert_eq!(
+        commands,
+        ["$(CARGO) clippy $(CLIPPY_FLAGS)"],
+        "unterminated continuation should retain its command"
     );
-    Ok(())
 }
 
 /// Scenario: each construct that can stand between a command and Make is
@@ -338,22 +339,22 @@ fn reports_every_construct_that_masks_an_exit_status(
 fn separates_the_ignore_errors_prefix_from_the_rest(
     #[case] line: &str,
     #[case] ignores_errors: bool,
-) -> Result<()> {
+) {
     let makefile = format!("lint:\n\t{line}\n");
-    let commands = recipe_commands(&makefile, "lint")?;
+    let commands =
+        recipe_commands(&makefile, "lint").expect("inline Makefile should have one lint recipe");
     let expected = RecipeCommand {
         text: "cargo clippy".to_owned(),
         ignores_errors,
     };
-    ensure!(
-        commands == [expected],
+    assert_eq!(
+        commands,
+        [expected],
         concat!(
             "`{line}` should read as `cargo clippy` with ignore-errors {ignores_errors}, ",
-            "found {commands:?}"
+            "found another command"
         ),
         line = line,
         ignores_errors = ignores_errors,
-        commands = commands
     );
-    Ok(())
 }

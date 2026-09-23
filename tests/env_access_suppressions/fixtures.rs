@@ -7,8 +7,6 @@
 //! test holds each route to a suppression Clippy honours; the second holds
 //! the text that merely resembles one, which is what keeps the first honest.
 
-use anyhow::{Result, ensure};
-
 use super::scan;
 
 /// Scenario: suppressions Clippy honours but `allow_attributes` never reports.
@@ -97,10 +95,9 @@ use super::scan;
 // compiler and by no walk rooted there.
 #[case::includes_above_the_root("include!(\"../../bypass.rs\");\n")]
 #[case::includes_an_absolute_path("include!(\"/tmp/bypass.rs\");\n")]
-fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Result<()> {
-    let found = scan(source)?;
-    ensure!(found.len() == 1, "expected one offence, found {found:?}");
-    Ok(())
+fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) {
+    let found = scan(source).expect("the suppression fixture should parse as Rust source");
+    assert!(found.len() == 1, "expected one offence, found {found:?}");
 }
 
 /// Scenario: text that resembles a suppression but is not one.
@@ -161,8 +158,7 @@ fn a_suppression_of_a_protected_lint_is_an_offence(#[case] source: &str) -> Resu
 #[case::attribute_handed_to_an_invocation(
     "assert_shape!(#[allow(clippy::disallowed_methods)] fn f() {});\n"
 )]
-fn text_resembling_a_suppression_is_not_an_offence(#[case] source: &str) -> Result<()> {
-    let found = scan(source)?;
-    ensure!(found.is_empty(), "expected no offence, found {found:?}");
-    Ok(())
+fn text_resembling_a_suppression_is_not_an_offence(#[case] source: &str) {
+    let found = scan(source).expect("the non-suppression fixture should parse as Rust source");
+    assert!(found.is_empty(), "expected no offence, found {found:?}");
 }
