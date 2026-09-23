@@ -136,7 +136,7 @@ pub fn leading_indent(s: &str) -> &str {
         .char_indices()
         .find_map(|(index, character)| (!character.is_whitespace()).then_some(index))
         .unwrap_or(s.len());
-    &s[..end]
+    s.get(..end).unwrap_or(s)
 }
 
 #[cfg(test)]
@@ -147,7 +147,7 @@ mod tests {
 
     #[test]
     fn identity_transformation_returns_input() {
-        let lines = vec!["a `b`".to_string()];
+        let lines = vec!["a `b`".to_owned()];
         let out = process_tokens(&lines, |tok, buf| match tok {
             Token::Text(t) => buf.push_str(t),
             Token::Code { raw, .. } => buf.push_str(raw),
@@ -160,13 +160,15 @@ mod tests {
     #[test]
     fn empty_input_returns_empty_vector() {
         let lines: Vec<String> = Vec::new();
-        let out = process_tokens(&lines, |_tok, _out| unreachable!());
+        let mut was_called = false;
+        let out = process_tokens(&lines, |_tok, _out| was_called = true);
         assert!(out.is_empty());
+        assert!(!was_called, "empty input must not invoke the callback");
     }
 
     #[test]
     fn transformation_can_remove_all_content() {
-        let lines = vec!["data".to_string()];
+        let lines = vec!["data".to_owned()];
         let out = process_tokens(&lines, |_tok, _out| {});
         assert!(out.is_empty());
     }
@@ -174,12 +176,12 @@ mod tests {
     #[test]
     fn process_text_preserves_trailing_blank() {
         let lines = process_text("a\nb\n", 0);
-        assert_eq!(lines, vec!["a".to_string(), "b".to_string(), String::new()]);
+        assert_eq!(lines, vec!["a".to_owned(), "b".to_owned(), String::new()]);
     }
 
     #[test]
     fn preserves_trailing_blank_lines() {
-        let lines = vec!["a".to_string(), String::new(), String::new()];
+        let lines = vec!["a".to_owned(), String::new(), String::new()];
         let out = process_tokens(&lines, |tok, buf| match tok {
             Token::Text(t) => buf.push_str(t),
             Token::Code { raw, .. } => buf.push_str(raw),
@@ -199,47 +201,59 @@ mod tests {
     #[test]
     fn token_stream_handles_fences() {
         let lines = vec![
-            "```rust".to_string(),
-            "fn main() {".to_string(),
-            "    println!(\"hi\");".to_string(),
-            "```".to_string(),
+            "```rust".to_owned(),
+            "fn main() {".to_owned(),
+            "    println!(\"hi\");".to_owned(),
+            "```".to_owned(),
         ];
         let mut tokens = Vec::new();
-        let _ = process_tokens(&lines, |tok, _| tokens.push(format!("{tok:?}")));
+        let processed = process_tokens(&lines, |tok, _| tokens.push(format!("{tok:?}")));
+        assert!(
+            processed.is_empty(),
+            "token capture must leave output empty"
+        );
         let expected = vec![
-            "Fence(\"```rust\")".to_string(),
-            "Newline".to_string(),
-            "Fence(\"fn main() {\")".to_string(),
-            "Newline".to_string(),
-            "Fence(\"    println!(\\\"hi\\\");\")".to_string(),
-            "Newline".to_string(),
-            "Fence(\"```\")".to_string(),
+            "Fence(\"```rust\")".to_owned(),
+            "Newline".to_owned(),
+            "Fence(\"fn main() {\")".to_owned(),
+            "Newline".to_owned(),
+            "Fence(\"    println!(\\\"hi\\\");\")".to_owned(),
+            "Newline".to_owned(),
+            "Fence(\"```\")".to_owned(),
         ];
         assert_eq!(tokens, expected);
     }
 
     #[test]
     fn malformed_fence_sequence_returns_tokens() {
-        let lines = vec!["```".to_string(), "code".to_string()];
+        let lines = vec!["```".to_owned(), "code".to_owned()];
         let mut tokens = Vec::new();
-        let _ = process_tokens(&lines, |tok, _| tokens.push(format!("{tok:?}")));
+        let processed = process_tokens(&lines, |tok, _| tokens.push(format!("{tok:?}")));
+        assert!(
+            processed.is_empty(),
+            "token capture must leave output empty"
+        );
         let expected = vec![
-            "Fence(\"```\")".to_string(),
-            "Newline".to_string(),
-            "Fence(\"code\")".to_string(),
+            "Fence(\"```\")".to_owned(),
+            "Newline".to_owned(),
+            "Fence(\"code\")".to_owned(),
         ];
         assert_eq!(tokens, expected);
     }
 
     #[test]
     fn multi_backtick_spans_are_recognised() {
-        let lines = vec!["A ``code`` span".to_string()];
+        let lines = vec!["A ``code`` span".to_owned()];
         let mut tokens = Vec::new();
-        let _ = process_tokens(&lines, |tok, _| tokens.push(format!("{tok:?}")));
+        let processed = process_tokens(&lines, |tok, _| tokens.push(format!("{tok:?}")));
+        assert!(
+            processed.is_empty(),
+            "token capture must leave output empty"
+        );
         let expected = vec![
-            "Text(\"A \")".to_string(),
-            "Code { raw: \"``code``\", fence: \"``\", code: \"code\" }".to_string(),
-            "Text(\" span\")".to_string(),
+            "Text(\"A \")".to_owned(),
+            "Code { raw: \"``code``\", fence: \"``\", code: \"code\" }".to_owned(),
+            "Text(\" span\")".to_owned(),
         ];
         assert_eq!(tokens, expected);
     }
