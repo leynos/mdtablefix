@@ -121,6 +121,16 @@ fn normalizes_break_after_link_definition() {
     assert_borrowed_break!(output[1]);
 }
 
+/// A link-shaped line after paragraph text remains part of that paragraph.
+#[test]
+fn preserves_setext_after_paragraph_link_shape() {
+    let input = lines_vec!["Title", "[a]: /url", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[2], "---");
+    assert!(std::ptr::eq(output[2].as_ref(), input[2].as_str()));
+}
+
 /// Underlines at a list item's content column stay inside that item.
 #[rstest]
 #[case(vec!["- Bar", "  ---"], 1)]

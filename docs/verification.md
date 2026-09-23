@@ -23,8 +23,9 @@ ATX class. The proof also establishes that a canonical seventy-underscore line
 classifies as a thematic break. The residual block matcher and Rust `String`
 assembly remain outside the proof boundary; the output check makes their effect
 on the emitted structural class explicit. The break pass also uses the residual
-block matcher when carrying prior-line context, so link and footnote
-definitions are not treated as paragraph text.
+block matcher when carrying prior-line context, so standalone link and footnote
+definitions are not treated as paragraph text. A link-shaped line following
+paragraph text at the same blockquote depth remains paragraph continuation.
 
 ## Claim ledger
 

@@ -13,7 +13,7 @@ use crate::{
         quote_depth,
         structural_content_indent,
     },
-    wrap::{FenceTracker, LinkReferenceMatcher, classify_residual_block},
+    wrap::{BlockKind, FenceTracker, LinkReferenceMatcher, classify_residual_block},
 };
 
 pub const THEMATIC_BREAK_LEN: usize = 70;
@@ -73,8 +73,16 @@ impl BreakLineState {
         depth: usize,
         link_matcher: LinkReferenceMatcher,
     ) {
-        let is_residual_block = classified.class == LineClass::ParagraphText
-            && classify_residual_block(classified.body.trim(), link_matcher).is_some();
+        let residual = if classified.class == LineClass::ParagraphText {
+            classify_residual_block(classified.body.trim(), link_matcher)
+        } else {
+            None
+        };
+        let is_paragraph_link = residual == Some(BlockKind::LinkReferenceDefinition)
+            && self.previous.is_some_and(|(class, old_depth, _)| {
+                class == LineClass::ParagraphText && old_depth == depth
+            });
+        let is_residual_block = residual.is_some() && !is_paragraph_link;
         let continuation_indent = if is_residual_block {
             self.lists.reset();
             None
