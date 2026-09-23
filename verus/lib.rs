@@ -119,16 +119,8 @@ proof fn lemma_trim_preserves_first(s: Seq<char>, end: int)
     }
 }
 
-/// Adding an ATX prefix to an accepted Setext text line remains an ATX heading.
-proof fn convert_setext(candidate: Seq<char>, underline: Seq<char>) -> (result: Seq<char>)
-    requires
-        spec_classify(candidate, canonical_context()) == LineClass::ParagraphText,
-        spec_classify(underline, ClassifyCtxView {
-            is_in_fence: false,
-            open_fence: None,
-            previous: Some(LineClass::ParagraphText),
-            prefix_agrees: true,
-        }) == LineClass::SetextUnderline,
+/// Adding an ATX prefix produces an ATX heading for any candidate text.
+proof fn lemma_atx_prefix_classifies(candidate: Seq<char>) -> (result: Seq<char>)
     ensures spec_classify(result, canonical_context()) == LineClass::AtxHeading,
 {
     let emitted = Seq::<char>::empty().push('#').push(' ').add(candidate);

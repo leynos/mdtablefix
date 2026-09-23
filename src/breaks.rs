@@ -3,7 +3,14 @@
 use std::borrow::Cow;
 
 use crate::{
-    classify::{ClassifyCtx, LineClass, classify_line_with_body, is_canonical_break_line},
+    classify::{
+        ClassifyCtx,
+        LineClass,
+        ListContinuationState,
+        classify_line_with_body,
+        is_canonical_break_line,
+        structural_content_indent,
+    },
     wrap::FenceTracker,
 };
 
@@ -47,12 +54,14 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     let mut out = Vec::with_capacity(lines.len());
     // Track fenced code blocks consistently while formatting breaks.
     let mut fences = FenceTracker::default();
-    let mut previous: Option<(LineClass, &str)> = None;
+    let mut previous: Option<(LineClass, &str, Option<usize>)> = None;
+    let mut lists = ListContinuationState::default();
 
     for line in lines {
         let fence = fences.observe_source_line(line);
         if fence.is_fence_marker || fence.is_in_fence {
             previous = None;
+            lists.reset();
             out.push(Cow::Borrowed(line.as_str()));
             continue;
         }
@@ -60,8 +69,11 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         let first_pass = classify_line_with_body(line, &ClassifyCtx::default());
         let prefix_len = line.len() - first_pass.body.len();
         let prefix = &line[..prefix_len];
-        let follows_paragraph = previous.is_some_and(|(class, old_prefix)| {
-            class == LineClass::ParagraphText && quote_depth(old_prefix) == quote_depth(prefix)
+        let follows_paragraph = previous.is_some_and(|(class, old_prefix, continuation_indent)| {
+            class == LineClass::ParagraphText
+                && quote_depth(old_prefix) == quote_depth(prefix)
+                && continuation_indent
+                    .is_none_or(|indent| structural_content_indent(line, first_pass.body) >= indent)
         });
         let context = if follows_paragraph {
             ClassifyCtx::following(LineClass::ParagraphText, true)
@@ -73,10 +85,11 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         } else {
             first_pass
         };
+        let continuation_indent = lists.observe(line, &classified);
         previous = if classified.class == LineClass::Blank {
             None
         } else {
-            Some((classified.class, prefix))
+            Some((classified.class, prefix, continuation_indent))
         };
 
         if classified.class == LineClass::ThematicBreak && is_canonical_break_line(line, &context) {

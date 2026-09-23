@@ -70,6 +70,17 @@ fn normalizes_break_after_blank_line() {
     assert_borrowed_break!(output[2]);
 }
 
+/// An outdented break ends a list continuation rather than underlining it.
+#[test]
+fn normalizes_break_after_outdented_list_continuation() {
+    let input = lines_vec!["- item", "  continuation", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[0], "- item");
+    assert_borrowed_value!(output[1], "  continuation");
+    assert_borrowed_break!(output[2]);
+}
+
 #[test]
 fn test_format_breaks_ignores_code() {
     let input = lines_vec!["```", "---", "```"];

@@ -22,6 +22,70 @@ pub(crate) struct ClassifiedLine<'line> {
     pub(crate) body: &'line str,
 }
 
+/// Minimal list indentation state shared by Setext and break consumers.
+#[derive(Default)]
+pub(crate) struct ListContinuationState {
+    /// Quote depth and required content indentation of the active list item.
+    active: Option<(usize, usize)>,
+}
+
+impl ListContinuationState {
+    /// Forgets a list at a fence or other explicit block boundary.
+    pub(crate) fn reset(&mut self) { self.active = None; }
+
+    /// Records a source line and returns its list-continuation indentation.
+    pub(crate) fn observe(&mut self, line: &str, classified: &ClassifiedLine<'_>) -> Option<usize> {
+        let prefix = &line[..line.len() - classified.body.len()];
+        let quote_depth = prefix.bytes().filter(|byte| *byte == b'>').count();
+        let indent = structural_content_indent(line, classified.body);
+
+        if classified.class == LineClass::ListItem {
+            let marker = classified.body.trim_start_matches([' ', '\t']);
+            let marker_len = marker
+                .chars()
+                .take_while(|ch| !matches!(ch, ' ' | '\t'))
+                .count();
+            let separator_width = if marker.chars().nth(marker_len) == Some('\t') {
+                4 - ((indent + marker_len) % 4)
+            } else {
+                1
+            };
+            self.active = Some((quote_depth, indent + marker_len + separator_width));
+            return None;
+        }
+
+        if classified.class != LineClass::ParagraphText {
+            self.reset();
+            return None;
+        }
+
+        let is_continuation = self
+            .active
+            .is_some_and(|(depth, required)| depth == quote_depth && indent >= required);
+        if is_continuation {
+            Some(indent)
+        } else {
+            self.reset();
+            None
+        }
+    }
+}
+
+/// Measures indentation after blockquote markers, or at the outer line edge.
+pub(crate) fn structural_content_indent(line: &str, body: &str) -> usize {
+    let prefix = &line[..line.len() - body.len()];
+    let source = if prefix.contains('>') { body } else { line };
+    let mut columns = 0;
+    for ch in source.chars() {
+        match ch {
+            ' ' => columns += 1,
+            '\t' => columns += 4 - columns % 4,
+            _ => break,
+        }
+    }
+    columns
+}
+
 /// Classifies one source line using the shared structural precedence.
 #[must_use]
 pub fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {

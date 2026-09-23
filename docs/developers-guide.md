@@ -113,6 +113,12 @@ predicate before emitting it. A new scanner predicate should carry a narrow
 contract about its characters and cursor, then be proved from the same body
 before the top-level classifier refinement relies on it.
 
+`ListContinuationState` in `src/classify.rs` belongs only to the Setext and
+thematic-break consumers. It remembers the content indentation of an active
+list marker, then marks indented paragraph continuations so an outdented break
+cannot be consumed as their underline. It is not a general list parser; list
+rendering and renumbering retain their own state.
+
 ## Internal API reference
 
 `Cargo.toml`:

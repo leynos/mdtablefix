@@ -15,6 +15,8 @@ use crate::{
     classify::{
         ClassifyCtx,
         LineClass,
+        ListContinuationState,
+        classify_line_with_body,
         is_atx_heading_line,
         is_setext_text_line,
         is_setext_underline_line,
@@ -47,6 +49,7 @@ pub fn convert_setext_headings(lines: &[String]) -> Vec<String> {
                 line,
                 lines.get(idx + 1).map(String::as_str),
                 link_matcher,
+                None,
             )
         {
             out.push(emitted);
@@ -72,11 +75,19 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
     let mut setext_text_lines = vec![false; lines.len()];
     let link_matcher = LinkReferenceMatcher::production();
     let mut fence_tracker = FenceTracker::default();
+    let mut lists = ListContinuationState::default();
     let mut idx = 0;
 
     while idx < lines.len() {
         let line = &lines[idx];
         let fence = fence_tracker.observe_source_line(line);
+        let continuation_indent = if fence.is_fence_marker || fence.is_in_fence {
+            lists.reset();
+            None
+        } else {
+            let classified = classify_line_with_body(line, &ClassifyCtx::default());
+            lists.observe(line, &classified)
+        };
 
         if !fence.is_fence_marker
             && !fence.is_in_fence
@@ -84,10 +95,12 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
                 line,
                 lines.get(idx + 1).map(String::as_str),
                 link_matcher,
+                continuation_indent,
             )
             .is_some()
         {
             setext_text_lines[idx] = true;
+            lists.reset();
             idx += 2;
         } else {
             idx += 1;
@@ -102,8 +115,10 @@ fn detect_verified_setext_heading(
     line: &str,
     underline: Option<&str>,
     link_matcher: LinkReferenceMatcher,
+    continuation_indent: Option<usize>,
 ) -> Option<String> {
-    let (level, prefix_len, text) = detect_setext_heading(line, underline, link_matcher)?;
+    let (level, prefix_len, text) =
+        detect_setext_heading(line, underline, link_matcher, continuation_indent)?;
     let emitted = convert_setext(&line[..prefix_len], level, &text);
     is_atx_heading_line(&emitted, &ClassifyCtx::default()).then_some(emitted)
 }
@@ -117,6 +132,7 @@ fn detect_setext_heading(
     line: &str,
     underline: Option<&str>,
     link_matcher: LinkReferenceMatcher,
+    continuation_indent: Option<usize>,
 ) -> Option<(usize, usize, String)> {
     let underline = underline?;
     if line.trim().is_empty() {
@@ -126,6 +142,9 @@ fn detect_setext_heading(
     let prefix_len = shared_prefix_len(line, underline);
     let prefixes_agree = !has_unmatched_prefix(line, underline);
     if !prefixes_agree {
+        return None;
+    }
+    if continuation_indent.is_some_and(|indent| content_indent_width(underline) < indent) {
         return None;
     }
     if prefix_len > 0
