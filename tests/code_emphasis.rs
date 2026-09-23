@@ -54,7 +54,7 @@ fn cli_in_place_code_emphasis() {
         "--in-place",
         file_path.to_str().expect("path is not valid UTF-8"),
     ])
-    .unwrap()
+    .expect("run code-emphasis CLI on input file")
     .success()
     .stdout("");
     let out = fs::read_to_string(&file_path).expect("failed to read output file");
@@ -71,7 +71,7 @@ fn cli_in_place_code_emphasis_empty_file() {
         "--in-place",
         file_path.to_str().expect("path is not valid UTF-8"),
     ])
-    .unwrap()
+    .expect("run code-emphasis CLI on empty file")
     .success()
     .stdout("");
     let out = fs::read_to_string(&file_path).expect("failed to read output file");
@@ -90,7 +90,7 @@ fn cli_in_place_code_emphasis_whitespace_file() {
         "--in-place",
         file_path.to_str().expect("path is not valid UTF-8"),
     ])
-    .unwrap()
+    .expect("run code-emphasis CLI on whitespace file")
     .success()
     .stdout("");
     let out = fs::read_to_string(&file_path).expect("failed to read output file");
@@ -108,7 +108,7 @@ fn cli_in_place_preserves_inner_backticks() {
         "--in-place",
         file_path.to_str().expect("path is not valid UTF-8"),
     ])
-    .unwrap()
+    .expect("run code-emphasis CLI on inner-backtick file")
     .success()
     .stdout("");
     let out = fs::read_to_string(&file_path).expect("failed to read output file");
