@@ -12,7 +12,7 @@ use crate::{
         quote_depth,
         structural_content_indent,
     },
-    wrap::FenceTracker,
+    wrap::{FenceTracker, LinkReferenceMatcher, classify_residual_block},
 };
 
 pub const THEMATIC_BREAK_LEN: usize = 70;
@@ -55,6 +55,7 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     let mut out = Vec::with_capacity(lines.len());
     // Track fenced code blocks consistently while formatting breaks.
     let mut fences = FenceTracker::default();
+    let link_matcher = LinkReferenceMatcher::production();
     let mut previous: Option<(LineClass, &str, Option<usize>)> = None;
     let mut lists = ListContinuationState::default();
 
@@ -87,8 +88,15 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         } else {
             first_pass
         };
-        let continuation_indent = lists.observe(line, &classified);
-        previous = if classified.class == LineClass::Blank {
+        let is_residual_block = classified.class == LineClass::ParagraphText
+            && classify_residual_block(classified.body.trim(), link_matcher).is_some();
+        let continuation_indent = if is_residual_block {
+            lists.reset();
+            None
+        } else {
+            lists.observe(line, &classified)
+        };
+        previous = if classified.class == LineClass::Blank || is_residual_block {
             None
         } else {
             Some((classified.class, prefix, continuation_indent))

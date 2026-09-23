@@ -81,6 +81,26 @@ fn normalizes_break_after_outdented_list_continuation() {
     assert_borrowed_break!(output[2]);
 }
 
+/// A lazy paragraph continuation still carries the list's content column.
+#[test]
+fn normalizes_break_after_lazy_list_continuation() {
+    let input = lines_vec!["- item", "lazy continuation", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[1], "lazy continuation");
+    assert_borrowed_break!(output[2]);
+}
+
+/// A link definition is a block start, not Setext heading text.
+#[test]
+fn normalizes_break_after_link_definition() {
+    let input = lines_vec!["[a]: /url", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[0], "[a]: /url");
+    assert_borrowed_break!(output[1]);
+}
+
 /// Underlines at a list item's content column stay inside that item.
 #[rstest]
 #[case(vec!["- Bar", "  ---"], 1)]

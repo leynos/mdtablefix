@@ -121,7 +121,9 @@ proof fn lemma_trim_preserves_first(s: Seq<char>, end: int)
 
 /// Adding an ATX prefix produces an ATX heading for any candidate text.
 proof fn lemma_atx_prefix_classifies(candidate: Seq<char>) -> (result: Seq<char>)
-    ensures spec_classify(result, canonical_context()) == LineClass::AtxHeading,
+    ensures
+        result == Seq::<char>::empty().push('#').push(' ').add(candidate),
+        spec_classify(result, canonical_context()) == LineClass::AtxHeading,
 {
     let emitted = Seq::<char>::empty().push('#').push(' ').add(candidate);
     assert(emitted[0] == '#');

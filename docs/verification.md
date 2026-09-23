@@ -22,7 +22,9 @@ kernel. The production Setext conversion checks its assembled output through
 ATX class. The proof also establishes that a canonical seventy-underscore line
 classifies as a thematic break. The residual block matcher and Rust `String`
 assembly remain outside the proof boundary; the output check makes their effect
-on the emitted structural class explicit.
+on the emitted structural class explicit. The break pass also uses the residual
+block matcher when carrying prior-line context, so link and footnote
+definitions are not treated as paragraph text.
 
 ## Claim ledger
 

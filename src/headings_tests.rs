@@ -36,6 +36,7 @@ fn converts_setext_headings(#[case] input: Vec<String>, #[case] expected: Vec<St
 #[case(vec![String::new(), "---".into()])]
 #[case(vec!["> Quote".into(), "-----".into()])]
 #[case(vec!["- item".into(), "  continuation".into(), "---".into()])]
+#[case(vec!["- item".into(), "lazy continuation".into(), "---".into()])]
 #[case(vec!["Heading".into(), "-==".into()])]
 fn leaves_non_headings_untouched(#[case] lines: Vec<String>) {
     assert_eq!(convert_setext_headings(&lines), lines);

@@ -23,6 +23,10 @@ pub(crate) struct ClassifiedLine<'line> {
 }
 
 /// Minimal list indentation state shared by Setext and break consumers.
+///
+/// Paragraph lines can continue an item lazily without the item indentation;
+/// the remembered content column still decides whether a later underline
+/// belongs to that list item.
 #[derive(Default)]
 pub(crate) struct ListContinuationState {
     /// Quote depth and required content indentation of the active list item.
@@ -67,7 +71,6 @@ impl ListContinuationState {
 
         if let Some((depth, required)) = self.active
             && depth == quote_depth
-            && indent >= required
         {
             Some(required)
         } else {
