@@ -31,6 +31,8 @@ pub(crate) struct ClassifiedLine<'line> {
 pub(crate) struct ListContinuationState {
     /// Quote depth and required content indentation of the active list item.
     active: Option<(usize, usize)>,
+    /// A blank line requires the next item continuation to be indented.
+    has_blank_line: bool,
 }
 
 /// Counts structural quote markers in a scanner-bounded prefix.
@@ -40,7 +42,10 @@ pub(crate) fn quote_depth(prefix: &str) -> usize {
 
 impl ListContinuationState {
     /// Forgets a list at a fence or other explicit block boundary.
-    pub(crate) fn reset(&mut self) { self.active = None; }
+    pub(crate) fn reset(&mut self) {
+        self.active = None;
+        self.has_blank_line = false;
+    }
 
     /// Records a source line and returns the active list's content indentation.
     pub(crate) fn observe(&mut self, line: &str, classified: &ClassifiedLine<'_>) -> Option<usize> {
@@ -48,17 +53,25 @@ impl ListContinuationState {
         let quote_depth = quote_depth(prefix);
         let indent = structural_content_indent(line, classified.body);
 
+        if classified.class == LineClass::Blank {
+            self.has_blank_line = self.active.is_some();
+            return None;
+        }
+
         if classified.class == LineClass::ListItem {
             let required = list_content_indent(classified.body, indent);
             self.active = Some((quote_depth, required));
+            self.has_blank_line = false;
             return Some(required);
         }
 
         if let Some((depth, required)) = self.active
             && depth == quote_depth
+            && (!self.has_blank_line || indent >= required)
             && (classified.class == LineClass::ParagraphText
                 || (classified.class == LineClass::Literal && indent >= required))
         {
+            self.has_blank_line = false;
             Some(required)
         } else {
             self.reset();

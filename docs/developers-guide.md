@@ -92,15 +92,15 @@ does not reach Verus, so a skipped verifier cannot pass the check.
 
 `make verus-mutation` runs `scripts/check-classifier-mutation.sh`. It changes
 the production Setext-text predicate to accept an ATX heading, then confirms
-Verus rejects its refinement postcondition. The pull-request Verus workflow runs
-`make verus` and `make verus-selftest`; the mutation target is local.
+Verus rejects its refinement postcondition. The mutation target is local.
 
-The pull-request workflow runs both targets on Ubuntu. It caches the
-version-specific `.verus` directory using the runner operating system,
-architecture, and pinned Verus version, then executes the same Makefile targets
-used locally. The [verification ledger](verification.md) records each claim and
-its trusted boundary; [ADR 0011](adrs/0011-verified-normalization-core.md)
-documents why the proof scope remains a narrow production-used core.
+The pull-request workflow runs `make verus` and `make verus-selftest` on
+Ubuntu. It caches the version-specific `.verus` directory using the runner
+operating system, architecture, and pinned Verus version, then executes the
+same Makefile targets used locally. The [verification ledger](verification.md)
+records each claim and its trusted boundary;
+[ADR 0011](adrs/0011-verified-normalization-core.md) documents why the proof
+scope remains a narrow production-used core.
 
 The `verified_kernel_function!` and `verified_loop_function!` macros live in
 `src/classify_kernel_macros.rs`, included by `src/classify_kernel.rs`. They
@@ -119,9 +119,10 @@ classifier refinement relies on it.
 `ListContinuationState` in `src/classify.rs` belongs only to the Setext and
 thematic-break consumers. It remembers the content indentation of an active
 list marker, then retains it through indented literal and lazy paragraph
-continuations so an outdented break cannot be consumed as their underline. It
-does not reclassify indented code as paragraph text and is not a general list
-parser; list rendering and renumbering retain their own state.
+continuations, including an indented continuation after a blank line, so an
+outdented break cannot be consumed as their underline. It does not reclassify
+indented code as paragraph text and is not a general list parser; list
+rendering and renumbering retain their own state.
 
 ## Internal API reference
 

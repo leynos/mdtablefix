@@ -101,6 +101,16 @@ fn normalizes_break_after_lazy_list_continuation() {
     assert_borrowed_break!(output[2]);
 }
 
+/// An indented item continuation remains in the list after a blank line.
+#[test]
+fn normalizes_break_after_blank_list_continuation() {
+    let input = lines_vec!["- item", "", "  continuation", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[2], "  continuation");
+    assert_borrowed_break!(output[3]);
+}
+
 /// A link definition is a block start, not Setext heading text.
 #[test]
 fn normalizes_break_after_link_definition() {
