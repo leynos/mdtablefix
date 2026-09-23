@@ -56,6 +56,7 @@ proptest = "1.11.0"
 serde_yaml = "0.9"
 tempfile = "3"
 libc = "0.2.174"
+rustix = { version = "1.1.4", features = ["process"] }
 predicates = "3"
 trybuild = "1"
 tracing-test = "0.2"
