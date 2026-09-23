@@ -97,6 +97,14 @@ used locally. The [verification ledger](verification.md) records each claim and
 its trusted boundary; [ADR 0011](adrs/0011-verified-normalization-core.md)
 documents why the proof scope remains a narrow production-used core.
 
+The `verified_kernel_function!` and `verified_loop_function!` macros belong to
+`src/classify_kernel.rs`. They emit one shared executable body for Cargo and
+Verus, adding contracts and loop invariants only in the proof build. Use them
+only in the classifier kernel and its predicate module; consumers call the
+kernel through `src/classify.rs`. A new scanner predicate should carry a
+narrow contract about its own characters and cursor, then be proved from the
+same body before the top-level classifier refinement relies on it.
+
 ## Internal API reference
 
 `Cargo.toml`:

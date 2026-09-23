@@ -34,6 +34,16 @@ impl View for production_classify::ClassifyCtxKernel {
     }
 }
 
+/// The two scalar values that Markdown treats as indentation whitespace.
+pub open spec fn spec_is_markdown_whitespace(character: char) -> bool {
+    character == ' ' || character == '\t'
+}
+
+/// Whether the suffix beginning at `start` contains only indentation whitespace.
+pub open spec fn spec_is_blank_from(s: Seq<char>, start: int) -> bool {
+    forall|i: int| start <= i < s.len() ==> spec_is_markdown_whitespace(s[i])
+}
+
 pub open spec fn is_atx_heading(s: Seq<char>) -> bool {
     s.len() >= 2 && s[0] == '#' && s[1] == ' '
 }

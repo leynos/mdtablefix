@@ -1,32 +1,50 @@
 //! Character-range predicates used by the structural scanner kernel.
 
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::*;
+
 use super::OpenFence;
 
+verified_kernel_function! {
 /// Reads one scalar without exposing unchecked indexing.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn char_at(chars: &[char], index: usize) -> Option<char> {
+pub(super) fn char_at(chars: &[char], index: usize) -> Option<char>;
+ensures(result => result == if index < chars@.len() { Some(chars@[index as int]) } else { None });
+{
     if index < chars.len() {
         Some(chars[index])
     } else {
         None
     }
 }
+}
 
+verified_kernel_function! {
 /// Reports whether every scalar is whitespace.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn is_blank(chars: &[char]) -> bool { is_blank_from(chars, 0) }
+pub(super) fn is_blank(chars: &[char]) -> bool;
+ensures(result => result == crate::spec_is_blank_from(chars@, 0));
+{ is_blank_from(chars, 0) }
+}
 
+verified_loop_function! {
 /// Reports whether the remaining scalars are Markdown indentation whitespace.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn is_blank_from(chars: &[char], start: usize) -> bool {
+pub(super) fn is_blank_from(chars: &[char], start: usize) -> bool;
+ensures(result => result == crate::spec_is_blank_from(chars@, start as int));
+before {
     let mut cursor = start;
-    while cursor < chars.len() {
+}
+while (cursor < chars.len()) invariant(
+    start <= cursor,
+    cursor <= chars@.len() || cursor == start,
+    forall|i: int| start <= i < cursor ==> crate::spec_is_markdown_whitespace(chars@[i]),
+) {
         if !is_markdown_whitespace(chars[cursor]) {
             return false;
         }
         cursor += 1;
-    }
+}
+after {
     true
+}
 }
 
 /// Finds the range after leading and trailing whitespace.
@@ -157,9 +175,12 @@ fn marker_run_len(chars: &[char], start: usize, end: usize, marker: char) -> usi
     cursor - start
 }
 
+verified_kernel_function! {
 /// Reports whether a scalar is Markdown's space or tab indentation whitespace.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-fn is_markdown_whitespace(character: char) -> bool { matches!(character, ' ' | '\t') }
+fn is_markdown_whitespace(character: char) -> bool;
+ensures(result => result == crate::spec_is_markdown_whitespace(character));
+{ matches!(character, ' ' | '\t') }
+}
 
 /// Reports whether a scalar range contains the target character.
 #[cfg_attr(verus_keep_ghost, verifier::external_body)]

@@ -21,6 +21,52 @@ macro_rules! verified_kernel_function {
     };
 }
 
+/// Emits a scanner loop from one body while omitting proof annotations in Cargo.
+#[cfg(not(verus_keep_ghost))]
+macro_rules! verified_loop_function {
+    (
+        $(#[$attribute:meta])*
+        $visibility:vis fn $name:ident($($arguments:tt)*) -> $result:ty;
+        ensures($result_name:ident => $($postcondition:tt)*);
+        before { $($before:tt)* }
+        while ($condition:expr) invariant($($invariant:tt)*) $loop_body:block
+        after { $($after:tt)* }
+    ) => {
+        $(#[$attribute])*
+        $visibility fn $name($($arguments)*) -> $result {
+            $($before)*
+            while $condition $loop_body
+            $($after)*
+        }
+    };
+}
+
+/// Sends the same scanner loop and its invariant to Verus.
+#[cfg(verus_keep_ghost)]
+macro_rules! verified_loop_function {
+    (
+        $(#[$attribute:meta])*
+        $visibility:vis fn $name:ident($($arguments:tt)*) -> $result:ty;
+        ensures($result_name:ident => $($postcondition:tt)*);
+        before { $($before:tt)* }
+        while ($condition:expr) invariant($($invariant:tt)*) $loop_body:block
+        after { $($after:tt)* }
+    ) => {
+        verus! {
+            $(#[$attribute])*
+            $visibility fn $name($($arguments)*) -> ($result_name: $result)
+                ensures $($postcondition)*
+            {
+                $($before)*
+                while $condition
+                    invariant $($invariant)*
+                    $loop_body
+                $($after)*
+            }
+        }
+    };
+}
+
 /// Emits the contracted Verus form of the same kernel function body.
 #[cfg(verus_keep_ghost)]
 macro_rules! verified_kernel_function {
