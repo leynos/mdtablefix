@@ -108,6 +108,60 @@ pub open spec fn spec_body_starts_with_pipe(s: Seq<char>, start: int) -> bool
     first < s.len() && s[first] == '|'
 }
 
+/// One table alignment cell after optional surrounding colons are removed.
+pub open spec fn spec_table_cell(s: Seq<char>, start: int, end: int) -> bool
+    recommends 0 <= start <= end <= s.len()
+{
+    let first = spec_trim_start(s, start, end);
+    let last = spec_trim_end(s, first, end);
+    let content_first = if first < last && s[first] == ':' { first + 1 } else { first };
+    let content_last = if content_first < last && s[last - 1] == ':' {
+        last - 1
+    } else {
+        last
+    };
+    content_first < content_last && spec_all_equal(s, content_first, content_last, '-')
+}
+
+/// Every pipe-separated cell must have delimiter grammar.
+pub open spec fn spec_table_cells(s: Seq<char>, cell_start: int, cursor: int, end: int) -> bool
+    recommends 0 <= cell_start <= cursor <= end <= s.len()
+    decreases (end - cursor) as nat
+{
+    if cursor >= end {
+        spec_table_cell(s, cell_start, end)
+    } else if s[cursor] == '|' {
+        spec_table_cell(s, cell_start, cursor)
+            && spec_table_cells(s, cursor + 1, cursor + 1, end)
+    } else {
+        spec_table_cells(s, cell_start, cursor + 1, end)
+    }
+}
+
+/// Skip all leading pipes, matching the production grammar.
+pub open spec fn spec_skip_pipes(s: Seq<char>, cursor: int, end: int) -> int
+    recommends 0 <= cursor <= end <= s.len()
+    decreases end - cursor
+{
+    if cursor < end && s[cursor] == '|' {
+        spec_skip_pipes(s, cursor + 1, end)
+    } else {
+        cursor
+    }
+}
+
+/// Table alignment grammar over the structural body.
+pub open spec fn spec_table_delimiter(s: Seq<char>, start: int) -> bool
+    recommends 0 <= start <= s.len()
+{
+    let (first, end) = spec_trimmed_range(s, start);
+    let content_first = spec_skip_pipes(s, first, end);
+    let content_end = if end > content_first && s[end - 1] == '|' { end - 1 } else { end };
+    spec_contains(s, first, end, '|')
+        && content_first < content_end
+        && spec_table_cells(s, content_first, content_first, content_end)
+}
+
 /// A uniform Setext underline of at least three markers.
 pub open spec fn spec_setext_underline(s: Seq<char>, start: int) -> bool
     recommends 0 <= start <= s.len()

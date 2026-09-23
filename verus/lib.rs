@@ -60,194 +60,128 @@ proof fn lemma_four_spaces_are_literal(s: Seq<char>)
     assert(spec_indentation_at(s, 0, 0, 0).0 == 4);
 }
 
-pub open spec fn is_atx_heading(s: Seq<char>) -> bool {
-    s.len() >= 2 && s[0] == '#' && s[1] == ' '
-}
-
-pub open spec fn is_setext_underline(s: Seq<char>) -> bool {
-    s.len() >= 3 && forall|i: int| 0 <= i < s.len() ==> s[i] == '-'
-}
-
-pub open spec fn is_table_delimiter(s: Seq<char>) -> bool {
-    s.len() >= 5
-        && s[0] == '|'
-        && s[s.len() - 1] == '|'
-        && forall|i: int| #![trigger s.index(i)] 0 <= i < s.len() ==> matches!(s.index(i), '|' | ':' | '-' | ' ')
-}
-
-pub open spec fn is_table_row(s: Seq<char>) -> bool {
-    s.len() > 0 && s[0] == '|'
-}
-
-pub open spec fn is_fence_marker(s: Seq<char>) -> bool {
-    s.len() >= 3 && (s[0] == '`' || s[0] == '~')
-}
-
-pub open spec fn is_thematic_break(s: Seq<char>) -> bool {
-    s.len() >= 3 && forall|i: int| 0 <= i < s.len() ==> s[i] == '_'
-}
-
-pub open spec fn is_list_item(s: Seq<char>) -> bool {
-    let zero: int = 0;
-    let one: int = 1;
-    s.len() >= 2 && matches!(s.index(zero), '-' | '*' | '+') && s.index(one) == ' '
-}
-
-/// Returns whether `s` is ordinary paragraph text in this structural model.
-pub open spec fn is_paragraph_text(s: Seq<char>) -> bool {
-    !is_atx_heading(s)
-        && !is_table_delimiter(s)
-        && !is_table_row(s)
-        && !is_fence_marker(s)
-        && !is_thematic_break(s)
-        && !is_list_item(s)
-        && s.len() > 0
-}
-
-/// Verus model of the scanner's structural precedence.
-pub open spec fn spec_classify(s: Seq<char>, ctx: ClassifyCtxView) -> LineClass {
-    if s.len() == 0 {
-        LineClass::Blank
-    } else if ctx.is_in_fence {
-        LineClass::Literal
-    } else if is_fence_marker(s) {
+/// Structural precedence over the exact body and context supplied to the kernel.
+pub open spec fn spec_open_text(s: Seq<char>, start: int, ctx: ClassifyCtxView) -> LineClass {
+    if spec_fence_marker(s, start) {
         LineClass::FenceMarker
-    } else if is_atx_heading(s) {
+    } else if spec_atx_heading(s, start) {
         LineClass::AtxHeading
-    } else if is_table_delimiter(s) {
+    } else if spec_table_delimiter(s, start) {
         LineClass::TableDelimiter
-    } else if is_table_row(s) {
+    } else if spec_body_starts_with_pipe(s, start) {
         LineClass::TableRow
     } else if matches!(ctx.previous, Some(LineClass::ParagraphText))
-        && ctx.prefix_agrees
-        && is_setext_underline(s)
-    {
+        && ctx.prefix_agrees && spec_setext_underline(s, start) {
         LineClass::SetextUnderline
-    } else if is_thematic_break(s) {
+    } else if spec_thematic_break(s, start) {
         LineClass::ThematicBreak
-    } else if is_list_item(s) {
+    } else if spec_list_item(s, start) {
         LineClass::ListItem
     } else {
         LineClass::ParagraphText
     }
 }
 
-/// Converts an accepted Setext pair to the emitted ATX heading shape.
-proof fn convert_setext(candidate: Seq<char>, underline: Seq<char>) -> (result: Seq<char>)
-    requires
-        spec_classify(
-            candidate,
-            canonical_context(),
-        ) == LineClass::ParagraphText,
-        spec_classify(
-            underline,
-            ClassifyCtxView {
-                is_in_fence: false,
-                open_fence: None,
-                previous: Some(LineClass::ParagraphText),
-                prefix_agrees: true,
-            },
-        ) == LineClass::SetextUnderline,
-    ensures
-        spec_classify(
-            result,
-            canonical_context(),
-        ) == LineClass::AtxHeading,
-{
-    let emitted = Seq::<char>::empty().push('#').push(' ').add(candidate);
-    assert(is_atx_heading(emitted));
-    emitted
+pub open spec fn spec_within_fence(s: Seq<char>, start: int, ctx: ClassifyCtxView) -> LineClass {
+    if matches!(ctx.open_fence, Some(open) if spec_closing_fence(s, start, open)) {
+        LineClass::FenceMarker
+    } else {
+        LineClass::Literal
+    }
 }
 
-pub open spec fn canonical_break() -> Seq<char> { Seq::<char>::new(70, |i: int| '_') }
+/// Structural precedence over the exact body and context supplied to the kernel.
+pub open spec fn spec_classify(s: Seq<char>, ctx: ClassifyCtxView) -> LineClass {
+    let (body_start, is_literal) = spec_line_parts(s);
+    if ctx.is_in_fence {
+        if is_literal {
+            LineClass::Literal
+        } else {
+            spec_within_fence(s, body_start, ctx)
+        }
+    } else if spec_is_blank_from(s, 0) || spec_is_blank_from(s, body_start) {
+        LineClass::Blank
+    } else if is_literal {
+        LineClass::Literal
+    } else {
+        spec_open_text(s, body_start, ctx)
+    }
+}
+
+/// Trimming trailing whitespace cannot erase a non-whitespace first scalar.
+proof fn lemma_trim_preserves_first(s: Seq<char>, end: int)
+    requires 0 < end <= s.len(), !spec_is_markdown_whitespace(s[0])
+    ensures 1 <= spec_trim_end(s, 0, end) <= end
+    decreases end
+{
+    if end > 1 && spec_is_markdown_whitespace(s[end - 1]) {
+        lemma_trim_preserves_first(s, end - 1);
+    }
+}
+
+/// Adding an ATX prefix to an accepted Setext text line remains an ATX heading.
+proof fn convert_setext(candidate: Seq<char>, underline: Seq<char>) -> (result: Seq<char>)
+    requires
+        spec_classify(candidate, canonical_context()) == LineClass::ParagraphText,
+        spec_classify(underline, ClassifyCtxView {
+            is_in_fence: false,
+            open_fence: None,
+            previous: Some(LineClass::ParagraphText),
+            prefix_agrees: true,
+        }) == LineClass::SetextUnderline,
+    ensures spec_classify(result, canonical_context()) == LineClass::AtxHeading,
+{
+    let emitted = Seq::<char>::empty().push('#').push(' ').add(candidate);
+    assert(emitted[0] == '#');
+    assert(emitted[1] == ' ');
+    assert(spec_line_parts(emitted) == (0int, false));
+    lemma_trim_preserves_first(emitted, emitted.len() as int);
+    assert(spec_trim_start(emitted, 0, emitted.len() as int) == 0);
+    let trimmed_end = spec_trim_end(emitted, 0, emitted.len() as int);
+    assert(1 <= trimmed_end <= emitted.len());
+    if trimmed_end > 1 {
+        assert(emitted[1] == ' ');
+        assert(spec_marker_run_len(emitted, 1, trimmed_end, '#') == 0);
+    }
+    assert(spec_marker_run_len(emitted, 0, trimmed_end, '#') == 1);
+    assert(spec_atx_heading(emitted, 0));
+    emitted
+}
 
 pub open spec fn canonical_context() -> ClassifyCtxView {
     ClassifyCtxView { is_in_fence: false, open_fence: None, previous: None, prefix_agrees: true }
 }
 
+pub open spec fn canonical_break() -> Seq<char> { Seq::<char>::new(70, |i: int| '_') }
+
+/// Each suffix of the canonical break contains only underscores.
+proof fn lemma_canonical_suffix(s: Seq<char>, start: int)
+    requires s.len() == 70,
+        forall|i: int| 0 <= i < 70 ==> s[i] == '_',
+        0 <= start <= 70
+    ensures
+        spec_marker_count(s, start, 70, '_') == 70 - start,
+        spec_thematic_valid(s, start, 70, '_')
+    decreases 70 - start
+{
+    if start < 70 {
+        lemma_canonical_suffix(s, start + 1);
+    }
+}
+
+/// The emitted canonical break remains structural in the exact classifier.
 proof fn lemma_canonical_break_remains_structural()
-    ensures
-        spec_classify(
-            canonical_break(),
-            canonical_context(),
-        ) == LineClass::ThematicBreak,
+    ensures spec_classify(canonical_break(), canonical_context()) == LineClass::ThematicBreak
 {
-    assert(is_thematic_break(canonical_break()));
-}
-
-pub open spec fn wrapper_accepts(s: Seq<char>, ctx: ClassifyCtxView) -> bool {
-    spec_classify(s, ctx) == LineClass::ParagraphText
-}
-
-pub open spec fn heading_accepts(s: Seq<char>, ctx: ClassifyCtxView) -> bool {
-    spec_classify(s, ctx) == LineClass::ParagraphText
-}
-
-pub open spec fn table_accepts(s: Seq<char>, ctx: ClassifyCtxView) -> bool {
-    matches!(spec_classify(s, ctx), LineClass::TableRow | LineClass::TableDelimiter)
-}
-
-pub open spec fn orphan_specifier_accepts(s: Seq<char>, ctx: ClassifyCtxView) -> bool {
-    spec_classify(s, ctx) == LineClass::ParagraphText
-}
-
-proof fn lemma_break_rejected_by_consumers()
-    ensures
-        !wrapper_accepts(canonical_break(), canonical_context()),
-        !heading_accepts(canonical_break(), canonical_context()),
-        !table_accepts(canonical_break(), canonical_context()),
-        !orphan_specifier_accepts(canonical_break(), canonical_context()),
-{
-    lemma_canonical_break_remains_structural();
-}
-
-/// Witnesses that ordinary digit-prefixed prose is not excluded by the model.
-proof fn lemma_paragraph_exists()
-    ensures
-        spec_classify(
-            Seq::<char>::empty()
-                .push('2')
-                .push('0')
-                .push('2')
-                .push('4')
-                .push(' ')
-                .push('r')
-                .push('e')
-                .push('v')
-                .push('e')
-                .push('n')
-                .push('u')
-                .push('e'),
-            canonical_context(),
-        ) == LineClass::ParagraphText,
-{
-}
-
-/// Witnesses that a table alignment row is distinct from paragraph text.
-proof fn lemma_delimiter_exists()
-    ensures
-        spec_classify(
-            Seq::<char>::empty()
-                .push('|')
-                .push('-')
-                .push('-')
-                .push('-')
-                .push('|')
-                .push('-')
-                .push('-')
-                .push('-')
-                .push('|'),
-            canonical_context(),
-        ) == LineClass::TableDelimiter,
-{
-}
-
-/// Witnesses that the canonical seventy-underscore break is structural.
-proof fn lemma_break_exists()
-    ensures
-        spec_classify(canonical_break(), canonical_context()) == LineClass::ThematicBreak,
-{
-    lemma_canonical_break_remains_structural();
+    let s = canonical_break();
+    assert(s.len() == 70);
+    assert(forall|i: int| 0 <= i < 70 ==> s[i] == '_');
+    lemma_canonical_suffix(s, 0);
+    assert(spec_line_parts(s) == (0int, false));
+    assert(!spec_is_blank_from(s, 0));
+    assert(!spec_contains(s, 0, 70, '|'));
+    assert(!spec_table_delimiter(s, 0));
+    assert(spec_thematic_break(s, 0));
 }
 
 } // verus!

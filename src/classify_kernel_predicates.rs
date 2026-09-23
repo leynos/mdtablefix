@@ -155,9 +155,13 @@ ensures(result => result == crate::spec_atx_heading(chars@, start as int));
 }
 }
 
+verified_kernel_function! {
 /// Reports whether every pipe-separated cell has table delimiter grammar.
 #[cfg_attr(verus_keep_ghost, verifier::external_body)]
-pub(super) fn is_table_delimiter(chars: &[char], start: usize) -> bool {
+pub(super) fn is_table_delimiter(chars: &[char], start: usize) -> bool;
+requires(start <= chars@.len());
+ensures(result => result == crate::spec_table_delimiter(chars@, start as int));
+{
     let (mut first, mut end) = trimmed_range(chars, start);
     if !contains(chars, first, end, '|') {
         return false;
@@ -169,6 +173,7 @@ pub(super) fn is_table_delimiter(chars: &[char], start: usize) -> bool {
         end -= 1;
     }
     first < end && table_cells_are_delimiters(chars, first, end)
+}
 }
 
 verified_kernel_function! {

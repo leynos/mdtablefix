@@ -12,7 +12,7 @@
 use tracing::trace;
 
 use crate::{
-    classify::{ClassifyCtx, LineClass, classify_line},
+    classify::{ClassifyCtx, LineClass, is_setext_text_line, is_setext_underline_line},
     wrap::{
         BlockKind,
         FenceTracker,
@@ -125,20 +125,19 @@ fn detect_setext_heading(
         return None;
     }
 
-    let candidate_class = classify_line(line, &ClassifyCtx::default());
+    let candidate_is_paragraph = is_setext_text_line(line, &ClassifyCtx::default());
     let text = line[prefix_len..].trim();
     if text.is_empty() {
         return None;
     }
-    if !is_setext_text(text, candidate_class, link_matcher) {
+    if !is_setext_text(text, candidate_is_paragraph, link_matcher) {
         return None;
     }
 
-    if classify_line(
+    if !is_setext_underline_line(
         underline,
         &ClassifyCtx::following(LineClass::ParagraphText, prefixes_agree),
-    ) != LineClass::SetextUnderline
-    {
+    ) {
         return None;
     }
 
@@ -167,10 +166,14 @@ fn detect_setext_heading(
 /// The only HTML support the project has is the `<table>` conversion in
 /// `crate::html`, which runs before this pass and replaces the lines it
 /// recognizes.
-fn is_setext_text(text: &str, line_class: LineClass, link_matcher: LinkReferenceMatcher) -> bool {
-    if line_class != LineClass::ParagraphText {
+fn is_setext_text(
+    text: &str,
+    candidate_is_paragraph: bool,
+    link_matcher: LinkReferenceMatcher,
+) -> bool {
+    if !candidate_is_paragraph {
         trace!(
-            ?line_class,
+            candidate_is_paragraph,
             payload_len = text.len(),
             "refusing a Setext candidate with a structural line class"
         );

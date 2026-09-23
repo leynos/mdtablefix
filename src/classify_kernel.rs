@@ -94,9 +94,11 @@ macro_rules! verified_kernel_function {
     };
 }
 
+#[path = "classify_kernel_consumers.rs"]
+mod consumers;
 #[path = "classify_kernel_predicates.rs"]
 mod predicates;
-
+pub(crate) use consumers::{is_canonical_break_seq, is_setext_text_seq, is_setext_underline_seq};
 use predicates::{
     body_starts_with_pipe,
     is_atx_heading,
@@ -205,12 +207,15 @@ pub(crate) struct KernelClassification {
     /// This offset is never greater than the input character-sequence length.
     pub(crate) body_start: CharIndex,
 }
-
 verified_kernel_function! {
 /// Classifies one character sequence using the shared structural precedence.
 #[must_use]
 pub(crate) fn classify_seq(chars: &[char], ctx: &ClassifyCtxKernel) -> KernelClassification;
-ensures(result => true);
+ensures(result =>
+    result.class == crate::spec_classify(chars@, ctx@),
+    result.body_start.0 as int == crate::spec_line_parts(chars@).0,
+    result.body_start.0 <= chars@.len(),
+);
 {
     let (body_start, is_literal) = line_parts(chars);
     if ctx.is_in_fence {
@@ -228,7 +233,6 @@ ensures(result => true);
     classify_open_text(chars, body_start, ctx)
 }
 }
-
 verified_kernel_function! {
 /// Classifies a line inside an open fenced region.
 fn classify_within_fence(
@@ -237,7 +241,10 @@ fn classify_within_fence(
     ctx: &ClassifyCtxKernel,
 ) -> KernelClassification;
 requires(body_start <= chars@.len());
-ensures(result => true);
+ensures(result =>
+    result.class == crate::spec_within_fence(chars@, body_start as int, ctx@),
+    result.body_start.0 == body_start,
+);
 {
     match ctx.open_fence {
         Some(open) if is_closing_fence(chars, body_start, open) => {
@@ -248,7 +255,6 @@ ensures(result => true);
     classified(LineClass::Literal, body_start)
 }
 }
-
 verified_kernel_function! {
 /// Applies structural precedence outside fenced regions.
 fn classify_open_text(
@@ -257,7 +263,10 @@ fn classify_open_text(
     ctx: &ClassifyCtxKernel,
 ) -> KernelClassification;
 requires(body_start <= chars@.len());
-ensures(result => true);
+ensures(result =>
+    result.class == crate::spec_open_text(chars@, body_start as int, ctx@),
+    result.body_start.0 == body_start,
+);
 {
     if is_fence_marker(chars, body_start) {
         return classified(LineClass::FenceMarker, body_start);
@@ -286,15 +295,17 @@ ensures(result => true);
     classified(LineClass::ParagraphText, body_start)
 }
 }
-
+verified_kernel_function! {
 /// Constructs a result without allowing the scalar offset to become implicit.
-fn classified(class: LineClass, body_start: usize) -> KernelClassification {
+fn classified(class: LineClass, body_start: usize) -> KernelClassification;
+ensures(result => result.class == class, result.body_start.0 == body_start);
+{
     KernelClassification {
         class,
         body_start: CharIndex(body_start),
     }
 }
-
+}
 verified_loop_function! {
 /// Locates the structural body and determines whether it is indented code.
 fn line_parts(chars: &[char]) -> (usize, bool);
@@ -354,7 +365,6 @@ ensures(result => result == crate::spec_has_quote_prefix(chars@, cursor as int, 
     indent_width < 4 && after_indent < chars.len() && chars[after_indent] == '>'
 }
 }
-
 verified_loop_function! {
 /// Measures indentation columns and the following scalar offset from `start`.
 fn indentation_at(chars: &[char], start: usize, column: usize) -> (usize, usize);

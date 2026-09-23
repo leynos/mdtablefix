@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use crate::{
-    classify::{ClassifyCtx, LineClass, OpenFence, classify_line_with_body},
+    classify::{ClassifyCtx, OpenFence, classify_line_with_body, is_canonical_break_line},
     wrap::FenceTracker,
 };
 
@@ -60,8 +60,8 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         } else {
             ClassifyCtx::default()
         };
-        let classified = classify_line_with_body(line, &context);
-        if !fence.is_in_fence && classified.class == LineClass::ThematicBreak {
+        if !fence.is_in_fence && is_canonical_break_line(line, &context) {
+            let classified = classify_line_with_body(line, &context);
             let prefix_len = line.len() - classified.body.len();
             if line[..prefix_len].contains('>') {
                 out.push(Cow::Owned(format!(
@@ -184,7 +184,6 @@ mod prop_tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::classify::classify_line;
 
     proptest! {
         #[test]
@@ -268,7 +267,7 @@ mod prop_tests {
 
     fn non_thematic_line() -> impl Strategy<Value = String> {
         any::<String>().prop_filter("line must not classify as a thematic break", |line| {
-            classify_line(line, &ClassifyCtx::default()) != LineClass::ThematicBreak
+            !is_canonical_break_line(line, &ClassifyCtx::default())
         })
     }
 

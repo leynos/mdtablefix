@@ -164,7 +164,7 @@ fn classifies_setext_text(#[case] payload: &str, #[case] expected: bool) {
     assert_eq!(
         is_setext_text(
             payload,
-            classify_line(payload, &ClassifyCtx::default()),
+            is_setext_text_line(payload, &ClassifyCtx::default()),
             matcher,
         ),
         expected

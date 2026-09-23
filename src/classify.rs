@@ -29,6 +29,27 @@ pub fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
     classify_line_with_body(line, ctx).class
 }
 
+/// Tests whether a Setext candidate is paragraph text through the verified kernel.
+#[must_use]
+pub(crate) fn is_setext_text_line(line: &str, ctx: &ClassifyCtx) -> bool {
+    let chars = line.chars().collect::<Vec<_>>();
+    crate::classify_kernel::is_setext_text_seq(&chars, ctx)
+}
+
+/// Tests whether a Setext underline follows compatible paragraph text.
+#[must_use]
+pub(crate) fn is_setext_underline_line(line: &str, ctx: &ClassifyCtx) -> bool {
+    let chars = line.chars().collect::<Vec<_>>();
+    crate::classify_kernel::is_setext_underline_seq(&chars, ctx)
+}
+
+/// Tests whether a line should become the canonical thematic break.
+#[must_use]
+pub(crate) fn is_canonical_break_line(line: &str, ctx: &ClassifyCtx) -> bool {
+    let chars = line.chars().collect::<Vec<_>>();
+    crate::classify_kernel::is_canonical_break_seq(&chars, ctx)
+}
+
 /// Classifies a source line and maps the kernel's scalar offset to UTF-8.
 #[must_use]
 pub(crate) fn classify_line_with_body<'line>(
