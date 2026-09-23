@@ -55,17 +55,17 @@ use swap::{
 };
 
 #[cfg(test)]
-#[path = "io_metrics_tests.rs"]
+#[path = "../io_metrics_tests.rs"]
 mod metrics_tests;
 
 #[cfg(test)]
-#[path = "io_tracing_tests.rs"]
+#[path = "../io_tracing_tests.rs"]
 mod tracing_tests;
 
 #[cfg(test)]
-#[path = "io_tests.rs"]
+#[path = "../io_tests.rs"]
 mod tests;
 
 #[cfg(test)]
-#[path = "io_line_ending_tests.rs"]
+#[path = "../io_line_ending_tests.rs"]
 mod line_ending_tests;
