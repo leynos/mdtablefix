@@ -21,6 +21,11 @@ cp "${repo_root}/src/classify_kernel_predicates.rs" "${proof_dir}/src/classify_k
 sed 's@LineClass::ParagraphText)$@LineClass::AtxHeading)@' \
     "${repo_root}/src/classify_kernel_consumers.rs" \
     > "${proof_dir}/src/classify_kernel_consumers.rs"
+if cmp -s "${repo_root}/src/classify_kernel_consumers.rs" \
+    "${proof_dir}/src/classify_kernel_consumers.rs"; then
+    echo "Setext consumer mutation did not apply" >&2
+    exit 1
+fi
 
 # `PROVER_TOOLS` carries a command and fixed arguments from the Makefile.
 # shellcheck disable=SC2086
