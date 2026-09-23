@@ -32,6 +32,7 @@ fn list_continuation_indent(first_line: &str) -> Option<String> {
 }
 
 /// Asserts wrapped output does not introduce spurious leading spaces.
+#[track_caller]
 fn assert_no_spurious_leading_spaces(output: &[String]) {
     assert!(!output.is_empty(), "output must not be empty");
 
