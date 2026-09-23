@@ -852,9 +852,9 @@ error text is ever used as a label, so a recorder's cardinality stays bounded.
 `format_breaks` returns `Vec<Cow<'_, str>>` rather than `Vec<String>`. Lines
 that are not thematic breaks are returned as `Cow::Borrowed` slices into the
 input, avoiding heap allocations for unchanged content. Synthesized
-thematic-break lines without a prefix are also `Cow::Borrowed`, borrowing from
-a shared static buffer. Quoted thematic breaks retain their quote prefix and
-are returned as `Cow::Owned`.
+thematic-break lines without a blockquote prefix are also `Cow::Borrowed`,
+borrowing from a shared static buffer. Quoted thematic breaks retain their
+quote prefix and are returned as `Cow::Owned`.
 
 Callers that need owned `String` values must call `.into_owned()`:
 

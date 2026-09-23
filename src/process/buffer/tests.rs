@@ -54,6 +54,16 @@ fn plain_table_line_enters_table_mode() {
     assert!(buffer.out.is_empty());
 }
 
+#[test]
+fn pipe_leading_delimiter_starts_table_mode() {
+    let mut buffer = new_buffer();
+
+    assert!(handle_line(&mut buffer, "|---|---|").is_none());
+    assert!(handle_line(&mut buffer, "| a | b |").is_none());
+    assert_eq!(buffer.buf, owned(&["|---|---|", "| a | b |"]));
+    assert!(buffer.in_table);
+}
+
 #[rstest]
 #[case::plain_quote("> | quoted | row |")]
 #[case::indented_quote("  > | quoted | row |")]

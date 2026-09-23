@@ -165,15 +165,17 @@ impl ProcessBuffer {
     /// have been checked, preventing quoted, list, or definition lines that
     /// contain pipes from corrupting a table candidate.
     pub(super) fn handle_table_line(&mut self, line: String) -> Option<String> {
-        // A leading indent of four or more columns marks a Markdown indented
-        // code block, so such a line must stay verbatim and never enter table
-        // mode (otherwise `reflow_table` would rewrite its contents). This
-        // mirrors the `indent_width < 4` gate in `classify_block`.
+        // The shared classifier returns Literal for indented code, so those
+        // lines must never enter table mode. A quoted pipe body is also not a
+        // top-level table row.
         let classified = classify_line_with_body(&line, &ClassifyCtx::default());
         let prefix = &line[..line.len() - classified.body.len()];
         let is_quoted = prefix.contains('>');
         let line_class = classified.class;
-        if line_class == LineClass::TableRow && !is_quoted {
+        if !is_quoted
+            && (line_class == LineClass::TableRow
+                || (line_class == LineClass::TableDelimiter && classified.body.starts_with('|')))
+        {
             debug!(
                 line_len = line.len(),
                 buffered_lines = self.buf.len(),
