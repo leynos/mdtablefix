@@ -18,6 +18,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::{Context, Result, ensure};
+
 /// The one approved revision of the shared uploader.
 ///
 /// Asserted as an allowlist rather than as a floor. Ordering two commit SHAs
@@ -59,42 +61,40 @@ fn workflow_directory() -> PathBuf {
 ///
 /// Both GitHub extensions are read: a workflow written with the other one
 /// would otherwise escape every contract here without failing anything.
-fn workflow_sources() -> Vec<(String, String)> {
+fn workflow_sources() -> Result<Vec<(String, String)>> {
     let directory = workflow_directory();
     let entries = fs::read_dir(&directory)
-        .unwrap_or_else(|error| panic!("{} could not be read: {error}", directory.display()));
-    let mut sources: Vec<(String, String)> = entries
-        .map(|entry| {
-            entry
-                .expect("workflow directory entry should be readable")
-                .path()
-        })
-        .filter(|path| {
-            path.extension().is_some_and(|extension| {
-                WORKFLOW_EXTENSIONS
-                    .iter()
-                    .any(|accepted| extension.eq_ignore_ascii_case(accepted))
-            })
-        })
-        .map(|path| {
-            let name = path
-                .file_name()
-                .expect("a workflow path should have a file name")
-                .to_string_lossy()
-                .into_owned();
-            let source = fs::read_to_string(&path)
-                .unwrap_or_else(|error| panic!("{} could not be read: {error}", path.display()));
-            (name, source)
-        })
-        .collect();
+        .with_context(|| format!("{} could not be read", directory.display()))?;
+    let mut sources = Vec::new();
+    for entry in entries {
+        let path = entry
+            .with_context(|| format!("could not read an entry in {}", directory.display()))?
+            .path();
+        let is_workflow = path.extension().is_some_and(|extension| {
+            WORKFLOW_EXTENSIONS
+                .iter()
+                .any(|accepted| extension.eq_ignore_ascii_case(accepted))
+        });
+        if !is_workflow {
+            continue;
+        }
+        let name = path
+            .file_name()
+            .with_context(|| format!("{} has no file name", path.display()))?
+            .to_string_lossy()
+            .into_owned();
+        let source = fs::read_to_string(&path)
+            .with_context(|| format!("{} could not be read", path.display()))?;
+        sources.push((name, source));
+    }
     sources.sort_by(|left, right| left.0.cmp(&right.0));
-    assert!(
+    ensure!(
         !sources.is_empty(),
         "no workflow was found under {}, so every contract in this file would pass having read \
          nothing",
         directory.display()
     );
-    sources
+    Ok(sources)
 }
 
 /// The revision of every uploader reference, paired with the workflow naming it.
@@ -103,8 +103,9 @@ fn workflow_sources() -> Vec<(String, String)> {
 /// byte offsets: a workflow is arbitrary UTF-8, and a slice taken at a
 /// computed offset would panic on a multi-byte character rather than fail the
 /// contract it was meant to check.
-fn uploader_references() -> Vec<(String, String)> {
-    workflow_sources()
+fn uploader_references() -> Result<Vec<(String, String)>> {
+    let sources = workflow_sources()?;
+    Ok(sources
         .into_iter()
         .flat_map(|(name, source)| {
             source
@@ -119,7 +120,7 @@ fn uploader_references() -> Vec<(String, String)> {
                 })
                 .collect::<Vec<_>>()
         })
-        .collect()
+        .collect())
 }
 
 /// The workflows whose source contains ``needle``, in file-name order.
@@ -127,12 +128,13 @@ fn uploader_references() -> Vec<(String, String)> {
 /// Shared by the two absence contracts below. They assert different things and
 /// fail apart, but the search itself is one operation, and writing it twice
 /// would leave two readers to keep in step.
-fn workflows_containing(needle: &str) -> Vec<String> {
-    workflow_sources()
+fn workflows_containing(needle: &str) -> Result<Vec<String>> {
+    let sources = workflow_sources()?;
+    Ok(sources
         .into_iter()
         .filter(|(_, source)| source.contains(needle))
         .map(|(name, _)| name)
-        .collect()
+        .collect())
 }
 
 /// The uploader rejects a non-empty value, so no workflow may pass it.
@@ -141,13 +143,14 @@ fn workflows_containing(needle: &str) -> Vec<String> {
 /// non-empty value, so the coverage upload stops working the moment the
 /// variable behind the input holds anything.
 #[test]
-fn no_workflow_passes_the_deprecated_installer_checksum() {
-    let offenders = workflows_containing(DEPRECATED_INPUT);
-    assert!(
+fn no_workflow_passes_the_deprecated_installer_checksum() -> Result<()> {
+    let offenders = workflows_containing(DEPRECATED_INPUT)?;
+    ensure!(
         offenders.is_empty(),
         "{DEPRECATED_INPUT} is deprecated and rejected by the uploader at {APPROVED_PIN}; remove \
          it from {offenders:?}"
     );
+    Ok(())
 }
 
 /// The variable existed only to feed the rejected input, so it must go.
@@ -157,13 +160,14 @@ fn no_workflow_passes_the_deprecated_installer_checksum() {
 /// all, and such a reference is what a later reader would take as evidence
 /// that the variable is still wanted.
 #[test]
-fn no_workflow_references_the_deprecated_checksum_variable() {
-    let offenders = workflows_containing(DEPRECATED_VARIABLE);
-    assert!(
+fn no_workflow_references_the_deprecated_checksum_variable() -> Result<()> {
+    let offenders = workflows_containing(DEPRECATED_VARIABLE)?;
+    ensure!(
         offenders.is_empty(),
         "{DEPRECATED_VARIABLE} fed {DEPRECATED_INPUT} and has no remaining consumer; remove it \
          from {offenders:?}"
     );
+    Ok(())
 }
 
 /// One approved revision, so a stale pin cannot reintroduce the input.
@@ -173,9 +177,9 @@ fn no_workflow_references_the_deprecated_checksum_variable() {
 /// contract instead of failing it, and this repository uploads its coverage
 /// through that action.
 #[test]
-fn every_uploader_reference_is_pinned_to_the_approved_revision() {
-    let references = uploader_references();
-    assert!(
+fn every_uploader_reference_is_pinned_to_the_approved_revision() -> Result<()> {
+    let references = uploader_references()?;
+    ensure!(
         !references.is_empty(),
         "no upload-codescene-coverage reference was found, so the pin assertion would pass \
          vacuously; this repository is expected to call the uploader"
@@ -184,11 +188,12 @@ fn every_uploader_reference_is_pinned_to_the_approved_revision() {
         .iter()
         .filter(|(_, revision)| revision != APPROVED_PIN)
         .collect();
-    assert!(
+    ensure!(
         wrong.is_empty(),
         "every upload-codescene-coverage reference must be pinned to {APPROVED_PIN}; found \
          {wrong:?}"
     );
+    Ok(())
 }
 
 /// Nothing reads the variable it would write, so it is dead code here.
