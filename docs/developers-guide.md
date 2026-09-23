@@ -90,11 +90,10 @@ production-used kernels. `make verus-selftest` runs `verus/smoke.rs`, whose
 deliberately false assertion must be rejected; it also fails when the runner
 does not reach Verus, so a skipped verifier cannot pass the check.
 
-`make verus-mutation` runs `scripts/check-atx-mutation.sh` to remove the space
-after the model's emitted ATX marker and confirm Verus rejects that assertion.
-It checks the exploratory model only, not the production conversion. The
-pull-request Verus workflow runs `make verus` and `make verus-selftest`; it
-does not run this mutation target.
+`make verus-mutation` runs `scripts/check-classifier-mutation.sh`. It changes
+the production Setext-text predicate to accept an ATX heading, then confirms
+Verus rejects its refinement postcondition. The pull-request Verus workflow runs
+`make verus` and `make verus-selftest`; the mutation target is local.
 
 The pull-request workflow runs both targets on Ubuntu. It caches the
 version-specific `.verus` directory using the runner operating system,
@@ -106,10 +105,12 @@ documents why the proof scope remains a narrow production-used core.
 The `verified_kernel_function!` and `verified_loop_function!` macros belong to
 `src/classify_kernel.rs`. They emit one shared executable body for Cargo and
 Verus, adding contracts and loop invariants only in the proof build. Use them
-only in the classifier kernel and its predicate module; consumers call the
-kernel through `src/classify.rs`. A new scanner predicate should carry a
-narrow contract about its own characters and cursor, then be proved from the
-same body before the top-level classifier refinement relies on it.
+only in the classifier kernel, its predicate module, and its consumer module;
+callers use the `&str` boundary in `src/classify.rs`. The consumer predicates
+for Setext and thematic-break decisions call `classify_seq` directly. A new
+scanner predicate should carry a narrow contract about its characters and
+cursor, then be proved from the same body before the top-level classifier
+refinement relies on it.
 
 ## Internal API reference
 

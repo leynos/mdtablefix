@@ -272,8 +272,8 @@ fn prefix_of_indent_or_quote(text: &str) -> usize {
 
 /// Builds an ATX heading while retaining the source indentation or blockquote prefix.
 ///
-/// The current Verus Setext model is separate from this production conversion;
-/// a refinement proof for this function remains to be established.
+/// The structural conversion decision is verified through the production
+/// classifier. This string assembly remains outside the executable proof.
 fn convert_setext(prefix: &str, level: usize, text: &str) -> String {
     let mut heading = String::new();
     heading.push_str(prefix);

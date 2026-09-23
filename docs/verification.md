@@ -8,41 +8,46 @@ connects it to the production function.
 
 ## Current status
 
-Issue #485 has no production-linked proof claims yet. The current
-`verus/lib.rs` exercises a structural model, but it does not refine the runtime
-scanner or consumer functions and is therefore deliberately excluded from the
-claim ledger.
-
 The pinned Verus release cannot compile `&str` range operations inside
-`verus!`. The production scanner now delegates to a character-sequence kernel
-that `verus/lib.rs` compiles, but `classify_seq` still has a trivial
-postcondition, its scanner predicates use `#[verifier::external_body]`, and
-`spec_classify` is not connected to the executable result. The missing
-refinement and consumer obligations are tracked in [#512][issue-512].
+`verus!`. Production `classify_line` therefore converts the line to Unicode
+scalars and delegates to the executable `classify_seq` body included by
+`verus/lib.rs`. Its postcondition proves the returned class equals
+`spec_classify(chars@, ctx@)` for every context and class, and proves the body
+offset is in bounds. The context view includes fence state, previous class, and
+prefix agreement. Leading tabs and four spaces are proved literal.
+
+The Setext and canonical-break consumer predicates call the same verified
+kernel. The proof also establishes that a canonical seventy-underscore line
+classifies as a thematic break, and that prefixing accepted Setext text with an
+ATX marker produces an ATX heading. The residual block matcher and the Rust
+`String` assembly in `src/headings.rs` remain outside this proof boundary.
 
 ## Claim ledger
 
-| Claim | Executable function | Input domain | Unverified external contracts | Result class |
-| ----- | ------------------- | ------------ | ----------------------------- | ------------ |
+| Claim                                             | Executable function       | Input domain                                       | Unverified external contracts                                                | Result class                                     |
+| ------------------------------------------------- | ------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------ |
+| Structural classification and bounded body offset | `classify_seq`            | All `&[char]` lines and `ClassifyCtxKernel` values | Table-delimiter grammar, thematic-break grammar, ordered-list marker grammar | Exact `LineClass` and scalar offset              |
+| Setext text decision                              | `is_setext_text_seq`      | All lines and classifier contexts                  | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `ParagraphText`   |
+| Setext underline decision                         | `is_setext_underline_seq` | All lines and classifier contexts                  | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `SetextUnderline` |
+| Canonical-break decision                          | `is_canonical_break_seq`  | All lines and classifier contexts                  | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `ThematicBreak`   |
 
 _Table 1: The verification claim ledger._
 
 ## Policy
 
-- `#[verifier::external_body]` wrappers may state contracts for regex
-  recognition, Unicode display width, and line breaking. They must not assert
-  the property that a proof is meant to establish, such as reparsing block
-  preservation or wrapping idempotence. Every external contract appears in a
-  claim row before a proof relies on it.
+- `#[verifier::external_body]` wrappers may state contracts for bounded matcher
+  recognition, Unicode display width, and line breaking. The classifier relies
+  on exact sequence contracts for table delimiters, thematic breaks, and
+  ordered-list markers. These contracts are trusted until their bodies are
+  verified. They must not assert the property that a proof is meant to
+  establish, such as reparsing block preservation or wrapping idempotence.
+  Every external contract appears in a claim row before a proof relies on it.
 - Specifications use distinct types for byte offsets, Unicode scalar indices,
   and display columns. No proof substitutes `String::len()` for display width.
 - Existing property tests remain in place. Verus proofs complement them and do
   not replace them.
-- `make verus-mutation` currently mutates the exploratory model only. It does
-  not satisfy the production-linked mutation obligation from #485. That work is
-  part of [#512][issue-512].
+- `make verus-mutation` changes the production Setext predicate to accept ATX
+  headings and checks that its refinement postcondition fails.
 
 The ledger check invoked by `make lint` rejects a claim whose executable
 function name does not occur in `src/`.
-
-[issue-512]: https://github.com/leynos/mdtablefix/issues/512
