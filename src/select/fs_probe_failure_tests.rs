@@ -80,9 +80,11 @@ fn a_failure_that_is_not_absence_is_reported_unchanged(#[case] kind: ErrorKind) 
 /// Unix says `ENOTDIR`, so the second shape is staged here rather than left to
 /// a platform that never asks the question.
 #[rstest]
-fn a_read_that_fails_under_a_file_is_not_an_absence(temp_root: io::Result<TempDir>) {
-    let temp_root = temp_root.expect("create a temporary root");
-    let root = as_path(&temp_root).expect("temporary root has a UTF-8 path");
+fn a_read_that_fails_under_a_file_is_not_an_absence(
+    temp_root: io::Result<TempDir>,
+) -> io::Result<()> {
+    let temp_root = temp_root?;
+    let root = as_path(&temp_root)?;
     let gone = root.join("gone.md");
     assert_eq!(
         classify_unreadable(&gone, io::Error::from(ErrorKind::NotFound)).ok(),
@@ -90,7 +92,7 @@ fn a_read_that_fails_under_a_file_is_not_an_absence(temp_root: io::Result<TempDi
         "gone.md is gone, and that is the answer the selection has a rule for"
     );
 
-    write(&root, "blocker", "not a directory\n").expect("write the blocker fixture");
+    write(&root, "blocker", "not a directory\n")?;
     let through_a_file = root.join("blocker/guide.md");
     let error = classify_unreadable(&through_a_file, io::Error::from(ErrorKind::NotFound))
         .expect_err("a path through a file is not an absence");
@@ -99,6 +101,7 @@ fn a_read_that_fails_under_a_file_is_not_an_absence(temp_root: io::Result<TempDi
         ErrorKind::NotADirectory,
         "the kind Unix reports for it, reported on every platform"
     );
+    Ok(())
 }
 
 /// A path no part of which is there is absent, not unreachable.
@@ -107,9 +110,11 @@ fn a_read_that_fails_under_a_file_is_not_an_absence(temp_root: io::Result<TempDi
 /// of the fixture: what is missing is a whole subtree, which is what a staged
 /// deletion of one looks like.
 #[rstest]
-fn a_read_that_fails_where_the_whole_path_is_gone_is_an_absence(temp_root: io::Result<TempDir>) {
-    let temp_root = temp_root.expect("create a temporary root");
-    let root = as_path(&temp_root).expect("temporary root has a UTF-8 path");
+fn a_read_that_fails_where_the_whole_path_is_gone_is_an_absence(
+    temp_root: io::Result<TempDir>,
+) -> io::Result<()> {
+    let temp_root = temp_root?;
+    let root = as_path(&temp_root)?;
     let path = root.join("gone/sub/guide.md");
 
     assert_eq!(
@@ -117,6 +122,7 @@ fn a_read_that_fails_where_the_whole_path_is_gone_is_an_absence(temp_root: io::R
         Some(PathKind::Missing),
         "a subtree that is gone is absent, not unreachable"
     );
+    Ok(())
 }
 
 /// A failure reading an ancestor stops the walk, and is reported as it arrived.
@@ -163,9 +169,9 @@ fn a_failure_reading_an_ancestor_is_reported_rather_than_walked_past() {
 /// Confinement that could not be established must not be reported as
 /// confinement, and a selection over a tree that is not there names nothing.
 #[rstest]
-fn a_root_that_does_not_exist_confines_nothing(temp_root: io::Result<TempDir>) {
-    let temp_root = temp_root.expect("create a temporary root");
-    let root = as_path(&temp_root).expect("temporary root has a UTF-8 path");
+fn a_root_that_does_not_exist_confines_nothing(temp_root: io::Result<TempDir>) -> io::Result<()> {
+    let temp_root = temp_root?;
+    let root = as_path(&temp_root)?;
     let gone = root.join("gone");
 
     assert!(
@@ -173,6 +179,7 @@ fn a_root_that_does_not_exist_confines_nothing(temp_root: io::Result<TempDir>) {
             .expect("an absent root is not a failure to read it"),
         "a root that cannot be resolved confines nothing"
     );
+    Ok(())
 }
 
 /// A root that exists but cannot be resolved is reported, not answered.
@@ -185,10 +192,10 @@ fn a_root_that_does_not_exist_confines_nothing(temp_root: io::Result<TempDir>) {
 /// ancestors rather than its own failure alone, the kind asserted below is the
 /// same on every platform, including the one that reports it as absence.
 #[rstest]
-fn a_root_that_cannot_be_resolved_is_reported(temp_root: io::Result<TempDir>) {
-    let temp_root = temp_root.expect("create a temporary root");
-    let root = as_path(&temp_root).expect("temporary root has a UTF-8 path");
-    write(&root, "blocker", "not a directory\n").expect("write the blocker fixture");
+fn a_root_that_cannot_be_resolved_is_reported(temp_root: io::Result<TempDir>) -> io::Result<()> {
+    let temp_root = temp_root?;
+    let root = as_path(&temp_root)?;
+    write(&root, "blocker", "not a directory\n")?;
     let unreachable = root.join("blocker/sub");
 
     let error = confined_to(&unreachable, &at("/canonical/guide.md"))
@@ -198,4 +205,5 @@ fn a_root_that_cannot_be_resolved_is_reported(temp_root: io::Result<TempDir>) {
         ErrorKind::NotADirectory,
         "a root behind a file is present, not absent: {error:?}"
     );
+    Ok(())
 }
