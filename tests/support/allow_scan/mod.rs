@@ -16,15 +16,15 @@ use proc_macro2::{TokenStream, TokenTree};
 use syn::{AttrStyle, Attribute, ImplItem, Item, Macro, Meta, visit::Visit};
 
 // The paths are relative to this file's own directory, `tests/support/`.
-#[path = "allow_scan/discovery.rs"]
+#[path = "discovery.rs"]
 mod discovery;
-#[path = "allow_scan/inclusion.rs"]
+#[path = "inclusion.rs"]
 mod inclusion;
-#[path = "allow_scan/meta.rs"]
+#[path = "meta.rs"]
 mod meta;
-#[path = "allow_scan/roots.rs"]
+#[path = "roots.rs"]
 pub mod roots;
-#[path = "allow_scan/tokens.rs"]
+#[path = "tokens.rs"]
 mod tokens;
 
 /// The extension a file must carry for the walk to collect it.
