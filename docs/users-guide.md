@@ -47,9 +47,9 @@ each formatting flag is described in the sections that follow.
 _Table 1: The command-line flags._
 
 With `--breaks`, a thematic break inside a blockquote keeps its quote prefix;
-for example, `> ---` becomes a `>` marker, a space, and 70 underscores.
-A `---` line immediately below compatible paragraph text is a Setext heading
-underline and remains unchanged, even when only `--breaks` is selected.
+for example, `> ---` becomes a `>` marker, a space, and 70 underscores. A `---`
+line immediately below compatible paragraph text is a Setext heading underline
+and remains unchanged, even when only `--breaks` is selected.
 
 ### The four file modes
 
@@ -637,9 +637,9 @@ syntax as well, so `| Title` above `---` is not converted and the `---` stays a
 thematic break.
 
 Indentation and blockquote markers shared by the heading and its underline are
-preserved, so `> Title` above `> -----` becomes `> ## Title`.
-The two lines may use different indentation of up to three spaces, provided
-they remain at the same blockquote depth.
+preserved, so `> Title` above `> -----` becomes `> ## Title`. The two lines may
+use different indentation of up to three spaces, provided they remain at the
+same blockquote depth.
 
 A candidate indented by four or more columns, or one inside a blockquote and
 indented four or more columns after the marker, is an indented code block: it

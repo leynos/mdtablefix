@@ -102,16 +102,19 @@ used locally. The [verification ledger](verification.md) records each claim and
 its trusted boundary; [ADR 0011](adrs/0011-verified-normalization-core.md)
 documents why the proof scope remains a narrow production-used core.
 
-The `verified_kernel_function!` and `verified_loop_function!` macros belong to
-`src/classify_kernel.rs`. They emit one shared executable body for Cargo and
-Verus, adding contracts and loop invariants only in the proof build. Use them
-only in the classifier kernel, its predicate module, and its consumer module;
-callers use the `&str` boundary in `src/classify.rs`. The consumer predicates
-for Setext and thematic-break decisions call `classify_seq` directly. Setext
-conversion also checks the assembled replacement with the verified ATX
-predicate before emitting it. A new scanner predicate should carry a narrow
-contract about its characters and cursor, then be proved from the same body
-before the top-level classifier refinement relies on it.
+The `verified_kernel_function!` and `verified_loop_function!` macros live in
+`src/classify_kernel_macros.rs`, included by `src/classify_kernel.rs`. They
+emit one shared executable body for Cargo and Verus, adding contracts and loop
+invariants only in the proof build. Their accepted attributes are limited to
+documentation, `must_use`, and the verifier's external-body marker, so macro
+callers cannot forward a lint-suppressing attribute. Use them only in the
+classifier kernel, its predicate module, and its consumer module; callers use
+the `&str` boundary in `src/classify.rs`. The consumer predicates for Setext
+and thematic-break decisions call `classify_seq` directly. Setext conversion
+also checks the assembled replacement with the verified ATX predicate before
+emitting it. A new scanner predicate should carry a narrow contract about its
+characters and cursor, then be proved from the same body before the top-level
+classifier refinement relies on it.
 
 `ListContinuationState` in `src/classify.rs` belongs only to the Setext and
 thematic-break consumers. It remembers the content indentation of an active

@@ -17,6 +17,7 @@ sed 's@../src/classify_kernel.rs@src/classify_kernel.rs@' \
     "${repo_root}/verus/lib.rs" > "${proof_file}"
 cp "${repo_root}/verus/classify_spec.rs" "${proof_dir}/classify_spec.rs"
 cp "${repo_root}/src/classify_kernel.rs" "${proof_dir}/src/classify_kernel.rs"
+cp "${repo_root}/src/classify_kernel_macros.rs" "${proof_dir}/src/classify_kernel_macros.rs"
 cp "${repo_root}/src/classify_kernel_predicates.rs" "${proof_dir}/src/classify_kernel_predicates.rs"
 sed 's@LineClass::ParagraphText)$@LineClass::AtxHeading)@' \
     "${repo_root}/src/classify_kernel_consumers.rs" \
