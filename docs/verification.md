@@ -26,13 +26,14 @@ on the emitted structural class explicit.
 
 ## Claim ledger
 
-| Claim                                             | Executable function       | Input domain                                       | Unverified external contracts                                                | Result class                                     |
-| ------------------------------------------------- | ------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------ |
-| Structural classification and bounded body offset | `classify_seq`            | All `&[char]` lines and `ClassifyCtxKernel` values | Table-delimiter grammar, thematic-break grammar, ordered-list marker grammar | Exact `LineClass` and scalar offset              |
-| Setext text decision                              | `is_setext_text_seq`      | All lines and classifier contexts                  | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `ParagraphText`   |
-| Setext underline decision                         | `is_setext_underline_seq` | All lines and classifier contexts                  | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `SetextUnderline` |
-| Emitted Setext ATX check                          | `is_atx_heading_seq`      | All generated lines and classifier contexts        | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `AtxHeading`      |
-| Canonical-break decision                          | `is_canonical_break_seq`  | All lines and classifier contexts                  | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `ThematicBreak`   |
+| Claim                                             | Executable function       | Input domain                                         | Unverified external contracts                                                | Result class                                                        |
+| ------------------------------------------------- | ------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Structural classification and bounded body offset | `classify_seq`            | All `&[char]` lines and `ClassifyCtxKernel` values   | Table-delimiter grammar, thematic-break grammar, ordered-list marker grammar | Exact `LineClass` and scalar offset                                 |
+| Setext text decision                              | `is_setext_text_seq`      | All lines and classifier contexts                    | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `ParagraphText`                      |
+| Setext underline decision                         | `is_setext_underline_seq` | All lines and classifier contexts                    | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `SetextUnderline`                    |
+| Emitted Setext ATX check                          | `is_atx_heading_seq`      | All generated lines and classifier contexts          | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `AtxHeading`                         |
+| Canonical-break decision                          | `is_canonical_break_seq`  | All lines and classifier contexts                    | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `ThematicBreak`                      |
+| Canonical seventy-underscore sequence             | `is_canonical_break_seq`  | The `canonical_break` sequence under default context | Same three scanner matcher contracts                                         | Thematic-break class; runtime string assembly remains outside Verus |
 
 _Table 1: The verification claim ledger._
 

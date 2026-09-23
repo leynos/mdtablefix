@@ -20,6 +20,7 @@ use crate::{
         is_atx_heading_line,
         is_setext_text_line,
         is_setext_underline_line,
+        quote_depth,
     },
     wrap::{
         BlockKind,
@@ -296,14 +297,8 @@ fn shared_prefix_len(a: &str, b: &str) -> usize {
 fn has_unmatched_prefix(line: &str, underline: &str) -> bool {
     let line_prefix = prefix_of_indent_or_quote(line);
     let underline_prefix = prefix_of_indent_or_quote(underline);
-    let line_depth = line[..line_prefix]
-        .bytes()
-        .filter(|byte| *byte == b'>')
-        .count();
-    let underline_depth = underline[..underline_prefix]
-        .bytes()
-        .filter(|byte| *byte == b'>')
-        .count();
+    let line_depth = quote_depth(&line[..line_prefix]);
+    let underline_depth = quote_depth(&underline[..underline_prefix]);
     line_depth != underline_depth
 }
 

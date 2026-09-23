@@ -81,6 +81,21 @@ fn normalizes_break_after_outdented_list_continuation() {
     assert_borrowed_break!(output[2]);
 }
 
+/// Underlines at a list item's content column stay inside that item.
+#[rstest]
+#[case(vec!["- Bar", "  ---"], 1)]
+#[case(vec!["- item", "   continuation", "  ---"], 2)]
+fn preserves_list_content_underlines(#[case] source: Vec<&str>, #[case] underline_index: usize) {
+    let input = source.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[underline_index], "  ---");
+    assert!(std::ptr::eq(
+        output[underline_index].as_ref(),
+        input[underline_index].as_str()
+    ));
+}
+
 #[test]
 fn test_format_breaks_ignores_code() {
     let input = lines_vec!["```", "---", "```"];

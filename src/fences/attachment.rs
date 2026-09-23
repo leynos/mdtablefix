@@ -106,9 +106,10 @@ where
 /// the break, so a document whose break precedes a code block would never reach
 /// a fixed point under `--breaks --fences`.
 ///
-/// The check is the one [`crate::breaks::format_breaks`] applies, so a line this
-/// module refuses to attach is exactly a line that pass rewrites. Lines indented
-/// by four columns or more are indented code, not breaks, and keep their
+/// Both passes use the shared line classifier for thematic breaks. The break
+/// pass also preserves Setext underlines in their preceding-line context, so
+/// declining a line here does not imply that pass will rewrite it. Lines
+/// indented by four columns or more are indented code and retain their
 /// specifier behaviour.
 fn is_thematic_break(line: &str) -> bool {
     classify_line(line, &ClassifyCtx::default()) == LineClass::ThematicBreak

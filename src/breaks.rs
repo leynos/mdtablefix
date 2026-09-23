@@ -9,6 +9,7 @@ use crate::{
         ListContinuationState,
         classify_line_with_body,
         is_canonical_break_line,
+        quote_depth,
         structural_content_indent,
     },
     wrap::FenceTracker,
@@ -70,7 +71,8 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         let prefix_len = line.len() - first_pass.body.len();
         let prefix = &line[..prefix_len];
         let follows_paragraph = previous.is_some_and(|(class, old_prefix, continuation_indent)| {
-            class == LineClass::ParagraphText
+            (class == LineClass::ParagraphText
+                || (class == LineClass::ListItem && continuation_indent.is_some()))
                 && quote_depth(old_prefix) == quote_depth(prefix)
                 && continuation_indent
                     .is_none_or(|indent| structural_content_indent(line, first_pass.body) >= indent)
@@ -92,16 +94,8 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
             Some((classified.class, prefix, continuation_indent))
         };
 
-        if classified.class == LineClass::ThematicBreak && is_canonical_break_line(line, &context) {
-            if line[..prefix_len].contains('>') {
-                out.push(Cow::Owned(format!(
-                    "{}{}",
-                    &line[..prefix_len],
-                    canonical_break()
-                )));
-            } else {
-                out.push(Cow::Borrowed(canonical_break()));
-            }
+        if is_canonical_break_line(line, &context) {
+            out.push(canonicalized_break(prefix));
         } else {
             out.push(Cow::Borrowed(line.as_str()));
         }
@@ -110,8 +104,14 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     out
 }
 
-/// Counts blockquote markers without treating indentation as prefix identity.
-fn quote_depth(prefix: &str) -> usize { prefix.bytes().filter(|byte| *byte == b'>').count() }
+/// Retains a quote prefix when emitting the shared canonical break line.
+fn canonicalized_break(prefix: &str) -> Cow<'static, str> {
+    if prefix.contains('>') {
+        Cow::Owned(format!("{prefix}{}", canonical_break()))
+    } else {
+        Cow::Borrowed(canonical_break())
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -32,6 +32,7 @@ fn converts_setext_headings(#[case] input: Vec<String>, #[case] expected: Vec<St
 #[case(vec!["```".into(), "Heading".into(), "---".into(), "```".into()])]
 #[case(vec!["Not a heading".into(), "--".into()])]
 #[case(vec!["- Item".into(), "-----".into()])]
+#[case(vec!["- Bar".into(), "  ---".into()])]
 #[case(vec![String::new(), "---".into()])]
 #[case(vec!["> Quote".into(), "-----".into()])]
 #[case(vec!["- item".into(), "  continuation".into(), "---".into()])]

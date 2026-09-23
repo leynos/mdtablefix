@@ -29,14 +29,19 @@ pub(crate) struct ListContinuationState {
     active: Option<(usize, usize)>,
 }
 
+/// Counts structural quote markers in a scanner-bounded prefix.
+pub(crate) fn quote_depth(prefix: &str) -> usize {
+    prefix.bytes().filter(|byte| *byte == b'>').count()
+}
+
 impl ListContinuationState {
     /// Forgets a list at a fence or other explicit block boundary.
     pub(crate) fn reset(&mut self) { self.active = None; }
 
-    /// Records a source line and returns its list-continuation indentation.
+    /// Records a source line and returns the active list's content indentation.
     pub(crate) fn observe(&mut self, line: &str, classified: &ClassifiedLine<'_>) -> Option<usize> {
         let prefix = &line[..line.len() - classified.body.len()];
-        let quote_depth = prefix.bytes().filter(|byte| *byte == b'>').count();
+        let quote_depth = quote_depth(prefix);
         let indent = structural_content_indent(line, classified.body);
 
         if classified.class == LineClass::ListItem {
@@ -50,8 +55,9 @@ impl ListContinuationState {
             } else {
                 1
             };
-            self.active = Some((quote_depth, indent + marker_len + separator_width));
-            return None;
+            let required = indent + marker_len + separator_width;
+            self.active = Some((quote_depth, required));
+            return Some(required);
         }
 
         if classified.class != LineClass::ParagraphText {
@@ -59,11 +65,11 @@ impl ListContinuationState {
             return None;
         }
 
-        let is_continuation = self
-            .active
-            .is_some_and(|(depth, required)| depth == quote_depth && indent >= required);
-        if is_continuation {
-            Some(indent)
+        if let Some((depth, required)) = self.active
+            && depth == quote_depth
+            && indent >= required
+        {
+            Some(required)
         } else {
             self.reset();
             None
