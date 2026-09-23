@@ -15,7 +15,7 @@ static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
 
 /// Returns the canonical thematic break emitted by [`format_breaks`].
 #[must_use]
-pub fn canonical_break() -> &'static str { THEMATIC_BREAK_LINE.as_str() }
+pub(crate) fn canonical_break() -> &'static str { THEMATIC_BREAK_LINE.as_str() }
 
 /// Normalize thematic breaks outside fenced code blocks.
 ///

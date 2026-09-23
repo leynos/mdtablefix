@@ -6,7 +6,7 @@ use regex::Regex;
 use tracing::debug;
 
 use crate::{
-    classify::{ClassifyCtx, LineClass, classify_line},
+    classify::{ClassifyCtx, LineClass, classify_line_with_body},
     wrap::FenceTracker,
 };
 
@@ -164,10 +164,14 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             .map_or_else(|| line.len(), |(i, _)| i);
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
-        if matches!(
-            classify_line(line, &ClassifyCtx::default()),
-            LineClass::AtxHeading | LineClass::ThematicBreak
-        ) {
+        let classified = classify_line_with_body(line, &ClassifyCtx::default());
+        let prefix = &line[..line.len() - classified.body.len()];
+        if !prefix.contains('>')
+            && matches!(
+                classified.class,
+                LineClass::AtxHeading | LineClass::ThematicBreak
+            )
+        {
             state.reset();
             out.push(line.clone());
             prev_blank = false;

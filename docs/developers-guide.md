@@ -90,6 +90,12 @@ production-used kernels. `make verus-selftest` runs `verus/smoke.rs`, whose
 deliberately false assertion must be rejected; it also fails when the runner
 does not reach Verus, so a skipped verifier cannot pass the check.
 
+`make verus-mutation` runs `scripts/check-atx-mutation.sh` to remove the space
+after the model's emitted ATX marker and confirm Verus rejects that assertion.
+It checks the exploratory model only, not the production conversion. The
+pull-request Verus workflow runs `make verus` and `make verus-selftest`; it
+does not run this mutation target.
+
 The pull-request workflow runs both targets on Ubuntu. It caches the
 version-specific `.verus` directory using the runner operating system,
 architecture, and pinned Verus version, then executes the same Makefile targets

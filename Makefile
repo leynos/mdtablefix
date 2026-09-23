@@ -96,7 +96,7 @@ verus-selftest: verus-install ## Confirm Verus rejects the deliberately false sm
 	cat "$$output"; \
 	rm -f "$$output"
 
-verus-mutation: verus-install ## Confirm ATX output proof rejects a missing space
+verus-mutation: verus-install ## Confirm exploratory ATX model rejects a missing space
 	PROVER_TOOLS='$(PROVER_TOOLS)' scripts/check-atx-mutation.sh .
 
 markdownlint: ## Lint Markdown files
