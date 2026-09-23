@@ -8,8 +8,7 @@ proof_file="${proof_dir}/lib.rs"
 output_file="${proof_dir}/verus.out"
 
 cleanup() {
-    rm -f "${proof_file}" "${output_file}"
-    rmdir "${proof_dir}"
+    rm -rf -- "${proof_dir}"
 }
 trap cleanup EXIT
 
@@ -27,5 +26,9 @@ if env -u RUSTUP_TOOLCHAIN ${PROVER_TOOLS:?PROVER_TOOLS must be set} verus run \
     exit 1
 fi
 
-grep -Fq "verification results::" "${output_file}"
-grep -Fq "assertion failed" "${output_file}"
+if ! grep -Fq "verification results::" "${output_file}" || \
+    ! grep -Fq "assertion failed" "${output_file}"; then
+    cat "${output_file}"
+    echo "ATX mutation did not reach a failed proof assertion" >&2
+    exit 1
+fi
