@@ -63,18 +63,19 @@ fn assess_keeps_a_byte_order_mark() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A file that cannot be read is an error rather than an unchanged file.
-#[test]
-fn assess_fails_for_a_missing_file() -> anyhow::Result<()> {
+/// Unreadable paths are errors rather than unchanged files.
+#[rstest]
+#[case::missing_file("missing.md", "reading a missing file must fail")]
+#[case::outside_capability("../escape.md", "a path outside the capability must fail")]
+fn assess_rejects_an_unreadable_path(
+    #[case] path: &str,
+    #[case] reason: &str,
+) -> anyhow::Result<()> {
     let (_dir, directory) = fixture("clean.md", ALIGNED)?;
 
-    let result = assess(
-        &readable(&directory)?,
-        Utf8Path::new("missing.md"),
-        &identity,
-    );
+    let result = assess(&readable(&directory)?, Utf8Path::new(path), &identity);
 
-    assert!(result.is_err(), "reading a missing file must fail");
+    assert!(result.is_err(), "{reason}");
     Ok(())
 }
 
@@ -287,21 +288,5 @@ fn list_files_prints_one_line_per_selected_path(
     // escaping belongs to the line a reader parses, not to the name itself.
     assert_eq!(report.display_path, display_path);
     assert!(!report.is_changed, "a listing assesses no content");
-    Ok(())
-}
-
-/// The capability names a file inside it, so a path outside the capability is
-/// not addressable at all.
-#[test]
-fn assess_declines_a_path_outside_the_capability() -> anyhow::Result<()> {
-    let (_dir, directory) = fixture("clean.md", ALIGNED)?;
-
-    let result = assess(
-        &readable(&directory)?,
-        Utf8Path::new("../escape.md"),
-        &identity,
-    );
-
-    assert!(result.is_err(), "a path outside the capability must fail");
     Ok(())
 }
