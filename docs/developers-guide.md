@@ -107,10 +107,11 @@ The `verified_kernel_function!` and `verified_loop_function!` macros belong to
 Verus, adding contracts and loop invariants only in the proof build. Use them
 only in the classifier kernel, its predicate module, and its consumer module;
 callers use the `&str` boundary in `src/classify.rs`. The consumer predicates
-for Setext and thematic-break decisions call `classify_seq` directly. A new
-scanner predicate should carry a narrow contract about its characters and
-cursor, then be proved from the same body before the top-level classifier
-refinement relies on it.
+for Setext and thematic-break decisions call `classify_seq` directly. Setext
+conversion also checks the assembled replacement with the verified ATX
+predicate before emitting it. A new scanner predicate should carry a narrow
+contract about its characters and cursor, then be proved from the same body
+before the top-level classifier refinement relies on it.
 
 ## Internal API reference
 

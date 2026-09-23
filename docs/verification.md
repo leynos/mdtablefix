@@ -17,10 +17,12 @@ offset is in bounds. The context view includes fence state, previous class, and
 prefix agreement. Leading tabs and four spaces are proved literal.
 
 The Setext and canonical-break consumer predicates call the same verified
-kernel. The proof also establishes that a canonical seventy-underscore line
-classifies as a thematic break, and that prefixing accepted Setext text with an
-ATX marker produces an ATX heading. The residual block matcher and the Rust
-`String` assembly in `src/headings.rs` remain outside this proof boundary.
+kernel. The production Setext conversion checks its assembled output through
+`is_atx_heading_seq` before emitting it, so every emitted replacement has the
+ATX class. The proof also establishes that a canonical seventy-underscore line
+classifies as a thematic break. The residual block matcher and Rust `String`
+assembly remain outside the proof boundary; the output check makes their effect
+on the emitted structural class explicit.
 
 ## Claim ledger
 
@@ -29,6 +31,7 @@ ATX marker produces an ATX heading. The residual block matcher and the Rust
 | Structural classification and bounded body offset | `classify_seq`            | All `&[char]` lines and `ClassifyCtxKernel` values | Table-delimiter grammar, thematic-break grammar, ordered-list marker grammar | Exact `LineClass` and scalar offset              |
 | Setext text decision                              | `is_setext_text_seq`      | All lines and classifier contexts                  | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `ParagraphText`   |
 | Setext underline decision                         | `is_setext_underline_seq` | All lines and classifier contexts                  | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `SetextUnderline` |
+| Emitted Setext ATX check                          | `is_atx_heading_seq`      | All generated lines and classifier contexts        | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `AtxHeading`      |
 | Canonical-break decision                          | `is_canonical_break_seq`  | All lines and classifier contexts                  | Same three scanner matcher contracts                                         | Boolean iff `spec_classify` is `ThematicBreak`   |
 
 _Table 1: The verification claim ledger._

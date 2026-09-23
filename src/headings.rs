@@ -12,7 +12,13 @@
 use tracing::trace;
 
 use crate::{
-    classify::{ClassifyCtx, LineClass, is_setext_text_line, is_setext_underline_line},
+    classify::{
+        ClassifyCtx,
+        LineClass,
+        is_atx_heading_line,
+        is_setext_text_line,
+        is_setext_underline_line,
+    },
     wrap::{
         BlockKind,
         FenceTracker,
@@ -37,11 +43,13 @@ pub fn convert_setext_headings(lines: &[String]) -> Vec<String> {
         let line = &lines[idx];
 
         if setext_text_lines[idx]
-            && let Some((level, prefix_len, text)) =
-                detect_setext_heading(line, lines.get(idx + 1).map(String::as_str), link_matcher)
+            && let Some(emitted) = detect_verified_setext_heading(
+                line,
+                lines.get(idx + 1).map(String::as_str),
+                link_matcher,
+            )
         {
-            let prefix = &line[..prefix_len];
-            out.push(convert_setext(prefix, level, &text));
+            out.push(emitted);
             idx += 2;
             continue;
         }
@@ -72,8 +80,12 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
 
         if !fence.is_fence_marker
             && !fence.is_in_fence
-            && detect_setext_heading(line, lines.get(idx + 1).map(String::as_str), link_matcher)
-                .is_some()
+            && detect_verified_setext_heading(
+                line,
+                lines.get(idx + 1).map(String::as_str),
+                link_matcher,
+            )
+            .is_some()
         {
             setext_text_lines[idx] = true;
             idx += 2;
@@ -83,6 +95,17 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
     }
 
     setext_text_lines
+}
+
+/// Builds a Setext replacement only when the verified classifier sees ATX output.
+fn detect_verified_setext_heading(
+    line: &str,
+    underline: Option<&str>,
+    link_matcher: LinkReferenceMatcher,
+) -> Option<String> {
+    let (level, prefix_len, text) = detect_setext_heading(line, underline, link_matcher)?;
+    let emitted = convert_setext(&line[..prefix_len], level, &text);
+    is_atx_heading_line(&emitted, &ClassifyCtx::default()).then_some(emitted)
 }
 
 /// Parses a Setext heading pair and returns its level, shared prefix length, and text.
@@ -272,8 +295,8 @@ fn prefix_of_indent_or_quote(text: &str) -> usize {
 
 /// Builds an ATX heading while retaining the source indentation or blockquote prefix.
 ///
-/// The structural conversion decision is verified through the production
-/// classifier. This string assembly remains outside the executable proof.
+/// The structural conversion decision and emitted ATX class are checked
+/// through the production classifier. String assembly stays at this boundary.
 fn convert_setext(prefix: &str, level: usize, text: &str) -> String {
     let mut heading = String::new();
     heading.push_str(prefix);

@@ -33,21 +33,28 @@ pub fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
 #[must_use]
 pub(crate) fn is_setext_text_line(line: &str, ctx: &ClassifyCtx) -> bool {
     let chars = line.chars().collect::<Vec<_>>();
-    crate::classify_kernel::is_setext_text_seq(&chars, ctx)
+    crate::classify_kernel::consumers::is_setext_text_seq(&chars, ctx)
 }
 
 /// Tests whether a Setext underline follows compatible paragraph text.
 #[must_use]
 pub(crate) fn is_setext_underline_line(line: &str, ctx: &ClassifyCtx) -> bool {
     let chars = line.chars().collect::<Vec<_>>();
-    crate::classify_kernel::is_setext_underline_seq(&chars, ctx)
+    crate::classify_kernel::consumers::is_setext_underline_seq(&chars, ctx)
 }
 
 /// Tests whether a line should become the canonical thematic break.
 #[must_use]
 pub(crate) fn is_canonical_break_line(line: &str, ctx: &ClassifyCtx) -> bool {
     let chars = line.chars().collect::<Vec<_>>();
-    crate::classify_kernel::is_canonical_break_seq(&chars, ctx)
+    crate::classify_kernel::consumers::is_canonical_break_seq(&chars, ctx)
+}
+
+/// Confirms that a generated Setext replacement is an ATX heading.
+#[must_use]
+pub(crate) fn is_atx_heading_line(line: &str, ctx: &ClassifyCtx) -> bool {
+    let chars = line.chars().collect::<Vec<_>>();
+    crate::classify_kernel::consumers::is_atx_heading_seq(&chars, ctx)
 }
 
 /// Classifies a source line and maps the kernel's scalar offset to UTF-8.

@@ -34,3 +34,13 @@ ensures(result => result == (crate::spec_classify(chars@, ctx@) == LineClass::Th
     matches!(classify_seq(chars, ctx).class, LineClass::ThematicBreak)
 }
 }
+
+verified_kernel_function! {
+/// Confirms that emitted Setext replacement is structurally an ATX heading.
+#[must_use]
+pub(crate) fn is_atx_heading_seq(chars: &[char], ctx: &ClassifyCtxKernel) -> bool;
+ensures(result => result == (crate::spec_classify(chars@, ctx@) == LineClass::AtxHeading));
+{
+    matches!(classify_seq(chars, ctx).class, LineClass::AtxHeading)
+}
+}

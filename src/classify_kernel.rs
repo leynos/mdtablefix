@@ -95,10 +95,9 @@ macro_rules! verified_kernel_function {
 }
 
 #[path = "classify_kernel_consumers.rs"]
-mod consumers;
+pub(crate) mod consumers;
 #[path = "classify_kernel_predicates.rs"]
 mod predicates;
-pub(crate) use consumers::{is_canonical_break_seq, is_setext_text_seq, is_setext_underline_seq};
 use predicates::{
     body_starts_with_pipe,
     is_atx_heading,
@@ -354,7 +353,6 @@ after {
     (cursor, content_indent >= 4)
 }
 }
-
 verified_kernel_function! {
 /// Checks a blockquote marker without consuming the cursor.
 fn has_quote_prefix(chars: &[char], cursor: usize, column: usize) -> bool;
