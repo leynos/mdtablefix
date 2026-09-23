@@ -4,6 +4,7 @@ use std::borrow::Cow;
 
 use crate::{
     classify::{
+        ClassifiedLine,
         ClassifyCtx,
         LineClass,
         ListContinuationState,
@@ -20,6 +21,73 @@ pub const THEMATIC_BREAK_LEN: usize = 70;
 /// Shared replacement line so every thematic break can be returned without allocation.
 static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| "_".repeat(THEMATIC_BREAK_LEN));
+
+/// Context retained between adjacent lines in the break pass.
+#[derive(Default)]
+struct BreakLineState {
+    /// Prior class, quote depth, and list content column, when available.
+    previous: Option<(LineClass, usize, Option<usize>)>,
+    /// Active list indentation tracked for Setext decisions.
+    lists: ListContinuationState,
+}
+
+impl BreakLineState {
+    /// Forgets context at a fenced-code boundary.
+    fn reset(&mut self) {
+        self.previous = None;
+        self.lists.reset();
+    }
+
+    /// Selects the classifier context for the next source line.
+    fn context(&self, line: &str, first_pass: &ClassifiedLine<'_>, depth: usize) -> ClassifyCtx {
+        if self.continues_paragraph(line, first_pass, depth) {
+            ClassifyCtx::following(LineClass::ParagraphText, true)
+        } else {
+            ClassifyCtx::default()
+        }
+    }
+
+    /// Checks whether the preceding text can supply a Setext prefix.
+    fn continues_paragraph(
+        &self,
+        line: &str,
+        classified: &ClassifiedLine<'_>,
+        depth: usize,
+    ) -> bool {
+        self.previous
+            .is_some_and(|(class, old_depth, continuation_indent)| {
+                (class == LineClass::ParagraphText
+                    || (class == LineClass::ListItem && continuation_indent.is_some()))
+                    && old_depth == depth
+                    && continuation_indent.is_none_or(|indent| {
+                        structural_content_indent(line, classified.body) >= indent
+                    })
+            })
+    }
+
+    /// Records a structural line for the next classifier decision.
+    fn observe(
+        &mut self,
+        line: &str,
+        classified: &ClassifiedLine<'_>,
+        depth: usize,
+        link_matcher: LinkReferenceMatcher,
+    ) {
+        let is_residual_block = classified.class == LineClass::ParagraphText
+            && classify_residual_block(classified.body.trim(), link_matcher).is_some();
+        let continuation_indent = if is_residual_block {
+            self.lists.reset();
+            None
+        } else {
+            self.lists.observe(line, classified)
+        };
+        self.previous = if classified.class == LineClass::Blank || is_residual_block {
+            None
+        } else {
+            Some((classified.class, depth, continuation_indent))
+        };
+    }
+}
 
 /// Returns the canonical thematic break emitted by [`format_breaks`].
 #[must_use]
@@ -56,14 +124,12 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     // Track fenced code blocks consistently while formatting breaks.
     let mut fences = FenceTracker::default();
     let link_matcher = LinkReferenceMatcher::production();
-    let mut previous: Option<(LineClass, &str, Option<usize>)> = None;
-    let mut lists = ListContinuationState::default();
+    let mut state = BreakLineState::default();
 
     for line in lines {
         let fence = fences.observe_source_line(line);
         if fence.is_fence_marker || fence.is_in_fence {
-            previous = None;
-            lists.reset();
+            state.reset();
             out.push(Cow::Borrowed(line.as_str()));
             continue;
         }
@@ -71,36 +137,14 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         let first_pass = classify_line_with_body(line, &ClassifyCtx::default());
         let prefix_len = line.len() - first_pass.body.len();
         let prefix = &line[..prefix_len];
-        let follows_paragraph = previous.is_some_and(|(class, old_prefix, continuation_indent)| {
-            (class == LineClass::ParagraphText
-                || (class == LineClass::ListItem && continuation_indent.is_some()))
-                && quote_depth(old_prefix) == quote_depth(prefix)
-                && continuation_indent
-                    .is_none_or(|indent| structural_content_indent(line, first_pass.body) >= indent)
-        });
-        let context = if follows_paragraph {
-            ClassifyCtx::following(LineClass::ParagraphText, true)
-        } else {
-            ClassifyCtx::default()
-        };
-        let classified = if follows_paragraph {
-            classify_line_with_body(line, &context)
-        } else {
+        let depth = quote_depth(prefix);
+        let context = state.context(line, &first_pass, depth);
+        let classified = if context == ClassifyCtx::default() {
             first_pass
-        };
-        let is_residual_block = classified.class == LineClass::ParagraphText
-            && classify_residual_block(classified.body.trim(), link_matcher).is_some();
-        let continuation_indent = if is_residual_block {
-            lists.reset();
-            None
         } else {
-            lists.observe(line, &classified)
+            classify_line_with_body(line, &context)
         };
-        previous = if classified.class == LineClass::Blank || is_residual_block {
-            None
-        } else {
-            Some((classified.class, prefix, continuation_indent))
-        };
+        state.observe(line, &classified, depth, link_matcher);
 
         if is_canonical_break_line(line, &context) {
             out.push(canonicalized_break(prefix));

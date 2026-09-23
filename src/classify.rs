@@ -49,27 +49,7 @@ impl ListContinuationState {
         let indent = structural_content_indent(line, classified.body);
 
         if classified.class == LineClass::ListItem {
-            let marker = classified.body.trim_start_matches([' ', '\t']);
-            let marker_len = marker
-                .chars()
-                .take_while(|ch| !matches!(ch, ' ' | '\t'))
-                .count();
-            let marker_end = indent + marker_len;
-            let mut content_column = marker_end;
-            for ch in marker.chars().skip(marker_len) {
-                match ch {
-                    ' ' => content_column += 1,
-                    '\t' => content_column += 4 - content_column % 4,
-                    _ => break,
-                }
-            }
-            let separator_width = content_column - marker_end;
-            let separator_width = if (1..=4).contains(&separator_width) {
-                separator_width
-            } else {
-                1
-            };
-            let required = indent + marker_len + separator_width;
+            let required = list_content_indent(classified.body, indent);
             self.active = Some((quote_depth, required));
             return Some(required);
         }
@@ -88,6 +68,31 @@ impl ListContinuationState {
             None
         }
     }
+}
+
+/// Calculates the content column after a list marker and its separator.
+fn list_content_indent(body: &str, indent: usize) -> usize {
+    let marker = body.trim_start_matches([' ', '\t']);
+    let marker_len = marker
+        .chars()
+        .take_while(|ch| !matches!(ch, ' ' | '\t'))
+        .count();
+    let marker_end = indent + marker_len;
+    let mut content_column = marker_end;
+    for ch in marker.chars().skip(marker_len) {
+        match ch {
+            ' ' => content_column += 1,
+            '\t' => content_column += 4 - content_column % 4,
+            _ => break,
+        }
+    }
+    let separator_width = content_column - marker_end;
+    let separator_width = if (1..=4).contains(&separator_width) {
+        separator_width
+    } else {
+        1
+    };
+    marker_end + separator_width
 }
 
 /// Measures indentation after blockquote markers, or at the outer line edge.
