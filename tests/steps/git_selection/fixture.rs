@@ -20,6 +20,7 @@ use std::{
     process::Command as ProcessCommand,
 };
 
+use anyhow::{Context, Result, anyhow, ensure};
 use assert_cmd::Command;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::ScenarioState;
@@ -79,20 +80,23 @@ pub struct GitSelectionState {
 /// The directory is created lazily rather than by a dedicated step so that the
 /// first `Given` in a scenario decides what kind of repository it is: that step
 /// writes the ignore file and runs `git init` into the directory this returns.
-/// A `Slot` is filled through `get_or_insert_with` because `get` requires
-/// `T: Clone`, which `TempDir` is not.
-pub fn repo_path(state: &GitSelectionState) -> PathBuf {
-    state
-        .repo
-        .get_or_insert_with(|| tempfile::tempdir().expect("create temporary directory"))
-        .path()
-        .to_path_buf()
+/// The slot is inspected by reference because `get` requires `T: Clone`,
+/// which `TempDir` is not. A new directory is stored only after creation
+/// succeeds, so a failed first use leaves the slot empty.
+pub fn repo_path(state: &GitSelectionState) -> Result<PathBuf> {
+    if let Some(path) = state.repo.with_ref(|repo| repo.path().to_path_buf()) {
+        return Ok(path);
+    }
+    let repo = tempfile::tempdir().context("create the fixture repository")?;
+    let path = repo.path().to_path_buf();
+    state.repo.set(repo);
+    Ok(path)
 }
 
 /// The directory the command runs in, which is the repository root unless a
 /// step moved it.
-pub fn run_directory(state: &GitSelectionState) -> PathBuf {
-    state.run_dir.get().unwrap_or_else(|| repo_path(state))
+pub fn run_directory(state: &GitSelectionState) -> Result<PathBuf> {
+    state.run_dir.get().map_or_else(|| repo_path(state), Ok)
 }
 
 /// Runs `git` in `directory` with the fixture's hardened environment, returning
@@ -100,7 +104,7 @@ pub fn run_directory(state: &GitSelectionState) -> PathBuf {
 ///
 /// A failed `git` is a legitimate result here: the fixture's merge is expected
 /// to conflict, and that is how the conflict is created rather than mocked.
-pub fn git_raw(directory: &Path, args: &[&str]) -> std::process::Output {
+pub fn git_raw(directory: &Path, args: &[&str]) -> Result<std::process::Output> {
     ProcessCommand::new("git")
         .current_dir(directory)
         .args(args)
@@ -114,34 +118,36 @@ pub fn git_raw(directory: &Path, args: &[&str]) -> std::process::Output {
         .env("GIT_COMMITTER_NAME", IDENTITY_NAME)
         .env("GIT_COMMITTER_EMAIL", IDENTITY_EMAIL)
         .output()
-        .expect("run git; the fixture needs it on PATH")
+        .with_context(|| format!("run git {args:?} in {}", directory.display()))
 }
 
 /// Runs `git` in `directory`, requiring it to succeed.
-pub fn git(directory: &Path, args: &[&str]) {
-    let output = git_raw(directory, args);
-    assert!(
+pub fn git(directory: &Path, args: &[&str]) -> Result<()> {
+    let output = git_raw(directory, args)?;
+    ensure!(
         output.status.success(),
         "git {args:?} failed with {}: {}",
         output.status,
         String::from_utf8_lossy(&output.stderr)
     );
+    Ok(())
 }
 
 /// Creates the parent directories of `path` and writes `content` there.
-pub fn write_fixture(path: &Path, content: &str) {
+pub fn write_fixture(path: &Path, content: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).expect("create the fixture's directory");
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create fixture directory {}", parent.display()))?;
     }
-    fs::write(path, content).expect("write a fixture");
+    fs::write(path, content).with_context(|| format!("write fixture {}", path.display()))
 }
 
 /// Writes `name` with a broken table, stages it, and commits it.
-pub fn commit_file(state: &GitSelectionState, name: &str, content: &str) {
-    let repo = repo_path(state);
-    write_fixture(&repo.join(name), content);
-    git(&repo, &["add", "--", name]);
-    git(&repo, &["commit", "-m", &format!("add {name}")]);
+pub fn commit_file(state: &GitSelectionState, name: &str, content: &str) -> Result<()> {
+    let repo = repo_path(state)?;
+    write_fixture(&repo.join(name), content)?;
+    git(&repo, &["add", "--", name])?;
+    git(&repo, &["commit", "-m", &format!("add {name}")])
 }
 
 /// Every fixture file under `root`, excluding `.git`, as a relative path paired
@@ -151,68 +157,89 @@ pub fn commit_file(state: &GitSelectionState, name: &str, content: &str) {
 /// rewrite through a link would show up twice: as a content change at the
 /// target, and as a type change here. `.git` is excluded because `git ls-files`
 /// may refresh the index it holds, which is not a change this tool made.
-pub fn snapshot(root: &Path) -> Vec<(String, Vec<u8>)> {
-    fn walk(root: &Path, directory: &Path, entries: &mut Vec<(String, Vec<u8>)>) {
-        for entry in fs::read_dir(directory).expect("read the fixture directory") {
-            let entry = entry.expect("read a fixture directory entry");
-            let path = entry.path();
-            let name = entry.file_name();
-            if name == OsStr::new(".git") {
-                continue;
-            }
-            // The key is spelled with `/` on every platform, because that is
-            // how the feature file and the steps name their files; a Windows
-            // separator here would make every lookup miss and read as a fixture
-            // file that was never written.
-            let relative = path
-                .strip_prefix(root)
-                .expect("every entry is beneath the root")
-                .components()
-                .map(|part| part.as_os_str().to_string_lossy().into_owned())
-                .collect::<Vec<_>>()
-                .join("/");
-            let metadata = fs::symlink_metadata(&path).expect("read fixture metadata");
-            if metadata.file_type().is_symlink() {
-                let target = fs::read_link(&path).expect("read the link target");
-                entries.push((relative, target.to_string_lossy().into_owned().into_bytes()));
-            } else if metadata.is_dir() {
-                walk(root, &path, entries);
-            } else {
-                entries.push((relative, fs::read(&path).expect("read a fixture")));
-            }
-        }
-    }
-
+pub fn snapshot(root: &Path) -> Result<Vec<(String, Vec<u8>)>> {
     let mut entries = Vec::new();
-    walk(root, root, &mut entries);
+    walk_snapshot(root, root, &mut entries)?;
     entries.sort();
-    entries
+    Ok(entries)
+}
+
+/// Walks one fixture directory and records its entries without following links.
+fn walk_snapshot(
+    root: &Path,
+    directory: &Path,
+    entries: &mut Vec<(String, Vec<u8>)>,
+) -> Result<()> {
+    for entry in fs::read_dir(directory)
+        .with_context(|| format!("read fixture directory {}", directory.display()))?
+    {
+        let entry = entry
+            .with_context(|| format!("read entry in fixture directory {}", directory.display()))?;
+        record_snapshot_entry(root, &entry, entries)?;
+    }
+    Ok(())
+}
+
+/// Records one entry, recursing only when it is a directory.
+fn record_snapshot_entry(
+    root: &Path,
+    entry: &fs::DirEntry,
+    entries: &mut Vec<(String, Vec<u8>)>,
+) -> Result<()> {
+    if entry.file_name() == OsStr::new(".git") {
+        return Ok(());
+    }
+    let path = entry.path();
+    // The key is spelled with `/` on every platform, because that is how the
+    // feature file and steps name their files; a Windows separator here would
+    // make every lookup miss and read as a fixture file never written.
+    let relative = path
+        .strip_prefix(root)
+        .with_context(|| format!("{} is outside {}", path.display(), root.display()))?
+        .components()
+        .map(|part| part.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/");
+    let metadata = fs::symlink_metadata(&path)
+        .with_context(|| format!("read fixture metadata {}", path.display()))?;
+    if metadata.file_type().is_symlink() {
+        let target = fs::read_link(&path)
+            .with_context(|| format!("read fixture link {}", path.display()))?;
+        entries.push((relative, target.to_string_lossy().into_owned().into_bytes()));
+    } else if metadata.is_dir() {
+        walk_snapshot(root, &path, entries)?;
+    } else {
+        let bytes = fs::read(&path).with_context(|| format!("read fixture {}", path.display()))?;
+        entries.push((relative, bytes));
+    }
+    Ok(())
 }
 
 /// The bytes the fixture recorded for `name` before the run.
-pub fn before_bytes(state: &GitSelectionState, name: &str) -> Vec<u8> {
-    state
+pub fn before_bytes(state: &GitSelectionState, name: &str) -> Result<Vec<u8>> {
+    let before = state
         .before
         .get()
-        .expect("the run must capture the fixture's bytes first")
+        .context("the run must capture the fixture's bytes first")?;
+    before
         .into_iter()
         .find(|(path, _)| path == name)
-        .unwrap_or_else(|| panic!("{name} was not part of the fixture before the run"))
-        .1
+        .map(|(_, bytes)| bytes)
+        .ok_or_else(|| anyhow!("{name} was not part of the fixture before the run"))
 }
 
 /// The most recent run, which every `Then` step reads.
-pub fn last_run(state: &GitSelectionState) -> Run {
+pub fn last_run(state: &GitSelectionState) -> Result<Run> {
     state
         .run
         .get()
-        .expect("the scenario must run mdtablefix before asserting on it")
+        .context("the scenario must run mdtablefix before asserting on it")
 }
 
 /// Runs the binary once in `directory`, without recording it.
-pub fn run_once(directory: &Path, flags: &str) -> Run {
+pub fn run_once(directory: &Path, flags: &str) -> Result<Run> {
     let output = Command::cargo_bin("mdtablefix")
-        .expect("cargo binary")
+        .context("locate the mdtablefix test binary")?
         .current_dir(directory)
         .args(flags.split_whitespace())
         .env("GIT_CONFIG_NOSYSTEM", "1")
@@ -225,11 +252,11 @@ pub fn run_once(directory: &Path, flags: &str) -> Run {
         // rather than assumed: the assertion is that standard output is empty.
         .write_stdin(RAGGED)
         .output()
-        .expect("run mdtablefix");
+        .with_context(|| format!("run mdtablefix in {}", directory.display()))?;
 
-    Run {
+    Ok(Run {
         status: output.status.code().unwrap_or(-1),
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    }
+    })
 }
