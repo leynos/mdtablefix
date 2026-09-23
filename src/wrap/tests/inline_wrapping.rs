@@ -83,38 +83,38 @@ proptest::proptest! {
 
 #[test]
 fn attach_punctuation_appends_to_previous_code_line() {
-    let mut lines = vec!["wrap `code`".to_string()];
+    let mut lines = vec!["wrap `code`".to_owned()];
     let current = String::new();
     assert!(attach_punctuation_to_previous_line(
         lines.as_mut_slice(),
         &current,
         "!",
     ));
-    assert_eq!(lines, vec!["wrap `code`!".to_string()]);
+    assert_eq!(lines, vec!["wrap `code`!".to_owned()]);
 }
 
 #[test]
 fn attach_punctuation_requires_empty_current_buffer() {
-    let mut lines = vec!["`code`".to_string()];
-    let current = " pending".to_string();
+    let mut lines = vec!["`code`".to_owned()];
+    let current = " pending".to_owned();
     assert!(!attach_punctuation_to_previous_line(
         lines.as_mut_slice(),
         &current,
         "!",
     ));
-    assert_eq!(lines, vec!["`code`".to_string()]);
+    assert_eq!(lines, vec!["`code`".to_owned()]);
 }
 
 #[test]
 fn attach_punctuation_ignores_non_code_suffix() {
-    let mut lines = vec!["plain text".to_string()];
+    let mut lines = vec!["plain text".to_owned()];
     let current = String::new();
     assert!(!attach_punctuation_to_previous_line(
         lines.as_mut_slice(),
         &current,
         ".",
     ));
-    assert_eq!(lines, vec!["plain text".to_string()]);
+    assert_eq!(lines, vec!["plain text".to_owned()]);
 }
 
 #[test]
@@ -123,9 +123,9 @@ fn wrap_preserving_code_splits_after_consecutive_whitespace() {
     assert_eq!(
         lines,
         vec![
-            "alpha  ".to_string(),
-            "beta   ".to_string(),
-            "gamma".to_string()
+            "alpha  ".to_owned(),
+            "beta   ".to_owned(),
+            "gamma".to_owned()
         ]
     );
 }
@@ -228,10 +228,7 @@ fn wrap_preserving_code_keeps_bracket_reference_whole_after_code_span(#[case] re
     assert_bracket_reference_whole(&lines, reference);
     assert_eq!(
         lines,
-        vec![
-            BRACKET_REFERENCE_SEAM_HEAD.to_string(),
-            reference.to_string()
-        ]
+        vec![BRACKET_REFERENCE_SEAM_HEAD.to_owned(), reference.to_owned()]
     );
 }
 
@@ -393,7 +390,7 @@ attached while wrapping.
 #[test]
 fn wrap_preserving_code_glues_punctuation_after_code() {
     let lines = wrap_preserving_code("line with `code` !", 80);
-    assert_eq!(lines, vec!["line with `code`!".to_string()]);
+    assert_eq!(lines, vec!["line with `code`!".to_owned()]);
 }
 
 #[test]
@@ -406,8 +403,8 @@ fn wrap_preserving_code_breaks_between_inline_code_spans() {
     assert_eq!(
         lines,
         vec![
-            "Extensions (`.toml`, `.json`,".to_string(),
-            "`.json5`, `.yaml`, `.yml`).".to_string(),
+            "Extensions (`.toml`, `.json`,".to_owned(),
+            "`.json5`, `.yaml`, `.yml`).".to_owned(),
         ]
     );
 }
@@ -418,7 +415,7 @@ fn wrap_preserving_code_retains_punctuation_after_separate_spans() {
     let lines = wrap_preserving_code(text, 18);
     assert_eq!(
         lines,
-        vec!["Alpha `code`".to_string(), "`more`, trailing.".to_string(),]
+        vec!["Alpha `code`".to_owned(), "`more`, trailing.".to_owned(),]
     );
 }
 
@@ -434,7 +431,7 @@ fn wrap_preserving_code_strips_leading_carry_whitespace(
     let lines = wrap_preserving_code(input, width);
     assert_eq!(
         lines,
-        expected.iter().map(|&s| s.to_string()).collect::<Vec<_>>()
+        expected.iter().map(|&s| s.to_owned()).collect::<Vec<_>>()
     );
     for line in lines.iter().skip(1) {
         assert!(
@@ -454,7 +451,7 @@ fn wrap_preserving_code_preserves_intentional_leading_whitespace_on_first_line(
     let lines = wrap_preserving_code(input, width);
     assert_eq!(
         lines,
-        expected.iter().map(|&s| s.to_string()).collect::<Vec<_>>()
+        expected.iter().map(|&s| s.to_owned()).collect::<Vec<_>>()
     );
     assert!(
         lines[0].starts_with("  "),
@@ -477,7 +474,7 @@ fn preserves_trailing_spaces(#[case] input: &str, #[case] width: usize, #[case] 
     let out = wrap_preserving_code(input, width);
     assert_eq!(
         out,
-        expected.iter().map(|&s| s.to_string()).collect::<Vec<_>>()
+        expected.iter().map(|&s| s.to_owned()).collect::<Vec<_>>()
     );
 }
 
@@ -493,7 +490,7 @@ fn no_split_forced_flush_no_trim(
     let out = wrap_preserving_code(input, width);
     assert_eq!(
         out,
-        expected.iter().map(|&s| s.to_string()).collect::<Vec<_>>()
+        expected.iter().map(|&s| s.to_owned()).collect::<Vec<_>>()
     );
 }
 

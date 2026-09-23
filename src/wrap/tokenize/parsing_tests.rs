@@ -145,7 +145,7 @@ fn parse_link_or_image_preserves_reference_style_link() {
 
     assert_eq!(
         parse_link_or_image(input, 0),
-        (input.to_string(), input.len())
+        (input.to_owned(), input.len())
     );
 }
 

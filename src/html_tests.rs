@@ -12,7 +12,7 @@ use super::*;
 #[test]
 fn element_detection() {
     let dom: RcDom =
-        parse_document(RcDom::default(), ParseOpts::default()).one("<table></table>".to_string());
+        parse_document(RcDom::default(), ParseOpts::default()).one("<table></table>".to_owned());
     let html = dom.document.children.borrow()[0].clone();
     let body = html.children.borrow()[1].clone();
     let table = body.children.borrow()[0].clone();
@@ -24,7 +24,7 @@ fn element_detection() {
 #[test]
 fn table_cell_detection() {
     let dom: RcDom = parse_document(RcDom::default(), ParseOpts::default())
-        .one("<table><tr><th>a</th><td>b</td></tr></table>".to_string());
+        .one("<table><tr><th>a</th><td>b</td></tr></table>".to_owned());
     let html = dom.document.children.borrow()[0].clone();
     let body = html.children.borrow()[1].clone();
     let table = body.children.borrow()[0].clone();
@@ -38,7 +38,7 @@ fn table_cell_detection() {
 
 #[test]
 fn convert_html_tables_ignores_mid_line_table_tags() {
-    let input = vec!["prefix <table><tr><td>Cell</td></tr></table>".to_string()];
+    let input = vec!["prefix <table><tr><td>Cell</td></tr></table>".to_owned()];
 
     assert_eq!(convert_html_tables(&input), input);
 }

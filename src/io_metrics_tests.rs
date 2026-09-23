@@ -96,9 +96,9 @@ fn metrics(snapshot: Snapshot) -> Vec<Recorded> {
             let key = composite.key();
             let labels = key
                 .labels()
-                .map(|label| (label.key().to_string(), label.value().to_string()))
+                .map(|label| (label.key().to_owned(), label.value().to_owned()))
                 .collect();
-            let name = key.name().to_string();
+            let name = key.name().to_owned();
             let value = match value {
                 DebugValue::Counter(count) => Value::Counter(count),
                 DebugValue::Histogram(samples) => {

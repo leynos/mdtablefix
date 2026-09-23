@@ -20,17 +20,17 @@ fn sep_index_within_bounds() {
 #[test]
 fn reflow_table_preserves_leading_empty_marker_character_as_payload() {
     let lines = vec![
-        "| Header |".to_string(),
-        "| --- |".to_string(),
-        "| \u{1d} |".to_string(),
+        "| Header |".to_owned(),
+        "| --- |".to_owned(),
+        "| \u{1d} |".to_owned(),
     ];
 
     assert_eq!(
         reflow_table(&lines),
         vec![
-            "| Header |".to_string(),
-            "| ------ |".to_string(),
-            "| \u{1d}      |".to_string(),
+            "| Header |".to_owned(),
+            "| ------ |".to_owned(),
+            "| \u{1d}      |".to_owned(),
         ]
     );
 }
@@ -38,17 +38,17 @@ fn reflow_table_preserves_leading_empty_marker_character_as_payload() {
 #[test]
 fn reflow_table_preserves_escaped_pipe_sentinel_character_as_payload() {
     let lines = vec![
-        "| Header | Value |".to_string(),
-        "| --- | --- |".to_string(),
-        "| \u{1f} | data |".to_string(),
+        "| Header | Value |".to_owned(),
+        "| --- | --- |".to_owned(),
+        "| \u{1f} | data |".to_owned(),
     ];
 
     assert_eq!(
         reflow_table(&lines),
         vec![
-            "| Header | Value |".to_string(),
-            "| ------ | ----- |".to_string(),
-            "| \u{1f}      | data  |".to_string(),
+            "| Header | Value |".to_owned(),
+            "| ------ | ----- |".to_owned(),
+            "| \u{1f}      | data  |".to_owned(),
         ]
     );
 }
@@ -56,21 +56,18 @@ fn reflow_table_preserves_escaped_pipe_sentinel_character_as_payload() {
 #[test]
 fn detect_row_mismatch() {
     let rows = vec![
-        vec!["a".to_string(), "b".to_string()],
-        vec!["1".to_string(), "2".to_string()],
+        vec!["a".to_owned(), "b".to_owned()],
+        vec!["1".to_owned(), "2".to_owned()],
     ];
     assert!(!rows_mismatched(&rows, false));
 
-    let mismatch = vec![
-        vec!["a".to_string(), "b".to_string()],
-        vec!["1".to_string()],
-    ];
+    let mismatch = vec![vec!["a".to_owned(), "b".to_owned()], vec!["1".to_owned()]];
     assert!(rows_mismatched(&mismatch, false));
 
     let with_sep = vec![
-        vec!["a".to_string(), "b".to_string()],
-        vec!["---".to_string(), "---".to_string()],
-        vec!["1".to_string(), "2".to_string()],
+        vec!["a".to_owned(), "b".to_owned()],
+        vec!["---".to_owned(), "---".to_owned()],
+        vec!["1".to_owned(), "2".to_owned()],
     ];
     assert!(!rows_mismatched(&with_sep, false));
 
@@ -78,10 +75,10 @@ fn detect_row_mismatch() {
 }
 
 #[rstest]
-#[case(vec![2], vec!["---".to_string()], vec!["---".to_string()])]
-#[case(vec![5], vec![":---".to_string()], vec![":----".to_string()])]
-#[case(vec![5], vec!["---:".to_string()], vec!["----:".to_string()])]
-#[case(vec![5], vec![":--:".to_string()], vec![":---:".to_string()])]
+#[case(vec![2], vec!["---".to_owned()], vec!["---".to_owned()])]
+#[case(vec![5], vec![":---".to_owned()], vec![":----".to_owned()])]
+#[case(vec![5], vec!["---:".to_owned()], vec!["----:".to_owned()])]
+#[case(vec![5], vec![":--:".to_owned()], vec![":---:".to_owned()])]
 fn format_separator_cells_preserves_alignment_markers(
     #[case] widths: Vec<usize>,
     #[case] cells: Vec<String>,
@@ -92,7 +89,7 @@ fn format_separator_cells_preserves_alignment_markers(
 
 #[test]
 fn format_separator_cells_returns_empty_when_counts_mismatch() {
-    let sep_cells = vec!["---".to_string()];
+    let sep_cells = vec!["---".to_owned()];
 
     assert!(format_separator_cells(&[3, 4], &sep_cells).is_empty());
 }
@@ -102,7 +99,7 @@ fn reflow_table_returns_lone_single_cell_line_unchanged() {
     // A single pipe-prefixed line with no separator row is a stray pipe
     // (for example a shell pipeline continuation), not a table. It must pass
     // through verbatim rather than gaining a fabricated trailing pipe.
-    let lines = vec!["| tee /tmp/test.log".to_string()];
+    let lines = vec!["| tee /tmp/test.log".to_owned()];
 
     assert_eq!(reflow_table(&lines), lines);
 }
@@ -114,14 +111,14 @@ fn reflow_table_keeps_the_delimiter_row_of_a_table_with_an_empty_header() {
     // delimiter row to a data row and left two delimiter-shaped rows for
     // later passes to consume in turn, so the table never settled.
     let lines = vec![
-        "|  |  |".to_string(),
-        "| --- | --- |".to_string(),
-        "| a |  |".to_string(),
+        "|  |  |".to_owned(),
+        "| --- | --- |".to_owned(),
+        "| a |  |".to_owned(),
     ];
 
     assert_eq!(
         reflow_table(&lines),
-        vec!["| a   |     |".to_string(), "| --- | --- |".to_string()]
+        vec!["| a   |     |".to_owned(), "| --- | --- |".to_owned()]
     );
 }
 
@@ -134,23 +131,23 @@ fn reflow_table_keeps_the_genuine_delimiter_row_below_a_malformed_header() {
     // delimiter cell admits no embedded whitespace, so the genuine row is the
     // one extracted and the malformed row stays data.
     let lines = vec![
-        "| - - |".to_string(),
-        "| --- |".to_string(),
-        "| a |".to_string(),
+        "| - - |".to_owned(),
+        "| --- |".to_owned(),
+        "| a |".to_owned(),
     ];
     let mut scannable = lines.clone();
 
     assert_eq!(
         extract_separator_line(&mut scannable),
-        Some("| --- |".to_string())
+        Some("| --- |".to_owned())
     );
-    assert_eq!(scannable, vec!["| - - |".to_string(), "| a |".to_string()]);
+    assert_eq!(scannable, vec!["| - - |".to_owned(), "| a |".to_owned()]);
     assert_eq!(
         reflow_table(&lines),
         vec![
-            "| - - |".to_string(),
-            "| --- |".to_string(),
-            "| a   |".to_string(),
+            "| - - |".to_owned(),
+            "| --- |".to_owned(),
+            "| a   |".to_owned(),
         ]
     );
 }
@@ -179,14 +176,14 @@ fn reflow_table_keeps_a_header_whose_lone_dash_tempts_the_delimiter_scan() {
     // The real delimiter row was then laid out as text and the synthesized
     // one measured a column wider on every pass.
     let lines = vec![
-        "|  | - |".to_string(),
-        "| --- | --- |".to_string(),
-        "|  | aAAa |".to_string(),
+        "|  | - |".to_owned(),
+        "| --- | --- |".to_owned(),
+        "|  | aAAa |".to_owned(),
     ];
     let expected = vec![
-        "|     | -    |".to_string(),
-        "| --- | ---- |".to_string(),
-        "|     | aAAa |".to_string(),
+        "|     | -    |".to_owned(),
+        "| --- | ---- |".to_owned(),
+        "|     | aAAa |".to_owned(),
     ];
 
     assert_eq!(reflow_table(&lines), expected);
@@ -200,9 +197,9 @@ fn reflow_table_keeps_a_header_whose_lone_dash_tempts_the_delimiter_scan() {
 #[test]
 fn reflow_table_returns_original_lines_for_mismatched_separator_columns() {
     let lines = vec![
-        "| head |".to_string(),
-        "| --- | --- |".to_string(),
-        "| body |".to_string(),
+        "| head |".to_owned(),
+        "| --- | --- |".to_owned(),
+        "| body |".to_owned(),
     ];
 
     assert_eq!(reflow_table(&lines), lines);

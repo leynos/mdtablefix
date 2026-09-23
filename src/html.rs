@@ -38,7 +38,7 @@ fn node_text(handle: &Handle) -> String {
     if last_space {
         out.push(' ');
     }
-    out.trim_start().to_string()
+    out.trim_start().to_owned()
 }
 
 /// Reports whether a subtree is metadata or executable content excluded from cell text.
@@ -201,7 +201,7 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
     }
 
     if has_header {
-        let sep: Vec<String> = (0..col_count).map(|_| "---".to_string()).collect();
+        let sep: Vec<String> = (0..col_count).map(|_| "---".to_owned()).collect();
         out.insert(1, format!("| {} |", sep.join(" | ")));
     }
 
@@ -214,7 +214,7 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
 fn table_lines_to_markdown(lines: &[String]) -> Vec<String> {
     let indent: String = lines
         .first()
-        .map(|line| crate::textproc::leading_indent(line).to_string())
+        .map(|line| crate::textproc::leading_indent(line).to_owned())
         .unwrap_or_default();
     let html: String = lines.join("\n");
     let opts = ParseOpts::default();
@@ -267,7 +267,7 @@ impl HtmlTableState {
         let previous_depth = self.depth;
         let start_count = TABLE_TAG_RE.find_iter(trimmed).count();
         let end_count = TABLE_END_RE.find_iter(trimmed).count();
-        self.buf.push(line.to_string());
+        self.buf.push(line.to_owned());
         self.depth += start_count;
         if end_count > 0 {
             self.depth = self.depth.saturating_sub(end_count);
