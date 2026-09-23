@@ -4,6 +4,7 @@ use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+use anyhow::Context as _;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use driver::Mode;
@@ -77,24 +78,19 @@ fn open_dir(path: &std::path::Path) -> std::io::Result<Dir> {
 /// `Inputs::resolve` converts every positional argument once, before any file
 /// is analysed, so a path reaching the CLI's parent-directory boundary is
 /// already UTF-8.
-fn as_utf8(path: &std::path::Path) -> &Utf8Path {
-    Utf8Path::from_path(path).expect("the temporary directory path is UTF-8")
+fn as_utf8(path: &std::path::Path) -> anyhow::Result<&Utf8Path> {
+    Utf8Path::from_path(path).with_context(|| format!("path is not UTF-8: {}", path.display()))
 }
 
 /// Lists the sorted names of the entries in `path`.
-fn entry_names(path: &std::path::Path) -> Vec<String> {
+fn entry_names(path: &std::path::Path) -> anyhow::Result<Vec<String>> {
     let mut names: Vec<String> = fs::read_dir(path)
-        .expect("read directory")
-        .map(|entry| {
-            entry
-                .expect("read directory entry")
-                .file_name()
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect();
+        .with_context(|| format!("read directory: {}", path.display()))?
+        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+        .collect::<std::io::Result<_>>()
+        .with_context(|| format!("read entries in directory: {}", path.display()))?;
     names.sort();
-    names
+    Ok(names)
 }
 
 #[cfg(unix)]
@@ -105,8 +101,9 @@ fn can_write_as_root() -> bool {
 }
 
 #[cfg(unix)]
-fn set_mode(path: &std::path::Path, mode: u32) {
-    fs::set_permissions(path, fs::Permissions::from_mode(mode)).expect("set permissions");
+fn set_mode(path: &std::path::Path, mode: u32) -> anyhow::Result<()> {
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+        .with_context(|| format!("set permissions on {} to {mode:o}", path.display()))
 }
 
 #[rstest]
@@ -120,7 +117,8 @@ fn rewrite_in_place_leaves_no_temporary_file(no_opts: FormatOpts) {
 
     rewrite_in_place(&directory, path, no_opts).expect("rewrite in place");
 
-    assert_eq!(entry_names(dir.path()), vec!["sample.md"]);
+    let names = entry_names(dir.path()).expect("list directory entries");
+    assert_eq!(names, vec!["sample.md"]);
 }
 
 #[cfg(unix)]
@@ -133,7 +131,7 @@ fn rewrite_in_place_preserves_file_mode(no_opts: FormatOpts) {
     directory
         .write(path, "|A|B|\n|1|2|")
         .expect("write fixture");
-    set_mode(&absolute, 0o640);
+    set_mode(&absolute, 0o640).expect("set fixture file mode");
 
     rewrite_in_place(&directory, path, no_opts).expect("rewrite in place");
 
@@ -156,11 +154,11 @@ fn rewrite_in_place_keeps_original_when_write_fails(no_opts: FormatOpts) {
     directory.write(path, original).expect("write fixture");
     // A read-only directory blocks the temporary file, which is the point
     // at which the replacement would otherwise begin.
-    set_mode(dir.path(), 0o555);
+    set_mode(dir.path(), 0o555).expect("make fixture directory read-only");
 
     let result = rewrite_in_place(&directory, path, no_opts);
 
-    set_mode(dir.path(), 0o755);
+    set_mode(dir.path(), 0o755).expect("restore fixture directory mode");
     if can_write_as_root() {
         // Root ignores directory permission bits, so the failure path
         // cannot be induced and the assertions below would be vacuous.
@@ -172,7 +170,8 @@ fn rewrite_in_place_keeps_original_when_write_fails(no_opts: FormatOpts) {
         original,
         "a failed rewrite must leave the original byte-identical"
     );
-    assert_eq!(entry_names(dir.path()), vec!["sample.md"]);
+    let names = entry_names(dir.path()).expect("list directory entries");
+    assert_eq!(names, vec!["sample.md"]);
 }
 
 #[cfg(unix)]
@@ -186,7 +185,8 @@ fn rewrite_in_place_declines_symlinked_target(no_opts: FormatOpts) {
     // A relative target keeps the link resolvable inside the capability.
     std::os::unix::fs::symlink("real.md", &link).expect("create symlink");
     let (directory, name) =
-        open_file_parent(as_utf8(&link)).expect("open the CLI's directory capability");
+        open_file_parent(as_utf8(&link).expect("convert symlink path to UTF-8"))
+            .expect("open the CLI's directory capability");
 
     let err = rewrite_in_place(&directory, &name, no_opts).expect_err("symlink must be declined");
 
@@ -204,7 +204,8 @@ fn rewrite_in_place_declines_symlinked_target(no_opts: FormatOpts) {
             .is_symlink(),
         "the symlink itself must survive"
     );
-    assert_eq!(entry_names(dir.path()), vec!["link.md", "real.md"]);
+    let names = entry_names(dir.path()).expect("list directory entries");
+    assert_eq!(names, vec!["link.md", "real.md"]);
 }
 
 #[test]
@@ -213,7 +214,8 @@ fn capability_scoped_failure_removes_temporary_file() {
     let target = dir.path().join("target.md");
     fs::create_dir(&target).expect("create target directory");
     let (directory, name) =
-        open_file_parent(as_utf8(&target)).expect("open the CLI's directory capability");
+        open_file_parent(as_utf8(&target).expect("convert target path to UTF-8"))
+            .expect("open the CLI's directory capability");
 
     // The temporary file is created, written and synced, and only then does
     // the final rename fail, because a file cannot replace a directory.
@@ -224,8 +226,9 @@ fn capability_scoped_failure_removes_temporary_file() {
         target.is_dir(),
         "the failed replacement must leave the target alone"
     );
+    let names = entry_names(dir.path()).expect("list directory entries");
     assert_eq!(
-        entry_names(dir.path()),
+        names,
         vec!["target.md"],
         "a failure after the temporary file exists must remove it"
     );
@@ -354,7 +357,9 @@ proptest! {
             .read_to_string(path)
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
         prop_assert_eq!(written, contents);
-        prop_assert_eq!(entry_names(dir.path()), vec!["sample.md".to_string()]);
+        let names = entry_names(dir.path())
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        prop_assert_eq!(names, vec!["sample.md".to_string()]);
     }
 
     /// A failure after the temporary file exists must remove it, whatever
@@ -373,6 +378,8 @@ proptest! {
 
         prop_assert!(result.is_err(), "renaming over a directory must fail");
         prop_assert!(dir.path().join("target.md").is_dir());
-        prop_assert_eq!(entry_names(dir.path()), vec!["target.md".to_string()]);
+        let names = entry_names(dir.path())
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        prop_assert_eq!(names, vec!["target.md".to_string()]);
     }
 }
