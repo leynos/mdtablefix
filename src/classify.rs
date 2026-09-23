@@ -54,13 +54,10 @@ impl ListContinuationState {
             return Some(required);
         }
 
-        if classified.class != LineClass::ParagraphText {
-            self.reset();
-            return None;
-        }
-
         if let Some((depth, required)) = self.active
             && depth == quote_depth
+            && (classified.class == LineClass::ParagraphText
+                || (classified.class == LineClass::Literal && indent >= required))
         {
             Some(required)
         } else {

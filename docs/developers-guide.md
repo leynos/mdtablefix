@@ -118,8 +118,9 @@ classifier refinement relies on it.
 
 `ListContinuationState` in `src/classify.rs` belongs only to the Setext and
 thematic-break consumers. It remembers the content indentation of an active
-list marker, then marks indented and lazy paragraph continuations so an
-outdented break cannot be consumed as their underline. It is not a general list
+list marker, then retains it through indented literal and lazy paragraph
+continuations so an outdented break cannot be consumed as their underline. It
+does not reclassify indented code as paragraph text and is not a general list
 parser; list rendering and renumbering retain their own state.
 
 ## Internal API reference

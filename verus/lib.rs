@@ -143,7 +143,7 @@ proof fn lemma_atx_prefix_classifies(candidate: Seq<char>) -> (result: Seq<char>
 }
 
 pub open spec fn canonical_context() -> ClassifyCtxView {
-    ClassifyCtxView { is_in_fence: false, open_fence: None, previous: None, prefix_agrees: true }
+    ClassifyCtxView { is_in_fence: false, open_fence: None, previous: None, prefix_agrees: false }
 }
 
 pub open spec fn canonical_break() -> Seq<char> { Seq::<char>::new(70, |i: int| '_') }

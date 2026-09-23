@@ -169,6 +169,27 @@ proptest! {
     }
 }
 
+/// Wrapped list content must not turn an outdented underline into a heading.
+#[test]
+fn wrapped_list_continuation_keeps_outdented_underline_stable() {
+    let document = concat!(
+        "  1. aaaaaaaa aaaaa aaaaaa aaaaaaa vyv lkklcbhp yxabwf ncm he pkdqzfkd loeyhsa cs\n",
+        "smvburhk xpurxf vtbb wggfap hn on uuqti xv icqdjk\n",
+        "-----\n",
+    );
+    let flags = [
+        "--wrap",
+        "--ellipsis",
+        "--footnotes",
+        "--code-emphasis",
+        "--headings",
+    ];
+    let (once, twice) = format_twice(document, &flags);
+
+    assert_eq!(twice, once);
+    assert!(once.lines().any(|line| line == "-----"));
+}
+
 /// Asserts the generator produces both changed and unchanged documents.
 ///
 /// The fixed-point property is only meaningful over documents the formatter
