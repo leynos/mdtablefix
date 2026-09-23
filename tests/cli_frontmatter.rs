@@ -1,21 +1,23 @@
 //! CLI tests for YAML frontmatter handling.
 
+use anyhow::Context;
 use assert_cmd::Command;
 use rstest::{fixture, rstest};
 
 /// Fixture providing an in-place test runner closure.
 #[fixture]
-fn in_place_runner() -> impl Fn(&[&str], &str, &str) {
+fn in_place_runner() -> impl Fn(&[&str], &str, &str) -> anyhow::Result<()> {
     |args: &[&str], input: &str, expected: &str| {
-        let temp = tempfile::NamedTempFile::new().expect("create temp file");
-        std::fs::write(temp.path(), input).expect("write temp file");
+        let temp = tempfile::NamedTempFile::new().context("create in-place fixture file")?;
+        std::fs::write(temp.path(), input).context("write in-place fixture")?;
 
-        let mut cmd = Command::cargo_bin("mdtablefix").expect("find binary");
+        let mut cmd = Command::cargo_bin("mdtablefix").context("find mdtablefix binary")?;
         cmd.arg("--in-place").args(args).arg(temp.path());
         cmd.assert().success();
 
-        let actual = std::fs::read_to_string(temp.path()).expect("read temp file");
+        let actual = std::fs::read_to_string(temp.path()).context("read in-place result")?;
         assert_eq!(actual, expected, "in-place content mismatch");
+        Ok(())
     }
 }
 
@@ -120,9 +122,10 @@ fn test_cli_yaml_frontmatter_in_place_variants(
     #[case] args: &[&str],
     #[case] input: &str,
     #[case] expected: &str,
-    in_place_runner: impl Fn(&[&str], &str, &str),
-) {
-    in_place_runner(args, input, expected);
+    in_place_runner: impl Fn(&[&str], &str, &str) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    in_place_runner(args, input, expected)?;
+    Ok(())
 }
 
 // Cannot be parameterized: uses partial/line-level assertions rather than stdout equality.

@@ -5,6 +5,7 @@
 //! through the probe, and each file keeps the fixture it needs so that neither
 //! has to reach into the other.
 
+use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
@@ -24,8 +25,9 @@ use crate::select::{
 fn at(path: &str) -> CandidatePath { CandidatePath::new(path.to_owned()) }
 
 /// `directory` as the UTF-8 path a test works in.
-fn as_path(directory: &TempDir) -> Utf8PathBuf {
-    Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).expect("a UTF-8 temporary directory")
+fn as_path(directory: &TempDir) -> Result<Utf8PathBuf> {
+    Utf8PathBuf::from_path_buf(directory.path().to_path_buf())
+        .map_err(|path| anyhow::anyhow!("non-UTF-8 temporary path: {}", path.display()))
 }
 
 /// A temporary tree, handed over as the guard that removes it.
@@ -38,7 +40,7 @@ fn as_path(directory: &TempDir) -> Utf8PathBuf {
 /// would delete the tree as it returned.
 #[test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn temp_root() -> TempDir { tempfile::tempdir().expect("a temporary directory") }
+fn temp_root() -> Result<TempDir> { tempfile::tempdir().context("create a temporary directory") }
 
 /// A second temporary tree, for the case that needs somewhere outside the first.
 ///
@@ -48,43 +50,49 @@ fn temp_root() -> TempDir { tempfile::tempdir().expect("a temporary directory") 
 #[cfg(unix)]
 #[test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn elsewhere_root() -> TempDir { tempfile::tempdir().expect("a second temporary directory") }
+fn elsewhere_root() -> Result<TempDir> {
+    tempfile::tempdir().context("create a second temporary directory")
+}
 
-fn write(root: &Utf8Path, name: &str, content: &str) {
+fn write(root: &Utf8Path, name: &str, content: &str) -> Result<()> {
     let path = root.join(name);
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).expect("create the fixture directory");
+        std::fs::create_dir_all(parent).context("create the fixture directory")?;
     }
-    std::fs::write(&path, content).expect("write a fixture");
+    std::fs::write(&path, content).with_context(|| format!("write fixture {path}"))?;
+    Ok(())
 }
 
 /// The probe's verdict for the fixtures that have one.
 ///
 /// The cases that exercise a *failure* call [`AmbientPathProbe::probe`]
-/// directly, since a helper that panics cannot report the error they assert on.
-fn probe(root: &Utf8Path, path: &str) -> PathKind {
+/// directly, so the test can assert on the returned failure.
+fn probe(root: &Utf8Path, path: &str) -> Result<PathKind> {
     AmbientPathProbe::new(root)
         .probe(&at(path))
-        .expect("every fixture path is one the probe can read")
+        .with_context(|| format!("probe fixture candidate {path}"))
 }
 
 /// The selection over `candidates` in `root`, with the ambient probe.
-fn selected_in(root: &Utf8Path, candidates: &[CandidatePath]) -> Vec<CandidatePath> {
+fn selected_in(root: &Utf8Path, candidates: &[CandidatePath]) -> Result<Vec<CandidatePath>> {
     select_files(
         candidates,
         &ExtensionFilter::default(),
         &AmbientPathProbe::new(root),
     )
-    .expect("every fixture candidate is one the probe can read")
+    .context("select fixture candidates")
 }
 
 #[rstest]
-fn a_regular_file_is_identified_by_an_absolute_canonical_path(temp_root: TempDir) {
-    let root = as_path(&temp_root);
-    write(&root, "docs/guide.md", "|A|B|\n");
+fn a_regular_file_is_identified_by_an_absolute_canonical_path(
+    #[from(temp_root)] temp_root_result: Result<TempDir>,
+) -> Result<()> {
+    let temp_root = temp_root_result?;
+    let root = as_path(&temp_root)?;
+    write(&root, "docs/guide.md", "|A|B|\n")?;
 
-    let PathKind::RegularFile(identity) = probe(&root, "docs/guide.md") else {
-        panic!("docs/guide.md is a regular file");
+    let PathKind::RegularFile(identity) = probe(&root, "docs/guide.md")? else {
+        anyhow::bail!("docs/guide.md is a regular file");
     };
     assert!(
         Utf8Path::new(identity.as_str()).is_absolute(),
@@ -102,13 +110,17 @@ fn a_regular_file_is_identified_by_an_absolute_canonical_path(temp_root: TempDir
         Utf8Path::new(identity.as_str()).file_name(),
         Some("guide.md")
     );
+    Ok(())
 }
 
 #[cfg(unix)]
 #[rstest]
-fn a_symlink_is_a_link_even_when_its_target_is_a_regular_file(temp_root: TempDir) {
-    let root = as_path(&temp_root);
-    write(&root, "src/lib.rs", "fn main() {}\n");
+fn a_symlink_is_a_link_even_when_its_target_is_a_regular_file(
+    #[from(temp_root)] temp_root_result: Result<TempDir>,
+) -> Result<()> {
+    let temp_root = temp_root_result?;
+    let root = as_path(&temp_root)?;
+    write(&root, "src/lib.rs", "fn main() {}\n")?;
     std::os::unix::fs::symlink("src/lib.rs", root.join("alias.md"))
         .expect("create the fixture symlink");
 
@@ -121,7 +133,8 @@ fn a_symlink_is_a_link_even_when_its_target_is_a_regular_file(temp_root: TempDir
             .is_file(),
         "the link must point at a regular file, or the case proves nothing"
     );
-    assert_eq!(probe(&root, "alias.md"), PathKind::Symlink);
+    assert_eq!(probe(&root, "alias.md")?, PathKind::Symlink);
+    Ok(())
 }
 
 /// The escape a symlinked directory makes possible, and the reason the probe
@@ -134,12 +147,14 @@ fn a_symlink_is_a_link_even_when_its_target_is_a_regular_file(temp_root: TempDir
 #[cfg(unix)]
 #[rstest]
 fn a_candidate_behind_a_symlinked_directory_is_outside_the_root(
-    temp_root: TempDir,
-    elsewhere_root: TempDir,
-) {
-    let root = as_path(&temp_root);
-    let elsewhere = as_path(&elsewhere_root);
-    write(&elsewhere, "guide.md", "|A|B|\n");
+    #[from(temp_root)] temp_root_result: Result<TempDir>,
+    #[from(elsewhere_root)] elsewhere_root_result: Result<TempDir>,
+) -> Result<()> {
+    let temp_root = temp_root_result?;
+    let root = as_path(&temp_root)?;
+    let elsewhere_root = elsewhere_root_result?;
+    let elsewhere = as_path(&elsewhere_root)?;
+    write(&elsewhere, "guide.md", "|A|B|\n")?;
     std::os::unix::fs::symlink(&elsewhere, root.join("docs")).expect("link the fixture directory");
 
     // The premise: the candidate is a regular file where the link points, so
@@ -148,13 +163,14 @@ fn a_candidate_behind_a_symlinked_directory_is_outside_the_root(
         elsewhere.join("guide.md").is_file(),
         "the link must point at a regular file, or the case proves nothing"
     );
-    assert_eq!(probe(&root, "docs/guide.md"), PathKind::OutsideRoot);
+    assert_eq!(probe(&root, "docs/guide.md")?, PathKind::OutsideRoot);
 
-    let selected = selected_in(&root, &[at("docs/guide.md")]);
+    let selected = selected_in(&root, &[at("docs/guide.md")])?;
     assert!(
         selected.is_empty(),
         "a candidate that leaves the tree is not selected, got {selected:?}"
     );
+    Ok(())
 }
 
 /// The other side of the same rule: a link among a candidate's ancestors is not
@@ -164,51 +180,65 @@ fn a_candidate_behind_a_symlinked_directory_is_outside_the_root(
 /// is why this case is not a link the probe may ignore.
 #[cfg(unix)]
 #[rstest]
-fn a_candidate_behind_an_in_tree_link_is_confined(temp_root: TempDir) {
-    let root = as_path(&temp_root);
-    write(&root, "real/guide.md", "|A|B|\n");
+fn a_candidate_behind_an_in_tree_link_is_confined(
+    #[from(temp_root)] temp_root_result: Result<TempDir>,
+) -> Result<()> {
+    let temp_root = temp_root_result?;
+    let root = as_path(&temp_root)?;
+    write(&root, "real/guide.md", "|A|B|\n")?;
     std::os::unix::fs::symlink("real", root.join("docs")).expect("link the fixture directory");
 
     assert!(
-        matches!(probe(&root, "docs/guide.md"), PathKind::RegularFile(_)),
+        matches!(probe(&root, "docs/guide.md")?, PathKind::RegularFile(_)),
         "a link to a directory inside the tree is still inside the tree"
     );
+    Ok(())
 }
 
 /// A tree may itself be reached through a link, so both sides of the comparison
 /// are canonicalized rather than only the candidate.
 #[cfg(unix)]
 #[rstest]
-fn a_root_reached_through_a_link_still_confines_its_candidates(temp_root: TempDir) {
-    let root = as_path(&temp_root);
-    write(&root, "real/docs/guide.md", "|A|B|\n");
+fn a_root_reached_through_a_link_still_confines_its_candidates(
+    #[from(temp_root)] temp_root_result: Result<TempDir>,
+) -> Result<()> {
+    let temp_root = temp_root_result?;
+    let root = as_path(&temp_root)?;
+    write(&root, "real/docs/guide.md", "|A|B|\n")?;
     std::os::unix::fs::symlink("real", root.join("link")).expect("link the fixture root");
 
     assert!(
         matches!(
-            probe(&root.join("link"), "docs/guide.md"),
+            probe(&root.join("link"), "docs/guide.md")?,
             PathKind::RegularFile(_)
         ),
         "a root named through a link is the same tree as the one it names"
     );
+    Ok(())
 }
 
 #[rstest]
-fn an_absent_path_is_missing(temp_root: TempDir) {
-    let root = as_path(&temp_root);
-    assert_eq!(probe(&root, "docs/gone.md"), PathKind::Missing);
+fn an_absent_path_is_missing(#[from(temp_root)] temp_root_result: Result<TempDir>) -> Result<()> {
+    let temp_root = temp_root_result?;
+    let root = as_path(&temp_root)?;
+    assert_eq!(probe(&root, "docs/gone.md")?, PathKind::Missing);
     assert_eq!(
-        probe(&root, "docs/gone.md/deeper.md"),
+        probe(&root, "docs/gone.md/deeper.md")?,
         PathKind::Missing,
         "a path whose parent is absent is not a regular file"
     );
+    Ok(())
 }
 
 #[rstest]
-fn a_directory_is_neither_a_regular_file_nor_a_symlink(temp_root: TempDir) {
-    let root = as_path(&temp_root);
+fn a_directory_is_neither_a_regular_file_nor_a_symlink(
+    #[from(temp_root)] temp_root_result: Result<TempDir>,
+) -> Result<()> {
+    let temp_root = temp_root_result?;
+    let root = as_path(&temp_root)?;
     std::fs::create_dir_all(root.join("docs")).expect("create the fixture directory");
-    assert_eq!(probe(&root, "docs"), PathKind::Other);
+    assert_eq!(probe(&root, "docs")?, PathKind::Other);
+    Ok(())
 }
 
 /// A loop among a candidate's ancestors is a question the probe could not ask,
@@ -220,8 +250,11 @@ fn a_directory_is_neither_a_regular_file_nor_a_symlink(temp_root: TempDir) {
 /// still unstable.
 #[cfg(unix)]
 #[rstest]
-fn a_symbolic_link_loop_is_an_error_rather_than_a_missing_file(temp_root: TempDir) {
-    let root = as_path(&temp_root);
+fn a_symbolic_link_loop_is_an_error_rather_than_a_missing_file(
+    #[from(temp_root)] temp_root_result: Result<TempDir>,
+) -> Result<()> {
+    let temp_root = temp_root_result?;
+    let root = as_path(&temp_root)?;
     // A loop between ancestors, not in the final component: the probe reads
     // `symlink_metadata`, so a candidate that *is* a link is classified as one
     // without the kernel ever resolving it.
@@ -233,24 +266,32 @@ fn a_symbolic_link_loop_is_an_error_rather_than_a_missing_file(temp_root: TempDi
         .expect_err("a link loop is not an absence, and not an answer");
     assert_eq!(error.path, at("a/guide.md"));
     assert_eq!(error.kind, ProbeFailureKind::Unreadable);
+    Ok(())
 }
 
 #[rstest]
-fn an_absolute_candidate_is_probed_where_it_points(temp_root: TempDir) {
-    let root = as_path(&temp_root);
-    write(&root, "docs/guide.md", "|A|B|\n");
+fn an_absolute_candidate_is_probed_where_it_points(
+    #[from(temp_root)] temp_root_result: Result<TempDir>,
+) -> Result<()> {
+    let temp_root = temp_root_result?;
+    let root = as_path(&temp_root)?;
+    write(&root, "docs/guide.md", "|A|B|\n")?;
     let absolute = root.join("docs/guide.md");
     assert_eq!(
-        probe(&root, absolute.as_str()),
-        probe(&root, "docs/guide.md"),
+        probe(&root, absolute.as_str())?,
+        probe(&root, "docs/guide.md")?,
         "a candidate is not re-rooted when it is already absolute"
     );
+    Ok(())
 }
 
 #[rstest]
-fn selection_over_a_real_tree_takes_regular_files_alone(temp_root: TempDir) {
-    let root = as_path(&temp_root);
-    write(&root, "docs/guide.md", "|A|B|\n");
+fn selection_over_a_real_tree_takes_regular_files_alone(
+    #[from(temp_root)] temp_root_result: Result<TempDir>,
+) -> Result<()> {
+    let temp_root = temp_root_result?;
+    let root = as_path(&temp_root)?;
+    write(&root, "docs/guide.md", "|A|B|\n")?;
     std::fs::create_dir_all(root.join("docs/subdir.md"))
         .expect("create a directory named like a document");
 
@@ -262,13 +303,14 @@ fn selection_over_a_real_tree_takes_regular_files_alone(temp_root: TempDir) {
             at("docs/gone.md"),
             at("draft.markdown"),
         ],
-    );
+    )?;
     assert_eq!(
         selected,
         vec![at("docs/guide.md")],
         "a directory named like a document, an absent file, and a name with a configured \
          extension that does not exist are all excluded"
     );
+    Ok(())
 }
 
 /// INV-DEDUP's negative control, and the reason the identity is the canonical
@@ -281,11 +323,14 @@ fn selection_over_a_real_tree_takes_regular_files_alone(temp_root: TempDir) {
 /// entries, and canonicalization draws exactly that line.
 #[cfg(unix)]
 #[rstest]
-fn two_hard_links_are_two_identities_and_neither_is_dropped(temp_root: TempDir) {
+fn two_hard_links_are_two_identities_and_neither_is_dropped(
+    #[from(temp_root)] temp_root_result: Result<TempDir>,
+) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
 
-    let root = as_path(&temp_root);
-    write(&root, "a.md", "|A|B|\n");
+    let temp_root = temp_root_result?;
+    let root = as_path(&temp_root)?;
+    write(&root, "a.md", "|A|B|\n")?;
     std::fs::hard_link(root.join("a.md"), root.join("b.md")).expect("create the hard link");
 
     let first = std::fs::metadata(root.join("a.md")).expect("read the fixture");
@@ -298,15 +343,16 @@ fn two_hard_links_are_two_identities_and_neither_is_dropped(temp_root: TempDir) 
     assert_eq!(first.nlink(), 2, "the fixture must be a hard-link pair");
 
     assert_ne!(
-        probe(&root, "a.md"),
-        probe(&root, "b.md"),
+        probe(&root, "a.md")?,
+        probe(&root, "b.md")?,
         "two directory entries must keep two identities"
     );
 
-    let selected = selected_in(&root, &[at("a.md"), at("b.md")]);
+    let selected = selected_in(&root, &[at("a.md"), at("b.md")])?;
     assert_eq!(
         selected,
         vec![at("a.md"), at("b.md")],
         "neither link may be dropped, or formatting it would leave the other stale"
     );
+    Ok(())
 }

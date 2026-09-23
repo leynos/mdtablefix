@@ -21,63 +21,67 @@ use super::{
 /// `INV-PREDICTS`: a formatter that reproduces its input reports no change, so
 /// a clean file is never reported as drift.
 #[test]
-fn assess_reports_no_change_for_its_own_output() {
-    let (_dir, directory) = fixture("clean.md", ALIGNED);
+fn assess_reports_no_change_for_its_own_output() -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("clean.md", ALIGNED)?;
 
-    let assessment = assess(&readable(&directory), Utf8Path::new("clean.md"), &identity)
+    let assessment = assess(&readable(&directory)?, Utf8Path::new("clean.md"), &identity)
         .expect("assess fixture");
 
     assert!(
         !assessment.is_changed(),
         "a fixed point must report no change"
     );
+    Ok(())
 }
 
 /// `INV-PREDICTS`: a formatter that rewrites the text reports a change, which
 /// is what makes the no-change case above meaningful.
 #[test]
-fn assess_reports_a_change_when_the_formatter_rewrites() {
-    let (_dir, directory) = fixture("ragged.md", RAGGED);
+fn assess_reports_a_change_when_the_formatter_rewrites() -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("ragged.md", RAGGED)?;
 
     let assessment =
-        assess(&readable(&directory), Utf8Path::new("ragged.md"), &align).expect("assess fixture");
+        assess(&readable(&directory)?, Utf8Path::new("ragged.md"), &align).expect("assess fixture");
 
     assert!(assessment.is_changed());
+    Ok(())
 }
 
 /// `INV-BOM`: a marked file that needs no Markdown change is not reported as
 /// drift, because the mark survives both parsing and rendering.
 #[test]
-fn assess_keeps_a_byte_order_mark() {
-    let (_dir, directory) = fixture("bom.md", &format!("\u{FEFF}{ALIGNED}"));
+fn assess_keeps_a_byte_order_mark() -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("bom.md", &format!("\u{FEFF}{ALIGNED}"))?;
 
     let assessment =
-        assess(&readable(&directory), Utf8Path::new("bom.md"), &identity).expect("assess fixture");
+        assess(&readable(&directory)?, Utf8Path::new("bom.md"), &identity).expect("assess fixture");
 
     assert!(
         !assessment.is_changed(),
         "the byte-order mark must survive the round trip"
     );
+    Ok(())
 }
 
 /// A file that cannot be read is an error rather than an unchanged file.
 #[test]
-fn assess_fails_for_a_missing_file() {
-    let (_dir, directory) = fixture("clean.md", ALIGNED);
+fn assess_fails_for_a_missing_file() -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("clean.md", ALIGNED)?;
 
     let result = assess(
-        &readable(&directory),
+        &readable(&directory)?,
         Utf8Path::new("missing.md"),
         &identity,
     );
 
     assert!(result.is_err(), "reading a missing file must fail");
+    Ok(())
 }
 
 /// `INV-NOWRITE`: a reporting mode reports drift and leaves the file alone.
 #[test]
-fn check_reports_drift_without_writing() {
-    let (_dir, directory) = fixture("ragged.md", RAGGED);
+fn check_reports_drift_without_writing() -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("ragged.md", RAGGED)?;
 
     let (report, payload) = analyse(
         Mode::Check,
@@ -94,17 +98,18 @@ fn check_reports_drift_without_writing() {
     assert_eq!(report.delta, LineDelta::between(RAGGED, ALIGNED));
     assert_eq!(payload, "ragged.md +3 -3\n");
     assert_eq!(
-        read(&directory, "ragged.md"),
+        read(&directory, "ragged.md")?,
         RAGGED,
         "a reporting mode must not write"
     );
+    Ok(())
 }
 
 /// A clean file produces no report line: the summary counts it as unchanged,
 /// and standard output stays a list of drifting files only.
 #[test]
-fn check_reports_a_clean_file_with_no_payload() {
-    let (_dir, directory) = fixture("clean.md", ALIGNED);
+fn check_reports_a_clean_file_with_no_payload() -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("clean.md", ALIGNED)?;
 
     let (report, payload) = analyse(
         Mode::Check,
@@ -119,6 +124,7 @@ fn check_reports_a_clean_file_with_no_payload() {
     assert!(!report.is_changed);
     assert_eq!(report.delta, LineDelta::default());
     assert_eq!(payload, "");
+    Ok(())
 }
 
 /// The line-ending report names the path the user wrote, not the bare name the
@@ -130,11 +136,11 @@ fn check_reports_a_clean_file_with_no_payload() {
 /// they been equal, the assertion would hold whichever one the report used.
 #[test]
 #[traced_test]
-fn check_reports_the_path_the_user_wrote() {
+fn check_reports_the_path_the_user_wrote() -> anyhow::Result<()> {
     // The capability is the file's parent, as `open_file_parent` makes it: the
     // name the capability reads by is the bare `inner.md`, and the name the
     // user wrote is the one with the directory in front of it.
-    let (_dir, directory) = fixture("nested/inner.md", RAGGED);
+    let (_dir, directory) = fixture("nested/inner.md", RAGGED)?;
     let nested = directory
         .open_dir(Utf8Path::new("nested"))
         .expect("open the nested directory");
@@ -153,6 +159,7 @@ fn check_reports_the_path_the_user_wrote() {
         logs_contain("nested/inner.md"),
         "the line-ending report must name the path the user wrote"
     );
+    Ok(())
 }
 
 /// Prefixes every line of `text` with `marker`, which is how a unified diff
@@ -170,8 +177,8 @@ fn marked(marker: char, text: &str) -> String {
 /// `INV-EXIT` under the verbose rendering: the payload is a unified diff that
 /// names the file on both sides, and the file is still not written.
 #[test]
-fn diff_reports_a_unified_diff_without_writing() {
-    let (_dir, directory) = fixture("ragged.md", RAGGED);
+fn diff_reports_a_unified_diff_without_writing() -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("ragged.md", RAGGED)?;
 
     let (report, payload) = analyse(
         Mode::Diff,
@@ -194,18 +201,19 @@ fn diff_reports_a_unified_diff_without_writing() {
         )
     );
     assert_eq!(
-        read(&directory, "ragged.md"),
+        read(&directory, "ragged.md")?,
         RAGGED,
         "a reporting mode must not write"
     );
+    Ok(())
 }
 
 /// A clean file produces no diff at all — not a header with no hunks, and not
 /// an empty hunk. The unchanged arm is what this pins, and it is separate from
 /// the `--check` case because the two renderings share that arm.
 #[test]
-fn diff_reports_a_clean_file_with_no_payload() {
-    let (_dir, directory) = fixture("clean.md", ALIGNED);
+fn diff_reports_a_clean_file_with_no_payload() -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("clean.md", ALIGNED)?;
 
     let (report, payload) = analyse(
         Mode::Diff,
@@ -219,13 +227,14 @@ fn diff_reports_a_clean_file_with_no_payload() {
 
     assert!(!report.is_changed);
     assert_eq!(payload, "");
+    Ok(())
 }
 
 /// The bare mode prints the formatted text and leaves the file alone: printing
 /// is a read, however the payload is later rendered.
 #[test]
-fn print_reports_the_formatted_text_without_writing() {
-    let (_dir, directory) = fixture("ragged.md", RAGGED);
+fn print_reports_the_formatted_text_without_writing() -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("ragged.md", RAGGED)?;
 
     let (_report, payload) = analyse(
         Mode::Print,
@@ -238,7 +247,8 @@ fn print_reports_the_formatted_text_without_writing() {
     .expect("analyse fixture");
 
     assert_eq!(payload, ALIGNED);
-    assert_eq!(read(&directory, "ragged.md"), RAGGED);
+    assert_eq!(read(&directory, "ragged.md")?, RAGGED);
+    Ok(())
 }
 
 /// `REQ-GIT-010`: a listing is a list of paths, one per line, and it stays one
@@ -255,8 +265,11 @@ fn print_reports_the_formatted_text_without_writing() {
 #[case("odd\\name.md", "odd\\\\name.md\n")]
 #[case("two\nlines.md", "two\\nlines.md\n")]
 #[case("carriage\rreturn.md", "carriage\\rreturn.md\n")]
-fn list_files_prints_one_line_per_selected_path(#[case] name: &str, #[case] expected: &str) {
-    let (_dir, directory) = fixture("clean.md", ALIGNED);
+fn list_files_prints_one_line_per_selected_path(
+    #[case] name: &str,
+    #[case] expected: &str,
+) -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("clean.md", ALIGNED)?;
     let display_path = Utf8Path::new(name);
 
     let (report, payload) = analyse(
@@ -274,19 +287,21 @@ fn list_files_prints_one_line_per_selected_path(#[case] name: &str, #[case] expe
     // escaping belongs to the line a reader parses, not to the name itself.
     assert_eq!(report.display_path, display_path);
     assert!(!report.is_changed, "a listing assesses no content");
+    Ok(())
 }
 
 /// The capability names a file inside it, so a path outside the capability is
 /// not addressable at all.
 #[test]
-fn assess_declines_a_path_outside_the_capability() {
-    let (_dir, directory) = fixture("clean.md", ALIGNED);
+fn assess_declines_a_path_outside_the_capability() -> anyhow::Result<()> {
+    let (_dir, directory) = fixture("clean.md", ALIGNED)?;
 
     let result = assess(
-        &readable(&directory),
+        &readable(&directory)?,
         Utf8Path::new("../escape.md"),
         &identity,
     );
 
     assert!(result.is_err(), "a path outside the capability must fail");
+    Ok(())
 }
