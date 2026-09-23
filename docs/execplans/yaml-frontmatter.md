@@ -151,8 +151,8 @@ pipeline preserves frontmatter correctly.
 
 Focused library tests already live beside the implementation in
 `src/process.rs` and `src/io.rs`. Behavioural CLI tests live in `tests/cli.rs`
-and `tests/wrap/cli.rs`. The user-facing guide is `README.md`. The processing
-pipeline is described in `docs/architecture.md`.
+and `tests/wrap/cli/mod.rs`. The user-facing guide is `README.md`. The
+processing pipeline is described in `docs/architecture.md`.
 
 ## Plan of work
 

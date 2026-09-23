@@ -232,12 +232,12 @@ filesystem access themselves.
 - `replace_file(directory, path, contents) -> std::io::Result<()>` performs the
   shared atomic replacement. It declines a symlinked target, creates a
   `create_new` temporary file in the same directory, writes, flushes and syncs
-  the contents, then calls `swap_into_place` in `src/io/swap.rs`, which applies
-  the target's permissions to the temporary file before the rename and clears a
-  Windows destination's read-only attribute first, because that attribute
-  blocks the rename. It attempts to remove the temporary file when a later step
-  fails. Both entry points call the one implementation, and the CLI and
-  `rewrite`/`rewrite_no_wrap` reach it through `replace_file_if_unchanged`.
+  the contents, then calls `swap_into_place` in `src/io/swap/mod.rs`, which
+  applies the target's permissions to the temporary file before the rename and
+  clears a Windows destination's read-only attribute first, because that
+  attribute blocks the rename. It attempts to remove the temporary file when a
+  later step fails. Both entry points call the one implementation, and the CLI
+  and `rewrite`/`rewrite_no_wrap` reach it through `replace_file_if_unchanged`.
 - `replace_file_if_unchanged(directory, path, expected, contents) -> std::io::Result<bool>`
   writes exactly as `replace_file` does, except that it reads the target back
   and compares it against `expected` twice: once after the temporary file is
@@ -2081,7 +2081,7 @@ file stays bounded without a wall-clock cut-off.
 ### 2.8. Deterministic failure seams
 
 The replacement tests drive two `#[cfg(test)]`-only, per-thread seams defined in
-`src/io/swap.rs`:
+`src/io/swap/mod.rs`:
 
 - `rename_failure_seam` fails the rename half of the swap.
 - `cleanup_failure_seam` fails the removal of the temporary file a failed
