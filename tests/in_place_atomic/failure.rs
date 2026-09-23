@@ -19,10 +19,7 @@ use super::{BROKEN, FIXED, entry_names, in_place, in_place_all};
 /// Root can create a file in a directory that denies everyone else, so a
 /// failure resting on one cannot be induced and the assertions that depend on
 /// it would be vacuous.
-fn root_ignores_permissions() -> bool {
-    // SAFETY: `geteuid()` has no side effects and is safe to call in tests.
-    unsafe { libc::geteuid() == 0 }
-}
+fn root_ignores_permissions() -> bool { rustix::process::geteuid().is_root() }
 
 #[cfg(unix)]
 #[test]
