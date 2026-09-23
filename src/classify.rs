@@ -54,8 +54,18 @@ impl ListContinuationState {
                 .chars()
                 .take_while(|ch| !matches!(ch, ' ' | '\t'))
                 .count();
-            let separator_width = if marker.chars().nth(marker_len) == Some('\t') {
-                4 - ((indent + marker_len) % 4)
+            let marker_end = indent + marker_len;
+            let mut content_column = marker_end;
+            for ch in marker.chars().skip(marker_len) {
+                match ch {
+                    ' ' => content_column += 1,
+                    '\t' => content_column += 4 - content_column % 4,
+                    _ => break,
+                }
+            }
+            let separator_width = content_column - marker_end;
+            let separator_width = if (1..=4).contains(&separator_width) {
+                separator_width
             } else {
                 1
             };

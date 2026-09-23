@@ -81,6 +81,16 @@ fn normalizes_break_after_outdented_list_continuation() {
     assert_borrowed_break!(output[2]);
 }
 
+/// Multiple marker separators move the list content beyond a two-space break.
+#[test]
+fn normalizes_break_below_wide_list_separator() {
+    let input = lines_vec!["-   Bar", "  ---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[0], "-   Bar");
+    assert_borrowed_break!(output[1]);
+}
+
 /// A lazy paragraph continuation still carries the list's content column.
 #[test]
 fn normalizes_break_after_lazy_list_continuation() {
