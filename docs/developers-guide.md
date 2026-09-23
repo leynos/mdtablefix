@@ -24,13 +24,13 @@ helper directly.
 
 ### Canonical frontmatter boundary
 
-[`process_with_frontmatter`](../src/process.rs) is the single authoritative
+[`process_with_frontmatter`](../src/process/mod.rs) is the single authoritative
 boundary for splitting and rejoining leading YAML frontmatter. It never passes
 the frontmatter prefix to `body_fn`, and it prepends that prefix verbatim to
 the closure's output.
 
 Callers must not split, transform, or restore frontmatter outside this
-boundary. Both [`process_stream_opts`](../src/process.rs) in the library and
+boundary. Both [`process_stream_opts`](../src/process/mod.rs) in the library and
 `process_lines` in the package binary route through it. All body transforms
 must run inside the closure. The library-owned `renumber_lists` pass runs inside
 `process_stream_inner`, controlled by `Options::renumber`; `format_breaks` is
@@ -1251,9 +1251,9 @@ Re-use policy for this helper:
 
 ## Fences module
 
-The `fences` module in [src/fences.rs](../src/fences.rs) is responsible for
-normalizing fenced code blocks before later Markdown transforms run. It exposes
-two public functions that are called in sequence:
+The `fences` module in [src/fences/mod.rs](../src/fences/mod.rs) is responsible
+for normalizing fenced code blocks before later Markdown transforms run. It
+exposes two public functions that are called in sequence:
 
 - `compress_fences(&[String]) -> Vec<String>` conditionally compresses fence
   delimiters of three or more backticks or tildes to exactly three backticks
