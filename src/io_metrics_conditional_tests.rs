@@ -3,6 +3,7 @@
 //! These cases live apart from the general metrics suite so both test modules
 //! remain within the repository's file-size limit.
 
+use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
@@ -29,28 +30,29 @@ struct ConditionalTarget {
 /// Creates the target `sample.md`, through the capability that replaces it.
 #[test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn conditional_target() -> ConditionalTarget {
-    let temporary = tempdir().expect("create temporary directory");
-    let root =
-        camino::Utf8Path::from_path(temporary.path()).expect("the temporary directory is UTF-8");
-    let directory =
-        Dir::open_ambient_dir(root, ambient_authority()).expect("open the directory capability");
+fn conditional_target() -> Result<ConditionalTarget> {
+    let temporary = tempdir().context("create temporary directory")?;
+    let root = camino::Utf8Path::from_path(temporary.path())
+        .context("the temporary directory is not UTF-8")?;
+    let directory = Dir::open_ambient_dir(root, ambient_authority())
+        .context("open the directory capability")?;
     directory
         .write(camino::Utf8Path::new("sample.md"), ORIGINAL)
-        .expect("write the fixture through the capability");
+        .context("write the fixture through the capability")?;
 
-    ConditionalTarget {
+    Ok(ConditionalTarget {
         _temporary: temporary,
         directory,
-    }
+    })
 }
 
 /// A conditional replacement that finds the target unchanged from the text it
 /// was read as writes it and records `success`, like any other replacement.
 #[rstest]
 fn a_conditional_replacement_of_a_matching_target_is_a_success(
-    conditional_target: ConditionalTarget,
-) {
+    #[from(conditional_target)] conditional_target_result: Result<ConditionalTarget>,
+) -> Result<()> {
+    let conditional_target = conditional_target_result?;
     let capability = &conditional_target.directory;
 
     let (replaced, recorded) = recorded(|| {
@@ -75,14 +77,16 @@ fn a_conditional_replacement_of_a_matching_target_is_a_success(
         1,
         "a conditional replacement that wrote is a success: {recorded:?}"
     );
+    Ok(())
 }
 
 /// The other half of the case above: a target that moved on before the swap
 /// records `unchanged` rather than `success` or `failure`.
 #[rstest]
 fn a_declined_replacement_after_the_target_moved_on_is_unchanged(
-    conditional_target: ConditionalTarget,
-) {
+    #[from(conditional_target)] conditional_target_result: Result<ConditionalTarget>,
+) -> Result<()> {
+    let conditional_target = conditional_target_result?;
     let capability = &conditional_target.directory;
     capability
         .write(camino::Utf8Path::new("sample.md"), "|X|Y|\n|3|4|")
@@ -121,4 +125,5 @@ fn a_declined_replacement_after_the_target_moved_on_is_unchanged(
         0,
         "a decline is neither a success nor a failure: {recorded:?}"
     );
+    Ok(())
 }
