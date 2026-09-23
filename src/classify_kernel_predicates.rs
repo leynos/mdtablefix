@@ -165,14 +165,28 @@ pub(super) fn is_list_item(chars: &[char], start: usize) -> bool {
     }
 }
 
+verified_loop_function! {
 /// Counts an uninterrupted marker run in a scalar range.
-#[cfg_attr(verus_keep_ghost, verifier::external_body)]
-fn marker_run_len(chars: &[char], start: usize, end: usize, marker: char) -> usize {
+fn marker_run_len(chars: &[char], start: usize, end: usize, marker: char) -> usize;
+requires(start <= end, end <= chars@.len());
+ensures(result =>
+    result <= end - start,
+    forall|i: int| start <= i < start + result ==> chars@[i] == marker,
+    start + result == end || chars@[start + result] != marker,
+);
+before {
     let mut cursor = start;
-    while cursor < end && chars[cursor] == marker {
+}
+while (cursor < end && chars[cursor] == marker) invariant(
+    start <= cursor <= end,
+    end <= chars@.len(),
+    forall|i: int| start <= i < cursor ==> chars@[i] == marker,
+) {
         cursor += 1;
-    }
+}
+after {
     cursor - start
+}
 }
 
 verified_kernel_function! {
