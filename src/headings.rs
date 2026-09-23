@@ -269,15 +269,23 @@ fn shared_prefix_len(a: &str, b: &str) -> usize {
     end
 }
 
-/// Determine whether a line and its underline disagree on indentation or blockquote prefix.
+/// Determine whether a line and its underline disagree on blockquote depth.
 ///
-/// Setext headings must repeat blockquote (`>`) markers and indentation on both lines. When the
-/// prefixes differ we leave the text untouched so blockquote paragraphs or code blocks are not
-/// promoted to headings.
+/// Setext headings must remain within one quote level. Up to three spaces of
+/// indentation may differ between the text and underline; the classifier
+/// independently rejects indented code.
 fn has_unmatched_prefix(line: &str, underline: &str) -> bool {
     let line_prefix = prefix_of_indent_or_quote(line);
     let underline_prefix = prefix_of_indent_or_quote(underline);
-    line_prefix != underline_prefix && (line_prefix > 0 || underline_prefix > 0)
+    let line_depth = line[..line_prefix]
+        .bytes()
+        .filter(|byte| *byte == b'>')
+        .count();
+    let underline_depth = underline[..underline_prefix]
+        .bytes()
+        .filter(|byte| *byte == b'>')
+        .count();
+    line_depth != underline_depth
 }
 
 /// Returns the byte length of leading indentation and blockquote markers.

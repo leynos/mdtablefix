@@ -7,6 +7,8 @@ use super::*;
 #[rstest]
 #[case(vec!["Heading".into(), "===".into()], vec!["# Heading".into()])]
 #[case(vec!["Heading".into(), "----".into()], vec!["## Heading".into()])]
+#[case(vec!["  Heading".into(), " ---".into()], vec![" ## Heading".into()])]
+#[case(vec![" Heading".into(), "  ---".into()], vec![" ## Heading".into()])]
 #[case(vec!["Title   ".into(), "=====".into()], vec!["# Title".into()])]
 #[case(vec!["   Heading".into(), "   ====".into()], vec!["   # Heading".into()])]
 #[case(vec!["Heading".into(), "----   ".into()], vec!["## Heading".into()])]
@@ -32,7 +34,6 @@ fn converts_setext_headings(#[case] input: Vec<String>, #[case] expected: Vec<St
 #[case(vec!["- Item".into(), "-----".into()])]
 #[case(vec![String::new(), "---".into()])]
 #[case(vec!["> Quote".into(), "-----".into()])]
-#[case(vec![" Heading".into(), "  ---".into()])]
 #[case(vec!["Heading".into(), "-==".into()])]
 fn leaves_non_headings_untouched(#[case] lines: Vec<String>) {
     assert_eq!(convert_setext_headings(&lines), lines);

@@ -638,6 +638,8 @@ thematic break.
 
 Indentation and blockquote markers shared by the heading and its underline are
 preserved, so `> Title` above `> -----` becomes `> ## Title`.
+The two lines may use different indentation of up to three spaces, provided
+they remain at the same blockquote depth.
 
 A candidate indented by four or more columns, or one inside a blockquote and
 indented four or more columns after the marker, is an indented code block: it

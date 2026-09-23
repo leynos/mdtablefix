@@ -47,7 +47,7 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     let mut out = Vec::with_capacity(lines.len());
     // Track fenced code blocks consistently while formatting breaks.
     let mut fences = FenceTracker::default();
-    let mut previous: Option<(LineClass, String)> = None;
+    let mut previous: Option<(LineClass, &str)> = None;
 
     for line in lines {
         let fence = fences.observe_source_line(line);
@@ -60,12 +60,15 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         let first_pass = classify_line_with_body(line, &ClassifyCtx::default());
         let prefix_len = line.len() - first_pass.body.len();
         let prefix = &line[..prefix_len];
-        let context = previous
-            .as_ref()
-            .map_or_else(ClassifyCtx::default, |(class, old_prefix)| {
-                ClassifyCtx::following(*class, old_prefix == prefix)
-            });
-        let classified = if previous.is_some() {
+        let follows_paragraph = previous.is_some_and(|(class, old_prefix)| {
+            class == LineClass::ParagraphText && quote_depth(old_prefix) == quote_depth(prefix)
+        });
+        let context = if follows_paragraph {
+            ClassifyCtx::following(LineClass::ParagraphText, true)
+        } else {
+            ClassifyCtx::default()
+        };
+        let classified = if follows_paragraph {
             classify_line_with_body(line, &context)
         } else {
             first_pass
@@ -73,7 +76,7 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         previous = if classified.class == LineClass::Blank {
             None
         } else {
-            Some((classified.class, prefix.to_owned()))
+            Some((classified.class, prefix))
         };
 
         if classified.class == LineClass::ThematicBreak && is_canonical_break_line(line, &context) {
@@ -93,6 +96,9 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
 
     out
 }
+
+/// Counts blockquote markers without treating indentation as prefix identity.
+fn quote_depth(prefix: &str) -> usize { prefix.bytes().filter(|byte| *byte == b'>').count() }
 
 #[cfg(test)]
 mod tests {

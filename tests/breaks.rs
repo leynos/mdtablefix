@@ -50,6 +50,7 @@ fn test_format_breaks_preserves_blockquote_prefix() {
 #[rstest]
 #[case("Title", "---")]
 #[case("> Title", "> ---")]
+#[case("  Title", " ---")]
 fn leaves_setext_underlines_unchanged(#[case] title: &str, #[case] underline: &str) {
     let input = lines_vec![title, underline];
     let output = format_breaks(&input);
