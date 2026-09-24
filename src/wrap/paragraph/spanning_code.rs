@@ -1,9 +1,7 @@
 //! Source-line preservation for inline code spans that cannot fit atomically.
 //!
-//! This module owns the narrow fallback used by paragraph flushing: source
-//! boundaries may be retained only when they occur inside an inline-code span,
-//! every authored line already fits, and joining the span would exceed the
-//! configured width. Ordinary prose remains owned by the greedy wrapper.
+//! This fallback preserves boundaries within inline-code spans whose authored lines fit
+//! but whose joined width exceeds the limit. Ordinary prose remains owned by the greedy wrapper.
 
 use std::ops::Range;
 
@@ -36,6 +34,7 @@ enum ProseEdge {
 
 impl ProseEdge {
     /// Join prose beside this preserved edge only when it fits one line.
+    /// Example: leading "pre" and first piece "fix" at width `6` yield `Some("prefix")`.
     fn join(self, lines: &[String], prose: &str, width: usize) -> Option<String> {
         match self {
             Self::Leading => join_if_fits(prose, lines.first()?, width),
@@ -44,6 +43,7 @@ impl ProseEdge {
     }
 
     /// Replace the preserved piece at this edge.
+    /// Example: trailing replacement turns `["first", "last"]` into `["first", "updated"]`.
     fn replace(self, lines: &mut [String], joined: String) {
         let target = match self {
             Self::Leading => lines.first_mut(),
@@ -55,6 +55,8 @@ impl ProseEdge {
     }
 
     /// Wrap and position prose when it does not fit beside this edge.
+    /// Example: leading "before ", width `5`: `["code", "span"]` becomes `["before", "code",
+    /// "span"]`.
     fn wrap_and_attach(self, lines: &mut Vec<String>, prose: &str, width: usize) {
         let trimmed = match self {
             Self::Leading => prose.trim_end(),
@@ -309,6 +311,7 @@ fn preserve_span_boundaries(
 ///
 /// It composes [`join_if_fits`] with the greedy wrapper, retaining each edge's
 /// join order, trim direction, and placement.
+/// Example: trailing "fix" at width `6` changes `["pre"]` to `["prefix"]`.
 fn reattach_prose(lines: &mut Vec<String>, prose: &str, width: usize, edge: ProseEdge) {
     if prose.is_empty() || lines.is_empty() {
         return;
@@ -321,6 +324,7 @@ fn reattach_prose(lines: &mut Vec<String>, prose: &str, width: usize, edge: Pros
 }
 
 /// Join adjacent source fragments only when their display width fits one line.
+/// Example: "pre" plus "fix" at width `6` returns `Some("prefix")`.
 fn join_if_fits(prefix: &str, suffix: &str, width: usize) -> Option<String> {
     let joined = format!("{prefix}{suffix}");
     (joined.width() <= width).then_some(joined)
