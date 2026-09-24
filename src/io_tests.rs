@@ -13,21 +13,21 @@ use super::*;
 
 #[test]
 fn rewrite_roundtrip() {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let file = dir.path().join("sample.md");
-    fs::write(&file, "|A|B|\n|1|2|").unwrap();
-    rewrite(&file).unwrap();
-    let out = fs::read_to_string(&file).unwrap();
+    fs::write(&file, "|A|B|\n|1|2|").expect("write input file");
+    rewrite(&file).expect("rewrite input file");
+    let out = fs::read_to_string(&file).expect("read rewritten file");
     assert!(out.contains("| A | B |"));
 }
 
 #[test]
 fn rewrite_no_wrap_roundtrip() {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let file = dir.path().join("sample.md");
-    fs::write(&file, "|A|B|\n|1|2|").unwrap();
-    rewrite_no_wrap(&file).unwrap();
-    let out = fs::read_to_string(&file).unwrap();
+    fs::write(&file, "|A|B|\n|1|2|").expect("write input file");
+    rewrite_no_wrap(&file).expect("rewrite input file without wrapping");
+    let out = fs::read_to_string(&file).expect("read rewritten file");
     assert_eq!(out, "| A | B |\n| 1 | 2 |\n");
 }
 
@@ -73,7 +73,7 @@ fn assert_permission_error_or_root_success(result: std::io::Result<()>) {
 #[case(rewrite)]
 #[case(rewrite_no_wrap)]
 fn missing_file_error(#[case] rewrite_fn: fn(&Path) -> std::io::Result<()>) {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let file = dir.path().join("missing.md");
     let err = rewrite_fn(&file).expect_err("expected error for missing file");
     assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
@@ -84,9 +84,9 @@ fn missing_file_error(#[case] rewrite_fn: fn(&Path) -> std::io::Result<()>) {
 #[case(rewrite)]
 #[case(rewrite_no_wrap)]
 fn permission_denied_error(#[case] rewrite_fn: fn(&Path) -> std::io::Result<()>) {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let file = dir.path().join("deny.md");
-    fs::write(&file, "data").unwrap();
+    fs::write(&file, "data").expect("write input file");
     // An unreadable file denies the read that precedes any write.
     set_mode(&file, 0o000);
     let result = rewrite_fn(&file);
@@ -97,11 +97,11 @@ fn permission_denied_error(#[case] rewrite_fn: fn(&Path) -> std::io::Result<()>)
 #[case(rewrite)]
 #[case(rewrite_no_wrap)]
 fn rewrite_leaves_no_temporary_file(#[case] rewrite_fn: fn(&Path) -> std::io::Result<()>) {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let file = dir.path().join("sample.md");
-    fs::write(&file, "|A|B|\n|1|2|").unwrap();
+    fs::write(&file, "|A|B|\n|1|2|").expect("write input file");
 
-    rewrite_fn(&file).unwrap();
+    rewrite_fn(&file).expect("rewrite input file");
 
     assert_eq!(entry_names(dir.path()), vec!["sample.md"]);
 }
@@ -111,14 +111,18 @@ fn rewrite_leaves_no_temporary_file(#[case] rewrite_fn: fn(&Path) -> std::io::Re
 #[case(rewrite)]
 #[case(rewrite_no_wrap)]
 fn rewrite_preserves_file_mode(#[case] rewrite_fn: fn(&Path) -> std::io::Result<()>) {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let file = dir.path().join("mode.md");
-    fs::write(&file, "|A|B|\n|1|2|").unwrap();
+    fs::write(&file, "|A|B|\n|1|2|").expect("write input file");
     set_mode(&file, 0o640);
 
-    rewrite_fn(&file).unwrap();
+    rewrite_fn(&file).expect("rewrite input file");
 
-    let mode = fs::metadata(&file).unwrap().permissions().mode() & 0o777;
+    let mode = fs::metadata(&file)
+        .expect("read rewritten file metadata")
+        .permissions()
+        .mode()
+        & 0o777;
     assert_eq!(mode, 0o640, "rewrite must preserve the original mode");
 }
 
@@ -127,10 +131,10 @@ fn rewrite_preserves_file_mode(#[case] rewrite_fn: fn(&Path) -> std::io::Result<
 #[case(rewrite)]
 #[case(rewrite_no_wrap)]
 fn write_failure_leaves_original_intact(#[case] rewrite_fn: fn(&Path) -> std::io::Result<()>) {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let file = dir.path().join("sample.md");
     let original = "|A|B|\n|1|2|";
-    fs::write(&file, original).unwrap();
+    fs::write(&file, original).expect("write original file");
     // A read-only directory denies the temporary file that the atomic swap
     // needs, while leaving the target itself readable.
     set_mode(dir.path(), 0o555);
@@ -146,7 +150,7 @@ fn write_failure_leaves_original_intact(#[case] rewrite_fn: fn(&Path) -> std::io
     let err = result.expect_err("expected permission denied error");
     assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
     assert_eq!(
-        fs::read_to_string(&file).unwrap(),
+        fs::read_to_string(&file).expect("read original file after failed rewrite"),
         original,
         "a failed rewrite must leave the original byte-identical"
     );
@@ -161,7 +165,7 @@ fn temporary_path_is_a_sibling(#[case] path: &str, #[case] attempt: u32) {
     let target = Utf8Path::new(path);
     let temp = temporary_path(target, attempt);
     assert_eq!(temp.parent(), target.parent());
-    let name = temp.file_name().unwrap();
+    let name = temp.file_name().expect("temporary path has a file name");
     assert!(
         name.starts_with("sample.md"),
         "temporary name should extend the target name"
@@ -232,25 +236,25 @@ fn create_temporary_file_reports_an_exhausted_name_space() {
 #[case(rewrite)]
 #[case(rewrite_no_wrap)]
 fn symlink_target_is_declined(#[case] rewrite_fn: fn(&Path) -> std::io::Result<()>) {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let real = dir.path().join("real.md");
     let link = dir.path().join("link.md");
     let original = "|A|B|\n|1|2|";
-    fs::write(&real, original).unwrap();
+    fs::write(&real, original).expect("write symlink target");
     // A relative target keeps the link resolvable inside the capability.
-    std::os::unix::fs::symlink("real.md", &link).unwrap();
+    std::os::unix::fs::symlink("real.md", &link).expect("create symlink to target");
 
     let err = rewrite_fn(&link).expect_err("symlink must be declined");
 
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
     assert_eq!(
-        fs::read_to_string(&real).unwrap(),
+        fs::read_to_string(&real).expect("read symlink target after declined rewrite"),
         original,
         "declining a symlink must leave its target untouched"
     );
     assert!(
         fs::symlink_metadata(&link)
-            .unwrap()
+            .expect("read symlink metadata")
             .file_type()
             .is_symlink(),
         "the symlink itself must survive"
@@ -260,9 +264,9 @@ fn symlink_target_is_declined(#[case] rewrite_fn: fn(&Path) -> std::io::Result<(
 
 #[test]
 fn failure_after_temporary_file_creation_removes_it() {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let target = dir.path().join("target.md");
-    fs::create_dir(&target).unwrap();
+    fs::create_dir(&target).expect("create directory at replacement target");
     let root = Utf8Path::from_path(dir.path()).expect("UTF-8 temporary directory");
     let capability = Dir::open_ambient_dir(root, ambient_authority()).expect("open capability");
 
@@ -330,10 +334,10 @@ fn assert_read_only(path: &Path) {
 fn failed_swap_restores_the_prepared_destination(
     #[case] rewrite_fn: fn(&Path) -> std::io::Result<()>,
 ) {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let file = dir.path().join("sample.md");
     let original = "|A|B|\n|1|2|";
-    fs::write(&file, original).unwrap();
+    fs::write(&file, original).expect("write original file");
     set_read_only(&file);
 
     let _armed = rename_failure_seam::arm();
@@ -344,7 +348,7 @@ fn failed_swap_restores_the_prepared_destination(
         "the failure must be the armed seam rather than an unrelated one: {error}"
     );
     assert_eq!(
-        fs::read_to_string(&file).unwrap(),
+        fs::read_to_string(&file).expect("read original file after failed swap"),
         original,
         "a failed swap must leave the original byte-identical"
     );
@@ -358,11 +362,11 @@ fn failed_swap_restores_the_prepared_destination(
 
 #[test]
 fn rewrite_empty_file_no_extra_newline() {
-    let dir = tempdir().unwrap();
+    let dir = tempdir().expect("create temporary directory");
     let file = dir.path().join("empty.md");
-    fs::write(&file, "").unwrap();
-    rewrite(&file).unwrap();
-    let contents = fs::read_to_string(&file).unwrap();
+    fs::write(&file, "").expect("write empty input file");
+    rewrite(&file).expect("rewrite empty input file");
+    let contents = fs::read_to_string(&file).expect("read rewritten empty file");
     assert!(contents.is_empty());
 }
 
