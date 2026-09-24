@@ -65,11 +65,11 @@ struct InlineFootnote<'a> {
 #[inline]
 fn capture_parts<'a>(caps: &'a Captures<'a>) -> InlineFootnote<'a> {
     InlineFootnote {
-        pre: &caps["pre"],
-        punc: &caps["punc"],
-        style: &caps["style"],
-        num: &caps["num"],
-        boundary: &caps["boundary"],
+        pre: caps.name("pre").map_or("", |m| m.as_str()),
+        punc: caps.name("punc").map_or("", |m| m.as_str()),
+        style: caps.name("style").map_or("", |m| m.as_str()),
+        num: caps.name("num").map_or("", |m| m.as_str()),
+        boundary: caps.name("boundary").map_or("", |m| m.as_str()),
     }
 }
 
@@ -90,18 +90,18 @@ pub(super) fn convert_inline(text: &str) -> String {
     let out = INLINE_FN_RE.replace_all(text, |caps: &Captures| build_footnote(capture_parts(caps)));
     COLON_FN_RE
         .replace_all(&out, |caps: &Captures| {
-            let pre = &caps["pre"];
-            let style = &caps["style"];
-            let num = &caps["num"];
-            let colons = &caps["colons"];
-            let boundary = &caps["boundary"];
+            let pre = caps.name("pre").map_or("", |m| m.as_str());
+            let style = caps.name("style").map_or("", |m| m.as_str());
+            let num = caps.name("num").map_or("", |m| m.as_str());
+            let colons = caps.name("colons").map_or("", |m| m.as_str());
+            let boundary = caps.name("boundary").map_or("", |m| m.as_str());
             let mat = caps.get(0).expect("regex matched without capture");
             let match_str = mat.as_str();
             let num_match = caps.name("num").expect("regex matched without num capture");
             let style_start = caps
                 .name("style")
                 .map_or(num_match.start() - mat.start(), |m| m.start() - mat.start());
-            let captured_gap = &match_str[pre.len()..style_start];
+            let captured_gap = match_str.get(pre.len()..style_start).unwrap_or("");
             let gap = if pre.is_empty() {
                 captured_gap
             } else if pre.chars().last().is_some_and(char::is_alphanumeric) {

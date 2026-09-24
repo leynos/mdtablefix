@@ -56,7 +56,7 @@ fn convert_inline_footnotes_inner(
     let mut out = Vec::with_capacity(lines.len());
 
     for (index, line) in lines.iter().enumerate() {
-        if setext_text_lines.is_some_and(|setext_lines| setext_lines[index])
+        if setext_text_lines.is_some_and(|setext_lines| setext_lines.get(index) == Some(&true))
             || is_atx_heading_prefix(line)
         {
             out.push(line.clone());

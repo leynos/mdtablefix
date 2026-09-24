@@ -104,7 +104,9 @@ struct DefinitionScanState<'a> {
 pub(super) fn definition_segment_end(lines: &[String], start: usize, block_end: usize) -> usize {
     let mut idx = start + 1;
     while idx < block_end {
-        let line = &lines[idx];
+        let Some(line) = lines.get(idx) else {
+            break;
+        };
         if parse_definition(line).is_some() {
             break;
         }
@@ -113,7 +115,11 @@ pub(super) fn definition_segment_end(lines: &[String], start: usize, block_end: 
             continue;
         }
         if line.trim().is_empty() {
-            if idx + 1 < block_end && parse_definition(&lines[idx + 1]).is_some() {
+            if idx + 1 < block_end
+                && lines
+                    .get(idx + 1)
+                    .is_some_and(|next| parse_definition(next).is_some())
+            {
                 break;
             }
             idx += 1;
@@ -187,17 +193,17 @@ fn definition_line_from_parts(
 /// ordered-list candidate or the captured number fails to parse.
 pub(super) fn numeric_candidate_from_line(line: &str, index: usize) -> Option<NumericCandidate> {
     let caps = FOOTNOTE_LINE_RE.captures(line)?;
-    let indent = caps.name("indent").map_or("", |m| m.as_str()).to_string();
+    let indent = caps.name("indent").map_or("", |m| m.as_str()).to_owned();
     let num_match = caps.name("num")?;
     let rest_match = caps.name("rest")?;
     let number = num_match.as_str().parse::<usize>().ok()?;
-    let rest = rest_match.as_str().to_string();
+    let rest = rest_match.as_str().to_owned();
     let sep_start = num_match.end().saturating_add(1);
     let rest_start = rest_match.start();
     if sep_start > rest_start || sep_start > line.len() || rest_start > line.len() {
         return None;
     }
-    let whitespace = line[sep_start..rest_start].to_string();
+    let whitespace = line.get(sep_start..rest_start)?.to_owned();
     Some(NumericCandidate {
         index,
         number,
@@ -214,7 +220,9 @@ pub(super) fn numeric_candidate_from_line(line: &str, index: usize) -> Option<Nu
 fn collect_scan_updates(lines: &[String], state: &mut DefinitionScanState<'_>) {
     let mut fences = FenceTracker::default();
 
-    for (index, line) in lines.iter().enumerate() {
+    for (index, (line, is_definition_line)) in
+        lines.iter().zip(&mut state.is_definition_line).enumerate()
+    {
         let fence = fences.observe_source_line(line);
         if fence.is_fence_marker || fence.is_in_fence {
             continue;
@@ -227,7 +235,7 @@ fn collect_scan_updates(lines: &[String], state: &mut DefinitionScanState<'_>) {
                 state.mapping,
                 state.next_number,
             ));
-            state.is_definition_line[index] = true;
+            *is_definition_line = true;
             continue;
         }
 
@@ -283,7 +291,9 @@ fn finalize_numeric_candidates(state: &mut DefinitionScanState<'_>) {
             new_number,
             line,
         });
-        state.is_definition_line[candidate.index] = true;
+        if let Some(is_definition_line) = state.is_definition_line.get_mut(candidate.index) {
+            *is_definition_line = true;
+        }
     }
 }
 
@@ -358,7 +368,9 @@ pub(super) fn settled_definitions(lines: &[String]) -> Vec<DefinitionLine> {
 /// untouched.
 pub(super) fn rewrite_definition_headers(lines: &mut [String], definitions: &[DefinitionLine]) {
     for definition in definitions {
-        lines[definition.index].clone_from(&definition.line);
+        if let Some(line) = lines.get_mut(definition.index) {
+            line.clone_from(&definition.line);
+        }
     }
 }
 

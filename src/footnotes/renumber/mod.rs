@@ -74,10 +74,15 @@ fn matches_definition_prefix(prefix: &str) -> bool {
 /// This guard prevents renumbering the identifier in `[^n]:` before the
 /// definition rewrite has applied the shared mapping.
 fn is_definition_like(text: &str, mat: &Match) -> bool {
-    if !matches_definition_prefix(&text[..mat.start()]) {
+    if !text
+        .get(..mat.start())
+        .is_some_and(matches_definition_prefix)
+    {
         return false;
     }
-    let suffix = &text[mat.end()..];
+    let Some(suffix) = text.get(mat.end()..) else {
+        return false;
+    };
     let trimmed = suffix.trim_start_matches(char::is_whitespace);
     if !trimmed.starts_with(':') {
         return false;
@@ -99,14 +104,13 @@ fn rewrite_refs_in_segment(text: &str, mapping: &HashMap<usize, usize>) -> Strin
                 return String::new();
             };
             if is_definition_like(text, &mat) {
-                return caps[0].to_string();
+                return mat.as_str().to_owned();
             }
-            caps["num"]
-                .parse::<usize>()
-                .ok()
+            caps.name("num")
+                .and_then(|capture| capture.as_str().parse::<usize>().ok())
                 .and_then(|number| mapping.get(&number).copied())
                 .map_or_else(
-                    || caps[0].to_string(),
+                    || mat.as_str().to_owned(),
                     |new_number| format!("[^{new_number}]"),
                 )
         })
@@ -168,7 +172,10 @@ fn collect_reference_mapping_from_text(
         if is_definition_like(text, &mat) {
             continue;
         }
-        let Ok(number) = caps["num"].parse::<usize>() else {
+        let Some(number) = caps
+            .name("num")
+            .and_then(|capture| capture.as_str().parse::<usize>().ok())
+        else {
             continue;
         };
         if mapping.contains_key(&number) {
@@ -184,26 +191,21 @@ fn collect_reference_mapping_from_text(
 /// Continuation and blank lines stay with the block, while unrelated trailing
 /// prose prevents reordering a partial or non-footnote suffix.
 fn footnote_definition_block_range(lines: &[String]) -> Option<(usize, usize)> {
-    let (mut start, end) = trimmed_range(lines, |line| {
+    let (start, end) = trimmed_range(lines, |line| {
         line.trim().is_empty()
             || parse_definition(line).is_some()
             || is_definition_continuation(line)
     });
-    while start < end
-        && parse_definition(&lines[start]).is_none()
-        && !lines[start].trim().is_empty()
-    {
-        start += 1;
-    }
-    if start < end
-        && lines[start..end]
-            .iter()
-            .any(|line| parse_definition(line).is_some())
-    {
-        Some((start, end))
-    } else {
-        None
-    }
+    let block = lines.get(start..end)?;
+    let leading = block
+        .iter()
+        .take_while(|line| parse_definition(line).is_none() && !line.trim().is_empty())
+        .count();
+    block
+        .iter()
+        .skip(leading)
+        .any(|line| parse_definition(line).is_some())
+        .then_some((start + leading, end))
 }
 
 /// Rewrite eligible prose references while preserving definitions and fences.

@@ -29,7 +29,11 @@ type DefinitionSegment = (usize, usize, Vec<String>);
 /// can move with the definition that owns them.
 fn collect_header_positions(lines: &[String], start: usize, end: usize) -> Vec<usize> {
     (start..end)
-        .filter(|&idx| parse_definition(&lines[idx]).is_some())
+        .filter(|&idx| {
+            lines
+                .get(idx)
+                .is_some_and(|line| parse_definition(line).is_some())
+        })
         .collect()
 }
 
@@ -56,8 +60,9 @@ fn build_def_lookup(
 fn leading_segment_start(lines: &[String], consumed: usize, position: usize) -> usize {
     let mut leading_start = position;
     while leading_start > consumed
-        && lines[leading_start - 1].trim().is_empty()
-        && !is_definition_continuation(&lines[leading_start - 1])
+        && lines
+            .get(leading_start - 1)
+            .is_some_and(|line| line.trim().is_empty() && !is_definition_continuation(line))
     {
         leading_start -= 1;
     }
@@ -76,11 +81,15 @@ fn build_definition_segment(
     next_bound: usize,
 ) -> DefinitionSegment {
     let mut segment = Vec::with_capacity(next_bound.saturating_sub(leading_start).max(1));
-    segment.extend(lines[leading_start..position].iter().cloned());
+    if let Some(leading) = lines.get(leading_start..position) {
+        segment.extend(leading.iter().cloned());
+    }
     segment.push(definition.line.clone());
     let tail_start = position.saturating_add(1);
-    if tail_start < next_bound {
-        segment.extend(lines[tail_start..next_bound].iter().cloned());
+    if tail_start < next_bound
+        && let Some(tail) = lines.get(tail_start..next_bound)
+    {
+        segment.extend(tail.iter().cloned());
     }
     (definition.new_number, definition.index, segment)
 }
@@ -149,8 +158,10 @@ fn compose_reordered_block(
     mut first_leading: Vec<String>,
 ) -> Vec<String> {
     let mut reordered = Vec::new();
-    if prefix_len > 0 {
-        reordered.extend(lines[start..start + prefix_len].iter().cloned());
+    if prefix_len > 0
+        && let Some(prefix) = lines.get(start..start + prefix_len)
+    {
+        reordered.extend(prefix.iter().cloned());
     }
 
     for (idx, (_, _, segment)) in segments.into_iter().enumerate() {
@@ -218,8 +229,10 @@ pub(super) fn reorder_definition_block(
     let reordered = compose_reordered_block(lines, start, prefix_len, segments, first_leading);
 
     if reordered.len() == end - start {
-        for (target, source) in lines[start..end].iter_mut().zip(reordered) {
-            *target = source;
+        if let Some(block) = lines.get_mut(start..end) {
+            for (target, source) in block.iter_mut().zip(reordered) {
+                *target = source;
+            }
         }
     } else {
         warn!(
