@@ -21,7 +21,9 @@ fn is_whitespace_only_line(line: &[InlineFragment]) -> bool {
 }
 
 /// Returns whether the line consists of one literal space fragment.
-fn is_single_space_line(line: &[InlineFragment]) -> bool { line.len() == 1 && line[0].text == " " }
+fn is_single_space_line(line: &[InlineFragment]) -> bool {
+    matches!(line, [fragment] if fragment.text == " ")
+}
 
 /// Returns the total display width of the rendered line.
 fn line_width(line: &[InlineFragment]) -> usize { line.iter().map(|fragment| fragment.width).sum() }
@@ -88,7 +90,7 @@ fn inline_code_tail_carry_fits(
     next_content_line: Option<&[InlineFragment]>,
     width: usize,
 ) -> bool {
-    let Some(next_content_line) = next_content_line else {
+    let Some(following_line) = next_content_line else {
         trace!(
             fits = true,
             reason = "no following content line",
@@ -116,7 +118,7 @@ fn inline_code_tail_carry_fits(
         return true;
     };
 
-    let next_line_width = line_width(next_content_line);
+    let next_line_width = line_width(following_line);
     let projected_width = previous_tail.width + 1 + next_line_width;
     let fits = projected_width <= width;
     trace!(
@@ -205,23 +207,29 @@ pub(super) fn merge_whitespace_only_lines(
 /// panics.
 pub(super) fn rebalance_atomic_tails(lines: &mut [Vec<InlineFragment>], width: usize) {
     for index in 0..lines.len().saturating_sub(1) {
-        if !line_starts_with_single_space_then_plain(&lines[index + 1])
-            || !line_has_rebalanceable_tail(&lines[index])
+        let (previous_lines, following_lines) = lines.split_at_mut(index + 1);
+        let (Some(previous_line), Some(following_line)) =
+            (previous_lines.last_mut(), following_lines.first_mut())
+        else {
+            continue;
+        };
+        if !line_starts_with_single_space_then_plain(following_line)
+            || !line_has_rebalanceable_tail(previous_line)
         {
             continue;
         }
 
-        let Some(trailing_width) = lines[index].last().map(|fragment| fragment.width) else {
+        let Some(trailing_width) = previous_line.last().map(|fragment| fragment.width) else {
             continue;
         };
-        if line_width(&lines[index + 1]) + trailing_width > width {
+        if line_width(following_line) + trailing_width > width {
             continue;
         }
 
-        let Some(trailing_fragment) = lines[index].pop() else {
+        let Some(trailing_fragment) = previous_line.pop() else {
             continue;
         };
-        lines[index + 1].insert(0, trailing_fragment);
+        following_line.insert(0, trailing_fragment);
     }
 }
 
