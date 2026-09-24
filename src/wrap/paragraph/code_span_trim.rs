@@ -17,7 +17,7 @@ pub(super) fn trim_code_span_edge_spaces<'a>(
     text: &'a str,
     synthetic_spaces: &[usize],
 ) -> Cow<'a, str> {
-    if synthetic_spaces.is_empty() || (!text.contains("` ") && !text.contains(" `")) {
+    if !has_potential_synthetic_edge_space(text, synthetic_spaces) {
         return Cow::Borrowed(text);
     }
 
@@ -36,8 +36,9 @@ pub(super) fn trim_code_span_edge_spaces<'a>(
         let code_end = consumed + close_start;
         let trim_start = usize::from(synthetic_space_offsets.contains(&code_start));
         let trim_end = usize::from(
-            code_end > code_start
-                && synthetic_space_offsets.contains(&(code_end.saturating_sub(1))),
+            (code_start..code_end)
+                .next_back()
+                .is_some_and(|last| synthetic_space_offsets.contains(&last)),
         );
         if trim_start > 0 || trim_end > 0 {
             trace!(
@@ -49,21 +50,37 @@ pub(super) fn trim_code_span_edge_spaces<'a>(
                 "trimmed synthetic code-span edge spaces"
             );
         }
-        output.push_str(&remaining[..open_end]);
-        output.push_str(&remaining[open_end + trim_start..close_start - trim_end]);
-        output.push_str(&remaining[close_start..close_end]);
-        remaining = &remaining[close_end..];
+        let Some(trimmed_end) = close_start.checked_sub(trim_end) else {
+            return Cow::Borrowed(text);
+        };
+        let (Some(opener), Some(content), Some(closer), Some(rest)) = (
+            remaining.get(..open_end),
+            remaining.get(open_end + trim_start..trimmed_end),
+            remaining.get(close_start..close_end),
+            remaining.get(close_end..),
+        ) else {
+            return Cow::Borrowed(text);
+        };
+        output.push_str(opener);
+        output.push_str(content);
+        output.push_str(closer);
+        remaining = rest;
         consumed += close_end;
     }
     output.push_str(remaining);
     Cow::Owned(output)
 }
 
+/// Limit the trim scan to joined lines that might have a synthetic code edge.
+fn has_potential_synthetic_edge_space(text: &str, synthetic_spaces: &[usize]) -> bool {
+    !synthetic_spaces.is_empty() && (text.contains("` ") || text.contains(" `"))
+}
+
 /// Find the next unescaped backtick run beginning at or after `start`.
 fn next_backtick_run(text: &str, start: usize) -> Option<(usize, usize)> {
     let mut index = start;
     while index < text.len() {
-        let ch = text[index..].chars().next()?;
+        let ch = text.get(index..)?.chars().next()?;
         if ch == '`' && !has_odd_backslash_escape(text.as_bytes(), index) {
             return Some((index, backtick_run_end(text, index)));
         }
@@ -91,14 +108,17 @@ fn is_exact_backtick_run(text: &str, start: usize, end: usize, fence_len: usize)
     end - start == fence_len
         && start
             .checked_sub(1)
-            .is_none_or(|before| text.as_bytes()[before] != b'`')
+            .is_none_or(|before| text.as_bytes().get(before) != Some(&b'`'))
         && text.as_bytes().get(end).is_none_or(|next| *next != b'`')
 }
 
 /// Return the byte offset immediately after a contiguous backtick run.
 fn backtick_run_end(text: &str, start: usize) -> usize {
     let mut end = start;
-    for ch in text[start..].chars() {
+    let Some(suffix) = text.get(start..) else {
+        return start;
+    };
+    for ch in suffix.chars() {
         if ch != '`' {
             break;
         }
@@ -112,15 +132,15 @@ fn backtick_run_end(text: &str, start: usize) -> usize {
 /// Odd parity means the backtick is literal; even parity leaves it eligible as
 /// a code-span delimiter.
 fn has_odd_backslash_escape(bytes: &[u8], mut index: usize) -> bool {
-    let mut count = 0;
+    let mut count = 0usize;
     while index > 0 {
         index -= 1;
-        if bytes[index] != b'\\' {
+        if bytes.get(index) != Some(&b'\\') {
             break;
         }
         count += 1;
     }
-    count % 2 == 1
+    count.rem_euclid(2) == 1
 }
 
 #[cfg(test)]
@@ -152,6 +172,14 @@ mod tests {
         assert_eq!(
             trim_code_span_edge_spaces("`` foo ` bar ` baz ``", &[2, 18]),
             Cow::Borrowed("``foo ` bar ` baz``"),
+        );
+    }
+
+    #[test]
+    fn trims_synthetic_spaces_after_multibyte_prefix() {
+        assert_eq!(
+            trim_code_span_edge_spaces("é ` foo ` 末", &[4, 8]),
+            Cow::Borrowed("é `foo` 末"),
         );
     }
 }
