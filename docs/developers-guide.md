@@ -507,6 +507,13 @@ build real repositories and drive the built binary as a user would.
 grammar of the flags, the `--help` rendering, and the properties a reader of a
 terminal depends on.
 
+The Git scenario fixture keeps its snapshot traversal private to
+`tests/steps/git_selection/fixture.rs`. `snapshot` is the only entry point for
+the steps: `walk_snapshot` visits directories, and `record_snapshot_entry`
+records each file or link and recurses through that walker. These helpers are
+specific to the Git fixture's byte comparison and must not be reused by other
+test suites.
+
 Both fixture sets neutralize the ambient Git configuration
 (`GIT_CONFIG_NOSYSTEM`, `GIT_CONFIG_GLOBAL`, and `HOME`), so the developer's own
 `core.excludesFile` cannot change what is selected, and they supply the
