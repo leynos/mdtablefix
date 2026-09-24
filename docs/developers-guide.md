@@ -882,16 +882,13 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   `scan_code_suffix_end` in `src/wrap/tokenize/scanning.rs`; the combined
   token is recognized as atomic by `has_inline_code_structure` in
   `src/wrap/inline/fragment.rs`, so wrapping treats the full string as one
-  unit. Leading-hyphen compounds — a token that ends with a hyphen and contains
-  at least one alphabetic character (for example `pre-`, `LLM-`, `(API-`) — are
-  coupled forward to the next inline code span during span grouping by the
-  `ends_with_hyphen_prefix` predicate in `src/wrap/inline/predicates.rs`,
-  applied in `determine_token_span` in `src/wrap/inline.rs`. The coupling
-  mirrors the existing opening-punctuation pattern, so compounds such as
-  `` pre-`LLMPort` `` and `` (API-`Foo`) `` remain atomic during wrapping.
-  Internal hyphen chains (e.g. `state-of-the-art-`) are accepted by design;
-  bare dash runs such as `-` or `---` are rejected. Unicode alphabetic
-  characters (e.g. `pré-`, `字-`) are intentionally supported.
+  unit. A non-whitespace token immediately before an inline code span is
+  grouped forward during `determine_token_span` in `src/wrap/inline/mod.rs`.
+  This makes unspaced runs such as `` **bold**`code` ``, `` pre-`LLMPort` ``,
+  and `` (API-`Foo`) `` atomic, because emitting a line break inside one would
+  introduce a space when the next pass rejoins the paragraph. Whitespace
+  remains a break opportunity, so separately spaced inline code spans may still
+  wrap independently.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
   line where they occur.
 - **Verbatim blocks.** Fenced code blocks must pass through unchanged, along
@@ -1188,7 +1185,6 @@ Table: Instrumented functions and their logging levels and fields.
 | ------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
 | `looks_like_footnote_ref` | trace        | `skip(token)`, return value (out)                                                                 |
 | `ends_with_footnote_ref`  | trace        | `skip(token)`, return value (out)                                                                 |
-| `ends_with_hyphen_prefix` | trace        | `skip(token)`, return value (out)                                                                 |
 | `is_month_name`           | trace        | `skip(token)`, return value (out)                                                                 |
 | `is_ordinal_day`          | trace        | `skip(token)`, return value (out)                                                                 |
 | `is_numeric_day`          | trace        | `skip(token)`, return value (out)                                                                 |

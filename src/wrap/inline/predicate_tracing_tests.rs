@@ -10,7 +10,6 @@ use test_macros::traced_test;
 
 use super::{
     ends_with_footnote_ref,
-    ends_with_hyphen_prefix,
     is_month_name,
     is_numeric_day,
     is_ordinal_day,
@@ -27,7 +26,6 @@ use super::{
     case(looks_like_bracketed_reference, "1]", "looks_like_bracketed_reference"),
     case(looks_like_footnote_ref, "[^1]", "looks_like_footnote_ref"),
     case(ends_with_footnote_ref, "word.[^1]", "ends_with_footnote_ref"),
-    case(ends_with_hyphen_prefix, "pre-", "ends_with_hyphen_prefix"),
     case(is_month_name, "January", "is_month_name"),
     case(is_ordinal_day, "25th", "is_ordinal_day"),
     case(is_numeric_day, "25", "is_numeric_day"),

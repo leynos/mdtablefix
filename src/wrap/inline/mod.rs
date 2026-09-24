@@ -38,7 +38,6 @@ use postprocess::{merge_whitespace_only_lines, rebalance_atomic_tails};
 use predicates::looks_like_link;
 pub(in crate::wrap::inline) use predicates::{
     ends_with_footnote_ref,
-    ends_with_hyphen_prefix,
     fragment_is_link,
     is_inline_code_token,
     is_opening_punct,
@@ -103,10 +102,10 @@ fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKin
         }
     }
 
-    // Forward-couple a hyphen-prefix token to the next inline code span so
-    // wrapping never splits compounds such as `pre-`code`` at the hyphen.
+    // A line break between adjacent inline syntax grows into a space when the
+    // next pass joins the paragraph. Keep the complete unspaced run atomic.
     if kind == SpanKind::General
-        && ends_with_hyphen_prefix(&tokens[start])
+        && !is_whitespace_token(&tokens[start])
         && let Some(next) = tokens.get(end)
         && is_code_token(next)
     {
