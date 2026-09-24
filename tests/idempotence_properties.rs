@@ -169,6 +169,30 @@ proptest! {
     }
 }
 
+/// Keeps an unspaced emphasis-to-code boundary from gaining a space on reread.
+#[test]
+fn adjacent_emphasis_and_code_reaches_a_fixed_point() {
+    let document = concat!(
+        "aaaaaaaa aaaaaa aaa aaaa aaaa aa dhaogoog axa gr\n",
+        "vi lg\n",
+        "nwqwaa jrc kojnx **bold**`code` aaaa aaaa aaaa aaaa aaaa aaaa aaaa aaaa aaaa aa\n",
+        "[1]\n",
+        "gcxjrit hcaolazw bto yzilku esvuo milveecc xkdfafl\n",
+    );
+    let flags = flags_for(71);
+    let (once, twice) = format_twice(document, &flags);
+
+    assert_eq!(
+        once,
+        concat!(
+            "aaaaaaaa aaaaaa aaa aaaa aaaa aa dhaogoog axa gr vi lg nwqwaa jrc kojnx\n",
+            "**bold**`code` aaaa aaaa aaaa aaaa aaaa aaaa aaaa aaaa aaaa aa [1] gcxjrit\n",
+            "hcaolazw bto yzilku esvuo milveecc xkdfafl\n",
+        ),
+    );
+    assert_eq!(twice, once, "the exact mask-71 case is not a fixed point");
+}
+
 /// Asserts the generator produces both changed and unchanged documents.
 ///
 /// The fixed-point property is only meaningful over documents the formatter
