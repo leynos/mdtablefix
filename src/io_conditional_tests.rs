@@ -3,6 +3,7 @@
 //! Conditional outcomes stay in their own module so the general replacement
 //! tests remain within the repository's file-size limit.
 
+use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::fixture;
@@ -23,35 +24,34 @@ struct ConditionalFixture {
 /// Creates a fresh target location without making an ambient filesystem path.
 #[test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn conditional_fixture() -> ConditionalFixture {
-    let temporary = tempdir().expect("create temporary directory");
-    let root =
-        camino::Utf8Path::from_path(temporary.path()).expect("the temporary directory is UTF-8");
-    let directory =
-        Dir::open_ambient_dir(root, ambient_authority()).expect("open the directory capability");
+fn conditional_fixture() -> Result<ConditionalFixture> {
+    let temporary = tempdir().context("create temporary directory")?;
+    let root = camino::Utf8Path::from_path(temporary.path())
+        .context("the temporary directory is not UTF-8")?;
+    let directory = Dir::open_ambient_dir(root, ambient_authority())
+        .context("open the directory capability")?;
 
-    ConditionalFixture {
+    Ok(ConditionalFixture {
         _temporary: temporary,
         directory,
         target: Utf8PathBuf::from("sample.md"),
-    }
+    })
 }
 
 /// Lists the fixture directory through its capability.
-fn entry_names(directory: &Dir) -> Vec<String> {
+fn entry_names(directory: &Dir) -> Result<Vec<String>> {
     let mut names: Vec<String> = directory
         .read_dir(".")
-        .expect("read the fixture directory")
+        .context("read the fixture directory")?
         .map(|entry| {
             entry
-                .expect("read fixture entry")
+                .context("read fixture entry")?
                 .file_name()
-                .expect("fixture entry has a UTF-8 name")
-                .clone()
+                .context("fixture entry has a UTF-8 name")
         })
-        .collect();
+        .collect::<Result<_>>()?;
     names.sort();
-    names
+    Ok(names)
 }
 
 /// A conditional replacement writes when the target still holds what was read.
@@ -60,7 +60,10 @@ fn entry_names(directory: &Dir) -> Vec<String> {
 /// the same entry point: without it, an implementation that never replaced
 /// anything would satisfy both.
 #[rstest::rstest]
-fn conditional_replacement_replaces_a_matching_target(conditional_fixture: ConditionalFixture) {
+fn conditional_replacement_replaces_a_matching_target(
+    #[from(conditional_fixture)] conditional_fixture_result: Result<ConditionalFixture>,
+) -> Result<()> {
+    let conditional_fixture = conditional_fixture_result?;
     let original = "|A|B|\n|1|2|";
     let formatted = "| A | B |\n| 1 | 2 |\n";
     conditional_fixture
@@ -84,15 +87,17 @@ fn conditional_replacement_replaces_a_matching_target(conditional_fixture: Condi
             .expect("read target"),
         formatted
     );
-    assert_eq!(entry_names(&conditional_fixture.directory), ["sample.md"]);
+    assert_eq!(entry_names(&conditional_fixture.directory)?, ["sample.md"]);
+    Ok(())
 }
 
 /// A target another writer reached first is left exactly as that writer left
 /// it, and the caller is told so rather than given an error.
 #[rstest::rstest]
 fn conditional_replacement_declines_a_target_that_moved_on(
-    conditional_fixture: ConditionalFixture,
-) {
+    #[from(conditional_fixture)] conditional_fixture_result: Result<ConditionalFixture>,
+) -> Result<()> {
+    let conditional_fixture = conditional_fixture_result?;
     let read = "|A|B|\n|1|2|";
     let moved_on = "|X|Y|\n|3|4|";
     conditional_fixture
@@ -118,10 +123,11 @@ fn conditional_replacement_declines_a_target_that_moved_on(
         "the other writer's text must survive untouched"
     );
     assert_eq!(
-        entry_names(&conditional_fixture.directory),
+        entry_names(&conditional_fixture.directory)?,
         ["sample.md"],
         "a declined replacement must remove the temporary file it wrote"
     );
+    Ok(())
 }
 
 /// A writer that lands between the swap's last comparison and its rename is
@@ -136,8 +142,9 @@ fn conditional_replacement_declines_a_target_that_moved_on(
 /// and no temporary file is left beside it.
 #[rstest::rstest]
 fn conditional_replacement_declines_a_writer_that_lands_inside_the_swap(
-    conditional_fixture: ConditionalFixture,
-) {
+    #[from(conditional_fixture)] conditional_fixture_result: Result<ConditionalFixture>,
+) -> Result<()> {
+    let conditional_fixture = conditional_fixture_result?;
     let read = "|A|B|\n|1|2|";
     let intruder = "|X|Y|\n|3|4|";
     conditional_fixture
@@ -171,15 +178,19 @@ fn conditional_replacement_declines_a_writer_that_lands_inside_the_swap(
         "the other writer's text must survive the declined swap"
     );
     assert_eq!(
-        entry_names(&conditional_fixture.directory),
+        entry_names(&conditional_fixture.directory)?,
         ["sample.md"],
         "a declined replacement must remove the temporary file it wrote"
     );
+    Ok(())
 }
 
 /// A failed cleanup after a declined replacement is reported to the caller.
 #[rstest::rstest]
-fn conditional_replacement_reports_a_failed_cleanup(conditional_fixture: ConditionalFixture) {
+fn conditional_replacement_reports_a_failed_cleanup(
+    #[from(conditional_fixture)] conditional_fixture_result: Result<ConditionalFixture>,
+) -> Result<()> {
+    let conditional_fixture = conditional_fixture_result?;
     let expected = "|A|B|\n|1|2|";
     let moved_on = "|X|Y|\n|3|4|";
     conditional_fixture
@@ -204,6 +215,7 @@ fn conditional_replacement_reports_a_failed_cleanup(conditional_fixture: Conditi
             .expect("read target"),
         moved_on
     );
+    Ok(())
 }
 
 /// A target that cannot be read back at all is an error rather than a decline.
@@ -212,8 +224,9 @@ fn conditional_replacement_reports_a_failed_cleanup(conditional_fixture: Conditi
 /// succeeded, or that the condition failed, when the question could not be put.
 #[rstest::rstest]
 fn conditional_replacement_reports_a_target_it_cannot_read_back(
-    conditional_fixture: ConditionalFixture,
-) {
+    #[from(conditional_fixture)] conditional_fixture_result: Result<ConditionalFixture>,
+) -> Result<()> {
+    let conditional_fixture = conditional_fixture_result?;
     conditional_fixture
         .directory
         .write(&conditional_fixture.target, "|A|B|\n|1|2|")
@@ -233,8 +246,9 @@ fn conditional_replacement_reports_a_target_it_cannot_read_back(
 
     assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
     assert_eq!(
-        entry_names(&conditional_fixture.directory),
+        entry_names(&conditional_fixture.directory)?,
         Vec::<String>::new(),
         "the temporary file must not survive the error"
     );
+    Ok(())
 }
