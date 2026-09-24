@@ -2,7 +2,13 @@
 # Confirm that Verus rejects a wrong production Setext consumer decision.
 set -euo pipefail
 
-repo_root="${1:-.}"
+# Absolute, because `VERUS_RUN` names its repository root as `.`. The runner
+# reads that relative to the working directory, so the script moves to the
+# repository root and keeps every path it builds independent of the caller's
+# directory.
+repo_root="$(cd -- "${1:-.}" && pwd)"
+cd "${repo_root}"
+
 proof_dir="$(mktemp -d "${repo_root}/verus/.setext-mutation-XXXXXX")"
 proof_file="${proof_dir}/lib.rs"
 output_file="${proof_dir}/verus.out"
@@ -28,10 +34,13 @@ if cmp -s "${repo_root}/src/classify_kernel_consumers.rs" \
     exit 1
 fi
 
-# `PROVER_TOOLS` carries a command and fixed arguments from the Makefile.
+# `VERUS_RUN` carries the runner, its toolchain isolation, and its fixed
+# arguments from the Makefile, so overriding that variable reaches this gate
+# exactly as it reaches `verus` and `verus-selftest`. Only the proof file is
+# added here, because this gate supplies its own mutated copy.
 # shellcheck disable=SC2086
-if env -u RUSTUP_TOOLCHAIN ${PROVER_TOOLS:?PROVER_TOOLS must be set} verus run \
-    --repo-root "${repo_root}" --proof-file "${proof_file}" > "${output_file}" 2>&1; then
+if ${VERUS_RUN:?VERUS_RUN must be set} \
+    --proof-file "${proof_file}" > "${output_file}" 2>&1; then
     cat "${output_file}"
     echo "Setext consumer mutation unexpectedly verified" >&2
     exit 1

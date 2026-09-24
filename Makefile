@@ -97,7 +97,7 @@ verus-selftest: verus-install ## Confirm Verus rejects the deliberately false sm
 	rm -f "$$output"
 
 verus-mutation: verus-install ## Confirm a wrong production classifier decision is rejected
-	PROVER_TOOLS='$(PROVER_TOOLS)' scripts/check-classifier-mutation.sh .
+	VERUS_RUN='$(VERUS_RUN)' scripts/check-classifier-mutation.sh .
 
 markdownlint: ## Lint Markdown files
 	$(MDLINT) "**/*.md"
