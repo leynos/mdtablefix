@@ -2007,6 +2007,13 @@ and `make lint`
 three run before a commit. `make markdownlint` covers the documentation changes
 that none of the Rust gates see.
 
+`rustix = "1.1.4"` is a development-only dependency that enables its `process`
+feature. The Unix permission-test helpers in `src/io_tests.rs`,
+`src/main_tests.rs` and `tests/in_place_atomic/failure.rs` use
+`rustix::process::geteuid().is_root()` to recognize an effective root user:
+permission-denial assertions would be vacuous under root, and the safe API
+keeps their UID checks out of `unsafe` code.
+
 #### `make mutants`
 
 `make mutants` runs mutation testing over the selection tree with
