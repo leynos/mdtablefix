@@ -83,14 +83,14 @@ impl IndentedCodeTracker {
     }
 
     /// Ends the tracked block after a fence or link continuation takes ownership of the line.
-    fn observe_completed_block(&mut self) {
+    const fn observe_completed_block(&mut self) {
         self.is_in_block = false;
         self.may_start_block = true;
     }
 }
 
 /// Reports whether a block leaves no paragraph open before the next source line.
-fn completes_leaf_block(block_kind: Option<BlockKind>) -> bool {
+const fn completes_leaf_block(block_kind: Option<BlockKind>) -> bool {
     matches!(
         block_kind,
         Some(
@@ -115,13 +115,26 @@ fn replace_ellipsis_in_prose(line: &str) -> String {
 
 /// Replaces ellipses between protected literal spans while copying those spans unchanged.
 fn replace_text_ellipsis(text: &str, out: &mut String) {
+    let output_start = out.len();
     let mut cursor = 0;
     for span in protected::literal_spans(text) {
-        replace_dot_runs(&text[cursor..span.start], out);
-        out.push_str(&text[span.clone()]);
+        let (Some(prose), Some(literal)) = (text.get(cursor..span.start), text.get(span.clone()))
+        else {
+            // Roll back this token so malformed protected ranges cannot drop or duplicate text.
+            out.truncate(output_start);
+            out.push_str(text);
+            return;
+        };
+        replace_dot_runs(prose, out);
+        out.push_str(literal);
         cursor = span.end;
     }
-    replace_dot_runs(&text[cursor..], out);
+    let Some(prose) = text.get(cursor..) else {
+        out.truncate(output_start);
+        out.push_str(text);
+        return;
+    };
+    replace_dot_runs(prose, out);
 }
 
 /// Converts complete dot triples in one text fragment and leaves an incomplete suffix unchanged.
@@ -133,8 +146,8 @@ fn replace_dot_runs(text: &str, out: &mut String) {
 
     let replaced = DOT_RE.replace_all(text, |caps: &regex::Captures<'_>| {
         let len = caps[0].len();
-        let ellipses = "…".repeat(len / 3);
-        let leftover = ".".repeat(len % 3);
+        let ellipses = "…".repeat(len.div_euclid(3));
+        let leftover = ".".repeat(len.rem_euclid(3));
         format!("{ellipses}{leftover}")
     });
     out.push_str(&replaced);
@@ -199,36 +212,30 @@ mod tests {
 
     #[test]
     fn replaces_simple_text() {
-        let input = vec!["wait...".to_string()];
-        let expected = vec!["wait…".to_string()];
-        assert_eq!(replace_ellipsis(&input), expected);
+        assert_eq!(
+            replace_ellipsis(&["wait...".to_owned()]),
+            ["wait…".to_owned()]
+        );
     }
 
     #[test]
     fn ignores_code_spans() {
-        let input = vec!["a `b...` c".to_string()];
-        let expected = input.clone();
-        assert_eq!(replace_ellipsis(&input), expected);
+        let input = ["a `b...` c".to_owned()];
+        assert_eq!(replace_ellipsis(&input), input);
     }
 
     #[test]
     fn ignores_fenced_blocks() {
-        let input = vec!["```".to_string(), "...".to_string(), "```".to_string()];
-        let expected = input.clone();
-        assert_eq!(replace_ellipsis(&input), expected);
+        let input = ["```".to_owned(), "...".to_owned(), "```".to_owned()];
+        assert_eq!(replace_ellipsis(&input), input);
     }
 
     #[test]
     fn ignores_blockquoted_fenced_blocks() {
         // The depth-aware fence tracker recognizes a fence opened inside a
         // blockquote, so the enclosed `...` stays literal.
-        let input = vec![
-            "> ```".to_string(),
-            "> ...".to_string(),
-            "> ```".to_string(),
-        ];
-        let expected = input.clone();
-        assert_eq!(replace_ellipsis(&input), expected);
+        let input = ["> ```".to_owned(), "> ...".to_owned(), "> ```".to_owned()];
+        assert_eq!(replace_ellipsis(&input), input);
     }
 
     #[rstest::rstest]
@@ -238,17 +245,17 @@ mod tests {
     )]
     #[case::paragraph_interruption(&["paragraph", "    prose..."], &["paragraph", "    prose…"])]
     fn transforms_indented_lines(#[case] input: &[&str], #[case] expected: &[&str]) {
-        let input = input.iter().map(ToString::to_string).collect::<Vec<_>>();
-        let expected = expected.iter().map(ToString::to_string).collect::<Vec<_>>();
-        assert_eq!(replace_ellipsis(&input), expected);
+        let input_lines = input.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let expected_lines = expected.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_eq!(replace_ellipsis(&input_lines), expected_lines);
     }
 
     #[rstest::rstest]
     #[case::heading(&["# Heading", "    literal..."])]
     #[case::closed_fence(&["```", "fenced...", "```", "    literal..."])]
     fn completed_blocks_allow_following_indented_code(#[case] input: &[&str]) {
-        let input = input.iter().map(ToString::to_string).collect::<Vec<_>>();
-        assert_eq!(replace_ellipsis(&input), input);
+        let input_lines = input.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_eq!(replace_ellipsis(&input_lines), input_lines);
     }
 
     #[rstest::rstest]
@@ -256,10 +263,7 @@ mod tests {
     #[case::four_spaces("    ...", "    ...")]
     #[case::one_tab("\t...", "\t...")]
     fn observes_indented_code_boundary(#[case] input: &str, #[case] expected: &str) {
-        assert_eq!(
-            replace_ellipsis(&[input.to_string()]),
-            [expected.to_string()]
-        );
+        assert_eq!(replace_ellipsis(&[input.to_owned()]), [expected.to_owned()]);
     }
 
     #[rstest::rstest]
@@ -274,7 +278,7 @@ mod tests {
     #[case::home_path("~/src/.../README.md")]
     #[case::windows_path(r"C:\src\...\README.md")]
     fn preserves_semantic_dot_runs(#[case] input: &str) {
-        assert_eq!(replace_ellipsis(&[input.to_string()]), [input.to_string()]);
+        assert_eq!(replace_ellipsis(&[input.to_owned()]), [input.to_owned()]);
     }
 
     #[test]
@@ -284,7 +288,7 @@ mod tests {
                 "[0.1.1]: https://github.com/leynos/diesel-cte-ext/compare/",
                 "v0.1.0...302d156361161fd73310926dcef6513b41f7b393",
             )
-            .to_string(),
+            .to_owned(),
         ];
         assert_eq!(replace_ellipsis(&input), input);
     }
@@ -292,14 +296,14 @@ mod tests {
     #[test]
     fn preserves_split_link_reference_destination() {
         let input = vec![
-            "[compare]:".to_string(),
-            "  https://github.com/leynos/mdtablefix/compare/v1...v2".to_string(),
-            "Prose... still changes.".to_string(),
+            "[compare]:".to_owned(),
+            "  https://github.com/leynos/mdtablefix/compare/v1...v2".to_owned(),
+            "Prose... still changes.".to_owned(),
         ];
         let expected = vec![
-            "[compare]:".to_string(),
-            "  https://github.com/leynos/mdtablefix/compare/v1...v2".to_string(),
-            "Prose… still changes.".to_string(),
+            "[compare]:".to_owned(),
+            "  https://github.com/leynos/mdtablefix/compare/v1...v2".to_owned(),
+            "Prose… still changes.".to_owned(),
         ];
         assert_eq!(replace_ellipsis(&input), expected);
     }
@@ -307,31 +311,31 @@ mod tests {
     #[test]
     fn preserves_split_link_reference_title() {
         let input = vec![
-            "[compare]:".to_string(),
-            "  https://example.com/compare/v1...v2".to_string(),
-            "  \"Versions v1...v2\"".to_string(),
-            "Prose... still changes.".to_string(),
+            "[compare]:".to_owned(),
+            "  https://example.com/compare/v1...v2".to_owned(),
+            "  \"Versions v1...v2\"".to_owned(),
+            "Prose... still changes.".to_owned(),
         ];
         let expected = vec![
-            "[compare]:".to_string(),
-            "  https://example.com/compare/v1...v2".to_string(),
-            "  \"Versions v1...v2\"".to_string(),
-            "Prose… still changes.".to_string(),
+            "[compare]:".to_owned(),
+            "  https://example.com/compare/v1...v2".to_owned(),
+            "  \"Versions v1...v2\"".to_owned(),
+            "Prose… still changes.".to_owned(),
         ];
         assert_eq!(replace_ellipsis(&input), expected);
     }
 
     #[test]
     fn normalizes_slash_delimited_prose() {
-        let input = vec!["Choose and/or... input/output...".to_string()];
-        let expected = vec!["Choose and/or… input/output…".to_string()];
+        let input = ["Choose and/or... input/output...".to_owned()];
+        let expected = ["Choose and/or… input/output…".to_owned()];
         assert_eq!(replace_ellipsis(&input), expected);
     }
 
     #[test]
     fn normalizes_escaped_autolink() {
-        let input = vec![r"\<https://example.com/a...b>".to_string()];
-        let expected = vec![r"\<https://example.com/a…b>".to_string()];
+        let input = vec![r"\<https://example.com/a...b>".to_owned()];
+        let expected = vec![r"\<https://example.com/a…b>".to_owned()];
         assert_eq!(replace_ellipsis(&input), expected);
     }
 
@@ -339,57 +343,57 @@ mod tests {
     #[test_macros::traced_test]
     #[test]
     fn preservation_traces_omit_document_content() {
-        let sensitive_line = "    private... payload".to_string();
+        let sensitive_line = "    private... payload".to_owned();
         let split_reference = vec![
-            "[private]:".to_string(),
-            "  https://example.com/private...target".to_string(),
+            "[private]:".to_owned(),
+            "  https://example.com/private...target".to_owned(),
         ];
 
-        let _ = replace_ellipsis(std::slice::from_ref(&sensitive_line));
-        let _ = replace_ellipsis(&split_reference);
+        drop(replace_ellipsis(std::slice::from_ref(&sensitive_line)));
+        drop(replace_ellipsis(&split_reference));
 
         assert!(logs_contain("reason=\"indented_code\""));
         assert!(logs_contain("reason=\"link_reference_continuation\""));
         assert!(!logs_contain(&sensitive_line));
-        assert!(!logs_contain(&split_reference[1]));
+        assert!(!logs_contain(
+            split_reference.get(1).expect("continuation line exists")
+        ));
     }
 
     #[test]
     fn replaces_prose_beside_a_literal_url() {
-        let input = vec!["Compare... https://example.com/v1...v2".to_string()];
-        let expected = vec!["Compare… https://example.com/v1...v2".to_string()];
+        let input = vec!["Élan... https://example.com/v1...v2 café...".to_owned()];
+        let expected = vec!["Élan… https://example.com/v1...v2 café…".to_owned()];
         assert_eq!(replace_ellipsis(&input), expected);
     }
 
     #[test]
     fn replaces_long_sequences() {
-        let input = vec![".... ..... ...... .......".to_string()];
-        let expected = vec!["…. ….. …… …….".to_string()];
+        let input = vec![".... ..... ...... .......".to_owned()];
+        let expected = vec!["…. ….. …… …….".to_owned()];
         assert_eq!(replace_ellipsis(&input), expected);
     }
 
     #[test]
     fn handles_empty_input() {
-        let input: Vec<String> = Vec::new();
-        let expected: Vec<String> = Vec::new();
-        assert_eq!(replace_ellipsis(&input), expected);
+        assert_eq!(replace_ellipsis(&[]), Vec::<String>::new());
     }
 
     #[test]
     fn handles_multiple_fenced_blocks() {
         let input = vec![
-            "text...".to_string(),
-            "```".to_string(),
-            "code...".to_string(),
-            "```".to_string(),
-            "more text...".to_string(),
+            "text...".to_owned(),
+            "```".to_owned(),
+            "code...".to_owned(),
+            "```".to_owned(),
+            "more text...".to_owned(),
         ];
         let expected = vec![
-            "text…".to_string(),
-            "```".to_string(),
-            "code...".to_string(),
-            "```".to_string(),
-            "more text…".to_string(),
+            "text…".to_owned(),
+            "```".to_owned(),
+            "code...".to_owned(),
+            "```".to_owned(),
+            "more text…".to_owned(),
         ];
         assert_eq!(replace_ellipsis(&input), expected);
     }
