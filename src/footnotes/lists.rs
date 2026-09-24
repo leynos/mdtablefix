@@ -18,7 +18,7 @@ where
         .rposition(|l| !l.trim().is_empty())
         .map_or(0, |i| i + 1);
     let start = (0..end)
-        .rfind(|&i| !predicate(lines[i].trim_end()))
+        .rfind(|&i| lines.get(i).is_some_and(|line| !predicate(line.trim_end())))
         .map_or(0, |i| i + 1);
     (start, end)
 }
@@ -31,9 +31,9 @@ pub(super) fn footnote_block_range(lines: &[String]) -> Option<(usize, usize)> {
             || is_definition_continuation(line)
     });
     if start < end
-        && lines[start..end]
-            .iter()
-            .any(|line| FOOTNOTE_LINE_RE.is_match(line))
+        && lines
+            .get(start..end)
+            .is_some_and(|block| block.iter().any(|line| FOOTNOTE_LINE_RE.is_match(line)))
     {
         Some((start, end))
     } else {
@@ -43,7 +43,9 @@ pub(super) fn footnote_block_range(lines: &[String]) -> Option<(usize, usize)> {
 
 /// Determine whether a second-level heading precedes the block.
 pub(super) fn has_h2_heading_before(lines: &[String], start: usize) -> bool {
-    lines[..start]
+    lines
+        .get(..start)
+        .unwrap_or_default()
         .iter()
         .rfind(|l| !l.trim().is_empty())
         .is_some_and(|l| l.trim_start().starts_with("## "))
@@ -52,7 +54,7 @@ pub(super) fn has_h2_heading_before(lines: &[String], start: usize) -> bool {
 /// Check for existing footnote definitions before the block.
 pub(super) fn has_existing_footnote_block(lines: &[String], start: usize) -> bool {
     let mut fences = FenceTracker::default();
-    for l in &lines[..start] {
+    for l in lines.get(..start).unwrap_or_default() {
         let fence = fences.observe_source_line(l);
         if fence.is_fence_marker || fence.is_in_fence {
             continue;
@@ -92,10 +94,14 @@ fn replace_footnote_line(line: &str, number: usize) -> String {
             let rest_match = caps
                 .name("rest")
                 .expect("footnote line capture missing rest");
-            let whitespace = &line[num_match.end() + 1..rest_match.start()];
+            let whitespace = line
+                .get(num_match.end() + 1..rest_match.start())
+                .unwrap_or("");
             format!(
                 "{}[^{number}]:{}{}",
-                &caps["indent"], whitespace, &caps["rest"]
+                caps.name("indent").map_or("", |m| m.as_str()),
+                whitespace,
+                caps.name("rest").map_or("", |m| m.as_str())
             )
         })
         .to_string()
@@ -110,7 +116,10 @@ pub(super) fn convert_block(lines: &mut [String]) {
         return;
     }
     let mut number = 1;
-    for line in &mut lines[start..end] {
+    let Some(block) = lines.get_mut(start..end) else {
+        return;
+    };
+    for line in block {
         if FOOTNOTE_LINE_RE.is_match(line) {
             *line = replace_footnote_line(line, number);
             number += 1;
