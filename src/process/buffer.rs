@@ -185,10 +185,14 @@ impl ProcessBuffer {
             self.buf.push(line);
             return None;
         }
+        // No earlier line opened a table, so there is no run to extend or
+        // flush and the caller decides what this line is. Every branch below
+        // therefore starts from an active table and can flush unconditionally.
+        if !self.in_table {
+            return Some(line);
+        }
         if line.trim().is_empty() {
-            if self.in_table {
-                self.flush();
-            }
+            self.flush();
             return Some(line);
         }
         // Recognise a new Markdown block *before* the pipe heuristic below.
@@ -198,9 +202,8 @@ impl ProcessBuffer {
         // table from being reflowed (a stray non-table row makes
         // `reflow_table` bail). Flushing here keeps wrapping and table
         // detection aligned.
-        if self.in_table
-            && (classify_block(&line, LinkReferenceMatcher::production()).is_some()
-                || line_class == LineClass::ThematicBreak)
+        if classify_block(&line, LinkReferenceMatcher::production()).is_some()
+            || line_class == LineClass::ThematicBreak
         {
             debug!(
                 line_len = line.len(),
@@ -211,20 +214,15 @@ impl ProcessBuffer {
             self.flush();
             return Some(line);
         }
-        if self.in_table && is_indented_content_line(&line) {
+        if is_indented_content_line(&line) {
             self.flush();
             return Some(line);
         }
-        if self.in_table
-            && line_class != LineClass::ThematicBreak
-            && (line.contains('|') || line_class == LineClass::TableDelimiter)
-        {
+        if line.contains('|') || line_class == LineClass::TableDelimiter {
             self.buf.push(line);
             return None;
         }
-        if self.in_table {
-            self.flush();
-        }
+        self.flush();
         Some(line)
     }
 }

@@ -129,6 +129,32 @@ fn block_prefixed_pipe_line_flushes_table(
     assert_eq!(buffer.out, owned(&["| a | b |"]));
 }
 
+#[rstest]
+#[case::asterisks("***")]
+#[case::hyphens("---")]
+#[case::underscores("___")]
+fn thematic_break_after_table_flushes_table(
+    #[case] break_line: &str,
+    #[from(new_buffer)] mut buffer: ProcessBuffer,
+) {
+    // A thematic break can look like a table row to the pipe heuristic, but it
+    // opens its own block. It must end the table run so the break is not
+    // reflowed into the table, leaving the caller to classify it.
+    handle_line(&mut buffer, "| a | b |");
+    handle_line(&mut buffer, "| --- | --- |");
+    handle_line(&mut buffer, "| 1 | 2 |");
+
+    let passthrough = handle_line(&mut buffer, break_line);
+
+    assert_eq!(passthrough, Some(break_line.to_string()));
+    assert!(!buffer.in_table, "thematic break should end table mode");
+    assert!(buffer.buf.is_empty(), "buffer should be flushed");
+    assert_eq!(
+        buffer.out,
+        owned(&["| a   | b   |", "| --- | --- |", "| 1   | 2   |"]),
+    );
+}
+
 #[test]
 fn plain_pipe_continuation_is_buffered() {
     let mut buffer = new_buffer();
