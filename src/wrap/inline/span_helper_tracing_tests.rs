@@ -12,21 +12,21 @@ use crate::wrap::{inline::determine_token_span, tracing_snapshot_support::normal
 #[fixture]
 fn date_tokens() -> Vec<String> {
     vec![
-        "25th".to_string(),
-        " ".to_string(),
-        "December".to_string(),
-        " ".to_string(),
-        "2025".to_string(),
+        "25th".to_owned(),
+        " ".to_owned(),
+        "December".to_owned(),
+        " ".to_owned(),
+        "2025".to_owned(),
     ]
 }
 
 #[fixture]
 fn colon_footnote_tokens() -> Vec<String> {
     vec![
-        "word".to_string(),
-        " ".to_string(),
-        "[^note]".to_string(),
-        ":".to_string(),
+        "word".to_owned(),
+        " ".to_owned(),
+        "[^note]".to_owned(),
+        ":".to_owned(),
     ]
 }
 
@@ -85,7 +85,7 @@ fn grouping_boundary_logs_declined_footnote_coupling(
 ) {
     let tokens = token_text
         .iter()
-        .map(|token| (*token).to_string())
+        .map(|token| (*token).to_owned())
         .collect::<Vec<_>>();
     let (end, width) = determine_token_span(&tokens, 0);
     // Observable edge-case result: a declined coupling groups only the leading
@@ -94,7 +94,7 @@ fn grouping_boundary_logs_declined_footnote_coupling(
         end, 1,
         "declined coupling must retain the leading word span"
     );
-    let grouped = tokens[..end].join("");
+    let grouped = tokens.get(..end).expect("span ends within tokens").join("");
     assert_eq!(grouped, "word");
     assert_eq!(width, 4);
     assert!(
@@ -114,7 +114,13 @@ fn snapshots_grouped_date_sequence_event(date_tokens: Vec<String>) {
     // Observable grouping result: the date tokens form one atomic span of
     // width 18. The snapshot below supplements this behavioural assertion.
     let (end, width) = determine_token_span(&date_tokens, 0);
-    assert_eq!(date_tokens[..end].join(""), "25th December 2025");
+    assert_eq!(
+        date_tokens
+            .get(..end)
+            .expect("span ends within tokens")
+            .join(""),
+        "25th December 2025"
+    );
     assert_eq!(width, 18);
     logs_assert(|lines| {
         captured.replace(normalize_event_lines(
@@ -123,7 +129,7 @@ fn snapshots_grouped_date_sequence_event(date_tokens: Vec<String>) {
         ));
         (!captured.borrow().is_empty())
             .then_some(())
-            .ok_or_else(|| "expected grouped date sequence event".to_string())
+            .ok_or_else(|| "expected grouped date sequence event".to_owned())
     });
     let event = captured.into_inner();
 
@@ -138,13 +144,19 @@ fn snapshots_matched_date_sequence_event(date_tokens: Vec<String>) {
     let captured = RefCell::new(String::new());
     // Observable grouping result backing the supplementary snapshot.
     let (end, width) = determine_token_span(&date_tokens, 0);
-    assert_eq!(date_tokens[..end].join(""), "25th December 2025");
+    assert_eq!(
+        date_tokens
+            .get(..end)
+            .expect("span ends within tokens")
+            .join(""),
+        "25th December 2025"
+    );
     assert_eq!(width, 18);
     logs_assert(|lines| {
         captured.replace(normalize_event_lines(lines, "matched date sequence"));
         (!captured.borrow().is_empty())
             .then_some(())
-            .ok_or_else(|| "expected matched date sequence event".to_string())
+            .ok_or_else(|| "expected matched date sequence event".to_owned())
     });
     let event = captured.into_inner();
 

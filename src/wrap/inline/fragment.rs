@@ -269,7 +269,7 @@ mod tracing_tests {
     #[case("   ", "Whitespace")]
     #[case("plain", "Plain")]
     fn fragment_classification_logs_kind(#[case] input: &str, #[case] expected: &str) {
-        let _fragment = InlineFragment::new(input.to_string());
+        let _fragment = InlineFragment::new(input.to_owned());
         assert!(logs_contain("fragment classified"));
         assert!(logs_contain(&format!("kind={expected}")));
         assert!(logs_contain("token="));
@@ -278,7 +278,7 @@ mod tracing_tests {
 
     #[test]
     fn fragment_classification_does_not_require_subscriber() {
-        let fragment = InlineFragment::new("[^1]".to_string());
+        let fragment = InlineFragment::new("[^1]".to_owned());
         assert_eq!(fragment.kind, FragmentKind::FootnoteRef);
     }
 }

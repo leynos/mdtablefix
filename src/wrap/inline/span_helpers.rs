@@ -47,8 +47,11 @@ pub(in crate::wrap::inline) fn extend_punctuation(
     mut j: usize,
     width: &mut usize,
 ) -> usize {
-    while j < tokens.len() && is_trailing_punctuation_token(&tokens[j]) {
-        *width += UnicodeWidthStr::width(tokens[j].as_str());
+    while let Some(token) = tokens
+        .get(j)
+        .filter(|token| is_trailing_punctuation_token(token))
+    {
+        *width += UnicodeWidthStr::width(token.as_str());
         j += 1;
     }
     j
@@ -100,7 +103,8 @@ pub(in crate::wrap::inline) fn date_token_span(
     start: usize,
 ) -> Option<(usize, usize)> {
     let date_end = try_match_date_sequence(tokens, start)?;
-    let mut date_width = tokens[start..date_end]
+    let mut date_width = tokens
+        .get(start..date_end)?
         .iter()
         .map(|token| UnicodeWidthStr::width(token.as_str()))
         .sum();
@@ -114,20 +118,20 @@ pub(in crate::wrap::inline) fn date_token_span(
 
 /// Match an ordinal day, month name, and year separated by whitespace.
 fn match_ordinal_day_month_year(tokens: &[String], start: usize) -> Option<usize> {
-    let tokens = extract_five(tokens, start)?;
-    match_pattern(tokens, is_ordinal_day, is_whitespace_token, is_month_name).then_some(start + 5)
+    let date = extract_five(tokens, start)?;
+    match_pattern(date, is_ordinal_day, is_whitespace_token, is_month_name).then_some(start + 5)
 }
 
 /// Match a numeric day, month name, and year separated by whitespace.
 fn match_numeric_day_month_year(tokens: &[String], start: usize) -> Option<usize> {
-    let tokens = extract_five(tokens, start)?;
-    match_pattern(tokens, is_numeric_day, is_whitespace_token, is_month_name).then_some(start + 5)
+    let date = extract_five(tokens, start)?;
+    match_pattern(date, is_numeric_day, is_whitespace_token, is_month_name).then_some(start + 5)
 }
 
 /// Match a month name, numeric day, and year separated by whitespace.
 fn match_month_numeric_day_year(tokens: &[String], start: usize) -> Option<usize> {
-    let tokens = extract_five(tokens, start)?;
-    match_pattern(tokens, is_month_name, is_whitespace_token, is_numeric_day).then_some(start + 5)
+    let date = extract_five(tokens, start)?;
+    match_pattern(date, is_month_name, is_whitespace_token, is_numeric_day).then_some(start + 5)
 }
 
 /// Borrow the five tokens needed for a day/month/year pattern check.
@@ -212,16 +216,16 @@ pub(in crate::wrap::inline) fn merge_code_span(
     width: &mut usize,
 ) -> usize {
     debug_assert!(
-        tokens[i] == "`",
+        tokens.get(i).is_some_and(|token| token == "`"),
         "merge_code_span requires a single backtick opener"
     );
     let mut j = i + 1;
-    while j < tokens.len() && tokens[j] != "`" {
-        *width += UnicodeWidthStr::width(tokens[j].as_str());
+    while let Some(token) = tokens.get(j).filter(|token| *token != "`") {
+        *width += UnicodeWidthStr::width(token.as_str());
         j += 1;
     }
-    if j < tokens.len() {
-        *width += UnicodeWidthStr::width(tokens[j].as_str());
+    if let Some(closing_backtick) = tokens.get(j) {
+        *width += UnicodeWidthStr::width(closing_backtick.as_str());
         j += 1;
         j = extend_punctuation(tokens, j, width);
     }
@@ -234,7 +238,10 @@ pub(in crate::wrap::inline) fn absorb_token_and_trailing_punctuation(
     end: usize,
     width: &mut usize,
 ) -> usize {
-    *width += UnicodeWidthStr::width(tokens[end].as_str());
+    let Some(token) = tokens.get(end) else {
+        return end;
+    };
+    *width += UnicodeWidthStr::width(token.as_str());
     extend_punctuation(tokens, end + 1, width)
 }
 
@@ -301,7 +308,9 @@ pub(in crate::wrap::inline) fn try_couple_footnote_reference(
                 .and_then(|previous| tokens.get(previous))?;
             let follows_punctuation = previous.chars().last().is_some_and(is_trailing_punct);
             let follows_space_before_colon = previous.chars().all(char::is_whitespace)
-                && tokens.get(end + 1).is_some_and(|token| token == ":");
+                && tokens
+                    .get(end + 1)
+                    .is_some_and(|following| following == ":");
             if !follows_punctuation && !follows_space_before_colon {
                 return None;
             }

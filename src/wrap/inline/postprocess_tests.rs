@@ -82,10 +82,12 @@ fn merge_moves_inline_code_tail_before_single_space() {
     ];
     let merged = merge_whitespace_only_lines(&lines, 80);
 
-    assert_eq!(merged[0], vec![fragment("plain")]);
     assert_eq!(
-        merged[1],
-        vec![fragment("`code`"), fragment(" "), fragment("tail")]
+        merged,
+        vec![
+            vec![fragment("plain")],
+            vec![fragment("`code`"), fragment(" "), fragment("tail")],
+        ]
     );
 }
 
@@ -99,10 +101,12 @@ fn merge_leaves_inline_code_tail_when_carry_would_exceed_width() {
     let merged = merge_whitespace_only_lines(&lines, 20);
 
     assert_eq!(
-        merged[0],
-        vec![fragment("plain"), fragment("`long-code-tail`")]
+        merged,
+        vec![
+            vec![fragment("plain"), fragment("`long-code-tail`")],
+            vec![fragment("wide continuation")],
+        ]
     );
-    assert_eq!(merged[1], vec![fragment("wide continuation")]);
 }
 
 #[test]
@@ -115,10 +119,12 @@ fn merge_moves_inline_code_tail_at_exact_width_boundary() {
     let width = fragment("`code`").width + 1 + fragment("tail").width;
     let merged = merge_whitespace_only_lines(&lines, width);
 
-    assert_eq!(merged[0], vec![fragment("plain")]);
     assert_eq!(
-        merged[1],
-        vec![fragment("`code`"), fragment(" "), fragment("tail")]
+        merged,
+        vec![
+            vec![fragment("plain")],
+            vec![fragment("`code`"), fragment(" "), fragment("tail")],
+        ]
     );
 }
 
@@ -176,10 +182,12 @@ fn rebalance_moves_atomic_tail_when_fits() {
         vec![fragment(" "), fragment("tail")],
     ];
     rebalance_atomic_tails(&mut lines, 80);
-    assert_eq!(lines[0], vec![fragment("alpha")]);
     assert_eq!(
-        lines[1],
-        vec![fragment("`code`"), fragment(" "), fragment("tail")]
+        lines,
+        vec![
+            vec![fragment("alpha")],
+            vec![fragment("`code`"), fragment(" "), fragment("tail")],
+        ]
     );
 }
 
@@ -236,12 +244,19 @@ fn rebalance_moves_atomic_tail_at_exact_width_boundary() {
         vec![fragment("alpha"), fragment("`tail`")],
         vec![fragment(" "), fragment("beta")],
     ];
-    let width = line_width(&lines[1]) + lines[0].last().expect("tail exists").width;
+    let width = line_width(lines.last().expect("following line exists"))
+        + lines
+            .first()
+            .and_then(|line| line.last())
+            .expect("tail exists")
+            .width;
     rebalance_atomic_tails(&mut lines, width);
-    assert_eq!(lines[0], vec![fragment("alpha")]);
     assert_eq!(
-        lines[1],
-        vec![fragment("`tail`"), fragment(" "), fragment("beta")]
+        lines,
+        vec![
+            vec![fragment("alpha")],
+            vec![fragment("`tail`"), fragment(" "), fragment("beta")],
+        ]
     );
 }
 
@@ -252,9 +267,11 @@ fn rebalance_moves_plain_tail_when_fits() {
         vec![fragment(" "), fragment("beta")],
     ];
     rebalance_atomic_tails(&mut lines, 20);
-    assert_eq!(lines[0], vec![fragment("alpha")]);
     assert_eq!(
-        lines[1],
-        vec![fragment("tail"), fragment(" "), fragment("beta")]
+        lines,
+        vec![
+            vec![fragment("alpha")],
+            vec![fragment("tail"), fragment(" "), fragment("beta")],
+        ]
     );
 }

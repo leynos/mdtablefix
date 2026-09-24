@@ -15,7 +15,7 @@ use crate::wrap::tokenize::segment_inline;
 fn determine_token_span_groups_punctuation_with_footnote_reference() {
     let tokens = segment_inline("word.[^4]");
     let (end, width) = determine_token_span(&tokens, 0);
-    let grouped = tokens[..end].join("");
+    let grouped = tokens.get(..end).expect("span ends within tokens").join("");
     assert_eq!(grouped, "word.[^4]");
     assert_eq!(width, unicode_width::UnicodeWidthStr::width("word.[^4]"));
 }
@@ -25,7 +25,7 @@ fn determine_token_span_groups_definition_like_footnote_reference_with_prose() {
     let input = "subcategories [^96]:";
     let tokens = segment_inline(input);
     let (end, width) = determine_token_span(&tokens, 0);
-    let grouped = tokens[..end].join("");
+    let grouped = tokens.get(..end).expect("span ends within tokens").join("");
 
     assert_eq!(grouped, input);
     assert_eq!(width, unicode_width::UnicodeWidthStr::width(input));
@@ -44,7 +44,7 @@ fn determine_token_span_groups_definition_like_footnote_reference_with_prose() {
 fn determine_token_span_groups_footnote_reference_after_atomic_span(#[case] input: &str) {
     let tokens = segment_inline(input);
     let (end, width) = determine_token_span(&tokens, 0);
-    let grouped = tokens[..end].join("");
+    let grouped = tokens.get(..end).expect("span ends within tokens").join("");
     assert_eq!(grouped, input);
     assert_eq!(width, unicode_width::UnicodeWidthStr::width(input));
 }
@@ -58,7 +58,7 @@ fn determine_token_span_does_not_group_whitespace_separated_footnote_reference(
 ) {
     let tokens = segment_inline(input);
     let (end, width) = determine_token_span(&tokens, 0);
-    let grouped = tokens[..end].join("");
+    let grouped = tokens.get(..end).expect("span ends within tokens").join("");
     assert_eq!(grouped, expected_group);
     assert_eq!(width, unicode_width::UnicodeWidthStr::width(expected_group));
 }
@@ -72,7 +72,10 @@ fn determine_token_span_groups_footnote_reference_after_opener_coupled_code() {
         .position(|token| token == "(")
         .expect("opening parenthesis token");
     let (end, width) = determine_token_span(&tokens, open_paren);
-    let grouped = tokens[open_paren..end].join("");
+    let grouped = tokens
+        .get(open_paren..end)
+        .expect("span ends within tokens")
+        .join("");
     let expected = "(`code`).[^1]";
     assert_eq!(grouped, expected);
     assert_eq!(width, unicode_width::UnicodeWidthStr::width(expected));
