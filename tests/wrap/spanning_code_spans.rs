@@ -326,6 +326,7 @@ fn test_wrap_partial_join_then_verbatim() {
     assert_no_line_exceeds_width(&output, 80);
 }
 
+#[track_caller]
 fn assert_no_md038_code_span(rendered: &str) {
     let mut remaining = rendered;
     while let Some(open_index) = remaining.find('`') {
@@ -372,6 +373,7 @@ fn backtick_run_len(text: &str) -> usize {
         .count()
 }
 
+#[track_caller]
 fn assert_no_line_exceeds_width(output: &[String], width: usize) {
     for line in output {
         let line_width = UnicodeWidthStr::width(line.as_str());
