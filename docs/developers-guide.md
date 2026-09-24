@@ -1347,10 +1347,12 @@ It follows these rules:
    buffered blank lines verbatim.
 4. A thematic-break line is never treated as an attachable specifier, even
    though a run of underscores or hyphens matches the specifier pattern. The
-   guard is `is_thematic_break`, whose predicate is deliberately identical to
-   the one `format_breaks` uses, so a line the fences pass declines to attach
-   is exactly a line `format_breaks` rewrites. The break line and any buffered
-   blank lines are emitted unchanged.
+   guard is `is_thematic_break`, which takes its decision from the shared line
+   classifier, as `format_breaks` does. The two are no longer identical: the
+   break pass also preserves Setext underlines in their preceding-line context,
+   so a line the fences pass declines to attach is not necessarily one
+   `format_breaks` rewrites. The break line and any buffered blank lines are
+   emitted unchanged.
 
 This structure keeps the one non-trivial lookahead path local to the helper
 instead of spreading it between the main loop and several index-based search

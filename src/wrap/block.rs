@@ -1,8 +1,8 @@
 //! Block-level Markdown prefix classification shared by wrapping and table detection.
 //!
-//! The regex helpers centralise detection for headings, lists, blockquotes, footnotes,
-//! markdownlint directives, and digit-prefixed paragraphs so wrapping and table handlers
-//! stay in sync.
+//! Headings, thematic breaks, and list items come from the shared classifier; the local regexes
+//! hold the residual roles: blockquotes, footnotes, markdownlint directives, link-reference
+//! definitions, and list-prefix capture during wrapping.
 
 use regex::Regex;
 use tracing::trace;

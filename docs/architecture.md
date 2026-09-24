@@ -1109,7 +1109,11 @@ to cover broad formatter behaviour while proofs establish their stated
 unbounded invariants. `verus/lib.rs` includes `classify_kernel.rs` by `#[path]`
 so the spec is written against the same source the binary compiles.
 `classify_seq` then proves its result against `spec_classify`, which is the
-structural precedence that kernel is required to implement. The ledger symbol
+structural precedence that kernel is required to implement. The consumer
+decisions are proved over that same kernel: `is_setext_text_seq`,
+`is_setext_underline_seq`, `is_canonical_break_seq`, and `is_atx_heading_seq` in
+`src/classify_kernel_consumers.rs` each prove their boolean equals whether
+`spec_classify` returns the class that consumer stands for. The ledger symbol
 names are enforced rather than merely documented:
 `scripts/check-verification-ledger.sh` runs under `make lint`, so renaming a
 claimed symbol fails the build instead of silently orphaning its row.
