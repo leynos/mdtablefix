@@ -670,11 +670,13 @@ depth-aware tracking.
    which qualifies and splits candidates, is owned and called only by
    `spanning_code`. Paragraph-level composition uses the existing `pub(super)`
    functions, without exposing either helper across modules. The private
-   `join_if_fits` helper is also owned by `spanning_code`, where it reuses
-   width-checked joining; directional prepend and append handling stays
-   separate. Trace events record width-triggered preservation, prefix-mismatch
-   flushes, and `TailReflow` transitions at these non-obvious decision
-   boundaries.
+   `join_if_fits` and `reattach_prose` helpers, plus the `ProseEdge` enum, are
+   owned by `spanning_code`. `preserve_span_boundaries` is their only
+   production call-site: `reattach_prose` composes width-checked joining with
+   the greedy wrapper while retaining each edge's join order, trim direction,
+   and placement. Do not reuse it for ordinary paragraph wrapping. Trace events
+   record width-triggered preservation, prefix-mismatch flushes, and
+   `TailReflow` transitions at these non-obvious decision boundaries.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
