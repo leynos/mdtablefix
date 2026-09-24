@@ -101,11 +101,12 @@ fn hard_break_groups(segments: &[(String, bool)]) -> impl Iterator<Item = &[(Str
         if start == segments.len() {
             return None;
         }
-        let relative_end = segments[start..]
+        let remaining = segments.get(start..)?;
+        let relative_end = remaining
             .iter()
             .position(|(_, hard_break)| *hard_break)
             .map_or(segments.len(), |index| start + index + 1);
-        let group = &segments[start..relative_end];
+        let group = segments.get(start..relative_end)?;
         start = relative_end;
         Some(group)
     })
@@ -141,7 +142,10 @@ fn overlong_code_spans_crossing_boundaries(
     let mut index = 0;
     let mut spans = Vec::new();
     while index < text.len() {
-        let Some(ch) = text[index..].chars().next() else {
+        let Some(suffix) = text.get(index..) else {
+            break;
+        };
+        let Some(ch) = suffix.chars().next() else {
             break;
         };
         if ch != '`' || has_odd_backslash_escape_bytes(bytes, index) {
@@ -149,7 +153,7 @@ fn overlong_code_spans_crossing_boundaries(
             continue;
         }
 
-        let fence_len = text[index..]
+        let fence_len = suffix
             .chars()
             .take_while(|candidate| *candidate == '`')
             .count();
@@ -164,18 +168,33 @@ fn overlong_code_spans_crossing_boundaries(
             index = fence_end;
             continue;
         };
-        let first_boundary = boundaries.partition_point(|boundary| *boundary <= index);
-        let last_boundary = boundaries.partition_point(|boundary| *boundary < close_end);
-        let span_boundaries = &boundaries[first_boundary..last_boundary];
-        if !span_boundaries.is_empty() && text[index..close_end].width() > width {
-            spans.push(OverlongSpan {
-                range: index..close_end,
-                pieces: split_span_at_boundaries(text, index, close_end, span_boundaries),
-            });
+        if let Some(span) =
+            overlong_span_crossing_boundaries(text, boundaries, index..close_end, width)
+        {
+            spans.push(span);
         }
         index = close_end;
     }
     spans
+}
+
+/// Build a candidate only when its complete code span crosses an authored
+/// boundary and exceeds the display width.
+fn overlong_span_crossing_boundaries(
+    text: &str,
+    boundaries: &[usize],
+    range: Range<usize>,
+    width: usize,
+) -> Option<OverlongSpan> {
+    let first_boundary = boundaries.partition_point(|boundary| *boundary <= range.start);
+    let last_boundary = boundaries.partition_point(|boundary| *boundary < range.end);
+    let span_boundaries = boundaries.get(first_boundary..last_boundary)?;
+    let span_text = text.get(range.clone())?;
+    if span_boundaries.is_empty() || span_text.width() <= width {
+        return None;
+    }
+    let pieces = split_span_at_boundaries(text, range.start, range.end, span_boundaries)?;
+    Some(OverlongSpan { range, pieces })
 }
 
 /// Split a complete code span at the supplied joined-text boundaries.
@@ -187,15 +206,15 @@ fn split_span_at_boundaries(
     start: usize,
     end: usize,
     boundaries: &[usize],
-) -> Vec<String> {
+) -> Option<Vec<String>> {
     let mut pieces = Vec::with_capacity(boundaries.len() + 1);
     let mut piece_start = start;
     for boundary in boundaries {
-        pieces.push(text[piece_start..*boundary].to_string());
-        piece_start = boundary + 1;
+        pieces.push(text.get(piece_start..*boundary)?.to_owned());
+        piece_start = boundary.checked_add(1)?;
     }
-    pieces.push(text[piece_start..end].to_string());
-    pieces
+    pieces.push(text.get(piece_start..end)?.to_owned());
+    Some(pieces)
 }
 
 /// Replace a wrapped overlong span with pieces that retain authored breaks.
@@ -209,7 +228,9 @@ fn preserve_span_boundaries(
     width: usize,
 ) {
     let OverlongSpan { range, pieces } = span;
-    let span_text = &joined[range];
+    let Some(span_text) = joined.get(range) else {
+        return;
+    };
     let Some((line_index, span_start)) = lines
         .iter()
         .enumerate()
@@ -227,8 +248,10 @@ fn preserve_span_boundaries(
     };
     let line = lines.remove(line_index);
     let span_end = span_start + span_text.len();
-    let before = &line[..span_start];
-    let after = &line[span_end..];
+    let (Some(before), Some(after)) = (line.get(..span_start), line.get(span_end..)) else {
+        lines.insert(line_index, line);
+        return;
+    };
     let mut replacement = pieces;
 
     prepend_prose(&mut replacement, before, width);
@@ -242,9 +265,11 @@ fn prepend_prose(lines: &mut Vec<String>, before: &str, width: usize) {
     if before.is_empty() {
         return;
     }
-    let combined = format!("{before}{}", lines[0]);
-    if combined.width() <= width {
-        lines[0] = combined;
+    let Some(first) = lines.first_mut() else {
+        return;
+    };
+    if let Some(combined) = join_if_fits(before, first, width) {
+        *first = combined;
         return;
     }
     let mut prose = wrap_preserving_code(before.trim_end(), width);
@@ -258,13 +283,20 @@ fn append_prose(lines: &mut Vec<String>, after: &str, width: usize) {
     if after.is_empty() {
         return;
     }
-    let last_index = lines.len() - 1;
-    let combined = format!("{}{after}", lines[last_index]);
-    if combined.width() <= width {
-        lines[last_index] = combined;
+    let Some(last) = lines.last_mut() else {
+        return;
+    };
+    if let Some(combined) = join_if_fits(last, after, width) {
+        *last = combined;
         return;
     }
     lines.extend(wrap_preserving_code(after.trim_start(), width));
+}
+
+/// Join adjacent source fragments only when their display width fits one line.
+fn join_if_fits(prefix: &str, suffix: &str, width: usize) -> Option<String> {
+    let joined = format!("{prefix}{suffix}");
+    (joined.width() <= width).then_some(joined)
 }
 
 /// Restore the two-space Markdown hard-break marker after span reflow.
@@ -273,5 +305,38 @@ fn restore_last_hard_break(lines: &mut [String]) {
         && trailing_hard_break_marker_len(line) == 0
     {
         line.push_str("  ");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Exact-output checks for source boundaries inside overlong code spans.
+
+    use super::{conforming_source_lines_for_overlong_span, join_with_boundaries};
+
+    #[test]
+    fn preserves_byte_boundary_after_multibyte_code_content() {
+        let segments = [("`éab".to_owned(), false), ("cd`".to_owned(), false)];
+        let (joined, boundaries) = join_with_boundaries(&segments);
+
+        assert_eq!(joined, "`éab cd`");
+        assert_eq!(boundaries, [5]);
+        assert_eq!(
+            conforming_source_lines_for_overlong_span(&segments, "", 4),
+            Some(vec!["`éab".to_owned(), "cd`".to_owned()]),
+        );
+    }
+
+    #[test]
+    fn preserves_boundary_immediately_after_multibyte_code_content() {
+        let segments = [("`é".to_owned(), false), ("abc`".to_owned(), false)];
+        let (joined, boundaries) = join_with_boundaries(&segments);
+
+        assert_eq!(joined, "`é abc`");
+        assert_eq!(boundaries, [3]);
+        assert_eq!(
+            conforming_source_lines_for_overlong_span(&segments, "", 4),
+            Some(vec!["`é".to_owned(), "abc`".to_owned()]),
+        );
     }
 }
