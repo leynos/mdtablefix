@@ -93,7 +93,7 @@ mod tests {
 
     macro_rules! assert_borrowed_value {
         ($line:expr, $expected:expr $(,)?) => {
-            match &$line {
+            match $line {
                 Cow::Borrowed(value) => assert_eq!(*value, $expected),
                 Cow::Owned(value) => panic!("expected borrowed value, got owned {value:?}"),
             }
@@ -102,28 +102,28 @@ mod tests {
 
     #[test]
     fn basic_formatting() {
-        let input = vec!["foo", "***", "bar"]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>();
+        let input = ["foo", "***", "bar"].map(str::to_owned);
         let output = format_breaks(&input);
+        let [first, middle, last] = output.as_slice() else {
+            panic!("expected three formatted lines, got {}", output.len());
+        };
 
-        assert_borrowed_value!(output[0], "foo");
-        assert_borrowed_value!(output[1], THEMATIC_BREAK_LINE.as_str());
-        assert_borrowed_value!(output[2], "bar");
+        assert_borrowed_value!(first, "foo");
+        assert_borrowed_value!(middle, THEMATIC_BREAK_LINE.as_str());
+        assert_borrowed_value!(last, "bar");
     }
 
     #[test]
     fn ignores_fenced_code() {
-        let input = vec!["```", "---", "```"]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>();
+        let input = ["```", "---", "```"].map(str::to_owned);
         let output = format_breaks(&input);
+        let [opening, middle, closing] = output.as_slice() else {
+            panic!("expected three formatted lines, got {}", output.len());
+        };
 
-        assert_borrowed_value!(output[0], "```");
-        assert_borrowed_value!(output[1], "---");
-        assert_borrowed_value!(output[2], "```");
+        assert_borrowed_value!(opening, "```");
+        assert_borrowed_value!(middle, "---");
+        assert_borrowed_value!(closing, "```");
     }
 
     #[test]
@@ -134,23 +134,19 @@ mod tests {
         let barrier = Arc::new(Barrier::new(THREADS));
         let handles = (0..THREADS)
             .map(|_| {
-                let barrier = Arc::clone(&barrier);
+                let start_barrier = Arc::clone(&barrier);
                 thread::spawn(move || {
-                    let input = vec!["---".to_string()];
-                    barrier.wait();
+                    let input = vec!["---".to_owned()];
+                    start_barrier.wait();
 
                     let output = format_breaks(&input);
-                    match &output[0] {
-                        Cow::Borrowed(value) => {
-                            assert_eq!(*value, THEMATIC_BREAK_LINE.as_str());
-                            assert_eq!(value.len(), THEMATIC_BREAK_LEN);
-                            assert!(std::ptr::eq(*value, THEMATIC_BREAK_LINE.as_str()));
-                            value.as_ptr() as usize
-                        }
-                        Cow::Owned(value) => {
-                            panic!("expected borrowed break line, got owned {value:?}");
-                        }
-                    }
+                    let [Cow::Borrowed(value)] = output.as_slice() else {
+                        panic!("expected one borrowed break line, got {output:?}");
+                    };
+                    assert_eq!(*value, THEMATIC_BREAK_LINE.as_str());
+                    assert_eq!(value.len(), THEMATIC_BREAK_LEN);
+                    assert!(std::ptr::eq(*value, THEMATIC_BREAK_LINE.as_str()));
+                    value.as_ptr() as usize
                 })
             })
             .collect::<Vec<_>>();
@@ -198,8 +194,8 @@ mod prop_tests {
         ) {
             let output = format_breaks(&lines);
 
-            for (input, output) in lines.iter().zip(output) {
-                match output {
+            for (input, formatted_line) in lines.iter().zip(output) {
+                match formatted_line {
                     Cow::Borrowed(value) => {
                         prop_assert_eq!(value, input.as_str());
                         prop_assert!(std::ptr::eq(value, input.as_str()));
@@ -217,21 +213,22 @@ mod prop_tests {
             let output = format_breaks(&input);
 
             prop_assert_eq!(output.len(), 1);
-            match &output[0] {
-                Cow::Borrowed(value) => {
+            match output.as_slice() {
+                [Cow::Borrowed(value)] => {
                     prop_assert_eq!(*value, THEMATIC_BREAK_LINE.as_str());
                     prop_assert_eq!(value.len(), THEMATIC_BREAK_LEN);
                     prop_assert!(std::ptr::eq(*value, THEMATIC_BREAK_LINE.as_str()));
                 }
-                Cow::Owned(value) => {
+                [Cow::Owned(value)] => {
                     prop_assert!(false, "expected borrowed break line, got owned {value:?}");
                 }
+                _ => prop_assert!(false, "expected one output line, got {}", output.len()),
             }
         }
 
         #[test]
         fn fenced_thematic_breaks_are_not_normalised(
-            fencer in prop_oneof![Just("```".to_string()), Just("~~~".to_string())],
+            fencer in prop_oneof![Just("```".to_owned()), Just("~~~".to_owned())],
             break_line in thematic_break_line(),
             prefix in prop::collection::vec(non_fence_line(), 0..8),
             suffix in prop::collection::vec(non_thematic_line(), 0..8),
@@ -246,20 +243,21 @@ mod prop_tests {
             prop_assert_eq!(output.len(), lines.len());
 
             let fence_break_idx = prefix.len() + 1;
-            match &output[fence_break_idx] {
-                Cow::Borrowed(value) => {
+            match lines.iter().zip(&output).nth(fence_break_idx) {
+                Some((source, Cow::Borrowed(value))) => {
                     prop_assert_eq!(*value, break_line.as_str());
                     prop_assert!(
-                        std::ptr::eq(*value, lines[fence_break_idx].as_str()),
+                        std::ptr::eq(*value, source.as_str()),
                         "fenced break line must borrow from input, not from static"
                     );
                 }
-                Cow::Owned(value) => {
+                Some((_, Cow::Owned(value))) => {
                     prop_assert!(
                         false,
                         "expected borrowed input line inside fence, got owned {value:?}"
                     );
                 }
+                None => prop_assert!(false, "missing fenced break line at {fence_break_idx}"),
             }
         }
     }
