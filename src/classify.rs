@@ -65,17 +65,36 @@ impl ListContinuationState {
             return Some(required);
         }
 
-        if let Some((depth, required)) = self.active
-            && depth == quote_depth
-            && (!self.has_blank_line || indent >= required)
-            && (classified.class == LineClass::ParagraphText
-                || (classified.class == LineClass::Literal && indent >= required))
-        {
+        if let Some(required) = self.continuation_indent(classified, quote_depth, indent) {
             self.has_blank_line = false;
             Some(required)
         } else {
             self.reset();
             None
+        }
+    }
+
+    /// Returns the active item's content column when `classified` continues it.
+    ///
+    /// The line's quote depth must match the item's. Paragraph text may
+    /// continue lazily, without reaching the content column, but only before an
+    /// intervening blank line: an outdented line after a blank line has left
+    /// the list. Literal content always has to reach the content column,
+    /// because indented code is not a lazy continuation.
+    fn continuation_indent(
+        &self,
+        classified: &ClassifiedLine<'_>,
+        quote_depth: usize,
+        indent: usize,
+    ) -> Option<usize> {
+        let (depth, required) = self.active?;
+        if depth != quote_depth {
+            return None;
+        }
+        match classified.class {
+            LineClass::ParagraphText if !self.has_blank_line => Some(required),
+            LineClass::ParagraphText | LineClass::Literal if indent >= required => Some(required),
+            _ => None,
         }
     }
 }
@@ -180,7 +199,10 @@ fn byte_offset_at_char_index(line: &str, CharIndex(target): CharIndex) -> usize 
 
 #[cfg(test)]
 mod tests {
-    //! Boundary tests for scalar-to-byte classification offsets.
+    //! Boundary tests for scalar-to-byte classification offsets, and
+    //! state-transition tests for list continuation eligibility.
+
+    use rstest::rstest;
 
     use super::*;
 
@@ -191,5 +213,122 @@ mod tests {
 
         assert_eq!(classified.class, LineClass::ParagraphText);
         assert_eq!(classified.body, "élan");
+    }
+
+    /// Observes one line through the default classifier context.
+    fn observe(state: &mut ListContinuationState, line: &str) -> Option<usize> {
+        let classified = classify_line_with_body(line, &ClassifyCtx::default());
+        state.observe(line, &classified)
+    }
+
+    /// A new item records its content column and reports it.
+    #[test]
+    fn list_item_sets_the_content_column() {
+        let mut state = ListContinuationState::default();
+
+        assert_eq!(observe(&mut state, "- item"), Some(2));
+        assert_eq!(state.active, Some((0, 2)));
+    }
+
+    /// An outdented paragraph still continues the item before a blank line.
+    #[test]
+    fn lazy_paragraph_continues_before_a_blank_line() {
+        let mut state = ListContinuationState::default();
+        observe(&mut state, "- item");
+
+        // No indentation at all, but no blank line either: lazy continuation.
+        assert_eq!(observe(&mut state, "continuation"), Some(2));
+    }
+
+    /// A blank line ends the item, so the next outdented paragraph has left it.
+    #[test]
+    fn paragraph_after_blank_line_requires_the_content_column() {
+        let mut state = ListContinuationState::default();
+        observe(&mut state, "- item");
+        assert_eq!(observe(&mut state, ""), None);
+
+        assert_eq!(observe(&mut state, "continuation"), None);
+        assert!(state.active.is_none(), "the outdented line left the list");
+    }
+
+    /// An indented paragraph still continues the item after a blank line.
+    #[test]
+    fn indented_paragraph_continues_after_blank_line() {
+        let mut state = ListContinuationState::default();
+        observe(&mut state, "- item");
+        observe(&mut state, "");
+
+        assert_eq!(observe(&mut state, "  continuation"), Some(2));
+        assert!(!state.has_blank_line, "continuing clears the blank marker");
+    }
+
+    /// A quote-depth change ends the item rather than continuing it.
+    #[rstest]
+    #[case("- item", "> continuation")]
+    #[case("> - item", "continuation")]
+    fn quote_depth_change_ends_the_item(#[case] item: &str, #[case] next: &str) {
+        let mut state = ListContinuationState::default();
+        assert_eq!(observe(&mut state, item), Some(2));
+
+        assert_eq!(observe(&mut state, next), None);
+        assert!(
+            state.active.is_none(),
+            "a changed quote depth must reset the item"
+        );
+    }
+
+    /// A new item after a blank line restarts the list.
+    #[test]
+    fn new_item_after_blank_line_restarts_the_list() {
+        let mut state = ListContinuationState::default();
+        observe(&mut state, "- item");
+        observe(&mut state, "");
+
+        assert_eq!(observe(&mut state, "- second"), Some(2));
+        assert_eq!(state.active, Some((0, 2)));
+        assert!(!state.has_blank_line, "starting an item clears the marker");
+    }
+
+    /// Four columns of indentation classifies as literal content.
+    #[test]
+    fn literal_content_at_the_content_column_continues_the_item() {
+        let mut state = ListContinuationState::default();
+        observe(&mut state, "- item");
+
+        assert_eq!(observe(&mut state, "    code"), Some(2));
+    }
+
+    /// Indented code below the content column ends the item.
+    #[test]
+    fn literal_content_below_the_content_column_ends_the_item() {
+        let mut state = ListContinuationState::default();
+        // A wide separator pushes the content column to five, past the
+        // indented-code threshold of four.
+        assert_eq!(observe(&mut state, "   - deep"), Some(5));
+
+        assert_eq!(observe(&mut state, "    code"), None);
+        assert!(state.active.is_none(), "shallow code left the item");
+    }
+
+    /// A blank line with no active item does not arm the blank marker.
+    #[test]
+    fn blank_line_without_an_item_leaves_the_marker_clear() {
+        let mut state = ListContinuationState::default();
+
+        assert_eq!(observe(&mut state, ""), None);
+        assert!(!state.has_blank_line);
+    }
+
+    /// A fence boundary forgets the item and the blank marker.
+    #[test]
+    fn reset_forgets_the_item_and_blank_marker() {
+        let mut state = ListContinuationState::default();
+        observe(&mut state, "- item");
+        observe(&mut state, "");
+
+        state.reset();
+
+        assert_eq!(state.active, None);
+        assert!(!state.has_blank_line);
     }
 }
