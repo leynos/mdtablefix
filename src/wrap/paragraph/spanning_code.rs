@@ -25,6 +25,52 @@ struct OverlongSpan {
     pieces: Vec<String>,
 }
 
+/// Which preserved span edge receives reattached prose.
+#[derive(Clone, Copy)]
+enum ProseEdge {
+    /// The edge before the first preserved span piece.
+    Leading,
+    /// The edge after the last preserved span piece.
+    Trailing,
+}
+
+impl ProseEdge {
+    /// Join prose beside this preserved edge only when it fits one line.
+    fn join(self, lines: &[String], prose: &str, width: usize) -> Option<String> {
+        match self {
+            Self::Leading => join_if_fits(prose, lines.first()?, width),
+            Self::Trailing => join_if_fits(lines.last()?, prose, width),
+        }
+    }
+
+    /// Replace the preserved piece at this edge.
+    fn replace(self, lines: &mut [String], joined: String) {
+        let target = match self {
+            Self::Leading => lines.first_mut(),
+            Self::Trailing => lines.last_mut(),
+        };
+        if let Some(target) = target {
+            *target = joined;
+        }
+    }
+
+    /// Wrap and position prose when it does not fit beside this edge.
+    fn wrap_and_attach(self, lines: &mut Vec<String>, prose: &str, width: usize) {
+        let trimmed = match self {
+            Self::Leading => prose.trim_end(),
+            Self::Trailing => prose.trim_start(),
+        };
+        let mut wrapped = wrap_preserving_code(trimmed, width);
+        match self {
+            Self::Leading => {
+                wrapped.append(lines);
+                *lines = wrapped;
+            }
+            Self::Trailing => lines.append(&mut wrapped),
+        }
+    }
+}
+
 /// Formats conforming source lines when an inline-code span must stay split.
 ///
 /// `segments` contains the buffered source text and hard-break markers,
@@ -254,43 +300,24 @@ fn preserve_span_boundaries(
     };
     let mut replacement = pieces;
 
-    prepend_prose(&mut replacement, before, width);
-    append_prose(&mut replacement, after, width);
+    reattach_prose(&mut replacement, before, width, ProseEdge::Leading);
+    reattach_prose(&mut replacement, after, width, ProseEdge::Trailing);
     lines.splice(line_index..line_index, replacement);
 }
 
-/// Prepend prose to preserved span pieces, wrapping it if the first line would
-/// exceed the available width.
-fn prepend_prose(lines: &mut Vec<String>, before: &str, width: usize) {
-    if before.is_empty() {
+/// Reattach prose at one preserved span edge; private to [`preserve_span_boundaries`].
+///
+/// It composes [`join_if_fits`] with the greedy wrapper, retaining each edge's
+/// join order, trim direction, and placement.
+fn reattach_prose(lines: &mut Vec<String>, prose: &str, width: usize, edge: ProseEdge) {
+    if prose.is_empty() || lines.is_empty() {
         return;
     }
-    let Some(first) = lines.first_mut() else {
-        return;
-    };
-    if let Some(combined) = join_if_fits(before, first, width) {
-        *first = combined;
+    if let Some(joined) = edge.join(lines, prose, width) {
+        edge.replace(lines, joined);
         return;
     }
-    let mut prose = wrap_preserving_code(before.trim_end(), width);
-    prose.append(lines);
-    *lines = prose;
-}
-
-/// Append prose to preserved span pieces, wrapping it if the final line would
-/// exceed the available width.
-fn append_prose(lines: &mut Vec<String>, after: &str, width: usize) {
-    if after.is_empty() {
-        return;
-    }
-    let Some(last) = lines.last_mut() else {
-        return;
-    };
-    if let Some(combined) = join_if_fits(last, after, width) {
-        *last = combined;
-        return;
-    }
-    lines.extend(wrap_preserving_code(after.trim_start(), width));
+    edge.wrap_and_attach(lines, prose, width);
 }
 
 /// Join adjacent source fragments only when their display width fits one line.
@@ -312,7 +339,12 @@ fn restore_last_hard_break(lines: &mut [String]) {
 mod tests {
     //! Exact-output checks for source boundaries inside overlong code spans.
 
-    use super::{conforming_source_lines_for_overlong_span, join_with_boundaries};
+    use super::{
+        ProseEdge,
+        conforming_source_lines_for_overlong_span,
+        join_with_boundaries,
+        reattach_prose,
+    };
 
     #[test]
     fn preserves_byte_boundary_after_multibyte_code_content() {
@@ -338,5 +370,27 @@ mod tests {
             conforming_source_lines_for_overlong_span(&segments, "", 4),
             Some(vec!["`é".to_owned(), "abc`".to_owned()]),
         );
+    }
+
+    #[test]
+    fn joins_prose_at_the_requested_preserved_span_edge() {
+        let mut leading = vec!["`code`".to_owned()];
+        reattach_prose(&mut leading, "before ", 20, ProseEdge::Leading);
+        assert_eq!(leading, ["before `code`"]);
+
+        let mut trailing = vec!["`code`".to_owned()];
+        reattach_prose(&mut trailing, " after", 20, ProseEdge::Trailing);
+        assert_eq!(trailing, ["`code` after"]);
+    }
+
+    #[test]
+    fn wraps_trimmed_prose_at_the_requested_preserved_span_edge() {
+        let mut leading = vec!["`code".to_owned(), "span`".to_owned()];
+        reattach_prose(&mut leading, "before ", 5, ProseEdge::Leading);
+        assert_eq!(leading, ["before", "`code", "span`"]);
+
+        let mut trailing = vec!["`code".to_owned(), "span`".to_owned()];
+        reattach_prose(&mut trailing, " after", 5, ProseEdge::Trailing);
+        assert_eq!(trailing, ["`code", "span`", "after"]);
     }
 }
