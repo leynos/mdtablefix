@@ -50,12 +50,12 @@ below and tracked as issue #504. Seven rules enforce the invariant where it
 holds:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
-  `src/wrap/block.rs` recognizes a break with
-  `crate::breaks::THEMATIC_BREAK_RE`, which covers three or more `-`, `*`, or
-  `_` characters, including spaced runs such as `- - -`, and the
-  seventy-underscore line that `--breaks` writes. Such a line is emitted on its
-  own line and never absorbed into the surrounding paragraph, with or without
-  `--breaks`; table separator rows keep their pipes and remain table rows.
+  `src/wrap/block.rs` recognizes a break through the shared classifier, which
+  reports `LineClass::ThematicBreak` for three or more `-`, `*`, or `_`
+  characters, including spaced runs such as `- - -`, and the seventy-underscore
+  line that `--breaks` writes. Such a line is emitted on its own line and never
+  absorbed into the surrounding paragraph, with or without `--breaks`; table
+  separator rows keep their pipes and remain table rows.
 - `--breaks` output is itself a fixed point. A seventy-underscore line is not
   absorbed into a paragraph by a later `--wrap`, and
   `fences::attach_orphan_specifiers` refuses to attach it to a following fence

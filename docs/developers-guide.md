@@ -757,12 +757,13 @@ depth-aware tracking.
 
 **`BlockKind::ThematicBreak`**
 
-Classified by `classify_block` when the stripped line matches
-`crate::breaks::THEMATIC_BREAK_RE`: three or more `-`, `*`, or `_` characters,
-including spaced runs such as `- - -`. The check outranks bullet classification
-because `BULLET_RE` also matches spaced runs. A thematic break passes through
-wrapping on its own line and never enters paragraph accumulation. Table
-separator rows such as `|---|` contain pipes and remain table rows.
+Classified by `classify_block` when the shared classifier reports
+`LineClass::ThematicBreak`: three or more `-`, `*`, or `_` characters,
+including spaced runs such as `- - -`. The shared classifier ranks thematic
+breaks above list items, so a spaced run is a break rather than a bullet. A
+thematic break passes through wrapping on its own line and never enters
+paragraph accumulation. Table separator rows such as `|---|` contain pipes and
+remain table rows.
 
 **`BlockKind::LinkReferenceDefinition`**
 

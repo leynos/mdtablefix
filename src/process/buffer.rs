@@ -202,9 +202,12 @@ impl ProcessBuffer {
         // table from being reflowed (a stray non-table row makes
         // `reflow_table` bail). Flushing here keeps wrapping and table
         // detection aligned.
-        if classify_block(&line, LinkReferenceMatcher::production()).is_some()
-            || line_class == LineClass::ThematicBreak
-        {
+        //
+        // Thematic breaks need no separate test: `classify_block` derives
+        // `BlockKind::ThematicBreak` from the same default-context
+        // classification that produced `line_class`, so every break already
+        // reaches this branch.
+        if classify_block(&line, LinkReferenceMatcher::production()).is_some() {
             debug!(
                 line_len = line.len(),
                 in_table = self.in_table,

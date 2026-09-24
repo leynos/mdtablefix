@@ -73,7 +73,7 @@ pub(crate) enum BlockKind {
     /// underscore run emitted by `--breaks`, none of which are table
     /// separators.
     ThematicBreak,
-    /// Bullet or ordered list markers matched by [`BULLET_RE`].
+    /// Bullet or ordered list markers reported by [`crate::classify::classify_line`].
     Bullet,
     /// Lines that begin with one or more `>` markers.
     Blockquote,
