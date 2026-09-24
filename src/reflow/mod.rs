@@ -39,14 +39,14 @@ pub(crate) struct Cell {
 /// # Examples
 ///
 /// ```rust,ignore
-/// let trimmed = vec!["| a | b |".to_string(), "| 1 | 2 |".to_string()];
+/// let trimmed = vec!["| a | b |".to_owned(), "| 1 | 2 |".to_owned()];
 /// let (rows, split_within_line) = mdtablefix::reflow::parse_rows(&trimmed);
 ///
 /// assert_eq!(
 ///     rows,
 ///     vec![
-///         vec!["a".to_string(), "b".to_string()],
-///         vec!["1".to_string(), "2".to_string()],
+///         vec!["a".to_owned(), "b".to_owned()],
+///         vec!["1".to_owned(), "2".to_owned()],
 ///     ]
 /// );
 /// assert!(!split_within_line);
@@ -103,13 +103,13 @@ fn retain_parsed_row(row_index: usize, row: &[Cell]) -> bool {
 ///         leading_empty: true,
 ///     },
 ///     Cell {
-///         payload: "value".to_string(),
+///         payload: "value".to_owned(),
 ///         leading_empty: false,
 ///     },
 /// ]];
 /// let cleaned = mdtablefix::reflow::clean_rows(rows);
 ///
-/// assert_eq!(cleaned, vec![vec![String::new(), "value".to_string()]]);
+/// assert_eq!(cleaned, vec![vec![String::new(), "value".to_owned()]]);
 /// ```
 pub(crate) fn clean_rows(rows: Vec<Vec<Cell>>) -> Vec<Vec<String>> {
     rows.into_iter()
@@ -140,8 +140,8 @@ pub(crate) fn clean_rows(rows: Vec<Vec<Cell>>) -> Vec<Vec<String>> {
 ///
 /// ```rust,ignore
 /// let rows = vec![
-///     vec!["ASCII".to_string(), "漢".to_string()],
-///     vec!["a | b".to_string(), "wide".to_string()],
+///     vec!["ASCII".to_owned(), "漢".to_owned()],
+///     vec!["a | b".to_owned(), "wide".to_owned()],
 /// ];
 /// let widths = mdtablefix::reflow::calculate_widths(&rows, 2);
 ///
@@ -151,7 +151,9 @@ pub(crate) fn calculate_widths(rows: &[Vec<String>], max_cols: usize) -> Vec<usi
     let mut widths = vec![0; max_cols];
     for row in rows {
         for (idx, cell) in row.iter().enumerate() {
-            widths[idx] = widths[idx].max(emitted_cell_width(cell));
+            if let Some(width) = widths.get_mut(idx) {
+                *width = (*width).max(emitted_cell_width(cell));
+            }
         }
     }
     widths
@@ -172,11 +174,11 @@ pub(crate) fn calculate_widths(rows: &[Vec<String>], max_cols: usize) -> Vec<usi
 /// # Examples
 ///
 /// ```rust,ignore
-/// let rows = vec![vec!["a".to_string(), "b | c".to_string()]];
+/// let rows = vec![vec!["a".to_owned(), "b | c".to_owned()]];
 /// let widths = vec![1, 5];
 /// let formatted = mdtablefix::reflow::format_rows(&rows, &widths, "  ");
 ///
-/// assert_eq!(formatted, vec!["  | a | b \\| c |".to_string()]);
+/// assert_eq!(formatted, vec!["  | a | b \\| c |".to_owned()]);
 /// ```
 pub(crate) fn format_rows(rows: &[Vec<String>], widths: &[usize], indent: &str) -> Vec<String> {
     rows.iter()
@@ -184,7 +186,9 @@ pub(crate) fn format_rows(rows: &[Vec<String>], widths: &[usize], indent: &str) 
             let padded: Vec<String> = row
                 .iter()
                 .enumerate()
-                .map(|(i, cell)| pad_cell_to_width(cell, widths[i]))
+                .map(|(i, cell)| {
+                    pad_cell_to_width(cell, widths.get(i).copied().unwrap_or_default())
+                })
                 .collect();
             format!("{}| {} |", indent, padded.join(" | "))
         })
@@ -208,10 +212,10 @@ pub(crate) fn format_rows(rows: &[Vec<String>], widths: &[usize], indent: &str) 
 /// # Examples
 ///
 /// ```rust,ignore
-/// let out = vec!["| head | body |".to_string(), "| row  | text |".to_string()];
+/// let out = vec!["| head | body |".to_owned(), "| row  | text |".to_owned()];
 /// let inserted = mdtablefix::reflow::insert_separator(
 ///     out,
-///     Some(vec!["---".to_string(), ":--".to_string()]),
+///     Some(vec!["---".to_owned(), ":--".to_owned()]),
 ///     &[4, 4],
 ///     "",
 /// );
@@ -219,9 +223,9 @@ pub(crate) fn format_rows(rows: &[Vec<String>], widths: &[usize], indent: &str) 
 /// assert_eq!(
 ///     inserted,
 ///     vec![
-///         "| head | body |".to_string(),
-///         "| ---- | :--- |".to_string(),
-///         "| row  | text |".to_string(),
+///         "| head | body |".to_owned(),
+///         "| ---- | :--- |".to_owned(),
+///         "| row  | text |".to_owned(),
 ///     ]
 /// );
 /// ```
@@ -270,13 +274,13 @@ pub(crate) fn insert_separator(
 ///
 /// ```rust,ignore
 /// let rows = vec![
-///     vec!["head".to_string(), "body".to_string()],
-///     vec!["---".to_string(), "---".to_string()],
-///     vec!["row".to_string(), "text".to_string()],
+///     vec!["head".to_owned(), "body".to_owned()],
+///     vec!["---".to_owned(), "---".to_owned()],
+///     vec!["row".to_owned(), "text".to_owned()],
 /// ];
 /// let (sep_cells, sep_row_idx) = mdtablefix::reflow::detect_separator(None, &rows, 2);
 ///
-/// assert_eq!(sep_cells, Some(vec!["---".to_string(), "---".to_string()]));
+/// assert_eq!(sep_cells, Some(vec!["---".to_owned(), "---".to_owned()]));
 /// assert_eq!(sep_row_idx, Some(1));
 /// ```
 pub(crate) fn detect_separator(
@@ -289,7 +293,9 @@ pub(crate) fn detect_separator(
 
     let sep_invalid = invalid_separator(sep_cells.as_ref(), max_cols);
     if should_use_second_row_as_separator(sep_invalid, rows) {
-        sep_cells = Some(rows[1].iter().map(|cell| cell.payload.clone()).collect());
+        sep_cells = rows
+            .get(1)
+            .map(|row| row.iter().map(|cell| cell.payload.clone()).collect());
         sep_row_idx = Some(1);
     }
 
@@ -318,7 +324,8 @@ fn should_use_second_row_as_separator(sep_invalid: bool, rows: &[Vec<Cell>]) -> 
 /// row of nothing but pipes and spaces — or one whose cells merely carry a
 /// dash, such as `| - - |` — would otherwise be taken for the delimiter row.
 fn second_row_is_separator(rows: &[Vec<Cell>]) -> bool {
-    rows.len() > 1 && rows[1].iter().all(|cell| is_delimiter_cell(&cell.payload))
+    rows.get(1)
+        .is_some_and(|row| row.iter().all(|cell| is_delimiter_cell(&cell.payload)))
 }
 
 /// Splits one physical row while retaining leading empty cells as column structure.
