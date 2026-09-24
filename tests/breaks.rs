@@ -121,6 +121,21 @@ fn normalizes_break_after_link_definition() {
     assert_borrowed_break!(output[1]);
 }
 
+/// An outdented break ends the list rather than underlining its link-shaped line.
+#[rstest]
+#[case(vec!["- item", "[a]: /url", "---"], 2)]
+#[case(vec!["- item", "  [a]: /url", "---"], 2)]
+fn normalizes_break_below_outdented_list_item_link(
+    #[case] source: Vec<&str>,
+    #[case] index: usize,
+) {
+    let input = source.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[index - 1], source[index - 1]);
+    assert_borrowed_break!(output[index]);
+}
+
 /// A link-shaped line after paragraph text remains part of that paragraph.
 #[test]
 fn preserves_setext_after_paragraph_link_shape() {
@@ -129,6 +144,18 @@ fn preserves_setext_after_paragraph_link_shape() {
 
     assert_borrowed_value!(output[2], "---");
     assert!(std::ptr::eq(output[2].as_ref(), input[2].as_str()));
+}
+
+/// A link-shaped line continues a list item's paragraph under its own indent.
+#[rstest]
+#[case(vec!["- item", "  [a]: /url", "  ---"], 2)]
+#[case(vec!["- item", "[a]: /url", "  ---"], 2)]
+fn preserves_setext_after_list_item_link_shape(#[case] source: Vec<&str>, #[case] index: usize) {
+    let input = source.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[index], "  ---");
+    assert!(std::ptr::eq(output[index].as_ref(), input[index].as_str()));
 }
 
 /// Underlines at a list item's content column stay inside that item.

@@ -22,17 +22,35 @@ pub const THEMATIC_BREAK_LEN: usize = 70;
 static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| "_".repeat(THEMATIC_BREAK_LEN));
 
+/// Whether a tracked prior line holds paragraph text a later line can continue.
+/// A list item marker line counts: it starts its item's paragraph.
+fn holds_paragraph_text(class: LineClass) -> bool {
+    matches!(class, LineClass::ParagraphText | LineClass::ListItem)
+}
+
 /// Context retained between adjacent lines in the break pass.
-#[derive(Default)]
 struct BreakLineState {
     /// Prior class, quote depth, and list content column, when available.
     previous: Option<(LineClass, usize, Option<usize>)>,
     /// Active list indentation tracked for Setext decisions.
     lists: ListContinuationState,
+    /// Link-reference matcher shared by every line in the pass.
+    links: LinkReferenceMatcher,
 }
 
 impl BreakLineState {
+    /// Creates state with no prior line, ready to classify the first line.
+    fn new(links: LinkReferenceMatcher) -> Self {
+        Self {
+            previous: None,
+            lists: ListContinuationState::default(),
+            links,
+        }
+    }
+
     /// Forgets context at a fenced-code boundary.
+    ///
+    /// The matcher is pass configuration, so it survives the reset.
     fn reset(&mut self) {
         self.previous = None;
         self.lists.reset();
@@ -66,21 +84,15 @@ impl BreakLineState {
     }
 
     /// Records a structural line for the next classifier decision.
-    fn observe(
-        &mut self,
-        line: &str,
-        classified: &ClassifiedLine<'_>,
-        depth: usize,
-        link_matcher: LinkReferenceMatcher,
-    ) {
+    fn observe(&mut self, line: &str, classified: &ClassifiedLine<'_>, depth: usize) {
         let residual = if classified.class == LineClass::ParagraphText {
-            classify_residual_block(classified.body.trim(), link_matcher)
+            classify_residual_block(classified.body.trim(), self.links)
         } else {
             None
         };
         let is_paragraph_link = residual == Some(BlockKind::LinkReferenceDefinition)
             && self.previous.is_some_and(|(class, old_depth, _)| {
-                class == LineClass::ParagraphText && old_depth == depth
+                holds_paragraph_text(class) && old_depth == depth
             });
         let is_residual_block = residual.is_some() && !is_paragraph_link;
         let continuation_indent = if is_residual_block {
@@ -131,8 +143,7 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     let mut out = Vec::with_capacity(lines.len());
     // Track fenced code blocks consistently while formatting breaks.
     let mut fences = FenceTracker::default();
-    let link_matcher = LinkReferenceMatcher::production();
-    let mut state = BreakLineState::default();
+    let mut state = BreakLineState::new(LinkReferenceMatcher::production());
 
     for line in lines {
         let fence = fences.observe_source_line(line);
@@ -152,7 +163,7 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         } else {
             classify_line_with_body(line, &context)
         };
-        state.observe(line, &classified, depth, link_matcher);
+        state.observe(line, &classified, depth);
 
         if is_canonical_break_line(line, &context) {
             out.push(canonicalized_break(prefix));
