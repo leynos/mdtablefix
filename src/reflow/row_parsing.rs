@@ -35,7 +35,10 @@ pub(super) fn split_physical_rows(mut physical_rows: Vec<Vec<Cell>>) -> (Vec<Vec
 /// and the surplus cells must all be empty; a surplus carrying content means the
 /// row is genuinely wider and must keep its shape.
 fn has_only_empty_padding(row: &[Cell], width: usize) -> bool {
-    width < row.len() && row[width..].iter().all(cell_is_semantically_empty)
+    width < row.len()
+        && row
+            .get(width..)
+            .is_some_and(|tail| tail.iter().all(cell_is_semantically_empty))
 }
 
 /// Infers the logical table width from the first row and concatenation markers.
@@ -71,12 +74,10 @@ fn has_embedded_separator_row(row: &[Cell], width: usize) -> bool {
     if !is_concatenated_rows(row, width) {
         return false;
     }
-    let row_count = (row.len() + 1) / (width + 1);
-    (0..row_count).any(|index| {
-        let start = index * (width + 1);
-        row[start..start + width]
-            .iter()
-            .all(|cell| is_delimiter_cell(&cell.payload))
+    row.chunks(width + 1).any(|chunk| {
+        chunk
+            .get(..width)
+            .is_some_and(|cells| cells.iter().all(|cell| is_delimiter_cell(&cell.payload)))
     })
 }
 
@@ -105,7 +106,10 @@ fn has_concatenation_shape(row: &[Cell], width: usize) -> bool {
 /// Those cells are the separators that make one physical row read as several;
 /// content in one would mean the split is not a separator at all.
 fn separators_are_empty(row: &[Cell], width: usize, row_count: usize) -> bool {
-    (1..row_count).all(|index| cell_is_semantically_empty(&row[index * (width + 1) - 1]))
+    (1..row_count).all(|index| {
+        row.get(index * (width + 1) - 1)
+            .is_some_and(cell_is_semantically_empty)
+    })
 }
 
 /// Reports whether each recovered logical row carries at least one non-empty cell.
@@ -114,9 +118,8 @@ fn separators_are_empty(row: &[Cell], width: usize, row_count: usize) -> bool {
 fn every_logical_row_has_content(row: &[Cell], width: usize, row_count: usize) -> bool {
     (0..row_count).all(|index| {
         let start = index * (width + 1);
-        row[start..start + width]
-            .iter()
-            .any(|cell| !cell_is_semantically_empty(cell))
+        row.get(start..start + width)
+            .is_some_and(|cells| cells.iter().any(|cell| !cell_is_semantically_empty(cell)))
     })
 }
 
