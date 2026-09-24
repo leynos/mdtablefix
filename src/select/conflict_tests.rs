@@ -9,7 +9,7 @@ use std::io;
 
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 
 use super::{
     ConflictGuard,
@@ -28,8 +28,9 @@ use super::{
 ///
 /// The markers are written through a capability of the same kind the scan uses,
 /// so no fixture can pass by having written something the scan could not have
-/// read. The [`tempfile::TempDir`] is part of the return value so the caller
+/// read. The [`tempfile::TempDir`] is part of the fixture value so the test
 /// keeps it alive for as long as the path is used.
+#[fixture]
 fn git_dir_fixture() -> io::Result<(tempfile::TempDir, Utf8PathBuf, Dir)> {
     let temporary = tempfile::tempdir()?;
     let git_dir = Utf8PathBuf::from_path_buf(temporary.path().to_path_buf()).map_err(|path| {
@@ -125,9 +126,10 @@ fn a_conflicted_file_is_refused_only_mid_operation_and_without_the_override(
     #[case] guarding: Guarding,
     #[case] conflicted: bool,
     #[case] expected: bool,
+    git_dir_fixture: io::Result<(tempfile::TempDir, Utf8PathBuf, Dir)>,
 ) {
     let (_temporary, git_dir, directory) =
-        git_dir_fixture().expect("create a UTF-8 Git directory fixture");
+        git_dir_fixture.expect("create a UTF-8 Git directory fixture");
     if matches!(guarding, Guarding::MidOperation) {
         directory
             .write("MERGE_HEAD", "")
@@ -177,10 +179,12 @@ fn the_unguarded_run_refuses_nothing() {
 /// The Git directory here is a regular file, which every marker test fails on:
 /// a clean document comes back unrefused anyway, which is only possible if the
 /// scan ran first. It is the ordering, rather than the answer, that this pins.
-#[test]
-fn a_document_without_markers_never_asks_the_repository() {
+#[rstest]
+fn a_document_without_markers_never_asks_the_repository(
+    git_dir_fixture: io::Result<(tempfile::TempDir, Utf8PathBuf, Dir)>,
+) {
     let (_temporary, root, directory) =
-        git_dir_fixture().expect("create a UTF-8 Git directory fixture");
+        git_dir_fixture.expect("create a UTF-8 Git directory fixture");
     directory
         .write("not-a-directory", "")
         .expect("create a file where a Git directory was expected");
@@ -214,9 +218,12 @@ enum Marker {
 #[case(Marker::File("CHERRY_PICK_HEAD"))]
 #[case(Marker::Directory("rebase-merge"))]
 #[case(Marker::Directory("rebase-apply"))]
-fn an_in_progress_operation_is_detected(#[case] marker: Marker) {
+fn an_in_progress_operation_is_detected(
+    #[case] marker: Marker,
+    git_dir_fixture: io::Result<(tempfile::TempDir, Utf8PathBuf, Dir)>,
+) {
     let (_temporary, git_dir, directory) =
-        git_dir_fixture().expect("create a UTF-8 Git directory fixture");
+        git_dir_fixture.expect("create a UTF-8 Git directory fixture");
     assert!(
         operation_in_progress(&git_dir).expect("read the idle fixture")
             == RepositoryOperationState::Idle,
@@ -236,10 +243,12 @@ fn an_in_progress_operation_is_detected(#[case] marker: Marker) {
     );
 }
 
-#[test]
-fn an_idle_git_directory_is_not_mid_operation() {
+#[rstest]
+fn an_idle_git_directory_is_not_mid_operation(
+    git_dir_fixture: io::Result<(tempfile::TempDir, Utf8PathBuf, Dir)>,
+) {
     let (_temporary, git_dir, directory) =
-        git_dir_fixture().expect("create a UTF-8 Git directory fixture");
+        git_dir_fixture.expect("create a UTF-8 Git directory fixture");
     directory
         .create_dir_all("objects")
         .expect("create an object store");
@@ -269,10 +278,12 @@ fn an_idle_git_directory_is_not_mid_operation() {
 /// through a file — so the kind is asserted rather than merely distinguished
 /// from absence. A run that read the failure as "no operation in progress" would
 /// rewrite a conflicted file on the strength of a question it never answered.
-#[test]
-fn an_unreadable_repository_is_an_error_rather_than_an_answer() {
+#[rstest]
+fn an_unreadable_repository_is_an_error_rather_than_an_answer(
+    git_dir_fixture: io::Result<(tempfile::TempDir, Utf8PathBuf, Dir)>,
+) {
     let (_temporary, root, directory) =
-        git_dir_fixture().expect("create a UTF-8 Git directory fixture");
+        git_dir_fixture.expect("create a UTF-8 Git directory fixture");
     directory
         .write("not-a-directory", "")
         .expect("create a file where a Git directory was expected");
@@ -296,10 +307,12 @@ fn an_unreadable_repository_is_an_error_rather_than_an_answer() {
 /// Stated as a function of the metadata rather than through
 /// [`operation_in_progress`], whose open refuses the same file on Linux before
 /// this check is reached, so that the decision is covered on both platforms.
-#[test]
-fn a_git_directory_that_is_not_a_directory_is_reported() {
+#[rstest]
+fn a_git_directory_that_is_not_a_directory_is_reported(
+    git_dir_fixture: io::Result<(tempfile::TempDir, Utf8PathBuf, Dir)>,
+) {
     let (_temporary, root, directory) =
-        git_dir_fixture().expect("create a UTF-8 Git directory fixture");
+        git_dir_fixture.expect("create a UTF-8 Git directory fixture");
     directory
         .write("not-a-directory", "")
         .expect("create a file where a Git directory was expected");
@@ -351,10 +364,12 @@ fn an_unreadable_marker_is_an_unanswered_question_rather_than_an_absent_one(
 /// a directory that is not there used to come back as absence, which is the
 /// answer "no operation in progress"; the question now fails to be asked, and
 /// an unanswered question is not a licence to write.
-#[test]
-fn a_git_directory_that_has_gone_is_reported_rather_than_answered() {
+#[rstest]
+fn a_git_directory_that_has_gone_is_reported_rather_than_answered(
+    git_dir_fixture: io::Result<(tempfile::TempDir, Utf8PathBuf, Dir)>,
+) {
     let (_temporary, root, _directory) =
-        git_dir_fixture().expect("create a UTF-8 Git directory fixture");
+        git_dir_fixture.expect("create a UTF-8 Git directory fixture");
     let gone = root.join("gone");
 
     let error = operation_in_progress(&gone).expect_err("a Git directory that is not there");
