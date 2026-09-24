@@ -22,6 +22,19 @@ pub(super) struct TableSubstitutions {
     pub(super) code_emphasis: bool,
 }
 
+/// Reports whether a classifier decision opens a top-level table run.
+///
+/// A quoted pipe body is not a top-level table row, and a delimiter is only a
+/// table start when its own body leads with the pipe: the classifier accepts a
+/// bare delimiter run that closes an existing table instead.
+fn opens_table_run(line_class: LineClass, body: &str, is_quoted: bool) -> bool {
+    if is_quoted {
+        return false;
+    }
+    line_class == LineClass::TableRow
+        || (line_class == LineClass::TableDelimiter && body.starts_with('|'))
+}
+
 /// Identifies a non-empty line whose indentation makes it an indented code
 /// block rather than a table row.
 fn is_indented_content_line(line: &str) -> bool {
@@ -172,10 +185,7 @@ impl ProcessBuffer {
         let prefix = &line[..line.len() - classified.body.len()];
         let is_quoted = prefix.contains('>');
         let line_class = classified.class;
-        if !is_quoted
-            && (line_class == LineClass::TableRow
-                || (line_class == LineClass::TableDelimiter && classified.body.starts_with('|')))
-        {
+        if opens_table_run(line_class, classified.body, is_quoted) {
             debug!(
                 line_len = line.len(),
                 buffered_lines = self.buf.len(),
