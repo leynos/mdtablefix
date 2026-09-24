@@ -160,7 +160,7 @@ fn flush_table_passes_lines_through_reflow() {
     let expected = owned(&["| a   | b   |", "| --- | --- |", "| 1   | 2   |"]);
     assert_eq!(buffer.out, expected);
     assert_eq!(buffer.out, reflow_table(&input));
-    assert_ne!(buffer.out, input, "reflow should normalise column widths");
+    assert_ne!(buffer.out, input, "reflow should normalize column widths");
     assert!(!buffer.in_table);
 }
 

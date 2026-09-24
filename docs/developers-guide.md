@@ -1221,14 +1221,14 @@ the neighbouring `snapshots/` directory.
 
 A test captures events with the in-repo `test_macros::traced_test` attribute,
 then normalizes the captured lines through the shared
-`crate::wrap::tracing_snapshot_support::normalise_event_lines` helper before
+`crate::wrap::tracing_snapshot_support::normalize_event_lines` helper before
 asserting the snapshot.
 
-#### `normalise_event_lines` helper
+#### `normalize_event_lines` helper
 
 `tracing-test` prefixes every captured line with a volatile timestamp and span
 context, which would make raw snapshots non-deterministic.
-`normalise_event_lines(lines, message)` retains only the lines containing
+`normalize_event_lines(lines, message)` retains only the lines containing
 `message`, strips the volatile prefix up to the event level (`TRACE`/`DEBUG`),
 trims trailing whitespace, and joins the survivors. The level, target, message,
 and structured fields are preserved verbatim, so the snapshot still fails if

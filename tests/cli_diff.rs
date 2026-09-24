@@ -179,7 +179,7 @@ fn diff_is_deterministic_across_ten_runs() {
 ///
 /// The line count is the *only* thing that chooses between the two algorithms,
 /// and this is the case where a wall-clock budget would have been tempting,
-/// since it is the one long enough to look slow. The localisation assertion is
+/// since it is the one long enough to look slow. The localization assertion is
 /// what rejects that budget: a deadline that trips makes the renderer replace
 /// the region wholesale rather than diff it, and the prose that no rewrite can
 /// touch would come back as deleted.
@@ -198,7 +198,7 @@ fn diff_is_deterministic_above_the_threshold() {
     assert_eq!(
         replaced,
         0,
-        "the diff must localise the change to the tables; {replaced} of the {} untouched prose \
+        "the diff must localize the change to the tables; {replaced} of the {} untouched prose \
          lines came back as deleted, which is a wholesale replacement rather than a diff",
         TABLES * PROSE_PER_TABLE
     );
