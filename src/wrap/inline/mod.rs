@@ -11,6 +11,7 @@ mod month_names;
 mod normalize;
 mod postprocess;
 mod predicates;
+mod span_classification;
 mod span_helpers;
 #[cfg(test)]
 mod test_support;
@@ -35,202 +36,26 @@ use std::ops::Range;
 use fragment::{InlineFragment, width_as_f64};
 use normalize::normalize_footnote_ref_spacing;
 use postprocess::{merge_whitespace_only_lines, rebalance_atomic_tails};
-use predicates::looks_like_link;
 pub(in crate::wrap::inline) use predicates::{
     ends_with_footnote_ref,
-    ends_with_hyphen_prefix,
     fragment_is_link,
     is_inline_code_token,
     is_opening_punct,
     is_trailing_punct,
-    is_trailing_punctuation_token,
     is_whitespace_token,
     looks_like_bracketed_reference,
     looks_like_footnote_ref,
 };
-use span_helpers::{
-    SpanKind,
-    absorb_token_and_trailing_punctuation,
-    date_token_span,
-    extend_punctuation,
-    merge_code_span,
-    should_couple_whitespace,
-    try_couple_bracketed_reference,
-    try_couple_footnote_reference,
-    try_couple_inline_link_after_opener,
-};
-use textwrap::wrap_algorithms::wrap_first_fit;
-use tracing::trace;
-use tracing_events::{emit_footnote_reference_coupling, emit_whitespace_footnote_coupling};
-use unicode_width::UnicodeWidthStr;
-
-use super::tokenize;
-
-/// Build the first atomic span at `start`, including punctuation and attached
-/// Markdown constructs that cannot be split across a line boundary.
-///
-/// Opening punctuation, hyphen prefixes, code spans, links, and footnote
-/// references are coupled before the general continuation loop runs. The
-/// returned width is the Unicode display width of that complete candidate.
-fn initial_token_span(tokens: &[String], start: usize) -> (usize, usize, SpanKind) {
-    let mut end = start + 1;
-    let mut width = UnicodeWidthStr::width(tokens[start].as_str());
-    let mut kind = SpanKind::General;
-
-    // Forward-couple opening punctuation to the next atomic span so wrapping
-    // never leaves a lone `(` at the end of a line before inline code or a link.
-    if tokens[start].chars().all(is_opening_punct)
-        && let Some(next) = tokens.get(start + 1)
-    {
-        if is_code_token(next) {
-            kind = SpanKind::Code;
-            end += 1;
-            width += UnicodeWidthStr::width(next.as_str());
-            end = extend_punctuation(tokens, end, &mut width);
-        } else if looks_like_link(next) {
-            kind = SpanKind::Link;
-            end += 1;
-            width += UnicodeWidthStr::width(next.as_str());
-            end = extend_punctuation(tokens, end, &mut width);
-        } else if tokens[start] == "[" && looks_like_bracketed_reference(next) {
-            // Forward-couple a bare bracket reference to its opener so wrapping
-            // never strands `[` at the end of a line before its digits. Only
-            // `[` introduces a reference, so other openers stay ordinary prose.
-            kind = SpanKind::BracketedRef;
-            end += 1;
-            width += UnicodeWidthStr::width(next.as_str());
-            end = extend_punctuation(tokens, end, &mut width);
-        }
-    }
-
-    // Forward-couple a hyphen-prefix token to the next inline code span so
-    // wrapping never splits compounds such as `pre-`code`` at the hyphen.
-    if kind == SpanKind::General
-        && ends_with_hyphen_prefix(&tokens[start])
-        && let Some(next) = tokens.get(end)
-        && is_code_token(next)
-    {
-        kind = SpanKind::Code;
-        width += UnicodeWidthStr::width(next.as_str());
-        end += 1;
-        end = extend_punctuation(tokens, end, &mut width);
-    }
-
-    if tokens[start] == "`" {
-        kind = SpanKind::Code;
-        end = merge_code_span(tokens, start, &mut width);
-    } else if is_code_token(&tokens[start]) {
-        kind = SpanKind::Code;
-        end = extend_punctuation(tokens, end, &mut width);
-    } else if looks_like_link(&tokens[start]) {
-        kind = SpanKind::Link;
-        end = extend_punctuation(tokens, end, &mut width);
-    } else if looks_like_footnote_ref(&tokens[start]) {
-        kind = SpanKind::FootnoteRef;
-        end = extend_punctuation(tokens, end, &mut width);
-    }
-
-    (end, width, kind)
-}
-
-/// Finds the next logical token group starting at `start`.
-///
-/// `tokens` is the segmented inline token stream and `start` is the first
-/// token in the next candidate group. The return value is `(end, width)`,
-/// where `end` is the exclusive end index of the grouped inline code span,
-/// link, or plain fragment, and `width` is its Unicode display width. This
-/// helper assumes `start < tokens.len()` and will panic if called out of
-/// bounds.
-pub(super) fn determine_token_span(tokens: &[String], start: usize) -> (usize, usize) {
-    if let Some((end, width)) = date_token_span(tokens, start) {
-        trace!(
-            start,
-            end, width, "determine_token_span grouped date sequence"
-        );
-        return (end, width);
-    }
-
-    let (mut end, mut width, mut kind) = initial_token_span(tokens, start);
-
-    while end < tokens.len() {
-        let token = &tokens[end];
-        if is_whitespace_token(token) {
-            let next_token = tokens.get(end + 1);
-            let following_token = tokens.get(end + 2);
-            let should_couple = should_couple_whitespace(kind, next_token, following_token);
-            emit_whitespace_footnote_coupling(kind, next_token, following_token, should_couple);
-            if should_couple {
-                width += UnicodeWidthStr::width(token.as_str());
-                end += 1;
-                continue;
-            }
-
-            break;
-        }
-
-        if is_trailing_punctuation_token(token) {
-            if matches!(
-                kind,
-                SpanKind::Code | SpanKind::Link | SpanKind::FootnoteRef
-            ) {
-                width += UnicodeWidthStr::width(token.as_str());
-                end += 1;
-                continue;
-            }
-            break;
-        }
-
-        let is_link = looks_like_link(token);
-        let is_code = is_code_token(token);
-        if let Some((next_kind, next_end)) =
-            try_couple_inline_link_after_opener(tokens, end, &mut width)
-        {
-            kind = next_kind;
-            end = next_end;
-            continue;
-        }
-
-        // A bare bracket reference couples to its opener for the same reason
-        // footnote markers do: the opener can follow an atomic span directly,
-        // and leaving `[` in the preceding span would strand it at a line end.
-        if let Some((next_kind, next_end)) = try_couple_bracketed_reference(tokens, end, &mut width)
-        {
-            kind = next_kind;
-            end = next_end;
-            continue;
-        }
-
-        // Footnote markers must be coupled before consecutive link/code chaining;
-        // otherwise `[^N]` stays a separate wrap token even when punctuation is
-        // already attached to the preceding atomic span.
-        let footnote_coupling = try_couple_footnote_reference(tokens, end, kind, &mut width);
-        emit_footnote_reference_coupling(tokens, end, kind, footnote_coupling.is_some());
-        if let Some((next_kind, next_end)) = footnote_coupling {
-            kind = next_kind;
-            end = next_end;
-            continue;
-        }
-
-        if kind == SpanKind::Link && is_link {
-            end = absorb_token_and_trailing_punctuation(tokens, end, &mut width);
-            continue;
-        }
-
-        if kind == SpanKind::Code && is_code {
-            end = absorb_token_and_trailing_punctuation(tokens, end, &mut width);
-            continue;
-        }
-
-        break;
-    }
-
-    (end, width)
-}
-
+pub(super) use span_classification::determine_token_span;
+use span_helpers::SpanKind;
 /// Re-exports the test-only helper that joins punctuation onto a prior code
 /// line when `current` is empty.
 #[cfg(test)]
 pub(super) use test_support::attach_punctuation_to_previous_line;
+use textwrap::wrap_algorithms::wrap_first_fit;
+use unicode_width::UnicodeWidthStr;
+
+use super::tokenize;
 
 /// Appends the token span into the rendered fragment buffer `text`.
 ///
@@ -238,7 +63,10 @@ pub(super) use test_support::attach_punctuation_to_previous_line;
 /// to copy. This helper mutates `text` in place and preserves the invariant
 /// that punctuation after code spans keeps its original Markdown spacing.
 fn push_span_text(text: &mut String, tokens: &[String], span: Range<usize>) {
-    for token in &tokens[span] {
+    let Some(span_tokens) = tokens.get(span) else {
+        return;
+    };
+    for token in span_tokens {
         if token.len() == 1 && ".?!,:;".contains(token) && text.trim_end().ends_with('`') {
             text.truncate(text.trim_end_matches(char::is_whitespace).len());
         }
@@ -257,15 +85,14 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
 
     while i < tokens.len() {
         let (group_end, _group_width) = determine_token_span(tokens, i);
-        let span = i..group_end;
-        let text = if tokens[i..group_end]
-            .iter()
-            .all(|token| is_whitespace_token(token))
-        {
-            tokens[span].join("")
+        let Some(span_tokens) = tokens.get(i..group_end).filter(|span| !span.is_empty()) else {
+            break;
+        };
+        let text = if span_tokens.iter().all(|token| is_whitespace_token(token)) {
+            span_tokens.join("")
         } else {
             let mut text = String::new();
-            push_span_text(&mut text, tokens, span);
+            push_span_text(&mut text, tokens, i..group_end);
             text
         };
         fragments.push(InlineFragment::new(text));
@@ -277,7 +104,10 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
 
 /// Returns whether `line` contains one link fragment.
 fn is_single_link_line(line: &[InlineFragment]) -> bool {
-    line.len() == 1 && line[0].kind == fragment::FragmentKind::Link
+    line.len() == 1
+        && line
+            .first()
+            .is_some_and(|fragment| fragment.kind == fragment::FragmentKind::Link)
 }
 
 /// Returns the total display width of a fragment line.
@@ -303,7 +133,7 @@ fn split_boundary_link_line(
         return None;
     }
 
-    Some((vec![line[0].clone()], line[1..].to_vec()))
+    Some((vec![line.first()?.clone()], line.get(1..)?.to_vec()))
 }
 
 /// Returns whether a boundary link fragment should be finalized now.
@@ -383,27 +213,7 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
         let mut grouped_lines = merge_whitespace_only_lines(&raw_lines, width);
         rebalance_atomic_tails(&mut grouped_lines, width);
 
-        if grouped_lines.len() == 1 {
-            continue;
-        }
-
-        if let Some((link_line, remaining_line)) = grouped_lines
-            .get(grouped_lines.len() - 2)
-            .zip(grouped_lines.last())
-            .and_then(|(previous, line)| split_boundary_link_line(previous, line, width))
-        {
-            for line in &grouped_lines[..grouped_lines.len() - 1] {
-                lines.push(render_line(line, false, !lines.is_empty()));
-            }
-            lines.push(render_line(&link_line, false, !lines.is_empty()));
-            buffer = remaining_line;
-            continue;
-        }
-
-        for line in &grouped_lines[..grouped_lines.len() - 1] {
-            lines.push(render_line(line, false, !lines.is_empty()));
-        }
-        buffer = grouped_lines.pop().unwrap_or_default();
+        emit_completed_lines(&mut lines, &mut buffer, grouped_lines, width);
     }
 
     if !buffer.is_empty() {
@@ -411,6 +221,32 @@ pub(super) fn wrap_preserving_code(text: &str, width: usize) -> Vec<String> {
     }
 
     lines
+}
+
+/// Emit finished wrap lines and retain the final fragments for the next pass.
+fn emit_completed_lines(
+    lines: &mut Vec<String>,
+    buffer: &mut Vec<InlineFragment>,
+    mut grouped_lines: Vec<Vec<InlineFragment>>,
+    width: usize,
+) {
+    if grouped_lines.len() < 2 {
+        return;
+    }
+
+    let split_link = grouped_lines
+        .get(grouped_lines.len() - 2)
+        .zip(grouped_lines.last())
+        .and_then(|(previous, line)| split_boundary_link_line(previous, line, width));
+    for line in grouped_lines.iter().take(grouped_lines.len() - 1) {
+        lines.push(render_line(line, false, !lines.is_empty()));
+    }
+    if let Some((link_line, remaining_line)) = split_link {
+        lines.push(render_line(&link_line, false, !lines.is_empty()));
+        *buffer = remaining_line;
+    } else {
+        *buffer = grouped_lines.pop().unwrap_or_default();
+    }
 }
 
 #[cfg(test)]

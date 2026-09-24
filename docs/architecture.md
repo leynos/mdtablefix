@@ -598,6 +598,13 @@ grouped into Markdown-aware fragments and passed to
 `textwrap::wrap_algorithms::wrap_first_fit`, which chooses the breakpoints
 without splitting code spans, links, or punctuation groups.
 
+`src/wrap/inline/span_classification.rs` owns the token-span selection loop: it
+classifies the first token and couples adjacent Markdown constructs before
+fragment construction. Its cursor is private to that module and is used only by
+this selection loop; parsing predicates and reusable punctuation/date coupling
+remain in `predicates.rs` and `span_helpers.rs`. The inline module retains
+fragment construction and line rendering.
+
 ```mermaid
 flowchart TD
     A["Input text (&str)"] --> B["Tokenize into whitespace and inline Markdown tokens"]
