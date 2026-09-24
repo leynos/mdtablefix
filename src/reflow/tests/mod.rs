@@ -17,9 +17,9 @@ fn single_line_character_strategy() -> impl Strategy<Value = char> {
 
 fn arbitrary_non_empty_cell_strategy() -> BoxedStrategy<String> {
     prop_oneof![
-        2 => Just("ROW_END".to_string()),
-        2 => Just("|".to_string()),
-        1 => Just("left | right".to_string()),
+        2 => Just("ROW_END".to_owned()),
+        2 => Just("|".to_owned()),
+        1 => Just("left | right".to_owned()),
         8 => prop::collection::vec(single_line_character_strategy(), 0..=24)
             .prop_map(|characters| {
                 let content = characters.into_iter().collect::<String>();
@@ -48,7 +48,7 @@ fn legacy_concatenated_rows_strategy() -> impl Strategy<Value = Vec<Vec<String>>
         let body =
             prop::collection::vec(generated_row_strategy(column_count, 0..column_count), 1..=6);
         (header, body).prop_map(move |(header, body)| {
-            let separator = vec!["---".to_string(); column_count];
+            let separator = vec!["---".to_owned(); column_count];
             std::iter::once(header)
                 .chain(std::iter::once(separator))
                 .chain(body)
@@ -120,8 +120,8 @@ fn normalize_cells(rows: &[Vec<Cell>]) -> Vec<Vec<String>> {
 #[test]
 fn parse_rows_preserves_literal_row_end_cell() {
     let input = vec![
-        "| Name | Value |".to_string(),
-        "| marker | ROW_END |".to_string(),
+        "| Name | Value |".to_owned(),
+        "| marker | ROW_END |".to_owned(),
     ];
 
     let (rows, split_within_line) = parse_rows(&input);
@@ -129,8 +129,8 @@ fn parse_rows_preserves_literal_row_end_cell() {
     assert_eq!(
         normalize_cells(&rows),
         vec![
-            vec!["Name".to_string(), "Value".to_string()],
-            vec!["marker".to_string(), "ROW_END".to_string()],
+            vec!["Name".to_owned(), "Value".to_owned()],
+            vec!["marker".to_owned(), "ROW_END".to_owned()],
         ]
     );
     assert!(!split_within_line);
@@ -138,16 +138,16 @@ fn parse_rows_preserves_literal_row_end_cell() {
 
 #[test]
 fn parse_rows_recovers_legacy_rows_with_embedded_separator() {
-    let input = vec!["| Name | Notes |  | --- | --- |  | alpha | value |".to_string()];
+    let input = vec!["| Name | Notes |  | --- | --- |  | alpha | value |".to_owned()];
 
     let (parsed, split_within_line) = parse_rows(&input);
 
     assert_eq!(
         normalize_cells(&parsed),
         vec![
-            vec!["Name".to_string(), "Notes".to_string()],
-            vec!["---".to_string(), "---".to_string()],
-            vec!["alpha".to_string(), "value".to_string()],
+            vec!["Name".to_owned(), "Notes".to_owned()],
+            vec!["---".to_owned(), "---".to_owned()],
+            vec!["alpha".to_owned(), "value".to_owned()],
         ]
     );
     assert!(split_within_line);
@@ -155,41 +155,41 @@ fn parse_rows_recovers_legacy_rows_with_embedded_separator() {
 
 #[test]
 fn parse_rows_preserves_adjacent_empty_interior_cell() {
-    let input = vec!["| A || C |".to_string()];
+    let input = vec!["| A || C |".to_owned()];
 
     let (parsed, split_within_line) = parse_rows(&input);
 
     assert_eq!(
         normalize_cells(&parsed),
-        vec![vec!["A".to_string(), String::new(), "C".to_string()]]
+        vec![vec!["A".to_owned(), String::new(), "C".to_owned()]]
     );
     assert!(!split_within_line);
 }
 
 #[test]
 fn parse_rows_preserves_whitespace_padded_empty_cells() {
-    let input = vec!["| A |  | C |".to_string()];
+    let input = vec!["| A |  | C |".to_owned()];
 
     let (parsed, split_within_line) = parse_rows(&input);
 
     assert_eq!(
         normalize_cells(&parsed),
-        vec![vec!["A".to_string(), String::new(), "C".to_string()]]
+        vec![vec!["A".to_owned(), String::new(), "C".to_owned()]]
     );
     assert!(!split_within_line);
 }
 
 #[test]
 fn parse_rows_preserves_trailing_empty_cells() {
-    let input = vec!["| A | B | C |".to_string(), "| 1 | 2 |  |".to_string()];
+    let input = vec!["| A | B | C |".to_owned(), "| 1 | 2 |  |".to_owned()];
 
     let (parsed, split_within_line) = parse_rows(&input);
 
     assert_eq!(
         normalize_cells(&parsed),
         vec![
-            vec!["A".to_string(), "B".to_string(), "C".to_string()],
-            vec!["1".to_string(), "2".to_string(), String::new()],
+            vec!["A".to_owned(), "B".to_owned(), "C".to_owned()],
+            vec!["1".to_owned(), "2".to_owned(), String::new()],
         ]
     );
     assert!(!split_within_line);
@@ -198,9 +198,9 @@ fn parse_rows_preserves_trailing_empty_cells() {
 #[test]
 fn parse_rows_splits_structural_rows_and_drops_marker_only_row() {
     let input = vec![
-        "| H1 | H2 |  |".to_string(),
-        "| A | B |  | C | D |".to_string(),
-        "| | |".to_string(),
+        "| H1 | H2 |  |".to_owned(),
+        "| A | B |  | C | D |".to_owned(),
+        "| | |".to_owned(),
     ];
 
     let (rows, split_within_line) = parse_rows(&input);
@@ -209,9 +209,9 @@ fn parse_rows_splits_structural_rows_and_drops_marker_only_row() {
     assert_eq!(
         normalize_cells(&rows),
         vec![
-            vec!["H1".to_string(), "H2".to_string()],
-            vec!["A".to_string(), "B".to_string()],
-            vec!["C".to_string(), "D".to_string()],
+            vec!["H1".to_owned(), "H2".to_owned()],
+            vec!["A".to_owned(), "B".to_owned()],
+            vec!["C".to_owned(), "D".to_owned()],
         ]
     );
 }
@@ -219,7 +219,7 @@ fn parse_rows_splits_structural_rows_and_drops_marker_only_row() {
 #[traced_test]
 #[test]
 fn parse_rows_logs_row_dimensions() {
-    let input = vec!["| Name | Value |".to_string()];
+    let input = vec!["| Name | Value |".to_owned()];
 
     let _ = parse_rows(&input);
 
@@ -231,7 +231,7 @@ fn parse_rows_logs_row_dimensions() {
 #[traced_test]
 #[test]
 fn empty_parsed_rows_log_discard_category() {
-    let input = vec!["| | |".to_string()];
+    let input = vec!["| | |".to_owned()];
     let (rows, split_within_line) = parse_rows(&input);
 
     assert!(rows.is_empty());
@@ -322,9 +322,9 @@ fn pad_cell_to_width_saturates_without_truncating() {
 }
 
 #[rstest]
-#[case(vec!["ASCII".to_string(), "wide".to_string()], vec!["narrow".to_string(), "text".to_string()], vec![6, 4])]
-#[case(vec!["漢字".to_string(), "🙂".to_string()], vec!["é".to_string(), "emoji 🙂".to_string()], vec![4, 8])]
-#[case(vec!["a | b".to_string()], vec!["plain".to_string()], vec![6])]
+#[case(vec!["ASCII".to_owned(), "wide".to_owned()], vec!["narrow".to_owned(), "text".to_owned()], vec![6, 4])]
+#[case(vec!["漢字".to_owned(), "🙂".to_owned()], vec!["é".to_owned(), "emoji 🙂".to_owned()], vec![4, 8])]
+#[case(vec!["a | b".to_owned()], vec!["plain".to_owned()], vec![6])]
 fn calculate_widths_uses_unicode_display_width(
     #[case] first: Vec<String>,
     #[case] second: Vec<String>,
@@ -340,7 +340,7 @@ fn parsed_row(payloads: &[&str]) -> Vec<Cell> {
     payloads
         .iter()
         .map(|payload| Cell {
-            payload: (*payload).to_string(),
+            payload: (*payload).to_owned(),
             leading_empty: false,
         })
         .collect()
@@ -366,11 +366,11 @@ fn second_row_is_not_a_separator_when_its_cells_carry_no_dash() {
 
 #[test]
 fn format_rows_reescapes_literal_pipes_in_emitted_cells() {
-    let rows = vec![vec![String::new(), "keep | literal".to_string()]];
+    let rows = vec![vec![String::new(), "keep | literal".to_owned()]];
     let widths = calculate_widths(&rows, 2);
 
     assert_eq!(
         format_rows(&rows, &widths, ""),
-        vec!["|  | keep \\| literal |".to_string()]
+        vec!["|  | keep \\| literal |".to_owned()]
     );
 }
