@@ -30,9 +30,16 @@ output and most test fixtures.
 │   └── users-guide.md
 ├── scripts/
 ├── src/
+│   ├── driver/
+│   ├── ellipsis/
 │   ├── fences/
 │   ├── footnotes/
+│   ├── io/
+│   ├── process/
 │   ├── reflow/
+│   ├── report/
+│   ├── select/
+│   ├── table/
 │   ├── wrap/
 │   └── *.rs
 └── tests/
@@ -98,24 +105,29 @@ _Figure 1: Simplified repository tree._
 
 - `src/main.rs`: Command-line entry point and application boundary.
 - `src/lib.rs`: Library surface used by the binary and integration tests.
-- `src/io.rs` and `src/io/`: Library file-rewriting helpers (`rewrite`,
+- `src/io/`: Library file-rewriting helpers (`rewrite`,
   `rewrite_no_wrap`) and the line-ending policy they share, split into
   `line_endings`, `replace`, and `swap`. `detect_line_ending` selects the
   terminator style holding the majority of a document's line endings, and
   `serialize_lines` re-emits formatted lines with it, so a CRLF file stays CRLF.
-- `src/process.rs`: High-level document processing orchestration.
-- `src/table.rs`: Markdown table parsing and rendering.
-- `src/reflow.rs` and `src/reflow/`: Reflow coordination and focused reflow
-  tests.
-- `src/wrap.rs` and `src/wrap/`: Paragraph wrapping, inline parsing,
+- `src/driver/`: Application boundary for file analysis, command-line input,
+  and documented exit statuses.
+- `src/process/`: High-level document processing orchestration.
+- `src/table/`: Markdown table parsing and rendering.
+- `src/reflow/`: Reflow coordination and focused reflow tests.
+- `src/wrap/`: Paragraph wrapping, inline parsing,
   continuation handling, link references, and related helpers.
-- `src/fences.rs` and `src/fences/`: Fenced code block tracking and attachment
-  behaviour.
+- `src/fences/`: Fenced code block tracking and attachment behaviour.
+- `src/report/`: Pure line-delta reporting used by `--check` and `--diff`.
+- `src/select/`: File selection for `--git`, including its policy and
+  adapters.
 - `src/footnotes.rs` and `src/footnotes/`: Footnote parsing, list handling,
   inline handling, and renumbering.
-- `src/*.rs`: Focused Markdown transformations such as headings, breaks,
-  frontmatter, HyperText Markup Language (HTML), lists, emphasis, ellipses, and
-  text processing.
+- `src/ellipsis/`: Replacement of three-dot sequences with the ellipsis
+  character, while preserving fenced, indented, and inline code.
+- `src/*.rs`: Other focused Markdown transformations such as headings, breaks,
+  frontmatter, HyperText Markup Language (HTML), lists, emphasis, and text
+  processing.
 
 ## Test paths
 
