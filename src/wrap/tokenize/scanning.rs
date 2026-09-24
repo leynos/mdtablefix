@@ -22,7 +22,7 @@ where
     F: FnMut(char) -> bool,
 {
     let mut idx = start;
-    for ch in text[start..].chars() {
+    for ch in text.get(start..).unwrap_or_default().chars() {
         if !cond(ch) {
             break;
         }
@@ -44,11 +44,9 @@ where
 /// assert_eq!(scan_code_suffix_end(text, close), close + 1);
 /// ```
 pub(super) fn scan_code_suffix_end(text: &str, start: usize) -> usize {
-    if start >= text.len() {
+    let Some(rest) = text.get(start..) else {
         return start;
-    }
-
-    let rest = &text[start..];
+    };
     if rest.starts_with('-') {
         let first = rest.chars().nth(1);
         if first.is_some_and(char::is_alphabetic) {
@@ -78,7 +76,7 @@ pub(super) fn scan_code_suffix_end(text: &str, start: usize) -> usize {
 /// assert_eq!(collect_range(text, 0, 2), "ab");
 /// ```
 pub(super) fn collect_range(text: &str, start: usize, end: usize) -> String {
-    text[start..end].to_string()
+    text.get(start..end).unwrap_or_default().to_owned()
 }
 
 /// Byte value used when checking whether Markdown punctuation is escaped.
@@ -92,12 +90,12 @@ fn closing_fence_end(bytes: &[u8], text: &str, search: usize, fence_len: usize) 
         return None;
     }
 
-    let ch = text[search..].chars().next()?;
+    let ch = text.get(search..)?.chars().next()?;
     if ch != '`' {
         return None;
     }
 
-    if search > 0 && bytes[search - 1] == BACKTICK_BYTE {
+    if search > 0 && bytes.get(search - 1) == Some(&BACKTICK_BYTE) {
         return None;
     }
 
@@ -106,7 +104,7 @@ fn closing_fence_end(bytes: &[u8], text: &str, search: usize, fence_len: usize) 
         return None;
     }
 
-    if candidate_end < bytes.len() && bytes[candidate_end] == BACKTICK_BYTE {
+    if bytes.get(candidate_end) == Some(&BACKTICK_BYTE) {
         return None;
     }
 
@@ -126,7 +124,7 @@ pub(crate) fn opening_fence_run_len(bytes: &[u8], text: &str) -> Option<usize> {
 
     let run_end = scan_while(text, 0, |candidate| candidate == '`');
     let fence_len = run_end;
-    if run_end < bytes.len() && bytes[run_end] == BACKTICK_BYTE {
+    if bytes.get(run_end) == Some(&BACKTICK_BYTE) {
         return None;
     }
 
@@ -141,7 +139,7 @@ pub(crate) fn parse_open_code_span(text: &str) -> Option<(usize, &str)> {
     let bytes = text.as_bytes();
     let mut index = 0;
     while index < text.len() {
-        let Some(ch) = text[index..].chars().next() else {
+        let Some(ch) = text.get(index..)?.chars().next() else {
             break;
         };
         if ch != '`' || has_odd_backslash_escape_bytes(bytes, index) {
@@ -157,7 +155,7 @@ pub(crate) fn parse_open_code_span(text: &str) -> Option<(usize, &str)> {
             continue;
         }
 
-        return Some((fence_len, &text[fence_end..]));
+        return Some((fence_len, text.get(fence_end..)?));
     }
     None
 }
@@ -169,7 +167,7 @@ pub(crate) fn has_odd_backslash_escape_bytes(bytes: &[u8], mut idx: usize) -> bo
     let mut count = 0;
     while idx > 0 {
         idx -= 1;
-        if bytes[idx] == BACKSLASH_BYTE {
+        if bytes.get(idx) == Some(&BACKSLASH_BYTE) {
             count += 1;
         } else {
             break;
@@ -186,7 +184,7 @@ pub(crate) fn has_odd_backslash_escape_bytes(bytes: &[u8], mut idx: usize) -> bo
 /// [`has_odd_backslash_escape_bytes`] to confirm the bang was escaped by an odd
 /// number of backslashes.
 pub(super) fn bracket_follows_escaped_bang(bytes: &[u8], idx: usize) -> bool {
-    if idx == 0 || bytes[idx - 1] != b'!' {
+    if idx == 0 || bytes.get(idx - 1) != Some(&b'!') {
         return false;
     }
     has_odd_backslash_escape_bytes(bytes, idx - 1)
@@ -197,7 +195,7 @@ pub(crate) fn has_unclosed_code_span(text: &str) -> bool {
     let bytes = text.as_bytes();
     let mut index = 0;
     while index < text.len() {
-        let Some(ch) = text[index..].chars().next() else {
+        let Some(ch) = text.get(index..).and_then(|rest| rest.chars().next()) else {
             break;
         };
         if ch != '`' || has_odd_backslash_escape_bytes(bytes, index) {
@@ -245,7 +243,7 @@ pub(crate) fn position_after_close(
         let mut close_index = search_from;
 
         while close_index < text.len() {
-            let Some(ch) = text[close_index..].chars().next() else {
+            let Some(ch) = text.get(close_index..).and_then(|rest| rest.chars().next()) else {
                 break;
             };
 
@@ -262,7 +260,7 @@ pub(crate) fn position_after_close(
     };
 
     while index < text.len() {
-        let ch = text[index..].chars().next()?;
+        let ch = text.get(index..)?.chars().next()?;
         if ch == '`'
             && let Some(end) = closing_fence_end(bytes, text, index, fence_len)
         {
@@ -294,7 +292,10 @@ pub(crate) fn scan_continuation_span_state(continuation: &str, fence_len: usize)
     let mut current_fence: Option<usize> = Some(fence_len);
 
     while index < continuation.len() {
-        let Some(ch) = continuation[index..].chars().next() else {
+        let Some(ch) = continuation
+            .get(index..)
+            .and_then(|rest| rest.chars().next())
+        else {
             break;
         };
 
@@ -308,7 +309,7 @@ pub(crate) fn scan_continuation_span_state(continuation: &str, fence_len: usize)
             } else {
                 let fence_end = scan_while(continuation, index, |c| c == '`');
                 let run = fence_end - index;
-                let isolated = fence_end >= bytes.len() || bytes[fence_end] != BACKTICK_BYTE;
+                let isolated = bytes.get(fence_end) != Some(&BACKTICK_BYTE);
                 if isolated && !has_odd_backslash_escape_bytes(bytes, index) {
                     current_fence = Some(run);
                     index = fence_end;
