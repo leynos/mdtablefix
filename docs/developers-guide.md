@@ -664,9 +664,19 @@ depth-aware tracking.
    paragraphs whose code span crosses a source boundary: when the joined span
    is overlong but every source line conforms, it retains only boundaries
    inside that span, restores the paragraph indentation, and leaves surrounding
-   prose to the greedy wrapper. Trace events record width-triggered
-   preservation, prefix-mismatch flushes, and `TailReflow` transitions at these
-   non-obvious decision boundaries.
+   prose to the greedy wrapper. Its private
+   `has_potential_synthetic_edge_space` prefilter is owned and called only by
+   `code_span_trim`; the private `overlong_span_crossing_boundaries` helper,
+   which qualifies and splits candidates, is owned and called only by
+   `spanning_code`. Paragraph-level composition uses the existing `pub(super)`
+   functions, without exposing either helper across modules. The private
+   `join_if_fits` and `reattach_prose` helpers, plus the `ProseEdge` enum, are
+   owned by `spanning_code`. `preserve_span_boundaries` is their only
+   production call-site: `reattach_prose` composes width-checked joining with
+   the greedy wrapper while retaining each edge's join order, trim direction,
+   and placement. Do not reuse it for ordinary paragraph wrapping. Trace events
+   record width-triggered preservation, prefix-mismatch flushes, and
+   `TailReflow` transitions at these non-obvious decision boundaries.
 
 3. **Fragment construction and line fitting.** `wrap_preserving_code` in
    `src/wrap/inline.rs` tokenizes prose with `tokenize::segment_inline`, groups
