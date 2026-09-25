@@ -154,6 +154,13 @@ documents why the proof scope remains a narrow production-used core.
   crate-private `leading_indent`, which recognizes only spaces and tabs and
   returns both column width and byte offset.
 
+`src/footnotes/mod.rs`:
+
+- `strip_blockquote_markers(s: &str) -> &str`: Returns a borrowed, idempotent
+  suffix after removing arbitrary-depth leading `>` markers and their
+  interleaved whitespace. New blockquote-prefix code must reuse this helper
+  rather than re-deriving the marker-stripping loop.
+
 `src/command.rs` command-line surface and formatting:
 
 - `Cli` and `FormatOpts` are the parsed command line and the formatting

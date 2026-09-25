@@ -1,0 +1,9 @@
+---
+source: tests/footnotes.rs
+expression: "convert_footnotes(input).join(\"\\n\")"
+---
+> ```
+> [^9]: Fenced text
+> ```
+## Footnotes
+[^1]: Converted list item
