@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest markdownlint nixie mutants
+.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest verus-mutation markdownlint nixie mutants
 
 APP ?= mdtablefix
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
@@ -95,6 +95,9 @@ verus-selftest: verus-install ## Confirm Verus rejects the deliberately false sm
 	fi; \
 	cat "$$output"; \
 	rm -f "$$output"
+
+verus-mutation: verus-install ## Confirm a wrong production classifier decision is rejected
+	VERUS_RUN='$(VERUS_RUN)' scripts/check-classifier-mutation.sh .
 
 markdownlint: ## Lint Markdown files
 	$(MDLINT) "**/*.md"

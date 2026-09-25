@@ -2,24 +2,116 @@
 
 use std::borrow::Cow;
 
-use regex::Regex;
-
-use crate::wrap::FenceTracker;
+use crate::{
+    classify::{
+        ClassifiedLine,
+        ClassifyCtx,
+        LineClass,
+        ListContinuationState,
+        classify_line_with_body,
+        is_canonical_break_line,
+        quote_depth,
+        structural_content_indent,
+    },
+    wrap::{BlockKind, FenceTracker, LinkReferenceMatcher, classify_residual_block},
+};
 
 pub const THEMATIC_BREAK_LEN: usize = 70;
-
-/// Recognizes a Markdown thematic break while allowing up to three columns of indentation.
-///
-/// The expression accepts spaces and tabs between markers because those forms are valid thematic
-/// breaks, while the formatter supplies one canonical replacement line.
-pub(crate) static THEMATIC_BREAK_RE: std::sync::LazyLock<Regex> = lazy_regex!(
-    r"^[ ]{0,3}((?:[ \t]*\*){3,}|(?:[ \t]*-){3,}|(?:[ \t]*_){3,})[ \t]*$",
-    "thematic break pattern should compile",
-);
 
 /// Shared replacement line so every thematic break can be returned without allocation.
 static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| "_".repeat(THEMATIC_BREAK_LEN));
+
+/// Whether a tracked prior line holds paragraph text a later line can continue.
+/// A list item marker line counts: it starts its item's paragraph.
+fn holds_paragraph_text(class: LineClass) -> bool {
+    matches!(class, LineClass::ParagraphText | LineClass::ListItem)
+}
+
+/// Context retained between adjacent lines in the break pass.
+struct BreakLineState {
+    /// Prior class, quote depth, and list content column, when available.
+    previous: Option<(LineClass, usize, Option<usize>)>,
+    /// Active list indentation tracked for Setext decisions.
+    lists: ListContinuationState,
+    /// Link-reference matcher shared by every line in the pass.
+    links: LinkReferenceMatcher,
+}
+
+impl BreakLineState {
+    /// Creates state with no prior line, ready to classify the first line.
+    fn new(links: LinkReferenceMatcher) -> Self {
+        Self {
+            previous: None,
+            lists: ListContinuationState::default(),
+            links,
+        }
+    }
+
+    /// Forgets context at a fenced-code boundary.
+    ///
+    /// The matcher is pass configuration, so it survives the reset.
+    fn reset(&mut self) {
+        self.previous = None;
+        self.lists.reset();
+    }
+
+    /// Selects the classifier context for the next source line.
+    fn context(&self, line: &str, first_pass: &ClassifiedLine<'_>, depth: usize) -> ClassifyCtx {
+        if self.continues_paragraph(line, first_pass, depth) {
+            ClassifyCtx::following(LineClass::ParagraphText, true)
+        } else {
+            ClassifyCtx::default()
+        }
+    }
+
+    /// Checks whether the preceding text can supply a Setext prefix.
+    fn continues_paragraph(
+        &self,
+        line: &str,
+        classified: &ClassifiedLine<'_>,
+        depth: usize,
+    ) -> bool {
+        self.previous
+            .is_some_and(|(class, old_depth, continuation_indent)| {
+                (class == LineClass::ParagraphText
+                    || (class == LineClass::ListItem && continuation_indent.is_some()))
+                    && old_depth == depth
+                    && continuation_indent.is_none_or(|indent| {
+                        structural_content_indent(line, classified.body) >= indent
+                    })
+            })
+    }
+
+    /// Records a structural line for the next classifier decision.
+    fn observe(&mut self, line: &str, classified: &ClassifiedLine<'_>, depth: usize) {
+        let residual = if classified.class == LineClass::ParagraphText {
+            classify_residual_block(classified.body.trim(), self.links)
+        } else {
+            None
+        };
+        let is_paragraph_link = residual == Some(BlockKind::LinkReferenceDefinition)
+            && self.previous.is_some_and(|(class, old_depth, _)| {
+                holds_paragraph_text(class) && old_depth == depth
+            });
+        let is_residual_block = residual.is_some() && !is_paragraph_link;
+        let continuation_indent = if is_residual_block {
+            self.lists.reset();
+            None
+        } else {
+            self.lists.observe(line, classified)
+        };
+        self.previous = if classified.class == LineClass::Blank || is_residual_block {
+            None
+        } else {
+            Some((classified.class, depth, continuation_indent))
+        };
+    }
+}
+
+/// Returns the canonical thematic break emitted by [`format_breaks`].
+#[must_use]
+pub(crate) fn canonical_break() -> &'static str { THEMATIC_BREAK_LINE.as_str() }
 
 /// Normalize thematic breaks outside fenced code blocks.
 ///
@@ -51,22 +143,45 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     let mut out = Vec::with_capacity(lines.len());
     // Track fenced code blocks consistently while formatting breaks.
     let mut fences = FenceTracker::default();
+    let mut state = BreakLineState::new(LinkReferenceMatcher::production());
 
     for line in lines {
         let fence = fences.observe_source_line(line);
-        if fence.is_fence_marker {
+        if fence.is_fence_marker || fence.is_in_fence {
+            state.reset();
             out.push(Cow::Borrowed(line.as_str()));
             continue;
         }
 
-        if !fence.is_in_fence && THEMATIC_BREAK_RE.is_match(line.trim_end()) {
-            out.push(Cow::Borrowed(THEMATIC_BREAK_LINE.as_str()));
+        let first_pass = classify_line_with_body(line, &ClassifyCtx::default());
+        let prefix_len = line.len() - first_pass.body.len();
+        let prefix = &line[..prefix_len];
+        let depth = quote_depth(prefix);
+        let context = state.context(line, &first_pass, depth);
+        let classified = if context == ClassifyCtx::default() {
+            first_pass
+        } else {
+            classify_line_with_body(line, &context)
+        };
+        state.observe(line, &classified, depth);
+
+        if is_canonical_break_line(line, &context) {
+            out.push(canonicalized_break(prefix));
         } else {
             out.push(Cow::Borrowed(line.as_str()));
         }
     }
 
     out
+}
+
+/// Retains a quote prefix when emitting the shared canonical break line.
+fn canonicalized_break(prefix: &str) -> Cow<'static, str> {
+    if prefix.contains('>') {
+        Cow::Owned(format!("{prefix}{}", canonical_break()))
+    } else {
+        Cow::Borrowed(canonical_break())
+    }
 }
 
 #[cfg(test)]
@@ -255,8 +370,8 @@ mod prop_tests {
     }
 
     fn non_thematic_line() -> impl Strategy<Value = String> {
-        any::<String>().prop_filter("line must not match thematic break regex", |line| {
-            !THEMATIC_BREAK_RE.is_match(line.trim_end())
+        any::<String>().prop_filter("line must not classify as a thematic break", |line| {
+            !is_canonical_break_line(line, &ClassifyCtx::default())
         })
     }
 

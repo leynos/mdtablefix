@@ -12,6 +12,8 @@
 //! span. `R1` and `R2` were already fixed points; they are here because a fix
 //! that absorbed breaks on the first pass instead of the second would satisfy
 //! the idempotence cases for the wrong reason.
+//! `A3` is a Setext heading pair, so its underline must survive without
+//! `--headings` rather than being normalized as a thematic break.
 //!
 //! Case `H1` reaches the same invariant through `--headings`, which the
 //! `make fmt` flag set does not enable: a candidate line that is itself a block
@@ -163,7 +165,7 @@ const CASES: &[IdempotenceCase] = &[
         id: "A3_setext_underline",
         fixture: "A3_setext_underline.dat",
         flags: WRAP_BREAKS,
-        expects: &[Standalone::NormalisedBreak],
+        expects: &[Standalone::Literal("-----")],
     },
     IdempotenceCase {
         id: "A4_frontmatter_fixture",

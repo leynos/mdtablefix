@@ -5,18 +5,13 @@ use std::collections::HashMap;
 use regex::Regex;
 use tracing::debug;
 
-use crate::{breaks::THEMATIC_BREAK_RE, wrap::FenceTracker};
+use crate::{
+    classify::{ClassifyCtx, LineClass, classify_line_with_body},
+    wrap::FenceTracker,
+};
 
 /// Characters that mark formatted text at the start of a line.
 const FORMATTING_CHARS: [char; 3] = ['*', '_', '`'];
-
-// Lines starting with optional indentation followed by '#' characters denote
-// Markdown ATX headings. A space or end of line must follow the hashes.
-/// Recognises ATX headings that reset ordered-list numbering.
-static HEADING_RE: std::sync::LazyLock<Regex> = lazy_regex!(
-    r"^[ ]{0,3}#{1,6}(?:\s|$)",
-    "ATX heading prefix pattern should compile",
-);
 
 /// Splits a numbered list item into indentation, separator, and content slices.
 ///
@@ -169,7 +164,14 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             .map_or_else(|| line.len(), |(i, _)| i);
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
-        if HEADING_RE.is_match(line) || THEMATIC_BREAK_RE.is_match(line.trim_end()) {
+        let classified = classify_line_with_body(line, &ClassifyCtx::default());
+        let prefix = &line[..line.len() - classified.body.len()];
+        if !prefix.contains('>')
+            && matches!(
+                classified.class,
+                LineClass::AtxHeading | LineClass::ThematicBreak
+            )
+        {
             state.reset();
             out.push(line.clone());
             prev_blank = false;
