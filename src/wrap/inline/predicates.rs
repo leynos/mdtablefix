@@ -202,23 +202,6 @@ pub(in crate::wrap::inline) fn is_inline_code_token(token: &str) -> bool {
     token.len() > 1 && token.starts_with('`') && token.ends_with('`')
 }
 
-/// Returns whether `token` is a hyphen-terminated prefix that should bind to a
-/// following inline code span (for example `pre-`, `LLM-`, or `(API-`).
-///
-/// Bare punctuation such as `-` or `---` is rejected so that ordinary dash
-/// runs are not absorbed into the next atomic span. The alphabetic check uses
-/// `char::is_alphabetic`, so Unicode-letter compounds (`pré-`, `naïve-`,
-/// `字-`) are intentionally accepted alongside ASCII prefixes. Internal hyphen
-/// chains (`state-of-the-art-`) are also accepted because such compounds
-/// remain a single atomic wrap token by design.
-///
-/// The `#[tracing::instrument]` attribute records the return value while
-/// excluding document content from the span.
-#[tracing::instrument(level = "trace", skip(token), ret)]
-pub(in crate::wrap::inline) fn ends_with_hyphen_prefix(token: &str) -> bool {
-    token.ends_with('-') && token.chars().any(char::is_alphabetic)
-}
-
 /// Returns the substring beginning at the first Markdown link opener after any
 /// leading opener punctuation.
 pub(in crate::wrap::inline) fn link_text_after_leading_openers(text: &str) -> &str {

@@ -4,7 +4,6 @@ use proptest::prelude::*;
 use rstest::rstest;
 
 use super::{
-    ends_with_hyphen_prefix,
     is_inline_code_token,
     is_opening_punct,
     is_trailing_punct,
@@ -83,21 +82,6 @@ fn looks_like_footnote_ref_implies_non_empty_label() {
 #[test]
 fn looks_like_footnote_ref_rejects_empty_label() {
     assert!(!looks_like_footnote_ref("[^]"));
-}
-
-#[rstest]
-#[case("pre-", true)]
-#[case("LLM-", true)]
-#[case("(pre-", true)]
-#[case("pré-", true)]
-#[case("字-", true)]
-#[case("state-of-the-art-", true)]
-#[case("-", false)]
-#[case("---", false)]
-#[case("foo", false)]
-#[case("2024-", false)]
-fn ends_with_hyphen_prefix_classifies_tokens(#[case] token: &str, #[case] expected: bool) {
-    assert_eq!(ends_with_hyphen_prefix(token), expected);
 }
 
 #[rstest]

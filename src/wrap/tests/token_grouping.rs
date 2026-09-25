@@ -80,6 +80,15 @@ fn determine_token_span_does_not_overcouple_citation_tokens(
     assert_eq!(width, unicode_width::UnicodeWidthStr::width(expected_group));
 }
 
+#[test]
+fn determine_token_span_keeps_space_before_code_as_a_break() {
+    let tokens = segment_inline("word `code`");
+    let (end, width) = determine_token_span(&tokens, 1);
+
+    assert_eq!(tokens[1..end], [" "]);
+    assert_eq!(width, 1);
+}
+
 #[rstest]
 #[case("word[link](url)", &["word", "[link](url)"])]
 #[case("word[link][reference]", &["word", "[link][reference]"])]
