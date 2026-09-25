@@ -138,46 +138,25 @@ fn attaches_orphan_specifier_with_hyphen_and_dot() {
     assert_eq!(out, lines_vec!["```objective-c", "int main() {}", "```"]);
 }
 
-#[test]
-fn does_not_attach_specifier_with_trailing_period() {
-    let input = lines_vec!["rust.", "```", "fn main() {}", "```"];
+#[rstest]
+#[case(lines_vec!["rust.", "```", "fn main() {}", "```"])]
+#[case(lines_vec!["rust?", "```", "fn main() {}", "```"])]
+fn does_not_attach_specifier_with_trailing_punctuation(#[case] input: Vec<String>) {
     let out = attach_orphan_specifiers(&input);
     assert_eq!(out, input);
 }
 
-#[test]
-fn does_not_attach_specifier_with_trailing_question_mark() {
-    let input = lines_vec!["rust?", "```", "fn main() {}", "```"];
-    let out = attach_orphan_specifiers(&input);
-    assert_eq!(out, input);
-}
-
-#[test]
-fn attaches_orphan_specifier_preserves_indent() {
-    let input = lines_vec!["  Rust", "", "  ```", "  fn main() {}", "  ```"];
+#[rstest]
+#[case(lines_vec!["  Rust", "", "  ```", "  fn main() {}", "  ```"], lines_vec!["  ```rust", "  fn main() {}", "  ```"])]
+#[case(lines_vec!["\tRust", "", "\t```", "\tfn main() {}", "\t```"], lines_vec!["\t```rust", "\tfn main() {}", "\t```"])]
+#[case(lines_vec![" \tRust", "", " \t```", " \tfn main() {}", " \t```"], lines_vec![" \t```rust", " \tfn main() {}", " \t```"])]
+#[case(lines_vec!["  Rust", "", "```", "fn main() {}", "```"], lines_vec!["  ```rust", "fn main() {}", "```"])]
+fn attaches_orphan_specifier_preserves_indent(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+) {
     let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(out, lines_vec!["  ```rust", "  fn main() {}", "  ```"]);
-}
-
-#[test]
-fn attaches_orphan_specifier_preserves_tab_indent() {
-    let input = lines_vec!["\tRust", "", "\t```", "\tfn main() {}", "\t```"];
-    let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(out, lines_vec!["\t```rust", "\tfn main() {}", "\t```"]);
-}
-
-#[test]
-fn attaches_orphan_specifier_mixed_indent() {
-    let input = lines_vec![" \tRust", "", " \t```", " \tfn main() {}", " \t```"];
-    let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(out, lines_vec![" \t```rust", " \tfn main() {}", " \t```"]);
-}
-
-#[test]
-fn attaches_orphan_specifier_uses_candidate_indent_when_fence_unindented() {
-    let input = lines_vec!["  Rust", "", "```", "fn main() {}", "```"];
-    let out = attach_orphan_specifiers(&compress_fences(&input));
-    assert_eq!(out, lines_vec!["  ```rust", "fn main() {}", "```"]);
+    assert_eq!(out, expected);
 }
 
 #[rstest]

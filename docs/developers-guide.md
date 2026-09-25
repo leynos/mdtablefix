@@ -2080,32 +2080,55 @@ file stays bounded without a wall-clock cut-off.
 
 ### 2.8. Deterministic failure seams
 
-The replacement tests drive two `#[cfg(test)]`-only, per-thread seams defined in
-`src/io/swap/mod.rs`:
+The replacement tests drive three `#[cfg(test)]`-only, per-thread seams. They
+are defined in `src/io/swap/seams.rs`, which `src/io/swap/mod.rs` declares and
+re-exports under `#[cfg(test)]`:
 
 - `rename_failure_seam` fails the rename half of the swap.
 - `cleanup_failure_seam` fails the removal of the temporary file a failed
   replacement left behind.
+- `competing_writer_seam` runs a write to the target inside the swap, in the
+  window between the two comparisons of it, so a test can land a writer there
+  rather than race the scheduler for it.
 
-Each seam is a `thread_local!` flag with an `arm()` that sets it and returns an
-RAII guard, and a `take()` that consumes the arming and reports whether this
-call must fail. Dropping the guard disarms the seam, so a failing assertion
-cannot leave the failure armed for whatever runs next on that thread; because
-`take()` clears the flag, arming fails exactly one call.
+The rename and cleanup seams are each a `thread_local!` flag with an `arm()`
+that sets it and returns an RAII guard, and a `take()` that consumes the arming
+and reports whether this call must fail. `competing_writer_seam` is armed with
+the write it is to perform instead: `arm()` takes that write as a closure, and
+`run(directory, path)` calls it with the directory capability and the target
+the swap is working with, so the write captures no path or handle of its own.
+All three are per-thread, and all three disarm when the value `arm()` returns
+is dropped, so a failing assertion cannot leave a failure armed for whatever
+runs next on that thread. The arming is one-shot as well, so each seam fires
+for exactly one call.
 
-They exist because the failures they stand in for cannot be forced
-deterministically on every platform. A rename a test can make fail for real
-fails before the destination is prepared, so the rollback in `swap_into_place`
-would otherwise be unreachable. A permission bit that denies the removal is
-ignored by a run as root, and an occupied temporary name is simply retried
-past: candidate names are a pure function of the target, the process id and the
-attempt, so `create_temporary_file` advances to the next one.
+The rename and cleanup seams exist because the failures they stand in for
+cannot be forced deterministically on every platform. A rename a test can make
+fail for real fails before the destination is prepared, so the rollback in
+`swap_into_place` would otherwise be unreachable. A permission bit that denies
+the removal is ignored by a run as root, and an occupied temporary name is
+simply retried past: candidate names are a pure function of the target, the
+process id and the attempt, so `create_temporary_file` advances to the next one.
 
-The seams are re-exported under `#[cfg(test)]` in `src/io.rs`.
-`src/io_metrics_failure_tests.rs` arms both and drives `rewrite`, so the
-replacement boundary itself, not just the helper, is exercised and the cleanup
-counter is asserted. `src/io_tests.rs` uses the rename seam to assert the
-destination is restored after a failed swap.
+`competing_writer_seam` stands in for the opposite case: a write that must be
+declined rather than forced to fail. No supported platform's rename compares
+contents, which is why the swap compares the target itself a second time,
+immediately before the rename; without that comparison a writer arriving after
+the first one would be renamed over rather than declined. A test can reach that
+window only by racing the scheduler; the seam runs the armed write in it, so
+the landing is deterministic. The case that arms it asserts what a decline
+promises: the replacement reports that it wrote nothing, the arriving writer's
+text is what the target holds, and no temporary file is left beside it. Its
+fuller rationale is in `docs/execplans/git-option.md`.
+
+The seams are re-exported under `#[cfg(test)]` in `src/io/mod.rs`.
+`src/io_metrics_failure_tests.rs` arms both the rename seam and the cleanup
+seam and drives `rewrite`, so the replacement boundary itself, not just the
+helper, is exercised and the cleanup counter is asserted. `src/io_tests.rs`
+uses the rename seam to assert the destination is restored after a failed swap,
+and `src/io_conditional_tests.rs` arms the cleanup seam against a declined
+replacement and the competing-writer seam against a write that lands inside the
+swap.
 
 ## 3. Breaks module – Cow allocation strategy
 
