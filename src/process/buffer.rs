@@ -8,6 +8,7 @@
 use tracing::debug;
 
 use crate::{
+    classify::{ClassifyCtx, LineClass, classify_line},
     ellipsis::replace_ellipsis,
     table::reflow_table,
     wrap::{LinkReferenceMatcher, classify_block, leading_indent},
@@ -168,7 +169,8 @@ impl ProcessBuffer {
         // code block, so such a line must stay verbatim and never enter table
         // mode (otherwise `reflow_table` would rewrite its contents). This
         // mirrors the `indent_width < 4` gate in `classify_block`.
-        if leading_indent(&line).0 < 4 && line.trim_start().starts_with('|') {
+        let line_class = classify_line(&line, &ClassifyCtx::default());
+        if line_class == LineClass::TableRow {
             debug!(
                 line_len = line.len(),
                 buffered_lines = self.buf.len(),
@@ -191,7 +193,10 @@ impl ProcessBuffer {
         // table from being reflowed (a stray non-table row makes
         // `reflow_table` bail). Flushing here keeps wrapping and table
         // detection aligned.
-        if self.in_table && classify_block(&line, LinkReferenceMatcher::production()).is_some() {
+        if self.in_table
+            && (classify_block(&line, LinkReferenceMatcher::production()).is_some()
+                || line_class == LineClass::ThematicBreak)
+        {
             debug!(
                 line_len = line.len(),
                 in_table = self.in_table,
@@ -205,7 +210,10 @@ impl ProcessBuffer {
             self.flush();
             return Some(line);
         }
-        if self.in_table && (line.contains('|') || crate::table::SEP_RE.is_match(line.trim())) {
+        if self.in_table
+            && line_class != LineClass::ThematicBreak
+            && (line.contains('|') || line_class == LineClass::TableDelimiter)
+        {
             self.buf.push(line);
             return None;
         }

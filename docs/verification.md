@@ -6,15 +6,28 @@ function, input domain, external contracts, and result class. A kernel may not
 be represented by a separate `proofs/` implementation unless a refinement proof
 connects it to the production function.
 
+## Current status
+
+Issue #485 has no production-linked proof claims yet. The current
+`verus/lib.rs` exercises a structural model, but it does not refine the runtime
+scanner or consumer functions and is therefore deliberately excluded from the
+claim ledger.
+
+The pinned Verus release cannot compile the production scanner's `&str` range
+operations inside `verus!`; the exact missing refinement obligation and the
+required shared character-sequence kernel are tracked in [#512][issue-512]. The
+production scanner and its consumers remain the source of truth. No
+`#[verifier::external_body]` contract is used to assert their correctness.
+
 ## Claim ledger
 
 | Claim | Executable function | Input domain | Unverified external contracts | Result class |
 | ----- | ------------------- | ------------ | ----------------------------- | ------------ |
 
-_Table 1: The verification claim ledger._
+<!-- markdownlint-disable MD013 -->
+<!-- markdownlint-enable MD013 -->
 
-No kernel claims have landed yet. Issues #491 and #483 will add the ellipsis and
-`ProcessBuffer::finish` claims after their production-used kernels exist.
+_Table 1: The verification claim ledger._
 
 ## Policy
 
@@ -27,6 +40,11 @@ No kernel claims have landed yet. Issues #491 and #483 will add the ellipsis and
   and display columns. No proof substitutes `String::len()` for display width.
 - Existing property tests remain in place. Verus proofs complement them and do
   not replace them.
+- `make verus-mutation` currently mutates the exploratory model only. It does
+  not satisfy the production-linked mutation obligation from #485. That work is
+  part of [#512][issue-512].
 
 The ledger check invoked by `make lint` rejects a claim whose executable
 function name does not occur in `src/`.
+
+[issue-512]: https://github.com/leynos/mdtablefix/issues/512
