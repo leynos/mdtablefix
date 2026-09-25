@@ -12,9 +12,9 @@ pub(super) fn split_physical_rows(mut physical_rows: Vec<Vec<Cell>>) -> (Vec<Vec
     let expected_width = infer_expected_width(&physical_rows);
     if let Some(first_row) = physical_rows.first_mut()
         && expected_width < first_row.len()
-        && first_row[expected_width..]
-            .iter()
-            .all(cell_is_semantically_empty)
+        && first_row
+            .get(expected_width..)
+            .is_some_and(|tail| tail.iter().all(cell_is_semantically_empty))
     {
         first_row.truncate(expected_width);
     }
@@ -65,12 +65,10 @@ fn has_embedded_separator_row(row: &[Cell], width: usize) -> bool {
     if !is_concatenated_rows(row, width) {
         return false;
     }
-    let row_count = (row.len() + 1) / (width + 1);
-    (0..row_count).any(|index| {
-        let start = index * (width + 1);
-        row[start..start + width]
-            .iter()
-            .all(|cell| is_delimiter_cell(&cell.payload))
+    row.chunks(width + 1).any(|chunk| {
+        chunk
+            .get(..width)
+            .is_some_and(|cells| cells.iter().all(|cell| is_delimiter_cell(&cell.payload)))
     })
 }
 
@@ -81,12 +79,14 @@ fn is_concatenated_rows(row: &[Cell], width: usize) -> bool {
     }
     let row_count = (row.len() + 1) / (width + 1);
     row_count >= 2
-        && (1..row_count).all(|index| cell_is_semantically_empty(&row[index * (width + 1) - 1]))
+        && (1..row_count).all(|index| {
+            row.get(index * (width + 1) - 1)
+                .is_some_and(cell_is_semantically_empty)
+        })
         && (0..row_count).all(|index| {
             let start = index * (width + 1);
-            row[start..start + width]
-                .iter()
-                .any(|cell| !cell_is_semantically_empty(cell))
+            row.get(start..start + width)
+                .is_some_and(|cells| cells.iter().any(|cell| !cell_is_semantically_empty(cell)))
         })
 }
 
