@@ -14,6 +14,8 @@ use super::*;
     char::is_alphabetic as fn(char) -> bool,
     "åßç123".find('1').expect("digit should be present in test case")
 )]
+#[case::invalid_utf8_boundary("åx", 1, char::is_alphabetic as fn(char) -> bool, 1)]
+#[case::past_end("abc", 4, char::is_alphabetic as fn(char) -> bool, 4)]
 fn scan_while_cases(
     #[case] text: &str,
     #[case] start: usize,
@@ -26,6 +28,8 @@ fn scan_while_cases(
 #[rstest]
 #[case::first_two("αβγδε", 0, "αβ".len(), "αβ")]
 #[case::middle("αβγδε", "αβ".len(), "αβ".len() + "γδ".len(), "γδ")]
+#[case::invalid_utf8_boundary("åx", 1, 3, "")]
+#[case::reversed_range("abc", 2, 1, "")]
 fn collect_range_cases(
     #[case] text: &str,
     #[case] start: usize,
@@ -173,17 +177,18 @@ proptest! {
                 "returned offset {end} cannot hold a {fence_len}-byte fence"
             );
             let run_start = end - fence_len;
+            let run = bytes.get(run_start..end);
             prop_assert!(
-                bytes[run_start..end].iter().all(|&byte| byte == b'`'),
+                run.is_some_and(|run| run.iter().all(|&byte| byte == b'`')),
                 "closing run {:?} is not exactly {fence_len} backticks",
-                &text[run_start..end]
+                text.get(run_start..end)
             );
             prop_assert!(
-                run_start == 0 || bytes[run_start - 1] != b'`',
+                run_start == 0 || bytes.get(run_start - 1) != Some(&b'`'),
                 "closing run is preceded by a backtick (mid-run on the left)"
             );
             prop_assert!(
-                end == text.len() || bytes[end] != b'`',
+                end == text.len() || bytes.get(end) != Some(&b'`'),
                 "closing run is followed by a backtick (mid-run on the right)"
             );
         }
