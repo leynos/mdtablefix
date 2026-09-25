@@ -16,9 +16,9 @@ fn code_emphasis_options() -> Options {
 #[rstest]
 fn process_stream_inner_applies_table_code_emphasis_before_reflow(code_emphasis_options: Options) {
     let input = vec![
-        "| Name  | Notes                      |".to_string(),
-        "| ----- | -------------------------- |".to_string(),
-        "| alpha | Use *`cargo test`* to run. |".to_string(),
+        "| Name  | Notes                      |".to_owned(),
+        "| ----- | -------------------------- |".to_owned(),
+        "| alpha | Use *`cargo test`* to run. |".to_owned(),
     ];
 
     let with_code_emphasis = process_stream_inner(&input, code_emphasis_options);
@@ -38,9 +38,9 @@ fn process_stream_inner_applies_table_code_emphasis_before_reflow(code_emphasis_
 #[rstest]
 fn table_cells_receive_code_emphasis_repair_once(code_emphasis_options: Options) {
     let input = vec![
-        "| H | X |".to_string(),
-        "| - | - |".to_string(),
-        "| a | *`*`*a* |".to_string(),
+        "| H | X |".to_owned(),
+        "| - | - |".to_owned(),
+        "| a | *`*`*a* |".to_owned(),
     ];
 
     let output = process_stream_inner(&input, code_emphasis_options);
@@ -51,7 +51,7 @@ fn table_cells_receive_code_emphasis_repair_once(code_emphasis_options: Options)
 
 #[rstest]
 fn pipe_prefixed_non_table_uses_the_existing_code_emphasis_path(code_emphasis_options: Options) {
-    let input = vec!["| Use *`cargo test`* to run.".to_string()];
+    let input = vec!["| Use *`cargo test`* to run.".to_owned()];
 
     let output = process_stream_inner(&input, code_emphasis_options);
 

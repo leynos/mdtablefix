@@ -69,7 +69,7 @@ fn deferred_list_item_indents_the_lazy_line_below_a_hard_break() {
         "zeta eta",
     ]
     .iter()
-    .map(|line| (*line).to_string())
+    .map(|line| (*line).to_owned())
     .collect();
 
     let once = wrap_text(&input, WRAP_COLS);
@@ -94,7 +94,7 @@ fn deferred_list_item_indents_the_lazy_line_below_a_hard_break() {
 #[test]
 fn shrunk_drift_documents_are_fixed_points_with_indented_lazy_lines() {
     for (index, document) in SHRUNK_DRIFT_DOCUMENTS.iter().enumerate() {
-        let input: Vec<String> = document.iter().map(|line| (*line).to_string()).collect();
+        let input: Vec<String> = document.iter().map(|line| (*line).to_owned()).collect();
         let once = wrap_text(&input, WRAP_COLS);
 
         assert_eq!(
@@ -146,7 +146,7 @@ const SHRUNK_BACKSLASH_TAIL_DOCUMENTS: &[&[&str]] = &[
 #[test]
 fn deferred_tail_measures_a_backslash_hard_break_as_content() {
     for (index, document) in SHRUNK_BACKSLASH_TAIL_DOCUMENTS.iter().enumerate() {
-        let input: Vec<String> = document.iter().map(|line| (*line).to_string()).collect();
+        let input: Vec<String> = document.iter().map(|line| (*line).to_owned()).collect();
         let once = wrap_text(&input, WRAP_COLS);
 
         assert_eq!(
@@ -174,7 +174,7 @@ fn wrap_with_prefix_emits_single_line_when_text_fits() {
     let mut out = Vec::new();
     let mut writer = ParagraphWriter::new(&mut out, 80);
     writer.wrap_with_prefix("> ", "> ", "hello world");
-    assert_eq!(out, vec!["> hello world".to_string()]);
+    assert_eq!(out, vec!["> hello world".to_owned()]);
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn wrap_with_prefix_uses_continuation_prefix_on_wrapped_lines() {
     let mut out = Vec::new();
     let mut writer = ParagraphWriter::new(&mut out, 14);
     writer.wrap_with_prefix("> ", "  ", "alpha beta gamma");
-    assert_eq!(out, vec!["> alpha beta".to_string(), "  gamma".to_string()]);
+    assert_eq!(out, vec!["> alpha beta".to_owned(), "  gamma".to_owned()]);
 }
 
 #[rstest]
@@ -229,7 +229,7 @@ fn wrap_with_prefix_accounts_for_unicode_wide_prefixes() {
     let mut out = Vec::new();
     let mut writer = ParagraphWriter::new(&mut out, 7);
     writer.wrap_with_prefix("「 ", "  ", "ab cd");
-    assert_eq!(out, vec!["「 ab".to_string(), "  cd".to_string()]);
+    assert_eq!(out, vec!["「 ab".to_owned(), "  cd".to_owned()]);
 }
 
 #[test]
@@ -325,8 +325,8 @@ proptest! {
 
 fn pending_prefix(prefix: &str, repeat_prefix: bool) -> PendingPrefix {
     PendingPrefix {
-        prefix: prefix.to_string(),
-        rest: "text".to_string(),
+        prefix: prefix.to_owned(),
+        rest: "text".to_owned(),
         original_lines: vec![format!("{prefix}text")],
         synthetic_join_spaces: Vec::new(),
         rest_width: 74,
