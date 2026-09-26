@@ -24,13 +24,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/setup-rust@2a910bfcfd1ea4216419f9290331785f05b33320
       - name: Install ripgrep
         run: cargo binstall --no-confirm --locked ripgrep@15.2.0
       - name: Install mdtablefix
         # `make check-fmt` runs `mdtablefix --check --git`; 0.6.0 is the
         # first release with `--check` and `--git`.
-        uses: leynos/shared-actions/.github/actions/install-mdtablefix@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@2a910bfcfd1ea4216419f9290331785f05b33320
         with:
           version: "0.6.0"
 
@@ -57,7 +57,7 @@ jobs:
         # The baseline paths are the action's defaults, which is what makes
         # this ratchet comparable with the one the main publisher writes: both
         # read and write `.coverage-baseline.rust`.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/generate-coverage@2a910bfcfd1ea4216419f9290331785f05b33320
         with:
           output-path: lcov.info
           format: lcov
@@ -86,7 +86,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/setup-rust@2a910bfcfd1ea4216419f9290331785f05b33320
         with:
           install-binstall: false
           use-sccache: false
@@ -141,7 +141,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/setup-rust@2a910bfcfd1ea4216419f9290331785f05b33320
         with:
           toolchain: 1.89.0
           install-binstall: false
