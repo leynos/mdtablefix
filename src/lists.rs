@@ -50,6 +50,22 @@ fn relative_to(line: &str, indent: usize, strip: usize) -> String {
         line.trim_start()
     )
 }
+/// Reports whether a line's text can be continued by a following line, as paragraph text can.
+///
+/// The line is classified without its indentation: inside a list item,
+/// paragraph text is often indented four or more columns, which the
+/// context-free classifier would otherwise read as indented code. A bullet
+/// item's first line is its paragraph's first line too.
+fn holds_paragraph_text(line: &str) -> bool {
+    matches!(
+        classify_line_with_body(line.trim_start(), &ClassifyCtx::default()).class,
+        LineClass::ParagraphText | LineClass::ListItem
+    )
+}
+
+/// Reports whether a numbered line's marker is `1.`, the only number that starts a list
+/// interrupting a paragraph.
+fn starts_at_one(line: &str) -> bool { line.trim_start().split('.').next() == Some("1") }
 
 /// Removes counters deeper than the current list item, optionally including its own depth.
 fn prune_deeper(
@@ -118,6 +134,9 @@ impl ListState {
             &mut self.counters,
         );
     }
+
+    /// Reports whether a list is active with its markers at exactly `indent`.
+    fn has_list_at(&self, indent: usize) -> bool { self.indent_stack.contains(&indent) }
 
     /// Allocates the next number at an indentation level, starting at one.
     fn next_number(&mut self, indent: usize) -> usize {
@@ -214,6 +233,8 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     // Track fenced code blocks consistently across list processing.
     let mut fences = FenceTracker::default();
     let mut prev_blank = lines.first().is_none_or(|l| l.trim().is_empty());
+    // Whether the previous line is paragraph text a numbered line could continue.
+    let mut prev_text = false;
 
     for line in lines {
         let fence = fences.observe_source_line(line);
@@ -224,16 +245,31 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             state.end_lists_from_marker(leading_indent(line));
             out.push(line.clone());
             prev_blank = false;
+            prev_text = false;
             continue;
         }
         if fence.is_in_fence {
             out.push(line.clone());
             prev_blank = line.trim().is_empty();
+            prev_text = false;
             continue;
         }
         if line.trim().is_empty() {
             out.push(line.clone());
             prev_blank = true;
+            prev_text = false;
+            continue;
+        }
+        if let Some((indent, ..)) = parse_numbered(line)
+            && prev_text
+            && !starts_at_one(line)
+            && !state.has_list_at(indent)
+        {
+            // Only a list starting at 1 can interrupt a paragraph (issue
+            // #573), so this line continues the paragraph above it.
+            // Renumbering it to `1.` would turn the text into a list item.
+            out.push(line.clone());
+            prev_blank = false;
             continue;
         }
         if let Some((indent, indent_str, sep, rest)) = parse_numbered(line) {
@@ -241,6 +277,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             state.record_content_column(indent, content_column(indent, current, sep, rest));
             out.push(format!("{indent_str}{current}.{sep}{rest}"));
             prev_blank = false;
+            prev_text = true;
             continue;
         }
         let indent = leading_indent(line);
@@ -259,11 +296,13 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             state.end_lists_at(indent);
             out.push(line.clone());
             prev_blank = false;
+            prev_text = false;
             continue;
         }
         state.apply_block(indent, line, prev_blank);
         out.push(line.clone());
         prev_blank = false;
+        prev_text = holds_paragraph_text(line);
     }
     out
 }

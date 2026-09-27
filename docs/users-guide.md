@@ -534,6 +534,10 @@ block quote, an HTML block or a bullet list. A bullet item or a fence line at
 that column ends it even without the blank line. A block indented right of the
 marker column belongs to the item, so the list keeps counting past it.
 
+Renumbering never changes whether a line is a list item. Only a list starting
+at 1 can interrupt a paragraph, so a line such as `12. Evidence` directly below
+paragraph text continues that paragraph and is left exactly as written.
+
 When a footnote reference immediately follows an inline code span or Markdown
 link without intervening whitespace—for example `` `code`.[^ref] `` or
 `[text](url).[^ref]`—the reference stays on the same line as the preceding

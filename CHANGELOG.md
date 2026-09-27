@@ -41,6 +41,11 @@
   continued across all of these since it was introduced; only paragraphs that
   began with a letter or digit ended a list.
   ([#563](https://github.com/leynos/mdtablefix/issues/563))
+- Fixed: `--renumber` leaves alone a numbered line that continues a paragraph,
+  such as a wrapped sentence whose next line starts `12.`. Only a list starting
+  at 1 can interrupt a paragraph, so the line is paragraph text; rewriting it to
+  `1.` had turned it into a list item since renumbering was introduced in #54.
+  ([#573](https://github.com/leynos/mdtablefix/issues/573))
 
 ## v0.6.0
 
