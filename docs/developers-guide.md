@@ -816,6 +816,15 @@ passes. Inline code spans, Markdown links, and GFM footnote references use
 atomic fragment kinds, so the wrapper never inserts a break inside their
 Markdown syntax.
 
+After grouping, `join_touching_fragments` (in `src/wrap/inline/touching.rs`)
+merges any two neighbouring fragments whose seam has no whitespace, reading the
+text at the seam rather than the fragment kinds because grouping sometimes
+couples a leading space into a fragment. Whitespace fragments are then the only
+break opportunities `textwrap` sees, so no wrap can add a space to the rendered
+text (issue #561). `render_line` trims every trailing space from a line the
+wrapper broke, since two or more would render as a hard break; only the final
+line keeps the source's own trailing spaces.
+
 The inline span builder uses the private `is_trailing_punctuation_token`
 helper, via `extend_punctuation`, to keep trailing punctuation attached to
 links and code spans while token groups are being formed. Markdown delimiters

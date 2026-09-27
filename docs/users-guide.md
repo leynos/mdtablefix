@@ -580,7 +580,15 @@ wrapping.
 
 Two trailing spaces at the end of a line produce a hard line break in rendered
 Markdown. `mdtablefix --wrap` preserves those trailing spaces on the final
-wrapped line, so hard-break semantics are not lost after reformatting.
+wrapped line, so hard-break semantics are not lost after reformatting. A line
+break the wrapper makes itself never keeps trailing spaces, so a run of spaces
+inside a paragraph cannot turn into a hard break.
+
+`--wrap` breaks lines only where the source already has whitespace. Markdown
+renders a soft line break as a space, so a break between characters that touch
+in the source would add a space to the rendered text. A run such as
+`([Python Packaging][4])`, `` `Mutex`/`MutexGuard` `` or `**`code`**` stays on
+one line, even when that leaves the line longer than the target width.
 
 A line ending in a backslash is also a Markdown hard break. Because the
 backslash is content, it stays glued to the last word and is measured by the

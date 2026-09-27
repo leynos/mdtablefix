@@ -117,16 +117,14 @@ fn attach_punctuation_ignores_non_code_suffix() {
     assert_eq!(lines, vec!["plain text".to_string()]);
 }
 
+/// A break made at a run of spaces keeps none of them at the line end: two or
+/// more would render as a hard break the source never wrote (issue #561).
 #[test]
-fn wrap_preserving_code_splits_after_consecutive_whitespace() {
+fn wrap_preserving_code_trims_consecutive_whitespace_at_breaks() {
     let lines = wrap_preserving_code("alpha  beta   gamma", 8);
     assert_eq!(
         lines,
-        vec![
-            "alpha  ".to_string(),
-            "beta   ".to_string(),
-            "gamma".to_string()
-        ]
+        vec!["alpha".to_string(), "beta".to_string(), "gamma".to_string()]
     );
 }
 
