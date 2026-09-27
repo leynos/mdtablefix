@@ -8,7 +8,10 @@
 
 use proptest::{prelude::*, strategy::Strategy as ProptestStrategy};
 
-use super::compress::{Strategy, rewrite_marker};
+use super::{
+    attach_orphan_specifiers,
+    compress::{Strategy, rewrite_marker},
+};
 
 fn fence_line_strategy() -> impl ProptestStrategy<Value = (String, String, char, usize, String)> {
     (
@@ -76,4 +79,18 @@ proptest! {
             prop_assert_eq!(twice, once);
         }
     }
+}
+
+/// The production canonical break cannot become an orphan language specifier.
+#[test]
+fn canonical_break_stays_structural_before_a_fence() {
+    let break_line = crate::breaks::canonical_break().to_string();
+    let input = vec![
+        break_line,
+        "```".to_string(),
+        "body".to_string(),
+        "```".to_string(),
+    ];
+
+    assert_eq!(attach_orphan_specifiers(&input), input);
 }

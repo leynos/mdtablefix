@@ -19,8 +19,11 @@ use crate::{
 pub const THEMATIC_BREAK_LEN: usize = 70;
 
 /// Shared replacement line so every thematic break can be returned without allocation.
-static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> =
-    std::sync::LazyLock::new(|| "_".repeat(THEMATIC_BREAK_LEN));
+static THEMATIC_BREAK_LINE: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    crate::classify_kernel::consumers::canonical_break_chars()
+        .into_iter()
+        .collect()
+});
 
 /// Whether a tracked prior line holds paragraph text a later line can continue.
 /// A list item marker line counts: it starts its item's paragraph.

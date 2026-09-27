@@ -7,7 +7,7 @@
 use regex::Regex;
 use tracing::trace;
 
-use crate::classify::{ClassifyCtx, LineClass, classify_line};
+use crate::classify::{ClassifyCtx, LineClass, wrapping_boundary};
 
 /// Returns the indentation width (treating tabs as four columns) and the byte
 /// offset of the first non-space or tab character.
@@ -104,9 +104,9 @@ pub(crate) fn classify_block(
     let (indent_width, indent_bytes) = leading_indent(line);
     let trimmed = line[indent_bytes..].trim_start();
 
-    match classify_line(line, &ClassifyCtx::default()) {
-        LineClass::AtxHeading => return Some(BlockKind::Heading),
-        LineClass::ThematicBreak => {
+    match wrapping_boundary(line, &ClassifyCtx::default()) {
+        Some(LineClass::AtxHeading) => return Some(BlockKind::Heading),
+        Some(LineClass::ThematicBreak) => {
             trace!(
                 indent_width,
                 line_len = line.len(),
@@ -114,7 +114,7 @@ pub(crate) fn classify_block(
             );
             return Some(BlockKind::ThematicBreak);
         }
-        LineClass::ListItem => return Some(BlockKind::Bullet),
+        Some(LineClass::ListItem) => return Some(BlockKind::Bullet),
         _ => {}
     }
     if let Some(kind) = classify_residual_block(line, link_matcher) {

@@ -1119,10 +1119,18 @@ unbounded invariants. `verus/lib.rs` includes `classify_kernel.rs` by `#[path]`
 so the spec is written against the same source the binary compiles.
 `classify_seq` then proves its result against `spec_classify`, which is the
 structural precedence that kernel is required to implement. The consumer
-decisions are proved over that same kernel: `is_setext_text_seq`,
-`is_setext_underline_seq`, `is_canonical_break_seq`, and `is_atx_heading_seq` in
-`src/classify_kernel_consumers.rs` each prove their boolean equals whether
-`spec_classify` returns the class that consumer stands for. The ledger symbol
-names are enforced rather than merely documented:
+decisions are proved over that same kernel. `is_setext_pair_seq` checks both
+the candidate and underline classes used by `detect_setext_heading`;
+`setext_atx_marker` constructs the level-one or level-two hash run and its
+mandatory separator, and `convert_setext` checks the full emitted line through
+`is_atx_heading_line`. `canonical_break_chars` builds the exact line returned by
+`canonical_break()`, whose structural classification is established by the
+canonical-break lemma. The break consumer lemmas establish that this class
+cannot be accepted as paragraph text, table input, or an orphan specifier in
+the modeled contexts. Executable regressions exercise the exact line through
+wrapping, heading detection, table buffering, and orphan attachment. The ledger
+records those cross-pass checks separately from local kernel correctness, and
+lists the three remaining external grammar contracts. The ledger symbol names
+are enforced rather than merely documented:
 `scripts/check-verification-ledger.sh` runs under `make lint`, so renaming a
 claimed symbol fails the build instead of silently orphaning its row.
