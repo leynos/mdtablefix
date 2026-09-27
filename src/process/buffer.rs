@@ -8,7 +8,7 @@
 use tracing::debug;
 
 use crate::{
-    classify::{ClassifyCtx, LineClass, classify_line_with_body, is_table_line},
+    classify::{ClassifyCtx, LineClass, classify_line_with_body},
     ellipsis::replace_ellipsis,
     table::reflow_table,
     wrap::{LinkReferenceMatcher, classify_block, leading_indent},
@@ -191,7 +191,8 @@ impl ProcessBuffer {
         let prefix = &line[..line.len() - classified.body.len()];
         let is_quoted = prefix.contains('>');
         let line_class = classified.class;
-        let is_structural_table_line = is_table_line(&line, &ClassifyCtx::default());
+        let is_structural_table_line =
+            crate::classify_kernel::consumers::is_table_class(line_class);
         if opens_table_run(
             line_class,
             classified.body,
