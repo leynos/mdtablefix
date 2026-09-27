@@ -6,7 +6,15 @@
 use proptest::prelude::*;
 use rstest::rstest;
 
-use crate::wrap::{FenceTracker, Region, classify_regions, is_fence};
+use crate::wrap::{
+    FenceTracker,
+    LineFeatures,
+    Region,
+    classify_regions,
+    compression_changes_region,
+    is_fence,
+    opener,
+};
 
 #[test]
 fn fence_tracker_new_starts_outside_fence() {
@@ -426,4 +434,50 @@ fn regions_treats_payload_after_interior_shorter_fence_as_literal() {
         classify_regions(lines),
         vec![Region::Delim, Region::Literal, Region::Literal],
     );
+}
+
+/// The compression predicate must distinguish the two opener families.
+///
+/// A block opened with four backticks and containing a three-backtick interior
+/// line cannot be compressed: the shorter backtick line would close the
+/// rewritten three-backtick opener, ending the block early. This is exactly
+/// issue #480, and it is what `requires_preserved_delimiters` reports.
+#[test]
+fn compression_predicate_preserves_when_interior_marker_matches_family() {
+    let opening = opener(0, '`', 4);
+    let interior_short_backticks = LineFeatures::fence(0, '`', 3, true);
+    assert!(compression_changes_region(
+        opening,
+        interior_short_backticks
+    ));
+}
+
+/// A tilde opener containing a backtick line is safe to compress.
+///
+/// The compression target is three backticks, so the interior backtick line
+/// would newly close the rewritten opener. The family check must catch this,
+/// which is why the predicate compares the marker character at all.
+#[test]
+fn compression_predicate_preserves_tilde_opener_with_backtick_interior() {
+    let opening = opener(0, '~', 3);
+    let interior_backticks = LineFeatures::fence(0, '`', 3, true);
+    assert!(compression_changes_region(opening, interior_backticks));
+}
+
+/// An interior marker of an unrelated family changes nothing.
+#[test]
+fn compression_predicate_is_quiet_for_unrelated_marker_family() {
+    // A backtick opener and a tilde interior line: compressing to backticks
+    // leaves the tilde line closing neither delimiter, so its region is the
+    // same either way.
+    let opening = opener(0, '`', 4);
+    let interior_tildes = LineFeatures::fence(0, '~', 4, true);
+    assert!(!compression_changes_region(opening, interior_tildes));
+}
+
+/// Prose is never affected by a delimiter rewrite.
+#[test]
+fn compression_predicate_is_quiet_for_prose() {
+    let opening = opener(0, '`', 4);
+    assert!(!compression_changes_region(opening, LineFeatures::prose(0)));
 }

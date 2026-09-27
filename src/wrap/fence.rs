@@ -12,7 +12,15 @@
 
 mod kernel;
 
-pub(crate) use kernel::{FenceState as KernelState, LineFeatures, agrees_with_opener, fence_step};
+pub(crate) use kernel::{
+    FenceState as KernelState,
+    LineFeatures,
+    agrees_with_opener,
+    compression_changes_region,
+    features_of_line,
+    fence_step,
+    opener,
+};
 pub use kernel::{Region, classify_regions};
 use regex::Regex;
 use tracing::{debug, trace};

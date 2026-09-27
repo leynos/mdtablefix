@@ -137,6 +137,90 @@ pub fn agrees_with_opener(state: FenceState, line: LineFeatures) -> bool {
     closes_fence(state, line.without_info_string())
 }
 
+/// The marker character every compressed delimiter is written with.
+pub const COMPRESSED_MARKER: char = '`';
+
+/// The marker run length every compressed delimiter is written with.
+pub const COMPRESSED_MARKER_LEN: usize = 3;
+
+/// The delimiter compression writes in place of a state's opening marker.
+///
+/// Normalization is deliberately a fixed target rather than a shortening: every
+/// compressed delimiter is three backticks, whatever the source used. The
+/// written delimiter covers exactly the run that was rewritten, so its string
+/// length is [`COMPRESSED_MARKER_LEN`] in every case.
+#[must_use]
+pub const fn compressed(state: FenceState) -> FenceState {
+    FenceState {
+        marker: COMPRESSED_MARKER,
+        marker_len: COMPRESSED_MARKER_LEN,
+        open_depth: state.open_depth,
+    }
+}
+
+/// Reduce one complete source line, blockquote prefix included, to kernel
+/// features.
+///
+/// The streaming [`FenceTracker`](super::FenceTracker) and the batch
+/// classification both use this, so the two cannot hold different notions of
+/// what a fence line is.
+#[must_use]
+pub fn features_of_line(line: &str) -> LineFeatures { super::features_of(line) }
+
+/// The opening-fence state a source line establishes once it opens a block.
+#[must_use]
+pub const fn opener(depth: usize, marker: char, marker_len: usize) -> FenceState {
+    FenceState {
+        marker,
+        marker_len,
+        open_depth: depth,
+    }
+}
+
+/// Whether `line` is fence-shaped content the block opened by `state` holds
+/// open as literal interior text.
+///
+/// Such a line closes nothing: either its run is too short, its marker is the
+/// wrong family, or it carries an info string. Reading it as a delimiter is the
+/// defect behind issue #480.
+#[must_use]
+pub fn interior_delimiter(state: FenceState, line: LineFeatures) -> bool {
+    line.marker.is_some() && line.depth >= state.open_depth && !closes_fence(state, line)
+}
+
+/// Whether compressing `state`'s delimiter could change the region of `line`.
+///
+/// This is the whole safety condition for delimiter compression, and it is a
+/// pure function of the opening state and one line's features: no buffer, no
+/// regex, and no accumulated flag. A block may have its delimiter rewritten to
+/// [`compressed`] exactly when this returns `false` for every line in it.
+///
+/// The predicate is the conjunction of the two ways a rewrite can matter. The
+/// line must be interior content of the block, so that it is read under the
+/// opener rather than closing it; and its marker must belong to the opener's
+/// family or the compression target's, because a marker of any other family
+/// closes neither the original delimiter nor the rewritten one, so its region
+/// is the same either way.
+///
+/// An interior line that newly closes the rewritten opener ends the block
+/// early, moving every later line out of the literal region; that is issue
+/// #480, so the pass keeps the source delimiter whenever this returns `true`.
+///
+/// The marker-family comparison is what makes the predicate discriminating,
+/// and it rests on [`closes_fence`] testing the marker character. That
+/// dependency is what the mutation gate exercises: dropping the character check
+/// leaves this predicate unchanged but falsifies the lemma that justifies it,
+/// because a line of an unrelated family would then appear to close the
+/// rewritten opener.
+#[must_use]
+pub fn compression_changes_region(state: FenceState, line: LineFeatures) -> bool {
+    interior_delimiter(state, line)
+        && matches!(
+            line.marker,
+            Some(marker) if marker == state.marker || marker == compressed(state).marker
+        )
+}
+
 verified_kernel_function! {
 /// Advances the fence state by one line and reports that line's region.
 ///
