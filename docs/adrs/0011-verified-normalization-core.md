@@ -112,13 +112,24 @@ specification is written against the same source the binary compiles.
 precedence the kernel must implement, and its postcondition also bounds the
 returned body offset within the input sequence.
 
-The consumer decisions are verified separately over that same kernel:
-`is_setext_text_seq`, `is_setext_underline_seq`, `is_canonical_break_seq`, and
-`is_atx_heading_seq` in `src/classify_kernel_consumers.rs` each prove their
-boolean equals whether `spec_classify` returns the corresponding structural
-class. `make verus-mutation` changes a production Setext consumer decision and
-requires Verus to reject the proof, so the refinement is shown to be
-load-bearing rather than vacuous.
+The consumer decisions are verified separately over that same kernel.
+`is_setext_pair_seq` composes the paragraph-text and underline checks used by
+the production Setext detector. `setext_atx_marker` builds the level-one or
+level-two hash run and required separator consumed by `convert_setext`;
+`is_atx_heading_seq` checks the emitted line through the classifier. The break
+pass builds its shared `canonical_break()` value from `canonical_break_chars`,
+whose loop contract fixes its length and contents. Concrete witness lemmas
+assert paragraph text, a table delimiter, and the canonical break. The fixture
+oracle pins each `tests/data` line's class together with its path, line number,
+and source-line hash.
+
+The Setext and break consumer lemmas establish class-based rejection in the
+specification. Separate executable regressions send the exact canonical break
+through wrapping, heading detection, table buffering, and orphan attachment;
+the ledger distinguishes these cross-pass checks from local kernel correctness.
+`make verus-mutation` removes the mandatory separator from the production
+`setext_atx_marker` builder and requires Verus to reject its postcondition,
+showing that the separator requirement is load-bearing.
 
 Three matcher contracts remain trusted: `#[verifier::external_body]` covers the
 table-delimiter grammar `is_table_delimiter` with its

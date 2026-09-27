@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Confirm that Verus rejects a wrong production Setext consumer decision.
+# Confirm that Verus rejects a production ATX marker without its separator.
 set -euo pipefail
 
 # Absolute, because `VERUS_RUN` names its repository root as `.`. The runner
@@ -9,7 +9,7 @@ set -euo pipefail
 repo_root="$(cd -- "${1:-.}" && pwd)"
 cd "${repo_root}"
 
-proof_dir="$(mktemp -d "${repo_root}/verus/.setext-mutation-XXXXXX")"
+proof_dir="$(mktemp -d "${repo_root}/verus/.atx-mutation-XXXXXX")"
 proof_file="${proof_dir}/lib.rs"
 output_file="${proof_dir}/verus.out"
 
@@ -25,12 +25,12 @@ cp "${repo_root}/verus/classify_spec.rs" "${proof_dir}/classify_spec.rs"
 cp "${repo_root}/src/classify_kernel.rs" "${proof_dir}/src/classify_kernel.rs"
 cp "${repo_root}/src/classify_kernel_macros.rs" "${proof_dir}/src/classify_kernel_macros.rs"
 cp "${repo_root}/src/classify_kernel_predicates.rs" "${proof_dir}/src/classify_kernel_predicates.rs"
-sed 's@LineClass::ParagraphText)$@LineClass::AtxHeading)@' \
+sed "/^[[:space:]]*marker\.push(' ');[[:space:]]*$/d" \
     "${repo_root}/src/classify_kernel_consumers.rs" \
     > "${proof_dir}/src/classify_kernel_consumers.rs"
 if cmp -s "${repo_root}/src/classify_kernel_consumers.rs" \
     "${proof_dir}/src/classify_kernel_consumers.rs"; then
-    echo "Setext consumer mutation did not apply" >&2
+    echo "ATX separator mutation did not apply" >&2
     exit 1
 fi
 
@@ -42,13 +42,13 @@ fi
 if ${VERUS_RUN:?VERUS_RUN must be set} \
     --proof-file "${proof_file}" > "${output_file}" 2>&1; then
     cat "${output_file}"
-    echo "Setext consumer mutation unexpectedly verified" >&2
+    echo "ATX separator mutation unexpectedly verified" >&2
     exit 1
 fi
 
 if ! grep -Fq "verification results::" "${output_file}" || \
     ! grep -Fq "postcondition not satisfied" "${output_file}"; then
     cat "${output_file}"
-    echo "Setext mutation did not reach a failed proof assertion" >&2
+    echo "ATX separator mutation did not reach a failed proof assertion" >&2
     exit 1
 fi

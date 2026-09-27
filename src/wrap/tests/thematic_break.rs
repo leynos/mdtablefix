@@ -9,10 +9,6 @@ use rstest::rstest;
 
 use crate::wrap::wrap_text;
 
-/// The underscore run `--breaks` emits in place of every other break form.
-const NORMALISED_BREAK: &str =
-    "______________________________________________________________________";
-
 fn lines(text: &str) -> Vec<String> { text.lines().map(str::to_string).collect() }
 
 #[rstest]
@@ -40,7 +36,8 @@ fn wrap_text_keeps_thematic_break_on_its_own_line(#[case] break_line: &str) {
 
 #[test]
 fn wrap_text_keeps_normalised_break_on_its_own_line() {
-    let input = lines(&format!("prose words here\n{NORMALISED_BREAK}\nmore prose"));
+    let break_line = crate::breaks::canonical_break();
+    let input = lines(&format!("prose words here\n{break_line}\nmore prose"));
 
     let wrapped = wrap_text(&input, 80);
 
@@ -48,7 +45,7 @@ fn wrap_text_keeps_normalised_break_on_its_own_line() {
         wrapped,
         vec![
             "prose words here".to_string(),
-            NORMALISED_BREAK.to_string(),
+            break_line.to_string(),
             "more prose".to_string(),
         ]
     );
