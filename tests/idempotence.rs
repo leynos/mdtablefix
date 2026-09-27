@@ -213,6 +213,19 @@ const CASES: &[IdempotenceCase] = &[
         flags: WRAP,
         expects: &[Standalone::Literal("[1]")],
     },
+    // Issue #507: an alphabetic label, after a space and touching the prose.
+    IdempotenceCase {
+        id: "E2_alphabetic_label_after_space",
+        fixture: "issue_507_label_after_space.dat",
+        flags: WRAP,
+        expects: &[Standalone::Literal("[a]")],
+    },
+    IdempotenceCase {
+        id: "E3_alphabetic_label_touching",
+        fixture: "issue_507_label_touching.dat",
+        flags: WRAP,
+        expects: &[],
+    },
     IdempotenceCase {
         id: "L1_footnote_width_boundary",
         fixture: "issue_484_footnotes_wrap.dat",

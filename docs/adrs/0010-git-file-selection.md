@@ -432,7 +432,8 @@ the real binary under `--wrap` and asserted byte-identical, the
 `src/wrap/tests/inline_wrapping.rs`, `tests/wrap_unit/stream.rs`,
 `tests/wrap/lists.rs` and `tests/wrap/cli.rs`.
 
-The limitation that remains is the one ADR 0006 records: a short alphabetic
-label such as `[a]` is still ordinary prose the wrapper may break at, so a
-document containing one can still be reported as needing formatting again after
-an `--in-place` run. That pre-dates this fix and is tracked as issue #507.
+ADR 0006 recorded one remaining limitation: a short alphabetic label such as
+`[a]` was ordinary prose the wrapper could break at, so a document containing
+one could still be reported as needing formatting again after an `--in-place`
+run. Issue #507 tracked it, and ADR 0006's 2026-09-27 addendum records the fix:
+the wrapper now breaks only at source whitespace.
