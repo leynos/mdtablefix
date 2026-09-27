@@ -20,4 +20,5 @@ status: code: 0
 3. second item with enough text to wrap around the configured column width when
    wrapping is enabled for the matrix harness.
 
-Title =====
+Title
+=====

@@ -10,7 +10,7 @@ status: code: 1
 [stdout]
 --- input.dat
 +++ input.dat
-@@ -1,7 +1,9 @@
+@@ -1,7 +1,10 @@
 -| Name | Notes | |---|---| | alpha | Use *`cargo test`* before merging... |
 +| Name  | Notes                                |
 +| ----- | ------------------------------------ |
@@ -21,9 +21,8 @@ status: code: 1
 +3. second item with enough text to wrap around the configured column width when
 +   wrapping is enabled for the matrix harness.
  
--Title
--=====
-+Title =====
+ Title
+ =====
 
 [stderr]
 1 file would be reformatted.

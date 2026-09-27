@@ -360,8 +360,9 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut fence_tracker = FenceTracker::default();
     let link_matcher = link_reference::LinkReferenceMatcher::production();
     let mut link_title_window = link_reference::LinkTitleWindow::default();
+    let setext_lines = crate::headings::setext_heading_lines(lines);
 
-    for line in lines {
+    for (index, line) in lines.iter().enumerate() {
         let blockquote = BlockquotePrefix::parse(line);
         let current_depth = blockquote.map_or(0, |prefix| prefix.depth());
         let inner_content = blockquote.map_or(line.as_str(), |prefix| prefix.inner());
@@ -378,6 +379,12 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
             link_matcher,
             &mut link_title_window,
         ) {
+            continue;
+        }
+
+        if setext_lines.get(index).copied().unwrap_or(false) {
+            // A Setext heading passes through whole; wrapped, it is prose (#562).
+            writer.push_verbatim(&mut state, line);
             continue;
         }
 
