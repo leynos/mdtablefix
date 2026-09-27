@@ -82,6 +82,22 @@ mod proptest_tests {
 
     use super::ListState;
 
+    /// One step of a generated list history: an item at a marker column with
+    /// its content offset, or a block at a column.
+    #[derive(Clone, Debug)]
+    enum Step {
+        Item(usize, usize),
+        Block(usize),
+    }
+
+    /// Generates an item or a block step over small columns.
+    fn step() -> impl Strategy<Value = Step> {
+        prop_oneof![
+            (0usize..=8, 2usize..=5).prop_map(|(indent, offset)| Step::Item(indent, offset)),
+            (0usize..=10).prop_map(Step::Block),
+        ]
+    }
+
     proptest! {
         #[test]
         fn list_state_next_number_always_starts_at_1_for_new_indent(
@@ -122,6 +138,38 @@ mod proptest_tests {
             prop_assert_eq!(state.next_number(0), outer_count + 1);
             prop_assert!(!state.counters.contains_key(&4));
             prop_assert_eq!(state.counters.get(&0), Some(&(outer_count + 2)));
+        }
+
+        /// `end_lists_at` ends exactly the innermost lists whose items
+        /// cannot contain the block: what remains is a prefix of the old
+        /// stack whose top item contains the column, and every kept level's
+        /// counter is unchanged.
+        #[test]
+        fn end_lists_at_keeps_the_prefix_that_contains_the_block(
+            steps in proptest::collection::vec(step(), 1..=24),
+        ) {
+            let mut state = ListState::default();
+            for step in steps {
+                match step {
+                    Step::Item(indent, offset) => {
+                        let _ = state.next_number(indent);
+                        state.record_content_column(indent, indent + offset);
+                    }
+                    Step::Block(column) => {
+                        let before = state.indent_stack.clone();
+                        let counters = state.counters.clone();
+                        state.end_lists_at(column);
+                        prop_assert!(before.starts_with(&state.indent_stack));
+                        if let Some(top) = state.indent_stack.last() {
+                            prop_assert!(state.content_columns[top] <= column);
+                        }
+                        for depth in &state.indent_stack {
+                            prop_assert_eq!(state.counters.get(depth), counters.get(depth));
+                        }
+                        prop_assert!(state.indent_stack.windows(2).all(|w| w[0] < w[1]));
+                    }
+                }
+            }
         }
     }
 }

@@ -6,7 +6,7 @@ use regex::Regex;
 use tracing::debug;
 
 use crate::{
-    classify::{ClassifyCtx, LineClass, classify_line_with_body},
+    classify::{ClassifyCtx, LineClass, classify_line_with_body, list_content_indent},
     wrap::FenceTracker,
 };
 
@@ -32,21 +32,26 @@ fn parse_numbered(line: &str) -> Option<(usize, &str, &str, &str)> {
 
 /// Returns the column where a renumbered item's content starts, in parser columns.
 ///
-/// `CommonMark` places it after the marker and the following spaces, except
-/// that an empty item, or one followed by five or more columns of space,
-/// starts its content one column after the marker. The marker measured is
-/// the emitted one, `number` and its dot, because the emitted line is what a
-/// second pass reads: measuring the source marker would let `10.` becoming
-/// `2.` move a block into the item between passes.
+/// Measured on the emitted marker, `number` and its dot, because the
+/// emitted line is what a second pass reads: measuring the source marker
+/// would let `10.` becoming `2.` move a block into the item between passes.
+/// The separator follows `classify::list_content_indent`, tab stops
+/// included, so both passes agree on where an item's content starts.
 fn content_column(indent: usize, number: usize, sep: &str, rest: &str) -> usize {
-    let marker = number.to_string().len() + 1;
-    let spacing = indent_len(sep);
-    let gap = if rest.is_empty() || spacing > 4 {
-        1
-    } else {
-        spacing
-    };
-    indent + marker + gap
+    list_content_indent(&format!("{number}.{sep}{rest}"), indent)
+}
+
+/// Rebuilds a line with `strip` columns of its indentation removed.
+///
+/// Classifying a line relative to the item that contains it lets a block
+/// indented four or more columns in absolute terms read as the heading or
+/// break it is inside that item, rather than as indented code.
+fn relative_to(line: &str, indent: usize, strip: usize) -> String {
+    format!(
+        "{}{}",
+        " ".repeat(indent.saturating_sub(strip)),
+        line.trim_start()
+    )
 }
 
 /// Removes counters deeper than the current list item, optionally including its own depth.
@@ -119,6 +124,18 @@ impl ListState {
         let current = *num;
         *num += 1;
         current
+    }
+
+    /// Returns the content column of the innermost active item that contains `indent`.
+    ///
+    /// Zero when no active item's content column is at or left of `indent`.
+    fn containing_content_column(&self, indent: usize) -> usize {
+        self.indent_stack
+            .iter()
+            .filter_map(|depth| self.content_columns.get(depth).copied())
+            .filter(|&column| column <= indent)
+            .max()
+            .unwrap_or(0)
     }
 
     /// Records where the latest item at `indent` starts its content.
@@ -212,8 +229,9 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             .map_or_else(|| line.len(), |(i, _)| i);
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
-        let classified = classify_line_with_body(line, &ClassifyCtx::default());
-        let prefix = &line[..line.len() - classified.body.len()];
+        let relative = relative_to(line, indent, state.containing_content_column(indent));
+        let classified = classify_line_with_body(&relative, &ClassifyCtx::default());
+        let prefix = &relative[..relative.len() - classified.body.len()];
         if !prefix.contains('>')
             && matches!(
                 classified.class,

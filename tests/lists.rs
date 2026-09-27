@@ -262,6 +262,22 @@ fn renumber_issue_450_block_inside_an_item_keeps_the_list_counting(#[case] input
     lines_vec!["1. a", "", "  ***", "", "5. b"],
     lines_vec!["1. a", "", "  ***", "", "1. b"]
 )]
+// Inside the outer item but left of the nested item's content: the heading
+// reads as a heading relative to the outer item, so only the nested list ends.
+#[case::heading_at_column_four_between_items(
+    lines_vec![
+        "1. Outer", "   1. Inner", "", "    #### Heading", "", "   5. Inner again", "7. Outer again",
+    ],
+    lines_vec![
+        "1. Outer", "   1. Inner", "", "    #### Heading", "", "   1. Inner again", "2. Outer again",
+    ]
+)]
+// A tab in the separator advances to the next tab stop, so `1. \t` puts the
+// content at column 4 and a three-space heading is outside the item.
+#[case::heading_left_of_a_tab_separated_item(
+    lines_vec!["1. \titem", "", "   ### h", "", "5. b"],
+    lines_vec!["1. \titem", "", "   ### h", "", "1. b"]
+)]
 // The content column is measured on the emitted marker, so `10.` becoming
 // `2.` puts the heading inside the item on the first pass as on the second.
 #[case::heading_after_a_narrowed_marker(

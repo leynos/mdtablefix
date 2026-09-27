@@ -100,7 +100,7 @@ impl ListContinuationState {
 }
 
 /// Calculates the content column after a list marker and its separator.
-fn list_content_indent(body: &str, indent: usize) -> usize {
+pub(crate) fn list_content_indent(body: &str, indent: usize) -> usize {
     let marker = body.trim_start_matches([' ', '\t']);
     let marker_len = marker
         .chars()
