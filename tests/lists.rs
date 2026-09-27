@@ -198,3 +198,76 @@ fn malformed_fences_do_not_break_list_renumbering() {
 fn test_renumber_cases(input: Vec<String>, expected: Vec<String>) {
     assert_eq!(renumber_lists(&input), expected);
 }
+
+/// Regression cases for issue #450: a heading indented inside a list item
+/// does not end the ordered list.
+///
+/// Issue #450 was introduced by #106 (1b41d7f), which made every ATX heading
+/// and thematic break up to three spaces deep reset all list state. A heading
+/// or break indented to an item's content column is a child block of that
+/// item, so the items after it keep their numbers.
+#[rstest]
+#[case::nested_heading(include_lines!("data/issue_450_nested_heading_input.txt"))]
+// Inline rather than under `tests/data`: the drift harness runs every fixture
+// there under `--breaks`, which rewrites this break at column 0 (reported
+// separately), so it is not a fixed point of the full flag set.
+#[case::nested_break(lines_vec![
+    "1. First item", "", "   Body paragraph.", "", "2. Second item", "", "   ***", "",
+    "   More body after a break inside the item.", "", "3. Third item",
+])]
+fn renumber_issue_450_block_inside_an_item_keeps_the_list_counting(#[case] input: Vec<String>) {
+    let once = renumber_lists(&input);
+    assert_eq!(once, input);
+    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+}
+
+/// Regression cases for issue #450, the neighbouring shapes #106 touched: a
+/// heading or break ends exactly the lists at or right of its column.
+///
+/// At a nested list's marker column it ends that nested list only, and the
+/// outer list keeps counting; at column 0 it ends every list.
+#[rstest]
+#[case::heading_at_nested_marker_column(
+    lines_vec![
+        "1. Outer", "   1. Inner", "   2. Inner", "", "   ## Heading in the outer item", "",
+        "   5. Inner again", "7. Outer again",
+    ],
+    lines_vec![
+        "1. Outer", "   1. Inner", "   2. Inner", "", "   ## Heading in the outer item", "",
+        "   1. Inner again", "2. Outer again",
+    ]
+)]
+#[case::break_at_nested_marker_column(
+    lines_vec!["1. Outer", "   1. Inner", "", "   ---", "", "   4. Inner again", "6. Outer again"],
+    lines_vec!["1. Outer", "   1. Inner", "", "   ---", "", "   1. Inner again", "2. Outer again"]
+)]
+#[case::heading_at_margin(
+    lines_vec!["1. a", "4. b", "", "# Title", "", "6. c", "9. d"],
+    lines_vec!["1. a", "2. b", "", "# Title", "", "1. c", "2. d"]
+)]
+#[case::break_at_margin(
+    lines_vec!["1. a", "   1. sub", "", "---", "", "6. c"],
+    lines_vec!["1. a", "   1. sub", "", "---", "", "1. c"]
+)]
+fn renumber_issue_450_neighbouring_shapes(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+) {
+    let once = renumber_lists(&input);
+    assert_eq!(once, expected);
+    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+}
+
+/// Regression case for issue #450 through the CLI: `--renumber` keeps the
+/// list counting past a heading nested in an item.
+#[test]
+fn renumber_issue_450_cli_keeps_counting_past_a_nested_heading() {
+    let input = include_str!("data/issue_450_nested_heading_input.txt");
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--renumber")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(input);
+}

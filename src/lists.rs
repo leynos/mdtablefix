@@ -75,17 +75,6 @@ struct ListState {
 }
 
 impl ListState {
-    /// Clears all counters after a heading, break, or other list boundary.
-    fn reset(&mut self) {
-        debug!(
-            indent_depths = self.indent_stack.len(),
-            counters = self.counters.len(),
-            "resetting ordered list renumbering state"
-        );
-        self.indent_stack.clear();
-        self.counters.clear();
-    }
-
     /// Removes nested counters before handling a new item or paragraph restart.
     fn prune_deeper(&mut self, indent: usize, inclusive: bool) {
         prune_deeper(
@@ -108,6 +97,20 @@ impl ListState {
         current
     }
 
+    /// Ends every list whose markers sit at `indent` or deeper.
+    ///
+    /// A block that starts at or left of a list's marker column cannot belong
+    /// to that list's items, so the list ends and the next marker at that
+    /// depth starts a new list. Lists with shallower markers continue.
+    fn end_lists_at(&mut self, indent: usize) {
+        debug!(
+            indent,
+            indent_depths = self.indent_stack.len(),
+            "ending ordered lists at or right of a block's column"
+        );
+        self.prune_deeper(indent, true);
+    }
+
     /// Resets the current level after a blank line followed by a plain paragraph.
     fn handle_paragraph_restart(&mut self, indent: usize, line: &str, prev_blank: bool) -> bool {
         let inclusive = prev_blank
@@ -124,7 +127,8 @@ impl ListState {
 
 /// Renumber ordered Markdown list items across the given lines.
 /// - Preserve code fences; do not renumber inside them.
-/// - Reset numbering on headings and thematic breaks.
+/// - End the lists at or right of a heading's or thematic break's column; one indented into an item
+///   leaves that item's list counting, and one at column 0 ends every list.
 /// - Restart numbering after a blank line followed by a plain paragraph at the same or a shallower
 ///   indent.
 #[must_use]
@@ -172,7 +176,10 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
                 LineClass::AtxHeading | LineClass::ThematicBreak
             )
         {
-            state.reset();
+            // A heading or break indented into an item is a child block of
+            // that item, so only the lists at or right of its column end
+            // (issue #450); at column 0 that is every list.
+            state.end_lists_at(indent);
             out.push(line.clone());
             prev_blank = false;
             continue;
@@ -235,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn list_state_reset_clears_indent_stack_and_counters() {
+    fn list_state_end_lists_at_zero_clears_indent_stack_and_counters() {
         let mut state = ListState::default();
         let _ = state.next_number(0);
         let _ = state.next_number(0);
@@ -243,7 +250,7 @@ mod tests {
         assert!(!state.indent_stack.is_empty());
         assert!(!state.counters.is_empty());
 
-        state.reset();
+        state.end_lists_at(0);
 
         assert!(state.indent_stack.is_empty());
         assert!(state.counters.is_empty());
