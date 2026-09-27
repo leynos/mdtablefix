@@ -1122,12 +1122,13 @@ structural precedence that kernel is required to implement. The consumer
 decisions are proved over that same kernel. `is_setext_pair_seq` checks both
 the candidate and underline classes used by `detect_setext_heading`;
 `setext_atx_marker` constructs the level-one or level-two hash run and its
-mandatory separator, and `convert_setext` checks the full emitted line through
-`is_atx_heading_line`. `canonical_break_chars` builds the exact line returned by
+mandatory separator. `convert_setext` assembles the line, and
+`detect_verified_setext_heading` checks it through `is_atx_heading_line` before
+emission. `canonical_break_chars` builds the exact line returned by
 `canonical_break()`, whose structural classification is established by the
 canonical-break lemma. The break consumer lemmas establish that this class
 cannot be accepted as paragraph text, table input, or an orphan specifier in
-the modeled contexts. Executable regressions exercise the exact line through
+the modelled contexts. Executable regressions exercise the exact line through
 wrapping, heading detection, table buffering, and orphan attachment. The ledger
 records those cross-pass checks separately from local kernel correctness, and
 lists the three remaining external grammar contracts. The ledger symbol names
