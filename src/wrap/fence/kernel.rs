@@ -327,10 +327,14 @@ after { out }
 /// );
 /// ```
 #[must_use]
-pub fn classify_regions<'a, I>(lines: I) -> Vec<Region>
+pub fn classify_regions<I, S>(lines: I) -> Vec<Region>
 where
-    I: IntoIterator<Item = &'a str>,
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
 {
-    let features: Vec<LineFeatures> = lines.into_iter().map(super::features_of).collect();
+    let features: Vec<LineFeatures> = lines
+        .into_iter()
+        .map(|line| super::features_of(line.as_ref()))
+        .collect();
     regions(&features)
 }
