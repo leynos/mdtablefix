@@ -120,16 +120,25 @@ fi
     })
 }
 
+/// Returns the command line that runs the fake runner through `bash`.
+///
+/// The runner is written by this process, and any other test thread that
+/// forks while the file is open for writing leaves a child holding a write
+/// descriptor until it execs. Executing the file directly in that window
+/// fails with `ETXTBSY` (#586), so the harness runs `bash` and lets it read
+/// the script instead of executing a file it has just written.
+fn runner_command(runner: &FakeProverTools) -> String { format!("bash {}", runner.path) }
+
 fn make_command(target: &str, runner: &FakeProverTools) -> Command {
     let mut command = Command::new("make");
     command
         .arg("--no-print-directory")
         .arg(target)
         .current_dir(manifest_dir())
-        .env("PROVER_TOOLS", &runner.path)
+        .env("PROVER_TOOLS", runner_command(runner))
         .env(
             "VERUS_RUN",
-            format!("{} verus run --repo-root .", runner.path),
+            format!("{} verus run --repo-root .", runner_command(runner)),
         )
         .env("FAKE_PROVER_TOOLS_LOG", &runner.log_path)
         .env("FAKE_PROVER_TOOLS_SMOKE_MODE", runner.smoke_mode);
@@ -365,6 +374,36 @@ fn make_verus_selftest_accepts_only_a_rejected_smoke_proof(
     ensure!(
         log.lines()
             .any(|line| line == "verus run --repo-root . --proof-file verus/smoke.rs")
+    );
+    Ok(())
+}
+
+/// Regression case for issue #586: the fake runner still runs while a write
+/// descriptor on it is open, as one inherited by a concurrently forked child
+/// would be.
+///
+/// Executing a file with an open write descriptor fails with `ETXTBSY`. The
+/// harness must not depend on no other thread forking at the wrong moment, so
+/// it runs the stub through `bash`, which only reads it.
+#[test]
+fn verus_harness_issue_586_runner_survives_an_open_write_descriptor() -> Result<()> {
+    let runner = fake_prover_tools("rejected")?;
+    let root = runner
+        .path
+        .parent()
+        .context("fake prover-tools path has no parent")?;
+    let _held_open = open_dir(root)?
+        .open_with("prover-tools", cap_std::fs::OpenOptions::new().append(true))
+        .context("hold the runner open for writing")?;
+
+    let output = make_command("verus", &runner)
+        .output()
+        .context("run make verus while the runner is open for writing")?;
+
+    ensure!(
+        output.status.success(),
+        "make verus failed: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
     Ok(())
 }

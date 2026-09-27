@@ -27,6 +27,12 @@
   body row over an empty header. Such a block is now left as written. A
   regression from #502.
   ([#582](https://github.com/leynos/mdtablefix/issues/582))
+- Fixed: the Verus harness and static-regex tests run their stub scripts
+  through `bash` or `sh` instead of executing files they have just written.
+  Another test thread forking in the same instant could make the execution fail
+  with `ETXTBSY`, which failed
+  `make_verus_selftest_accepts_only_a_rejected_smoke_proof` intermittently.
+  ([#586](https://github.com/leynos/mdtablefix/issues/586))
 
 ## v0.6.0
 

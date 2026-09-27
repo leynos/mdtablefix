@@ -114,6 +114,13 @@ fn run_guard(scan_dir: &Utf8Path, rg: Option<&str>) -> io::Result<std::process::
     cmd.output()
 }
 
+/// Returns an `RG` value that runs `stub` through `sh` rather than executing it.
+///
+/// The stub is written by this process; a test thread that forks while it is
+/// open for writing leaves a child holding a write descriptor until it
+/// execs, and executing the file in that window fails with `ETXTBSY` (#586).
+fn stub_command(stub: &Utf8Path) -> String { format!("sh {stub}") }
+
 /// Write `script` to `<dir>/<name>`, mark it executable, and return its path.
 ///
 /// Both operations go through a capability scoped to `dir`, so `name` is
@@ -174,7 +181,7 @@ fn propagates_ripgrep_scan_failure() {
     let stub = write_stub(scan_dir, "rg-stub.sh", "#!/bin/sh\nexit 3\n")
         .expect("write the failing ripgrep stub");
 
-    let output = run_guard(scan_dir, Some(stub.as_str())).expect("execute the guard");
+    let output = run_guard(scan_dir, Some(&stub_command(&stub))).expect("execute the guard");
 
     assert_eq!(
         output.status.code(),
@@ -222,7 +229,8 @@ fn preserves_arguments_supplied_through_rg(#[case] dir_name: &str) {
     )
     .expect("write the argument-recording ripgrep stub");
 
-    let output = run_guard(&dir, Some(&format!("{stub} --pcre2"))).expect("execute the guard");
+    let output = run_guard(&dir, Some(&format!("{} --pcre2", stub_command(&stub))))
+        .expect("execute the guard");
 
     assert_eq!(
         output.status.code(),

@@ -1671,6 +1671,19 @@ run the lint target and the test suite carry a condition. A step keeps its
 `if: false`. The full rationale is in
 [Environment seam taxonomy](adrs/0012-environment-seam-taxonomy.md).
 
+### Stub scripts in subprocess tests
+
+A test that writes a stub script, such as the fake prover-tools runner in
+`tests/verus_harness.rs` or the ripgrep stubs in `tests/static_regex_lint.rs`,
+runs it through its interpreter (`bash <path>`, `sh <path>`) and never executes
+the file directly. Tests in one binary run as threads of one process. A thread
+that forks while another thread's stub is still open for writing leaves the
+child holding a write descriptor until it execs, and executing the stub in that
+window fails with `ETXTBSY` (#586). The interpreter only reads the file, so the
+race cannot arise.
+`verus_harness_issue_586_runner_survives_an_open_write_descriptor` holds the
+stub open while the target runs, so a direct execution fails deterministically.
+
 ## Coverage publication belongs to `main`
 
 Coverage has two persistent outputs, the CodeScene upload and the ratchet
