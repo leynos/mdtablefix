@@ -26,7 +26,15 @@ pub(crate) mod tracing_snapshot_support;
 pub(crate) use block::{BlockKind, classify_block, classify_residual_block, leading_indent};
 pub use blockquote::BlockquotePrefix;
 use continuation::apply_continuation_chunk;
-pub(crate) use fence::{FenceObservation, ObservedFence};
+pub(crate) use fence::{
+    FenceObservation,
+    KernelState,
+    LineFeatures,
+    ObservedFence,
+    compression_changes_region,
+    features_of_line,
+    opener,
+};
 /// Fence-detection utilities re-exported for downstream callers.
 ///
 /// [`FenceTracker`] maintains fenced code-block state across lines, which is
