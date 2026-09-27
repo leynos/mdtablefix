@@ -7,7 +7,7 @@
 #[cfg(verus_keep_ghost)]
 use vstd::prelude::*;
 
-include!("classify_kernel_macros.rs");
+include!("verified_kernel_macros.rs");
 
 #[path = "classify_kernel_consumers.rs"]
 pub(crate) mod consumers;

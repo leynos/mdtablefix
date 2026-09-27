@@ -33,7 +33,7 @@ pub(crate) use fence::{FenceObservation, ObservedFence};
 /// useful for callers that process Markdown incrementally. [`is_fence`]
 /// inspects one line and returns the fence components (indentation, marker,
 /// info string) when the line opens a fenced code block, or `None` otherwise.
-pub use fence::{FenceTracker, is_fence};
+pub use fence::{FenceTracker, Region, classify_regions, is_fence};
 pub(crate) use link_reference::{LinkReferenceMatcher, LinkTitleWindow, LinkTitleWindowOutcome};
 use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 use passthrough::{is_passthrough_block, normalized_passthrough_line};
