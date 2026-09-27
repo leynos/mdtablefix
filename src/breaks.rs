@@ -178,6 +178,15 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     out
 }
 
+/// Reports whether a break's prefix is structural and must precede the canonical line.
+///
+/// A quote prefix always is. Indentation is when the break sits inside a list
+/// item, because it places the break in that item.
+fn keeps_prefix(prefix: &str, is_in_item: bool) -> bool {
+    let is_indented_in_item = is_in_item && !prefix.is_empty();
+    prefix.contains('>') || is_indented_in_item
+}
+
 /// Retains a structural prefix when emitting the shared canonical break line.
 ///
 /// A quote prefix is always kept. Indentation is kept when the break sits
@@ -186,7 +195,7 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
 /// up to three spaces changes nothing structural, so the break is emitted at
 /// column 0.
 fn canonicalized_break(prefix: &str, is_in_item: bool) -> Cow<'static, str> {
-    if prefix.contains('>') || (is_in_item && !prefix.is_empty()) {
+    if keeps_prefix(prefix, is_in_item) {
         Cow::Owned(format!("{prefix}{}", canonical_break()))
     } else {
         Cow::Borrowed(canonical_break())
