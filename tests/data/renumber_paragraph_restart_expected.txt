@@ -14,13 +14,13 @@ Here's a plain paragraph at a lower indent level
 | --- | --- |
 | 1   | 2   |
 
-2. Fifth item
+1. Fifth item
 
-3. Sixth item
+2. Sixth item
 
 ```js
 // fenced code block at lower indent
 console.log('hello');
 ```
 
-4. Seventh item
+1. Seventh item

@@ -10,9 +10,6 @@ use crate::{
     wrap::FenceTracker,
 };
 
-/// Characters that mark formatted text at the start of a line.
-const FORMATTING_CHARS: [char; 3] = ['*', '_', '`'];
-
 /// Splits a numbered list item into indentation, separator, and content slices.
 ///
 /// The returned indentation width treats a tab as four columns so nested counters use the same
@@ -78,15 +75,23 @@ fn indent_len(indent: &str) -> usize {
         .fold(0, |acc, ch| acc + if ch == '\t' { 4 } else { 1 })
 }
 
-/// Reports whether a non-list line begins with ordinary alphanumeric paragraph text.
-fn is_plain_paragraph_line(line: &str) -> bool {
-    matches!(
-        line.trim_start()
-            .trim_start_matches(|c: char| FORMATTING_CHARS.contains(&c))
-            .chars()
-            .next(),
-        Some(c) if c.is_alphanumeric()
-    )
+/// Measures a line's leading whitespace in parser columns.
+fn leading_indent(line: &str) -> usize {
+    let indent_end = line
+        .char_indices()
+        .find(|&(_, c)| !c.is_whitespace())
+        .map_or_else(|| line.len(), |(i, _)| i);
+    indent_len(&line[..indent_end])
+}
+
+/// Reports whether a line opens a bullet list item (`-`, `*` or `+` then space or end).
+///
+/// A bullet item can interrupt a list without a blank line, so it ends an
+/// ordered list at the same or a deeper marker column even when it follows
+/// an item directly.
+fn is_bullet_item(line: &str) -> bool {
+    let mut chars = line.trim_start().chars();
+    matches!(chars.next(), Some('-' | '*' | '+')) && chars.next().is_none_or(char::is_whitespace)
 }
 
 /// Holds ordered-list counters keyed by indentation depth.
@@ -171,26 +176,37 @@ impl ListState {
         }
     }
 
-    /// Resets the current level after a blank line followed by a plain paragraph.
-    fn handle_paragraph_restart(&mut self, indent: usize, line: &str, prev_blank: bool) -> bool {
-        let inclusive = prev_blank
-            && self
-                .indent_stack
-                .last()
-                .is_some_and(|&depth| indent <= depth && is_plain_paragraph_line(line));
-        if inclusive {
-            self.prune_deeper(indent, true);
+    /// Ends every list whose markers sit at `indent` or deeper.
+    ///
+    /// A block that starts at or left of a list's marker column cannot belong
+    /// to that list's items, so the list ends and the next marker at that
+    /// depth starts a new list.
+    fn end_lists_from_marker(&mut self, indent: usize) { self.prune_deeper(indent, true); }
+
+    /// Applies a non-item block at `indent` to the active lists.
+    ///
+    /// After a blank line, any block at or left of a list's marker column ends
+    /// that list: a paragraph, a table, a block quote, an HTML block or a
+    /// bullet list alike. A bullet item ends it even without the blank line,
+    /// because it can interrupt. Otherwise the line continues the enclosing
+    /// item lazily, and only deeper lists end.
+    fn apply_block(&mut self, indent: usize, line: &str, prev_blank: bool) {
+        if prev_blank || is_bullet_item(line) {
+            self.end_lists_from_marker(indent);
+        } else {
+            self.prune_deeper(indent, false);
         }
-        inclusive
     }
 }
 
 /// Renumber ordered Markdown list items across the given lines.
-/// - Preserve code fences; do not renumber inside them.
+/// Renumber ordered Markdown list items across the given lines.
+/// - Preserve code fences; do not renumber inside them. A fence line at or left of a list's marker
+///   column ends that list.
 /// - End the lists at or right of a heading's or thematic break's column; one indented into an item
 ///   leaves that item's list counting, and one at column 0 ends every list.
-/// - Restart numbering after a blank line followed by a plain paragraph at the same or a shallower
-///   indent.
+/// - End a list at any other block at or left of its marker column that follows a blank line, and
+///   at a bullet item there with or without one; the next list restarts at one.
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
@@ -202,6 +218,10 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     for line in lines {
         let fence = fences.observe_source_line(line);
         if fence.is_fence_marker {
+            // A fence line at a list's marker column is a sibling block, not
+            // item content, so it ends that list as a paragraph would. A
+            // closing fence left of its opener is outside the item too.
+            state.end_lists_from_marker(leading_indent(line));
             out.push(line.clone());
             prev_blank = false;
             continue;
@@ -223,12 +243,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             prev_blank = false;
             continue;
         }
-        let indent_end = line
-            .char_indices()
-            .find(|&(_, c)| !c.is_whitespace())
-            .map_or_else(|| line.len(), |(i, _)| i);
-        let indent_str = &line[..indent_end];
-        let indent = indent_len(indent_str);
+        let indent = leading_indent(line);
         let relative = relative_to(line, indent, state.containing_content_column(indent));
         let classified = classify_line_with_body(&relative, &ClassifyCtx::default());
         let prefix = &relative[..relative.len() - classified.body.len()];
@@ -246,10 +261,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             prev_blank = false;
             continue;
         }
-        let did_inclusive = state.handle_paragraph_restart(indent, line, prev_blank);
-        if !did_inclusive {
-            state.prune_deeper(indent, false);
-        }
+        state.apply_block(indent, line, prev_blank);
         out.push(line.clone());
         prev_blank = false;
     }

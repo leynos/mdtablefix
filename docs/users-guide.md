@@ -527,6 +527,13 @@ One at column 0, or indented less than the content column, ends the list, and
 the next list restarts at one. The content column is measured on the renumbered
 marker, so a second pass reaches the same result.
 
+Renumbering restarts at one wherever the list ends. A heading or a thematic
+break ends every list. After a blank line, any block at or left of a list's
+marker column ends that list: a paragraph, a fenced code block, a table, a
+block quote, an HTML block or a bullet list. A bullet item or a fence line at
+that column ends it even without the blank line. A block indented right of the
+marker column belongs to the item, so the list keeps counting past it.
+
 When a footnote reference immediately follows an inline code span or Markdown
 link without intervening whitespace—for example `` `code`.[^ref] `` or
 `[text](url).[^ref]`—the reference stays on the same line as the preceding

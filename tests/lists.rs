@@ -146,9 +146,10 @@ fn malformed_fences_do_not_break_list_renumbering() {
         lines_vec!["1. first", "2. second", "7. third"],
         lines_vec!["1. first", "2. second", "3. third"]
     ),
+    // A fence at the list's marker column ends the list (issue #563).
     case::with_fence(
         lines_vec!["1. item", "```", "code", "```", "9. next"],
-        lines_vec!["1. item", "```", "code", "```", "2. next"]
+        lines_vec!["1. item", "```", "code", "```", "1. next"]
     ),
     case::nested_lists(
         lines_vec!["1. first", "    1. sub first", "    3. sub second", "2. second"],
@@ -300,6 +301,84 @@ fn renumber_issue_450_neighbouring_shapes(
 #[test]
 fn renumber_issue_450_cli_keeps_counting_past_a_nested_heading() {
     let input = include_str!("data/issue_450_nested_heading_input.txt");
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--renumber")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(input);
+}
+
+/// Regression cases for issue #563: a block that ends an ordered list resets
+/// numbering for the next list.
+///
+/// Each fixture is a list, then a block at the list's marker column, then a
+/// second list that the source starts at one. `CommonMark` ends the first list
+/// at that block, so renumbering must leave the second list at one; carrying
+/// the count across it changes the rendered `start` of the second list.
+#[rstest]
+#[case::fence(include_lines!("data/issue_563_fence_input.txt"))]
+#[case::bullet_list(include_lines!("data/issue_563_bullet_list_input.txt"))]
+#[case::table(include_lines!("data/issue_563_table_input.txt"))]
+#[case::block_quote(include_lines!("data/issue_563_block_quote_input.txt"))]
+#[case::html_comment(include_lines!("data/issue_563_html_comment_input.txt"))]
+#[case::link_paragraph(include_lines!("data/issue_563_link_paragraph_input.txt"))]
+fn renumber_issue_563_block_at_marker_column_ends_the_list(#[case] input: Vec<String>) {
+    let once = renumber_lists(&input);
+    assert_eq!(once, input);
+    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+}
+
+/// Regression cases for issue #563, the neighbouring shapes: a block
+/// indented into an item, or a bullet item that interrupts without a blank
+/// line, is decided by its column alone.
+///
+/// A block right of the list's marker column belongs to the item and the
+/// list keeps counting; one at a nested list's marker column ends only that
+/// nested list; a bullet item at the marker column ends the list even with
+/// no blank line before it.
+#[rstest]
+#[case::fence_inside_item(
+    lines_vec!["1. a", "   ```", "   code", "   ```", "5. b"],
+    lines_vec!["1. a", "   ```", "   code", "   ```", "2. b"]
+)]
+#[case::bullet_inside_item(
+    lines_vec!["1. a", "", "   - sub", "", "5. b"],
+    lines_vec!["1. a", "", "   - sub", "", "2. b"]
+)]
+#[case::fence_at_nested_marker_column(
+    lines_vec![
+        "1. Outer", "   1. Inner", "   2. Inner", "", "   ```", "   code", "   ```", "",
+        "   4. Inner again", "5. Outer again",
+    ],
+    lines_vec![
+        "1. Outer", "   1. Inner", "   2. Inner", "", "   ```", "   code", "   ```", "",
+        "   1. Inner again", "2. Outer again",
+    ]
+)]
+#[case::bullet_interrupts_without_blank(
+    lines_vec!["1. a", "2. b", "- bullet", "3. c"],
+    lines_vec!["1. a", "2. b", "- bullet", "1. c"]
+)]
+#[case::lazy_paragraph_continues(
+    lines_vec!["1. a", "[lazy](u) continuation", "3. b"],
+    lines_vec!["1. a", "[lazy](u) continuation", "2. b"]
+)]
+fn renumber_issue_563_neighbouring_shapes(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+) {
+    let once = renumber_lists(&input);
+    assert_eq!(once, expected);
+    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+}
+
+/// Regression case for issue #563 through the CLI: `--renumber` leaves the
+/// list after an ending fence at one.
+#[test]
+fn renumber_issue_563_cli_keeps_the_restart_after_a_fence() {
+    let input = include_str!("data/issue_563_fence_input.txt");
     Command::cargo_bin("mdtablefix")
         .expect("Failed to create cargo command for mdtablefix")
         .arg("--renumber")

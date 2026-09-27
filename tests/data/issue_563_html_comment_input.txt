@@ -1,0 +1,6 @@
+1. First item.
+2. Second item.
+
+<!-- markdownlint-disable-next-line MD029 -->
+
+1. A new list after the comment.
