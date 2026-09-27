@@ -163,10 +163,13 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         } else {
             classify_line_with_body(line, &context)
         };
+        let is_in_item = state
+            .lists
+            .contains_block(depth, structural_content_indent(line, classified.body));
         state.observe(line, &classified, depth);
 
         if is_canonical_break_line(line, &context) {
-            out.push(canonicalized_break(prefix));
+            out.push(canonicalized_break(prefix, is_in_item));
         } else {
             out.push(Cow::Borrowed(line.as_str()));
         }
@@ -175,9 +178,15 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
     out
 }
 
-/// Retains a quote prefix when emitting the shared canonical break line.
-fn canonicalized_break(prefix: &str) -> Cow<'static, str> {
-    if prefix.contains('>') {
+/// Retains a structural prefix when emitting the shared canonical break line.
+///
+/// A quote prefix is always kept. Indentation is kept when the break sits
+/// inside a list item, because moving it to column 0 would take the break,
+/// and everything after it, out of the item (#572). Elsewhere indentation of
+/// up to three spaces changes nothing structural, so the break is emitted at
+/// column 0.
+fn canonicalized_break(prefix: &str, is_in_item: bool) -> Cow<'static, str> {
+    if prefix.contains('>') || (is_in_item && !prefix.is_empty()) {
         Cow::Owned(format!("{prefix}{}", canonical_break()))
     } else {
         Cow::Borrowed(canonical_break())

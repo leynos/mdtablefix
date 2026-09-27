@@ -47,9 +47,11 @@ each formatting flag is described in the sections that follow.
 _Table 1: The command-line flags._
 
 With `--breaks`, a thematic break inside a blockquote keeps its quote prefix;
-for example, `> ---` becomes a `>` marker, a space, and 70 underscores. A `---`
-line immediately below compatible paragraph text is a Setext heading underline
-and remains unchanged, even when only `--breaks` is selected.
+for example, `> ---` becomes a `>` marker, a space, and 70 underscores. A break
+indented to a list item's content column keeps that indentation, so it stays
+inside the item; elsewhere the break is written at column 0. A `---` line
+immediately below compatible paragraph text is a Setext heading underline and
+remains unchanged, even when only `--breaks` is selected.
 
 ### The four file modes
 

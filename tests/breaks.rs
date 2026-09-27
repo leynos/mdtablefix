@@ -230,3 +230,79 @@ fn test_cli_breaks_option() {
         .success()
         .stdout(format!("{}\n", "_".repeat(THEMATIC_BREAK_LEN)));
 }
+
+/// Returns `format_breaks` output as owned lines, for whole-document comparisons.
+fn formatted(lines: &[String]) -> Vec<String> {
+    format_breaks(lines)
+        .into_iter()
+        .map(std::borrow::Cow::into_owned)
+        .collect()
+}
+
+/// Returns the canonical break behind `indent`.
+fn indented_break(indent: &str) -> String { format!("{indent}{}", "_".repeat(THEMATIC_BREAK_LEN)) }
+
+/// Regression cases for issue #572: a thematic break inside a list item keeps
+/// its indentation and stays in the item.
+///
+/// A break indented to an item's content column is a child block of that
+/// item. Canonicalising it at column 0 took it, and the item's remaining
+/// content, out of the list, and split the list in two. Only the break's
+/// characters are canonical; its indentation is structural.
+#[rstest]
+#[case::after_a_blank_line(include_lines!("data/issue_572_break_in_item_input.txt"), 4, "   ")]
+#[case::in_a_bullet_item(lines_vec!["- item", "", "  ***", "", "  more"], 2, "  ")]
+fn breaks_issue_572_break_in_item_keeps_its_indentation(
+    #[case] input: Vec<String>,
+    #[case] break_index: usize,
+    #[case] indent: &str,
+) {
+    let once = formatted(&input);
+    let mut expected = input.clone();
+    expected[break_index] = indented_break(indent);
+    assert_eq!(once, expected);
+    assert_eq!(formatted(&once), once, "a second pass changes nothing");
+}
+
+/// Regression cases for issue #572, the neighbouring shapes: a break that is
+/// not inside an item is still canonicalised at column 0.
+///
+/// Indentation of up to three spaces outside an item changes nothing
+/// structural, and a break left of an item's content column has already left
+/// the item, so both keep the column-0 canonical form.
+#[rstest]
+#[case::top_level_indent(lines_vec!["text", "", "  ***"], 2)]
+#[case::left_of_the_content_column(lines_vec!["1. item", "", "  ***"], 2)]
+#[case::after_the_list_ends(lines_vec!["1. item", "", "para", "", "   ***"], 4)]
+fn breaks_issue_572_break_outside_an_item_is_emitted_at_column_zero(
+    #[case] input: Vec<String>,
+    #[case] break_index: usize,
+) {
+    let once = formatted(&input);
+    assert_eq!(once[break_index], indented_break(""));
+    assert_eq!(formatted(&once), once, "a second pass changes nothing");
+}
+
+/// Regression case for issue #572: a break indented four or more columns,
+/// such as one inside a `10.` item, reads as indented code without list
+/// context, so the pass leaves it exactly as written rather than moving it.
+#[test]
+fn breaks_issue_572_break_at_four_columns_is_left_as_written() {
+    let input = lines_vec!["10. item", "", "    ***", "", "    more"];
+    assert_eq!(formatted(&input), input);
+}
+
+/// Regression case for issue #572 through the CLI: `--breaks` keeps the
+/// reproduction's break inside its item.
+#[test]
+fn breaks_issue_572_cli_keeps_the_break_in_the_item() {
+    let input = include_str!("data/issue_572_break_in_item_input.txt");
+    let expected = input.replace("   ***", &indented_break("   "));
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--breaks")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(expected);
+}
