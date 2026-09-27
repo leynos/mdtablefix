@@ -3,9 +3,10 @@
 ## Unreleased
 
 - Fixed: `--renumber` no longer ends an ordered list at a heading or thematic
-  break indented into one of its items; only the lists at or right of the
-  block's column end. Since #106 every such block up to three spaces deep reset
-  all list state, so the items after it restarted at one.
+  break indented into one of its items. Such a block now ends only the lists
+  whose current item it is not indented into, judged by the item's content
+  column. Since #106 every such block up to three spaces deep reset all list
+  state, so the items after it restarted at one.
   ([#450](https://github.com/leynos/mdtablefix/issues/450))
 
 ## v0.6.0

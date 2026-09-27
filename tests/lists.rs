@@ -222,10 +222,15 @@ fn renumber_issue_450_block_inside_an_item_keeps_the_list_counting(#[case] input
 }
 
 /// Regression cases for issue #450, the neighbouring shapes #106 touched: a
-/// heading or break ends exactly the lists at or right of its column.
+/// heading or break ends exactly the lists whose current item it is not
+/// indented into.
 ///
-/// At a nested list's marker column it ends that nested list only, and the
-/// outer list keeps counting; at column 0 it ends every list.
+/// #106 reset on every ATX heading and thematic break indented zero to three
+/// spaces. Under `1. `, whose content starts at column 3, a heading at three
+/// spaces is inside the item and the list continues; at one or two spaces it
+/// is not, so the list ends as it does at column 0, which #106 intended. A
+/// block inside the outer item but left of a nested item's content ends the
+/// nested list only.
 #[rstest]
 #[case::heading_at_nested_marker_column(
     lines_vec![
@@ -240,6 +245,28 @@ fn renumber_issue_450_block_inside_an_item_keeps_the_list_counting(#[case] input
 #[case::break_at_nested_marker_column(
     lines_vec!["1. Outer", "   1. Inner", "", "   ---", "", "   4. Inner again", "6. Outer again"],
     lines_vec!["1. Outer", "   1. Inner", "", "   ---", "", "   1. Inner again", "2. Outer again"]
+)]
+#[case::heading_three_spaces_inside_item(
+    lines_vec!["1. a", "", "   ### h", "", "5. b"],
+    lines_vec!["1. a", "", "   ### h", "", "2. b"]
+)]
+#[case::heading_two_spaces_ends_list(
+    lines_vec!["1. a", "", "  ### h", "", "5. b"],
+    lines_vec!["1. a", "", "  ### h", "", "1. b"]
+)]
+#[case::heading_one_space_ends_list(
+    lines_vec!["1. a", "", " ### h", "", "5. b"],
+    lines_vec!["1. a", "", " ### h", "", "1. b"]
+)]
+#[case::break_two_spaces_ends_list(
+    lines_vec!["1. a", "", "  ***", "", "5. b"],
+    lines_vec!["1. a", "", "  ***", "", "1. b"]
+)]
+// The content column is measured on the emitted marker, so `10.` becoming
+// `2.` puts the heading inside the item on the first pass as on the second.
+#[case::heading_after_a_narrowed_marker(
+    lines_vec!["9. a", "10. b", "", "   ### h", "", "4. c"],
+    lines_vec!["1. a", "2. b", "", "   ### h", "", "3. c"]
 )]
 #[case::heading_at_margin(
     lines_vec!["1. a", "4. b", "", "# Title", "", "6. c", "9. d"],

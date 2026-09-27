@@ -30,6 +30,25 @@ fn parse_numbered(line: &str) -> Option<(usize, &str, &str, &str)> {
     Some((indent, indent_str, sep, rest))
 }
 
+/// Returns the column where a renumbered item's content starts, in parser columns.
+///
+/// `CommonMark` places it after the marker and the following spaces, except
+/// that an empty item, or one followed by five or more columns of space,
+/// starts its content one column after the marker. The marker measured is
+/// the emitted one, `number` and its dot, because the emitted line is what a
+/// second pass reads: measuring the source marker would let `10.` becoming
+/// `2.` move a block into the item between passes.
+fn content_column(indent: usize, number: usize, sep: &str, rest: &str) -> usize {
+    let marker = number.to_string().len() + 1;
+    let spacing = indent_len(sep);
+    let gap = if rest.is_empty() || spacing > 4 {
+        1
+    } else {
+        spacing
+    };
+    indent + marker + gap
+}
+
 /// Removes counters deeper than the current list item, optionally including its own depth.
 fn prune_deeper(
     indent: usize,
@@ -72,6 +91,11 @@ struct ListState {
     indent_stack: Vec<usize>,
     /// Next item number for each active indentation level.
     counters: HashMap<usize, usize>,
+    /// Content column of the latest item at each active indentation level.
+    ///
+    /// A block belongs to that item only when it is indented at least this
+    /// far, which is what decides whether it ends the list.
+    content_columns: HashMap<usize, usize>,
 }
 
 impl ListState {
@@ -97,18 +121,37 @@ impl ListState {
         current
     }
 
-    /// Ends every list whose markers sit at `indent` or deeper.
+    /// Records where the latest item at `indent` starts its content.
+    fn record_content_column(&mut self, indent: usize, column: usize) {
+        self.content_columns.insert(indent, column);
+    }
+
+    /// Ends every list whose current item cannot contain a block at `column`.
     ///
-    /// A block that starts at or left of a list's marker column cannot belong
-    /// to that list's items, so the list ends and the next marker at that
-    /// depth starts a new list. Lists with shallower markers continue.
-    fn end_lists_at(&mut self, indent: usize) {
+    /// A block belongs to an item only when it is indented to the item's
+    /// content column, so a block left of that column ends the list and the
+    /// next marker at that depth starts a new one. Lists whose items do
+    /// contain the block continue. A depth with no recorded content column
+    /// is treated as ending right after its marker column.
+    fn end_lists_at(&mut self, column: usize) {
         debug!(
-            indent,
+            column,
             indent_depths = self.indent_stack.len(),
-            "ending ordered lists at or right of a block's column"
+            "ending ordered lists whose items cannot contain the block"
         );
-        self.prune_deeper(indent, true);
+        while let Some(&depth) = self.indent_stack.last() {
+            let content = self
+                .content_columns
+                .get(&depth)
+                .copied()
+                .unwrap_or(depth + 1);
+            if content <= column {
+                break;
+            }
+            self.indent_stack.pop();
+            self.counters.remove(&depth);
+            self.content_columns.remove(&depth);
+        }
     }
 
     /// Resets the current level after a blank line followed by a plain paragraph.
@@ -158,6 +201,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
         }
         if let Some((indent, indent_str, sep, rest)) = parse_numbered(line) {
             let current = state.next_number(indent);
+            state.record_content_column(indent, content_column(indent, current, sep, rest));
             out.push(format!("{indent_str}{current}.{sep}{rest}"));
             prev_blank = false;
             continue;
