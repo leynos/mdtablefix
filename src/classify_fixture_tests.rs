@@ -67,6 +67,9 @@ fn line_hash(line: &str) -> u64 {
         })
 }
 
+/// Renders fixture paths independently of the host path separator.
+fn snapshot_path(path: &Utf8Path) -> String { path.as_str().replace('\\', "/") }
+
 /// Classifies a complete fixture while carrying fence and preceding-line state.
 fn classify_fixture(fixture: &Fixture, oracle: &mut String) {
     let mut open_fence = None;
@@ -87,7 +90,7 @@ fn classify_fixture(fixture: &Fixture, oracle: &mut String) {
         writeln!(
             oracle,
             "{}\t{}\t{:016x}\t{class:?}",
-            fixture.path,
+            snapshot_path(&fixture.path),
             line_index + 1,
             line_hash(line),
         )
@@ -104,6 +107,14 @@ fn classify_fixture(fixture: &Fixture, oracle: &mut String) {
         previous_prefix.clear();
         previous_prefix.push_str(prefix);
     }
+}
+
+#[test]
+fn snapshot_paths_use_forward_slashes() {
+    assert_eq!(
+        snapshot_path(Utf8Path::new(r"nested\fixture.txt")),
+        "nested/fixture.txt"
+    );
 }
 
 /// Every repository fixture retains its checked-in per-line classification.
