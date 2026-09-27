@@ -6,7 +6,7 @@
 use proptest::prelude::*;
 use rstest::rstest;
 
-use crate::wrap::{FenceTracker, is_fence};
+use crate::wrap::{FenceTracker, Region, classify_regions, is_fence};
 
 #[test]
 fn fence_tracker_new_starts_outside_fence() {
@@ -375,4 +375,55 @@ fn fence_tracker_rejects_non_ascii_whitespace_close(#[case] closing: &str) {
     // A bare marker still closes.
     assert!(tracker.observe("```", 0));
     assert!(!tracker.in_fence(0));
+}
+
+/// The two non-vacuity witnesses for the region-classification obligation.
+///
+/// Both documents open with four backticks and carry an interior three-backtick
+/// line. The only difference is the final line, so the pair pins down exactly
+/// which property distinguishes the two outcomes: a shorter marker never closes
+/// a wider fence, and an interior marker never becomes literal merely because a
+/// later delimiter closes the block.
+#[test]
+fn regions_witness_wider_closer_stays_literal() {
+    let lines = ["````", "```", "literal", "````"];
+    assert_eq!(
+        classify_regions(lines),
+        vec![
+            Region::Delim,
+            Region::Literal,
+            Region::Literal,
+            Region::Delim
+        ],
+    );
+}
+
+#[test]
+fn regions_witness_shorter_closer_leaves_the_opener_printed() {
+    // The document ends inside the fence, so the interior three-backtick line
+    // is literal content and the trailing line stays inside the same region.
+    let lines = ["````", "```", "literal", "```"];
+    assert_eq!(
+        classify_regions(lines),
+        vec![
+            Region::Delim,
+            Region::Literal,
+            Region::Literal,
+            Region::Literal
+        ],
+    );
+}
+
+/// The issue #480 reproduction, stated as a specification test.
+///
+/// A four-backtick opener followed by a three-backtick line and a payload line
+/// must leave the payload literal. The defect this pins is a pass that reads
+/// the interior three-backtick line as a closer and then rewrites the payload.
+#[test]
+fn regions_treats_payload_after_interior_shorter_fence_as_literal() {
+    let lines = ["````", "```", "literal..."];
+    assert_eq!(
+        classify_regions(lines),
+        vec![Region::Delim, Region::Literal, Region::Literal],
+    );
 }

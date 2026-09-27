@@ -1,4 +1,10 @@
-// Shared Cargo and Verus expansion forms for the production scanner.
+// Shared Cargo and Verus expansion forms for a production proof kernel.
+//
+// A kernel includes this file to emit one executable body for both builds:
+// the plain Rust function Cargo compiles, and the same function carrying its
+// contracts and loop invariants under Verus. Every kernel in this crate uses
+// the same expansion, so a contract written here is the contract the verifier
+// sees.
 //
 // Each macro matches the verifier's external-body marker as a literal, in its
 // own arm, rather than through a `verifier::$external:ident` metavariable. A
