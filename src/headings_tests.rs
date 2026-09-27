@@ -29,17 +29,22 @@ use super::*;
     vec!["   > ## Title".into()]
 )]
 fn converts_setext_headings(#[case] input: Vec<String>, #[case] expected: Vec<String>) {
+    assert_eq!(convert_setext_headings(&input), expected);
+}
+
+/// Production output retains its prefix and reparses as an ATX heading.
+#[rstest]
+#[case(vec!["Heading".into(), "===".into()], "# Heading")]
+#[case(vec!["   Heading".into(), "   ====".into()], "   # Heading")]
+#[case(vec!["> Quote".into(), "> ----".into()], "> ## Quote")]
+fn emitted_setext_heading_is_atx(#[case] input: Vec<String>, #[case] expected: &str) {
     let output = convert_setext_headings(&input);
 
-    assert_eq!(output, expected);
-    for (source, emitted) in input.iter().zip(&output) {
-        if source != emitted {
-            assert_eq!(
-                crate::classify::classify_line(emitted, &ClassifyCtx::default()),
-                LineClass::AtxHeading,
-            );
-        }
-    }
+    assert_eq!(output, vec![expected.to_string()]);
+    assert_eq!(
+        crate::classify::classify_line(&output[0], &ClassifyCtx::default()),
+        LineClass::AtxHeading,
+    );
 }
 
 #[rstest]

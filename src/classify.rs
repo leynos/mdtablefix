@@ -203,10 +203,10 @@ pub(crate) fn is_table_line(line: &str, ctx: &ClassifyCtx) -> bool {
 #[must_use]
 pub(crate) fn can_be_orphan_specifier(line: &str, ctx: &ClassifyCtx) -> bool {
     let chars = line.chars().collect::<Vec<_>>();
-    let accepted = classify_line(line, ctx) != LineClass::ThematicBreak;
+    let accepted = crate::classify_kernel::consumers::can_be_orphan_specifier_seq(&chars, ctx);
     debug_assert_eq!(
         accepted,
-        crate::classify_kernel::consumers::can_be_orphan_specifier_seq(&chars, ctx),
+        classify_line(line, ctx) != LineClass::ThematicBreak,
         "the orphan adapter and production classifier must agree",
     );
     accepted
