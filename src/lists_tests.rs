@@ -17,30 +17,17 @@ fn parse_numbered_with_tab() {
     assert_eq!(parse_numbered(line), Some((4, "	", "	", "foo")));
 }
 
-#[test]
-fn simple_renumber() {
-    let input = vec!["1. a", "3. b"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    let expected = vec!["1. a", "2. b"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    assert_eq!(renumber_lists(&input), expected);
-}
+/// Returns owned lines for a renumbering case.
+fn owned(lines: &[&str]) -> Vec<String> { lines.iter().map(|line| (*line).to_string()).collect() }
 
-#[test]
-fn nested_renumber() {
-    let input = vec!["1. a", "    1. sub", "    3. sub2", "2. b"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    let expected = vec!["1. a", "    1. sub", "    2. sub2", "2. b"]
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    assert_eq!(renumber_lists(&input), expected);
+#[rstest::rstest]
+#[case::simple(&["1. a", "3. b"], &["1. a", "2. b"])]
+#[case::nested(
+    &["1. a", "    1. sub", "    3. sub2", "2. b"],
+    &["1. a", "    1. sub", "    2. sub2", "2. b"]
+)]
+fn renumbers_in_sequence(#[case] input: &[&str], #[case] expected: &[&str]) {
+    assert_eq!(renumber_lists(&owned(input)), owned(expected));
 }
 
 #[test]
