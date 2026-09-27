@@ -239,8 +239,29 @@ fn extract_separator_line(lines: &mut Vec<String>) -> Option<String> {
     sep_idx.map(|idx| lines.remove(idx))
 }
 
+/// Reports whether a line holds pipes and nothing else but whitespace.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert!(is_pipe_only(" |"));
+/// assert!(is_pipe_only("|  |  |"));
+/// assert!(!is_pipe_only("| a |"));
+/// ```
+fn is_pipe_only(line: &str) -> bool {
+    line.contains('|') && line.chars().all(|ch| ch == '|' || ch.is_whitespace())
+}
+
 /// Parses table rows and validates column consistency.
 fn parse_and_validate(trimmed: &[String], sep_line: Option<&String>) -> Option<ParsedTable> {
+    // Reflow discards a row whose cells are all empty. A line made only of
+    // pipes is such a row, and discarding it deletes text the source wrote:
+    // paragraph pipes when the block has no delimiter row, an empty table row
+    // when it has one (#582). Leave the candidate exactly as written instead.
+    if trimmed.iter().any(|line| is_pipe_only(line)) {
+        debug!(reason = "pipe_only_line", "table candidate rejected");
+        return None;
+    }
     let (rows, split_within_line) = crate::reflow::parse_rows(trimmed);
     let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
     let (sep_cells, sep_row_idx) = crate::reflow::detect_separator(sep_line, &rows, max_cols);

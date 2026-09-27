@@ -112,17 +112,17 @@ fn reflow_table_keeps_the_delimiter_row_of_a_table_with_an_empty_header() {
     // `|  |  |` is made only of pipes and spaces, so `SEP_RE` matches it.
     // Taking the empty header for the delimiter row demoted the real
     // delimiter row to a data row and left two delimiter-shaped rows for
-    // later passes to consume in turn, so the table never settled.
+    // later passes to consume in turn, so the table never settled. #502 then
+    // dropped the empty header as an empty row, which promoted the body row
+    // `a` to the header and deleted the body (#582). A table with a
+    // pipe-only row is left exactly as written, which is a fixed point.
     let lines = vec![
         "|  |  |".to_string(),
         "| --- | --- |".to_string(),
         "| a |  |".to_string(),
     ];
 
-    assert_eq!(
-        reflow_table(&lines),
-        vec!["| a   |     |".to_string(), "| --- | --- |".to_string()]
-    );
+    assert_eq!(reflow_table(&lines), lines);
 }
 
 #[test]

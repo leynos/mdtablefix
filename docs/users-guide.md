@@ -322,6 +322,10 @@ spaces (`|  |  |`), a lone dash among empty cells (`|  | - |`), `| - - |`, and
 a table with an empty header row from being restructured, and the same rule is
 applied wherever the formatter looks for an alignment row.
 
+A block that contains a line made only of pipes and spaces is left exactly as
+written. Such a line is an empty row in a table, and plain text in a pipe-led
+block that has no delimiter row; reflowing would discard it either way.
+
 Continuation rows are preserved during reflow. When a row starts with empty
 leading cells because its content continues from the previous row, those empty
 cells keep their original column positions instead of collapsing into the first

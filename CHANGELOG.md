@@ -21,6 +21,12 @@
   since `--breaks` was introduced in #57, which took the break and the rest of
   the item out of the list and split the list in two.
   ([#572](https://github.com/leynos/mdtablefix/issues/572))
+- Fixed: the table pass no longer drops a line made only of pipes and spaces.
+  In a pipe-led block with no delimiter row it deleted paragraph `|`
+  characters, and in a table it deleted an empty body row or promoted the first
+  body row over an empty header. Such a block is now left as written. A
+  regression from #502.
+  ([#582](https://github.com/leynos/mdtablefix/issues/582))
 
 ## v0.6.0
 
