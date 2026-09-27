@@ -7,7 +7,7 @@ use tracing::debug;
 
 use crate::{
     classify::{ClassifyCtx, LineClass, classify_line_with_body},
-    wrap::FenceTracker,
+    wrap::{FenceObservation, FenceTracker},
 };
 
 /// Characters that mark formatted text at the start of a line.
@@ -41,6 +41,24 @@ fn holds_paragraph_text(line: &str) -> bool {
         classify_line_with_body(line.trim_start(), &ClassifyCtx::default()).class,
         LineClass::ParagraphText | LineClass::ListItem
     )
+}
+
+/// Returns whether a fenced or blank line passes through untouched, and if so whether it is blank.
+///
+/// Fence markers, fenced content and blank lines are copied as written; the
+/// caller only needs to know whether the line counts as a blank line.
+fn passes_through(fence: FenceObservation, line: &str) -> Option<bool> {
+    let is_blank = line.trim().is_empty();
+    (fence.is_fence_marker || fence.is_in_fence || is_blank).then_some(is_blank)
+}
+
+/// Reports whether a numbered line directly below paragraph text continues that paragraph.
+///
+/// It does when its marker is not `1.` and no active list at its column
+/// continues: only a list starting at 1 can interrupt a paragraph.
+fn continues_paragraph(state: &ListState, line: &str) -> bool {
+    parse_numbered(line)
+        .is_some_and(|(indent, ..)| !starts_at_one(line) && !state.has_list_at(indent))
 }
 
 /// Reports whether a numbered line's marker is `1.`, the only number that starts a list
@@ -158,30 +176,13 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut prev_text = false;
 
     for line in lines {
-        let fence = fences.observe_source_line(line);
-        if fence.is_fence_marker {
+        if let Some(is_blank) = passes_through(fences.observe_source_line(line), line) {
             out.push(line.clone());
-            prev_blank = false;
+            prev_blank = is_blank;
             prev_text = false;
             continue;
         }
-        if fence.is_in_fence {
-            out.push(line.clone());
-            prev_blank = line.trim().is_empty();
-            prev_text = false;
-            continue;
-        }
-        if line.trim().is_empty() {
-            out.push(line.clone());
-            prev_blank = true;
-            prev_text = false;
-            continue;
-        }
-        if let Some((indent, ..)) = parse_numbered(line)
-            && prev_text
-            && !starts_at_one(line)
-            && !state.has_list_at(indent)
-        {
+        if prev_text && continues_paragraph(&state, line) {
             // Only a list starting at 1 can interrupt a paragraph (issue
             // #573), so this line continues the paragraph above it.
             // Renumbering it to `1.` would turn the text into a list item.
