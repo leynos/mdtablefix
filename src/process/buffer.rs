@@ -8,6 +8,7 @@
 use tracing::debug;
 
 use crate::{
+    classify::{ClassifyCtx, LineClass, classify_line_with_body},
     ellipsis::replace_ellipsis,
     table::reflow_table,
     wrap::{LinkReferenceMatcher, classify_block, leading_indent},
@@ -19,6 +20,19 @@ pub(super) struct TableSubstitutions {
     pub(super) ellipsis: bool,
     /// Whether code-emphasis repair must run before table widths are measured.
     pub(super) code_emphasis: bool,
+}
+
+/// Reports whether a classifier decision opens a top-level table run.
+///
+/// A quoted pipe body is not a top-level table row, and a delimiter is only a
+/// table start when its own body leads with the pipe: the classifier accepts a
+/// bare delimiter run that closes an existing table instead.
+fn opens_table_run(line_class: LineClass, body: &str, is_quoted: bool) -> bool {
+    if is_quoted {
+        return false;
+    }
+    line_class == LineClass::TableRow
+        || (line_class == LineClass::TableDelimiter && body.starts_with('|'))
 }
 
 /// Identifies a non-empty line whose indentation makes it an indented code
@@ -164,11 +178,14 @@ impl ProcessBuffer {
     /// have been checked, preventing quoted, list, or definition lines that
     /// contain pipes from corrupting a table candidate.
     pub(super) fn handle_table_line(&mut self, line: String) -> Option<String> {
-        // A leading indent of four or more columns marks a Markdown indented
-        // code block, so such a line must stay verbatim and never enter table
-        // mode (otherwise `reflow_table` would rewrite its contents). This
-        // mirrors the `indent_width < 4` gate in `classify_block`.
-        if leading_indent(&line).0 < 4 && line.trim_start().starts_with('|') {
+        // The shared classifier returns Literal for indented code, so those
+        // lines must never enter table mode. A quoted pipe body is also not a
+        // top-level table row.
+        let classified = classify_line_with_body(&line, &ClassifyCtx::default());
+        let prefix = &line[..line.len() - classified.body.len()];
+        let is_quoted = prefix.contains('>');
+        let line_class = classified.class;
+        if opens_table_run(line_class, classified.body, is_quoted) {
             debug!(
                 line_len = line.len(),
                 buffered_lines = self.buf.len(),
@@ -178,10 +195,14 @@ impl ProcessBuffer {
             self.buf.push(line);
             return None;
         }
+        // No earlier line opened a table, so there is no run to extend or
+        // flush and the caller decides what this line is. Every branch below
+        // therefore starts from an active table and can flush unconditionally.
+        if !self.in_table {
+            return Some(line);
+        }
         if line.trim().is_empty() {
-            if self.in_table {
-                self.flush();
-            }
+            self.flush();
             return Some(line);
         }
         // Recognise a new Markdown block *before* the pipe heuristic below.
@@ -191,7 +212,12 @@ impl ProcessBuffer {
         // table from being reflowed (a stray non-table row makes
         // `reflow_table` bail). Flushing here keeps wrapping and table
         // detection aligned.
-        if self.in_table && classify_block(&line, LinkReferenceMatcher::production()).is_some() {
+        //
+        // Thematic breaks need no separate test: `classify_block` derives
+        // `BlockKind::ThematicBreak` from the same default-context
+        // classification that produced `line_class`, so every break already
+        // reaches this branch.
+        if classify_block(&line, LinkReferenceMatcher::production()).is_some() {
             debug!(
                 line_len = line.len(),
                 in_table = self.in_table,
@@ -201,17 +227,15 @@ impl ProcessBuffer {
             self.flush();
             return Some(line);
         }
-        if self.in_table && is_indented_content_line(&line) {
+        if is_indented_content_line(&line) {
             self.flush();
             return Some(line);
         }
-        if self.in_table && (line.contains('|') || crate::table::SEP_RE.is_match(line.trim())) {
+        if line.contains('|') || line_class == LineClass::TableDelimiter {
             self.buf.push(line);
             return None;
         }
-        if self.in_table {
-            self.flush();
-        }
+        self.flush();
         Some(line)
     }
 }

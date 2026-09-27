@@ -1,11 +1,13 @@
 //! Block-level Markdown prefix classification shared by wrapping and table detection.
 //!
-//! The regex helpers centralise detection for headings, lists, blockquotes, footnotes,
-//! markdownlint directives, and digit-prefixed paragraphs so wrapping and table handlers
-//! stay in sync.
+//! Headings, thematic breaks, and list items come from the shared classifier; the local regexes
+//! hold the residual roles: blockquotes, footnotes, markdownlint directives, link-reference
+//! definitions, and list-prefix capture during wrapping.
 
 use regex::Regex;
 use tracing::trace;
+
+use crate::classify::{ClassifyCtx, LineClass, classify_line};
 
 /// Returns the indentation width (treating tabs as four columns) and the byte
 /// offset of the first non-space or tab character.
@@ -65,13 +67,13 @@ pub(super) static MARKDOWNLINT_DIRECTIVE_RE: std::sync::LazyLock<Regex> = lazy_r
 pub(crate) enum BlockKind {
     /// Lines that begin with `#`, `##`, and similar heading prefixes.
     Heading,
-    /// Thematic breaks recognised by [`crate::breaks::THEMATIC_BREAK_RE`].
+    /// Thematic breaks recognized by [`crate::classify::classify_line`].
     ///
     /// This covers `***`, `___`, `---`, spaced runs such as `- - -`, and the
     /// underscore run emitted by `--breaks`, none of which are table
     /// separators.
     ThematicBreak,
-    /// Bullet or ordered list markers matched by [`BULLET_RE`].
+    /// Bullet or ordered list markers reported by [`crate::classify::classify_line`].
     Bullet,
     /// Lines that begin with one or more `>` markers.
     Blockquote,
@@ -87,15 +89,12 @@ pub(crate) enum BlockKind {
 
 /// Classifies block-level Markdown prefixes shared by wrapping and table detection.
 ///
-/// Detection order determines precedence when a line could match multiple prefixes.
-/// The current precedence is: heading, thematic break, bullet, blockquote,
-/// footnote definition, link reference definition, markdownlint directive,
-/// digit prefix. Headings outrank bullets and blockquotes,
-/// so inputs such as "# 1" remain headings rather than list items. Headings ignore
-/// indentation of four or more spaces so indented code remains untouched.
-/// Thematic breaks outrank bullets because [`BULLET_RE`] also matches spaced
-/// runs such as `- - -`; classifying those as breaks keeps them on their own
-/// line instead of absorbing them into a paragraph.
+/// Structural roles shared with other passes come from [`classify_line`].
+///
+/// This function keeps only the residual block roles that `LineClass` does not
+/// represent: blockquotes, footnotes, link definitions, and markdownlint
+/// directives.  The shared classifier gives headings, thematic breaks, and
+/// list items one precedence everywhere that needs them.
 /// For example, passing "> quote" returns `Some(BlockKind::Blockquote)` while
 /// "| cell |" yields `None` because the line is part of a table.
 pub(crate) fn classify_block(
@@ -105,36 +104,52 @@ pub(crate) fn classify_block(
     let (indent_width, indent_bytes) = leading_indent(line);
     let trimmed = line[indent_bytes..].trim_start();
 
-    if indent_width < 4 && trimmed.starts_with('#') {
-        return Some(BlockKind::Heading);
+    match classify_line(line, &ClassifyCtx::default()) {
+        LineClass::AtxHeading => return Some(BlockKind::Heading),
+        LineClass::ThematicBreak => {
+            trace!(
+                indent_width,
+                line_len = line.len(),
+                "classifying a line as a thematic break"
+            );
+            return Some(BlockKind::ThematicBreak);
+        }
+        LineClass::ListItem => return Some(BlockKind::Bullet),
+        _ => {}
     }
-    if indent_width < 4 && crate::breaks::THEMATIC_BREAK_RE.is_match(trimmed) {
-        trace!(
-            indent_width,
-            line_len = line.len(),
-            "classifying a line as a thematic break"
-        );
-        return Some(BlockKind::ThematicBreak);
-    }
-    if indent_width < 4 && BULLET_RE.is_match(line) {
-        return Some(BlockKind::Bullet);
-    }
-    if indent_width < 4 && BLOCKQUOTE_RE.is_match(line) {
-        return Some(BlockKind::Blockquote);
-    }
-    if indent_width < 4 && FOOTNOTE_RE.is_match(line) {
-        return Some(BlockKind::FootnoteDefinition);
-    }
-    if indent_width < 4
-        && (link_matcher.is_definition(line) || link_matcher.is_bare_label_only(line))
-    {
-        return Some(BlockKind::LinkReferenceDefinition);
-    }
-    if indent_width < 4 && is_markdownlint_directive(line) {
-        return Some(BlockKind::MarkdownlintDirective);
+    if let Some(kind) = classify_residual_block(line, link_matcher) {
+        return Some(kind);
     }
     if indent_width < 4 && trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         return Some(BlockKind::DigitPrefix);
+    }
+    None
+}
+
+/// Recognizes block starts that the shared line classifier does not represent.
+///
+/// Wrapping and Setext conversion call this only after obtaining their
+/// structural decision from the production line classifier. It is the sole
+/// boundary for regex and link-reference checks that remain outside that
+/// classifier.
+pub(crate) fn classify_residual_block(
+    line: &str,
+    link_matcher: super::link_reference::LinkReferenceMatcher,
+) -> Option<BlockKind> {
+    if leading_indent(line).0 >= 4 {
+        return None;
+    }
+    if BLOCKQUOTE_RE.is_match(line) {
+        return Some(BlockKind::Blockquote);
+    }
+    if FOOTNOTE_RE.is_match(line) {
+        return Some(BlockKind::FootnoteDefinition);
+    }
+    if link_matcher.is_definition(line) || link_matcher.is_bare_label_only(line) {
+        return Some(BlockKind::LinkReferenceDefinition);
+    }
+    if is_markdownlint_directive(line) {
+        return Some(BlockKind::MarkdownlintDirective);
     }
     None
 }
@@ -198,7 +213,7 @@ mod tests {
         case("2024 revenue", Some(BlockKind::DigitPrefix)),
         case("plain paragraph", None),
         case("| a | b |", None),
-        case("#123", Some(BlockKind::Heading)),
+        case("#123", None),
         case("1) list", Some(BlockKind::Bullet)),
         case(" 2024", Some(BlockKind::DigitPrefix)),
         case("    1. code", None)

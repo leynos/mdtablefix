@@ -63,6 +63,16 @@ fn reset_on_heading_and_thematic_break() {
     let expected = lines_vec!("1. a", "2. b", "# Heading", "1. c", "---", "1. d");
     assert_eq!(renumber_lists(&input), expected);
 }
+
+#[rstest::rstest]
+#[case::quoted_break("> ---")]
+#[case::quoted_heading("> # Heading")]
+fn quoted_structure_does_not_reset_list_numbering(#[case] quoted_line: &str) {
+    let input = lines_vec!("1. first", "2. second", quoted_line, "8. third");
+    let expected = lines_vec!("1. first", "2. second", quoted_line, "3. third");
+
+    assert_eq!(renumber_lists(&input), expected);
+}
 /// Tests the CLI `--renumber` option.
 ///
 /// Ensures that list numbering is corrected when the flag is supplied.

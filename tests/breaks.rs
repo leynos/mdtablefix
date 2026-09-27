@@ -4,6 +4,7 @@
 
 use assert_cmd::Command;
 use mdtablefix::{THEMATIC_BREAK_LEN, format_breaks};
+use rstest::rstest;
 
 #[macro_use]
 #[path = "common/mod.rs"]
@@ -37,6 +38,142 @@ fn test_format_breaks_basic() {
 }
 
 #[test]
+fn test_format_breaks_preserves_blockquote_prefix() {
+    let input = lines_vec!["> ---", "> > ***"];
+    let output = format_breaks(&input);
+
+    assert_eq!(output[0], format!("> {}", "_".repeat(THEMATIC_BREAK_LEN)));
+    assert_eq!(output[1], format!("> > {}", "_".repeat(THEMATIC_BREAK_LEN)));
+}
+
+/// A Setext underline remains borrowed source text without the headings pass.
+#[rstest]
+#[case("Title", "---")]
+#[case("> Title", "> ---")]
+#[case("  Title", " ---")]
+fn leaves_setext_underlines_unchanged(#[case] title: &str, #[case] underline: &str) {
+    let input = lines_vec![title, underline];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[0], title);
+    assert_borrowed_value!(output[1], underline);
+    assert!(std::ptr::eq(output[1].as_ref(), input[1].as_str()));
+}
+
+/// A blank line breaks the Setext pair, leaving a standalone thematic break.
+#[test]
+fn normalizes_break_after_blank_line() {
+    let input = lines_vec!["Title", "", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[1], "");
+    assert_borrowed_break!(output[2]);
+}
+
+/// An outdented break ends a list continuation rather than underlining it.
+#[test]
+fn normalizes_break_after_outdented_list_continuation() {
+    let input = lines_vec!["- item", "  continuation", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[0], "- item");
+    assert_borrowed_value!(output[1], "  continuation");
+    assert_borrowed_break!(output[2]);
+}
+
+/// Multiple marker separators move the list content beyond a two-space break.
+#[test]
+fn normalizes_break_below_wide_list_separator() {
+    let input = lines_vec!["-   Bar", "  ---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[0], "-   Bar");
+    assert_borrowed_break!(output[1]);
+}
+
+/// A lazy paragraph continuation still carries the list's content column.
+#[test]
+fn normalizes_break_after_lazy_list_continuation() {
+    let input = lines_vec!["- item", "lazy continuation", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[1], "lazy continuation");
+    assert_borrowed_break!(output[2]);
+}
+
+/// An indented item continuation remains in the list after a blank line.
+#[test]
+fn normalizes_break_after_blank_list_continuation() {
+    let input = lines_vec!["- item", "", "  continuation", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[2], "  continuation");
+    assert_borrowed_break!(output[3]);
+}
+
+/// A link definition is a block start, not Setext heading text.
+#[test]
+fn normalizes_break_after_link_definition() {
+    let input = lines_vec!["[a]: /url", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[0], "[a]: /url");
+    assert_borrowed_break!(output[1]);
+}
+
+/// An outdented break ends the list rather than underlining its link-shaped line.
+#[rstest]
+#[case(vec!["- item", "[a]: /url", "---"], 2)]
+#[case(vec!["- item", "  [a]: /url", "---"], 2)]
+fn normalizes_break_below_outdented_list_item_link(
+    #[case] source: Vec<&str>,
+    #[case] index: usize,
+) {
+    let input = source.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[index - 1], source[index - 1]);
+    assert_borrowed_break!(output[index]);
+}
+
+/// A link-shaped line after paragraph text remains part of that paragraph.
+#[test]
+fn preserves_setext_after_paragraph_link_shape() {
+    let input = lines_vec!["Title", "[a]: /url", "---"];
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[2], "---");
+    assert!(std::ptr::eq(output[2].as_ref(), input[2].as_str()));
+}
+
+/// A link-shaped line continues a list item's paragraph under its own indent.
+#[rstest]
+#[case(vec!["- item", "  [a]: /url", "  ---"], 2)]
+#[case(vec!["- item", "[a]: /url", "  ---"], 2)]
+fn preserves_setext_after_list_item_link_shape(#[case] source: Vec<&str>, #[case] index: usize) {
+    let input = source.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[index], "  ---");
+    assert!(std::ptr::eq(output[index].as_ref(), input[index].as_str()));
+}
+
+/// Underlines at a list item's content column stay inside that item.
+#[rstest]
+#[case(vec!["- Bar", "  ---"], 1)]
+#[case(vec!["- item", "   continuation", "  ---"], 2)]
+fn preserves_list_content_underlines(#[case] source: Vec<&str>, #[case] underline_index: usize) {
+    let input = source.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let output = format_breaks(&input);
+
+    assert_borrowed_value!(output[underline_index], "  ---");
+    assert!(std::ptr::eq(
+        output[underline_index].as_ref(),
+        input[underline_index].as_str()
+    ));
+}
+
+#[test]
 fn test_format_breaks_ignores_code() {
     let input = lines_vec!["```", "---", "```"];
     let output = format_breaks(&input);
@@ -62,12 +199,13 @@ fn test_format_breaks_with_spaces_and_indent() {
     assert_borrowed_break!(output[0]);
 }
 
+/// Leaves a tab-prefixed apparent break untouched as indented code.
 #[test]
-fn test_format_breaks_with_tabs_and_underscores() {
+fn leaves_tab_prefixed_break_as_indented_code() {
     let input = lines_vec!["\t_\t_\t_\t"];
     let output = format_breaks(&input);
 
-    assert_borrowed_break!(output[0]);
+    assert_borrowed_value!(output[0], "\t_\t_\t_\t");
 }
 
 #[test]

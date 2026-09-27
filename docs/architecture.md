@@ -48,8 +48,8 @@ The function combines several helpers documented in `docs/`:
   (case-insensitive) or consisting solely of whitespace are treated as absent.
   `compress_fences` also tolerates spaces within comma-separated specifiers,
   e.g. `TOML, Ini` becomes `toml,ini`.
-- `html::convert_html_tables` transforms basic HTML tables into Markdown so \
-  they can be reflowed like regular tables. See \
+- `html::convert_html_tables` transforms basic HTML tables into Markdown so
+  they can be reflowed like regular tables. See
   [HTML table support](#html-table-support-in-mdtablefix).
 - `wrap::wrap_text` applies optional line wrapping. It classifies Markdown
   block structure locally and delegates greedy line fitting to the `textwrap`
@@ -65,8 +65,8 @@ The function combines several helpers documented in `docs/`:
   classification — an ATX heading, thematic break, list item, blockquote,
   definition, directive, or fence marker — keeps its underline, so the line
   below it survives as a block of its own. A table delimiter row is refused on
-  the same grounds: it is table syntax rather than paragraph text, recognized
-  with the table parser's `SEP_RE`, so the break below it is not read as its
+  the same grounds: the shared classifier reports `LineClass::TableDelimiter`
+  for it rather than paragraph text, so the break below it is not read as its
   underline. The predicate is measured after the shared prefix is removed, so
   quoted headings still convert. A candidate indented by four or more columns
   is refused as an indented code block. The indentation width is measured on
@@ -76,6 +76,20 @@ The function combines several helpers documented in `docs/`:
 
 Heading conversion runs after fence/table processing and before wrapping, so
 the wrapping stage observes ATX headings and leaves them untouched.
+
+Structural line classes come from one shared classifier rather than from
+per-pass matching. `classify::classify_line` and
+`classify::classify_line_with_body` are the `&str` boundary over it: they
+return a `ClassifiedLine` carrying the selected `LineClass` and the body that
+follows the indentation and blockquote prefix. The decisions themselves belong
+to the pure `classify::classify_seq` kernel, which reads `&[char]` and a
+`ClassifyCtx` and performs no regex or I/O, and the adapter maps the kernel's
+Unicode scalar offsets back to checked UTF-8 byte offsets. That kernel owns
+headings, thematic breaks, list items, fence markers, tables, Setext
+underlines, blank lines and literal content. `wrap::classify_block` forwards
+those classes and then consults `wrap::classify_residual_block`, the sole
+boundary for the detection that remains outside the classifier: blockquotes,
+footnote definitions, link reference definitions and markdownlint directives.
 
 The function maintains a small state machine that tracks whether it is inside a
 Markdown table, an HTML table, or a fenced code block. The state determines how
@@ -1092,4 +1106,14 @@ the production function it verifies, and every contract it trusts at an
 external boundary. [ADR 0011](adrs/0011-verified-normalization-core.md)
 restricts proofs to narrow production-used kernels, so property tests continue
 to cover broad formatter behaviour while proofs establish their stated
-unbounded invariants.
+unbounded invariants. `verus/lib.rs` includes `classify_kernel.rs` by `#[path]`
+so the spec is written against the same source the binary compiles.
+`classify_seq` then proves its result against `spec_classify`, which is the
+structural precedence that kernel is required to implement. The consumer
+decisions are proved over that same kernel: `is_setext_text_seq`,
+`is_setext_underline_seq`, `is_canonical_break_seq`, and `is_atx_heading_seq` in
+`src/classify_kernel_consumers.rs` each prove their boolean equals whether
+`spec_classify` returns the class that consumer stands for. The ledger symbol
+names are enforced rather than merely documented:
+`scripts/check-verification-ledger.sh` runs under `make lint`, so renaming a
+claimed symbol fails the build instead of silently orphaning its row.

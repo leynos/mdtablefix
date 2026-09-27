@@ -90,12 +90,39 @@ production-used kernels. `make verus-selftest` runs `verus/smoke.rs`, whose
 deliberately false assertion must be rejected; it also fails when the runner
 does not reach Verus, so a skipped verifier cannot pass the check.
 
-The pull-request workflow runs both targets on Ubuntu. It caches the
-version-specific `.verus` directory using the runner operating system,
-architecture, and pinned Verus version, then executes the same Makefile targets
-used locally. The [verification ledger](verification.md) records each claim and
-its trusted boundary; [ADR 0011](adrs/0011-verified-normalization-core.md)
-documents why the proof scope remains a narrow production-used core.
+`make verus-mutation` runs `scripts/check-classifier-mutation.sh`. It changes
+the production Setext-text predicate to accept an ATX heading, then confirms
+Verus rejects its refinement postcondition. The mutation target is local.
+
+The pull-request workflow runs `make verus` and `make verus-selftest` on
+Ubuntu. It caches the version-specific `.verus` directory using the runner
+operating system, architecture, and pinned Verus version, then executes the
+same Makefile targets used locally. The [verification ledger](verification.md)
+records each claim and its trusted boundary;
+[ADR 0011](adrs/0011-verified-normalization-core.md) documents why the proof
+scope remains a narrow production-used core.
+
+The `verified_kernel_function!` and `verified_loop_function!` macros live in
+`src/classify_kernel_macros.rs`, included by `src/classify_kernel.rs`. They
+emit one shared executable body for Cargo and Verus, adding contracts and loop
+invariants only in the proof build. Their accepted attributes are limited to
+documentation, `must_use`, and the verifier's external-body marker, so macro
+callers cannot forward a lint-suppressing attribute. Use them only in the
+classifier kernel, its predicate module, and its consumer module; callers use
+the `&str` boundary in `src/classify.rs`. The consumer predicates for Setext
+and thematic-break decisions call `classify_seq` directly. Setext conversion
+also checks the assembled replacement with the verified ATX predicate before
+emitting it. A new scanner predicate should carry a narrow contract about its
+characters and cursor, then be proved from the same body before the top-level
+classifier refinement relies on it.
+
+`ListContinuationState` in `src/classify.rs` belongs only to the Setext and
+thematic-break consumers. It remembers the content indentation of an active
+list marker, then retains it through indented literal and lazy paragraph
+continuations, including an indented continuation after a blank line, so an
+outdented break cannot be consumed as their underline. It does not reclassify
+indented code as paragraph text and is not a general list parser; list
+rendering and renumbering retain their own state.
 
 ## Internal API reference
 
@@ -594,6 +621,14 @@ depth-aware tracking.
    blocks, headings, tables, directives, thematic breaks, link reference
    definitions, and blank lines stop paragraph accumulation.
 
+   `classify_residual_block` in the same module owns only blockquote, footnote,
+   link-reference, and markdownlint recognition. Wrapping calls it after the
+   shared line classifier; Setext conversion calls it after its candidate has
+   been classified as paragraph text. Callers must not use it in place of the
+   shared classifier for headings, lists, thematic breaks, or tables. This
+   keeps the regex and link-matcher boundary separate from the character
+   scanner's structural decision.
+
 2. **Prefix-aware paragraph handling.** `ParagraphWriter` in
    `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.
    `wrap_with_prefix` computes the available content width once from the
@@ -722,12 +757,13 @@ depth-aware tracking.
 
 **`BlockKind::ThematicBreak`**
 
-Classified by `classify_block` when the stripped line matches
-`crate::breaks::THEMATIC_BREAK_RE`: three or more `-`, `*`, or `_` characters,
-including spaced runs such as `- - -`. The check outranks bullet classification
-because `BULLET_RE` also matches spaced runs. A thematic break passes through
-wrapping on its own line and never enters paragraph accumulation. Table
-separator rows such as `|---|` contain pipes and remain table rows.
+Classified by `classify_block` when the shared classifier reports
+`LineClass::ThematicBreak`: three or more `-`, `*`, or `_` characters,
+including spaced runs such as `- - -`. The shared classifier ranks thematic
+breaks above list items, so a spaced run is a break rather than a bullet. A
+thematic break passes through wrapping on its own line and never enters
+paragraph accumulation. Table separator rows such as `|---|` contain pipes and
+remain table rows.
 
 **`BlockKind::LinkReferenceDefinition`**
 
@@ -1311,10 +1347,12 @@ It follows these rules:
    buffered blank lines verbatim.
 4. A thematic-break line is never treated as an attachable specifier, even
    though a run of underscores or hyphens matches the specifier pattern. The
-   guard is `is_thematic_break`, whose predicate is deliberately identical to
-   the one `format_breaks` uses, so a line the fences pass declines to attach
-   is exactly a line `format_breaks` rewrites. The break line and any buffered
-   blank lines are emitted unchanged.
+   guard is `is_thematic_break`, which takes its decision from the shared line
+   classifier, as `format_breaks` does. The two are no longer identical: the
+   break pass also preserves Setext underlines in their preceding-line context,
+   so a line the fences pass declines to attach is not necessarily one
+   `format_breaks` rewrites. The break line and any buffered blank lines are
+   emitted unchanged.
 
 This structure keeps the one non-trivial lookahead path local to the helper
 instead of spreading it between the main loop and several index-based search

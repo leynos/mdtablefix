@@ -54,6 +54,28 @@ fn plain_table_line_enters_table_mode() {
     assert!(buffer.out.is_empty());
 }
 
+#[test]
+fn pipe_leading_delimiter_starts_table_mode() {
+    let mut buffer = new_buffer();
+
+    assert!(handle_line(&mut buffer, "|---|---|").is_none());
+    assert!(handle_line(&mut buffer, "| a | b |").is_none());
+    assert_eq!(buffer.buf, owned(&["|---|---|", "| a | b |"]));
+    assert!(buffer.in_table);
+}
+
+#[rstest]
+#[case::plain_quote("> | quoted | row |")]
+#[case::indented_quote("  > | quoted | row |")]
+fn quoted_table_row_does_not_enter_table_mode(
+    #[case] line: &str,
+    #[from(new_buffer)] mut buffer: ProcessBuffer,
+) {
+    assert_eq!(handle_line(&mut buffer, line), Some(line.to_string()));
+    assert!(!buffer.in_table);
+    assert!(buffer.buf.is_empty());
+}
+
 #[rstest]
 #[case::four_spaces("    | not | a | table |")]
 #[case::leading_tab("\t| not | a | table |")]
@@ -105,6 +127,32 @@ fn block_prefixed_pipe_line_flushes_table(
     // The flushed table reaches `out`; the block line itself is left for the
     // caller to handle (it is not emitted by `handle_table_line`).
     assert_eq!(buffer.out, owned(&["| a | b |"]));
+}
+
+#[rstest]
+#[case::asterisks("***")]
+#[case::hyphens("---")]
+#[case::underscores("___")]
+fn thematic_break_after_table_flushes_table(
+    #[case] break_line: &str,
+    #[from(new_buffer)] mut buffer: ProcessBuffer,
+) {
+    // A thematic break can look like a table row to the pipe heuristic, but it
+    // opens its own block. It must end the table run so the break is not
+    // reflowed into the table, leaving the caller to classify it.
+    handle_line(&mut buffer, "| a | b |");
+    handle_line(&mut buffer, "| --- | --- |");
+    handle_line(&mut buffer, "| 1 | 2 |");
+
+    let passthrough = handle_line(&mut buffer, break_line);
+
+    assert_eq!(passthrough, Some(break_line.to_string()));
+    assert!(!buffer.in_table, "thematic break should end table mode");
+    assert!(buffer.buf.is_empty(), "buffer should be flushed");
+    assert_eq!(
+        buffer.out,
+        owned(&["| a   | b   |", "| --- | --- |", "| 1   | 2   |"]),
+    );
 }
 
 #[test]

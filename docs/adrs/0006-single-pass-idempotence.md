@@ -50,17 +50,20 @@ below and tracked as issue #504. Seven rules enforce the invariant where it
 holds:
 
 - Thematic breaks are a block-level pass-through. `BlockKind::ThematicBreak` in
-  `src/wrap/block.rs` recognizes a break with
-  `crate::breaks::THEMATIC_BREAK_RE`, which covers three or more `-`, `*`, or
-  `_` characters, including spaced runs such as `- - -`, and the
-  seventy-underscore line that `--breaks` writes. Such a line is emitted on its
-  own line and never absorbed into the surrounding paragraph, with or without
-  `--breaks`; table separator rows keep their pipes and remain table rows.
+  `src/wrap/block.rs` recognizes a break through the shared classifier, which
+  reports `LineClass::ThematicBreak` for three or more `-`, `*`, or `_`
+  characters, including spaced runs such as `- - -`, and the seventy-underscore
+  line that `--breaks` writes. Such a line is emitted on its own line and never
+  absorbed into the surrounding paragraph, with or without `--breaks`; table
+  separator rows keep their pipes and remain table rows.
 - `--breaks` output is itself a fixed point. A seventy-underscore line is not
   absorbed into a paragraph by a later `--wrap`, and
   `fences::attach_orphan_specifiers` refuses to attach it to a following fence
-  as an orphaned info string. The guard is `is_thematic_break`, whose predicate
-  is deliberately identical to the one `format_breaks` uses.
+  as an orphaned info string. The guard is `is_thematic_break`, which now takes
+  its decision from the shared line classifier, as the break pass does. The two
+  predicates are no longer identical: the break pass also preserves Setext
+  underlines in their preceding-line context, so a line this guard declines is
+  not necessarily one `format_breaks` rewrites.
 - Prefixed blocks that wrap reflow with their continuation lines.
   `ParagraphWriter` defers an overlong first line through `PendingPrefix` so
   the continuation and lazy continuation lines below it are folded into the
@@ -109,15 +112,16 @@ holds:
   grammar this formatter supports and is not a CommonMark block parser: HTML
   blocks other than the `<table>` conversion in `src/html.rs` remain outside it.
 - Table delimiter rows are refused separately from the block kinds.
-  `is_table_delimiter_row` in `src/headings.rs` refuses a candidate that
-  carries a `|` and matches `crate::table::SEP_RE`, the pattern the table
-  parser already uses to find the delimiter row, so the heading pass and the
-  table pass agree on what one is. A delimiter row is table syntax rather than
-  paragraph text, and `BlockKind` does not model it: `classify_block` reports
-  `None` for a pipe-prefixed line, because such a line is part of a table. The
-  `|` is required, so a bare `---` stays a thematic break and a break above
-  another break stays two breaks, while a paragraph that merely contains a pipe
-  still converts. Refusing the candidate keeps the `---` below it as a thematic
+  `is_setext_text_line` in `src/classify.rs` refuses a candidate unless the
+  shared classifier reports paragraph text for it, and a delimiter row carries
+  the classifier's `LineClass::TableDelimiter` class, the table-delimiter
+  decision that refuses it, so the heading pass and the table pass agree on
+  what one is. A delimiter row is table syntax rather than paragraph text, and
+  `BlockKind` does not model it: `classify_block` reports `None` for a
+  pipe-prefixed line, because such a line is part of a table. The `|` is
+  required, so a bare `---` stays a thematic break and a break above another
+  break stays two breaks, while a paragraph that merely contains a pipe still
+  converts. Refusing the candidate keeps the `---` below it as a thematic
   break, which is what the no-flags run already produces.
 
 ## Consequences
@@ -335,11 +339,10 @@ The two revised rules are:
 - The normalizer-ordering rule, extended by the split footnote stage and the
   definition fold: the inline footnote stage runs before the table pass and the
   wrap, and the definition stage runs last, after the layout.
-- The table-row refusal rule, now `is_table_syntax` in `src/headings.rs` with
-  the leading-`|` precondition: a candidate is refused when it starts with the
-  `|` the table pass enters its table mode on, or when it carries a `|` and
-  matches `crate::table::SEP_RE`, so a body row above a break is refused as
-  well as a delimiter row.
+- The table-row refusal rule, now `is_setext_text_line` in `src/classify.rs`
+  through the shared classifier's table decisions: a candidate is refused when
+  the classifier reports `LineClass::TableDelimiter` or `LineClass::TableRow`
+  for it, so a body row above a break is refused as well as a delimiter row.
 
 ### Footnote stages
 
@@ -395,8 +398,8 @@ Four fixes carry the added classes into the rule set:
   alone and emits the interior lines verbatim.
 - The Setext table row: `| a | b |` over `| --- | --- |` over `| ccccc | d |`
   over `---` had the body row converted, leaving a five-column first row on one
-  pass and a three-column one on the next; `is_table_syntax` refuses the row,
-  and the table keeps its delimiter row and its widths.
+  pass and a three-column one on the next; `is_setext_text_line` refuses the
+  row, and the table keeps its delimiter row and its widths.
 - The lazy continuation: `- alpha … beta` over a hard-broken `delta epsilon`
   over `zeta eta` ended at column one on the first pass and two columns in on
   the second; `ParagraphState::note_indent` now carries the block's
@@ -478,7 +481,8 @@ The accepted-body wording this addendum replaces is:
   are now thirteen, as the New and revised rules section above records.
 - The rule title "Table delimiter rows are refused separately from the block
   kinds": the rule is now "Table rows are refused separately from the block
-  kinds", resting on `is_table_syntax` and its leading-`|` precondition.
+  kinds", resting on `is_setext_text_line` and the shared classifier's
+  table-delimiter decision.
 - The rule opening "Content normalizers consumed by layout run before the
   layout they affect", in so far as it describes footnote conversion as one
   stage: the conversion is split, and the definition stage runs last.

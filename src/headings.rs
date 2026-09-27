@@ -11,13 +11,24 @@
 
 use tracing::trace;
 
-use crate::wrap::{
-    BlockKind,
-    FenceTracker,
-    LinkReferenceMatcher,
-    classify_block,
-    is_fence,
-    leading_indent,
+use crate::{
+    classify::{
+        ClassifyCtx,
+        LineClass,
+        ListContinuationState,
+        classify_line_with_body,
+        is_atx_heading_line,
+        is_setext_text_line,
+        is_setext_underline_line,
+        quote_depth,
+    },
+    wrap::{
+        BlockKind,
+        FenceTracker,
+        LinkReferenceMatcher,
+        classify_residual_block,
+        leading_indent,
+    },
 };
 
 /// Convert Setext-style headings into ATX (`#`) headings.
@@ -35,11 +46,14 @@ pub fn convert_setext_headings(lines: &[String]) -> Vec<String> {
         let line = &lines[idx];
 
         if setext_text_lines[idx]
-            && let Some((level, prefix_len, text)) =
-                detect_setext_heading(line, lines.get(idx + 1).map(String::as_str), link_matcher)
+            && let Some(emitted) = detect_verified_setext_heading(
+                line,
+                lines.get(idx + 1).map(String::as_str),
+                link_matcher,
+                None,
+            )
         {
-            let prefix = &line[..prefix_len];
-            out.push(build_heading_line(prefix, level, &text));
+            out.push(emitted);
             idx += 2;
             continue;
         }
@@ -62,18 +76,32 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
     let mut setext_text_lines = vec![false; lines.len()];
     let link_matcher = LinkReferenceMatcher::production();
     let mut fence_tracker = FenceTracker::default();
+    let mut lists = ListContinuationState::default();
     let mut idx = 0;
 
     while idx < lines.len() {
         let line = &lines[idx];
         let fence = fence_tracker.observe_source_line(line);
+        let continuation_indent = if fence.is_fence_marker || fence.is_in_fence {
+            lists.reset();
+            None
+        } else {
+            let classified = classify_line_with_body(line, &ClassifyCtx::default());
+            lists.observe(line, &classified)
+        };
 
         if !fence.is_fence_marker
             && !fence.is_in_fence
-            && detect_setext_heading(line, lines.get(idx + 1).map(String::as_str), link_matcher)
-                .is_some()
+            && detect_verified_setext_heading(
+                line,
+                lines.get(idx + 1).map(String::as_str),
+                link_matcher,
+                continuation_indent,
+            )
+            .is_some()
         {
             setext_text_lines[idx] = true;
+            lists.reset();
             idx += 2;
         } else {
             idx += 1;
@@ -81,6 +109,19 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
     }
 
     setext_text_lines
+}
+
+/// Builds a Setext replacement only when the verified classifier sees ATX output.
+fn detect_verified_setext_heading(
+    line: &str,
+    underline: Option<&str>,
+    link_matcher: LinkReferenceMatcher,
+    continuation_indent: Option<usize>,
+) -> Option<String> {
+    let (level, prefix_len, text) =
+        detect_setext_heading(line, underline, link_matcher, continuation_indent)?;
+    let emitted = convert_setext(&line[..prefix_len], level, &text);
+    is_atx_heading_line(&emitted, &ClassifyCtx::default()).then_some(emitted)
 }
 
 /// Parses a Setext heading pair and returns its level, shared prefix length, and text.
@@ -92,6 +133,7 @@ fn detect_setext_heading(
     line: &str,
     underline: Option<&str>,
     link_matcher: LinkReferenceMatcher,
+    continuation_indent: Option<usize>,
 ) -> Option<(usize, usize, String)> {
     let underline = underline?;
     if line.trim().is_empty() {
@@ -99,7 +141,11 @@ fn detect_setext_heading(
     }
 
     let prefix_len = shared_prefix_len(line, underline);
-    if has_unmatched_prefix(line, underline) {
+    let prefixes_agree = !has_unmatched_prefix(line, underline);
+    if !prefixes_agree {
+        return None;
+    }
+    if continuation_indent.is_some_and(|indent| content_indent_width(underline) < indent) {
         return None;
     }
     if prefix_len > 0
@@ -122,30 +168,23 @@ fn detect_setext_heading(
         return None;
     }
 
+    let candidate_is_paragraph = is_setext_text_line(line, &ClassifyCtx::default());
     let text = line[prefix_len..].trim();
     if text.is_empty() {
         return None;
     }
-    if !is_setext_text(text, link_matcher) {
+    if !is_setext_text(text, candidate_is_paragraph, link_matcher) {
         return None;
     }
 
-    let underline_body = underline[prefix_len..].trim();
-    if underline_body.is_empty() {
+    if !is_setext_underline_line(
+        underline,
+        &ClassifyCtx::following(LineClass::ParagraphText, prefixes_agree),
+    ) {
         return None;
     }
 
-    let marker = underline_body.chars().next()?;
-    if marker != '=' && marker != '-' {
-        return None;
-    }
-    if !underline_body.chars().all(|c| c == marker) {
-        return None;
-    }
-    if underline_body.len() < 3 {
-        return None;
-    }
-
+    let marker = underline[prefix_len..].trim().chars().next()?;
     let level = if marker == '=' { 1 } else { 2 };
     Some((level, prefix_len, text.to_string()))
 }
@@ -159,8 +198,8 @@ fn detect_setext_heading(
 /// The candidate is measured after [`shared_prefix_len`] has removed the
 /// indentation or blockquote prefix shared with the underline, so a valid
 /// quoted heading such as `> Title` above `> -----` still reads as paragraph
-/// text. Block kinds come from [`crate::wrap::classify_block`], so this pass and
-/// the wrapper agree on what a block start is.
+/// text. The shared classifier decides structural roles; the residual block
+/// matcher checks only forms the classifier does not represent.
 ///
 /// A digit-prefixed candidate stays eligible.
 /// [`BlockKind::DigitPrefix`] marks a line the wrapper measures specially, not
@@ -170,29 +209,24 @@ fn detect_setext_heading(
 /// The only HTML support the project has is the `<table>` conversion in
 /// `crate::html`, which runs before this pass and replaces the lines it
 /// recognizes.
-fn is_setext_text(text: &str, link_matcher: LinkReferenceMatcher) -> bool {
-    if is_fence(text).is_some() {
+fn is_setext_text(
+    text: &str,
+    candidate_is_paragraph: bool,
+    link_matcher: LinkReferenceMatcher,
+) -> bool {
+    if !candidate_is_paragraph {
         trace!(
+            candidate_is_paragraph,
             payload_len = text.len(),
-            "refusing a Setext candidate that is a fence marker"
-        );
-        return false;
-    }
-    if is_table_syntax(text) {
-        trace!(
-            payload_len = text.len(),
-            "refusing a Setext candidate that is table syntax"
+            "refusing a Setext candidate with a structural line class"
         );
         return false;
     }
 
-    match classify_block(text, link_matcher) {
-        None | Some(BlockKind::DigitPrefix) => true,
+    match classify_residual_block(text, link_matcher) {
+        None => true,
         Some(
-            kind @ (BlockKind::Heading
-            | BlockKind::ThematicBreak
-            | BlockKind::Bullet
-            | BlockKind::Blockquote
+            kind @ (BlockKind::Blockquote
             | BlockKind::FootnoteDefinition
             | BlockKind::LinkReferenceDefinition
             | BlockKind::MarkdownlintDirective),
@@ -203,50 +237,9 @@ fn is_setext_text(text: &str, link_matcher: LinkReferenceMatcher) -> bool {
             );
             false
         }
+        Some(_) => false,
     }
 }
-
-/// Determine whether a stripped candidate is table syntax.
-///
-/// A table row is table syntax rather than paragraph text, so the `---` below
-/// it is a thematic break and not an underline for it. `| --- | --- |` above
-/// `---` was converted into the single line `## | --- | --- |`: the break was
-/// consumed, the table above lost its delimiter row, and the orphaned header row
-/// was then padded differently on the next pass, so the output never settled.
-/// A body row above a break fails the same way, one row further down, and is
-/// quieter about it: the row the Setext pass takes is often the table's widest,
-/// and once it is gone the table above is measured without it, so every
-/// remaining row is padded a column narrower than the pass before made it.
-/// `| a | b |` over `| --- | --- |` over `| ccccc | d |` over `---` reflowed to
-/// a five-column first row and a three-column one on the pass after.
-///
-/// Both spellings are ones the table pass itself recognizes. A line that starts
-/// with a pipe opens table mode in `ProcessBuffer::handle_table_line`, so a
-/// pipe-leading candidate is a row of the table that pass has just laid out. The
-/// delimiter row test is repeated for the rows that omit the leading pipe, such
-/// as `--- | ---`, which the table pass still reads as a delimiter row.
-///
-/// A paragraph that merely contains a pipe, such as `Text with > inside | here`,
-/// is not table syntax and still converts, and a bare `---` stays a thematic
-/// break, which [`classify_block`] already refuses.
-fn is_table_syntax(text: &str) -> bool { is_table_row(text) || is_table_delimiter_row(text) }
-
-/// Determine whether a stripped candidate is a row of a table.
-///
-/// The `|` is the marker the table pass enters table mode on, and it is
-/// required: a paragraph that merely contains a pipe still converts.
-fn is_table_row(text: &str) -> bool { text.starts_with('|') }
-/// Determine whether a stripped candidate is a table delimiter row.
-///
-/// Alignment markers and dashes alone are covered by the delimiter row's own
-/// pipe, so `|---|---|`, `| --- | --- |`, and `--- | ---` are all refused.
-///
-/// The pattern is the one the table parser already uses to find the delimiter
-/// row, so the heading pass and the table pass agree on what one is.
-fn is_table_delimiter_row(text: &str) -> bool {
-    text.contains('|') && crate::table::SEP_RE.is_match(text)
-}
-
 /// Returns the indentation width of a line's content, in columns.
 ///
 /// Blockquote markers are consumed before the width is measured, so
@@ -296,15 +289,17 @@ fn shared_prefix_len(a: &str, b: &str) -> usize {
     end
 }
 
-/// Determine whether a line and its underline disagree on indentation or blockquote prefix.
+/// Determine whether a line and its underline disagree on blockquote depth.
 ///
-/// Setext headings must repeat blockquote (`>`) markers and indentation on both lines. When the
-/// prefixes differ we leave the text untouched so blockquote paragraphs or code blocks are not
-/// promoted to headings.
+/// Setext headings must remain within one quote level. Up to three spaces of
+/// indentation may differ between the text and underline; the classifier
+/// independently rejects indented code.
 fn has_unmatched_prefix(line: &str, underline: &str) -> bool {
     let line_prefix = prefix_of_indent_or_quote(line);
     let underline_prefix = prefix_of_indent_or_quote(underline);
-    line_prefix != underline_prefix && (line_prefix > 0 || underline_prefix > 0)
+    let line_depth = quote_depth(&line[..line_prefix]);
+    let underline_depth = quote_depth(&underline[..underline_prefix]);
+    line_depth != underline_depth
 }
 
 /// Returns the byte length of leading indentation and blockquote markers.
@@ -321,7 +316,10 @@ fn prefix_of_indent_or_quote(text: &str) -> usize {
 }
 
 /// Builds an ATX heading while retaining the source indentation or blockquote prefix.
-fn build_heading_line(prefix: &str, level: usize, text: &str) -> String {
+///
+/// The structural conversion decision and emitted ATX class are checked
+/// through the production classifier. String assembly stays at this boundary.
+fn convert_setext(prefix: &str, level: usize, text: &str) -> String {
     let mut heading = String::new();
     heading.push_str(prefix);
     if needs_space_after(prefix) {

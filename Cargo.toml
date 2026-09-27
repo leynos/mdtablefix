@@ -84,5 +84,10 @@ disallowed_methods = "deny"
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
 
+[workspace.lints.rust]
+# Production kernels select Verus contracts only while the pinned verifier
+# compiles their shared source. Cargo must recognise that verifier cfg.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(verus_keep_ghost)"] }
+
 [lints]
 workspace = true

@@ -97,3 +97,32 @@ as distinct types, and never use `String::len()` as display width.
 - The harness contains no kernel theorem until issues #491 and #483 add their
   production-used code, so it currently proves toolchain resolution and
   non-vacuity rather than formatter semantics.
+
+## Addendum (2026-09-24)
+
+The final bullet of "Known risks and limitations" above is retired. It said the
+harness contained no kernel theorem until issues #491 and #483 added their
+production-used code, and that it therefore proved toolchain resolution and
+non-vacuity rather than formatter semantics. A production-linked kernel theorem
+has since landed, so the claim no longer holds.
+
+`verus/lib.rs` includes `src/classify_kernel.rs` by `#[path]`, so the
+specification is written against the same source the binary compiles.
+`classify_seq` proves its result against `spec_classify`, the structural
+precedence the kernel must implement, and its postcondition also bounds the
+returned body offset within the input sequence.
+
+The consumer decisions are verified separately over that same kernel:
+`is_setext_text_seq`, `is_setext_underline_seq`, `is_canonical_break_seq`, and
+`is_atx_heading_seq` in `src/classify_kernel_consumers.rs` each prove their
+boolean equals whether `spec_classify` returns the corresponding structural
+class. `make verus-mutation` changes a production Setext consumer decision and
+requires Verus to reject the proof, so the refinement is shown to be
+load-bearing rather than vacuous.
+
+Three matcher contracts remain trusted: `#[verifier::external_body]` covers the
+table-delimiter grammar `is_table_delimiter` with its
+`table_cells_are_delimiters` and `is_table_delimiter_cell` helpers, the
+thematic-break grammar `is_thematic_break`, and the ordered-list marker grammar
+`ordered_list_item`. They are listed as unverified external contracts in the
+claim ledger in `docs/verification.md`, and none of them is claimed as verified.
