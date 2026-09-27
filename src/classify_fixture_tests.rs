@@ -107,6 +107,9 @@ fn classify_fixture(fixture: &Fixture, oracle: &mut String) {
 }
 
 /// Every repository fixture retains its checked-in per-line classification.
+///
+/// An empty fixture is still traversed but contributes no oracle row because
+/// it contains no source line to classify.
 #[test]
 fn fixture_lines_match_the_classification_oracle() -> Result<(), Box<dyn Error>> {
     let fixtures = fixtures()?;
