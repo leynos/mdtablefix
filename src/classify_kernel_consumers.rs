@@ -31,16 +31,12 @@ ensures(result => result == match crate::spec_classify(chars@, ctx@) {
 verified_kernel_function! {
 /// Reports whether table buffering may treat a line as structural table input.
 #[must_use]
-pub(crate) fn is_table_line_seq(chars: &[char], ctx: &ClassifyCtxKernel) -> bool;
+pub(crate) fn is_table_class(class: LineClass) -> bool;
 ensures(result => result == (
-    crate::spec_classify(chars@, ctx@) == LineClass::TableDelimiter
-        || crate::spec_classify(chars@, ctx@) == LineClass::TableRow
+    class == LineClass::TableDelimiter || class == LineClass::TableRow
 ));
 {
-    matches!(
-        classify_seq(chars, ctx).class,
-        LineClass::TableDelimiter | LineClass::TableRow
-    )
+    matches!(class, LineClass::TableDelimiter | LineClass::TableRow)
 }
 }
 

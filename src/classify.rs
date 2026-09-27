@@ -192,13 +192,6 @@ pub(crate) fn wrapping_boundary(line: &str, ctx: &ClassifyCtx) -> Option<LineCla
     crate::classify_kernel::consumers::wrapping_boundary_seq(&chars, ctx)
 }
 
-/// Tests whether table buffering may accept a structural table line.
-#[must_use]
-pub(crate) fn is_table_line(line: &str, ctx: &ClassifyCtx) -> bool {
-    let chars = line.chars().collect::<Vec<_>>();
-    crate::classify_kernel::consumers::is_table_line_seq(&chars, ctx)
-}
-
 /// Tests the structural precondition for orphan-specifier attachment.
 #[must_use]
 pub(crate) fn can_be_orphan_specifier(line: &str, ctx: &ClassifyCtx) -> bool {

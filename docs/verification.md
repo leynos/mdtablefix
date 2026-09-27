@@ -32,7 +32,7 @@ proves the builder returns exactly seventy underscores, and
 The production consumer paths also have regression coverage using that exact
 canonical break: wrapping, Setext heading detection, table buffering, and
 orphan-specifier attachment. Their production decisions call
-`wrapping_boundary_seq`, `is_setext_pair_seq`, `is_table_line_seq`, and
+`wrapping_boundary_seq`, `is_setext_pair_seq`, `is_table_class`, and
 `can_be_orphan_specifier_seq`, respectively. `src/classify_fixture_tests.rs`
 pins a snapshot for every `tests/data` line. Each entry includes its path, line
 number, FNV-1a hash of the original line, and classification, so edits to
@@ -56,7 +56,7 @@ this classifier proof.
 | Setext output construction                        | `convert_setext`                                | Prefix, level one or two, and candidate text                            | Same three scanner matcher contracts                           | Uses the verified marker builder; `detect_verified_setext_heading` checks the completed line (executable prefix regressions) |
 | Wrapping break preservation                       | `wrapping_boundary_seq`                         | Exact `canonical_break()` in default wrapper context                    | Same three scanner matcher contracts                           | Returns the boundary used by `classify_block`; exact production-path regression (cross-pass behavioural preservation)        |
 | Heading break preservation                        | `is_setext_pair_seq`                            | Exact `canonical_break()` as candidate                                  | Same three scanner matcher contracts                           | Model-level rejection proof; exact production-path regression (cross-pass behavioural preservation)                          |
-| Table break preservation                          | `is_table_line_seq`                             | Exact `canonical_break()` while a table is buffered                     | Same three scanner matcher contracts                           | Rejects the gate used by `handle_table_line`; exact production-path regression (cross-pass behavioural preservation)         |
+| Table break preservation                          | `is_table_class`                                | Exact `canonical_break()` while a table is buffered                     | Same three scanner matcher contracts                           | Rejects the gate used by `handle_table_line`; exact production-path regression (cross-pass behavioural preservation)         |
 | Orphan-specifier break preservation               | `can_be_orphan_specifier_seq`                   | Exact `canonical_break()` before a fence                                | Same three scanner matcher contracts                           | Rejects the gate used by `preserve_thematic_break`; exact production-path regression (cross-pass behavioural preservation)   |
 | Fixture classification compatibility              | `fixture_lines_match_the_classification_oracle` | Every `tests/data` line with carried fence and preceding-line context   | Same three scanner matcher contracts                           | Per-line class and FNV-1a source-line hash are pinned (compatibility regression)                                             |
 
