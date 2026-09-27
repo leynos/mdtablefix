@@ -10,8 +10,9 @@ mod common;
 
 #[test]
 fn restart_after_equal_indent_paragraph() {
+    // `3. Next` directly follows the paragraph, so it continues it (#573).
     let input = lines_vec!("1. One", "", "Paragraph", "3. Next");
-    let expected = lines_vec!("1. One", "", "Paragraph", "1. Next");
+    let expected = lines_vec!("1. One", "", "Paragraph", "3. Next");
     assert_eq!(renumber_lists(&input), expected);
 }
 
@@ -38,15 +39,17 @@ fn restart_after_top_heading() {
 
 #[test]
 fn restart_after_nested_paragraph() {
+    // `3. Next` directly follows the paragraph, so it continues it (#573).
     let input = lines_vec!("1. One", "    1. Sub", "", "Paragraph", "3. Next");
-    let expected = lines_vec!("1. One", "    1. Sub", "", "Paragraph", "1. Next");
+    let expected = lines_vec!("1. One", "    1. Sub", "", "Paragraph", "3. Next");
     assert_eq!(renumber_lists(&input), expected);
 }
 
 #[test]
 fn restart_after_nested_equal_indent_paragraph() {
+    // `5. Next` directly follows the paragraph, so it continues it (#573).
     let input = lines_vec!("1. One", "    1. Sub", "", "    Paragraph", "    5. Next");
-    let expected = lines_vec!("1. One", "    1. Sub", "", "    Paragraph", "    1. Next");
+    let expected = lines_vec!("1. One", "    1. Sub", "", "    Paragraph", "    5. Next");
     assert_eq!(renumber_lists(&input), expected);
 }
 
@@ -107,11 +110,13 @@ fn nested_lists_respect_fence_tracker() {
         "   1. Code block list",
         "   ```",
         "2. Outer list continued",
-        "   1. Nested list",
+        // `4.` continues the item's text, so it is not a list (#573); the
+        // fence ends that paragraph, so `8.` starts a list, at one.
+        "   4. Nested list",
         "      ```",
         "      - Malformed fence",
         "      ```",
-        "   2. Nested list continued",
+        "   1. Nested list continued",
     ];
     assert_eq!(renumber_lists(&input), expected);
 }
@@ -197,4 +202,61 @@ fn malformed_fences_do_not_break_list_renumbering() {
 )]
 fn test_renumber_cases(input: Vec<String>, expected: Vec<String>) {
     assert_eq!(renumber_lists(&input), expected);
+}
+
+/// Regression cases for issue #573: renumbering never changes whether a line
+/// is a list item.
+///
+/// Only a list starting at 1 can interrupt a paragraph, so a line such as
+/// `12. Evidence …` that follows paragraph text continues the paragraph.
+/// Rewriting its marker to `1.` would turn that text into a list item, so it
+/// is left exactly as written.
+#[rstest]
+#[case::wrapped_sentence(include_lines!("data/issue_573_paragraph_continuation_input.txt"))]
+#[case::inside_an_item(lines_vec!["1. First", "   continues here and ends with section", "   8. Work item text"])]
+#[case::after_an_item_line(lines_vec!["1. a", "   2. b"])]
+// Paragraph text indented four or more columns inside an item is still text.
+#[case::deep_in_an_item(lines_vec!["  1. Snapshots store", "     wrapped text", "     12. Evidence"])]
+fn renumber_issue_573_paragraph_continuation_is_not_an_item(#[case] input: Vec<String>) {
+    let once = renumber_lists(&input);
+    assert_eq!(once, input);
+    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+}
+
+/// Regression cases for issue #573, the neighbouring shapes: a numbered line
+/// that does start or continue a list is still renumbered.
+///
+/// A sibling of an active list continues it whatever the paragraph above,
+/// `1.` can interrupt a paragraph, and after a blank line or heading any
+/// number starts a list.
+#[rstest]
+#[case::sibling_after_item_text(lines_vec!["1. a", "5. b"], lines_vec!["1. a", "2. b"])]
+#[case::nested_sibling(
+    lines_vec!["1. a", "   1. b", "   5. c"],
+    lines_vec!["1. a", "   1. b", "   2. c"]
+)]
+#[case::one_interrupts(lines_vec!["text", "1. b", "4. c"], lines_vec!["text", "1. b", "2. c"])]
+#[case::after_a_blank_line(lines_vec!["text", "", "4. b"], lines_vec!["text", "", "1. b"])]
+#[case::after_a_heading(lines_vec!["# h", "4. b"], lines_vec!["# h", "1. b"])]
+fn renumber_issue_573_neighbouring_shapes(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+) {
+    let once = renumber_lists(&input);
+    assert_eq!(once, expected);
+    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+}
+
+/// Regression case for issue #573 through the CLI: `--renumber` leaves the
+/// wrapped sentence's `12.` alone.
+#[test]
+fn renumber_issue_573_cli_leaves_paragraph_text_alone() {
+    let input = include_str!("data/issue_573_paragraph_continuation_input.txt");
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--renumber")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(input);
 }

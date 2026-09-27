@@ -491,6 +491,10 @@ Ordered-list renumbering runs before wrapping. Continuation indentation is
 therefore measured from the final marker width, including when renumbering
 changes a marker from one digit to two, such as `9.` to `10.`.
 
+Renumbering never changes whether a line is a list item. Only a list starting
+at 1 can interrupt a paragraph, so a line such as `12. Evidence` directly below
+paragraph text continues that paragraph and is left exactly as written.
+
 When a footnote reference immediately follows an inline code span or Markdown
 link without intervening whitespace—for example `` `code`.[^ref] `` or
 `[text](url).[^ref]`—the reference stays on the same line as the preceding

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: `--renumber` leaves alone a numbered line that continues a paragraph,
+  such as a wrapped sentence whose next line starts `12.`. Only a list starting
+  at 1 can interrupt a paragraph, so the line is paragraph text; rewriting it to
+  `1.` had turned it into a list item since renumbering was introduced in #54.
+  ([#573](https://github.com/leynos/mdtablefix/issues/573))
+
 ## v0.6.0
 
 ### Added
