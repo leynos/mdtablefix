@@ -172,6 +172,21 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       Batch fence classification section. Fixed in `b9fe398`. The Format gate
       then failed on the new prose, because it was wrapped by hand rather than
       by `mdtablefix --check`'s own rule set; fixed in `9d20e58`.
+- [x] M5 CodeScene regression. The hosted CodeScene check failed on
+      `src/wrap/tests/fence_tracker.rs` with `8.03 → 7.79` and the Large
+      Assertion Blocks biomarker, while `main` passes the same check at 8.03.
+      The decline was mine: three `assert_eq!` on `.features`, added mid-run to
+      `observe_source_fence_exposes_structural_marker_with_prefix_indent`,
+      pushed three consecutive-assert runs from 3 to 4 and took the count of
+      flagged test cases from 7 (main) to 8 (branch). CodeScene's own wording
+      for the biomarker is "Consecutive assert statements indicate missing
+      abstractions", so the prescribed remedy is extraction, not suppression.
+      Every run of four or more is now collapsed to at most three via helpers
+      named for the invariant under test (`assert_fence_state`,
+      `assert_fence_step`, `assert_transition`, `assert_fenced_line`), and the
+      property block moved verbatim to `src/wrap/tests/fence_tracker_props.rs`
+      so both files sit under the 400-line limit. Measured result: max
+      consecutive-assert run 8 → 3 across every file.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -223,6 +238,37 @@ See the decision log.
   `docs/execplans/git-option.md` are already unformatted at `origin/main`, so
   the gate reports pre-existing failures that are not this branch's to fix and
   must not be confused with regressions.
+
+- **A green advisory check on `main` says nothing about the same check on this
+  branch, and the failing one was mine.** The hosted CodeScene check was read
+  as a standing, pre-existing condition and left alone through several rounds.
+  It is not: `main` passes it at 8.03, and this branch fails it at 7.79. The
+  decline traces to three assertions I added to one test function, which pushed
+  its consecutive-assert runs from 3 to 4 and its file over the threshold. The
+  general lesson is to compare a failing advisory check against the base branch
+  before deciding whose it is: "this check has always been red" is a claim that
+  has to be checked, and `gh api .../commits/<ref>/check-runs` answers it in
+  one call. Two specifics were worth learning too. The biomarker counts
+  *consecutive* assertions per test case, not assertions per file, so splitting
+  a file without touching the offending functions changes nothing — my earlier
+  `fence_kernel_tests.rs` split was inert for exactly that reason. And the
+  count of flagged cases is 7 on `main` and 8 on this branch, which is the
+  number that actually moved; the score itself is only its shadow.
+
+- **A refactor that passes `cargo fmt` has been parsed, not verified.** The
+  helpers here replaced 24 assertion sites, and formatting proves only that the
+  file is syntactically valid. With the Cargo package-cache lock held by
+  another agent for the whole session, the focused test run could not happen
+  locally at all. The extraction was therefore checked two other ways that do
+  not need the lock: the moved property block and both helpers were diffed
+  against the original and confirmed byte-for-byte identical, and every
+  rewritten assertion was re-read against the source of `main` to confirm it
+  tests the same thing. One conversion was in fact *weaker* than what it
+  replaced — it substituted `in_fence_for_line` for a direct
+  `observation.is_in_fence`, two predicates that agree today but need not — and
+  was corrected. Verification that a refactor is faithful is not the same as
+  verification that it compiles, and neither is the same as verification that
+  it passes.
 
 - Acting on the CodeRabbit finding about `ObservedFence` removed a parse rather
   than adding a field. `ParsedLine::observe` was calling
