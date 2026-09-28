@@ -156,20 +156,22 @@ See the decision log.
 - **`const fn` bodies are opaque to Verus.** `LineFeatures::prose(0)` and the
   other `const fn` constructors cannot be called from a proof body at all
   ("cannot call function with mode exec"), and a `const fn` cannot carry a
-  `when_used_as_spec` contract, so its body cannot be unfolded in a spec either.
-  Witness lemmas therefore build their `LineFeatures` literally, and the kernel
-  inlines the struct updates its contracts depend on. Three helpers
+  `when_used_as_spec` contract, so its body cannot be unfolded in a spec
+  either. Witness lemmas therefore build their `LineFeatures` literally, and
+  the kernel inlines the struct updates its contracts depend on. Three helpers
   (`without_info_string`, `with_trailing_blank`, `fence_marker`) were deleted
   rather than kept as unfolded-by-nobody indirection.
 - **A macro does not carry a doc comment placed outside it.** An outer `///`
-  above a `verified_kernel_function! {` invocation produces `unused doc
-  comment`. The doc must be the first thing inside the macro's own parens.
+  above a `verified_kernel_function! {` invocation produces
+  `unused doc comment`. The doc must be the first thing inside the macro's own
+  parens.
 - **Recursive spec functions are opaque until revealed.** The witness lemma's
-  non-degeneracy assertion (`spec_regions_seeded(...) == Seq::empty().push(...)`)
-  needed explicit `reveal(...)` calls; without them Z3 has no reason to unfold
-  the recursion. The same applies to `seq!`, which routes through array `View`
-  machinery the solver will not unfold on its own — the witness body is built
-  from `Seq::empty().push(...)` instead.
+  non-degeneracy assertion
+  (`spec_regions_seeded(...) == Seq::empty().push(...)`) needed explicit
+  `reveal(...)` calls; without them Z3 has no reason to unfold the recursion.
+  The same applies to `seq!`, which routes through array `View` machinery the
+  solver will not unfold on its own — the witness body is built from
+  `Seq::empty().push(...)` instead.
 - **The loop invariant's shape was wrong, not its content.** The original stated
   `out@ + spec_regions_from(features@, index, state@) == spec_regions(features@)`,
   relating a growing prefix to a shrinking suffix. Closing it requires
@@ -293,10 +295,9 @@ The formatter now classifies every line of a document through one pure
 transition kernel, and the region-preservation theorem is machine-checked
 against that same production body. `make verus` reports 81 verified functions
 with no errors, `make verus-fence-mutation` confirms the proof fails for the
-intended reason when the closing rule is weakened, and
-`tests/fence_regions.rs` replays the argument over every fixture in
-`tests/data/` plus four whole-file documents that reach the unclosed-fence
-path.
+intended reason when the closing rule is weakened, and `tests/fence_regions.rs`
+replays the argument over every fixture in `tests/data/` plus four whole-file
+documents that reach the unclosed-fence path.
 
 Three lessons are worth keeping.
 
@@ -395,10 +396,10 @@ Delivered in `src/wrap/fence/kernel.rs` (348 lines), declared as a child module
 of `src/wrap/fence.rs` and re-exported through it. `fence_step` is the pure
 transition function; `regions` folds it over a line sequence; `Region` and
 `FenceState` are defined there. `observe_parsed` in the parent derives features
-through the kernel's `features_of_line`, calls `fence_step`, and maps the result
-onto `FenceObservation`; the tracing events and their `transition` / `reason`
-values are preserved and `FenceTracker`'s public API is unchanged. Committed as
-`95c27a3`.
+through the kernel's `features_of_line`, calls `fence_step`, and maps the
+result onto `FenceObservation`; the tracing events and their `transition` /
+`reason` values are preserved and `FenceTracker`'s public API is unchanged.
+Committed as `95c27a3`.
 
 As planned, the signature is narrower than the milestone text anticipated:
 `LineFeatures` carries the marker character, run length, blockquote depth, and
@@ -437,12 +438,12 @@ assert the two `regions` vectors from obligation 2.
 and `ParsedLine::observe` (`src/fences/compress.rs:188`) computes each line's
 kernel features from the same single parse that produces the structural marker,
 so the decision and the transition cannot disagree about what a line is.
-`advance_fence_block` consults the predicate directly rather than accumulating a
-regex-derived flag. `opening_rewrite` maps the block-level guard onto a
-`Strategy`, and both flush paths take their `Strategy` from it: `flush_unmatched_block`
-rewrites only the opening delimiter, `flush_matched_block` both delimiters,
-`flush_original_block` neither — chosen by `flush_completed_block` from the
-cached rewrites. Committed as `fbd31de`.
+`advance_fence_block` consults the predicate directly rather than accumulating
+a regex-derived flag. `opening_rewrite` maps the block-level guard onto a
+`Strategy`, and both flush paths take their `Strategy` from it:
+`flush_unmatched_block` rewrites only the opening delimiter,
+`flush_matched_block` both delimiters, `flush_original_block` neither — chosen
+by `flush_completed_block` from the cached rewrites. Committed as `fbd31de`.
 
 Acceptance met: `make test` passes including every existing fence test; both
 flush paths call `opening_rewrite`, and all four emit delimiter lines through
@@ -453,11 +454,10 @@ the shared `rewrite_fence_line`.
 `verus/fence_spec.rs` states the specification and `verus/lib.rs` includes
 `src/wrap/fence/kernel.rs` through `#[path]`, so the proofs constrain the body
 the formatter runs. The spec functions are `spec_fence_next`,
-`spec_fence_region`, `spec_state_seeded`, `spec_regions_seeded`,
-`spec_closes`, `spec_agrees_with_opener`, `spec_compressed`,
-`spec_interior_delimiter`, `spec_compression_changes_region`, and
-`spec_rewrite_permitted`. Every kernel decision carries a postcondition tying
-it to its spec function.
+`spec_fence_region`, `spec_state_seeded`, `spec_regions_seeded`, `spec_closes`,
+`spec_agrees_with_opener`, `spec_compressed`, `spec_interior_delimiter`,
+`spec_compression_changes_region`, and `spec_rewrite_permitted`. Every kernel
+decision carries a postcondition tying it to its spec function.
 
 Obligation 3 is discharged by `lemma_rewrite_preserves_closer_relation`, in the
 one-sided form the counterexample admits. Obligation 4 is discharged by
@@ -473,8 +473,8 @@ name that contract. Seven ledger rows were added, the theorem among them.
 `make verus`: 81 verified, 0 errors.
 
 Acceptance met: `make verus` verifies with 0 errors; `make verus-selftest`
-still rejects the smoke proof; `make lint`'s `check-verification-ledger` accepts
-the new rows; the mutation gate fails for the intended reason.
+still rejects the smoke proof; `make lint`'s `check-verification-ledger`
+accepts the new rows; the mutation gate fails for the intended reason.
 
 ### M4 — Corpus equality and cross-pass evidence (complete)
 
