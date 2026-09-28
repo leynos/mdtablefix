@@ -61,24 +61,45 @@ const UNCLOSED_DOCUMENTS: &[&str] = &[
 ];
 
 /// Returns every file under `root`, recursively.
-fn data_files(root: &Path) -> Vec<PathBuf> {
-    fn walk(directory: &Path, found: &mut Vec<PathBuf>) {
-        let Ok(entries) = fs::read_dir(directory) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
+///
+/// A directory that cannot be listed is an error, not an empty result: a walk
+/// that silently returns fewer files would let the sweep pass over a corpus it
+/// never read.
+fn data_files(root: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    fn walk(directory: &Path, found: &mut Vec<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
+        for entry in
+            fs::read_dir(directory).map_err(|error| format!("{}: {error}", directory.display()))?
+        {
+            let path = entry
+                .map_err(|error| format!("{}: {error}", directory.display()))?
+                .path();
             if path.is_dir() {
-                walk(&path, found);
+                walk(&path, found)?;
             } else {
                 found.push(path);
             }
         }
+        Ok(())
     }
 
     let mut found = Vec::new();
-    walk(root, &mut found);
-    found
+    walk(root, &mut found)?;
+    Ok(found)
+}
+
+/// Reads a fixture as UTF-8 text, naming the file in any failure.
+///
+/// The sweeps must not treat an unreadable or non-UTF-8 fixture as one that
+/// passed. Skipping it would leave the guard counting only the files that
+/// happened to be readable, so a corpus read in part could pass while the file
+/// that would have failed went unchecked. Failing here makes a non-UTF-8
+/// fixture a deliberate addition that updates this test rather than a silent
+/// gap.
+fn read_fixture(file: &Path) -> Result<String, Box<dyn std::error::Error>> {
+    let bytes = fs::read(file).map_err(|error| format!("{}: {error}", file.display()))?;
+    let text = String::from_utf8(bytes)
+        .map_err(|error| format!("{}: not valid UTF-8: {error}", file.display()))?;
+    Ok(text)
 }
 
 /// Splits a document into lines the way `compress_fences` consumes them.
@@ -95,17 +116,12 @@ fn lines_of(text: &str) -> Vec<String> {
 
 /// Asserts that normalizing every fixture's fences preserves its regions.
 ///
-/// Returns the number of files checked. Files that cannot be read, or that are
-/// not UTF-8, are skipped rather than failing the sweep.
-fn assert_regions_preserved(files: &[PathBuf]) -> usize {
+/// Returns the number of files checked. Every fixture must be readable as
+/// UTF-8; an unreadable one fails the sweep rather than being skipped.
+fn assert_regions_preserved(files: &[PathBuf]) -> Result<usize, Box<dyn std::error::Error>> {
     let mut checked = 0_usize;
     for file in files {
-        let Ok(original) = fs::read(file) else {
-            continue;
-        };
-        let Ok(text) = String::from_utf8(original) else {
-            continue;
-        };
+        let text = read_fixture(file)?;
 
         let lines = lines_of(&text);
         let normalized = compress_fences(&lines);
@@ -125,7 +141,7 @@ fn assert_regions_preserved(files: &[PathBuf]) -> usize {
         checked += 1;
     }
 
-    checked
+    Ok(checked)
 }
 
 /// Formats `text` once with the full flag set through the real binary.
@@ -207,17 +223,20 @@ fn line_content(line: &str) -> &str { line.strip_suffix('\r').unwrap_or(line) }
 /// normalization is entitled to respell those, which is the whole point of the
 /// theorem.
 ///
-/// Returns the number of files checked.
+/// The comparison walks the two literal subsequences in step rather than asking
+/// whether each source literal line appears *anywhere* in the output. Membership
+/// is too weak: a blank prose line, or a second block that happens to repeat the
+/// text, would satisfy it after the real line had been merged or reordered. The
+/// output's own region classification decides which lines to compare, and the
+/// walk rejects a missing, changed, or extra literal line alike.
+///
+/// Returns the number of files checked. Every fixture must be readable as
+/// UTF-8; an unreadable one fails the sweep rather than being skipped.
 fn assert_literal_lines_survive(files: &[PathBuf]) -> Result<usize, Box<dyn std::error::Error>> {
     let directory = TempDir::new()?;
     let mut checked = 0_usize;
     for file in files {
-        let Ok(original) = fs::read(file) else {
-            continue;
-        };
-        let Ok(text) = String::from_utf8(original) else {
-            continue;
-        };
+        let text = read_fixture(file)?;
 
         let lines = lines_of(&text);
         let regions = classify_regions(&lines);
@@ -228,23 +247,30 @@ fn assert_literal_lines_survive(files: &[PathBuf]) -> Result<usize, Box<dyn std:
             .into_owned();
         let output = format_once(&directory, &name, &text)?;
         let output_text = lines_of(&output);
-        let output_lines: Vec<&str> = output_text
+        let output_regions = classify_regions(&output_text);
+        let mut output_literal_lines = output_text
             .iter()
-            .map(String::as_str)
-            .map(line_content)
-            .collect();
+            .zip(&output_regions)
+            .filter(|(_line, region)| **region == Region::Literal)
+            .map(|(line, _region)| line_content(line));
 
         for (line, region) in lines.iter().zip(&regions) {
             if *region != Region::Literal {
                 continue;
             }
             let content = line_content(line);
-            assert!(
-                output_lines.contains(&content),
-                "{} lost the literal line {content:?} under the full flag set",
+            assert_eq!(
+                output_literal_lines.next(),
+                Some(content),
+                "{} changed or lost the literal line {content:?} under the full flag set",
                 file.display(),
             );
         }
+        assert!(
+            output_literal_lines.next().is_none(),
+            "{} gained an extra literal line under the full flag set",
+            file.display(),
+        );
         checked += 1;
     }
 
@@ -252,9 +278,10 @@ fn assert_literal_lines_survive(files: &[PathBuf]) -> Result<usize, Box<dyn std:
 }
 
 #[test]
-fn every_fixture_preserves_regions_under_fence_normalization() {
+fn every_fixture_preserves_regions_under_fence_normalization()
+-> Result<(), Box<dyn std::error::Error>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let files = data_files(&root.join("tests").join("data"));
+    let files = data_files(&root.join("tests").join("data"))?;
 
     assert!(!files.is_empty(), "found no fixtures to check");
     assert!(
@@ -264,18 +291,19 @@ fn every_fixture_preserves_regions_under_fence_normalization() {
         "the region sweep must cover {MUST_COVER}",
     );
 
-    let checked = assert_regions_preserved(&files);
+    let checked = assert_regions_preserved(&files)?;
 
     assert!(
         checked > 100,
         "expected the whole fixture corpus, checked {checked}",
     );
+    Ok(())
 }
 
 #[test]
 fn every_fixture_keeps_its_literal_lines_verbatim() -> Result<(), Box<dyn std::error::Error>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let files = data_files(&root.join("tests").join("data"));
+    let files = data_files(&root.join("tests").join("data"))?;
 
     assert!(!files.is_empty(), "found no fixtures to check");
 
