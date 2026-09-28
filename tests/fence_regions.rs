@@ -102,16 +102,22 @@ fn read_fixture(file: &Path) -> Result<String, Box<dyn std::error::Error>> {
     Ok(text)
 }
 
-/// Splits a document into lines the way `compress_fences` consumes them.
+/// Splits a document into the lines the product actually sees.
 ///
-/// A trailing newline does not produce a final empty line, matching how the
-/// binary reads a file.
+/// The product parses a file into a `SourceDocument`, which strips a leading
+/// byte-order mark, and then splits with `str::lines` — so a line never carries
+/// its terminator. Splitting on `\n` and keeping the `\r` would hand the
+/// classifier a line the product never produces, and the error is not benign:
+/// `FENCE_RE` excludes carriage returns from its info capture, so a delimiter
+/// carrying a stray `\r` is not recognised as a fence at all, and the document
+/// would classify as unbroken prose. Both sides of every comparison here use
+/// this split, so the test classifies the same lines the binary does.
 fn lines_of(text: &str) -> Vec<String> {
-    let trimmed = text.strip_suffix('\n').unwrap_or(text);
-    if trimmed.is_empty() {
-        return Vec::new();
-    }
-    trimmed.split('\n').map(str::to_owned).collect()
+    text.strip_prefix('\u{FEFF}')
+        .unwrap_or(text)
+        .lines()
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Asserts that normalizing every fixture's fences preserves its regions.
@@ -203,25 +209,12 @@ fn unclosed_fences_keep_their_payload_literal() {
     }
 }
 
-/// Strips the carriage return `lines_of` keeps as line content.
-///
-/// The I/O boundary selects one ending for the whole document and re-applies it
-/// to every line (ADR 0007, `src/io/line_endings.rs`), so a CRLF-majority
-/// fixture is emitted entirely as CRLF even where the source used a bare line
-/// feed. That is the terminator, not the content: this test is about whether a
-/// pass rewrote the text of a literal line, so both sides are compared with the
-/// terminator removed. Comparing them raw would fail on every deliberately
-/// mixed-ending fixture for a reason that has nothing to do with fences.
-fn line_content(line: &str) -> &str { line.strip_suffix('\r').unwrap_or(line) }
-
 /// Asserts that no fixture's literal lines are rewritten by the full pass.
 ///
 /// A line the classifier calls literal is fenced content. Every such line's
 /// text must appear in the output unchanged, because no pass may rewrite it.
-/// Only the terminal line ending may differ, for the reason given on
-/// [`line_content`]. Delimiter lines are excluded from the sweep entirely:
-/// normalization is entitled to respell those, which is the whole point of the
-/// theorem.
+/// Delimiter lines are excluded from the sweep entirely: normalization is
+/// entitled to respell those, which is the whole point of the theorem.
 ///
 /// The comparison walks the two literal subsequences in step rather than asking
 /// whether each source literal line appears *anywhere* in the output. Membership
@@ -229,6 +222,9 @@ fn line_content(line: &str) -> &str { line.strip_suffix('\r').unwrap_or(line) }
 /// text, would satisfy it after the real line had been merged or reordered. The
 /// output's own region classification decides which lines to compare, and the
 /// walk rejects a missing, changed, or extra literal line alike.
+///
+/// Both sides are split by [`lines_of`], so the comparison is between the same
+/// terminator-free lines the product itself works with.
 ///
 /// Returns the number of files checked. Every fixture must be readable as
 /// UTF-8; an unreadable one fails the sweep rather than being skipped.
@@ -252,17 +248,16 @@ fn assert_literal_lines_survive(files: &[PathBuf]) -> Result<usize, Box<dyn std:
             .iter()
             .zip(&output_regions)
             .filter(|(_line, region)| **region == Region::Literal)
-            .map(|(line, _region)| line_content(line));
+            .map(|(line, _region)| line.as_str());
 
         for (line, region) in lines.iter().zip(&regions) {
             if *region != Region::Literal {
                 continue;
             }
-            let content = line_content(line);
             assert_eq!(
                 output_literal_lines.next(),
-                Some(content),
-                "{} changed or lost the literal line {content:?} under the full flag set",
+                Some(line.as_str()),
+                "{} changed or lost the literal line {line:?} under the full flag set",
                 file.display(),
             );
         }
