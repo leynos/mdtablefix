@@ -210,6 +210,19 @@ See the decision log.
   code failure: no gate has been observed to fail on this commit. Per the
   standing instruction the lock is waited out rather than worked around with a
   private `CARGO_HOME`.
+- **The lock is deadlocked, not merely busy.** Kernel evidence: PID 1832225
+  (`cargo test` in `/podbot/worktrees/9863d7f9…`) holds the exclusive
+  `FLOCK WRITE` on `.package-cache-mutate` and is parked in `do_wait`; its
+  child 1855438 is parked in `futex_wait_queue`; *its* child 1855450 wants the
+  lock and is parked in `locks_lock_inode_wait`. That is a closed cycle formed
+  entirely by one agent's process tree. Forty-six processes are queued on the
+  same lock (`/proc/locks`), including a `cargo check` of this very worktree.
+  CPU counter deltas across a 20-second and again across a 100-minute sample
+  are flat, and no `rustc` process has existed for the whole period. An
+  `--offline` invocation still wants the lock, so there is no supported route
+  around it. This is the escalation the Tolerances section exists to catch;
+  clearing it means killing another agent's job, which is outside this work's
+  authority.
 
 ## Decision log
 
@@ -310,7 +323,11 @@ already recorded in the ledger.
 
 ## Outcomes & retrospective
 
-Delivered, pending the M5 gate run, CodeRabbit review, and draft PR.
+Delivered, pending the M5 gate run, CodeRabbit review, and draft PR. The
+implementation, proofs, mutation gates, and formatting gate are all green at
+`c9ea885`; the remaining three Cargo gates are blocked on the deadlock recorded
+in Surprises, which is an escalation for the user rather than a defect in this
+work.
 
 The formatter now classifies every line of a document through one pure
 transition kernel, and the region-preservation theorem is machine-checked
