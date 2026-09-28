@@ -161,8 +161,8 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       literal subsequences; ExecPlan obligations 3 and 4 restated to match what
       the proofs actually establish). The remaining assertion-block finding was
       fixed in `9288d42` by splitting the kernel tests into
-      `src/wrap/tests/fence_kernel_tests.rs`. The two documentation warnings are
-      in flight.
+      `src/wrap/tests/fence_kernel_tests.rs`. The two documentation warnings
+      were fixed later in `b9fe398`; see the Documentation entry below.
 - [x] M5 Line-model fix. The stricter literal-line walk failed in CI on
       `tests/data/document/mixed_in_fence.dat`. The cause was the sweep's own
       line model, not a fence defect: the sweeps split on the line feed and kept
