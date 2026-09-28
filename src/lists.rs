@@ -57,13 +57,11 @@ fn passes_through(fence: FenceObservation, line: &str) -> Option<bool> {
 /// It does when its marker is not `1.` and no active list at its column
 /// continues: only a list starting at 1 can interrupt a paragraph.
 fn continues_paragraph(state: &ListState, line: &str) -> bool {
-    parse_numbered(line)
-        .is_some_and(|(indent, ..)| !starts_at_one(line) && !state.has_list_at(indent))
+    parse_numbered(line).is_some_and(|(indent, ..)| {
+        let starts_at_one = line.trim_start().split('.').next() == Some("1");
+        !starts_at_one && !state.has_list_at(indent)
+    })
 }
-
-/// Reports whether a numbered line's marker is `1.`, the only number that starts a list
-/// interrupting a paragraph.
-fn starts_at_one(line: &str) -> bool { line.trim_start().split('.').next() == Some("1") }
 
 /// Removes counters deeper than the current list item, optionally including its own depth.
 fn prune_deeper(
