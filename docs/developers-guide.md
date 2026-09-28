@@ -106,19 +106,38 @@ boundary; [ADR 0011](adrs/0011-verified-normalization-core.md) documents why
 the proof scope remains a narrow production-used core.
 
 The `verified_kernel_function!` and `verified_loop_function!` macros live in
-`src/classify_kernel_macros.rs`, included by `src/classify_kernel.rs`. They
-emit one shared executable body for Cargo and Verus, adding contracts and loop
-invariants only in the proof build. Their accepted attributes are limited to
-documentation, `must_use`, and the verifier's external-body marker, so macro
-callers cannot forward a lint-suppressing attribute. The classifier kernel, its
-predicate module, and `src/classify_kernel_consumers.rs` own production
-structural gates and verified builders. Other callers use the `&str` adapters in
+`src/verified_kernel_macros.rs`, included by `src/classify_kernel.rs` and by the
+fence kernel. They emit one shared executable body for Cargo and Verus, adding
+contracts and loop invariants only in the proof build. Their accepted attributes
+are limited to documentation, `must_use`, and the verifier's external-body
+marker, so macro callers cannot forward a lint-suppressing attribute. The
+classifier kernel, its predicate module, and
+`src/classify_kernel_consumers.rs` own production structural gates and verified
+builders. Use them only in the classifier kernel, its predicate and consumer
+modules, and the fence kernel; other callers use the `&str` adapters in
 `src/classify.rs`; do not add another scanner or repeat structural matching in
 a pass. The classifier-consumer kernels below own those shared decisions. A new
 scanner predicate should carry a narrow contract about its characters and
 cursor, then be proved from the same body before the top-level classifier
 refinement relies on it.
 
+The fence transition kernel in `src/wrap/fence/kernel.rs` follows the same
+pattern. `verus/lib.rs` includes it through `#[path]`, and its regex-facing
+entry point is `#[cfg(not(verus_keep_ghost))]`, so the proof build sees a
+`LineFeatures` value that has already been parsed and never the regex that
+produces one. Recognition therefore stays outside the proof, as the verification
+ledger records. `FenceTracker` routes each observed line through `fence_step`,
+and `compression_changes_region`, the guard `compress_fences` consults before it
+rewrites a delimiter, is stated and proved over that same transition. Callers
+that hold a whole document rather than a streaming pass use the public
+`mdtablefix::wrap::{classify_regions, Region}` re-exports, the batch counterpart
+of the tracker. That pair returns one `Region` per input line, in order: `Delim`
+where the line opens or closes a fence, `Literal` for the content a fence holds
+verbatim, and `Prose` for the ordinary Markdown a pass may rewrite.
+`make verus-fence-mutation` is the negative control. It drops the
+marker-character comparison from `closes_fence` and requires the failed
+obligation to name that function's contract against `spec_closes`, so the fence
+proofs are shown to rest on the closing rule they claim to establish.
 ### Shared classifier consumer kernels
 
 These functions are the verified decision boundary for structural consumers. The
