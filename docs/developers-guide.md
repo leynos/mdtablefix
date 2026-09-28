@@ -91,8 +91,9 @@ deliberately false assertion must be rejected; it also fails when the runner
 does not reach Verus, so a skipped verifier cannot pass the check.
 
 `make verus-mutation` runs `scripts/check-classifier-mutation.sh`. It changes
-the production Setext-text predicate to accept an ATX heading, then confirms
-Verus rejects its refinement postcondition. The mutation target is local.
+the production `setext_atx_marker` builder by removing its mandatory space,
+then confirms Verus rejects the builder's postcondition. This guards against
+weakening the emitted ATX prefix proof. The mutation target is local.
 
 The pull-request workflow runs `make verus` and `make verus-selftest` on
 Ubuntu. It caches the version-specific `.verus` directory using the runner
@@ -107,14 +108,23 @@ The `verified_kernel_function!` and `verified_loop_function!` macros live in
 emit one shared executable body for Cargo and Verus, adding contracts and loop
 invariants only in the proof build. Their accepted attributes are limited to
 documentation, `must_use`, and the verifier's external-body marker, so macro
-callers cannot forward a lint-suppressing attribute. Use them only in the
-classifier kernel, its predicate module, and its consumer module; callers use
-the `&str` boundary in `src/classify.rs`. The consumer predicates for Setext
-and thematic-break decisions call `classify_seq` directly. Setext conversion
-also checks the assembled replacement with the verified ATX predicate before
-emitting it. A new scanner predicate should carry a narrow contract about its
-characters and cursor, then be proved from the same body before the top-level
-classifier refinement relies on it.
+callers cannot forward a lint-suppressing attribute. The classifier kernel, its
+predicate module, and `src/classify_kernel_consumers.rs` own production
+structural gates and verified builders. Other callers use the `&str` adapters in
+`src/classify.rs`; do not add another scanner or repeat structural matching in
+a pass. The Setext detector uses `is_setext_pair_seq`, conversion gets its hash
+marker and separator from `setext_atx_marker`, and the emitted line is checked
+through `is_atx_heading_line`. The break pass builds its canonical line from
+`canonical_break_chars`. Keep these decisions in the consumer kernel and route
+new callers through the existing adapters. A new scanner predicate should carry
+a narrow contract about its characters and cursor, then be proved from the same
+body before the top-level classifier refinement relies on it.
+
+The classification compatibility test covers every line under `tests/data` with
+its actual fence and preceding-line context. Its checked-in snapshot records
+the relative path, line number, a hash of the source line, and the
+classification. Updating fixture text or changing a classification therefore
+requires an explicit snapshot review.
 
 `ListContinuationState` in `src/classify.rs` belongs only to the Setext and
 thematic-break consumers. It remembers the content indentation of an active

@@ -27,12 +27,18 @@ pub(super) struct TableSubstitutions {
 /// A quoted pipe body is not a top-level table row, and a delimiter is only a
 /// table start when its own body leads with the pipe: the classifier accepts a
 /// bare delimiter run that closes an existing table instead.
-fn opens_table_run(line_class: LineClass, body: &str, is_quoted: bool) -> bool {
+fn opens_table_run(
+    line_class: LineClass,
+    body: &str,
+    is_quoted: bool,
+    is_structural_table_line: bool,
+) -> bool {
     if is_quoted {
         return false;
     }
-    line_class == LineClass::TableRow
-        || (line_class == LineClass::TableDelimiter && body.starts_with('|'))
+    is_structural_table_line
+        && (line_class == LineClass::TableRow
+            || (line_class == LineClass::TableDelimiter && body.starts_with('|')))
 }
 
 /// Identifies a non-empty line whose indentation makes it an indented code
@@ -185,7 +191,14 @@ impl ProcessBuffer {
         let prefix = &line[..line.len() - classified.body.len()];
         let is_quoted = prefix.contains('>');
         let line_class = classified.class;
-        if opens_table_run(line_class, classified.body, is_quoted) {
+        let is_structural_table_line =
+            crate::classify_kernel::consumers::is_table_class(line_class);
+        if opens_table_run(
+            line_class,
+            classified.body,
+            is_quoted,
+            is_structural_table_line,
+        ) {
             debug!(
                 line_len = line.len(),
                 buffered_lines = self.buf.len(),
@@ -231,7 +244,7 @@ impl ProcessBuffer {
             self.flush();
             return Some(line);
         }
-        if line.contains('|') || line_class == LineClass::TableDelimiter {
+        if line.contains('|') || is_structural_table_line {
             self.buf.push(line);
             return None;
         }

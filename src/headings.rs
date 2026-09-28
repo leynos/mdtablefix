@@ -18,8 +18,7 @@ use crate::{
         ListContinuationState,
         classify_line_with_body,
         is_atx_heading_line,
-        is_setext_text_line,
-        is_setext_underline_line,
+        is_setext_pair,
         quote_depth,
     },
     wrap::{
@@ -168,19 +167,15 @@ fn detect_setext_heading(
         return None;
     }
 
-    let candidate_is_paragraph = is_setext_text_line(line, &ClassifyCtx::default());
+    let underline_context = ClassifyCtx::following(LineClass::ParagraphText, prefixes_agree);
+    if !is_setext_pair(line, &ClassifyCtx::default(), underline, &underline_context) {
+        return None;
+    }
     let text = line[prefix_len..].trim();
     if text.is_empty() {
         return None;
     }
-    if !is_setext_text(text, candidate_is_paragraph, link_matcher) {
-        return None;
-    }
-
-    if !is_setext_underline_line(
-        underline,
-        &ClassifyCtx::following(LineClass::ParagraphText, prefixes_agree),
-    ) {
+    if !is_setext_text(text, true, link_matcher) {
         return None;
     }
 
@@ -325,11 +320,8 @@ fn convert_setext(prefix: &str, level: usize, text: &str) -> String {
     if needs_space_after(prefix) {
         heading.push(' ');
     }
-    heading.push_str(&"#".repeat(level));
-    if !text.is_empty() {
-        heading.push(' ');
-        heading.push_str(text);
-    }
+    heading.extend(crate::classify_kernel::consumers::setext_atx_marker(level));
+    heading.push_str(text);
     heading
 }
 

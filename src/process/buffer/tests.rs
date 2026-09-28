@@ -155,6 +155,21 @@ fn thematic_break_after_table_flushes_table(
     );
 }
 
+/// The exact break emitted by `format_breaks` must terminate table buffering.
+#[rstest]
+fn canonical_break_after_table_flushes_table(#[from(new_buffer)] mut buffer: ProcessBuffer) {
+    handle_line(&mut buffer, "| a | b |");
+    handle_line(&mut buffer, "| --- | --- |");
+    handle_line(&mut buffer, "| 1 | 2 |");
+    let break_line = crate::breaks::canonical_break();
+
+    let passthrough = handle_line(&mut buffer, break_line);
+
+    assert_eq!(passthrough, Some(break_line.to_string()));
+    assert!(!buffer.in_table);
+    assert!(buffer.buf.is_empty());
+}
+
 #[test]
 fn plain_pipe_continuation_is_buffered() {
     let mut buffer = new_buffer();

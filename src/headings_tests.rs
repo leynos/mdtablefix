@@ -32,6 +32,21 @@ fn converts_setext_headings(#[case] input: Vec<String>, #[case] expected: Vec<St
     assert_eq!(convert_setext_headings(&input), expected);
 }
 
+/// Production output retains its prefix and reparses as an ATX heading.
+#[rstest]
+#[case(vec!["Heading".into(), "===".into()], "# Heading")]
+#[case(vec!["   Heading".into(), "   ====".into()], "   # Heading")]
+#[case(vec!["> Quote".into(), "> ----".into()], "> ## Quote")]
+fn emitted_setext_heading_is_atx(#[case] input: Vec<String>, #[case] expected: &str) {
+    let output = convert_setext_headings(&input);
+
+    assert_eq!(output, vec![expected.to_string()]);
+    assert_eq!(
+        crate::classify::classify_line(&output[0], &ClassifyCtx::default()),
+        LineClass::AtxHeading,
+    );
+}
+
 #[rstest]
 #[case(vec!["```".into(), "Heading".into(), "---".into(), "```".into()])]
 #[case(vec!["Not a heading".into(), "--".into()])]
@@ -174,7 +189,7 @@ fn classifies_setext_text(#[case] payload: &str, #[case] expected: bool) {
     assert_eq!(
         is_setext_text(
             payload,
-            is_setext_text_line(payload, &ClassifyCtx::default()),
+            crate::classify::is_setext_text_line(payload, &ClassifyCtx::default()),
             matcher,
         ),
         expected
@@ -186,4 +201,13 @@ fn classifies_setext_text(#[case] payload: &str, #[case] expected: bool) {
 #[case(vec!["2024 revenue".into(), "===".into()], vec!["# 2024 revenue".into()])]
 fn converts_digit_prefixed_paragraphs(#[case] input: Vec<String>, #[case] expected: Vec<String>) {
     assert_eq!(convert_setext_headings(&input), expected);
+}
+
+/// The canonical break is structural and cannot become Setext candidate text.
+#[test]
+fn canonical_break_is_not_consumed_as_setext_text() {
+    let break_line = crate::breaks::canonical_break().to_string();
+    let input = vec![break_line, "---".to_string()];
+
+    assert_eq!(convert_setext_headings(&input), input);
 }
