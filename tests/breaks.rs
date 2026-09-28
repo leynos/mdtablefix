@@ -257,6 +257,9 @@ fn indented_break(indent: &str) -> String { format!("{indent}{}", "_".repeat(THE
 #[case::after_a_child_heading(lines_vec!["- item", "", "  # heading", "", "  ***", "", "  more"], 4, "  ")]
 // A nested list inside the item closes before the break; the outer item holds it.
 #[case::after_a_nested_list(lines_vec!["- a", "  - b", "", "  ***", "", "  more"], 3, "  ")]
+// A lazy continuation line at column 0 still belongs to the item's paragraph,
+// so it does not close the item.
+#[case::after_a_lazy_line(lines_vec!["- item", "lazy continuation", "", "  ***", "", "  more"], 3, "  ")]
 // A `10.` item's content starts at column 4; relative to the item this is a
 // break, not indented code.
 #[case::under_a_wide_marker(lines_vec!["10. item", "", "    ***", "", "    more"], 2, "    ")]
