@@ -65,6 +65,14 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
 - Every gate is run sequentially, and only by `scrutineer`. No parallel
   format/lint/test runs.
 - en-GB-oxendict spelling in all prose and comments.
+- The Cargo package-cache lock (`~/.cargo/.package-cache-mutate`) is
+  **permanently deadlocked** for the remainder of this work by another agent's
+  process in the `podbot` worktree (`cargo test` holds the sole write lock and
+  waits on a `trybuild` child that waits on the parent's lock). It will not
+  clear unaided, 85 cargo processes are queued behind it, and it is not this
+  branch's to kill. Consequently `lint`, `typecheck`, and `test` **cannot run
+  locally at all**; CI is their authority. `cargo fmt` and the Verus gates are
+  lock-independent and do still run.
 
 ## Tolerances (exception triggers)
 
@@ -186,7 +194,16 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       `assert_fence_step`, `assert_transition`, `assert_fenced_line`), and the
       property block moved verbatim to `src/wrap/tests/fence_tracker_props.rs`
       so both files sit under the 400-line limit. Measured result: max
-      consecutive-assert run 8 → 3 across every file.
+      consecutive-assert run 8 → 3 across every file. **Verified**: CI green at
+      `a55e030` (`build-test` success — clippy, the full 2544-test suite, and the
+      Windows contract job), and CodeScene now passes at `8.03 → 10.00` with
+      *both* the Large Assertion Blocks and Duplicated Assertion Blocks
+      biomarkers cleared. The first push of this fix failed the Lint gate with
+      `clippy::trivially_copy_pass_by_ref`, because the new `assert_transition`
+      took a three-boolean `Copy` type by reference; fixed in `a55e030` by
+      taking it by value. `cargo fmt` had reported the file clean, which is the
+      point: formatting parses a file, and this defect was only visible to a
+      lint that needs type information.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -269,6 +286,29 @@ See the decision log.
   was corrected. Verification that a refactor is faithful is not the same as
   verification that it compiles, and neither is the same as verification that
   it passes.
+
+  The prediction held, and the failure it missed was instructive. CI found
+  `clippy::trivially_copy_pass_by_ref` in the new helper: `FenceObservation` is
+  three `bool`s and a `Copy`, so an `&FenceObservation` parameter is more
+  expensive than passing it by value, and `-D warnings` makes that fatal. None
+  of the three structural checks could have caught it, and neither could
+  `cargo fmt`, because the defect was not in the *logic* the checks compared —
+  the assertions were faithful line for line — but in a *signature* choice that
+  only a lint with type information can see. Being faithful and being
+  well-typed are independent properties, and a test-only change is easy to
+  mistake for one that cannot break the build.
+
+- **CI is the real gate when the local lock is deadlocked, and it works.** With
+  `lint`, `typecheck`, and `test` unrunnable locally, every Cargo gate was
+  obtained by pushing and watching the run: `gh run watch <id> --exit-status`
+  foregrounded in the background, with `--log-failed` to extract the failure and
+  `--log` plus `grep 'test result:'` to confirm the suite actually ran rather
+  than trusting a green job badge. The last step matters. "Job passed" and "my
+  tests passed" are different claims, and only the second is the one worth
+  making: the individual `wrap::tests::fence_tracker_props::*` lines were read
+  out of the log to confirm the moved module compiled and its four property
+  cases executed.
+
 
 - Acting on the CodeRabbit finding about `ObservedFence` removed a parse rather
   than adding a field. `ParsedLine::observe` was calling
