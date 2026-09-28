@@ -134,7 +134,13 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       the proof. The whole-line finding was substantive rather than cosmetic: it
       caught the terminator mismatch recorded in Surprises, which the weaker
       substring assertion had been hiding.
-- [ ] M5 Re-run CodeRabbit, then mark the PR ready for review.
+- [x] M5 CodeRabbit round 4. Zero findings. All seven non-Cargo gates green at
+      `b53a7e9` (`check-fmt`, `markdownlint`, `check-static-regexes`,
+      `check-verification-ledger`, `verus` 81 verified/0 errors,
+      `verus-fence-mutation`, `verus-selftest`), and CI green at the same commit
+      (CI 36382514058, Verus 36382513964). The review was run with `--base
+      origin/main`; see the decision log.
+- [ ] M5 Mark the PR ready for review.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -282,6 +288,18 @@ See the decision log.
   completed in about a second each while the Cargo gates sat blocked. Useful
   for triage: a green Verus run says nothing about whether a Cargo gate has
   been attempted.
+- **A passing mutation gate cannot show its own evidence.**
+  `make verus-fence-mutation` asserts three substrings of the verifier output
+  (`verification results::`, `postcondition not satisfied`, and the `ensures`
+  clause `result == crate::spec_closes(state, line)`) and then deletes its
+  temporary directory in a `trap`, so on the pass path nothing is printed. The
+  contract the gate requires the output to name is the spec-call expression,
+  not the literal token `closes_fence`. Exit 0 therefore means the three
+  assertions held, which is the designed evidence, but the log cannot be read
+  afterwards to confirm which contract failed if a future mutation is
+  mis-targeted. Recorded rather than "fixed": making the pass path print the
+  verifier output is a change to the existing gate's noise level, outside this
+  issue's proof scope.
 
 ## Decision log
 
@@ -319,6 +337,12 @@ See the decision log.
   the trusted boundary is the established pattern. What crosses the boundary is
   a pre-parsed `LineFeatures`, and that contract is recorded in the ledger.
   Date 2026-09-28.
+- Decision: review against `origin/main`, not the local `main` ref. Rationale:
+  local `main` was 29 commits behind `origin/main`, which is what the PR
+  actually targets and is a direct ancestor of this branch. Reviewing against
+  the stale ref reported a 255-file, 34,245-insertion diff; against
+  `origin/main` it is the 17 files this work touched, which is the diff a
+  reviewer needs. Date 2026-09-28.
 
 ## Verification plan
 
