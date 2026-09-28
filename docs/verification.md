@@ -82,6 +82,28 @@ formatter leaves that source line unchanged. These cases have named regressions
 in the reference test module. The residual block matcher used for link and
 footnote definitions remains outside this classifier proof.
 
+`src/wrap/fence/kernel.rs` is the pure fence transition kernel, included by
+`verus/lib.rs` through `#[path]` so the proofs constrain the body the formatter
+runs. Recognition is excluded from the proof build: the kernel's regex-facing
+entry points are `#[cfg(not(verus_keep_ghost))]`, exactly as the classifier's
+are, so a line arrives already reduced to pre-parsed features. The kernel's
+whole-document `regions` is proved to equal the seeded-prefix specification
+element for element, and `compress_fences` consults the same
+`compression_changes_region` predicate the proofs are stated over, so the batch
+classification and the rewrite decision cannot hold different notions of what a
+delimiter is.
+
+The region-preservation theorem is one-sided, and that is the honest form: a
+tilde line closes a tilde opener but cannot close the three-backtick opener the
+pass writes in its place, so the two runs legitimately disagree about delimiter
+identity. What the theorem establishes is that no line moves between the
+literal and prose regions -- delimiter spelling may change, payload regions may
+not. `lemma_witness_interior_is_literal` exhibits an interior satisfying every
+hypothesis and pins the regions both runs agree on, so the conclusion is not an
+empty sequence, and `lemma_witness_conflict_is_rejected` proves the guard fires
+on the issue #480 shape. `tests/fence_regions.rs` replays the same reasoning
+over every fixture.
+
 ## Claim ledger
 
 | Claim                                             | Executable function                             | Input domain                                                                                                           | Unverified external contracts                                                                                           | Result class                                                                                                                                            |
@@ -106,6 +128,14 @@ footnote definitions remains outside this classifier proof.
 | Table break preservation                          | `is_table_class`                                | Thematic-break class returned for the exact canonical line                                                             | Same five trusted matcher contracts                                                                                     | Rejects the table-input gate; wrapper lemma and path regression (cross-pass preservation)                                                               |
 | Orphan-specifier break preservation               | `can_be_orphan_specifier_seq`                   | Exact unprefixed canonical line under every outside-fence context                                                      | Same five trusted matcher contracts                                                                                     | Returns false for thematic-break class; wrapper lemma and path regression (cross-pass preservation)                                                     |
 | Fixture classification compatibility              | `fixture_lines_match_the_classification_oracle` | Every `tests/data` line with independently carried fence, preceding-class and prefix state                             | Same five trusted matcher contracts                                                                                     | Differentially compares an independent regex reference and pins path, class and FNV-1a source-line hash (compatibility evidence and regression)         |
+| Fence closing-rule decision                       | `closes_fence`            | All opener states and parsed line features           | Fence recognition and blockquote parsing                                     | Boolean iff `spec_closes`                                            |
+| Would-be-closer decision                          | `agrees_with_opener`      | All opener states and parsed line features           | Fence recognition and blockquote parsing                                     | Boolean iff `spec_agrees_with_opener`                                |
+| Interior-delimiter decision                       | `interior_delimiter`      | All opener states and parsed line features           | Fence recognition and blockquote parsing                                     | Boolean iff `spec_interior_delimiter`                                |
+| Compression-conflict decision                     | `compression_changes_region` | All opener states and parsed line features        | Fence recognition and blockquote parsing                                     | Boolean iff `spec_compression_changes_region`                        |
+| Compressed delimiter state                        | `compressed`              | All opener states                                    | None                                                                         | Exact state; three backticks at the opening depth                    |
+| Fence transition and line region                  | `fence_step`              | All opener states and parsed line features           | Fence recognition and blockquote parsing                                     | Exact next state and `Region`                                        |
+| Whole-document region classification              | `regions`                 | Every `LineFeatures` slice                          | Fence recognition and blockquote parsing                                     | Exact `Region` sequence, element for element                        |
+| Region preservation under delimiter compression   | `regions`                 | A block interior meeting the compression guard       | Fence recognition and blockquote parsing                                     | Equal region sequences under the original and compressed openers     |
 
 _Table 1: The verification claim ledger._
 
@@ -140,6 +170,12 @@ issue #567.
 - Preservation of breaks inside all enclosing containers is tracked by
   [issue #580](https://github.com/leynos/mdtablefix/issues/580); the narrow
   canonical-break consumer claims above do not discharge that broader domain.
+- `make verus-fence-mutation` drops the marker-character comparison from
+  `closes_fence` and checks that the failed obligation names that function's
+  contract against `spec_closes`. The mutation leaves a plausible predicate
+  behind -- it still tests depth, run length, and trailing whitespace -- so a
+  gate that accepted it would show the fence proofs rested on something other
+  than the closing rule they claim to establish.
 
 The ledger check invoked by `make lint` rejects a claim whose executable
 function name does not occur in `src/`.
