@@ -19,6 +19,7 @@ mod fence;
 mod inline;
 mod link_reference;
 mod paragraph;
+mod passthrough;
 mod pending;
 mod tokenize;
 #[cfg(test)]
@@ -37,6 +38,7 @@ pub(crate) use fence::{FenceObservation, ObservedFence};
 pub use fence::{FenceTracker, is_fence};
 pub(crate) use link_reference::{LinkReferenceMatcher, LinkTitleWindow, LinkTitleWindowOutcome};
 use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
+use passthrough::{is_passthrough_block, normalized_passthrough_line};
 use pending::handle_pending_continuation;
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
@@ -57,49 +59,6 @@ pub(crate) use tokenize::{has_odd_backslash_escape_bytes, link_or_image_span};
 
 // Permit GFM task list markers with flexible spacing and missing post-marker
 // spaces in Markdown.
-
-/// Return whether a line is an indented code block with visible content.
-///
-/// Blank indented lines remain paragraph separators; only four-column
-/// indentation followed by a non-whitespace character is protected here.
-fn is_indented_code_line(line: &str) -> bool {
-    let (indent_width, first_content_byte) = leading_indent(line);
-    indent_width >= 4
-        && line[first_content_byte..]
-            .chars()
-            .any(|c| !c.is_whitespace())
-}
-
-/// Return whether a line belongs to a table or a table-separator boundary.
-///
-/// These lines are emitted verbatim because reflowing their pipes or separator
-/// dashes would change the table grammar before the table formatter sees it.
-fn is_table_or_separator(line: &str) -> bool {
-    line.trim_start().starts_with('|') || crate::table::SEP_RE.is_match(line.trim())
-}
-
-/// Returns whether `line` must be emitted verbatim rather than wrapped.
-///
-/// Thematic breaks are included even though [`is_table_or_separator`] already
-/// passes `---` through: that accidental match relies on the table-separator
-/// pattern, which rejects `***`, `___`, `- - -`, and the underscore run
-/// emitted by `--breaks`. Recognising the break directly keeps all of those on
-/// their own line, so a second `--wrap` pass cannot absorb a normalised break
-/// into the surrounding paragraph.
-fn is_passthrough_block(block_kind: Option<BlockKind>, line: &str) -> bool {
-    is_table_or_separator(line)
-        || matches!(
-            block_kind,
-            Some(
-                BlockKind::Heading
-                    | BlockKind::MarkdownlintDirective
-                    | BlockKind::LinkReferenceDefinition
-                    | BlockKind::ThematicBreak,
-            )
-        )
-        || line.trim().is_empty()
-        || is_indented_code_line(line)
-}
 
 /// Parse a list or footnote prefix, retaining any outer blockquote prefix.
 ///
@@ -207,23 +166,6 @@ fn line_break_parts(line: &str) -> (String, bool) {
         .trim_end_matches(' ')
         .to_string();
     (text, hard_break)
-}
-
-/// Collapse whitespace-only passthrough lines to the canonical empty line.
-///
-/// Verbatim constructs keep their source spelling, except that a whitespace
-/// only separator is normalised so repeated formatting does not accumulate
-/// insignificant indentation.
-fn normalized_passthrough_line(line: &str) -> &str {
-    if !line.is_empty() && line.trim().is_empty() {
-        trace!(
-            line_len = line.len(),
-            "normalizing whitespace-only passthrough line"
-        );
-        ""
-    } else {
-        line
-    }
 }
 
 /// Consume a continuation whose blockquote prefix still matches pending state.
