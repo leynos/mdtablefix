@@ -144,6 +144,17 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       [#588](https://github.com/leynos/mdtablefix/pull/588) is `OPEN`,
       `isDraft=false`, base `main`, mergeable, with `Closes #486` and the Lody
       session link in the body.
+- [x] M5 Hosted review remediation. Taking the PR out of draft started the
+      GitHub App review, which returned four inline findings, one error-level
+      pre-merge check, two warnings, a CodeScene quality-gate failure and a
+      codex P2. Four were fixed in `4c3b4c5` (the missing `replaced` transition
+      arm; corpus-sweep read failures promoted from silent skips to errors; the
+      literal-line sweep changed from substring to an in-step walk of both
+      literal subsequences; ExecPlan obligations 3 and 4 restated to match what
+      the proofs actually establish). The remaining assertion-block finding was
+      fixed in `9288d42` by splitting the kernel tests into
+      `src/wrap/tests/fence_kernel_tests.rs`. The two documentation warnings are
+      in flight.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -303,6 +314,17 @@ See the decision log.
   mis-targeted. Recorded rather than "fixed": making the pass path print the
   verifier output is a change to the existing gate's noise level, outside this
   issue's proof scope.
+- **A clean CLI CodeRabbit pass does not mean the PR is clean.** Round 4 of
+  `coderabbit review --agent` returned zero findings at `b53a7e9`, and every
+  gate was green, so the PR was marked ready. Taking it out of draft then
+  started the *hosted* GitHub App review, which reviewed the same commit and
+  returned four inline findings, an error-level pre-merge check, two warning
+  pre-merge checks, a CodeScene quality-gate failure and a codex P2 — a
+  materially different and stricter result. The two are separate reviewers: the
+  App only reviews non-draft PRs, and the CLI pass cannot see its configured
+  rule set. The operational consequence is that "all concerns cleared" cannot
+  be established from the CLI alone, and the point at which the App first runs
+  is a state change worth anticipating rather than treating as a formality.
 
 ## Decision log
 
@@ -374,14 +396,15 @@ Obligations, and how each is discharged.
    turned out to require. For a guarded interior line — one that does not close
    the original opener and that `spec_rewrite_permitted` admits — the line
    closes the rewritten opener no more than it closed the original, and both
-   runs classify it as `Literal`. Method: `proof fn
-   lemma_rewrite_preserves_closer_relation` over parsed `LineFeatures` and the
-   pure `spec_compressed` / `spec_rewrite_permitted` predicates. The symmetric
-   biconditional is *false*, and the Surprises entry records why: a tilde line
-   closes a tilde opener but not the three-backtick opener the pass writes.
-   Non-vacuity: the mutation gate drops the marker-character check and must
-   report `postcondition not satisfied` naming the `spec_closes` contract; the
-   doc comment on the lemma states why that check is what makes it true.
+   runs classify it as `Literal`. Method:
+   `proof fn lemma_rewrite_preserves_closer_relation` over parsed
+   `LineFeatures` and the pure `spec_compressed` / `spec_rewrite_permitted`
+   predicates. The symmetric biconditional is *false*, and the Surprises entry
+   records why: a tilde line closes a tilde opener but not the three-backtick
+   opener the pass writes. Non-vacuity: the mutation gate drops the
+   marker-character check and must report `postcondition not satisfied` naming
+   the `spec_closes` contract; the doc comment on the lemma states why that
+   check is what makes it true.
 
 4. **LEM-FENCE-NORMALIZATION-PRESERVES-REGIONS**, for one pre-parsed block
    interior. For a body whose lines each satisfy the compression guard, the
