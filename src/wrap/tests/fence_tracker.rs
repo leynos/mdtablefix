@@ -35,8 +35,11 @@ fn assert_fence_step(tracker: &mut FenceTracker, line: &str, depth: usize, in_fe
 }
 
 /// Asserts that one source line yields exactly the expected transition.
+///
+/// `FenceObservation` is three booleans and is `Copy`, so it is taken by value
+/// rather than by reference.
 fn assert_transition(
-    step: &FenceObservation,
+    step: FenceObservation,
     was_in_fence: bool,
     is_fence_marker: bool,
     is_in_fence: bool,
@@ -230,15 +233,15 @@ fn source_line_observation_reports_transition_and_resulting_state() {
     let mut tracker = FenceTracker::new();
 
     let opening = tracker.observe_source_line("> > ```rust");
-    assert_transition(&opening, false, true, true);
+    assert_transition(opening, false, true, true);
 
     let content = tracker.observe_source_line("> > code");
-    assert_transition(&content, true, false, true);
+    assert_transition(content, true, false, true);
 
     // Dropping below the opening depth closes the block implicitly, so the line
     // is neither a marker nor inside a fence.
     let shallower = tracker.observe_source_line("> prose");
-    assert_transition(&shallower, false, false, false);
+    assert_transition(shallower, false, false, false);
 }
 
 #[test]
