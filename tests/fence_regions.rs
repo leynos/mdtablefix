@@ -214,13 +214,14 @@ fn assert_literal_lines_survive(files: &[PathBuf]) -> Result<usize, Box<dyn std:
             .to_string_lossy()
             .into_owned();
         let output = format_once(&directory, &name, &text)?;
+        let output_lines = lines_of(&output);
 
         for (line, region) in lines.iter().zip(&regions) {
             if *region != Region::Literal {
                 continue;
             }
             assert!(
-                output.contains(line.as_str()),
+                output_lines.contains(line),
                 "{} lost the literal line {line:?} under the full flag set",
                 file.display(),
             );

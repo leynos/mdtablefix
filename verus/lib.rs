@@ -53,9 +53,10 @@ pub use fence_spec::*;
 
 /// The fence kernel's view is itself.
 ///
-/// All three fields are bit-valued scalars, so the mathematical form of a
-/// [`LineFeatures`] is the struct: the specification reasons about the same
-/// values the kernel carries, with no abstraction that could disagree.
+/// Every field is a plain `Copy` value — a depth, an optional marker character,
+/// a run length, and a trailing-blankness flag — so the mathematical form of a
+/// [`LineFeatures`] is the struct itself: the specification reasons about the
+/// same values the kernel carries, with no abstraction that could disagree.
 impl View for production_fence::LineFeatures {
     type V = production_fence::LineFeatures;
 

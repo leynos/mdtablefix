@@ -181,8 +181,14 @@ pub open spec fn spec_compression_changes_region(
     )
 }
 
-/// A rewrite is permitted on exactly one line: interior content whose marker
-/// belongs to the opener's family or to the compression target's.
+/// Whether a delimiter rewrite may be performed while this one line is inside
+/// the block.
+///
+/// Rewriting is permitted for every line except interior content whose marker
+/// conflicts with the compression target: a fence-shaped line still held open
+/// that the rewritten three-backtick opener would newly close. Delimiters and
+/// prose are always permitted; only such an interior line forbids the rewrite,
+/// because it alone would move later lines out of the literal region.
 ///
 /// This is the whole safety condition, stated as an equivalence so that the
 /// negation the lemmas consume is available without a case analysis of its own.
