@@ -395,10 +395,13 @@ fn fence_tracker_rejects_non_ascii_whitespace_close(#[case] closing: &str) {
 /// The two non-vacuity witnesses for the region-classification obligation.
 ///
 /// Both documents open with four backticks and carry an interior three-backtick
-/// line. The only difference is the final line, so the pair pins down exactly
-/// which property distinguishes the two outcomes: a shorter marker never closes
-/// a wider fence, and an interior marker never becomes literal merely because a
-/// later delimiter closes the block.
+/// line, which stays literal in both. The only difference is the final line, so
+/// the pair pins down which property distinguishes the two outcomes: a trailing
+/// four-backtick line closes the opener and is itself a delimiter, while a
+/// trailing three-backtick line is too short to close it and so remains literal
+/// interior content. The interior line's region is what the obligation is
+/// about, and showing it unchanged across both closers is what stops the pair
+/// from being a restatement of one case.
 #[test]
 fn regions_witness_wider_closer_stays_literal() {
     let lines = ["````", "```", "literal", "````"];
