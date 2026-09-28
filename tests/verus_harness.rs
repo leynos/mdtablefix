@@ -11,14 +11,14 @@ use std::process::{Command, Output};
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{
-    ambient_authority,
-    fs::{Permissions, PermissionsExt},
-    fs_utf8::Dir,
-};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::{fixture, rstest};
 use serde_yaml::{Mapping, Value};
 use tempfile::TempDir;
+
+#[path = "support/fake_prover_tools.rs"]
+mod fake_prover_tools;
+use fake_prover_tools::{fake_prover_tools, make_command, runner_log};
 
 const VERUS_WORKFLOW: &str = include_str!("../.github/workflows/verus.yml");
 const VERUS_VERSION: &str = include_str!("../tools/verus/VERSION");
@@ -74,85 +74,6 @@ fn run_ledger_check(directory: &Utf8Path) -> Output {
         .env_remove("RG")
         .output()
         .expect("failed to execute check-verification-ledger.sh")
-}
-
-struct FakeProverTools {
-    _directory: TempDir,
-    path: Utf8PathBuf,
-    log_path: Utf8PathBuf,
-    smoke_mode: &'static str,
-}
-
-fn fake_prover_tools(smoke_mode: &'static str) -> Result<FakeProverTools> {
-    let directory = TempDir::new().context("create fake prover-tools directory")?;
-    let root = utf8(directory.path())?;
-    let handle = open_dir(root)?;
-    let path = root.join("prover-tools");
-    let log_path = root.join("prover-tools.log");
-    let script = r#"#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' "$*" >> "${FAKE_PROVER_TOOLS_LOG:?}"
-if [[ "$*" == "verus run --repo-root . --proof-file verus/smoke.rs" ]]; then
-    case "${FAKE_PROVER_TOOLS_SMOKE_MODE:?}" in
-        rejected)
-            echo "Verus proofs failed"
-            exit 1
-            ;;
-        accepted) exit 0 ;;
-        unrelated_failure)
-            echo "runner unavailable"
-            exit 1
-            ;;
-    esac
-fi
-"#;
-    handle
-        .write("prover-tools", script)
-        .context("write fake prover-tools runner")?;
-    handle
-        .set_permissions("prover-tools", Permissions::from_mode(0o755))
-        .context("make fake prover-tools runner executable")?;
-    Ok(FakeProverTools {
-        _directory: directory,
-        path,
-        log_path,
-        smoke_mode,
-    })
-}
-
-/// Returns the command line that runs the fake runner through `bash`.
-///
-/// The runner is written by this process, and any other test thread that
-/// forks while the file is open for writing leaves a child holding a write
-/// descriptor until it execs. Executing the file directly in that window
-/// fails with `ETXTBSY` (#586), so the harness runs `bash` and lets it read
-/// the script instead of executing a file it has just written.
-fn runner_command(runner: &FakeProverTools) -> String { format!("bash {}", runner.path) }
-
-fn make_command(target: &str, runner: &FakeProverTools) -> Command {
-    let mut command = Command::new("make");
-    command
-        .arg("--no-print-directory")
-        .arg(target)
-        .current_dir(manifest_dir())
-        .env("PROVER_TOOLS", runner_command(runner))
-        .env(
-            "VERUS_RUN",
-            format!("{} verus run --repo-root .", runner_command(runner)),
-        )
-        .env("FAKE_PROVER_TOOLS_LOG", &runner.log_path)
-        .env("FAKE_PROVER_TOOLS_SMOKE_MODE", runner.smoke_mode);
-    command
-}
-
-fn runner_log(runner: &FakeProverTools) -> Result<String> {
-    let root = runner
-        .path
-        .parent()
-        .context("fake prover-tools path has no parent")?;
-    open_dir(root)?
-        .read_to_string("prover-tools.log")
-        .context("read fake prover-tools log")
 }
 
 fn parse_workflow() -> Result<Value> {

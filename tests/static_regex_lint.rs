@@ -39,6 +39,10 @@ use proptest::prelude::*;
 use rstest::rstest;
 use tempfile::TempDir;
 
+#[path = "support/script_stubs.rs"]
+mod script_stubs;
+use script_stubs::{stub_command, write_stub};
+
 /// The diagnostic emitted when a prohibited declaration is found.
 const PROHIBITED_DIAGNOSTIC: &str = "static regular expressions must use lazy_regex!";
 
@@ -112,28 +116,6 @@ fn run_guard(scan_dir: &Utf8Path, rg: Option<&str>) -> io::Result<std::process::
         None => cmd.env_remove("RG"),
     };
     cmd.output()
-}
-
-/// Returns an `RG` value that runs `stub` through `sh` rather than executing it.
-///
-/// The stub is written by this process; a test thread that forks while it is
-/// open for writing leaves a child holding a write descriptor until it
-/// execs, and executing the file in that window fails with `ETXTBSY` (#586).
-fn stub_command(stub: &Utf8Path) -> String { format!("sh {stub}") }
-
-/// Write `script` to `<dir>/<name>`, mark it executable, and return its path.
-///
-/// Both operations go through a capability scoped to `dir`, so `name` is
-/// resolved relative to that directory rather than against ambient authority.
-fn write_stub(dir: &Utf8Path, name: &str, script: &str) -> io::Result<Utf8PathBuf> {
-    let handle = open_dir(dir)?;
-    handle.write(name, script)?;
-    #[cfg(unix)]
-    {
-        use cap_std::fs::{Permissions, PermissionsExt};
-        handle.set_permissions(name, Permissions::from_mode(0o755))?;
-    }
-    Ok(dir.join(name))
 }
 
 #[rstest]
