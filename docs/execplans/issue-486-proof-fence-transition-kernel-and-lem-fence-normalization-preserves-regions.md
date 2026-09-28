@@ -140,7 +140,10 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       `verus-fence-mutation`, `verus-selftest`), and CI green at the same commit
       (CI 36382514058, Verus 36382513964). The review was run with `--base
       origin/main`; see the decision log.
-- [ ] M5 Mark the PR ready for review.
+- [x] M5 Mark the PR ready for review. PR
+      [#588](https://github.com/leynos/mdtablefix/pull/588) is `OPEN`,
+      `isDraft=false`, base `main`, mergeable, with `Closes #486` and the Lody
+      session link in the body.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
