@@ -275,15 +275,12 @@ impl FenceTracker {
         );
         self.state = next;
 
-        match features {
-            Some(features) => {
-                self.report_fence_marker(before, next, features);
-                true
-            }
-            None => {
-                self.report_implicit_close(before, next, depth);
-                false
-            }
+        if let Some(features) = features {
+            Self::report_fence_marker(before, next, features);
+            true
+        } else {
+            Self::report_implicit_close(before, next, depth);
+            false
         }
     }
 
@@ -293,12 +290,7 @@ impl FenceTracker {
     /// The event reports the *line's* depth, not the resulting state, because a
     /// delimiter on the same line opens a fresh fence afterwards. Reporting the
     /// resulting state would hide the closure that made it possible.
-    fn report_implicit_close(
-        &self,
-        before: Option<FenceState>,
-        after: Option<FenceState>,
-        depth: usize,
-    ) {
+    fn report_implicit_close(before: Option<FenceState>, after: Option<FenceState>, depth: usize) {
         if let Some(open) = before
             && after.is_none_or(|next| next.open_depth != open.open_depth)
         {
@@ -315,7 +307,6 @@ impl FenceTracker {
 
     /// Emit the event describing what a fence-marker line did to the state.
     fn report_fence_marker(
-        &self,
         before: Option<FenceState>,
         after: Option<FenceState>,
         features: LineFeatures,

@@ -34,8 +34,8 @@ pub enum Region {
 
 /// Opening-fence identity that a later line must match before it can close.
 ///
-/// The three fields are exactly the conditions CommonMark places on a closing
-/// fence: the same marker family, a run at least as long, and the same
+/// The three fields are exactly the conditions `CommonMark` places on a
+/// closing fence: the same marker family, a run at least as long, and the same
 /// blockquote depth.
 #[derive(Clone, Copy)]
 #[cfg_attr(not(verus_keep_ghost), derive(Debug, Eq, PartialEq))]
@@ -64,7 +64,7 @@ pub struct LineFeatures {
     pub marker_len: usize,
     /// Whether only ASCII spaces and tabs follow the marker run.
     ///
-    /// CommonMark forbids an info string on a closing fence, so a same-marker
+    /// `CommonMark` forbids an info string on a closing fence, so a same-marker
     /// line carrying trailing text is literal content, not a close.
     pub trailing_blank: bool,
 }
@@ -96,7 +96,6 @@ impl LineFeatures {
             trailing_blank,
         }
     }
-
 }
 
 verified_kernel_function! {
