@@ -232,8 +232,7 @@ fn assert_literal_lines_survive(files: &[PathBuf]) -> Result<usize, Box<dyn std:
 }
 
 #[test]
-fn every_fixture_preserves_regions_under_fence_normalization()
--> Result<(), Box<dyn std::error::Error>> {
+fn every_fixture_preserves_regions_under_fence_normalization() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let files = data_files(&root.join("tests").join("data"));
 
@@ -251,7 +250,6 @@ fn every_fixture_preserves_regions_under_fence_normalization()
         checked > 100,
         "expected the whole fixture corpus, checked {checked}",
     );
-    Ok(())
 }
 
 #[test]
