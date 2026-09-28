@@ -384,11 +384,12 @@ already recorded in the ledger.
 
 Delivered, pending CodeRabbit review and marking the PR ready. Draft PR
 [#588](https://github.com/leynos/mdtablefix/pull/588) is open. The
-implementation, proofs, mutation gates, and formatting gate are all green
-locally; the three Cargo gates that the shared package-cache deadlock blocks
-locally pass in CI at `58d4fca` (Format, Markdown lint, Lint, and the full test
-suite — 2544 run, 2544 passed). The deadlock is recorded in Surprises and
-remains an escalation for the user rather than a defect in this work.
+implementation, proofs, mutation gates, and formatting gate are green locally;
+the Cargo gates that the shared package-cache deadlock blocks locally — Format,
+Markdown lint, Lint, and the test suite (2544 run, 2544 passed, 0 skipped) —
+pass in CI on `e810a01`, and the Windows `atomic write contract` job passes
+there too. The deadlock is recorded in Surprises and remains an escalation for
+the user rather than a defect in this work.
 
 The formatter now classifies every line of a document through one pure
 transition kernel, and the region-preservation theorem is machine-checked
