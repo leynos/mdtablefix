@@ -118,19 +118,23 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       `(#486)`, body carrying `Closes #486` and the Lody session link.
 - [x] M5 Gates. `check-fmt`, `verus` (81 verified, 0 errors), `verus-selftest`,
       `verus-mutation`, and `verus-fence-mutation` pass locally. `lint`,
-      `format`, `markdownlint`, and the test suite (2544 run, 2544 passed, 0
-      skipped) pass in CI at `58d4fca`, which is where they had to run because
-      the local Cargo package-cache lock is deadlocked.
+      `format`, `markdownlint`, the Windows `atomic write contract` job, and the
+      test suite (2544 run, 2544 passed, 0 skipped) pass in CI at `e810a01`,
+      which is where the Cargo gates had to run because the local Cargo
+      package-cache lock is deadlocked.
 - [x] M5 CodeRabbit review. `coderabbit review --agent --base main` reviewed 17
-  files and returned 16 finding entries resolving to 11 distinct issues: two
-  major (API docs for the newly public `Region` and `classify_regions`; four
-  `compression_predicate_*` tests to consolidate into one `#[rstest]` table)
-  and nine minor or trivial (a doc comment that contradicted its own assertion,
-  a production `.expect()`, substring rather than whole-line comparison in the
-  corpus sweep, `verus-fence-mutation` missing from `.PHONY`, two Verus doc
-  errors, and two ExecPlan corrections). All 11 were verified against the code
-  and remediated; none were correctness defects in the proof.
-- [ ] M5 Mark the PR ready for review.
+      files and returned 16 finding entries resolving to 11 distinct issues:
+      two major (API docs for the newly public `Region` and `classify_regions`;
+      four `compression_predicate_*` tests to consolidate into one `#[rstest]`
+      table) and nine minor or trivial (a doc comment that contradicted its own
+      assertion, a production `.expect()`, substring rather than whole-line
+      comparison in the corpus sweep, `verus-fence-mutation` missing from
+      `.PHONY`, two Verus doc errors, and two ExecPlan corrections). All 11 were
+      verified against the code and remediated; none were correctness defects in
+      the proof. The whole-line finding was substantive rather than cosmetic: it
+      caught the terminator mismatch recorded in Surprises, which the weaker
+      substring assertion had been hiding.
+- [ ] M5 Re-run CodeRabbit, then mark the PR ready for review.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
