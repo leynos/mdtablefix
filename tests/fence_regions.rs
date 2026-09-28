@@ -187,12 +187,25 @@ fn unclosed_fences_keep_their_payload_literal() {
     }
 }
 
+/// Strips the carriage return `lines_of` keeps as line content.
+///
+/// The I/O boundary selects one ending for the whole document and re-applies it
+/// to every line (ADR 0007, `src/io/line_endings.rs`), so a CRLF-majority
+/// fixture is emitted entirely as CRLF even where the source used a bare line
+/// feed. That is the terminator, not the content: this test is about whether a
+/// pass rewrote the text of a literal line, so both sides are compared with the
+/// terminator removed. Comparing them raw would fail on every deliberately
+/// mixed-ending fixture for a reason that has nothing to do with fences.
+fn line_content(line: &str) -> &str { line.strip_suffix('\r').unwrap_or(line) }
+
 /// Asserts that no fixture's literal lines are rewritten by the full pass.
 ///
-/// A line the classifier calls literal is fenced content. Every such line must
-/// appear in the output unchanged, because no pass may rewrite it. Delimiter
-/// lines are excluded: normalization is entitled to respell those, which is the
-/// whole point of the theorem.
+/// A line the classifier calls literal is fenced content. Every such line's
+/// text must appear in the output unchanged, because no pass may rewrite it.
+/// Only the terminal line ending may differ, for the reason given on
+/// [`line_content`]. Delimiter lines are excluded from the sweep entirely:
+/// normalization is entitled to respell those, which is the whole point of the
+/// theorem.
 ///
 /// Returns the number of files checked.
 fn assert_literal_lines_survive(files: &[PathBuf]) -> Result<usize, Box<dyn std::error::Error>> {
@@ -214,15 +227,21 @@ fn assert_literal_lines_survive(files: &[PathBuf]) -> Result<usize, Box<dyn std:
             .to_string_lossy()
             .into_owned();
         let output = format_once(&directory, &name, &text)?;
-        let output_lines = lines_of(&output);
+        let output_text = lines_of(&output);
+        let output_lines: Vec<&str> = output_text
+            .iter()
+            .map(String::as_str)
+            .map(line_content)
+            .collect();
 
         for (line, region) in lines.iter().zip(&regions) {
             if *region != Region::Literal {
                 continue;
             }
+            let content = line_content(line);
             assert!(
-                output_lines.contains(line),
-                "{} lost the literal line {line:?} under the full flag set",
+                output_lines.contains(&content),
+                "{} lost the literal line {content:?} under the full flag set",
                 file.display(),
             );
         }

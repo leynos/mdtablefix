@@ -138,6 +138,21 @@ See the decision log.
 
 ## Surprises & discoveries
 
+- The CodeRabbit finding asking the literal-line sweep to compare whole output
+  lines rather than substrings was not cosmetic: the stricter assertion failed
+  in CI on `tests/data/document/mixed_in_fence.dat`, in both `build-test` and
+  the Windows `atomic write contract` job. The cause is not a fence bug. The
+  I/O boundary selects one line ending for the whole document and re-applies it
+  to every line (ADR 0007), so that CRLF-majority fixture is emitted entirely
+  as CRLF even where the source used a bare line feed. `lines_of` keeps the
+  `\r` as line content, so `output.contains(line)` had been "passing" only
+  because the substring match ignored terminators, and a whole-line comparison
+  of raw split lines fails for every mixed-ending fixture. The test now strips
+  the terminator from both sides and says why; the payload text is unchanged,
+  which the binary confirms on that fixture. Worth noting that the weaker
+  assertion was measurably worse in a second way too: it would have accepted a
+  literal line that a pass had *merged into* a longer line.
+
 - Acting on the CodeRabbit finding about `ObservedFence` removed a parse rather
   than adding a field. `ParsedLine::observe` was calling
   `features_of_line(line)` — a second full regex pass over a line the tracker
