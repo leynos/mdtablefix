@@ -97,27 +97,18 @@ impl LineFeatures {
         }
     }
 
-    /// The same line, as it would read with no info string after its marker.
-    ///
-    /// Used to separate "an otherwise-matching delimiter carrying text" from
-    /// "a delimiter that does not match the active opener at all", which are
-    /// different reasons a marker line leaves the state unchanged.
-    #[must_use]
-    const fn without_info_string(self) -> Self {
-        Self {
-            trailing_blank: true,
-            ..self
-        }
-    }
 }
 
+verified_kernel_function! {
 /// Whether the line's marker closes the fence described by `state`.
 ///
 /// This is the single closing rule. The transition kernel applies it to the
 /// active opener, and the compression pass applies it to the opener it intends
 /// to write, so the two cannot drift apart.
 #[must_use]
-pub fn closes_fence(state: FenceState, line: LineFeatures) -> bool {
+pub fn closes_fence(state: FenceState, line: LineFeatures) -> bool;
+ensures(result => result == crate::spec_closes(state, line));
+{
     matches!(
         line.marker,
         Some(marker)
@@ -127,14 +118,25 @@ pub fn closes_fence(state: FenceState, line: LineFeatures) -> bool {
                 && line.trailing_blank
     )
 }
+}
 
+verified_kernel_function! {
 /// Whether the line would close `state` were it not carrying an info string.
 ///
 /// A line that satisfies this but fails [`closes_fence`] is a would-be closer
 /// rejected only for its trailing text.
 #[must_use]
-pub fn agrees_with_opener(state: FenceState, line: LineFeatures) -> bool {
-    closes_fence(state, line.without_info_string())
+pub fn agrees_with_opener(state: FenceState, line: LineFeatures) -> bool;
+ensures(result => result == crate::spec_agrees_with_opener(state, line));
+{
+    closes_fence(
+        state,
+        LineFeatures {
+            trailing_blank: true,
+            ..line
+        },
+    )
+}
 }
 
 /// The marker character every compressed delimiter is written with.
@@ -143,19 +145,23 @@ pub const COMPRESSED_MARKER: char = '`';
 /// The marker run length every compressed delimiter is written with.
 pub const COMPRESSED_MARKER_LEN: usize = 3;
 
+verified_kernel_function! {
 /// The delimiter compression writes in place of a state's opening marker.
 ///
-/// Normalization is deliberately a fixed target rather than a shortening: every
-/// compressed delimiter is three backticks, whatever the source used. The
-/// written delimiter covers exactly the run that was rewritten, so its string
-/// length is [`COMPRESSED_MARKER_LEN`] in every case.
+/// Normalization is deliberately a fixed target rather than a shortening:
+/// every compressed delimiter is three backticks, whatever the source used.
+/// The written delimiter covers exactly the run that was rewritten, so its
+/// string length is [`COMPRESSED_MARKER_LEN`] in every case.
 #[must_use]
-pub const fn compressed(state: FenceState) -> FenceState {
+pub fn compressed(state: FenceState) -> FenceState;
+ensures(result => result == crate::spec_compressed(state));
+{
     FenceState {
         marker: COMPRESSED_MARKER,
         marker_len: COMPRESSED_MARKER_LEN,
         open_depth: state.open_depth,
     }
+}
 }
 
 /// Reduce one complete source line, blockquote prefix included, to kernel
@@ -164,6 +170,7 @@ pub const fn compressed(state: FenceState) -> FenceState {
 /// The streaming [`FenceTracker`](super::FenceTracker) and the batch
 /// classification both use this, so the two cannot hold different notions of
 /// what a fence line is.
+#[cfg(not(verus_keep_ghost))]
 #[must_use]
 pub fn features_of_line(line: &str) -> LineFeatures { super::features_of(line) }
 
@@ -177,6 +184,7 @@ pub const fn opener(depth: usize, marker: char, marker_len: usize) -> FenceState
     }
 }
 
+verified_kernel_function! {
 /// Whether `line` is fence-shaped content the block opened by `state` holds
 /// open as literal interior text.
 ///
@@ -184,23 +192,20 @@ pub const fn opener(depth: usize, marker: char, marker_len: usize) -> FenceState
 /// wrong family, or it carries an info string. Reading it as a delimiter is the
 /// defect behind issue #480.
 #[must_use]
-pub fn interior_delimiter(state: FenceState, line: LineFeatures) -> bool {
+pub fn interior_delimiter(state: FenceState, line: LineFeatures) -> bool;
+ensures(result => result == crate::spec_interior_delimiter(state, line));
+{
     line.marker.is_some() && line.depth >= state.open_depth && !closes_fence(state, line)
 }
+}
 
+verified_kernel_function! {
 /// Whether compressing `state`'s delimiter could change the region of `line`.
 ///
 /// This is the whole safety condition for delimiter compression, and it is a
 /// pure function of the opening state and one line's features: no buffer, no
 /// regex, and no accumulated flag. A block may have its delimiter rewritten to
 /// [`compressed`] exactly when this returns `false` for every line in it.
-///
-/// The predicate is the conjunction of the two ways a rewrite can matter. The
-/// line must be interior content of the block, so that it is read under the
-/// opener rather than closing it; and its marker must belong to the opener's
-/// family or the compression target's, because a marker of any other family
-/// closes neither the original delimiter nor the rewritten one, so its region
-/// is the same either way.
 ///
 /// An interior line that newly closes the rewritten opener ends the block
 /// early, moving every later line out of the literal region; that is issue
@@ -213,12 +218,15 @@ pub fn interior_delimiter(state: FenceState, line: LineFeatures) -> bool {
 /// because a line of an unrelated family would then appear to close the
 /// rewritten opener.
 #[must_use]
-pub fn compression_changes_region(state: FenceState, line: LineFeatures) -> bool {
+pub fn compression_changes_region(state: FenceState, line: LineFeatures) -> bool;
+ensures(result => result == crate::spec_compression_changes_region(state, line));
+{
     interior_delimiter(state, line)
         && matches!(
             line.marker,
             Some(marker) if marker == state.marker || marker == compressed(state).marker
         )
+}
 }
 
 verified_kernel_function! {
@@ -287,14 +295,13 @@ pub fn regions(features: &[LineFeatures]) -> Vec<Region>;
 ensures(result => result@ == crate::spec_regions(features@));
 before {
     let mut state: Option<FenceState> = None;
-    let mut out = Vec::with_capacity(features.len());
+    let mut out: Vec<Region> = Vec::new();
     let mut index = 0;
 }
 while (index < features.len()) invariant(
     index <= features@.len(),
-    out.len() == index,
-    crate::spec_regions_prefix(features@, index as int, state@) == out@,
-    crate::spec_regions_from(features@, index as int, state@) == out@,
+    out@ == crate::spec_regions_seeded(features@, index as int, None),
+    state@ == crate::spec_state_seeded(features@, index as int, None),
 ) {
     let (next, region) = fence_step(state, features[index]);
     state = next;
@@ -326,6 +333,7 @@ after { out }
 ///     ],
 /// );
 /// ```
+#[cfg(not(verus_keep_ghost))]
 #[must_use]
 pub fn classify_regions<I, S>(lines: I) -> Vec<Region>
 where
