@@ -114,7 +114,10 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions_corpus.rs
       and `69d0321` (mutation gate, ledger). `make verus`: 81 verified, 0
       errors.
 - [ ] M5 Documentation, gates, CodeRabbit, draft PR. In progress: ExecPlan
-      update done; gate run, CodeRabbit, push, and PR remain.
+      update done; CodeRabbit, push, and PR remain. `check-fmt`, `verus`,
+      `verus-selftest`, `verus-mutation`, and `verus-fence-mutation` all pass
+      at `c9ea885`; `lint`, `typecheck`, and `test` are waiting on the shared
+      Cargo package-cache lock held by other agents.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -189,6 +192,24 @@ See the decision log.
   would accept a parse error or an unrelated obligation. The script now
   additionally requires the output to name `closes_fence`'s contract against
   `spec_closes`, so the gate fails for the intended reason or not at all.
+- **`spec_closes` was cross-checked against the CommonMark specification.** The
+  normative sentences of §4.5 are "The closing code fence must use the same
+  character as the opening fence", "The closing code fence must be at least as
+  long as the opening fence", and "A closing fence … may be followed only by
+  spaces or tabs". Those are exactly the three tests `closes_fence` performs,
+  and the trailing-whitespace clause is why `trailing_blank` admits only ASCII
+  space and tab rather than trimming Unicode-aware. The one rule outside the
+  kernel is container matching: CommonMark requires a closing fence to be in
+  the same container as its opener, which `spec_closes` states as depth
+  equality and the kernel inherits.
+- **The commit-gate sweep is contending with a shared Cargo package-cache
+  lock.** All four Verus gates and `check-fmt` pass, but `make lint`,
+  `make typecheck`, and `make test` sat in
+  `Blocking waiting for file lock on shared package cache` for over an hour
+  behind other agents' cargo jobs. This is infrastructure contention, not a
+  code failure: no gate has been observed to fail on this commit. Per the
+  standing instruction the lock is waited out rather than worked around with a
+  private `CARGO_HOME`.
 
 ## Decision log
 
