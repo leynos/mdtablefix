@@ -8,6 +8,14 @@
   column. Since #106 every such block up to three spaces deep reset all list
   state, so the items after it restarted at one.
   ([#450](https://github.com/leynos/mdtablefix/issues/450))
+- Fixed: `--wrap` breaks lines only where the source already has whitespace, so
+  a wrap can no longer add a space to the rendered text. `([ref][4])`,
+  `` `a`/`b` ``, `-[r]->`, `**`code`**` and `][4]).` stay whole, even when that
+  leaves a line longer than the target width. A line the wrapper breaks keeps
+  no trailing spaces, so a run of spaces can no longer become a hard break.
+  Re-running `make fmt` after upgrading may rejoin lines that 0.6.0 split at
+  these seams; the rendered text of such a file becomes the source's again.
+  ([#561](https://github.com/leynos/mdtablefix/issues/561))
 
 ## v0.6.0
 

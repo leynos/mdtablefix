@@ -15,14 +15,15 @@
 //! for this defect (no word may gain a boundary). It also checks that no line
 //! the wrapper broke ends in a space, and that a second pass changes nothing.
 
-use mdtablefix::wrap::wrap_text;
+use assert_cmd::Command;
+use mdtablefix::{process::WRAP_COLS, wrap::wrap_text};
 use proptest::prelude::*;
 use rstest::rstest;
 
 const PAD: &str = "The word word word word word word word word word word word word see";
 
-/// Wraps one paragraph at 80 columns.
-fn wrap(paragraph: &str) -> Vec<String> { wrap_text(&[paragraph.to_owned()], 80) }
+/// Wraps one paragraph at the production width.
+fn wrap(paragraph: &str) -> Vec<String> { wrap_text(&[paragraph.to_owned()], WRAP_COLS) }
 
 /// Returns the whitespace-separated words of some lines.
 fn words(lines: &[String]) -> Vec<String> {
@@ -95,11 +96,59 @@ fn a_break_at_a_double_space_leaves_no_hard_break() {
 /// Invariant: the hard break survives, since the source wrote it.
 #[test]
 fn a_source_hard_break_survives() {
-    let lines = wrap_text(&["First line.  ".to_owned(), "Second line.".to_owned()], 80);
+    let lines = wrap_text(
+        &["First line.  ".to_owned(), "Second line.".to_owned()],
+        WRAP_COLS,
+    );
     assert_eq!(
         lines,
         vec!["First line.  ".to_owned(), "Second line.".to_owned()]
     );
+}
+
+/// Runs the real binary with `--wrap` over `input` and returns stdout.
+fn wrap_cli(input: &str) -> String {
+    let output = Command::cargo_bin("mdtablefix")
+        .expect("the mdtablefix binary builds")
+        .arg("--wrap")
+        .write_stdin(input)
+        .output()
+        .expect("mdtablefix runs");
+    assert!(output.status.success(), "mdtablefix failed: {output:?}");
+    String::from_utf8(output.stdout).expect("mdtablefix writes UTF-8")
+}
+
+/// Scenario: the command line formats a document holding every reported shape,
+/// a break at a run of two spaces and a source hard break.
+///
+/// Invariant: the snapshot pins the exact output: touching runs whole, no
+/// trailing spaces on wrapper-broken lines, and the source hard break kept.
+/// A second run over the output changes nothing.
+#[test]
+fn the_command_line_keeps_touching_runs_whole() {
+    let input = [
+        format!("{PAD} ([Python Packaging][4]) tail words here."),
+        String::new(),
+        format!("{PAD} `Mutex`/`MutexGuard` tail words here."),
+        String::new(),
+        format!("{PAD} (Alice)-[r]->(Bob) tail words here."),
+        String::new(),
+        format!("{PAD} **`Node.isConnected`** tail words here."),
+        String::new(),
+        concat!(
+            "- Reliable clipboard, ctrl+enter queue batching, selection auto-scroll  ",
+            "(a6d912d2) (@7jrxt42BxFZo4iAnN4CX)",
+        )
+        .to_owned(),
+        String::new(),
+        "First line.  ".to_owned(),
+        "Second line.".to_owned(),
+        String::new(),
+    ]
+    .join("\n");
+    let output = wrap_cli(&input);
+    insta::assert_snapshot!(output);
+    assert_eq!(wrap_cli(&output), output, "a second run changed the output");
 }
 
 /// Returns one glue string that joins two words with no whitespace.
