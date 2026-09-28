@@ -11,6 +11,15 @@ verus! {
 #[path = "../src/classify_kernel.rs"]
 pub mod production_classify;
 
+/// The production fence transition kernel, included so the specification in
+/// `verus/fence_spec.rs` constrains the body the formatter actually runs.
+///
+/// The kernel is included rather than reimplemented for the same reason the
+/// classifier is: a parallel model would be free to drift, and a proof about a
+/// model that is not the production code proves nothing about the formatter.
+#[path = "../src/wrap/fence/kernel.rs"]
+pub mod production_fence;
+
 use production_classify::LineClass;
 
 /// State relevant to a structural decision after source scanning.
@@ -37,6 +46,41 @@ impl View for production_classify::ClassifyCtxKernel {
 #[path = "classify_spec.rs"]
 pub mod classify_spec;
 pub use classify_spec::*;
+
+#[path = "fence_spec.rs"]
+pub mod fence_spec;
+pub use fence_spec::*;
+
+/// The fence kernel's view is itself.
+///
+/// All three fields are bit-valued scalars, so the mathematical form of a
+/// [`LineFeatures`] is the struct: the specification reasons about the same
+/// values the kernel carries, with no abstraction that could disagree.
+impl View for production_fence::LineFeatures {
+    type V = production_fence::LineFeatures;
+
+    open spec fn view(&self) -> production_fence::LineFeatures {
+        *self
+    }
+}
+
+/// A fence opener's view is likewise itself.
+impl View for production_fence::FenceState {
+    type V = production_fence::FenceState;
+
+    open spec fn view(&self) -> production_fence::FenceState {
+        *self
+    }
+}
+
+/// A region's view is itself.
+impl View for production_fence::Region {
+    type V = production_fence::Region;
+
+    open spec fn view(&self) -> production_fence::Region {
+        *self
+    }
+}
 
 /// A leading tab occupies four columns and leaves the line literal.
 proof fn lemma_leading_tab_is_literal(s: Seq<char>)
