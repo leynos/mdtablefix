@@ -371,10 +371,14 @@ Obligations, and how each is discharged.
    Non-vacuity: assert the corpus is non-empty, assert a minimum checked count,
    and pin `tests/data/footnotes_fence_toggle_input.txt` as must-cover.
 
-External contracts: none claimed. The kernel takes pre-parsed line features and
-performs no regex recognition; the feature extraction that *does* use regex
-stays outside the proof boundary and is listed as a residual in the ledger, in
-the same spirit as the existing rows.
+External contracts: the one assumed contract is the reduction of a source line
+to `LineFeatures` by the regex-based fence recognition and blockquote parsing
+that feed the kernel. Every obligation below is stated over already-reduced
+features, so none of them depends on that reduction being correct, and the
+kernel body itself runs no regex. Recognition is excluded from the proof build
+by `#[cfg(not(verus_keep_ghost))]` and is recorded as the assumed contract in
+the assumptions column of each fence row in the verification ledger, alongside
+the classifier's existing matcher contract rows.
 
 Axioms relied upon: the pinned Verus release and its standard library, treated
 as an axiom per ADR 0011; and the `verus/lib.rs` char-conversion boundary
@@ -421,14 +425,11 @@ The third is that a mutation gate needs a gate of its own. "Verus failed" is
 satisfied by a typo. Requiring the output to name the specific contract that
 was falsified is what makes the gate evidence rather than ceremony.
 
-Residual gaps, recorded rather than hidden: the regex-facing recognition
-boundary (`classify_regions`, and the parent's `line_features`) is excluded
-from the proof build with `#[cfg(not(verus_keep_ghost))]`, so the claims hold
-for pre-parsed line features, not for the parse that produces them. That is the
-same boundary the existing classifier uses, and the assumed contract is
-recorded in `docs/verification.md`. The `compress_fences` pass itself is not
-proved; what is proved is the predicate it consults and the region-level
-consequence of consulting it correctly, with the executable sweep as the bridge.
+Residual gaps, recorded rather than hidden: the claims hold for pre-parsed line
+features, not for the parse that produces them, as the external contract above
+sets out. The `compress_fences` pass itself is not proved either; what is
+proved is the predicate it consults and the region-level consequence of
+consulting it correctly, with the executable sweep as the bridge.
 
 ## Context and orientation
 
