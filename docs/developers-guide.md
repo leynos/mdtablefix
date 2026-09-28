@@ -750,8 +750,11 @@ depth-aware tracking.
    that the fitter attaches to the start of wrapped continuation lines; it is
    set only when `wrap_preserving_code` has already emitted at least one line,
    so intentional leading whitespace on the first output line is preserved.
-   Non-final lines may also drop a single trailing space unless the line ends
-   with a hard-break double space.
+   Every non-final line loses all of its trailing spaces: the wrapper chose
+   that break, and two or more spaces there would render as a hard break the
+   source never wrote. Only the final line keeps the source's trailing spaces,
+   which is where a source hard break sits, because the paragraph writer ends a
+   wrapped segment at each one.
 
 ### Block classification
 
@@ -931,7 +934,9 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   bare dash runs such as `-` or `---` are rejected. Unicode alphabetic
   characters (e.g. `pré-`, `字-`) are intentionally supported.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
-  line where they occur.
+  line where they occur. A source hard break ends its wrapped segment, so it is
+  always on the segment's final line, the only line `render_line` keeps
+  trailing spaces on; a break the wrapper chooses never carries them.
 - **Verbatim blocks.** Fenced code blocks must pass through unchanged, along
   with the other non-paragraph block kinds detected by `classify_block`.
 - **Prefix width.** The visual width of every prefix string is measured with
