@@ -166,6 +166,12 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       mirrors the product. Verified against the whole corpus through the real
       binary: 153 fixtures, zero mismatches, and the walk still detects the
       issue #480 defect.
+- [x] M5 Documentation. The two hosted-review documentation warnings are fixed.
+      `docs/developers-guide.md` drops the stale `src/classify_kernel_macros.rs`
+      reference and describes the fence kernel; `docs/users-guide.md` gains a
+      Batch fence classification section. Fixed in `b9fe398`. The Format gate
+      then failed on the new prose, because it was wrapped by hand rather than
+      by `mdtablefix --check`'s own rule set; fixed in `9d20e58`.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -202,6 +208,22 @@ See the decision log.
   way: it would have accepted a literal line that a pass had *merged into* a
   longer line.
 
+- **Hand-wrapped guide prose fails the Format gate, for the third time in this
+  work.** `check-fmt` runs
+  `mdtablefix --check --git --include-untracked
+  --wrap --renumber --breaks --ellipsis --fences`,
+  so the same tool that rewraps the repository is also the authority on what
+  "wrapped" means. Prose wrapped by hand to look right passed
+  `make markdownlint` and still failed, because the gate compares against
+  mdtablefix's own reflow and not against a line-length rule. The fix is to run
+  the file through the tool rather than to match your own idea of the width.
+  Two standing traps make this easy to hit: `--in-place` without the rule flags
+  does nothing, so a command that looks like it formatted the file may have
+  left it untouched; and `docs/execplans/check-option.md` and
+  `docs/execplans/git-option.md` are already unformatted at `origin/main`, so
+  the gate reports pre-existing failures that are not this branch's to fix and
+  must not be confused with regressions.
+
 - Acting on the CodeRabbit finding about `ObservedFence` removed a parse rather
   than adding a field. `ParsedLine::observe` was calling
   `features_of_line(line)` — a second full regex pass over a line the tracker
@@ -224,10 +246,13 @@ See the decision log.
   Verus 0.2025.04.19.1b16620 and correctly rejects `verus/smoke.rs`. A prior
   issue (#479) delivered it.
 - There is a complete precedent for the kernel shape:
-  `src/classify_kernel.rs` plus `classify_kernel_macros.rs`,
-  `classify_kernel_predicates.rs`, `classify_kernel_consumers.rs`, and
+  `src/classify_kernel.rs` plus `src/verified_kernel_macros.rs`,
+  `src/classify_kernel_predicates.rs`, `src/classify_kernel_consumers.rs`, and
   `verus/classify_spec.rs`, wired by `#[path]` from `verus/lib.rs`. The fence
-  kernel should follow it exactly rather than invent a second convention.
+  kernel should follow it exactly rather than invent a second convention. (The
+  macros file was named `classify_kernel_macros.rs` when this reconnaissance
+  was written; it has since been renamed, and the reference here is corrected
+  to match the file that exists.)
 - `src/wrap/fence.rs` is 417 lines, already over the 400-line guideline, so
   the kernel must live in a submodule regardless.
 - Every `tests/data/` fence fixture is balanced; there is no unclosed-fence
