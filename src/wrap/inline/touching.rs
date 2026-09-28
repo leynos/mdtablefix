@@ -18,17 +18,33 @@ use super::fragment::InlineFragment;
 /// pair here makes the whitespace fragments the only break opportunities, so
 /// wrapping can never insert a space into the rendered text.
 pub(super) fn join_touching_fragments(fragments: Vec<InlineFragment>) -> Vec<InlineFragment> {
-    let mut joined: Vec<InlineFragment> = Vec::with_capacity(fragments.len());
+    let mut runs: Vec<Vec<InlineFragment>> = Vec::new();
     for fragment in fragments {
-        match joined.last_mut() {
-            Some(previous) if touches(previous, &fragment) => {
-                let text = format!("{}{}", previous.text, fragment.text);
-                *previous = InlineFragment::new(text);
+        match runs.last_mut() {
+            Some(run)
+                if run
+                    .last()
+                    .is_some_and(|previous| touches(previous, &fragment)) =>
+            {
+                run.push(fragment);
             }
-            _ => joined.push(fragment),
+            _ => runs.push(vec![fragment]),
         }
     }
-    joined
+    runs.into_iter().map(merge_run).collect()
+}
+
+/// Returns one fragment for a run, concatenating and classifying it once.
+///
+/// A run of one keeps its fragment as grouping built it; a longer run is
+/// joined into a single buffer so a long whitespace-free run costs linear time.
+fn merge_run(run: Vec<InlineFragment>) -> InlineFragment {
+    match <[InlineFragment; 1]>::try_from(run) {
+        Ok([only]) => only,
+        Err(run) => {
+            InlineFragment::new(run.iter().map(|fragment| fragment.text.as_str()).collect())
+        }
+    }
 }
 
 /// Returns whether `next` follows `previous` with no whitespace between them.
