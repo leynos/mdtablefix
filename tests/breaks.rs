@@ -252,6 +252,14 @@ fn indented_break(indent: &str) -> String { format!("{indent}{}", "_".repeat(THE
 #[rstest]
 #[case::after_a_blank_line(include_lines!("data/issue_572_break_in_item_input.txt"), 4, "   ")]
 #[case::in_a_bullet_item(lines_vec!["- item", "", "  ***", "", "  more"], 2, "  ")]
+// A heading between the item's marker and the break is a child block of the
+// item; it must not close the item.
+#[case::after_a_child_heading(lines_vec!["- item", "", "  # heading", "", "  ***", "", "  more"], 4, "  ")]
+// A nested list inside the item closes before the break; the outer item holds it.
+#[case::after_a_nested_list(lines_vec!["- a", "  - b", "", "  ***", "", "  more"], 3, "  ")]
+// A `10.` item's content starts at column 4; relative to the item this is a
+// break, not indented code.
+#[case::under_a_wide_marker(lines_vec!["10. item", "", "    ***", "", "    more"], 2, "    ")]
 fn breaks_issue_572_break_in_item_keeps_its_indentation(
     #[case] input: Vec<String>,
     #[case] break_index: usize,
@@ -281,15 +289,6 @@ fn breaks_issue_572_break_outside_an_item_is_emitted_at_column_zero(
     let once = formatted(&input);
     assert_eq!(once[break_index], indented_break(""));
     assert_eq!(formatted(&once), once, "a second pass changes nothing");
-}
-
-/// Regression case for issue #572: a break indented four or more columns,
-/// such as one inside a `10.` item, reads as indented code without list
-/// context, so the pass leaves it exactly as written rather than moving it.
-#[test]
-fn breaks_issue_572_break_at_four_columns_is_left_as_written() {
-    let input = lines_vec!["10. item", "", "    ***", "", "    more"];
-    assert_eq!(formatted(&input), input);
 }
 
 /// Regression case for issue #572 through the CLI: `--breaks` keeps the

@@ -208,13 +208,7 @@ fn test_renumber_cases(input: Vec<String>, expected: Vec<String>) {
 /// item, so the items after it keep their numbers.
 #[rstest]
 #[case::nested_heading(include_lines!("data/issue_450_nested_heading_input.txt"))]
-// Inline rather than under `tests/data`: the drift harness runs every fixture
-// there under `--breaks`, which rewrites this break at column 0 (reported
-// separately), so it is not a fixed point of the full flag set.
-#[case::nested_break(lines_vec![
-    "1. First item", "", "   Body paragraph.", "", "2. Second item", "", "   ***", "",
-    "   More body after a break inside the item.", "", "3. Third item",
-])]
+#[case::nested_break(include_lines!("data/issue_450_nested_break_input.txt"))]
 fn renumber_issue_450_block_inside_an_item_keeps_the_list_counting(#[case] input: Vec<String>) {
     let once = renumber_lists(&input);
     assert_eq!(once, input);

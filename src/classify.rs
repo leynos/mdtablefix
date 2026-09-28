@@ -74,15 +74,6 @@ impl ListContinuationState {
         }
     }
 
-    /// Reports whether a block at `indent` and `quote_depth` sits inside the active item.
-    ///
-    /// A block belongs to a list item when it is indented at least to the
-    /// item's content column at the same quote depth, blank line or not.
-    pub(crate) fn contains_block(&self, quote_depth: usize, indent: usize) -> bool {
-        self.active
-            .is_some_and(|(depth, required)| depth == quote_depth && indent >= required)
-    }
-
     /// Returns the active item's content column when `classified` continues it.
     ///
     /// The line's quote depth must match the item's. Paragraph text may
