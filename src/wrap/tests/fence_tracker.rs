@@ -8,6 +8,7 @@ use rstest::rstest;
 
 use crate::wrap::{
     FenceTracker,
+    KernelState,
     LineFeatures,
     Region,
     classify_regions,
@@ -211,16 +212,22 @@ fn observe_source_fence_exposes_structural_marker_with_prefix_indent() {
     assert!(opening.observation.is_fence_marker);
     assert!(opening.observation.is_in_fence);
     assert_eq!(opening.fence, Some(("> > ", "```", "rust")));
+    assert_eq!(
+        opening.features,
+        Some(LineFeatures::fence(2, '`', 3, false))
+    );
 
     let content = tracker.observe_source_fence("> > code");
     assert!(content.observation.is_in_fence);
     assert!(!content.observation.is_fence_marker);
     assert!(content.fence.is_none());
+    assert_eq!(content.features, None);
 
     let closing = tracker.observe_source_fence("> > ```");
     assert!(closing.observation.is_fence_marker);
     assert!(!closing.observation.is_in_fence);
     assert_eq!(closing.fence, Some(("> > ", "```", "")));
+    assert_eq!(closing.features, Some(LineFeatures::fence(2, '`', 3, true)));
 }
 
 /// Build a blockquote-prefixed source line at the requested nesting depth.
@@ -436,48 +443,33 @@ fn regions_treats_payload_after_interior_shorter_fence_as_literal() {
     );
 }
 
-/// The compression predicate must distinguish the two opener families.
+/// The compression predicate flags exactly the interior lines a rewrite would
+/// move out of the literal region.
 ///
-/// A block opened with four backticks and containing a three-backtick interior
-/// line cannot be compressed: the shorter backtick line would close the
-/// rewritten three-backtick opener, ending the block early. This is exactly
-/// issue #480, and it is what `requires_preserved_delimiters` reports.
-#[test]
-fn compression_predicate_preserves_when_interior_marker_matches_family() {
-    let opening = opener(0, '`', 4);
-    let interior_short_backticks = LineFeatures::fence(0, '`', 3, true);
-    assert!(compression_changes_region(
-        opening,
-        interior_short_backticks
-    ));
-}
-
-/// A tilde opener containing a backtick line is safe to compress.
-///
-/// The compression target is three backticks, so the interior backtick line
-/// would newly close the rewritten opener. The family check must catch this,
-/// which is why the predicate compares the marker character at all.
-#[test]
-fn compression_predicate_preserves_tilde_opener_with_backtick_interior() {
-    let opening = opener(0, '~', 3);
-    let interior_backticks = LineFeatures::fence(0, '`', 3, true);
-    assert!(compression_changes_region(opening, interior_backticks));
-}
-
-/// An interior marker of an unrelated family changes nothing.
-#[test]
-fn compression_predicate_is_quiet_for_unrelated_marker_family() {
-    // A backtick opener and a tilde interior line: compressing to backticks
-    // leaves the tilde line closing neither delimiter, so its region is the
-    // same either way.
-    let opening = opener(0, '`', 4);
-    let interior_tildes = LineFeatures::fence(0, '~', 4, true);
-    assert!(!compression_changes_region(opening, interior_tildes));
-}
-
-/// Prose is never affected by a delimiter rewrite.
-#[test]
-fn compression_predicate_is_quiet_for_prose() {
-    let opening = opener(0, '`', 4);
-    assert!(!compression_changes_region(opening, LineFeatures::prose(0)));
+/// Compressing a delimiter always writes three backticks, so an interior line
+/// is a hazard precisely when its marker is a backtick, or the opener's own
+/// family, and its run reaches the compressed opener's length. The two `true`
+/// rows are that shape: an interior line the rewritten three-backtick opener
+/// would newly close, ending the block early, which is issue #480. The two
+/// `false` rows are the cases the pass must stay quiet about, because the
+/// rewritten block's regions are unchanged either way.
+#[rstest]
+#[case::same_family_short_run(opener(0, '`', 4), LineFeatures::fence(0, '`', 3, true), true)]
+#[case::tilde_opener_backtick_interior(
+    opener(0, '~', 3),
+    LineFeatures::fence(0, '`', 3, true),
+    true
+)]
+#[case::unrelated_marker_family(opener(0, '`', 4), LineFeatures::fence(0, '~', 4, true), false)]
+#[case::prose(opener(0, '`', 4), LineFeatures::prose(0), false)]
+fn compression_changes_region_matches_the_rewrite_hazard(
+    #[case] opening: KernelState,
+    #[case] interior: LineFeatures,
+    #[case] expected: bool,
+) {
+    assert_eq!(
+        compression_changes_region(opening, interior),
+        expected,
+        "opening {opening:?} against interior {interior:?}",
+    );
 }
