@@ -155,6 +155,17 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       fixed in `9288d42` by splitting the kernel tests into
       `src/wrap/tests/fence_kernel_tests.rs`. The two documentation warnings are
       in flight.
+- [x] M5 Line-model fix. The stricter literal-line walk failed in CI on
+      `tests/data/document/mixed_in_fence.dat`. The cause was the sweep's own
+      line model, not a fence defect: the sweeps split on the line feed and kept
+      the carriage return, while the product parses a `SourceDocument` (which
+      strips a leading byte-order mark) and splits with `str::lines`, so a line
+      never carries its terminator. `FENCE_RE` excludes carriage returns from
+      its info capture, so a delimiter carrying a stray `\r` is not a fence at
+      all. Fixed in `30a5867` by splitting both sides through one helper that
+      mirrors the product. Verified against the whole corpus through the real
+      binary: 153 fixtures, zero mismatches, and the walk still detects the
+      issue #480 defect.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -165,17 +176,31 @@ See the decision log.
 - The CodeRabbit finding asking the literal-line sweep to compare whole output
   lines rather than substrings was not cosmetic: the stricter assertion failed
   in CI on `tests/data/document/mixed_in_fence.dat`, in both `build-test` and
-  the Windows `atomic write contract` job. The cause is not a fence bug. The
-  I/O boundary selects one line ending for the whole document and re-applies it
-  to every line (ADR 0007), so that CRLF-majority fixture is emitted entirely
-  as CRLF even where the source used a bare line feed. `lines_of` keeps the
-  `\r` as line content, so `output.contains(line)` had been "passing" only
-  because the substring match ignored terminators, and a whole-line comparison
-  of raw split lines fails for every mixed-ending fixture. The test now strips
-  the terminator from both sides and says why; the payload text is unchanged,
-  which the binary confirms on that fixture. Worth noting that the weaker
-  assertion was measurably worse in a second way too: it would have accepted a
-  literal line that a pass had *merged into* a longer line.
+  the Windows `atomic write contract` job. **The first diagnosis of that
+  failure was wrong, and the second was right.** The first put it down to ADR
+  0007 re-applying one line ending to the whole document, so that a
+  CRLF-majority fixture is emitted entirely as CRLF; on that reading the fix
+  was to strip the terminator from both sides before comparing. That patch made
+  the assertion pass locally but the same failure came straight back in CI,
+  because the real defect was upstream of the comparison: the sweep's *line
+  model* disagreed with the product's. The sweeps split on the line feed and
+  kept the carriage return, while the product parses a `SourceDocument` and
+  splits with `str::lines`, so a line never carries its terminator. That is not
+  a cosmetic difference: `FENCE_RE` excludes carriage returns from its info
+  capture, so `"```\r"` is not recognised as a fence at all. On that fixture
+  the old model therefore misfiled the closing delimiter as *literal* on the
+  input side and classified the whole CRLF output as unbroken prose, leaving
+  the output-side literal subsequence empty — which is exactly the reported
+  `left: None, right: Some("echo hi")`. Fixed in `30a5867` by splitting both
+  sides through one helper that mirrors the product. Two lessons: a fix that
+  makes a failure go away locally is not a diagnosis, and a test that models
+  its own input differently from the product can be confidently, silently
+  wrong. A third consequence is that sweep #1 was **vacuous on all eight
+  carriage-return fixtures** under the old model, since with no fence ever
+  recognised it compared all-prose against all-prose; it is real there now.
+  Separately, the weaker substring assertion was measurably worse in a second
+  way: it would have accepted a literal line that a pass had *merged into* a
+  longer line.
 
 - Acting on the CodeRabbit finding about `ObservedFence` removed a parse rather
   than adding a field. `ParsedLine::observe` was calling
