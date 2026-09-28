@@ -1074,6 +1074,8 @@ pass may rewrite a line only while it is `Region::Prose`. This is the same
 classification the wrapping pipeline and the `--fences` pass derive from the
 tracker, so the three cannot disagree about which lines are code.
 
+See [Fence normalization](#fence-normalization) for the `--fences` behaviour.
+
 <!-- markdownlint-disable-next-line MD046 -->
 ```rust
 use mdtablefix::wrap::{Region, classify_regions};
