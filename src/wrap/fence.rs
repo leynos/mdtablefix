@@ -325,6 +325,22 @@ impl FenceTracker {
                 open_marker_len = open.marker_len,
                 "fence state changed"
             ),
+            // A replacement is a close followed by an open on one line: the
+            // line dropped below the old opener's depth and then opened a fresh
+            // fence. Both states are `Some`, so without this arm the event would
+            // read as "unchanged" and a subscriber filtering for state changes
+            // would miss both halves of the transition.
+            (Some(open), Some(next)) if next != open => debug!(
+                transition = "replaced",
+                reason = "depth_dropped_below_open_then_opened",
+                depth = features.depth,
+                open_depth = open.open_depth,
+                marker_len,
+                open_marker_len = open.marker_len,
+                new_marker_len = next.marker_len,
+                new_open_depth = next.open_depth,
+                "fence state changed"
+            ),
             (Some(open), Some(_)) if agrees_with_opener(open, features) => trace!(
                 transition = "unchanged",
                 reason = "closing_fence_has_info_string",
