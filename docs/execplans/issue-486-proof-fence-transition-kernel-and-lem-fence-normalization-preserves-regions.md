@@ -309,7 +309,6 @@ See the decision log.
   out of the log to confirm the moved module compiled and its four property
   cases executed.
 
-
 - Acting on the CodeRabbit finding about `ObservedFence` removed a parse rather
   than adding a field. `ParsedLine::observe` was calling
   `features_of_line(line)` — a second full regex pass over a line the tracker
@@ -461,6 +460,25 @@ See the decision log.
   rule set. The operational consequence is that "all concerns cleared" cannot
   be established from the CLI alone, and the point at which the App first runs
   is a state change worth anticipating rather than treating as a formality.
+- **A docs-only commit still has to pass a gate, and the ExecPlan failed its
+  own.** The commit that recorded the CodeScene fix was documentation only, so
+  no Rust gate applied to it — but `make markdownlint` did, and it failed:
+  MD012/no-multiple-blanks at a single stray double blank left behind when an
+  edit re-inserted a bullet into the middle of the Surprises list. Format, the
+  full 3618-test suite, and every other job passed in the same run; this one
+  lint was the entire failure. The lesson is narrow but worth stating: "docs
+  only" reduces which gates apply, it does not remove the obligation to run the
+  ones that do. It is also the second time in this task that a *structural*
+  check caught what reasoning had missed, the first being the
+  `clippy::trivially_copy_pass_by_ref` error in a `cargo fmt`-clean file.
+- **A stale local binary reports defects that no longer exist.** The vendored
+  `target/debug/mdtablefix` was built at 02:41, before the fence work landed,
+  and `--check` from it flagged `docs/execplans/check-option.md` and
+  `docs/execplans/git-option.md` — files this branch did not touch. The freshly
+  built CI binary reports all 41 files unchanged. Both readings are of *this
+  branch's* formatting rules, but only one of them runs the current classifier.
+  When a local self-format check disagrees with CI's Format step, check the
+  binary's mtime against the commit before believing the local result.
 
 ## Decision log
 
