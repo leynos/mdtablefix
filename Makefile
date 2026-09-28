@@ -99,6 +99,9 @@ verus-selftest: verus-install ## Confirm Verus rejects the deliberately false sm
 verus-mutation: verus-install ## Confirm a wrong production classifier decision is rejected
 	VERUS_RUN='$(VERUS_RUN)' scripts/check-classifier-mutation.sh .
 
+verus-fence-mutation: verus-install ## Confirm a wrong production fence closing rule is rejected
+	VERUS_RUN='$(VERUS_RUN)' scripts/check-fence-mutation.sh .
+
 markdownlint: ## Lint Markdown files
 	$(MDLINT) "**/*.md"
 
