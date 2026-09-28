@@ -204,6 +204,23 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       taking it by value. `cargo fmt` had reported the file clean, which is the
       point: formatting parses a file, and this defect was only visible to a
       lint that needs type information.
+- [x] M5 Close the hosted-review threads. All four review threads are resolved.
+      Each finding was verified against the revision it was raised on
+      (`6f9ece9` for the CodeRabbit review, `63d4672` for the codex one) rather
+      than against the branch tip, because a finding that is stale at the tip
+      may still have been valid when raised. All four were valid on their
+      reviewed revision and are fixed at the tip: the codex
+      `replaced`-transition finding by `4c3b4c5` (submitted 05:49:11Z on
+      `63d4672`, fixed 06:13:44Z), and the three CodeRabbit findings —
+      obligations 3 and 4, the silent fixture skips, and the membership-based
+      literal check — by the same commit, which cites all four in its message.
+      The codex thread was answered with that provenance and resolved.
+- [x] M5 Clear the MD012 docs-gate failure. CI at `73d0981` failed `build-test`
+      on a single `MD012/no-multiple-blanks` at ExecPlan line 312; Format, the
+      full 3618-test suite and every other job passed in the same run. A
+      documentation-only commit had narrowed which gates applied but not removed
+      the obligation to run the one that did. Fixed and recorded in `044abca`;
+      `make markdownlint` reports 0 errors across 41 files.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
