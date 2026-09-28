@@ -163,16 +163,6 @@ ensures(result => result == crate::spec_compressed(state));
 }
 }
 
-/// Reduce one complete source line, blockquote prefix included, to kernel
-/// features.
-///
-/// The streaming [`FenceTracker`](super::FenceTracker) and the batch
-/// classification both use this, so the two cannot hold different notions of
-/// what a fence line is.
-#[cfg(not(verus_keep_ghost))]
-#[must_use]
-pub fn features_of_line(line: &str) -> LineFeatures { super::features_of(line) }
-
 /// The opening-fence state a source line establishes once it opens a block.
 #[must_use]
 pub const fn opener(depth: usize, marker: char, marker_len: usize) -> FenceState {

@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest verus-mutation markdownlint nixie mutants test-workflow-contracts
+.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest verus-mutation verus-fence-mutation markdownlint nixie mutants test-workflow-contracts
 
 APP ?= mdtablefix
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)

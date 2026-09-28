@@ -48,7 +48,7 @@ Trace chain for the central obligation:
 
 ```plaintext
 issue-486 -> M3 (LEM-FENCE-NORMALIZATION-PRESERVES-REGIONS) -> make verus
-issue-486 -> M4 (corpus regions equality) -> tests/fence_regions_corpus.rs
+issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
 ```
 
 ## Constraints
@@ -121,13 +121,34 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions_corpus.rs
       `format`, `markdownlint`, and the test suite (2544 run, 2544 passed, 0
       skipped) pass in CI at `58d4fca`, which is where they had to run because
       the local Cargo package-cache lock is deadlocked.
-- [ ] M5 CodeRabbit review, then mark the PR ready for review.
+- [x] M5 CodeRabbit review. `coderabbit review --agent --base main` reviewed 17
+  files and returned 16 finding entries resolving to 11 distinct issues: two
+  major (API docs for the newly public `Region` and `classify_regions`; four
+  `compression_predicate_*` tests to consolidate into one `#[rstest]` table)
+  and nine minor or trivial (a doc comment that contradicted its own assertion,
+  a production `.expect()`, substring rather than whole-line comparison in the
+  corpus sweep, `verus-fence-mutation` missing from `.PHONY`, two Verus doc
+  errors, and two ExecPlan corrections). All 11 were verified against the code
+  and remediated; none were correctness defects in the proof.
+- [ ] M5 Mark the PR ready for review.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
 See the decision log.
 
 ## Surprises & discoveries
+
+- Acting on the CodeRabbit finding about `ObservedFence` removed a parse rather
+  than adding a field. `ParsedLine::observe` was calling
+  `features_of_line(line)` — a second full regex pass over a line the tracker
+  had already parsed — because `ObservedFence` carried only the structural
+  `(indent, marker, info)` capture. Exposing the features the tracker already
+  computed let `compress.rs` consume them directly. That in turn made
+  `features_of_line` dead in production, so it was deleted along with its three
+  re-exports; `line_features` in the parent remains the single producer.
+  Removing production code is the better outcome here than adding a field would
+  have been, and it is what the finding pointed at even though it only asked to
+  "avoid a second parse".
 
 - Both prerequisite defects (#480, #481) are already fixed on `origin/main` and
   their issues are closed. The branch tip `91aa6d9` sits level with
@@ -342,11 +363,13 @@ already recorded in the ledger.
 
 ## Outcomes & retrospective
 
-Delivered, pending the M5 gate run, CodeRabbit review, and draft PR. The
-implementation, proofs, mutation gates, and formatting gate are all green at
-`c9ea885`; the remaining three Cargo gates are blocked on the deadlock recorded
-in Surprises, which is an escalation for the user rather than a defect in this
-work.
+Delivered, pending CodeRabbit review and marking the PR ready. Draft PR
+[#588](https://github.com/leynos/mdtablefix/pull/588) is open. The
+implementation, proofs, mutation gates, and formatting gate are all green
+locally; the three Cargo gates that the shared package-cache deadlock blocks
+locally pass in CI at `58d4fca` (Format, Markdown lint, Lint, and the full test
+suite — 2544 run, 2544 passed). The deadlock is recorded in Surprises and
+remains an escalation for the user rather than a defect in this work.
 
 The formatter now classifies every line of a document through one pure
 transition kernel, and the region-preservation theorem is machine-checked
@@ -379,13 +402,13 @@ satisfied by a typo. Requiring the output to name the specific contract that
 was falsified is what makes the gate evidence rather than ceremony.
 
 Residual gaps, recorded rather than hidden: the regex-facing recognition
-boundary (`features_of_line`, `classify_regions`) is excluded from the proof
-build with `#[cfg(not(verus_keep_ghost))]`, so the claims hold for pre-parsed
-line features, not for the parse that produces them. That is the same boundary
-the existing classifier uses, and the assumed contract is recorded in
-`docs/verification.md`. The `compress_fences` pass itself is not proved; what
-is proved is the predicate it consults and the region-level consequence of
-consulting it correctly, with the executable sweep as the bridge.
+boundary (`classify_regions`, and the parent's `line_features`) is excluded
+from the proof build with `#[cfg(not(verus_keep_ghost))]`, so the claims hold
+for pre-parsed line features, not for the parse that produces them. That is the
+same boundary the existing classifier uses, and the assumed contract is
+recorded in `docs/verification.md`. The `compress_fences` pass itself is not
+proved; what is proved is the predicate it consults and the region-level
+consequence of consulting it correctly, with the executable sweep as the bridge.
 
 ## Context and orientation
 
@@ -452,17 +475,18 @@ tests already exist:
 Delivered in `src/wrap/fence/kernel.rs` (348 lines), declared as a child module
 of `src/wrap/fence.rs` and re-exported through it. `fence_step` is the pure
 transition function; `regions` folds it over a line sequence; `Region` and
-`FenceState` are defined there. `observe_parsed` in the parent derives features
-through the kernel's `features_of_line`, calls `fence_step`, and maps the
-result onto `FenceObservation`; the tracing events and their `transition` /
-`reason` values are preserved and `FenceTracker`'s public API is unchanged.
-Committed as `95c27a3`.
+`FenceState` are defined there. The parent's `line_features` derives the
+kernel's features from the same regex parse the tracker already performs,
+`observe_step` calls `fence_step`, and the result is mapped onto
+`FenceObservation`; the tracing events and their `transition` / `reason` values
+are preserved and `FenceTracker`'s public API is unchanged. Committed as
+`95c27a3`.
 
 As planned, the signature is narrower than the milestone text anticipated:
 `LineFeatures` carries the marker character, run length, blockquote depth, and
 a trailing-whitespace-only flag, and the *presence* of a marker is that field's
 `Some`, so no separate fence-marker flag was needed. Recognition stays in the
-parent as `features_of_line`; the kernel is pure over pre-parsed features.
+parent's `line_features`; the kernel is pure over pre-parsed features.
 
 Acceptance met: `make test` passes; the fence-tracker unit and logging tests
 pass unchanged; the witness tests asserting the two `regions` vectors live in

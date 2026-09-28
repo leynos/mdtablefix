@@ -17,7 +17,6 @@ pub(crate) use kernel::{
     LineFeatures,
     agrees_with_opener,
     compression_changes_region,
-    features_of_line,
     fence_step,
     opener,
 };
@@ -190,16 +189,23 @@ pub(crate) struct FenceObservation {
     pub(crate) is_in_fence: bool,
 }
 
-/// A source-line fence observation paired with the structural fence parse of
-/// that same line.
+/// A source-line fence observation paired with both parses of that same line.
 ///
 /// Callers that need the marker components (indentation, marker run, info
-/// string) obtain them here rather than re-running [`is_fence`], keeping
-/// [`FenceTracker`] the single authority for the line's fence classification.
+/// string) obtain them here rather than re-running [`is_fence`], and callers
+/// that need the kernel's view of the line obtain that here rather than
+/// re-deriving it from a second parse. Keeping both alongside the transition
+/// makes [`FenceTracker`] the single authority for the line's classification.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ObservedFence<'a> {
     /// The tracker transition for the complete source line.
     pub(crate) observation: FenceObservation,
+    /// The kernel's view of the line, already stepped over by the transition.
+    ///
+    /// This is the same value the batch [`classify_regions`](kernel::classify_regions)
+    /// path derives, computed here from the tracker's one regex match instead
+    /// of a second one.
+    pub(crate) features: Option<LineFeatures>,
     /// The `(indent, marker, info)` components when the line is a fence marker,
     /// with `indent` spanning any blockquote prefix, as [`is_fence`] returns.
     pub(crate) fence: Option<(&'a str, &'a str, &'a str)>,
@@ -252,20 +258,18 @@ impl FenceTracker {
     /// The caller supplies `depth` separately because the inner text no longer
     /// carries enough information to recover the quote nesting.
     fn observe_inner(&mut self, line: &str, depth: usize) -> bool {
-        self.observe_parsed(depth, is_inner_fence(line))
+        self.observe_step(line_features(depth, is_inner_fence(line)), depth)
     }
 
-    /// Update the tracker from an already-parsed inner fence, avoiding a second
-    /// regex match when the caller has parsed the line itself.
+    /// Update the tracker from already-parsed line features.
     ///
-    /// The decision itself belongs to [`fence_step`]; this method only turns
-    /// the parsed line into kernel features and reports the transition. The
+    /// The decision itself belongs to [`fence_step`]; this method only reports
+    /// the transition and whether the line was treated as a fence marker. The
     /// events below are emitted from the before/after states rather than
     /// alongside each rule, so the tracing stays accurate however the kernel
     /// grows.
-    fn observe_parsed(&mut self, depth: usize, parsed: Option<(&str, &str, &str)>) -> bool {
+    fn observe_step(&mut self, features: Option<LineFeatures>, depth: usize) -> bool {
         let before = self.state;
-        let features = line_features(depth, parsed);
 
         // Every line is stepped, fence-shaped or not: dropping below the
         // opening quote depth ends the fence implicitly, whatever the line is.
@@ -380,16 +384,20 @@ impl FenceTracker {
     }
 
     /// Observe a source line, returning the fence-state transition together with
-    /// the structural fence parse of the line.
+    /// both the structural fence parse and the kernel features of the line.
     ///
     /// The line's blockquote prefix and fence marker are parsed exactly once and
-    /// reused for both the tracker update and the returned `fence` components, so
-    /// callers need not run [`is_fence`] again.
+    /// reused for the tracker update, the returned `fence` components, and the
+    /// returned kernel `features`, so callers need not parse the line again.
+    /// `features` is absent only when the line is not fence-shaped, which is
+    /// exactly the case where a caller that wants [`LineFeatures::prose`] must
+    /// supply the depth itself.
     pub(crate) fn observe_source_fence<'a>(&mut self, line: &'a str) -> ObservedFence<'a> {
         let context = FenceLine::parse(line);
         let parsed_inner = is_inner_fence(context.inner);
+        let features = line_features(context.depth, parsed_inner);
         let was_in_fence = self.in_fence(context.depth);
-        let is_fence_marker = self.observe_parsed(context.depth, parsed_inner);
+        let is_fence_marker = self.observe_step(features, context.depth);
         let is_in_fence = self.in_fence(context.depth);
         let fence = parsed_inner.map(|(inner_indent, marker, info)| {
             let indent = &line[..context.prefix_len + inner_indent.len()];
@@ -401,6 +409,7 @@ impl FenceTracker {
                 is_fence_marker,
                 is_in_fence,
             },
+            features,
             fence,
         }
     }
