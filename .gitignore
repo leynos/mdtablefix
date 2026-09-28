@@ -1,5 +1,10 @@
 target/
 .verus/
+# Scratch trees the mutation gates build under `verus/`. They are removed by
+# each script's exit trap, but a killed run or an interrupting `git add -A`
+# could stage one, and a committed copy of a mutated kernel is worse than no
+# copy at all.
+verus/.*-mutation-*/
 **/*.rs.bk
 .crush
 *.proptest-regressions
