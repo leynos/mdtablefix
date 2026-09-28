@@ -104,14 +104,17 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions_corpus.rs
 - [x] Write this ExecPlan.
 - [x] M0 Verify and record that the #480 and #481 prerequisite fixes are on
       the branch tip.
-- [ ] M1 Extract the pure fence transition kernel and route `FenceTracker`
-      through it.
-- [ ] M2 Make the `compress_fences` rewrite decision a pure function of
-      `(opening state, line)`.
-- [ ] M4 Add the corpus-wide `regions` equality test and cross-pass
-      equivalence evidence.
-- [ ] M3 Add the Verus proofs and ledger rows.
-- [ ] M5 Documentation, gates, CodeRabbit, draft PR.
+- [x] M1 Extract the pure fence transition kernel and route `FenceTracker`
+      through it. Committed as `95c27a3`.
+- [x] M2 Make the `compress_fences` rewrite decision a pure function of
+      `(opening state, line)`. Committed as `fbd31de`.
+- [x] M4 Add the corpus-wide `regions` equality test and cross-pass
+      equivalence evidence. Committed as `480b3ef`.
+- [x] M3 Add the Verus proofs and ledger rows. Committed as `a82667f` (proofs)
+      and `69d0321` (mutation gate, ledger). `make verus`: 81 verified, 0
+      errors.
+- [ ] M5 Documentation, gates, CodeRabbit, draft PR. In progress: ExecPlan
+      update done; gate run, CodeRabbit, push, and PR remain.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -140,6 +143,50 @@ See the decision log.
   (`tests/fences.rs:411`). `tests/data/footnotes_fence_toggle_input.txt` has a
   four-backtick opener with an interior three-backtick line and is a suitable
   must-cover fixture for the corpus test.
+- **The symmetric theorem is false, and the verifier caught it.** The first
+  formulation was a biconditional: compressing an opener preserves each line's
+  closer status. Verus rejected it with `postcondition not satisfied`, and the
+  reason is real rather than a proof failure — a tilde line closes a tilde
+  opener but cannot close the three-backtick opener the pass writes in its
+  place. The pass is nonetheless entitled to respell that line, so the two runs
+  legitimately disagree about delimiter identity. The theorem was restated
+  one-sidedly over the lines the pass leaves alone. This is the single most
+  important discovery of the task: without a prover, a plausible-sounding
+  symmetric claim would have been asserted in a comment and believed.
+- **`const fn` bodies are opaque to Verus.** `LineFeatures::prose(0)` and the
+  other `const fn` constructors cannot be called from a proof body at all
+  ("cannot call function with mode exec"), and a `const fn` cannot carry a
+  `when_used_as_spec` contract, so its body cannot be unfolded in a spec either.
+  Witness lemmas therefore build their `LineFeatures` literally, and the kernel
+  inlines the struct updates its contracts depend on. Three helpers
+  (`without_info_string`, `with_trailing_blank`, `fence_marker`) were deleted
+  rather than kept as unfolded-by-nobody indirection.
+- **A macro does not carry a doc comment placed outside it.** An outer `///`
+  above a `verified_kernel_function! {` invocation produces `unused doc
+  comment`. The doc must be the first thing inside the macro's own parens.
+- **Recursive spec functions are opaque until revealed.** The witness lemma's
+  non-degeneracy assertion (`spec_regions_seeded(...) == Seq::empty().push(...)`)
+  needed explicit `reveal(...)` calls; without them Z3 has no reason to unfold
+  the recursion. The same applies to `seq!`, which routes through array `View`
+  machinery the solver will not unfold on its own — the witness body is built
+  from `Seq::empty().push(...)` instead.
+- **The loop invariant's shape was wrong, not its content.** The original stated
+  `out@ + spec_regions_from(features@, index, state@) == spec_regions(features@)`,
+  relating a growing prefix to a shrinking suffix. Closing it requires
+  associativity of sequence concatenation, which vstd exposes only as
+  `lemma_concat_associative` — outside the default broadcast group, and a plain
+  `proof fn` rather than a `broadcast proof fn`. Crucially, the call would have
+  had to sit in the loop body, which plain Cargo also compiles, so Verus syntax
+  there breaks the non-Verus build. Respecifying regions as a *seeded prefix*
+  (`spec_regions_seeded`) removed the need for the lemma entirely: the loop's
+  invariant became the definition, and no concatenation algebra is involved.
+  This was a better outcome than a `proof_after` block would have been, because
+  it also made the executable recurrence and the spec recurrence visibly the
+  same recurrence.
+- **The mutation gate's own gate needed gating.** Requiring only "Verus failed"
+  would accept a parse error or an unrelated obligation. The script now
+  additionally requires the output to name `closes_fence`'s contract against
+  `spec_closes`, so the gate fails for the intended reason or not at all.
 
 ## Decision log
 
@@ -159,6 +206,24 @@ See the decision log.
   fallback, so finishing the deterministic evidence first means a tolerance
   breach still leaves a complete, shippable improvement rather than a
   half-finished theorem. Date 2026-09-28.
+- Decision: restate the region theorem one-sidedly rather than prove a
+  biconditional. Rationale: the biconditional is false (see Surprises). The
+  one-sided form is the property the formatter actually needs — no line moves
+  between the literal and prose regions — and it is the form the executable
+  sweep tests. Date 2026-09-28.
+- Decision: specify regions as a seeded prefix (`spec_regions_seeded`) rather
+  than as a suffix from a running index. Rationale: the suffix form's loop
+  invariant needs sequence-concatenation associativity, available only outside
+  vstd's default broadcast group; the prefix form makes the invariant the
+  definition and needs no concatenation lemma. It also removes any temptation
+  to put Verus-only syntax in the loop body, which Cargo must also compile.
+  Date 2026-09-28.
+- Decision: exclude the kernel's recognition entry points from the proof build
+  with `#[cfg(not(verus_keep_ghost))]`, matching the classifier. Rationale: the
+  regex boundary cannot compile under Verus, and keeping recognition outside
+  the trusted boundary is the established pattern. What crosses the boundary is
+  a pre-parsed `LineFeatures`, and that contract is recorded in the ledger.
+  Date 2026-09-28.
 
 ## Verification plan
 
@@ -222,7 +287,47 @@ already recorded in the ledger.
 
 ## Outcomes & retrospective
 
-Not yet populated.
+Delivered, pending the M5 gate run, CodeRabbit review, and draft PR.
+
+The formatter now classifies every line of a document through one pure
+transition kernel, and the region-preservation theorem is machine-checked
+against that same production body. `make verus` reports 81 verified functions
+with no errors, `make verus-fence-mutation` confirms the proof fails for the
+intended reason when the closing rule is weakened, and
+`tests/fence_regions.rs` replays the argument over every fixture in
+`tests/data/` plus four whole-file documents that reach the unclosed-fence
+path.
+
+Three lessons are worth keeping.
+
+The first is that the verifier earned its place by rejecting a plausible
+theorem. The symmetric formulation of region preservation reads well and is
+false, and nothing but a prover would have said so. The value of this work is
+not the proof as an artefact; it is that the claim now stated is the one that
+survives contact with a counterexample search.
+
+The second is that a specification's *shape* is as much a design decision as
+its content. The suffix formulation
+(`out@ + spec_regions_from(index) == spec_regions`) looks like the natural way
+to state a fold, but its invariant needs concatenation associativity, which
+vstd keeps out of its default broadcast group; closing it would have meant
+either an expensive hint in the loop body, where Cargo must also parse it, or a
+`proof_after` block. Respecifying regions as a seeded prefix dissolved the
+obligation instead of discharging it, and as a side effect made the executable
+recurrence and the spec recurrence literally the same recurrence.
+
+The third is that a mutation gate needs a gate of its own. "Verus failed" is
+satisfied by a typo. Requiring the output to name the specific contract that
+was falsified is what makes the gate evidence rather than ceremony.
+
+Residual gaps, recorded rather than hidden: the regex-facing recognition
+boundary (`features_of_line`, `classify_regions`) is excluded from the proof
+build with `#[cfg(not(verus_keep_ghost))]`, so the claims hold for pre-parsed
+line features, not for the parse that produces them. That is the same boundary
+the existing classifier uses, and the assumed contract is recorded in
+`docs/verification.md`. The `compress_fences` pass itself is not proved; what
+is proved is the predicate it consults and the region-level consequence of
+consulting it correctly, with the executable sweep as the bridge.
 
 ## Context and orientation
 
@@ -284,7 +389,28 @@ tests already exist:
 `test_fence_toggle_regression_prose_ref_after_nested_fence`
 (`tests/footnotes.rs:42`).
 
-### M1 — Extract the pure fence transition kernel
+### M1 — Extract the pure fence transition kernel (complete)
+
+Delivered in `src/wrap/fence/kernel.rs` (348 lines), declared as a child module
+of `src/wrap/fence.rs` and re-exported through it. `fence_step` is the pure
+transition function; `regions` folds it over a line sequence; `Region` and
+`FenceState` are defined there. `observe_parsed` in the parent derives features
+through the kernel's `features_of_line`, calls `fence_step`, and maps the result
+onto `FenceObservation`; the tracing events and their `transition` / `reason`
+values are preserved and `FenceTracker`'s public API is unchanged. Committed as
+`95c27a3`.
+
+As planned, the signature is narrower than the milestone text anticipated:
+`LineFeatures` carries the marker character, run length, blockquote depth, and
+a trailing-whitespace-only flag, and the *presence* of a marker is that field's
+`Some`, so no separate fence-marker flag was needed. Recognition stays in the
+parent as `features_of_line`; the kernel is pure over pre-parsed features.
+
+Acceptance met: `make test` passes; the fence-tracker unit and logging tests
+pass unchanged; the witness tests asserting the two `regions` vectors live in
+`src/wrap/tests/fence_tracker.rs`.
+
+The original milestone text follows.
 
 Add `src/wrap/fence/kernel.rs` holding: a `Region` enum (`Delim`, `Literal`,
 `Prose`); the opening-fence state; a pre-parsed line-feature struct carrying
@@ -305,42 +431,73 @@ Acceptance: `make test` passes; `src/wrap/tests/fence_tracker.rs` and
 `src/wrap/tests/fence_tracker_logging.rs` pass unchanged; new witness tests
 assert the two `regions` vectors from obligation 2.
 
-### M2 — Make the rewrite decision pure
+### M2 — Make the rewrite decision pure (complete)
 
-Factor `src/fences/compress.rs` so both flush paths compute their opening
-`Strategy` from one pure function of `(opening state, line features)`, and both
-emit delimiter lines through one shared rewrite helper. The decision function
-must have no side effects, no output buffer, and no regex; where the rewrite
-needs the marker run, it takes pre-parsed features.
+`compression_changes_region` in the kernel is now the whole rewrite decision,
+and `ParsedLine::observe` (`src/fences/compress.rs:188`) computes each line's
+kernel features from the same single parse that produces the structural marker,
+so the decision and the transition cannot disagree about what a line is.
+`advance_fence_block` consults the predicate directly rather than accumulating a
+regex-derived flag. `opening_rewrite` maps the block-level guard onto a
+`Strategy`, and both flush paths take their `Strategy` from it: `flush_unmatched_block`
+rewrites only the opening delimiter, `flush_matched_block` both delimiters,
+`flush_original_block` neither — chosen by `flush_completed_block` from the
+cached rewrites. Committed as `fbd31de`.
 
-Acceptance: `make test` passes, including every existing fence test; the two
-flush paths demonstrably call the same helper.
+Acceptance met: `make test` passes including every existing fence test; both
+flush paths call `opening_rewrite`, and all four emit delimiter lines through
+the shared `rewrite_fence_line`.
 
-### M3 — Verus proofs and ledger rows
+### M3 — Verus proofs and ledger rows (complete)
 
-Add `spec fn spec_step`, `spec fn spec_regions`, and the refinement
-postcondition on the executable kernel, including the kernel with `#[path]` from
-`verus/lib.rs`. Prove obligation 3 and, within the stated tolerance,
-obligation 4. State the issue #480 reproduction as a specification test. Add
-the documented mutation check that drops the marker-character check from
-`spec_step` and confirms the tilde/backtick witness fails. Add ledger rows for
-the kernel and the theorem, with "external contracts: none", and keep
-`make verus-selftest` intact.
+`verus/fence_spec.rs` states the specification and `verus/lib.rs` includes
+`src/wrap/fence/kernel.rs` through `#[path]`, so the proofs constrain the body
+the formatter runs. The spec functions are `spec_fence_next`,
+`spec_fence_region`, `spec_state_seeded`, `spec_regions_seeded`,
+`spec_closes`, `spec_agrees_with_opener`, `spec_compressed`,
+`spec_interior_delimiter`, `spec_compression_changes_region`, and
+`spec_rewrite_permitted`. Every kernel decision carries a postcondition tying
+it to its spec function.
 
-Acceptance: `make verus` verifies; `make verus-selftest` still rejects the
-smoke proof; `make lint` accepts the new ledger rows; the mutation gate fails
-for the intended reason.
+Obligation 3 is discharged by `lemma_rewrite_preserves_closer_relation`, in the
+one-sided form the counterexample admits. Obligation 4 is discharged by
+`lemma_normalization_preserves_regions`, by induction on the prefix length with
+`lemma_state_preserved` and a single `lemma_block_stays_open` step. The final
+tolerance was never approached: the proof converged once the specification's
+shape was corrected, and no `admit` or extra axiom was needed.
 
-### M4 — Corpus equality and cross-pass evidence
+`scripts/check-fence-mutation.sh` (target `make verus-fence-mutation`) drops
+the marker-character comparison from `closes_fence` and requires the failure to
+name that contract. Seven ledger rows were added, the theorem among them.
 
-Add an integration test under `tests/` modelled on `tests/idempotence_drift.rs`
-that walks `tests/data/`, formats each input through the compiled binary, and
-asserts `regions(output) == regions(input)` on payload lines, with
-self-guarding assertions. Confirm no private classifier remains in the skipping
-passes; for residual direct predicate use, add an equivalence test and a ledger
-row.
+`make verus`: 81 verified, 0 errors.
 
-Acceptance: the new test passes and its guards fail if the corpus is empty.
+Acceptance met: `make verus` verifies with 0 errors; `make verus-selftest`
+still rejects the smoke proof; `make lint`'s `check-verification-ledger` accepts
+the new rows; the mutation gate fails for the intended reason.
+
+### M4 — Corpus equality and cross-pass evidence (complete)
+
+`tests/fence_regions.rs` (271 lines) holds two sweeps over every fixture under
+`tests/data/`. The first asserts
+`regions(compress_fences(lines)) == regions(lines)` at every index — the
+theorem itself, as a line-by-line equality, since `compress_fences` is a
+one-line-in, one-line-out map. The second drives the real binary with the full
+flag set and asserts that every line the classifier calls literal survives
+byte-for-byte. Both self-guard on corpus size and pin
+`tests/data/footnotes_fence_toggle_input.txt` as must-cover.
+
+Because no `tests/data/` fixture is unbalanced, `UNCLOSED_DOCUMENTS` adds four
+whole-file documents that reach `flush_unmatched_block`, the first being the
+issue #480 reproduction. Committed as `480b3ef`.
+
+Cross-pass agreement (obligation 5) holds without new machinery: all 29
+`FenceTracker::new` sites in `src/` route through `observe_parsed`, every
+skipping pass gates on `is_fence_marker || is_in_fence`, and `compress_fences`
+consults the kernel predicate. No private classifier remains, so no equivalence
+test or "assumed equivalent" ledger row was needed.
+
+Acceptance met: the new tests pass; their guards fail on an empty corpus;
 `make test` and `make lint` pass.
 
 ### M5 — Documentation and delivery
