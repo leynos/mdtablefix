@@ -97,7 +97,7 @@ fn lines_of(text: &str) -> Vec<String> {
 ///
 /// Returns the number of files checked. Files that cannot be read, or that are
 /// not UTF-8, are skipped rather than failing the sweep.
-fn assert_regions_preserved(files: &[PathBuf]) -> Result<usize, Box<dyn std::error::Error>> {
+fn assert_regions_preserved(files: &[PathBuf]) -> usize {
     let mut checked = 0_usize;
     for file in files {
         let Ok(original) = fs::read(file) else {
@@ -125,7 +125,7 @@ fn assert_regions_preserved(files: &[PathBuf]) -> Result<usize, Box<dyn std::err
         checked += 1;
     }
 
-    Ok(checked)
+    checked
 }
 
 /// Formats `text` once with the full flag set through the real binary.
@@ -245,7 +245,7 @@ fn every_fixture_preserves_regions_under_fence_normalization()
         "the region sweep must cover {MUST_COVER}",
     );
 
-    let checked = assert_regions_preserved(&files)?;
+    let checked = assert_regions_preserved(&files);
 
     assert!(
         checked > 100,
