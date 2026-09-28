@@ -113,11 +113,15 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions_corpus.rs
 - [x] M3 Add the Verus proofs and ledger rows. Committed as `a82667f` (proofs)
       and `69d0321` (mutation gate, ledger). `make verus`: 81 verified, 0
       errors.
-- [ ] M5 Documentation, gates, CodeRabbit, draft PR. In progress: ExecPlan
-      update done; CodeRabbit, push, and PR remain. `check-fmt`, `verus`,
-      `verus-selftest`, `verus-mutation`, and `verus-fence-mutation` all pass
-      at `c9ea885`; `lint`, `typecheck`, and `test` are waiting on the shared
-      Cargo package-cache lock held by other agents.
+- [x] M5 Push and draft PR. Draft PR
+      [#588](https://github.com/leynos/mdtablefix/pull/588) opened, titled with
+      `(#486)`, body carrying `Closes #486` and the Lody session link.
+- [x] M5 Gates. `check-fmt`, `verus` (81 verified, 0 errors), `verus-selftest`,
+      `verus-mutation`, and `verus-fence-mutation` pass locally. `lint`,
+      `format`, `markdownlint`, and the test suite (2544 run, 2544 passed, 0
+      skipped) pass in CI at `58d4fca`, which is where they had to run because
+      the local Cargo package-cache lock is deadlocked.
+- [ ] M5 CodeRabbit review, then mark the PR ready for review.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -223,6 +227,21 @@ See the decision log.
   around it. This is the escalation the Tolerances section exists to catch;
   clearing it means killing another agent's job, which is outside this work's
   authority.
+- **CI ran the three blocked gates, and found a real defect in one of them.**
+  The draft PR's `build-test` job failed twice on `make lint` with
+  `clippy::unnecessary_wraps` at `tests/fence_regions.rs`: first on
+  `assert_regions_preserved`, whose reads are handled with
+  `let Ok(..) else { continue }` so it never propagates a failure; then, once
+  that `Result` was gone, on its caller. Both are now plain `fn`. Worth
+  recording as a lesson about waiting out a contended lock: waiting was right —
+  working around the lock with a private `CARGO_HOME` would not have been the
+  fix, and would have hidden this defect. What recovered the gate was routing
+  it somewhere it could run, not bypassing it.
+- **The Verus gates are lock-independent.** They invoke `rust_verify` through
+  `uvx` and never touch the Cargo package cache, which is why all four
+  completed in about a second each while the Cargo gates sat blocked. Useful
+  for triage: a green Verus run says nothing about whether a Cargo gate has
+  been attempted.
 
 ## Decision log
 
