@@ -7,6 +7,9 @@ use super::{ClassifyCtxKernel, LineClass, classify_seq};
 
 verified_kernel_function! {
 /// Selects the structural classes that terminate wrapping paragraphs.
+///
+/// For example, `wrapping_boundary_seq(&['*', '*', '*'],
+/// &ClassifyCtxKernel::default())` returns `Some(LineClass::ThematicBreak)`.
 #[must_use]
 pub(crate) fn wrapping_boundary_seq(
     chars: &[char],
