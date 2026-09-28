@@ -6,7 +6,7 @@ use regex::Regex;
 use tracing::debug;
 
 use crate::{
-    classify::{ClassifyCtx, LineClass, classify_line_with_body},
+    classify::{ClassifyCtx, LineClass, classify_line_with_body, list_content_indent},
     wrap::FenceTracker,
 };
 
@@ -28,6 +28,30 @@ fn parse_numbered(line: &str) -> Option<(usize, &str, &str, &str)> {
     let sep = cap.get(2)?.as_str();
     let rest = cap.get(3)?.as_str();
     Some((indent, indent_str, sep, rest))
+}
+
+/// Returns the column where a renumbered item's content starts, in parser columns.
+///
+/// Measured on the emitted marker, `number` and its dot, because the
+/// emitted line is what a second pass reads: measuring the source marker
+/// would let `10.` becoming `2.` move a block into the item between passes.
+/// The separator follows `classify::list_content_indent`, tab stops
+/// included, so both passes agree on where an item's content starts.
+fn content_column(indent: usize, number: usize, sep: &str, rest: &str) -> usize {
+    list_content_indent(&format!("{number}.{sep}{rest}"), indent)
+}
+
+/// Rebuilds a line with `strip` columns of its indentation removed.
+///
+/// Classifying a line relative to the item that contains it lets a block
+/// indented four or more columns in absolute terms read as the heading or
+/// break it is inside that item, rather than as indented code.
+fn relative_to(line: &str, indent: usize, strip: usize) -> String {
+    format!(
+        "{}{}",
+        " ".repeat(indent.saturating_sub(strip)),
+        line.trim_start()
+    )
 }
 
 /// Removes counters deeper than the current list item, optionally including its own depth.
@@ -72,20 +96,14 @@ struct ListState {
     indent_stack: Vec<usize>,
     /// Next item number for each active indentation level.
     counters: HashMap<usize, usize>,
+    /// Content column of the latest item at each active indentation level.
+    ///
+    /// A block belongs to that item only when it is indented at least this
+    /// far, which is what decides whether it ends the list.
+    content_columns: HashMap<usize, usize>,
 }
 
 impl ListState {
-    /// Clears all counters after a heading, break, or other list boundary.
-    fn reset(&mut self) {
-        debug!(
-            indent_depths = self.indent_stack.len(),
-            counters = self.counters.len(),
-            "resetting ordered list renumbering state"
-        );
-        self.indent_stack.clear();
-        self.counters.clear();
-    }
-
     /// Removes nested counters before handling a new item or paragraph restart.
     fn prune_deeper(&mut self, indent: usize, inclusive: bool) {
         prune_deeper(
@@ -108,6 +126,51 @@ impl ListState {
         current
     }
 
+    /// Returns the content column of the innermost active item that contains `indent`.
+    ///
+    /// Zero when no active item's content column is at or left of `indent`.
+    fn containing_content_column(&self, indent: usize) -> usize {
+        self.indent_stack
+            .iter()
+            .filter_map(|depth| self.content_columns.get(depth).copied())
+            .filter(|&column| column <= indent)
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Records where the latest item at `indent` starts its content.
+    fn record_content_column(&mut self, indent: usize, column: usize) {
+        self.content_columns.insert(indent, column);
+    }
+
+    /// Ends every list whose current item cannot contain a block at `column`.
+    ///
+    /// A block belongs to an item only when it is indented to the item's
+    /// content column, so a block left of that column ends the list and the
+    /// next marker at that depth starts a new one. Lists whose items do
+    /// contain the block continue. A depth with no recorded content column
+    /// is treated as ending right after its marker column.
+    fn end_lists_at(&mut self, column: usize) {
+        debug!(
+            column,
+            indent_depths = self.indent_stack.len(),
+            "ending ordered lists whose items cannot contain the block"
+        );
+        while let Some(&depth) = self.indent_stack.last() {
+            let content = self
+                .content_columns
+                .get(&depth)
+                .copied()
+                .unwrap_or(depth + 1);
+            if content <= column {
+                break;
+            }
+            self.indent_stack.pop();
+            self.counters.remove(&depth);
+            self.content_columns.remove(&depth);
+        }
+    }
+
     /// Resets the current level after a blank line followed by a plain paragraph.
     fn handle_paragraph_restart(&mut self, indent: usize, line: &str, prev_blank: bool) -> bool {
         let inclusive = prev_blank
@@ -124,7 +187,8 @@ impl ListState {
 
 /// Renumber ordered Markdown list items across the given lines.
 /// - Preserve code fences; do not renumber inside them.
-/// - Reset numbering on headings and thematic breaks.
+/// - End the lists at or right of a heading's or thematic break's column; one indented into an item
+///   leaves that item's list counting, and one at column 0 ends every list.
 /// - Restart numbering after a blank line followed by a plain paragraph at the same or a shallower
 ///   indent.
 #[must_use]
@@ -154,6 +218,7 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
         }
         if let Some((indent, indent_str, sep, rest)) = parse_numbered(line) {
             let current = state.next_number(indent);
+            state.record_content_column(indent, content_column(indent, current, sep, rest));
             out.push(format!("{indent_str}{current}.{sep}{rest}"));
             prev_blank = false;
             continue;
@@ -164,15 +229,19 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
             .map_or_else(|| line.len(), |(i, _)| i);
         let indent_str = &line[..indent_end];
         let indent = indent_len(indent_str);
-        let classified = classify_line_with_body(line, &ClassifyCtx::default());
-        let prefix = &line[..line.len() - classified.body.len()];
+        let relative = relative_to(line, indent, state.containing_content_column(indent));
+        let classified = classify_line_with_body(&relative, &ClassifyCtx::default());
+        let prefix = &relative[..relative.len() - classified.body.len()];
         if !prefix.contains('>')
             && matches!(
                 classified.class,
                 LineClass::AtxHeading | LineClass::ThematicBreak
             )
         {
-            state.reset();
+            // A heading or break indented into an item is a child block of
+            // that item, so only the lists at or right of its column end
+            // (issue #450); at column 0 that is every list.
+            state.end_lists_at(indent);
             out.push(line.clone());
             prev_blank = false;
             continue;
@@ -188,132 +257,5 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for ordered list renumbering.
-    //!
-    //! These tests cover the parent module's parsing helpers, state
-    //! transitions, and public renumbering behaviour.
-
-    use super::*;
-
-    #[test]
-    fn parse_numbered_parts() {
-        let line = "  12. item";
-        assert_eq!(parse_numbered(line), Some((2, "  ", " ", "item")));
-    }
-
-    #[test]
-    fn parse_numbered_with_tab() {
-        let line = "	1.	foo";
-        assert_eq!(parse_numbered(line), Some((4, "	", "	", "foo")));
-    }
-
-    #[test]
-    fn simple_renumber() {
-        let input = vec!["1. a", "3. b"]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>();
-        let expected = vec!["1. a", "2. b"]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>();
-        assert_eq!(renumber_lists(&input), expected);
-    }
-
-    #[test]
-    fn nested_renumber() {
-        let input = vec!["1. a", "    1. sub", "    3. sub2", "2. b"]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>();
-        let expected = vec!["1. a", "    1. sub", "    2. sub2", "2. b"]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>();
-        assert_eq!(renumber_lists(&input), expected);
-    }
-
-    #[test]
-    fn list_state_reset_clears_indent_stack_and_counters() {
-        let mut state = ListState::default();
-        let _ = state.next_number(0);
-        let _ = state.next_number(0);
-        let _ = state.next_number(4);
-        assert!(!state.indent_stack.is_empty());
-        assert!(!state.counters.is_empty());
-
-        state.reset();
-
-        assert!(state.indent_stack.is_empty());
-        assert!(state.counters.is_empty());
-    }
-
-    #[test]
-    fn list_state_next_number_increments_and_prunes_deeper_indents() {
-        let mut state = ListState::default();
-        assert_eq!(state.next_number(0), 1);
-        assert_eq!(state.next_number(0), 2);
-        // A deeper indent starts its own counter at 1.
-        assert_eq!(state.next_number(4), 1);
-        assert_eq!(state.next_number(4), 2);
-        // Returning to the original indent prunes the deeper one and continues
-        // counting from where the outer level left off.
-        assert_eq!(state.next_number(0), 3);
-        assert!(!state.counters.contains_key(&4));
-    }
-
-    mod proptest_tests {
-        //! Property tests for ordered list state invariants.
-        //!
-        //! These generated cases exercise the same `ListState` state machine
-        //! used by `renumber_lists` across varied indent sequences.
-
-        use proptest::prelude::*;
-
-        use super::ListState;
-
-        proptest! {
-            #[test]
-            fn list_state_next_number_always_starts_at_1_for_new_indent(
-                indents in proptest::collection::vec(0usize..=8, 1..=20),
-            ) {
-                let mut state = ListState::default();
-                for &indent in &indents {
-                    // Capture absence before the call: `next_number` may
-                    // prune deeper counters, but the counter for `indent`
-                    // itself is only removed by an earlier shallower call.
-                    let was_absent = !state.counters.contains_key(&indent);
-                    let returned = state.next_number(indent);
-                    if was_absent {
-                        prop_assert_eq!(
-                            returned,
-                            1,
-                            "indent {} first appeared (or re-emerged after pruning) but returned {}",
-                            indent,
-                            returned,
-                        );
-                    }
-                }
-            }
-
-            #[test]
-            fn list_state_prunes_deeper_counters_when_returning_to_outer_indent(
-                outer_count in 1usize..=6,
-                deeper_count in 1usize..=6,
-            ) {
-                let mut state = ListState::default();
-                for expected in 1..=outer_count {
-                    prop_assert_eq!(state.next_number(0), expected);
-                }
-                for expected in 1..=deeper_count {
-                    prop_assert_eq!(state.next_number(4), expected);
-                }
-
-                prop_assert_eq!(state.next_number(0), outer_count + 1);
-                prop_assert!(!state.counters.contains_key(&4));
-                prop_assert_eq!(state.counters.get(&0), Some(&(outer_count + 2)));
-            }
-        }
-    }
-}
+#[path = "lists_tests.rs"]
+mod tests;

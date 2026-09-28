@@ -491,6 +491,13 @@ Ordered-list renumbering runs before wrapping. Continuation indentation is
 therefore measured from the final marker width, including when renumbering
 changes a marker from one digit to two, such as `9.` to `10.`.
 
+A heading or thematic break ends every ordered list whose current item it is
+not indented into. One indented to an item's content column, which is three
+spaces under `1.`, belongs to that item, and the list keeps counting past it.
+One at column 0, or indented less than the content column, ends the list, and
+the next list restarts at one. The content column is measured on the renumbered
+marker, so a second pass reaches the same result.
+
 When a footnote reference immediately follows an inline code span or Markdown
 link without intervening whitespace—for example `` `code`.[^ref] `` or
 `[text](url).[^ref]`—the reference stays on the same line as the preceding

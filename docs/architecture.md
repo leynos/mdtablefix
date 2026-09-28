@@ -206,6 +206,15 @@ code-emphasis pass handles non-table content only. The same ordering rule
 governs prose: footnote conversion runs before table buffering, while list
 renumbering and `replace_ellipsis` run before `--wrap` measures paragraph text.
 
+`renumber_lists` keeps its state in `ListState`: a stack of active marker
+columns, the next number for each, and each level's content column. The content
+column is measured on the emitted marker with `classify::list_content_indent`,
+so a second pass sees the same item boundaries. A heading or thematic break
+ends exactly the innermost lists whose current item it is not indented into
+(`ListState::end_lists_at`), and it is recognised relative to the item that
+contains it, so a heading four columns deep inside an item is not mistaken for
+indented code.
+
 Outside table buffering, `replace_ellipsis` maintains fence and indented-code
 state while it walks the original lines. Its private indented-code tracker is
 owned solely by the ellipsis pass: it preserves top-level code blocks that
