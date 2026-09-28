@@ -1,0 +1,21 @@
+---
+source: tests/issue_561_wrap_never_breaks_without_whitespace.rs
+expression: output
+---
+The word word word word word word word word word word word word see
+([Python Packaging][4]) tail words here.
+
+The word word word word word word word word word word word word see
+`Mutex`/`MutexGuard` tail words here.
+
+The word word word word word word word word word word word word see
+(Alice)-[r]->(Bob) tail words here.
+
+The word word word word word word word word word word word word see
+**`Node.isConnected`** tail words here.
+
+- Reliable clipboard, ctrl+enter queue batching, selection auto-scroll
+  (a6d912d2) (@7jrxt42BxFZo4iAnN4CX)
+
+First line.  
+Second line.

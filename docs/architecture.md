@@ -625,10 +625,11 @@ flowchart TD
     A["Input text (&str)"] --> B["Tokenize into whitespace and inline Markdown tokens"]
     B --> C["Normalize inline footnote reference spacing"]
     C --> D["Group tokens into Markdown-aware fragments"]
-    D --> E["Measure fragment widths with unicode-width"]
+    D --> J["Join fragments that touch with no whitespace between them"]
+    J --> E["Measure fragment widths with unicode-width"]
     E --> F["Run textwrap wrap_first_fit over current fragments"]
     F --> G["Merge whitespace-only continuation lines forward"]
-    G --> H["Render wrapped lines, trimming only a single trailing separator space"]
+    G --> H["Render wrapped lines, trimming every trailing space from a broken line"]
 ```
 
 Figure: Wrap-tokenizer flow. Starting from an input string, the wrapper emits
@@ -637,6 +638,15 @@ with `normalize_footnote_ref_spacing`, groups tokens into fragments, measures
 their display widths with `unicode-width`, feeds them through
 `textwrap::wrap_algorithms::wrap_first_fit`, and then reconstructs wrapped
 lines while preserving Markdown-aware spacing rules.
+
+`join_touching_fragments` (`src/wrap/inline/touching.rs`) runs between grouping
+and measurement. It merges every run of neighbouring fragments whose seams have
+no whitespace, so the whitespace fragments are the only break opportunities
+`textwrap` sees and a wrap can never add a space to the rendered text; see
+[issue 561](https://github.com/leynos/mdtablefix/issues/561). `render_line`
+then trims every trailing space from a line the wrapper broke, because two or
+more would render as a hard break; only the final line keeps the source's own
+trailing spaces.
 
 ### Wrap flow
 

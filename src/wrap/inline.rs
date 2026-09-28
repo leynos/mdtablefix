@@ -16,6 +16,7 @@ mod span_helpers;
 mod test_support;
 #[cfg(test)]
 mod tests;
+mod touching;
 mod tracing_events;
 
 /// Returns whether `token` begins with a matched inline code fence, optionally
@@ -60,6 +61,7 @@ use span_helpers::{
     try_couple_inline_link_after_opener,
 };
 use textwrap::wrap_algorithms::wrap_first_fit;
+use touching::join_touching_fragments;
 use tracing::trace;
 use tracing_events::{emit_footnote_reference_coupling, emit_whitespace_footnote_coupling};
 use unicode_width::UnicodeWidthStr;
@@ -272,7 +274,7 @@ fn build_fragments(tokens: &[String]) -> Vec<InlineFragment> {
         i = group_end;
     }
 
-    fragments
+    join_touching_fragments(fragments)
 }
 
 /// Returns whether `line` contains one link fragment.
@@ -338,8 +340,11 @@ fn render_line(
         .map(|fragment| fragment.text.as_str())
         .collect::<String>();
 
-    if !is_final_output_line && text.ends_with(' ') && !text.ends_with("  ") {
-        text.pop();
+    // A break the wrapper made must render as a soft break, so every trailing
+    // space goes: two or more left at a line end would read as a hard break.
+    // Only the final line keeps them, since there they are the source's own.
+    if !is_final_output_line {
+        text.truncate(text.trim_end_matches(' ').len());
     }
 
     if strip_leading_carry_whitespace {

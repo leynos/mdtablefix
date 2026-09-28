@@ -5,7 +5,10 @@ The `textwrap`-backed inline wrapper keeps trailing spaces on the final line.
 Markdown treats two spaces at the end of a line as a hard break. Earlier
 versions trimmed those spaces during the final flush, turning hard breaks into
 soft ones. The current wrapper still renders the final line as-is after
-`textwrap` has chosen the line breaks, so trailing whitespace survives wrapping.
+`textwrap` has chosen the line breaks, so trailing whitespace survives
+wrapping. Every other line is a break the wrapper made, and it keeps no
+trailing space: two spaces left there would add a hard break the source never
+wrote. See [issue #561](https://github.com/leynos/mdtablefix/issues/561).
 
 ## Example
 

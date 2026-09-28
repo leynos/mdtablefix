@@ -750,8 +750,11 @@ depth-aware tracking.
    that the fitter attaches to the start of wrapped continuation lines; it is
    set only when `wrap_preserving_code` has already emitted at least one line,
    so intentional leading whitespace on the first output line is preserved.
-   Non-final lines may also drop a single trailing space unless the line ends
-   with a hard-break double space.
+   Every non-final line loses all of its trailing spaces: the wrapper chose
+   that break, and two or more spaces there would render as a hard break the
+   source never wrote. Only the final line keeps the source's trailing spaces,
+   which is where a source hard break sits, because the paragraph writer ends a
+   wrapped segment at each one.
 
 ### Block classification
 
@@ -815,6 +818,15 @@ questions without repeating ad hoc string inspection in the post-processing
 passes. Inline code spans, Markdown links, and GFM footnote references use
 atomic fragment kinds, so the wrapper never inserts a break inside their
 Markdown syntax.
+
+After grouping, `join_touching_fragments` (in `src/wrap/inline/touching.rs`)
+merges any two neighbouring fragments whose seam has no whitespace, reading the
+text at the seam rather than the fragment kinds because grouping sometimes
+couples a leading space into a fragment. Whitespace fragments are then the only
+break opportunities `textwrap` sees, so no wrap can add a space to the rendered
+text (issue #561). `render_line` trims every trailing space from a line the
+wrapper broke, since two or more would render as a hard break; only the final
+line keeps the source's own trailing spaces.
 
 The inline span builder uses the private `is_trailing_punctuation_token`
 helper, via `extend_punctuation`, to keep trailing punctuation attached to
@@ -922,7 +934,9 @@ when a footnote marker has been promoted or grouped with preceding punctuation.
   bare dash runs such as `-` or `---` are rejected. Unicode alphabetic
   characters (e.g. `pré-`, `字-`) are intentionally supported.
 - **Hard breaks.** Trailing two-space hard breaks must survive on the emitted
-  line where they occur.
+  line where they occur. A source hard break ends its wrapped segment, so it is
+  always on the segment's final line, the only line `render_line` keeps
+  trailing spaces on; a break the wrapper chooses never carries them.
 - **Verbatim blocks.** Fenced code blocks must pass through unchanged, along
   with the other non-paragraph block kinds detected by `classify_block`.
 - **Prefix width.** The visual width of every prefix string is measured with

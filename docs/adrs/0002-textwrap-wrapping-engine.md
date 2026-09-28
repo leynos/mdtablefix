@@ -62,3 +62,25 @@ Negative:
 - **Patching `LineBuffer` for Unicode correctness**: rejected because the
   split-point cursor and carry semantics remained inherently fragile; the
   maintenance burden outweighed the risk of introducing a new dependency.
+
+## Addendum (2026-09-27)
+
+[Issue 561](https://github.com/leynos/mdtablefix/issues/561) showed that the
+fragment model this ADR adopted let `textwrap` break between any two fragments,
+including two that touch in the source. Markdown renders a soft line break as a
+space, so such a break added a space to the rendered text:
+`([Python Packaging][4])` became `( Python Packaging)`. From
+[pull request 271](https://github.com/leynos/mdtablefix/pull/271) onwards,
+attached constructs had been protected one coupling at a time (opening
+punctuation before code or inline links, hyphen prefixes, digit bracket
+references), and every uncoupled shape stayed breakable.
+
+The rule is now structural. After grouping, `join_touching_fragments` merges
+each run of fragments with no whitespace at its seams, so a break can fall only
+at source whitespace. `render_line` trims every trailing space from a line the
+wrapper broke, since two or more would render as a hard break; only the final
+line keeps the source's trailing spaces. A run with no whitespace is never
+split, even when that leaves a line wider than the target, which is the same
+trade-off this ADR already accepts for atomic code spans and links. The
+per-construct couplings stay, because `FragmentKind` still drives tail
+rebalancing.
