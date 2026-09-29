@@ -20,6 +20,11 @@
   underline onto its text as one paragraph, so `Arc Gambit` over `==========`
   became `Arc Gambit ==========`. The `--breaks` half was fixed earlier on main.
   ([#562](https://github.com/leynos/mdtablefix/issues/562))
+- Fixed: wrapping a bracket label is idempotent. The mechanism is the #561
+  change, which lets the wrapper break only at source whitespace, so `[a]`
+  written after a space or touching its text no longer moves on a second pass.
+  This release pins both reproductions with regression tests.
+  ([#507](https://github.com/leynos/mdtablefix/issues/507))
 - Fixed: `--breaks` keeps the indentation of a thematic break indented to a
   list item's content column. It had written a list item's break at column 0
   since `--breaks` was introduced in #57, which took the break and the rest of
