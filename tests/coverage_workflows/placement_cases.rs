@@ -17,7 +17,7 @@ use super::{
 
 /// The estate's runner expression, as a lane writes it.
 const ESTATE: &str =
-    "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}";
+    "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-4' }}";
 
 /// Every job that can land on Ubicloud, with the ceiling it states in minutes.
 ///
@@ -30,8 +30,8 @@ const CEILINGS: [(&str, &str, u64); 1] = [("coverage-main.yml", "coverage-upload
 /// Invariant: a push, a dispatch and a same-repository pull request select
 /// Ubicloud, and only a fork's pull request selects the hosted pool.
 #[rstest]
-#[case::push_or_dispatch(Origin::NoPullRequest, "ubicloud-standard-2")]
-#[case::same_repository(Origin::SameRepository, "ubicloud-standard-2")]
+#[case::push_or_dispatch(Origin::NoPullRequest, "ubicloud-standard-4")]
+#[case::same_repository(Origin::SameRepository, "ubicloud-standard-4")]
 #[case::fork(Origin::Fork, "ubuntu-latest")]
 fn the_estate_expression_places_each_run(#[case] origin: Origin, #[case] wanted: &str) {
     assert_eq!(
@@ -47,23 +47,23 @@ fn the_estate_expression_places_each_run(#[case] origin: Origin, #[case] wanted:
 #[rstest]
 #[case::estate(ESTATE, 0)]
 #[case::always_hosted("ubuntu-latest", 3)]
-#[case::always_ubicloud("ubicloud-standard-2", 3)]
+#[case::always_ubicloud("ubicloud-standard-4", 3)]
 #[case::inverted_arms(
-    "${{ github.event.pull_request.head.repo.fork && 'ubicloud-standard-2' || 'ubuntu-latest' }}",
+    "${{ github.event.pull_request.head.repo.fork && 'ubicloud-standard-4' || 'ubuntu-latest' }}",
     3
 )]
 #[case::another_label(
-    "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-4' }}",
+    "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}",
     2
 )]
 #[case::another_condition(
-    "${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'ubicloud-standard-2' }}",
+    "${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'ubicloud-standard-4' }}",
     3
 )]
 #[case::fork_kept_on_ubicloud(
     concat!(
-        "${{ github.event.pull_request.head.repo.fork && 'ubicloud-standard-2' ",
-        "|| 'ubicloud-standard-2' }}"
+        "${{ github.event.pull_request.head.repo.fork && 'ubicloud-standard-4' ",
+        "|| 'ubicloud-standard-4' }}"
     ),
     1
 )]
@@ -133,8 +133,8 @@ fn every_ubicloud_lane_is_placed_by_the_estate_expression_and_states_a_ceiling()
 /// Invariant: it is inventoried and judged, and the judgement rejects it, so
 /// no shape of `runs-on` places a lane outside the estate expression.
 #[rstest]
-#[case::sequence("[ubicloud-standard-2]")]
-#[case::mapping("{ group: ubicloud-standard-2 }")]
+#[case::sequence("[ubicloud-standard-4]")]
+#[case::mapping("{ group: ubicloud-standard-4 }")]
 fn a_non_scalar_ubicloud_runner_is_inventoried_and_rejected(#[case] runs_on: &str) -> Result<()> {
     let source = format!("on: push\njobs:\n  lane:\n    runs-on: {runs_on}\n");
     let all: reader::Workflows = [("x.yml".to_owned(), parse(&source)?)].into();

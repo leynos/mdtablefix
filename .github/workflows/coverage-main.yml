@@ -36,7 +36,10 @@ jobs:
     # build-test reads a warm main scope only if a main job on Ubicloud
     # writes it. This is that writer. The fork arm never applies on push or
     # dispatch; it is kept so every Ubicloud lane reads the same way.
-    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}
+    # standard-4, not standard-2: on two vCPUs two trybuild compile tests
+    # (`compile.rs`) exceed nextest's 180 s allowance, cold and warm (runs
+    # 36556931315 and 36558819122); on four they pass.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-4' }}
     # An Ubicloud runner is a self-hosted just-in-time runner with no
     # six-hour hosted cap. Provisional: sized for the first, cold run on
     # Ubicloud; tightened to twice a measured warm Ubicloud run once one
