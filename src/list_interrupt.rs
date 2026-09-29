@@ -103,8 +103,8 @@ fn starts_html_block(text: &str) -> bool {
     if rest.starts_with("!--") || rest.starts_with('?') || rest.starts_with("![CDATA[") {
         return true;
     }
-    if rest.starts_with('!') {
-        return rest[1..].starts_with(|ch: char| ch.is_ascii_alphabetic());
+    if let Some(declaration) = rest.strip_prefix('!') {
+        return declaration.starts_with(|ch: char| ch.is_ascii_alphabetic());
     }
     let name_part = rest.strip_prefix('/').unwrap_or(rest);
     let name_end = name_part
