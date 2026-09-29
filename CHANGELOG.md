@@ -33,14 +33,14 @@
   with `ETXTBSY`, which failed
   `make_verus_selftest_accepts_only_a_rejected_smoke_proof` intermittently.
   ([#586](https://github.com/leynos/mdtablefix/issues/586))
-- Fixed: `--renumber` ends an ordered list at any block at or left of the
-  list's marker column: after a blank line a paragraph, fenced code block,
-  table, block quote, HTML block or bullet list, and a bullet item or fence
-  line even without one. The list after it restarts at one instead of
-  continuing the count and changing its rendered `start`. Renumbering had
-  continued across all of these since it was introduced; only paragraphs that
-  began with a letter or digit ended a list.
-  ([#563](https://github.com/leynos/mdtablefix/issues/563))
+- Fixed: `--renumber` ends an ordered list at any block left of its item's
+  content column: after a blank line a paragraph, fenced code block, table,
+  block quote, HTML block or bullet list, and without one a block that can
+  interrupt a paragraph (a fence, block quote, bullet item with text, or HTML
+  block). The list after it restarts at one instead of continuing the count and
+  changing its rendered `start`. Renumbering had continued across all of these
+  since it was introduced; only paragraphs that began with a letter or digit
+  ended a list. ([#563](https://github.com/leynos/mdtablefix/issues/563))
 - Fixed: `--renumber` leaves alone a numbered line that continues a paragraph,
   such as a wrapped sentence whose next line starts `12.`. Only a list starting
   at 1 can interrupt a paragraph, so the line is paragraph text; rewriting it to

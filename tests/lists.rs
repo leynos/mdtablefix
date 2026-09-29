@@ -43,9 +43,12 @@ fn no_restart_without_blank() {
 }
 
 #[test]
-fn no_restart_for_indented_paragraph() {
+fn an_indented_paragraph_left_of_the_content_column_ends_the_list() {
+    // Two columns is left of the item's content column (three), so the
+    // paragraph is outside the item and ends the list; `3. Next` then cannot
+    // interrupt that paragraph and stays as written (#573).
     let input = lines_vec!("1. One", "", "  Indented", "3. Next");
-    let expected = lines_vec!("1. One", "", "  Indented", "2. Next");
+    let expected = lines_vec!("1. One", "", "  Indented", "3. Next");
     assert_eq!(renumber_lists(&input), expected);
 }
 
@@ -86,12 +89,18 @@ fn reset_on_heading_and_thematic_break() {
     assert_eq!(renumber_lists(&input), expected);
 }
 
+/// A quoted heading or break is ended by the quote, not read as a heading.
+///
+/// A block quote interrupts a paragraph, so it ends the list above it even
+/// without a blank line; the list after it restarts at one. The quoted
+/// structure is not what ends the list: a heading or break would end it by
+/// the content-column rule, which the quote prefix takes out of play.
 #[rstest::rstest]
 #[case::quoted_break("> ---")]
 #[case::quoted_heading("> # Heading")]
-fn quoted_structure_does_not_reset_list_numbering(#[case] quoted_line: &str) {
+fn a_quote_ends_the_list_it_interrupts(#[case] quoted_line: &str) {
     let input = lines_vec!("1. first", "2. second", quoted_line, "8. third");
-    let expected = lines_vec!("1. first", "2. second", quoted_line, "3. third");
+    let expected = lines_vec!("1. first", "2. second", quoted_line, "1. third");
 
     assert_eq!(renumber_lists(&input), expected);
 }
@@ -374,6 +383,32 @@ fn renumber_issue_563_block_at_marker_column_ends_the_list(#[case] input: Vec<St
 #[case::bullet_interrupts_without_blank(
     lines_vec!["1. a", "2. b", "- bullet", "", "3. c"],
     lines_vec!["1. a", "2. b", "- bullet", "", "1. c"]
+)]
+// A block quote or an HTML block that can interrupt a paragraph ends the list
+// without a blank line; an inline tag, a bare `-` and a `-` followed by a
+// non-breaking space are paragraph text and leave it open.
+#[case::quote_interrupts_without_blank(
+    lines_vec!["1. a", "> quote", "", "5. b"],
+    lines_vec!["1. a", "> quote", "", "1. b"]
+)]
+#[case::html_block_interrupts_without_blank(
+    lines_vec!["1. a", "<div>", "", "5. b"],
+    lines_vec!["1. a", "<div>", "", "1. b"]
+)]
+#[case::inline_tag_is_lazy_text(
+    lines_vec!["1. a", "<span>x", "4. b"],
+    lines_vec!["1. a", "<span>x", "2. b"]
+)]
+#[case::bare_bullet_is_lazy_text(lines_vec!["1. a", "-", "4. b"], lines_vec!["1. a", "-", "2. b"])]
+#[case::non_breaking_space_is_no_bullet(
+    lines_vec!["1. a", "-\u{a0}text", "7. next"],
+    lines_vec!["1. a", "-\u{a0}text", "2. next"]
+)]
+// Two columns is left of the content column of `1. `, so the paragraph is not
+// in the item and ends the list.
+#[case::paragraph_left_of_the_content_column(
+    lines_vec!["1. a", "", "  para", "", "5. b"],
+    lines_vec!["1. a", "", "  para", "", "1. b"]
 )]
 #[case::lazy_paragraph_continues(
     lines_vec!["1. a", "[lazy](u) continuation", "3. b"],

@@ -527,12 +527,18 @@ One at column 0, or indented less than the content column, ends the list, and
 the next list restarts at one. The content column is measured on the renumbered
 marker, so a second pass reaches the same result.
 
-Renumbering restarts at one wherever the list ends. A heading or a thematic
-break ends every list. After a blank line, any block at or left of a list's
-marker column ends that list: a paragraph, a fenced code block, a table, a
-block quote, an HTML block or a bullet list. A bullet item or a fence line at
-that column ends it even without the blank line. A block indented right of the
-marker column belongs to the item, so the list keeps counting past it.
+Renumbering restarts at one wherever the list ends. The rule for a heading or
+thematic break above applies to those two blocks. Any other block ends the
+lists whose item it is not indented into, judged by the same content column:
+after a blank line a paragraph, a fenced code block, a table, a block quote, an
+HTML block or a bullet list ends the list. A block that can interrupt a
+paragraph ends it even without the blank line: a fence, a block quote, a bullet
+item with text after its marker, or an HTML block of the kinds CommonMark lets
+interrupt a paragraph (comments, `<script>`, `<pre>`, `<div>` and the other
+block-level tags). An empty bullet, a bullet whose marker is followed by a
+non-breaking space, and an inline tag such as `<span>` are paragraph text and
+leave the list open. A block indented to the content column belongs to the
+item, so the list keeps counting past it.
 
 Renumbering never changes whether a line is a list item. Only a list starting
 at 1 can interrupt a paragraph, so a line such as `12. Evidence` directly below

@@ -67,7 +67,7 @@ mod proptest_tests {
 
     use proptest::prelude::*;
 
-    use super::ListState;
+    use super::{ListState, parse_numbered, renumber_lists};
 
     /// One step of a generated list history: an item at a marker column with
     /// its content offset, or a block at a column.
@@ -85,7 +85,55 @@ mod proptest_tests {
         ]
     }
 
+    /// Generates one document line from the shapes that start, continue or end a list.
+    fn document_line() -> impl Strategy<Value = String> {
+        prop::sample::select(vec![
+            "1. one",
+            "7. seven",
+            "   3. nested",
+            "10. ten",
+            "",
+            "text",
+            "  para",
+            "> quote",
+            "- bullet",
+            "-",
+            "-\u{a0}nbsp",
+            "```",
+            "# heading",
+            "---",
+            "<div>",
+            "<span>x",
+            "   - child",
+        ])
+        .prop_map(str::to_string)
+    }
+
     proptest! {
+        /// Renumbering rewrites only a numbered line's number and settles in one pass.
+        ///
+        /// Whatever ends a list or continues a paragraph, a line that is not a
+        /// numbered item comes out byte for byte as it went in, a numbered
+        /// item keeps everything but its number, and a second pass changes
+        /// nothing.
+        #[test]
+        fn renumbering_changes_only_numbers_and_settles_in_one_pass(
+            lines in proptest::collection::vec(document_line(), 0..=16),
+        ) {
+            let once = renumber_lists(&lines);
+            prop_assert_eq!(once.len(), lines.len());
+            for (before, after) in lines.iter().zip(&once) {
+                match (parse_numbered(before), parse_numbered(after)) {
+                    (Some((indent, _, sep, rest)), Some((out_indent, _, out_sep, out_rest))) => {
+                        prop_assert_eq!((indent, sep, rest), (out_indent, out_sep, out_rest));
+                    }
+                    (None, None) => prop_assert_eq!(before, after),
+                    _ => prop_assert!(false, "{before:?} became {after:?}"),
+                }
+            }
+            prop_assert_eq!(renumber_lists(&once), once);
+        }
+
         #[test]
         fn list_state_next_number_always_starts_at_1_for_new_indent(
             indents in proptest::collection::vec(0usize..=8, 1..=20),

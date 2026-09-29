@@ -36,6 +36,7 @@ pub(crate) mod frontmatter;
 pub mod headings;
 mod html;
 pub mod io;
+mod list_interrupt;
 pub mod lists;
 pub mod process;
 mod reflow;

@@ -7,6 +7,7 @@ use tracing::debug;
 
 use crate::{
     classify::{ClassifyCtx, LineClass, classify_line_with_body, list_content_indent},
+    list_interrupt::interrupts_paragraph,
     wrap::{FenceObservation, FenceTracker},
 };
 
@@ -116,16 +117,6 @@ fn leading_indent(line: &str) -> usize {
     indent_len(&line[..indent_end])
 }
 
-/// Reports whether a line opens a bullet list item (`-`, `*` or `+` then space or end).
-///
-/// A bullet item can interrupt a list without a blank line, so it ends an
-/// ordered list at the same or a deeper marker column even when it follows
-/// an item directly.
-fn is_bullet_item(line: &str) -> bool {
-    let mut chars = line.trim_start().chars();
-    matches!(chars.next(), Some('-' | '*' | '+')) && chars.next().is_none_or(char::is_whitespace)
-}
-
 /// Holds ordered-list counters keyed by indentation depth.
 #[derive(Default)]
 struct ListState {
@@ -211,23 +202,16 @@ impl ListState {
         }
     }
 
-    /// Ends every list whose markers sit at `indent` or deeper.
-    ///
-    /// A block that starts at or left of a list's marker column cannot belong
-    /// to that list's items, so the list ends and the next marker at that
-    /// depth starts a new list.
-    fn end_lists_from_marker(&mut self, indent: usize) { self.prune_deeper(indent, true); }
-
     /// Applies a non-item block at `indent` to the active lists.
     ///
-    /// After a blank line, any block at or left of a list's marker column ends
-    /// that list: a paragraph, a table, a block quote, an HTML block or a
-    /// bullet list alike. A bullet item ends it even without the blank line,
-    /// because it can interrupt. Otherwise the line continues the enclosing
-    /// item lazily, and only deeper lists end.
+    /// After a blank line, any block left of an item's content column ends
+    /// that item's list: a paragraph, a table, a block quote, an HTML block or
+    /// a bullet list alike. A block that can interrupt a paragraph does so
+    /// without the blank line. Otherwise the line continues the enclosing item
+    /// lazily, and only deeper lists end.
     fn apply_block(&mut self, indent: usize, line: &str, prev_blank: bool) {
-        if prev_blank || is_bullet_item(line) {
-            self.end_lists_from_marker(indent);
+        if prev_blank || interrupts_paragraph(line) {
+            self.end_lists_at(indent);
         } else {
             self.prune_deeper(indent, false);
         }
@@ -236,12 +220,13 @@ impl ListState {
 
 /// Renumber ordered Markdown list items across the given lines.
 /// Renumber ordered Markdown list items across the given lines.
-/// - Preserve code fences; do not renumber inside them. A fence line at or left of a list's marker
+/// - Preserve code fences; do not renumber inside them. A fence line left of a list's content
 ///   column ends that list.
 /// - End the lists at or right of a heading's or thematic break's column; one indented into an item
 ///   leaves that item's list counting, and one at column 0 ends every list.
-/// - End a list at any other block at or left of its marker column that follows a blank line, and
-///   at a bullet item there with or without one; the next list restarts at one.
+/// - End a list at any other block left of its content column that follows a blank line, and at a
+///   block that can interrupt a paragraph (a bullet item with content, a block quote, an HTML
+///   block) with or without one; the next list restarts at one.
 #[must_use]
 pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(lines.len());
@@ -255,10 +240,10 @@ pub fn renumber_lists(lines: &[String]) -> Vec<String> {
     for line in lines {
         let fence = fences.observe_source_line(line);
         if fence.is_fence_marker {
-            // A fence line at a list's marker column is a sibling block, not
-            // item content, so it ends that list as a paragraph would. A
+            // A fence line left of a list's content column is a sibling block,
+            // not item content, so it ends that list as a paragraph would. A
             // closing fence left of its opener is outside the item too.
-            state.end_lists_from_marker(leading_indent(line));
+            state.end_lists_at(leading_indent(line));
         }
         if let Some(is_blank) = passes_through(fence, line) {
             out.push(line.clone());
