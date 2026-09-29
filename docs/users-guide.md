@@ -1103,3 +1103,39 @@ assert_eq!(
 // terminator, so a mark-only document survives unchanged.
 assert!(SourceDocument::parse("").render(&[]).is_empty());
 ```
+
+### Batch fence classification
+
+`mdtablefix::wrap::{classify_regions, Region}` is the batch counterpart of the
+streaming `FenceTracker`. A caller that holds a whole document passes its lines
+to `classify_regions` and receives one `Region` per input line, in order. The
+accepted input is any iterator of string-like items — `&[&str]`, `&[String]`,
+or an iterator of either — and each line is read as the document spells it,
+blockquote prefix and fence marker included. A line is `Region::Delim` when it
+opens or closes a fence, `Region::Literal` when it is content a fence holds
+verbatim, and `Region::Prose` when it is ordinary Markdown outside any fence. A
+pass may rewrite a line only while it is `Region::Prose`. This is the same
+classification the wrapping pipeline and the `--fences` pass derive from the
+tracker, so the three cannot disagree about which lines are code.
+
+See [Fence normalization](#fence-normalization) for the `--fences` behaviour.
+
+<!-- markdownlint-disable-next-line MD046 -->
+```rust
+use mdtablefix::wrap::{Region, classify_regions};
+
+let lines = ["````", "```", "literal", "````"];
+assert_eq!(
+    classify_regions(&lines),
+    vec![
+        Region::Delim,
+        Region::Literal,
+        Region::Literal,
+        Region::Delim
+    ],
+);
+```
+
+Here the opener is four backticks, so the interior three-backtick line is too
+short to close it and stays literal. The final line matches the opener and is
+the closing delimiter.

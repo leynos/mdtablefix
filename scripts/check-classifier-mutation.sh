@@ -18,13 +18,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir "${proof_dir}/src"
-sed 's@../src/classify_kernel.rs@src/classify_kernel.rs@' \
+mkdir -p "${proof_dir}/src/wrap/fence"
+
+# Both production kernels are included by the proof entry point, so both tree
+# layouts have to be reproduced: the classifier at `src/`, the fence kernel at
+# `src/wrap/fence/`. Each `include!` and `#[path]` inside those modules is
+# relative to its own directory, so these copies resolve without further
+# rewriting. Only the classifier is mutated here; the fence kernel and its
+# specification travel unmodified, because the proofs in `fence_spec.rs` are
+# part of what this gate has to re-verify.
+sed -e 's@../src/classify_kernel.rs@src/classify_kernel.rs@' \
+    -e 's@../src/wrap/fence/kernel.rs@src/wrap/fence/kernel.rs@' \
     "${repo_root}/verus/lib.rs" > "${proof_file}"
 cp "${repo_root}/verus/classify_spec.rs" "${proof_dir}/classify_spec.rs"
+cp "${repo_root}/verus/fence_spec.rs" "${proof_dir}/fence_spec.rs"
 cp "${repo_root}/src/classify_kernel.rs" "${proof_dir}/src/classify_kernel.rs"
-cp "${repo_root}/src/classify_kernel_macros.rs" "${proof_dir}/src/classify_kernel_macros.rs"
+cp "${repo_root}/src/verified_kernel_macros.rs" "${proof_dir}/src/verified_kernel_macros.rs"
 cp "${repo_root}/src/classify_kernel_predicates.rs" "${proof_dir}/src/classify_kernel_predicates.rs"
+cp "${repo_root}/src/wrap/fence/kernel.rs" "${proof_dir}/src/wrap/fence/kernel.rs"
 sed 's@LineClass::ParagraphText)$@LineClass::AtxHeading)@' \
     "${repo_root}/src/classify_kernel_consumers.rs" \
     > "${proof_dir}/src/classify_kernel_consumers.rs"

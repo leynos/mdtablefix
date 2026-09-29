@@ -26,14 +26,30 @@ pub(crate) mod tracing_snapshot_support;
 pub(crate) use block::{BlockKind, classify_block, classify_residual_block, leading_indent};
 pub use blockquote::BlockquotePrefix;
 use continuation::apply_continuation_chunk;
-pub(crate) use fence::{FenceObservation, ObservedFence};
+pub(crate) use fence::{
+    FenceObservation,
+    KernelState,
+    LineFeatures,
+    ObservedFence,
+    compression_changes_region,
+    opener,
+};
 /// Fence-detection utilities re-exported for downstream callers.
 ///
 /// [`FenceTracker`] maintains fenced code-block state across lines, which is
 /// useful for callers that process Markdown incrementally. [`is_fence`]
 /// inspects one line and returns the fence components (indentation, marker,
 /// info string) when the line opens a fenced code block, or `None` otherwise.
-pub use fence::{FenceTracker, is_fence};
+///
+/// [`classify_regions`] and [`Region`] are the batch counterparts of that
+/// streaming state. A caller that holds a whole document passes its lines to
+/// [`classify_regions`] and receives one [`Region`] per line: [`Region::Delim`]
+/// for a line that opens or closes a fence, [`Region::Literal`] for content a
+/// fence holds verbatim, and [`Region::Prose`] for ordinary Markdown. The
+/// distinction is what lets a pass know which lines it may rewrite; it is the
+/// same classification the wrapping pipeline and the fence-compression pass
+/// derive, so all three cannot disagree about which lines are code.
+pub use fence::{FenceTracker, Region, classify_regions, is_fence};
 pub(crate) use link_reference::{LinkReferenceMatcher, LinkTitleWindow, LinkTitleWindowOutcome};
 use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
 use passthrough::{is_passthrough_block, normalized_passthrough_line};

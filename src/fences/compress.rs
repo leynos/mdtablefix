@@ -14,7 +14,15 @@
 use tracing::debug;
 
 use super::{FENCE_RE, is_null_lang};
-use crate::wrap::{FenceObservation, FenceTracker, ObservedFence};
+use crate::wrap::{
+    FenceObservation,
+    FenceTracker,
+    KernelState,
+    LineFeatures,
+    ObservedFence,
+    compression_changes_region,
+    opener,
+};
 
 /// Selects how a recognised fence marker is normalised.
 #[derive(Clone, Copy)]
@@ -39,16 +47,13 @@ struct CachedLine {
 }
 /// Buffers one candidate fenced block until its closing marker determines the rewrite.
 struct PendingFenceBlock {
-    /// Marker family and length from the opening delimiter.
-    opening_marker: String,
+    /// Opening-fence state, the left half of the rewrite decision.
+    opening: KernelState,
     /// Whether an interior marker makes compression change the block's meaning.
     has_conflicting_interior_fence: bool,
     /// Source lines and any precomputed compatible rewrites in document order.
     lines: Vec<CachedLine>,
 }
-
-/// Returns the marker family used by a fence, if the delimiter is non-empty.
-fn marker_char(marker: &str) -> Option<char> { marker.chars().next() }
 
 /// Rewrites a parsed fence marker according to the selected compression strategy.
 ///
@@ -69,25 +74,11 @@ pub(super) fn rewrite_marker(line: &str, strategy: Strategy) -> Option<String> {
     })
 }
 
-/// Reports whether an interior marker would conflict with the opening delimiter after compression.
-fn interior_fence_requires_preserved_delimiters(
-    opening_marker: &str,
-    parsed: Option<(&str, &str, &str)>,
-) -> bool {
-    let Some((_indent, marker, _info)) = parsed else {
-        return false;
-    };
-    let Some(opening_ch) = marker_char(opening_marker) else {
-        return false;
-    };
-    let Some(marker_ch) = marker_char(marker) else {
-        return false;
-    };
-    marker_ch == opening_ch || marker_ch == '`'
-}
-
 /// Chooses preservation whenever interior fence-like content would make compression ambiguous.
-fn opening_rewrite(has_conflicting_interior_fence: bool) -> Strategy {
+///
+/// This is the block-level summary of the kernel's per-line decision: a block
+/// is compressed only when no interior line's region could change.
+const fn opening_rewrite(has_conflicting_interior_fence: bool) -> Strategy {
     if has_conflicting_interior_fence {
         Strategy::Preserve
     } else {
@@ -176,6 +167,11 @@ struct ParsedLine<'a> {
     line: &'a str,
     /// Structural fence state produced by the shared tracker.
     observation: FenceObservation,
+    /// The kernel's view of this line, the right half of the rewrite decision.
+    ///
+    /// `None` marks a line that is not fence-shaped, which `fence_step` reads as
+    /// prose at the observed depth.
+    features: Option<LineFeatures>,
     /// Marker components parsed by the tracker, if this line is a fence.
     fence: Option<(&'a str, &'a str, &'a str)>,
     /// Optional three-backtick rewrite computed from the same source parse.
@@ -185,15 +181,19 @@ struct ParsedLine<'a> {
 impl<'a> ParsedLine<'a> {
     /// Observe `line` against `tracker` and compute its compressed rewrite once.
     ///
-    /// The blockquote depth and structural fence marker come from the tracker's
-    /// single parse via [`FenceTracker::observe_source_fence`]; only the local
-    /// normalization regex runs in addition, so the raw line is never handed to
-    /// `is_fence` again.
+    /// The blockquote depth, structural fence marker, and kernel features all
+    /// come from the tracker's single parse via
+    /// [`FenceTracker::observe_source_fence`]; only the local normalization
+    /// regex runs in addition, so the raw line is never handed to `is_fence`
+    /// again. Deriving the features from the same parse keeps the compression
+    /// decision and the fence transition from disagreeing about what the line
+    /// is.
     fn observe(tracker: &mut FenceTracker, line: &'a str) -> Self {
         let observed: ObservedFence<'a> = tracker.observe_source_fence(line);
         Self {
             line,
             observation: observed.observation,
+            features: observed.features,
             fence: observed.fence,
             compressed: rewrite_marker(line, Strategy::Compress),
         }
@@ -220,13 +220,24 @@ fn start_fence_block(
     if let Some(block) = previous {
         flush_original_block(block, out);
     }
-    let Some((_indent, opening_marker, _info)) = parsed.fence else {
+    // Opening a block needs the tracker to have found both a structural fence
+    // and a marker character on this line. `FENCE_RE` guarantees a non-empty
+    // marker run, so the marker is always present here, but the code says so by
+    // yielding to the verbatim branch rather than by asserting it. A line
+    // missing either is handled exactly like any other non-opening line.
+    let opener_source = parsed
+        .features
+        .zip(parsed.fence)
+        .and_then(|(features, _)| features.marker.map(|marker| (features, marker)));
+    let Some((features, marker)) = opener_source else {
         out.push(parsed.compressed.unwrap_or_else(|| parsed.line.to_owned()));
         return None;
     };
-    let opening_marker = opening_marker.to_owned();
+    // The kernel has already read this line as opening a block, so the features
+    // describe the opener exactly: its depth, its marker family, and its run.
+    let opening = opener(features.depth, marker, features.marker_len);
     Some(PendingFenceBlock {
-        opening_marker,
+        opening,
         has_conflicting_interior_fence: false,
         lines: vec![parsed.into_cached()],
     })
@@ -248,9 +259,14 @@ fn advance_fence_block(
     };
 
     let observation = parsed.observation;
-    if observation.is_fence_marker
-        && observation.is_in_fence
-        && interior_fence_requires_preserved_delimiters(&block.opening_marker, parsed.fence)
+    // The rewrite decision is a pure function of the opening state and this
+    // line: no accumulated flag decides it, and no regex of its own. Only
+    // interior lines can change region under a rewrite, so the kernel predicate
+    // is consulted for the lines still inside the block. A line with no kernel
+    // features is prose, which `compression_changes_region` never flags.
+    if observation.is_in_fence
+        && let Some(features) = parsed.features
+        && compression_changes_region(block.opening, features)
     {
         block.has_conflicting_interior_fence = true;
     }

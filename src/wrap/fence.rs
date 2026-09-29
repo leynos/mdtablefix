@@ -3,7 +3,24 @@
 //! Fence state is keyed by marker character, marker length, and blockquote
 //! depth. Keeping those values together prevents a closing marker from a
 //! shallower quote or a different marker family from ending the wrong block.
+//!
+//! The transition relation itself lives in the [`kernel`] submodule, which is
+//! pure and is the body Verus proves. This module owns only the regex parsing
+//! that turns a source line into the kernel's line features, so every pass that
+//! asks whether a line is literal code draws the same answer from the same
+//! transition function.
 
+mod kernel;
+
+pub(crate) use kernel::{
+    FenceState as KernelState,
+    LineFeatures,
+    agrees_with_opener,
+    compression_changes_region,
+    fence_step,
+    opener,
+};
+pub use kernel::{Region, classify_regions};
 use regex::Regex;
 use tracing::{debug, trace};
 
@@ -56,14 +73,57 @@ pub fn is_fence(line: &str) -> Option<(&str, &str, &str)> {
 ///
 /// Returning borrowed capture slices keeps the original info string available
 /// for the closing-fence whitespace check.
+///
+/// Exposed to the child `kernel` module, which classifies whole documents by
+/// reusing the parent's single regex parse rather than a second one.
 #[rustfmt::skip]
-fn is_inner_fence(line: &str) -> Option<(&str, &str, &str)> {
+pub(super) fn is_inner_fence(line: &str) -> Option<(&str, &str, &str)> {
     FENCE_RE.captures(line).map(|cap| {
         let inner_indent = cap.get(1).map_or("", |m| m.as_str());
         let fence  = cap.get(2).map_or("", |m| m.as_str());
         let info   = cap.get(3).map_or("", |m| m.as_str());
         (inner_indent, fence, info)
     })
+}
+
+/// Reduce a parsed fence line to the kernel's line features.
+///
+/// The `None` result means the line is not fence-shaped, which still has to be
+/// stepped because it may drop below the opening blockquote depth and end the
+/// fence implicitly.
+///
+/// `FENCE_RE` guarantees a non-empty marker run, so the first character always
+/// exists; the `?` would only fire if the regex disagreed with the kernel's
+/// notion of a fence marker.
+fn line_features(depth: usize, parsed: Option<(&str, &str, &str)>) -> Option<LineFeatures> {
+    let (_indent, fence, info) = parsed?;
+    let mut chars = fence.chars();
+    let marker = chars.next()?;
+    let marker_len = chars.count() + 1;
+    // CommonMark forbids an info string on a closing fence: a same-marker
+    // line carrying trailing text is literal content, not a close. Only ASCII
+    // spaces and tabs may follow a closing marker, so avoid the Unicode-aware
+    // `trim`, which would wrongly accept a no-break space (U+00A0) or form
+    // feed (U+000C) as blank trailing whitespace.
+    let trailing_blank = info.bytes().all(|b| b == b' ' || b == b'\t');
+    Some(LineFeatures::fence(
+        depth,
+        marker,
+        marker_len,
+        trailing_blank,
+    ))
+}
+
+/// Reduce one complete source line, blockquote prefix included, to kernel
+/// features.
+///
+/// The child `kernel` module reuses this so a whole-document classification
+/// runs the same parse as the streaming [`FenceTracker`], rather than keeping
+/// a second notion of what a fence line is.
+fn features_of(line: &str) -> LineFeatures {
+    let context = FenceLine::parse(line);
+    line_features(context.depth, is_inner_fence(context.inner))
+        .unwrap_or_else(|| LineFeatures::prose(context.depth))
 }
 
 /// The prefix-stripped view needed while classifying a source fence line.
@@ -115,16 +175,8 @@ pub(crate) fn handle_fence_line(
     true
 }
 
-/// Opening-fence identity used to validate later closing markers.
-#[derive(Clone, Copy, Debug)]
-struct FenceState {
-    /// Marker family used by the opener (backtick or tilde).
-    marker: char,
-    /// Marker run length required of a closing fence.
-    marker_len: usize,
-    /// Blockquote depth at which the fence was opened.
-    open_depth: usize,
-}
+/// Working alias for the kernel's opening-fence state.
+type FenceState = KernelState;
 
 /// The state transition observed while processing one source line.
 #[derive(Clone, Copy, Debug)]
@@ -137,16 +189,23 @@ pub(crate) struct FenceObservation {
     pub(crate) is_in_fence: bool,
 }
 
-/// A source-line fence observation paired with the structural fence parse of
-/// that same line.
+/// A source-line fence observation paired with both parses of that same line.
 ///
 /// Callers that need the marker components (indentation, marker run, info
-/// string) obtain them here rather than re-running [`is_fence`], keeping
-/// [`FenceTracker`] the single authority for the line's fence classification.
+/// string) obtain them here rather than re-running [`is_fence`], and callers
+/// that need the kernel's view of the line obtain that here rather than
+/// re-deriving it from a second parse. Keeping both alongside the transition
+/// makes [`FenceTracker`] the single authority for the line's classification.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ObservedFence<'a> {
     /// The tracker transition for the complete source line.
     pub(crate) observation: FenceObservation,
+    /// The kernel's view of the line, already stepped over by the transition.
+    ///
+    /// This is the same value the batch [`classify_regions`](kernel::classify_regions)
+    /// path derives, computed here from the tracker's one regex match instead
+    /// of a second one.
+    pub(crate) features: Option<LineFeatures>,
     /// The `(indent, marker, info)` components when the line is a fence marker,
     /// with `indent` spanning any blockquote prefix, as [`is_fence`] returns.
     pub(crate) fence: Option<(&'a str, &'a str, &'a str)>,
@@ -199,14 +258,45 @@ impl FenceTracker {
     /// The caller supplies `depth` separately because the inner text no longer
     /// carries enough information to recover the quote nesting.
     fn observe_inner(&mut self, line: &str, depth: usize) -> bool {
-        self.observe_parsed(depth, is_inner_fence(line))
+        self.observe_step(line_features(depth, is_inner_fence(line)), depth)
     }
 
-    /// Update the tracker from an already-parsed inner fence, avoiding a second
-    /// regex match when the caller has parsed the line itself.
-    fn observe_parsed(&mut self, depth: usize, parsed: Option<(&str, &str, &str)>) -> bool {
-        if let Some(open) = self.state
-            && depth < open.open_depth
+    /// Update the tracker from already-parsed line features.
+    ///
+    /// The decision itself belongs to [`fence_step`]; this method only reports
+    /// the transition and whether the line was treated as a fence marker. The
+    /// events below are emitted from the before/after states rather than
+    /// alongside each rule, so the tracing stays accurate however the kernel
+    /// grows.
+    fn observe_step(&mut self, features: Option<LineFeatures>, depth: usize) -> bool {
+        let before = self.state;
+
+        // Every line is stepped, fence-shaped or not: dropping below the
+        // opening quote depth ends the fence implicitly, whatever the line is.
+        let (next, _) = fence_step(
+            self.state,
+            features.unwrap_or_else(|| LineFeatures::prose(depth)),
+        );
+        self.state = next;
+
+        if let Some(features) = features {
+            Self::report_fence_marker(before, next, features);
+            true
+        } else {
+            Self::report_implicit_close(before, next, depth);
+            false
+        }
+    }
+
+    /// Emit the `implicit_close` event when the line's depth dropped below the
+    /// open fence's, which ends that fence before the line is read.
+    ///
+    /// The event reports the *line's* depth, not the resulting state, because a
+    /// delimiter on the same line opens a fresh fence afterwards. Reporting the
+    /// resulting state would hide the closure that made it possible.
+    fn report_implicit_close(before: Option<FenceState>, after: Option<FenceState>, depth: usize) {
+        if let Some(open) = before
+            && after.is_none_or(|next| next.open_depth != open.open_depth)
         {
             debug!(
                 transition = "implicit_close",
@@ -216,84 +306,69 @@ impl FenceTracker {
                 open_marker_len = open.marker_len,
                 "fence state changed"
             );
-            self.state = None;
         }
+    }
 
-        let Some((_indent, fence, info)) = parsed else {
-            return false;
-        };
-
-        let mut chars = fence.chars();
-        let marker_ch = chars.next().expect("FENCE_RE guarantees a non-empty fence");
-        let marker_len = chars.count() + 1;
-        // CommonMark forbids an info string on a closing fence: a same-marker
-        // line carrying trailing text is literal content, not a close. Only
-        // ASCII spaces and tabs may follow a closing marker, so avoid the
-        // Unicode-aware `trim`, which would wrongly accept a no-break space
-        // (U+00A0) or form feed (U+000C) as blank trailing whitespace.
-        let closes_fence = info.bytes().all(|b| b == b' ' || b == b'\t');
-
-        match self.state {
-            Some(open)
-                if depth == open.open_depth
-                    && marker_ch == open.marker
-                    && marker_len >= open.marker_len
-                    && closes_fence =>
-            {
-                debug!(
-                    transition = "matching_close",
-                    depth,
-                    open_depth = open.open_depth,
-                    marker_len,
-                    open_marker_len = open.marker_len,
-                    "fence state changed"
-                );
-                self.state = None;
-            }
-            Some(open)
-                if depth == open.open_depth
-                    && marker_ch == open.marker
-                    && marker_len >= open.marker_len =>
-            {
-                trace!(
-                    transition = "unchanged",
-                    reason = "closing_fence_has_info_string",
-                    depth,
-                    open_depth = open.open_depth,
-                    marker_len,
-                    open_marker_len = open.marker_len,
-                    "fence marker did not change state"
-                );
-            }
-            Some(open) => {
-                trace!(
-                    transition = "unchanged",
-                    reason = "incompatible_active_opener",
-                    depth,
-                    open_depth = open.open_depth,
-                    marker_len,
-                    open_marker_len = open.marker_len,
-                    "fence marker did not change state"
-                );
-            }
-            None => {
-                debug!(
-                    transition = "open",
-                    depth,
-                    open_depth = depth,
-                    marker_len,
-                    open_marker_len = marker_len,
-                    "fence state changed"
-                );
-                self.state = Some(FenceState {
-                    marker: marker_ch,
-                    marker_len,
-                    open_depth: depth,
-                });
-            }
+    /// Emit the event describing what a fence-marker line did to the state.
+    fn report_fence_marker(
+        before: Option<FenceState>,
+        after: Option<FenceState>,
+        features: LineFeatures,
+    ) {
+        let marker_len = features.marker_len;
+        match (before, after) {
+            (Some(open), None) => debug!(
+                transition = "matching_close",
+                depth = features.depth,
+                open_depth = open.open_depth,
+                marker_len,
+                open_marker_len = open.marker_len,
+                "fence state changed"
+            ),
+            // A replacement is a close followed by an open on one line: the
+            // line dropped below the old opener's depth and then opened a fresh
+            // fence. Both states are `Some`, so without this arm the event would
+            // read as "unchanged" and a subscriber filtering for state changes
+            // would miss both halves of the transition.
+            (Some(open), Some(next)) if next != open => debug!(
+                transition = "replaced",
+                reason = "depth_dropped_below_open_then_opened",
+                depth = features.depth,
+                open_depth = open.open_depth,
+                marker_len,
+                open_marker_len = open.marker_len,
+                new_marker_len = next.marker_len,
+                new_open_depth = next.open_depth,
+                "fence state changed"
+            ),
+            (Some(open), Some(_)) if agrees_with_opener(open, features) => trace!(
+                transition = "unchanged",
+                reason = "closing_fence_has_info_string",
+                depth = features.depth,
+                open_depth = open.open_depth,
+                marker_len,
+                open_marker_len = open.marker_len,
+                "fence marker did not change state"
+            ),
+            (Some(open), Some(_)) => trace!(
+                transition = "unchanged",
+                reason = "incompatible_active_opener",
+                depth = features.depth,
+                open_depth = open.open_depth,
+                marker_len,
+                open_marker_len = open.marker_len,
+                "fence marker did not change state"
+            ),
+            (None, Some(_)) => debug!(
+                transition = "open",
+                depth = features.depth,
+                open_depth = features.depth,
+                marker_len,
+                open_marker_len = marker_len,
+                "fence state changed"
+            ),
+            (None, None) => {}
         }
-
-        true
     }
 
     /// Update the tracker from a source line, including any blockquote prefix.
@@ -325,16 +400,20 @@ impl FenceTracker {
     }
 
     /// Observe a source line, returning the fence-state transition together with
-    /// the structural fence parse of the line.
+    /// both the structural fence parse and the kernel features of the line.
     ///
     /// The line's blockquote prefix and fence marker are parsed exactly once and
-    /// reused for both the tracker update and the returned `fence` components, so
-    /// callers need not run [`is_fence`] again.
+    /// reused for the tracker update, the returned `fence` components, and the
+    /// returned kernel `features`, so callers need not parse the line again.
+    /// `features` is absent only when the line is not fence-shaped, which is
+    /// exactly the case where a caller that wants [`LineFeatures::prose`] must
+    /// supply the depth itself.
     pub(crate) fn observe_source_fence<'a>(&mut self, line: &'a str) -> ObservedFence<'a> {
         let context = FenceLine::parse(line);
         let parsed_inner = is_inner_fence(context.inner);
+        let features = line_features(context.depth, parsed_inner);
         let was_in_fence = self.in_fence(context.depth);
-        let is_fence_marker = self.observe_parsed(context.depth, parsed_inner);
+        let is_fence_marker = self.observe_step(features, context.depth);
         let is_in_fence = self.in_fence(context.depth);
         let fence = parsed_inner.map(|(inner_indent, marker, info)| {
             let indent = &line[..context.prefix_len + inner_indent.len()];
@@ -346,6 +425,7 @@ impl FenceTracker {
                 is_fence_marker,
                 is_in_fence,
             },
+            features,
             fence,
         }
     }
