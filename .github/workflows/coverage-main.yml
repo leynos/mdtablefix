@@ -25,7 +25,7 @@ name: Coverage (main)
 # with no complete run at all. With cancellation off, a newer push waits for
 # the running one and replaces any run still pending, so the newest baseline
 # wins. The pull-request lanes cancel superseded runs; this one must not, and
-# `tests/coverage_workflows.rs` refuses it.
+# `make test-workflow-contracts` refuses it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -55,6 +55,8 @@ jobs:
       BUILD_PROFILE: debug
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@6dea5677a84fec60ca51b07202570e3af12ffdb4
       - name: Install ripgrep
@@ -75,18 +77,23 @@ jobs:
           output-path: lcov.info
           format: lcov
           with-ratchet: 'true'
+      # Whether the token is set, as a plain step output. The expression is
+      # evaluated before the shell runs, so this step binds nothing: the token
+      # sits in no `env` in this workflow, because the upload action is
+      # composite and hands its step's `env` to the nested steps it runs.
+      - name: Check CodeScene token
+        id: codescene-token
+        run: echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
       - name: Upload coverage data to CodeScene
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         # An unset secret leaves the upload out rather than failing the lane,
         # which is what lets a fork of this repository run the workflow at all.
         # The ref conjunct is what keeps the dispatch trigger above from
         # uploading a branch CodeScene does not analyse: the push trigger is
         # restricted to `main`, but a dispatch may name any branch.
-        if: ${{ env.CS_ACCESS_TOKEN != '' && github.ref == 'refs/heads/main' }}
+        if: ${{ steps.codescene-token.outputs.available == 'true' && github.ref == 'refs/heads/main' }}
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           path: lcov.info
           format: lcov
           mode: upload
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          access-token: ${{ secrets.CS_ACCESS_TOKEN }}

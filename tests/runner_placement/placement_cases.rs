@@ -8,12 +8,15 @@
 
 use anyhow::{Result, ensure};
 use rstest::rstest;
+use serde_yaml::Value;
 
 use super::{
     placement::{self, Origin, Placed},
-    pull_request_cases::parse,
     reader,
 };
+
+/// Parses a fixture through the same reader the real workflows use.
+fn parse(source: &str) -> Result<Value> { reader::parse("fixture", source) }
 
 /// The estate's runner expression, as a lane writes it.
 const ESTATE: &str =

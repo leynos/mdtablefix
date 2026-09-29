@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest verus-mutation markdownlint nixie mutants
+.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest verus-mutation markdownlint nixie mutants test-workflow-contracts
 
 APP ?= mdtablefix
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
@@ -21,10 +21,23 @@ RG ?= rg
 PROVER_TOOLS ?= uvx --from git+https://github.com/leynos/rust-prover-tools@$(shell cat tools/rust-prover-tools/REF) prover-tools
 VERUS_RUN ?= env -u RUSTUP_TOOLCHAIN $(PROVER_TOOLS) verus run --repo-root .
 
+UV ?= uv
+UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+# The CV-005 CodeScene contracts live in shared-actions and run from a full
+# commit, so a fix is a pin bump. `.github/cv005.toml` holds this repository's
+# only parameters.
+CV005_CONTRACTS_REF ?= a38feb9be25755c30eca5bda96bd3786a5b89c6b
+CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python 3.13 \
+	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
+	cv005-contracts
+
+test-workflow-contracts: ## Check the CV-005 CodeScene workflow contracts
+	$(CV005_CONTRACTS) check --repository .
+
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
 
-all: release ## Default target builds release binary
+all: release test-workflow-contracts ## Default target builds release binary
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
