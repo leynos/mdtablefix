@@ -7,7 +7,7 @@
 //! a self-hosted just-in-time runner that GitHub's six-hour cap for hosted
 //! jobs does not bound.
 
-use serde_yaml::Value;
+use serde_yaml::{Mapping, Value};
 
 use super::reader;
 
@@ -76,6 +76,24 @@ pub fn placement_faults(runs_on: &str) -> Vec<String> {
     .collect()
 }
 
+/// Returns a job's `runs-on` as text, whatever shape it is written in.
+///
+/// A string is itself. A sequence or a mapping (`[ubicloud-standard-2]`,
+/// `{ group: ... }`) is rendered as YAML, so a label hidden in one still reads
+/// as Ubicloud, and the judgement then rejects it: only the estate expression
+/// places a lane.
+fn runs_on_text(job: &Mapping) -> Option<String> {
+    match reader::get(job, "runs-on")? {
+        Value::String(text) => Some(text.clone()),
+        other => serde_yaml::to_string(other).ok(),
+    }
+}
+
+/// Returns whether a job's `runs-on`, in any shape, names an Ubicloud runner.
+fn names_ubicloud(job: &Mapping) -> bool {
+    runs_on_text(job).is_some_and(|text| text.contains("ubicloud"))
+}
+
 /// One lane whose runner can be an Ubicloud one.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Placed {
@@ -95,11 +113,7 @@ pub fn placed_jobs(all: &reader::Workflows) -> Vec<Placed> {
         .flat_map(|(workflow, document)| {
             reader::jobs(document)
                 .into_iter()
-                .filter(|(_, job)| {
-                    reader::get(job, "runs-on")
-                        .and_then(Value::as_str)
-                        .is_some_and(|runs_on| runs_on.contains("ubicloud"))
-                })
+                .filter(|(_, job)| names_ubicloud(job))
                 .map(move |(job, mapping)| Placed {
                     workflow: workflow.clone(),
                     job: job.to_owned(),
@@ -109,17 +123,15 @@ pub fn placed_jobs(all: &reader::Workflows) -> Vec<Placed> {
         .collect()
 }
 
-/// Returns the `runs-on` expression of every placed job, with its name.
+/// Returns the `runs-on` text of every placed job, with its name.
 pub fn placement_expressions(all: &reader::Workflows) -> Vec<(String, String)> {
     all.iter()
         .flat_map(|(workflow, document)| {
             reader::jobs(document)
                 .into_iter()
+                .filter(|(_, job)| names_ubicloud(job))
                 .filter_map(move |(job, mapping)| {
-                    let runs_on = reader::get(mapping, "runs-on")?.as_str()?;
-                    runs_on
-                        .contains("ubicloud")
-                        .then(|| (format!("{workflow}: {job}"), runs_on.to_owned()))
+                    Some((format!("{workflow}: {job}"), runs_on_text(mapping)?))
                 })
         })
         .collect()

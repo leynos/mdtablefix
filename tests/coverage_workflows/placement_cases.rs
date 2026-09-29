@@ -126,3 +126,26 @@ fn every_ubicloud_lane_is_placed_by_the_estate_expression_and_states_a_ceiling()
     }
     Ok(())
 }
+
+/// Scenario: a job names an Ubicloud runner in a sequence or a mapping rather
+/// than as a string.
+///
+/// Invariant: it is inventoried and judged, and the judgement rejects it, so
+/// no shape of `runs-on` places a lane outside the estate expression.
+#[rstest]
+#[case::sequence("[ubicloud-standard-2]")]
+#[case::mapping("{ group: ubicloud-standard-2 }")]
+fn a_non_scalar_ubicloud_runner_is_inventoried_and_rejected(#[case] runs_on: &str) -> Result<()> {
+    let source = format!("on: push\njobs:\n  lane:\n    runs-on: {runs_on}\n");
+    let all: reader::Workflows = [("x.yml".to_owned(), parse(&source)?)].into();
+    ensure!(placement::placed_jobs(&all).len() == 1, "not inventoried");
+    let expressions = placement::placement_expressions(&all);
+    ensure!(
+        expressions
+            .iter()
+            .all(|(_, text)| !placement::placement_faults(text).is_empty())
+            && expressions.len() == 1,
+        "not rejected: {expressions:?}"
+    );
+    Ok(())
+}
