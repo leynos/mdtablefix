@@ -11,9 +11,6 @@ use serde_yaml::{Mapping, Value};
 
 use super::reader;
 
-/// The Ubicloud runner class every placed lane names.
-pub const UBICLOUD_LABEL: &str = "ubicloud-standard-4";
-
 /// The hosted runner a fork's pull request falls back to.
 pub const HOSTED_LABEL: &str = "ubuntu-latest";
 
@@ -60,11 +57,11 @@ pub fn selected_runner(runs_on: &str, origin: Origin) -> Option<String> {
 
 /// Returns why an expression misplaces a lane, one entry per origin it gets
 /// wrong; empty when a fork falls back to hosted and every other run is on
-/// [`UBICLOUD_LABEL`].
-pub fn placement_faults(runs_on: &str) -> Vec<String> {
+/// the Ubicloud runner class `label`.
+pub fn placement_faults(runs_on: &str, label: &str) -> Vec<String> {
     [
-        (Origin::NoPullRequest, UBICLOUD_LABEL),
-        (Origin::SameRepository, UBICLOUD_LABEL),
+        (Origin::NoPullRequest, label),
+        (Origin::SameRepository, label),
         (Origin::Fork, HOSTED_LABEL),
     ]
     .into_iter()
@@ -78,7 +75,7 @@ pub fn placement_faults(runs_on: &str) -> Vec<String> {
 
 /// Returns a job's `runs-on` as text, whatever shape it is written in.
 ///
-/// A string is itself. A sequence or a mapping (`[ubicloud-standard-4]`,
+/// A string is itself. A sequence or a mapping (`[ubicloud-standard-2]`,
 /// `{ group: ... }`) is rendered as YAML, so a label hidden in one still reads
 /// as Ubicloud, and the judgement then rejects it: only the estate expression
 /// places a lane.
