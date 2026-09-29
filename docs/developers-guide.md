@@ -1884,15 +1884,35 @@ unchanged while prose outside those blocks remains eligible for renumbering.
 
 ### 1.5. `ListState` (`src/lists.rs`)
 
-`ListState` maintains an indent stack and a per-indent counter map for
-ordered-list renumbering. `next_number(indent)` first prunes indent levels
-deeper than `indent` (their counters disappear so a future deeper level
-restarts at 1), pushes `indent` onto the stack if it is new, and returns the
-next sequential number for that level — incrementing the counter, so the next
-call at the same indent receives the following integer. `reset()` clears both
-the stack and the counter map; the renumbering pass invokes it when a heading
-or thematic break is encountered, so the next list starts numbering from 1
-again.
+`ListState` maintains an indent stack, a per-indent counter map and a
+per-indent content column for ordered-list renumbering.
+
+- `next_number(indent)` first prunes indent levels deeper than `indent` (their
+  counters disappear so a future deeper level restarts at 1), pushes `indent`
+  onto the stack if it is new, and returns the next sequential number for that
+  level. `record_content_column` then stores where the item's content starts,
+  measured on the emitted marker so a second pass agrees.
+- `end_lists_at(column)` is the one boundary transition. It pops every list
+  whose current item cannot contain a block at `column`, that is, whose content
+  column is right of it, and drops their counters. `containing_content_column`
+  returns the innermost item that does contain an indent, so a heading or break
+  is classified relative to that item.
+- `apply_block(indent, line, prev_blank)` decides for any other block. After a
+  blank line it calls `end_lists_at`. Without one it does so only when
+  `list_interrupt::interrupts_paragraph` says the line can interrupt a
+  paragraph (a bullet item with text, a block quote, an HTML block of start
+  conditions 1 to 6); a fence marker always calls it. Anything else is a lazy
+  continuation and prunes only deeper lists.
+- `continues_paragraph` sits in front of the numbered-item path: a numbered
+  line that is not a `1.`, directly below paragraph text, with no active list
+  at its column, is paragraph text and is left as written.
+
+Adding a block kind means deciding whether it interrupts a paragraph and adding
+the case to `list_interrupt`'s unit tests and to
+`renumber_issue_563_neighbouring_shapes`. The property tests in
+`src/lists_tests.rs` hold the whole pass to its invariants: it changes only
+numbers, settles in one pass, and ends a list exactly at a block that is left
+of the item's content column.
 
 ## 2. Test infrastructure
 

@@ -1,0 +1,7 @@
+1. Identify the operation first.
+
+- `generate`: create a new image from text and optional references.
+- `edit`: modify an existing image while preserving specified elements.
+
+1. Choose the lowest-complexity prompt shape that fits the ask.
+2. Build the prompt in this order.
