@@ -3,7 +3,7 @@
 //!
 //! A check parametrized over this repository's own correct workflow passes
 //! whether or not it discriminates anything, so the judgement is driven
-//! directly in both directions first: the estate expression must pass, and
+//! directly in both directions first: the runner-selection expression must pass, and
 //! each way of misplacing a lane must fail.
 
 use anyhow::{Result, ensure};
@@ -17,21 +17,30 @@ use super::{
 
 /// The estate's runner expression, as a lane writes it.
 const ESTATE: &str =
-    "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-4' }}";
+    "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}";
 
-/// Every job that can land on Ubicloud, with the ceiling it states in minutes.
+/// Every job that can land on Ubicloud, with the runner class it names and the
+/// ceiling it states in minutes.
 ///
-/// The inventory is exact, so a new Ubicloud lane without a ceiling, or a
-/// ceiling removed or changed, fails here until the change is reviewed.
-const CEILINGS: [(&str, &str, u64); 1] = [("coverage-main.yml", "coverage-upload", 30)];
+/// The inventory is exact, so a new Ubicloud lane without a ceiling, or a class
+/// or ceiling changed, fails here until the change is reviewed.
+const PLACEMENTS: [(&str, &str, &str, u64); 2] = [
+    ("ci.yml", "build-test", "ubicloud-standard-4", 15),
+    (
+        "coverage-main.yml",
+        "coverage-upload",
+        "ubicloud-standard-4",
+        10,
+    ),
+];
 
-/// Scenario: the estate expression is evaluated for each kind of run.
+/// Scenario: the runner-selection expression is evaluated for each kind of run.
 ///
 /// Invariant: a push, a dispatch and a same-repository pull request select
 /// Ubicloud, and only a fork's pull request selects the hosted pool.
 #[rstest]
-#[case::push_or_dispatch(Origin::NoPullRequest, "ubicloud-standard-4")]
-#[case::same_repository(Origin::SameRepository, "ubicloud-standard-4")]
+#[case::push_or_dispatch(Origin::NoPullRequest, "ubicloud-standard-2")]
+#[case::same_repository(Origin::SameRepository, "ubicloud-standard-2")]
 #[case::fork(Origin::Fork, "ubuntu-latest")]
 fn the_estate_expression_places_each_run(#[case] origin: Origin, #[case] wanted: &str) {
     assert_eq!(
@@ -43,32 +52,32 @@ fn the_estate_expression_places_each_run(#[case] origin: Origin, #[case] wanted:
 /// Scenario: an expression misplaces a lane in one of the ways a careless
 /// edit would.
 ///
-/// Invariant: each is reported, and the estate expression is not.
+/// Invariant: each is reported, and the runner-selection expression is not.
 #[rstest]
 #[case::estate(ESTATE, 0)]
 #[case::always_hosted("ubuntu-latest", 3)]
-#[case::always_ubicloud("ubicloud-standard-4", 3)]
+#[case::always_ubicloud("ubicloud-standard-2", 3)]
 #[case::inverted_arms(
-    "${{ github.event.pull_request.head.repo.fork && 'ubicloud-standard-4' || 'ubuntu-latest' }}",
+    "${{ github.event.pull_request.head.repo.fork && 'ubicloud-standard-2' || 'ubuntu-latest' }}",
     3
 )]
 #[case::another_label(
-    "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}",
+    "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-4' }}",
     2
 )]
 #[case::another_condition(
-    "${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'ubicloud-standard-4' }}",
+    "${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'ubicloud-standard-2' }}",
     3
 )]
 #[case::fork_kept_on_ubicloud(
     concat!(
-        "${{ github.event.pull_request.head.repo.fork && 'ubicloud-standard-4' ",
-        "|| 'ubicloud-standard-4' }}"
+        "${{ github.event.pull_request.head.repo.fork && 'ubicloud-standard-2' ",
+        "|| 'ubicloud-standard-2' }}"
     ),
     1
 )]
 fn a_misplaced_lane_is_reported(#[case] runs_on: &str, #[case] expected: usize) -> Result<()> {
-    let faults = placement::placement_faults(runs_on);
+    let faults = placement::placement_faults(runs_on, "ubicloud-standard-2");
     ensure!(
         faults.len() == expected,
         "expected {expected}, saw {faults:?}"
@@ -107,7 +116,7 @@ fn a_ceiling_is_read_only_when_it_is_a_number(
 /// Scenario: the repository's own workflows are read.
 ///
 /// Invariant: exactly the inventoried jobs can land on Ubicloud, each states
-/// its ceiling, and each selects its runner by the estate expression.
+/// its ceiling, and each selects its runner by the runner-selection expression.
 #[test]
 fn every_ubicloud_lane_is_placed_by_the_estate_expression_and_states_a_ceiling() -> Result<()> {
     let all = reader::workflows()?;
@@ -115,13 +124,20 @@ fn every_ubicloud_lane_is_placed_by_the_estate_expression_and_states_a_ceiling()
         .into_iter()
         .map(|placed| (placed.workflow, placed.job, placed.ceiling))
         .collect();
-    let expected: Vec<(String, String, Option<u64>)> = CEILINGS
+    let expected: Vec<(String, String, Option<u64>)> = PLACEMENTS
         .iter()
-        .map(|(workflow, job, ceiling)| ((*workflow).to_owned(), (*job).to_owned(), Some(*ceiling)))
+        .map(|(workflow, job, _, ceiling)| {
+            ((*workflow).to_owned(), (*job).to_owned(), Some(*ceiling))
+        })
         .collect();
     ensure!(found == expected, "found {found:?}, expected {expected:?}");
-    for (lane, runs_on) in placement::placement_expressions(&all) {
-        let faults = placement::placement_faults(&runs_on);
+    let expressions = placement::placement_expressions(&all);
+    ensure!(
+        expressions.len() == PLACEMENTS.len(),
+        "read {expressions:?}"
+    );
+    for ((lane, runs_on), (_, _, label, _)) in expressions.iter().zip(PLACEMENTS) {
+        let faults = placement::placement_faults(runs_on, label);
         ensure!(faults.is_empty(), "{lane} is misplaced: {faults:?}");
     }
     Ok(())
@@ -131,10 +147,10 @@ fn every_ubicloud_lane_is_placed_by_the_estate_expression_and_states_a_ceiling()
 /// than as a string.
 ///
 /// Invariant: it is inventoried and judged, and the judgement rejects it, so
-/// no shape of `runs-on` places a lane outside the estate expression.
+/// no shape of `runs-on` places a lane outside the runner-selection expression.
 #[rstest]
-#[case::sequence("[ubicloud-standard-4]")]
-#[case::mapping("{ group: ubicloud-standard-4 }")]
+#[case::sequence("[ubicloud-standard-2]")]
+#[case::mapping("{ group: ubicloud-standard-2 }")]
 fn a_non_scalar_ubicloud_runner_is_inventoried_and_rejected(#[case] runs_on: &str) -> Result<()> {
     let source = format!("on: push\njobs:\n  lane:\n    runs-on: {runs_on}\n");
     let all: reader::Workflows = [("x.yml".to_owned(), parse(&source)?)].into();
@@ -143,9 +159,22 @@ fn a_non_scalar_ubicloud_runner_is_inventoried_and_rejected(#[case] runs_on: &st
     ensure!(
         expressions
             .iter()
-            .all(|(_, text)| !placement::placement_faults(text).is_empty())
+            .all(|(_, text)| !placement::placement_faults(text, "ubicloud-standard-2").is_empty())
             && expressions.len() == 1,
         "not rejected: {expressions:?}"
     );
     Ok(())
+}
+
+/// Scenario: a lane names a different Ubicloud runner class from the one the
+/// inventory records.
+///
+/// Invariant: it is reported in both directions, so a lane moved between
+/// `standard-2` and `standard-4` fails until the inventory says so.
+#[rstest]
+#[case::inventory_says_four("ubicloud-standard-4", 0)]
+#[case::inventory_says_two("ubicloud-standard-2", 2)]
+fn a_lane_on_another_runner_class_is_reported(#[case] label: &str, #[case] expected: usize) {
+    let four = ESTATE.replace("standard-2", "standard-4");
+    assert_eq!(placement::placement_faults(&four, label).len(), expected);
 }
