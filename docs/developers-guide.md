@@ -1795,10 +1795,10 @@ cap for hosted jobs does not bound it and a hung job would hold a billable
 runner. Every job whose `runs-on` can select Ubicloud therefore states its own
 `timeout-minutes`: twice a measured warm Ubicloud run. `coverage-upload` is at
 10 minutes (its first standard-4 main run took 4.6 min, run 36568808595) and
-`build-test` at a provisional 20 minutes until a warm run sizes it. A fork's
-pull request restores a hosted cache that main no longer refreshes; fork pull
-requests are rare here, and a second hosted writer would pay double on every
-main push.
+`build-test` at 15 (a warm standard-4 run took 6.0 min, run 36574662121). A
+fork's pull request restores a hosted cache that main no longer refreshes; fork
+pull requests are rare here, and a second hosted writer would pay double on
+every main push.
 
 `tests/coverage_workflows/placement_cases.rs` holds this to the files. It
 evaluates the expression for a push or dispatch, a same-repository pull request
