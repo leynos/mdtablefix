@@ -514,6 +514,8 @@ narrowed to touching tokens so that prose with a real space keeps its break.
 
 The evidence is the corpus cases `E2_alphabetic_label_after_space` and
 `E3_alphabetic_label_touching` (the two reproductions in #507), the regression
-test `tests/issue_507_bracket_label_wrap_is_idempotent.rs`, and its property,
-which grows prose to the wrap boundary in front of a generated label of letters
-and digits, with and without a space before it.
+test `tests/issue_507_bracket_label_wrap_is_idempotent.rs`, which asserts the
+exact output of each reproduction, pins the break opportunity after an opener
+followed by a space, and carries a property that grows prose to the wrap
+boundary in front of a generated label of letters and digits, with and without
+a space before it.
