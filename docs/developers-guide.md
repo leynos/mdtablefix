@@ -1769,12 +1769,17 @@ by comparison with reachability computed on the adjacency matrix. Run it with
 ## Runner placement
 
 `coverage-main.yml`'s `coverage-upload`, main's only cache writer, runs on
-`ubicloud-standard-2`. `runs-on` selects it with the estate expression
+`ubicloud-standard-4`. `runs-on` selects it with the estate expression
 `${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' ||
-'ubicloud-standard-2' }}`.
+'ubicloud-standard-4' }}`.
 A pull request from a fork cannot obtain an Ubicloud runner, so it falls back
 to `ubuntu-latest`; a push and a dispatch have no pull request, so the fork
 value is null and they select Ubicloud.
+
+The writer is `standard-4` rather than the estate's `standard-2` on a measured
+shortfall: on two vCPUs two trybuild compile tests in `tests/compile.rs` exceed
+nextest's 180 s allowance, cold and warm (runs 36556931315 and 36558819122),
+where four vCPUs pass them.
 
 The writer sits on Ubicloud because Ubicloud's cache proxy is scoped by ref. A
 pull request's Ubicloud lane reads a warm main scope only when a main job on

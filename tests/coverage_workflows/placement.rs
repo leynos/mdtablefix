@@ -12,7 +12,7 @@ use serde_yaml::{Mapping, Value};
 use super::reader;
 
 /// The Ubicloud runner class every placed lane names.
-pub const UBICLOUD_LABEL: &str = "ubicloud-standard-2";
+pub const UBICLOUD_LABEL: &str = "ubicloud-standard-4";
 
 /// The hosted runner a fork's pull request falls back to.
 pub const HOSTED_LABEL: &str = "ubuntu-latest";
@@ -78,7 +78,7 @@ pub fn placement_faults(runs_on: &str) -> Vec<String> {
 
 /// Returns a job's `runs-on` as text, whatever shape it is written in.
 ///
-/// A string is itself. A sequence or a mapping (`[ubicloud-standard-2]`,
+/// A string is itself. A sequence or a mapping (`[ubicloud-standard-4]`,
 /// `{ group: ... }`) is rendered as YAML, so a label hidden in one still reads
 /// as Ubicloud, and the judgement then rejects it: only the estate expression
 /// places a lane.
