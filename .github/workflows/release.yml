@@ -167,6 +167,11 @@ jobs:
       - name: Add release target
         run: rustup target add --toolchain "${RELEASE_RUST_VERSION}" ${{ matrix.target }}
       - name: Build release binary
+        # The stable release toolchain must never see the configuration's
+        # nightly-only `-Zthreads` flag: an assigned RUSTFLAGS displaces every
+        # `rustflags` table in .cargo/config.toml, so this step states its own.
+        env:
+          RUSTFLAGS: -D warnings
         run: |
           set -euo pipefail
           if [[ "${{ matrix.builder }}" == "cross" ]]; then

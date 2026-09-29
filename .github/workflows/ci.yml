@@ -57,6 +57,12 @@ jobs:
         # The baseline paths are the action's defaults, which is what makes
         # this ratchet comparable with the one the main publisher writes: both
         # read and write `.coverage-baseline.rust`.
+        env:
+          # One of the two exclusions from the build standard: a coverage build is
+          # a measurement, so it takes neither the parallel frontend nor the mold
+          # linker. Assigning RUSTFLAGS displaces every `rustflags` table in
+          # .cargo/config.toml.
+          RUSTFLAGS: -D warnings
         uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           output-path: lcov.info
@@ -82,7 +88,10 @@ jobs:
         shell: bash
     env:
       CARGO_TERM_COLOR: always
-      RUSTFLAGS: "-D warnings"
+      # This job runs cargo directly with RUSTFLAGS assigned, which displaces
+      # .cargo/config.toml, so it restates the build standard's parallel
+      # frontend flag (mold is Linux-only and this runner is Windows).
+      RUSTFLAGS: "-D warnings -Zthreads=8"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
@@ -149,6 +158,11 @@ jobs:
       - name: Add release target
         run: rustup target add --toolchain 1.89.0 ${{ matrix.target }}
       - name: Build the release binary
+        # The stable release toolchain must never see the configuration's
+        # nightly-only `-Zthreads` flag: an assigned RUSTFLAGS displaces every
+        # `rustflags` table in .cargo/config.toml, so this step states its own.
+        env:
+          RUSTFLAGS: -D warnings
         run: cargo +1.89.0 build --release --bin mdtablefix --target ${{ matrix.target }}
       - name: Stage the release assets
         run: |

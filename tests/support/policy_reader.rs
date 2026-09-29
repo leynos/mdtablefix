@@ -140,6 +140,61 @@ fn value_names_cargo(value: &str) -> bool {
         .any(|piece| is_cargo_path(piece.trim()))
 }
 
+/// Return `command` without the `NAME=value` assignments that precede its
+/// executable, or an empty string when an assignment never closes.
+///
+/// A recipe composes `RUSTFLAGS` in front of Cargo, as
+/// `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) clippy`, and
+/// the executable is still the first word that runs. A value may hold quoted
+/// spaces and a `$(...)` reference, so it is scanned rather than split on
+/// whitespace. Only assignments are skipped: `echo`, `:` and every other word
+/// stop the scan, so a command that merely mentions Cargo stays rejected.
+fn without_env_assignments(command: &str) -> &str {
+    let mut rest = command.trim_start();
+    while let Some(name_len) = assignment_name_len(rest) {
+        let value = rest.get(name_len + 1..).unwrap_or_default();
+        let Some(value_len) = assignment_value_len(value) else {
+            return "";
+        };
+        rest = value.get(value_len..).unwrap_or_default().trim_start();
+    }
+    rest
+}
+
+/// Return the length of a leading shell variable name that is followed by `=`.
+fn assignment_name_len(text: &str) -> Option<usize> {
+    let name_len = text
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .unwrap_or(text.len());
+    let starts_like_a_name = text
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+    (starts_like_a_name && text.get(name_len..)?.starts_with('=')).then_some(name_len)
+}
+
+/// Return the length of the assignment value at the start of `text`, or `None`
+/// when a quote or `$(` is still open at the end of the input.
+fn assignment_value_len(text: &str) -> Option<usize> {
+    let mut quote: Option<char> = None;
+    let mut depth = 0_usize;
+    let mut chars = text.char_indices();
+    while let Some((index, c)) = chars.next() {
+        match (quote, c) {
+            (_, '\\') if quote != Some('\'') => {
+                chars.next();
+            }
+            (Some(open), _) if c == open => quote = None,
+            (None, '"' | '\'') => quote = Some(c),
+            (None, '(') => depth += 1,
+            (None, ')') => depth = depth.saturating_sub(1),
+            (None, _) if c.is_whitespace() && depth == 0 => return Some(index),
+            _ => {}
+        }
+    }
+    (quote.is_none() && depth == 0).then_some(text.len())
+}
+
 /// Return whether `command` executes Cargo's `clippy` subcommand.
 ///
 /// Both the executable and the argument position are checked, because a
@@ -150,7 +205,7 @@ fn value_names_cargo(value: &str) -> bool {
 /// and `clippy` must be the subcommand rather than a later argument. A leading
 /// `+toolchain` override is skipped, since Cargo accepts one there.
 pub fn is_cargo_clippy_invocation(makefile: &str, command: &str) -> bool {
-    let mut words = command.split_whitespace();
+    let mut words = without_env_assignments(command).split_whitespace();
     let Some(executable) = words.next() else {
         return false;
     };
