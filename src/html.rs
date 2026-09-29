@@ -205,7 +205,7 @@ fn table_node_to_markdown(table: &Handle) -> Vec<String> {
         out.insert(1, format!("| {} |", sep.join(" | ")));
     }
 
-    crate::reflow_table(&out)
+    crate::table::reflow_generated_rows(&out)
 }
 
 /// Parses HTML table markup and returns the equivalent Markdown lines.

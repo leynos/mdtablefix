@@ -4,7 +4,7 @@
 //! #583), so regression cases that must run live here until it is revived.
 
 use assert_cmd::Command;
-use mdtablefix::{process_stream, reflow_table};
+use mdtablefix::{convert_html_tables, process_stream, reflow_table};
 use rstest::rstest;
 
 #[macro_use]
@@ -50,4 +50,32 @@ fn table_issue_582_cli_keeps_the_pipe_line() {
         .assert()
         .success()
         .stdout(input);
+}
+
+/// Regression case for issue #582, the HTML path: an empty `<tr>` becomes a
+/// pipe-only row, and the generated table is still aligned with that row kept.
+///
+/// Source tables with a pipe-only line are left as written, but the HTML
+/// converter builds its own lines, so it reflows the rest and puts each empty
+/// row back padded to the delimiter row's geometry.
+#[test]
+fn table_issue_582_html_table_keeps_its_empty_row_aligned() {
+    let input = lines_vec![
+        "<table>",
+        "<tr><th>Name</th><th>Value</th></tr>",
+        "<tr><td>alpha</td><td>1</td></tr>",
+        "<tr><td></td><td></td></tr>",
+        "<tr><td>b</td><td>22</td></tr>",
+        "</table>",
+    ];
+    let expected = lines_vec![
+        "| Name  | Value |",
+        "| ----- | ----- |",
+        "| alpha | 1     |",
+        "|       |       |",
+        "| b     | 22    |",
+    ];
+    let once = convert_html_tables(&input);
+    assert_eq!(once, expected);
+    assert_eq!(process_stream(&once), once, "a second pass changes nothing");
 }

@@ -369,5 +369,8 @@ fn reflow_valid_table(lines: &[String]) -> Option<Vec<String>> {
 
     calculate_and_format(&parsed, &indent)
 }
+mod empty_rows;
+pub(crate) use empty_rows::reflow_generated_rows;
+
 #[cfg(test)]
 mod tests;
