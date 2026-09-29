@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.6.1
 
 - Fixed: `--renumber` no longer ends an ordered list at a heading or thematic
   break indented into one of its items. Such a block now ends only the lists
