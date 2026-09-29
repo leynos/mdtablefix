@@ -8,10 +8,30 @@ use rstest::rstest;
 #[path = "common/mod.rs"]
 mod common;
 
+/// Asserts that renumbering `input` gives `expected` and that a second pass
+/// then changes nothing, which is the property every regression case shares.
+fn assert_is_a_renumbering_fixed_point(input: &[String], expected: &[String]) {
+    let once = renumber_lists(input);
+    assert_eq!(once, expected);
+    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+}
+
+/// Asserts that `mdtablefix --renumber` writes `input` back exactly as it read it.
+fn assert_cli_leaves_alone(input: &'static str) {
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--renumber")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(input);
+}
+
 #[test]
 fn restart_after_equal_indent_paragraph() {
+    // `3. Next` directly follows the paragraph, so it continues it (#573).
     let input = lines_vec!("1. One", "", "Paragraph", "3. Next");
-    let expected = lines_vec!("1. One", "", "Paragraph", "1. Next");
+    let expected = lines_vec!("1. One", "", "Paragraph", "3. Next");
     assert_eq!(renumber_lists(&input), expected);
 }
 
@@ -23,9 +43,12 @@ fn no_restart_without_blank() {
 }
 
 #[test]
-fn no_restart_for_indented_paragraph() {
+fn an_indented_paragraph_left_of_the_content_column_ends_the_list() {
+    // Two columns is left of the item's content column (three), so the
+    // paragraph is outside the item and ends the list; `3. Next` then cannot
+    // interrupt that paragraph and stays as written (#573).
     let input = lines_vec!("1. One", "", "  Indented", "3. Next");
-    let expected = lines_vec!("1. One", "", "  Indented", "2. Next");
+    let expected = lines_vec!("1. One", "", "  Indented", "3. Next");
     assert_eq!(renumber_lists(&input), expected);
 }
 
@@ -38,15 +61,17 @@ fn restart_after_top_heading() {
 
 #[test]
 fn restart_after_nested_paragraph() {
+    // `3. Next` directly follows the paragraph, so it continues it (#573).
     let input = lines_vec!("1. One", "    1. Sub", "", "Paragraph", "3. Next");
-    let expected = lines_vec!("1. One", "    1. Sub", "", "Paragraph", "1. Next");
+    let expected = lines_vec!("1. One", "    1. Sub", "", "Paragraph", "3. Next");
     assert_eq!(renumber_lists(&input), expected);
 }
 
 #[test]
 fn restart_after_nested_equal_indent_paragraph() {
+    // `5. Next` directly follows the paragraph, so it continues it (#573).
     let input = lines_vec!("1. One", "    1. Sub", "", "    Paragraph", "    5. Next");
-    let expected = lines_vec!("1. One", "    1. Sub", "", "    Paragraph", "    1. Next");
+    let expected = lines_vec!("1. One", "    1. Sub", "", "    Paragraph", "    5. Next");
     assert_eq!(renumber_lists(&input), expected);
 }
 
@@ -64,12 +89,18 @@ fn reset_on_heading_and_thematic_break() {
     assert_eq!(renumber_lists(&input), expected);
 }
 
+/// A quoted heading or break is ended by the quote, not read as a heading.
+///
+/// A block quote interrupts a paragraph, so it ends the list above it even
+/// without a blank line; the list after it restarts at one. The quoted
+/// structure is not what ends the list: a heading or break would end it by
+/// the content-column rule, which the quote prefix takes out of play.
 #[rstest::rstest]
 #[case::quoted_break("> ---")]
 #[case::quoted_heading("> # Heading")]
-fn quoted_structure_does_not_reset_list_numbering(#[case] quoted_line: &str) {
+fn a_quote_ends_the_list_it_interrupts(#[case] quoted_line: &str) {
     let input = lines_vec!("1. first", "2. second", quoted_line, "8. third");
-    let expected = lines_vec!("1. first", "2. second", quoted_line, "3. third");
+    let expected = lines_vec!("1. first", "2. second", quoted_line, "1. third");
 
     assert_eq!(renumber_lists(&input), expected);
 }
@@ -107,11 +138,13 @@ fn nested_lists_respect_fence_tracker() {
         "   1. Code block list",
         "   ```",
         "2. Outer list continued",
-        "   1. Nested list",
+        // `4.` continues the item's text, so it is not a list (#573); the
+        // fence ends that paragraph, so `8.` starts a list, at one.
+        "   4. Nested list",
         "      ```",
         "      - Malformed fence",
         "      ```",
-        "   2. Nested list continued",
+        "   1. Nested list continued",
     ];
     assert_eq!(renumber_lists(&input), expected);
 }
@@ -146,9 +179,10 @@ fn malformed_fences_do_not_break_list_renumbering() {
         lines_vec!["1. first", "2. second", "7. third"],
         lines_vec!["1. first", "2. second", "3. third"]
     ),
+    // A fence at the list's marker column ends the list (issue #563).
     case::with_fence(
         lines_vec!["1. item", "```", "code", "```", "9. next"],
-        lines_vec!["1. item", "```", "code", "```", "2. next"]
+        lines_vec!["1. item", "```", "code", "```", "1. next"]
     ),
     case::nested_lists(
         lines_vec!["1. first", "    1. sub first", "    3. sub second", "2. second"],
@@ -210,9 +244,7 @@ fn test_renumber_cases(input: Vec<String>, expected: Vec<String>) {
 #[case::nested_heading(include_lines!("data/issue_450_nested_heading_input.txt"))]
 #[case::nested_break(include_lines!("data/issue_450_nested_break_input.txt"))]
 fn renumber_issue_450_block_inside_an_item_keeps_the_list_counting(#[case] input: Vec<String>) {
-    let once = renumber_lists(&input);
-    assert_eq!(once, input);
-    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+    assert_is_a_renumbering_fixed_point(&input, &input);
 }
 
 /// Regression cases for issue #450, the neighbouring shapes #106 touched: a
@@ -290,21 +322,108 @@ fn renumber_issue_450_neighbouring_shapes(
     #[case] input: Vec<String>,
     #[case] expected: Vec<String>,
 ) {
-    let once = renumber_lists(&input);
-    assert_eq!(once, expected);
-    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+    assert_is_a_renumbering_fixed_point(&input, &expected);
 }
 
 /// Regression case for issue #450 through the CLI: `--renumber` keeps the
 /// list counting past a heading nested in an item.
 #[test]
 fn renumber_issue_450_cli_keeps_counting_past_a_nested_heading() {
-    let input = include_str!("data/issue_450_nested_heading_input.txt");
-    Command::cargo_bin("mdtablefix")
-        .expect("Failed to create cargo command for mdtablefix")
-        .arg("--renumber")
-        .write_stdin(input)
-        .assert()
-        .success()
-        .stdout(input);
+    assert_cli_leaves_alone(include_str!("data/issue_450_nested_heading_input.txt"));
+}
+
+/// Regression cases for issue #563: a block that ends an ordered list resets
+/// numbering for the next list.
+///
+/// Each fixture is a list, then a block at the list's marker column, then a
+/// second list that the source starts at one. `CommonMark` ends the first list
+/// at that block, so renumbering must leave the second list at one; carrying
+/// the count across it changes the rendered `start` of the second list.
+#[rstest]
+#[case::fence(include_lines!("data/issue_563_fence_input.txt"))]
+#[case::bullet_list(include_lines!("data/issue_563_bullet_list_input.txt"))]
+#[case::table(include_lines!("data/issue_563_table_input.txt"))]
+#[case::block_quote(include_lines!("data/issue_563_block_quote_input.txt"))]
+#[case::html_comment(include_lines!("data/issue_563_html_comment_input.txt"))]
+#[case::link_paragraph(include_lines!("data/issue_563_link_paragraph_input.txt"))]
+fn renumber_issue_563_block_at_marker_column_ends_the_list(#[case] input: Vec<String>) {
+    assert_is_a_renumbering_fixed_point(&input, &input);
+}
+
+/// Regression cases for issue #563, the neighbouring shapes: a block
+/// indented into an item, or a bullet item that interrupts without a blank
+/// line, is decided by its column alone.
+///
+/// A block right of the list's marker column belongs to the item and the
+/// list keeps counting; one at a nested list's marker column ends only that
+/// nested list; a bullet item at the marker column ends the list even with
+/// no blank line before it.
+#[rstest]
+#[case::fence_inside_item(
+    lines_vec!["1. a", "   ```", "   code", "   ```", "5. b"],
+    lines_vec!["1. a", "   ```", "   code", "   ```", "2. b"]
+)]
+#[case::bullet_inside_item(
+    lines_vec!["1. a", "", "   - sub", "", "5. b"],
+    lines_vec!["1. a", "", "   - sub", "", "2. b"]
+)]
+#[case::fence_at_nested_marker_column(
+    lines_vec![
+        "1. Outer", "   1. Inner", "   2. Inner", "", "   ```", "   code", "   ```", "",
+        "   4. Inner again", "5. Outer again",
+    ],
+    lines_vec![
+        "1. Outer", "   1. Inner", "   2. Inner", "", "   ```", "   code", "   ```", "",
+        "   1. Inner again", "2. Outer again",
+    ]
+)]
+// The bullet ends the list without a blank line above it, so the list after
+// the blank line restarts. (A `3. c` directly below the bullet is not a list
+// item at all: it lazily continues the bullet's paragraph, see #573.)
+#[case::bullet_interrupts_without_blank(
+    lines_vec!["1. a", "2. b", "- bullet", "", "3. c"],
+    lines_vec!["1. a", "2. b", "- bullet", "", "1. c"]
+)]
+// A block quote or an HTML block that can interrupt a paragraph ends the list
+// without a blank line; an inline tag, a bare `-` and a `-` followed by a
+// non-breaking space are paragraph text and leave it open.
+#[case::quote_interrupts_without_blank(
+    lines_vec!["1. a", "> quote", "", "5. b"],
+    lines_vec!["1. a", "> quote", "", "1. b"]
+)]
+#[case::html_block_interrupts_without_blank(
+    lines_vec!["1. a", "<div>", "", "5. b"],
+    lines_vec!["1. a", "<div>", "", "1. b"]
+)]
+#[case::inline_tag_is_lazy_text(
+    lines_vec!["1. a", "<span>x", "4. b"],
+    lines_vec!["1. a", "<span>x", "2. b"]
+)]
+#[case::bare_bullet_is_lazy_text(lines_vec!["1. a", "-", "4. b"], lines_vec!["1. a", "-", "2. b"])]
+#[case::non_breaking_space_is_no_bullet(
+    lines_vec!["1. a", "-\u{a0}text", "7. next"],
+    lines_vec!["1. a", "-\u{a0}text", "2. next"]
+)]
+// Two columns is left of the content column of `1. `, so the paragraph is not
+// in the item and ends the list.
+#[case::paragraph_left_of_the_content_column(
+    lines_vec!["1. a", "", "  para", "", "5. b"],
+    lines_vec!["1. a", "", "  para", "", "1. b"]
+)]
+#[case::lazy_paragraph_continues(
+    lines_vec!["1. a", "[lazy](u) continuation", "3. b"],
+    lines_vec!["1. a", "[lazy](u) continuation", "2. b"]
+)]
+fn renumber_issue_563_neighbouring_shapes(
+    #[case] input: Vec<String>,
+    #[case] expected: Vec<String>,
+) {
+    assert_is_a_renumbering_fixed_point(&input, &expected);
+}
+
+/// Regression case for issue #563 through the CLI: `--renumber` leaves the
+/// list after an ending fence at one.
+#[test]
+fn renumber_issue_563_cli_keeps_the_restart_after_a_fence() {
+    assert_cli_leaves_alone(include_str!("data/issue_563_fence_input.txt"));
 }

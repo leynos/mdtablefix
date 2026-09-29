@@ -1806,6 +1806,47 @@ selecting the backend would break that build (recorded 2026-09-29). That build
 assigns `RUSTFLAGS`, so the nightly-only `-Zthreads` flag never reaches it.
 Revisit if that build moves to the pinned nightly.
 
+## Runner placement
+
+`ci.yml`'s `build-test` and `coverage-main.yml`'s `coverage-upload`, main's
+only cache writer, run on `ubicloud-standard-4`. `runs-on` selects it with the
+runner-selection expression:
+
+```yaml
+runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-4' }}
+```
+
+A pull request from a fork cannot obtain an Ubicloud runner, so it falls back to
+`ubuntu-latest`; a push and a dispatch have no pull request, so the fork value
+is null and they select Ubicloud.
+
+The lanes are `standard-4` rather than the estate's `standard-2` on a measured
+shortfall: on two vCPUs two trybuild compile tests in `tests/compile.rs` exceed
+nextest's 180 s allowance, cold and warm (runs 36556931315 and 36558819122),
+where four vCPUs pass them.
+
+The writer sits on Ubicloud because Ubicloud's cache proxy is scoped by ref. A
+pull request's Ubicloud lane reads a warm main scope only when a main job on
+Ubicloud writes it, so a lane can move to Ubicloud only after its main writer
+has.
+
+An Ubicloud runner is a self-hosted just-in-time runner, so GitHub's six-hour
+cap for hosted jobs does not bound it and a hung job would hold a billable
+runner. Every job whose `runs-on` can select Ubicloud therefore states its own
+`timeout-minutes`: twice a measured warm Ubicloud run. `coverage-upload` is at
+10 minutes (its first standard-4 main run took 4.6 min, run 36568808595) and
+`build-test` at 15 (a warm standard-4 run took 6.0 min, run 36574662121). A
+fork's pull request restores a hosted cache that main no longer refreshes; fork
+pull requests are rare here, and a second hosted writer would pay double on
+every main push.
+
+`tests/coverage_workflows/placement_cases.rs` holds this to the files. It
+evaluates the expression for a push or dispatch, a same-repository pull request
+and a fork, rejects a literal label, inverted arms, another label and another
+condition, and asserts an exact inventory of the jobs that can land on Ubicloud
+with their ceilings. A change that adds, removes or re-times such a job fails
+it until the inventory is updated in the same commit.
+
 ## 1. Stateful pipeline helpers
 
 Internal state carriers centralize the buffered state used by the conversion
@@ -1890,15 +1931,35 @@ unchanged while prose outside those blocks remains eligible for renumbering.
 
 ### 1.5. `ListState` (`src/lists.rs`)
 
-`ListState` maintains an indent stack and a per-indent counter map for
-ordered-list renumbering. `next_number(indent)` first prunes indent levels
-deeper than `indent` (their counters disappear so a future deeper level
-restarts at 1), pushes `indent` onto the stack if it is new, and returns the
-next sequential number for that level — incrementing the counter, so the next
-call at the same indent receives the following integer. `reset()` clears both
-the stack and the counter map; the renumbering pass invokes it when a heading
-or thematic break is encountered, so the next list starts numbering from 1
-again.
+`ListState` maintains an indent stack, a per-indent counter map and a
+per-indent content column for ordered-list renumbering.
+
+- `next_number(indent)` first prunes indent levels deeper than `indent` (their
+  counters disappear so a future deeper level restarts at 1), pushes `indent`
+  onto the stack if it is new, and returns the next sequential number for that
+  level. `record_content_column` then stores where the item's content starts,
+  measured on the emitted marker so a second pass agrees.
+- `end_lists_at(column)` is the one boundary transition. It pops every list
+  whose current item cannot contain a block at `column`, that is, whose content
+  column is right of it, and drops their counters. `containing_content_column`
+  returns the innermost item that does contain an indent, so a heading or break
+  is classified relative to that item.
+- `apply_block(indent, line, prev_blank)` decides for any other block. After a
+  blank line it calls `end_lists_at`. Without one it does so only when
+  `list_interrupt::interrupts_paragraph` says the line can interrupt a
+  paragraph (a bullet item with text, a block quote, an HTML block of start
+  conditions 1 to 6); a fence marker always calls it. Anything else is a lazy
+  continuation and prunes only deeper lists.
+- `continues_paragraph` sits in front of the numbered-item path: a numbered
+  line that is not a `1.`, directly below paragraph text, with no active list
+  at its column, is paragraph text and is left as written.
+
+Adding a block kind means deciding whether it interrupts a paragraph and adding
+the case to `list_interrupt`'s unit tests and to
+`renumber_issue_563_neighbouring_shapes`. The property tests in
+`src/lists_tests.rs` hold the whole pass to its invariants: it changes only
+numbers, settles in one pass, and ends a list exactly at a block that is left
+of the item's content column.
 
 ## 2. Test infrastructure
 

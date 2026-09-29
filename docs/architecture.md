@@ -215,6 +215,19 @@ ends exactly the innermost lists whose current item it is not indented into
 contains it, so a heading four columns deep inside an item is not mistaken for
 indented code.
 
+Every other block goes through `ListState::apply_block`, which uses the same
+content-column rule (`end_lists_at`) under two invariants. After a blank line
+any block ends the lists whose item it is not indented into. Without one, only
+a block that can interrupt a paragraph does so: a fence, a block quote, a
+bullet item with text after its marker, or an HTML block of start conditions 1
+to 6 (`list_interrupt::interrupts_paragraph`). Anything else is a lazy
+continuation, and only deeper lists end. A numbered line directly below
+paragraph text that is not a `1.` and does not continue an active list at its
+column is itself a lazy continuation (`continues_paragraph`), so renumbering
+never turns paragraph text into a list item. `renumber_lists` therefore only
+rewrites the number of a line it reads as an item and settles in one pass,
+which the property test in `src/lists_tests.rs` checks over generated documents.
+
 Outside table buffering, `replace_ellipsis` maintains fence and indented-code
 state while it walks the original lines. Its private indented-code tracker is
 owned solely by the ellipsis pass: it preserves top-level code blocks that
