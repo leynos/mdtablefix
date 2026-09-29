@@ -8,6 +8,25 @@ use rstest::rstest;
 #[path = "common/mod.rs"]
 mod common;
 
+/// Asserts that renumbering `input` gives `expected` and that a second pass
+/// then changes nothing, which is the property every regression case shares.
+fn assert_is_a_renumbering_fixed_point(input: &[String], expected: &[String]) {
+    let once = renumber_lists(input);
+    assert_eq!(once, expected);
+    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+}
+
+/// Asserts that `mdtablefix --renumber` writes `input` back exactly as it read it.
+fn assert_cli_leaves_alone(input: &'static str) {
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--renumber")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(input);
+}
+
 #[test]
 fn restart_after_equal_indent_paragraph() {
     // `3. Next` directly follows the paragraph, so it continues it (#573).
@@ -216,9 +235,7 @@ fn test_renumber_cases(input: Vec<String>, expected: Vec<String>) {
 #[case::nested_heading(include_lines!("data/issue_450_nested_heading_input.txt"))]
 #[case::nested_break(include_lines!("data/issue_450_nested_break_input.txt"))]
 fn renumber_issue_450_block_inside_an_item_keeps_the_list_counting(#[case] input: Vec<String>) {
-    let once = renumber_lists(&input);
-    assert_eq!(once, input);
-    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+    assert_is_a_renumbering_fixed_point(&input, &input);
 }
 
 /// Regression cases for issue #450, the neighbouring shapes #106 touched: a
@@ -296,23 +313,14 @@ fn renumber_issue_450_neighbouring_shapes(
     #[case] input: Vec<String>,
     #[case] expected: Vec<String>,
 ) {
-    let once = renumber_lists(&input);
-    assert_eq!(once, expected);
-    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+    assert_is_a_renumbering_fixed_point(&input, &expected);
 }
 
 /// Regression case for issue #450 through the CLI: `--renumber` keeps the
 /// list counting past a heading nested in an item.
 #[test]
 fn renumber_issue_450_cli_keeps_counting_past_a_nested_heading() {
-    let input = include_str!("data/issue_450_nested_heading_input.txt");
-    Command::cargo_bin("mdtablefix")
-        .expect("Failed to create cargo command for mdtablefix")
-        .arg("--renumber")
-        .write_stdin(input)
-        .assert()
-        .success()
-        .stdout(input);
+    assert_cli_leaves_alone(include_str!("data/issue_450_nested_heading_input.txt"));
 }
 
 /// Regression cases for issue #563: a block that ends an ordered list resets
@@ -330,9 +338,7 @@ fn renumber_issue_450_cli_keeps_counting_past_a_nested_heading() {
 #[case::html_comment(include_lines!("data/issue_563_html_comment_input.txt"))]
 #[case::link_paragraph(include_lines!("data/issue_563_link_paragraph_input.txt"))]
 fn renumber_issue_563_block_at_marker_column_ends_the_list(#[case] input: Vec<String>) {
-    let once = renumber_lists(&input);
-    assert_eq!(once, input);
-    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+    assert_is_a_renumbering_fixed_point(&input, &input);
 }
 
 /// Regression cases for issue #563, the neighbouring shapes: a block
@@ -377,21 +383,12 @@ fn renumber_issue_563_neighbouring_shapes(
     #[case] input: Vec<String>,
     #[case] expected: Vec<String>,
 ) {
-    let once = renumber_lists(&input);
-    assert_eq!(once, expected);
-    assert_eq!(renumber_lists(&once), once, "a second pass changes nothing");
+    assert_is_a_renumbering_fixed_point(&input, &expected);
 }
 
 /// Regression case for issue #563 through the CLI: `--renumber` leaves the
 /// list after an ending fence at one.
 #[test]
 fn renumber_issue_563_cli_keeps_the_restart_after_a_fence() {
-    let input = include_str!("data/issue_563_fence_input.txt");
-    Command::cargo_bin("mdtablefix")
-        .expect("Failed to create cargo command for mdtablefix")
-        .arg("--renumber")
-        .write_stdin(input)
-        .assert()
-        .success()
-        .stdout(input);
+    assert_cli_leaves_alone(include_str!("data/issue_563_fence_input.txt"));
 }
