@@ -17,9 +17,9 @@
   these seams; the rendered text of such a file becomes the source's again.
   ([#561](https://github.com/leynos/mdtablefix/issues/561))
 - Fixed: `--breaks` keeps the indentation of a thematic break indented to a
-  list item's content column. It had written every break at column 0 since
-  `--breaks` was introduced in #57, which took the break and the rest of the
-  item out of the list and split the list in two.
+  list item's content column. It had written a list item's break at column 0
+  since `--breaks` was introduced in #57, which took the break and the rest of
+  the item out of the list and split the list in two.
   ([#572](https://github.com/leynos/mdtablefix/issues/572))
 
 ## v0.6.0

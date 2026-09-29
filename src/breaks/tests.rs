@@ -30,6 +30,16 @@ fn basic_formatting() {
     assert_borrowed_value!(output[2], "bar");
 }
 
+/// A break inside an item is rewritten with its indentation, so the output
+/// owns its text; only breaks outside every item borrow the shared static.
+#[test]
+fn a_break_inside_a_wide_item_is_owned() {
+    let input = vec!["10. item".to_string(), "    ***".to_string()];
+    let output = format_breaks(&input);
+
+    assert!(matches!(&output[1], Cow::Owned(value) if value.starts_with("    _")));
+}
+
 #[test]
 fn ignores_fenced_code() {
     let input = vec!["```", "---", "```"]

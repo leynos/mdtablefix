@@ -153,7 +153,7 @@ pub fn format_breaks(lines: &[String]) -> Vec<Cow<'_, str>> {
         let fence = fences.observe_source_line(line);
         if fence.is_fence_marker || fence.is_in_fence {
             state.reset();
-            items.reset();
+            items.close_outdented(line);
             out.push(Cow::Borrowed(line.as_str()));
             continue;
         }
@@ -196,6 +196,7 @@ fn place_in_item(items: &mut ItemStack, line: &str, prefix: &str) -> Option<Plac
         return None;
     }
     if prefix.contains('>') {
+        items.close_outdented(line);
         return None;
     }
     Some(items.place(line)).filter(|placement| placement.container > 0)

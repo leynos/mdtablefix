@@ -262,6 +262,8 @@ fn indented_break(indent: &str) -> String { format!("{indent}{}", "_".repeat(THE
 #[case::after_a_lazy_line(lines_vec!["- item", "lazy continuation", "", "  ***", "", "  more"], 3, "  ")]
 // A `10.` item's content starts at column 4; relative to the item this is a
 // break, not indented code.
+// A fenced block is a child of the item too, so the item stays open across it.
+#[case::after_a_fenced_block(lines_vec!["- item", "", "  ```", "  code", "  ```", "", "  ***", "", "  more"], 6, "  ")]
 #[case::under_a_wide_marker(lines_vec!["10. item", "", "    ***", "", "    more"], 2, "    ")]
 fn breaks_issue_572_break_in_item_keeps_its_indentation(
     #[case] input: Vec<String>,
@@ -284,6 +286,12 @@ fn breaks_issue_572_break_in_item_keeps_its_indentation(
 #[rstest]
 #[case::top_level_indent(lines_vec!["text", "", "  ***"], 2)]
 #[case::left_of_the_content_column(lines_vec!["1. item", "", "  ***"], 2)]
+// A quote at column 0 leaves the item, so the break after it is outside.
+#[case::after_an_outdented_quote(lines_vec!["- item", "", "> quote", "", "  ***"], 4)]
+// An empty marker, or one that opens a heading or fence, starts no paragraph,
+// so the column-0 line after it is not a lazy continuation of the item.
+#[case::after_an_empty_marker(lines_vec!["- ", "para", "", "  ***"], 3)]
+#[case::after_a_heading_marker(lines_vec!["- # heading", "para", "", "  ***"], 3)]
 #[case::after_the_list_ends(lines_vec!["1. item", "", "para", "", "   ***"], 4)]
 fn breaks_issue_572_break_outside_an_item_is_emitted_at_column_zero(
     #[case] input: Vec<String>,

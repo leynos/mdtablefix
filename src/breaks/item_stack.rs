@@ -28,9 +28,16 @@ pub(super) struct Placement {
 }
 
 impl ItemStack {
-    /// Forgets every open item at a fenced-code boundary.
-    pub(super) fn reset(&mut self) {
-        self.columns.clear();
+    /// Closes the items a line is left of, without placing the line in one.
+    ///
+    /// Used for lines the pass does not classify itself: a quoted line, or a
+    /// fence marker. A fenced block can be a child of an item, so the item
+    /// stays open across the fence and closes only when a line leaves it.
+    pub(super) fn close_outdented(&mut self, line: &str) {
+        let indent = leading_width(line);
+        while self.columns.last().is_some_and(|&column| column > indent) {
+            self.columns.pop();
+        }
         self.prev_text = false;
     }
 
@@ -57,12 +64,25 @@ impl ItemStack {
         if class == LineClass::ListItem {
             self.columns.push(list_content_indent(text, indent));
         }
-        self.prev_text = matches!(class, LineClass::ParagraphText | LineClass::ListItem);
+        self.prev_text = match class {
+            LineClass::ParagraphText => true,
+            LineClass::ListItem => is_paragraph_text(item_content(text)),
+            _ => false,
+        };
         Placement {
             container,
             relative,
         }
     }
+}
+
+/// Returns the text after a list marker and its separator.
+///
+/// An empty marker, a heading and a fence opener all begin a child block
+/// rather than a paragraph, so a lazy line cannot continue them.
+fn item_content(text: &str) -> &str {
+    let after_marker = text.trim_start_matches(|ch: char| !matches!(ch, ' ' | '\t'));
+    after_marker.trim_start_matches([' ', '\t'])
 }
 
 /// Reports whether text, taken without its indentation, is paragraph text.

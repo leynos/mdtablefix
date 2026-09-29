@@ -93,8 +93,11 @@ proptest! {
 }
 
 fn non_thematic_line() -> impl Strategy<Value = String> {
+    // A break is also a break once its indentation is taken as an item's
+    // content column, and that one is rewritten, so the trimmed line counts too.
     any::<String>().prop_filter("line must not classify as a thematic break", |line| {
         !is_canonical_break_line(line, &ClassifyCtx::default())
+            && !is_canonical_break_line(line.trim_start(), &ClassifyCtx::default())
     })
 }
 
