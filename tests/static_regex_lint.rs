@@ -19,8 +19,8 @@
 //! through a [`cap_std::fs_utf8::Dir`] capability scoped to the directory it
 //! touches, so reads and writes cannot stray outside the manifest or the
 //! temporary directory they belong to. [`TempDir`] still provides the isolated
-//! directories and [`Command`] still runs the guard; only the path and
-//! filesystem layers change.
+//! directories and [`std::process::Command`] still runs the guard; only the
+//! path and filesystem layers change.
 //!
 //! The guard itself is Unix-only: it is a `bash` script that shells out to
 //! ripgrep, and the tests stand in for ripgrep with stub scripts that have to
@@ -31,10 +31,8 @@
 //! lint job.
 #![cfg(unix)]
 
-use std::{io, process::Command};
+use std::io;
 
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
 use proptest::prelude::*;
 use rstest::rstest;
 use tempfile::TempDir;
