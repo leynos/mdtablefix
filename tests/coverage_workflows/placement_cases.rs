@@ -26,7 +26,12 @@ const ESTATE: &str =
 /// or ceiling changed, fails here until the change is reviewed.
 const PLACEMENTS: [(&str, &str, &str, u64); 2] = [
     ("ci.yml", "build-test", "ubicloud-standard-4", 20),
-    ("coverage-main.yml", "coverage-upload", "ubicloud-standard-4", 10),
+    (
+        "coverage-main.yml",
+        "coverage-upload",
+        "ubicloud-standard-4",
+        10,
+    ),
 ];
 
 /// Scenario: the estate expression is evaluated for each kind of run.
