@@ -11,14 +11,14 @@ use std::process::{Command, Output};
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{
-    ambient_authority,
-    fs::{Permissions, PermissionsExt},
-    fs_utf8::Dir,
-};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::{fixture, rstest};
 use serde_yaml::{Mapping, Value};
 use tempfile::TempDir;
+
+#[path = "support/fake_prover_tools.rs"]
+mod fake_prover_tools;
+use fake_prover_tools::{fake_prover_tools, make_command, runner_log};
 
 const VERUS_WORKFLOW: &str = include_str!("../.github/workflows/verus.yml");
 const VERUS_VERSION: &str = include_str!("../tools/verus/VERSION");
@@ -74,76 +74,6 @@ fn run_ledger_check(directory: &Utf8Path) -> Output {
         .env_remove("RG")
         .output()
         .expect("failed to execute check-verification-ledger.sh")
-}
-
-struct FakeProverTools {
-    _directory: TempDir,
-    path: Utf8PathBuf,
-    log_path: Utf8PathBuf,
-    smoke_mode: &'static str,
-}
-
-fn fake_prover_tools(smoke_mode: &'static str) -> Result<FakeProverTools> {
-    let directory = TempDir::new().context("create fake prover-tools directory")?;
-    let root = utf8(directory.path())?;
-    let handle = open_dir(root)?;
-    let path = root.join("prover-tools");
-    let log_path = root.join("prover-tools.log");
-    let script = r#"#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' "$*" >> "${FAKE_PROVER_TOOLS_LOG:?}"
-if [[ "$*" == "verus run --repo-root . --proof-file verus/smoke.rs" ]]; then
-    case "${FAKE_PROVER_TOOLS_SMOKE_MODE:?}" in
-        rejected)
-            echo "Verus proofs failed"
-            exit 1
-            ;;
-        accepted) exit 0 ;;
-        unrelated_failure)
-            echo "runner unavailable"
-            exit 1
-            ;;
-    esac
-fi
-"#;
-    handle
-        .write("prover-tools", script)
-        .context("write fake prover-tools runner")?;
-    handle
-        .set_permissions("prover-tools", Permissions::from_mode(0o755))
-        .context("make fake prover-tools runner executable")?;
-    Ok(FakeProverTools {
-        _directory: directory,
-        path,
-        log_path,
-        smoke_mode,
-    })
-}
-
-fn make_command(target: &str, runner: &FakeProverTools) -> Command {
-    let mut command = Command::new("make");
-    command
-        .arg("--no-print-directory")
-        .arg(target)
-        .current_dir(manifest_dir())
-        .env("PROVER_TOOLS", &runner.path)
-        .env(
-            "VERUS_RUN",
-            format!("{} verus run --repo-root .", runner.path),
-        )
-        .env("FAKE_PROVER_TOOLS_LOG", &runner.log_path)
-        .env("FAKE_PROVER_TOOLS_SMOKE_MODE", runner.smoke_mode);
-    command
-}
-
-fn runner_log(runner: &FakeProverTools) -> Result<String> {
-    let root = runner
-        .path
-        .parent()
-        .context("fake prover-tools path has no parent")?;
-    open_dir(root)?
-        .read_to_string("prover-tools.log")
-        .context("read fake prover-tools log")
 }
 
 fn parse_workflow() -> Result<Value> {
@@ -365,6 +295,36 @@ fn make_verus_selftest_accepts_only_a_rejected_smoke_proof(
     ensure!(
         log.lines()
             .any(|line| line == "verus run --repo-root . --proof-file verus/smoke.rs")
+    );
+    Ok(())
+}
+
+/// Regression case for issue #586: the fake runner still runs while a write
+/// descriptor on it is open, as one inherited by a concurrently forked child
+/// would be.
+///
+/// Executing a file with an open write descriptor fails with `ETXTBSY`. The
+/// harness must not depend on no other thread forking at the wrong moment, so
+/// it runs the stub through `bash`, which only reads it.
+#[test]
+fn verus_harness_issue_586_runner_survives_an_open_write_descriptor() -> Result<()> {
+    let runner = fake_prover_tools("rejected")?;
+    let root = runner
+        .path
+        .parent()
+        .context("fake prover-tools path has no parent")?;
+    let _held_open = open_dir(root)?
+        .open_with("prover-tools", cap_std::fs::OpenOptions::new().append(true))
+        .context("hold the runner open for writing")?;
+
+    let output = make_command("verus", &runner)
+        .output()
+        .context("run make verus while the runner is open for writing")?;
+
+    ensure!(
+        output.status.success(),
+        "make verus failed: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
     Ok(())
 }

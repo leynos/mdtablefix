@@ -19,8 +19,8 @@
 //! through a [`cap_std::fs_utf8::Dir`] capability scoped to the directory it
 //! touches, so reads and writes cannot stray outside the manifest or the
 //! temporary directory they belong to. [`TempDir`] still provides the isolated
-//! directories and [`Command`] still runs the guard; only the path and
-//! filesystem layers change.
+//! directories and [`std::process::Command`] still runs the guard; only the
+//! path and filesystem layers change.
 //!
 //! The guard itself is Unix-only: it is a `bash` script that shells out to
 //! ripgrep, and the tests stand in for ripgrep with stub scripts that have to
@@ -31,13 +31,18 @@
 //! lint job.
 #![cfg(unix)]
 
-use std::{io, process::Command};
+use std::io;
 
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
 use proptest::prelude::*;
 use rstest::rstest;
 use tempfile::TempDir;
+
+#[path = "support/script_stubs.rs"]
+mod script_stubs;
+use script_stubs::{stub_command, write_stub};
+#[path = "support/static_regex_guard.rs"]
+mod static_regex_guard;
+use static_regex_guard::{open_dir, run_guard, scan_dir_with, utf8};
 
 /// The diagnostic emitted when a prohibited declaration is found.
 const PROHIBITED_DIAGNOSTIC: &str = "static regular expressions must use lazy_regex!";
@@ -60,74 +65,6 @@ const PROHIBITED_FORMS: &[&str] = &[
     "once_cell_lazy_qualified",
     "once_cell_lazy_move",
 ];
-
-/// Adapt an ambient [`std::path::Path`] — as produced by [`TempDir::path`] —
-/// into a UTF-8 path, failing loudly rather than lossily if it is not UTF-8.
-fn utf8(path: &std::path::Path) -> io::Result<&Utf8Path> {
-    Utf8Path::from_path(path).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("non-UTF-8 temporary path: {}", path.display()),
-        )
-    })
-}
-
-/// Open a filesystem capability scoped to `dir`.
-///
-/// Every subsequent operation names a path relative to this handle, so it
-/// cannot reach outside `dir`.
-fn open_dir(dir: &Utf8Path) -> io::Result<Dir> { Dir::open_ambient_dir(dir, ambient_authority()) }
-
-/// The crate root, used as the capability root for reading fixtures.
-fn manifest_dir() -> Utf8PathBuf { Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
-
-/// The guard script under test.
-fn script_path() -> Utf8PathBuf { manifest_dir().join("scripts/check-static-regexes.sh") }
-
-/// Read `label`'s fixture through a capability scoped to the crate root.
-fn fixture(label: &str) -> io::Result<String> {
-    let relative = format!("tests/data/static_regex/{label}.rs.txt");
-    open_dir(&manifest_dir())?.read_to_string(&relative)
-}
-
-/// Materialize `label`'s fixture as a `.rs` file inside a fresh temp directory.
-fn scan_dir_with(label: &str) -> io::Result<TempDir> {
-    let dir = TempDir::new()?;
-    open_dir(utf8(dir.path())?)?.write(format!("{label}.rs"), fixture(label)?)?;
-    Ok(dir)
-}
-
-/// Run the guard against `scan_dir`, optionally overriding the `RG` ripgrep
-/// command.
-///
-/// `rg` is the raw `RG` value, so it may carry arguments (for example
-/// `rg --pcre2`); the guard splits it on whitespace. Passing `None` clears any
-/// ambient `RG` so default-path runs exercise the guard's own `rg` default
-/// deterministically.
-fn run_guard(scan_dir: &Utf8Path, rg: Option<&str>) -> io::Result<std::process::Output> {
-    let mut cmd = Command::new(script_path());
-    cmd.arg(scan_dir);
-    match rg {
-        Some(rg) => cmd.env("RG", rg),
-        None => cmd.env_remove("RG"),
-    };
-    cmd.output()
-}
-
-/// Write `script` to `<dir>/<name>`, mark it executable, and return its path.
-///
-/// Both operations go through a capability scoped to `dir`, so `name` is
-/// resolved relative to that directory rather than against ambient authority.
-fn write_stub(dir: &Utf8Path, name: &str, script: &str) -> io::Result<Utf8PathBuf> {
-    let handle = open_dir(dir)?;
-    handle.write(name, script)?;
-    #[cfg(unix)]
-    {
-        use cap_std::fs::{Permissions, PermissionsExt};
-        handle.set_permissions(name, Permissions::from_mode(0o755))?;
-    }
-    Ok(dir.join(name))
-}
 
 #[rstest]
 fn rejects_prohibited_lazy_wrapper_form(#[values(0, 1, 2, 3, 4, 5)] index: usize) {
@@ -174,7 +111,7 @@ fn propagates_ripgrep_scan_failure() {
     let stub = write_stub(scan_dir, "rg-stub.sh", "#!/bin/sh\nexit 3\n")
         .expect("write the failing ripgrep stub");
 
-    let output = run_guard(scan_dir, Some(stub.as_str())).expect("execute the guard");
+    let output = run_guard(scan_dir, Some(&stub_command(&stub))).expect("execute the guard");
 
     assert_eq!(
         output.status.code(),
@@ -222,7 +159,8 @@ fn preserves_arguments_supplied_through_rg(#[case] dir_name: &str) {
     )
     .expect("write the argument-recording ripgrep stub");
 
-    let output = run_guard(&dir, Some(&format!("{stub} --pcre2"))).expect("execute the guard");
+    let output = run_guard(&dir, Some(&format!("{} --pcre2", stub_command(&stub))))
+        .expect("execute the guard");
 
     assert_eq!(
         output.status.code(),
@@ -396,3 +334,29 @@ proptest! {
 // Bounded model checking is unsuitable here because the guard is a ripgrep
 // pattern over unbounded Rust source text rather than a bounded state machine;
 // property testing exercises that input domain directly.
+
+/// Regression case for issue #586: a ripgrep stub still runs while a write
+/// descriptor on it is open, as one inherited by a concurrently forked child
+/// would be.
+///
+/// Executing a file with an open write descriptor fails with `ETXTBSY`, so
+/// the stub runs through `sh`, which only reads it.
+#[test]
+fn static_regex_issue_586_stub_survives_an_open_write_descriptor() {
+    let dir = scan_dir_with("clean").expect("stage clean fixture");
+    let scan_dir = utf8(dir.path()).expect("temporary path is UTF-8");
+    let stub = write_stub(scan_dir, "rg-stub.sh", "#!/bin/sh\nexit 3\n").expect("write the stub");
+    let _held_open = open_dir(scan_dir)
+        .expect("open the scan directory")
+        .open_with("rg-stub.sh", cap_std::fs::OpenOptions::new().append(true))
+        .expect("hold the stub open for writing");
+
+    let output = run_guard(scan_dir, Some(&stub_command(&stub))).expect("execute the guard");
+
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "the stub must run despite the open descriptor; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
