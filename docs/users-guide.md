@@ -326,6 +326,11 @@ A block that contains a line made only of pipes and spaces is left exactly as
 written. Such a line is an empty row in a table, and plain text in a pipe-led
 block that has no delimiter row; reflowing would discard it either way.
 
+The exception is a table that `--html` generates from HTML. An empty `<tr>`
+becomes such a line, but the table is still aligned: the other rows are
+reflowed and each empty row is put back, padded to the width of the delimiter
+row.
+
 Continuation rows are preserved during reflow. When a row starts with empty
 leading cells because its content continues from the previous row, those empty
 cells keep their original column positions instead of collapsing into the first
