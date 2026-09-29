@@ -134,6 +134,38 @@ mod proptest_tests {
             prop_assert_eq!(renumber_lists(&once), once);
         }
 
+        /// A block after a blank line ends a list exactly when it is left of the item's content column.
+        ///
+        /// Over generated marker indents, item counts and block shapes, a
+        /// block left of the content column ends the list, so the next item
+        /// restarts at one; the same block indented to the content column
+        /// or beyond belongs to the last item, so the list keeps counting.
+        #[test]
+        fn a_separated_block_ends_the_list_only_left_of_the_content_column(
+            marker_indent in 0usize..=3,
+            items in 1usize..=5,
+            block in prop::sample::select(vec![
+                "text", "> quote", "- bullet", "<div>", "# heading", "---",
+            ]),
+            offset in 0usize..=4,
+        ) {
+            let pad = |width: usize| " ".repeat(width);
+            let mut lines: Vec<String> = (0..items)
+                .map(|n| format!("{}{}. item", pad(marker_indent), 5 + 3 * n))
+                .collect();
+            let block_indent = marker_indent + offset;
+            // `N. ` puts an item's content three columns right of its marker.
+            let is_inside_item = offset >= 3;
+            lines.push(String::new());
+            lines.push(format!("{}{block}", pad(block_indent)));
+            lines.push(String::new());
+            lines.push(format!("{}9. last", pad(marker_indent)));
+            let out = renumber_lists(&lines);
+            let expected_last = if is_inside_item { items + 1 } else { 1 };
+            let expected = format!("{}{expected_last}. last", pad(marker_indent));
+            prop_assert_eq!(out.last(), Some(&expected));
+        }
+
         #[test]
         fn list_state_next_number_always_starts_at_1_for_new_indent(
             indents in proptest::collection::vec(0usize..=8, 1..=20),
