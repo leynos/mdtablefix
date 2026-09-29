@@ -498,3 +498,24 @@ The accepted-body wording this addendum replaces is:
   `tests/support/idempotence_harness.rs`". The Evidence section above replaces
   these with the `T7` pin, the two generator and harness modules, and the
   widened sweeps.
+
+## Addendum (2026-09-27)
+
+Issue #507 is fixed, and the digit-only residue recorded in the 2026-09-14
+addendum no longer applies. The fix is not a wider label match. Since #561
+(pull request #570), the inline wrapper merges any two neighbouring fragments
+that meet with no whitespace between them, so the only places `textwrap` can
+break are the source's own whitespace. An opener written directly before its
+label, as in `[a]`, is therefore one run and cannot be split, whether the label
+is digits, letters or both. A bracket followed by a space, as in
+`[ not a reference]`, still has a break opportunity after it, because the
+source put one there. This was the first candidate direction #507 recorded,
+narrowed to touching tokens so that prose with a real space keeps its break.
+
+The evidence is the corpus cases `E2_alphabetic_label_after_space` and
+`E3_alphabetic_label_touching` (the two reproductions in #507), the regression
+test `tests/issue_507_bracket_label_wrap_is_idempotent.rs`, which asserts the
+exact output of each reproduction, pins the break opportunity after an opener
+followed by a space, and carries a property that grows prose to the wrap
+boundary in front of a generated label of letters and digits, with and without
+a space before it.
