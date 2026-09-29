@@ -171,7 +171,7 @@ const CASES: &[IdempotenceCase] = &[
         id: "A4_frontmatter_fixture",
         fixture: "A4_frontmatter_fixture.dat",
         flags: FULL,
-        expects: &[Standalone::NormalisedBreak],
+        expects: &[Standalone::NormalisedBreak, Standalone::Literal("-----")],
     },
     IdempotenceCase {
         id: "B1_code_span_tail",

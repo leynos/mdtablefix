@@ -124,6 +124,24 @@ fn detect_verified_setext_heading(
     is_atx_heading_line(&emitted, &ClassifyCtx::default()).then_some(emitted)
 }
 
+/// Marks both lines of every valid Setext heading: its text and its underline.
+///
+/// Wrapping consults it, because a `===` underline joined onto its text becomes
+/// prose (issue #562), and heading text is left unwrapped as ATX heading text
+/// is. `format_breaks` makes the matching decision for a `---` underline
+/// through the line classifier.
+pub(crate) fn setext_heading_lines(lines: &[String]) -> Vec<bool> {
+    let mut heading = vec![false; lines.len()];
+    for (index, is_text) in setext_text_lines(lines).into_iter().enumerate() {
+        if is_text {
+            for slot in heading.iter_mut().skip(index).take(2) {
+                *slot = true;
+            }
+        }
+    }
+    heading
+}
+
 /// Parses a Setext heading pair and returns its level, shared prefix length, and text.
 ///
 /// The candidate is rejected when the underline prefix differs, the text is a block start, or

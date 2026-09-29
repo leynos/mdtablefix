@@ -8,7 +8,7 @@ args: --wrap --check
 status: code: 1
 
 [stdout]
-input.dat +6 -4
+input.dat +5 -2
 
 [stderr]
 1 file would be reformatted.

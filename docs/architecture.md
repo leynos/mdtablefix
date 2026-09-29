@@ -651,9 +651,12 @@ trailing spaces.
 ### Wrap flow
 
 The higher-level `wrap_text` entry point combines block classification,
-paragraph buffering, prefix-aware wrapping, and inline line fitting. The
-following flow shows how a line moves through those stages before it is either
-preserved verbatim or emitted as wrapped output.
+paragraph buffering, prefix-aware wrapping, and inline line fitting. Before the
+loop it precomputes which lines belong to a Setext heading
+(`headings::setext_heading_lines`, built on `setext_text_lines`) and emits
+those verbatim, so a heading's text and underline are never reflowed as prose.
+The following flow shows how a line moves through those stages before it is
+either preserved verbatim or emitted as wrapped output.
 
 ```mermaid
 flowchart TD

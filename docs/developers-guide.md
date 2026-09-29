@@ -629,6 +629,18 @@ depth-aware tracking.
    keeps the regex and link-matcher boundary separate from the character
    scanner's structural decision.
 
+   Before the loop, `wrap_text` calls `headings::setext_heading_lines`, which
+   marks both lines of every valid Setext pair, and emits a marked line
+   verbatim through `ParagraphWriter::push_verbatim`, so the underline is never
+   joined to its text or to the paragraph below it; see
+   [issue 562](https://github.com/leynos/mdtablefix/issues/562). The helper is
+   crate-private and derives its marks from `setext_text_lines`, so it applies
+   exactly the candidate rules `--headings` conversion applies (fence-aware,
+   refusing block starts, table syntax and indented code) and never classifies
+   a line on its own. Its only caller is `wrap_text`; `format_breaks` takes its
+   Setext decision from the shared line classifier instead, and new callers
+   should prefer that classifier over adding a third route.
+
 2. **Prefix-aware paragraph handling.** `ParagraphWriter` in
    `src/wrap/paragraph.rs` is the single entry point for prefix-aware wrapping.
    `wrap_with_prefix` computes the available content width once from the

@@ -448,6 +448,24 @@ such as `- - -` and the seventy-underscore line that `--breaks` writes. A table
 separator row such as `| --- | --- |` still contains pipes and is reflowed with
 its table rather than treated as a break.
 
+Setext headings pass through `--wrap` whole. A line of paragraph text directly
+above an underline of `=` or `-` characters is a heading, so both lines are
+emitted unchanged: the heading text is not wrapped, as ATX heading text is not,
+and the underline is never joined to the heading or to a paragraph directly
+below it. `--breaks` likewise leaves a `---` underline alone, because it is not
+a thematic break. `--headings` still converts the pair to an ATX heading when
+it is passed.
+
+```markdown
+Arc Gambit
+==========
+
+What is it?
+-----------
+```
+
+Both headings above come out of `--wrap --breaks` exactly as written.
+
 When the first line of a prefixed block spills past the target width, the
 wrapper keeps that block open so its continuation and lazy continuation lines
 reflow with the tail in the same pass rather than being joined to it on a later

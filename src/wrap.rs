@@ -8,8 +8,6 @@
 //! The [`Token`] enum and [`tokenize_markdown`] function are public so callers
 //! can perform custom token-based processing.
 
-use std::borrow::Cow;
-
 use tracing::trace;
 
 mod block;
@@ -19,11 +17,12 @@ mod fence;
 mod inline;
 mod link_reference;
 mod paragraph;
+mod passthrough;
 mod pending;
+mod prefix;
 mod tokenize;
 #[cfg(test)]
 pub(crate) mod tracing_snapshot_support;
-use block::{BULLET_RE, FOOTNOTE_RE};
 pub(crate) use block::{BlockKind, classify_block, classify_residual_block, leading_indent};
 pub use blockquote::BlockquotePrefix;
 use continuation::apply_continuation_chunk;
@@ -37,7 +36,9 @@ pub(crate) use fence::{FenceObservation, ObservedFence};
 pub use fence::{FenceTracker, is_fence};
 pub(crate) use link_reference::{LinkReferenceMatcher, LinkTitleWindow, LinkTitleWindowOutcome};
 use paragraph::{ParagraphState, ParagraphWriter, PrefixLine};
+use passthrough::{is_passthrough_block, normalized_passthrough_line};
 use pending::handle_pending_continuation;
+use prefix::prefix_line;
 /// Token emitted by the `tokenize::segment_inline` parser and used by
 /// higher-level wrappers.
 ///
@@ -54,107 +55,6 @@ pub use tokenize::tokenize_markdown;
 #[cfg(test)]
 pub(crate) use tokenize::{continuation_begins_with_closing_fence, has_unclosed_code_span};
 pub(crate) use tokenize::{has_odd_backslash_escape_bytes, link_or_image_span};
-
-// Permit GFM task list markers with flexible spacing and missing post-marker
-// spaces in Markdown.
-
-/// Return whether a line is an indented code block with visible content.
-///
-/// Blank indented lines remain paragraph separators; only four-column
-/// indentation followed by a non-whitespace character is protected here.
-fn is_indented_code_line(line: &str) -> bool {
-    let (indent_width, first_content_byte) = leading_indent(line);
-    indent_width >= 4
-        && line[first_content_byte..]
-            .chars()
-            .any(|c| !c.is_whitespace())
-}
-
-/// Return whether a line belongs to a table or a table-separator boundary.
-///
-/// These lines are emitted verbatim because reflowing their pipes or separator
-/// dashes would change the table grammar before the table formatter sees it.
-fn is_table_or_separator(line: &str) -> bool {
-    line.trim_start().starts_with('|') || crate::table::SEP_RE.is_match(line.trim())
-}
-
-/// Returns whether `line` must be emitted verbatim rather than wrapped.
-///
-/// Thematic breaks are included even though [`is_table_or_separator`] already
-/// passes `---` through: that accidental match relies on the table-separator
-/// pattern, which rejects `***`, `___`, `- - -`, and the underscore run
-/// emitted by `--breaks`. Recognising the break directly keeps all of those on
-/// their own line, so a second `--wrap` pass cannot absorb a normalised break
-/// into the surrounding paragraph.
-fn is_passthrough_block(block_kind: Option<BlockKind>, line: &str) -> bool {
-    is_table_or_separator(line)
-        || matches!(
-            block_kind,
-            Some(
-                BlockKind::Heading
-                    | BlockKind::MarkdownlintDirective
-                    | BlockKind::LinkReferenceDefinition
-                    | BlockKind::ThematicBreak,
-            )
-        )
-        || line.trim().is_empty()
-        || is_indented_code_line(line)
-}
-
-/// Parse a list or footnote prefix, retaining any outer blockquote prefix.
-///
-/// The returned `PrefixLine` marks whether a prefix must repeat on subsequent
-/// lines and borrows all source slices so verbatim syntax can be reconstructed.
-fn prefix_line<'a>(
-    inner_content: &'a str,
-    blockquote: Option<BlockquotePrefix<'a>>,
-) -> Option<PrefixLine<'a>> {
-    let outer_prefix = blockquote.map(|prefix| prefix.raw_prefix());
-
-    if let Some(cap) = BULLET_RE.captures(inner_content) {
-        let inner_prefix = cap.get(1).map(|m| m.as_str())?;
-        let rest = cap.get(2).map(|m| m.as_str())?;
-        return Some(PrefixLine {
-            prefix: outer_prefix.map_or_else(
-                || Cow::Borrowed(inner_prefix),
-                |outer| Cow::Owned(format!("{outer}{inner_prefix}")),
-            ),
-            rest,
-            repeat_prefix: false,
-            outer_prefix: outer_prefix.map(Cow::Borrowed),
-        });
-    }
-
-    if let Some(cap) = FOOTNOTE_RE.captures(inner_content) {
-        let prefix = cap.get(1).map(|m| m.as_str())?;
-        let marker = cap.get(2).map(|m| m.as_str())?;
-        let rest = cap.get(3).map(|m| m.as_str())?;
-        let inner_prefix = format!("{prefix}{marker}");
-        return Some(PrefixLine {
-            prefix: Cow::Owned(format!(
-                "{}{inner_prefix}",
-                outer_prefix.unwrap_or_default()
-            )),
-            rest,
-            repeat_prefix: false,
-            outer_prefix: outer_prefix.map(Cow::Borrowed),
-        });
-    }
-
-    let Some(blockquote) = blockquote else {
-        trace!(
-            line_len = inner_content.len(),
-            "prefix_line found no supported prefix"
-        );
-        return None;
-    };
-    Some(PrefixLine {
-        prefix: Cow::Borrowed(blockquote.raw_prefix()),
-        rest: inner_content,
-        repeat_prefix: true,
-        outer_prefix: Some(Cow::Borrowed(blockquote.raw_prefix())),
-    })
-}
 
 /// Split a source line into its original spelling, inner content, and block
 /// context before any paragraph state is changed.
@@ -182,6 +82,8 @@ struct PreambleLine<'a> {
     inner: &'a str,
     /// The active blockquote nesting depth used by fence tracking.
     depth: usize,
+    /// Whether the line belongs to a Setext heading, text or underline.
+    is_setext: bool,
 }
 
 /// Remove Markdown hard-break markers while retaining whether the break was
@@ -207,23 +109,6 @@ fn line_break_parts(line: &str) -> (String, bool) {
         .trim_end_matches(' ')
         .to_string();
     (text, hard_break)
-}
-
-/// Collapse whitespace-only passthrough lines to the canonical empty line.
-///
-/// Verbatim constructs keep their source spelling, except that a whitespace
-/// only separator is normalised so repeated formatting does not accumulate
-/// insignificant indentation.
-fn normalized_passthrough_line(line: &str) -> &str {
-    if !line.is_empty() && line.trim().is_empty() {
-        trace!(
-            line_len = line.len(),
-            "normalizing whitespace-only passthrough line"
-        );
-        ""
-    } else {
-        line
-    }
 }
 
 /// Consume a continuation whose blockquote prefix still matches pending state.
@@ -279,8 +164,8 @@ fn try_passthrough_block(
     true
 }
 
-/// Handle fence and link-title context that must be known before paragraph
-/// dispatch.
+/// Handle fence, link-title and Setext context that must be known before
+/// paragraph dispatch.
 ///
 /// Returning `true` means the line was emitted or consumed by that preamble
 /// state, so the caller must not also feed it to paragraph wrapping.
@@ -313,6 +198,12 @@ fn handle_line_preamble(
     if let Some(outcome) = link_title_window.observe_next_line(line.inner, link_matcher)
         && outcome == link_reference::LinkTitleWindowOutcome::EmitVerbatim
     {
+        writer.push_verbatim(state, line.original);
+        return true;
+    }
+
+    if line.is_setext {
+        // A Setext heading passes through whole; wrapped, it is prose (#562).
         writer.push_verbatim(state, line.original);
         return true;
     }
@@ -360,8 +251,9 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
     let mut fence_tracker = FenceTracker::default();
     let link_matcher = link_reference::LinkReferenceMatcher::production();
     let mut link_title_window = link_reference::LinkTitleWindow::default();
+    let setext_lines = crate::headings::setext_heading_lines(lines);
 
-    for line in lines {
+    for (index, line) in lines.iter().enumerate() {
         let blockquote = BlockquotePrefix::parse(line);
         let current_depth = blockquote.map_or(0, |prefix| prefix.depth());
         let inner_content = blockquote.map_or(line.as_str(), |prefix| prefix.inner());
@@ -371,6 +263,7 @@ pub fn wrap_text(lines: &[String], width: usize) -> Vec<String> {
                 original: line,
                 inner: inner_content,
                 depth: current_depth,
+                is_setext: setext_lines.get(index).copied().unwrap_or(false),
             },
             &mut writer,
             &mut state,
