@@ -1766,6 +1766,35 @@ against generated call graphs, with branches, cycles and every call spelling,
 by comparison with reachability computed on the adjacency matrix. Run it with
 `make test`.
 
+## Runner placement
+
+`coverage-main.yml`'s `coverage-upload`, main's only cache writer, runs on
+`ubicloud-standard-2`. `runs-on` selects it with the estate expression
+`${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' ||
+'ubicloud-standard-2' }}`.
+A pull request from a fork cannot obtain an Ubicloud runner, so it falls back
+to `ubuntu-latest`; a push and a dispatch have no pull request, so the fork
+value is null and they select Ubicloud.
+
+The writer sits on Ubicloud because Ubicloud's cache proxy is scoped by ref. A
+pull request's Ubicloud lane reads a warm main scope only when a main job on
+Ubicloud writes it, so a lane can move to Ubicloud only after its main writer
+has.
+
+An Ubicloud runner is a self-hosted just-in-time runner, so GitHub's six-hour
+cap for hosted jobs does not bound it and a hung job would hold a billable
+runner. Every job whose `runs-on` can select Ubicloud therefore states its own
+`timeout-minutes`: twice a measured warm Ubicloud run. `coverage-upload` is at
+a provisional 30 minutes, sized for its first cold run, until a warm run exists
+to size it from.
+
+`tests/coverage_workflows/placement_cases.rs` holds this to the files. It
+evaluates the expression for a push or dispatch, a same-repository pull request
+and a fork, rejects a literal label, inverted arms, another label and another
+condition, and asserts an exact inventory of the jobs that can land on Ubicloud
+with their ceilings. A change that adds, removes or re-times such a job fails
+it until the inventory is updated in the same commit.
+
 ## 1. Stateful pipeline helpers
 
 Internal state carriers centralize the buffered state used by the conversion
