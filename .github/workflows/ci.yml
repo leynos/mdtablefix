@@ -57,7 +57,7 @@ jobs:
         # The baseline paths are the action's defaults, which is what makes
         # this ratchet comparable with the one the main publisher writes: both
         # read and write `.coverage-baseline.rust`.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/generate-coverage@6dea5677a84fec60ca51b07202570e3af12ffdb4
         with:
           output-path: lcov.info
           format: lcov
