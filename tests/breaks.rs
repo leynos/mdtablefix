@@ -230,3 +230,89 @@ fn test_cli_breaks_option() {
         .success()
         .stdout(format!("{}\n", "_".repeat(THEMATIC_BREAK_LEN)));
 }
+
+/// Returns `format_breaks` output as owned lines, for whole-document comparisons.
+fn formatted(lines: &[String]) -> Vec<String> {
+    format_breaks(lines)
+        .into_iter()
+        .map(std::borrow::Cow::into_owned)
+        .collect()
+}
+
+/// Returns the canonical break behind `indent`.
+fn indented_break(indent: &str) -> String { format!("{indent}{}", "_".repeat(THEMATIC_BREAK_LEN)) }
+
+/// Regression cases for issue #572: a thematic break inside a list item keeps
+/// its indentation and stays in the item.
+///
+/// A break indented to an item's content column is a child block of that
+/// item. Canonicalising it at column 0 took it, and the item's remaining
+/// content, out of the list, and split the list in two. Only the break's
+/// characters are canonical; its indentation is structural.
+#[rstest]
+#[case::after_a_blank_line(include_lines!("data/issue_572_break_in_item_input.txt"), 4, "   ")]
+#[case::in_a_bullet_item(lines_vec!["- item", "", "  ***", "", "  more"], 2, "  ")]
+// A heading between the item's marker and the break is a child block of the
+// item; it must not close the item.
+#[case::after_a_child_heading(lines_vec!["- item", "", "  # heading", "", "  ***", "", "  more"], 4, "  ")]
+// A nested list inside the item closes before the break; the outer item holds it.
+#[case::after_a_nested_list(lines_vec!["- a", "  - b", "", "  ***", "", "  more"], 3, "  ")]
+// A lazy continuation line at column 0 still belongs to the item's paragraph,
+// so it does not close the item.
+#[case::after_a_lazy_line(lines_vec!["- item", "lazy continuation", "", "  ***", "", "  more"], 3, "  ")]
+// A `10.` item's content starts at column 4; relative to the item this is a
+// break, not indented code.
+// A fenced block is a child of the item too, so the item stays open across it.
+#[case::after_a_fenced_block(lines_vec!["- item", "", "  ```", "  code", "  ```", "", "  ***", "", "  more"], 6, "  ")]
+#[case::under_a_wide_marker(lines_vec!["10. item", "", "    ***", "", "    more"], 2, "    ")]
+fn breaks_issue_572_break_in_item_keeps_its_indentation(
+    #[case] input: Vec<String>,
+    #[case] break_index: usize,
+    #[case] indent: &str,
+) {
+    let once = formatted(&input);
+    let mut expected = input.clone();
+    expected[break_index] = indented_break(indent);
+    assert_eq!(once, expected);
+    assert_eq!(formatted(&once), once, "a second pass changes nothing");
+}
+
+/// Regression cases for issue #572, the neighbouring shapes: a break that is
+/// not inside an item is still canonicalised at column 0.
+///
+/// Indentation of up to three spaces outside an item changes nothing
+/// structural, and a break left of an item's content column has already left
+/// the item, so both keep the column-0 canonical form.
+#[rstest]
+#[case::top_level_indent(lines_vec!["text", "", "  ***"], 2)]
+#[case::left_of_the_content_column(lines_vec!["1. item", "", "  ***"], 2)]
+// A quote at column 0 leaves the item, so the break after it is outside.
+#[case::after_an_outdented_quote(lines_vec!["- item", "", "> quote", "", "  ***"], 4)]
+// An empty marker, or one that opens a heading or fence, starts no paragraph,
+// so the column-0 line after it is not a lazy continuation of the item.
+#[case::after_an_empty_marker(lines_vec!["- ", "para", "", "  ***"], 3)]
+#[case::after_a_heading_marker(lines_vec!["- # heading", "para", "", "  ***"], 3)]
+#[case::after_the_list_ends(lines_vec!["1. item", "", "para", "", "   ***"], 4)]
+fn breaks_issue_572_break_outside_an_item_is_emitted_at_column_zero(
+    #[case] input: Vec<String>,
+    #[case] break_index: usize,
+) {
+    let once = formatted(&input);
+    assert_eq!(once[break_index], indented_break(""));
+    assert_eq!(formatted(&once), once, "a second pass changes nothing");
+}
+
+/// Regression case for issue #572 through the CLI: `--breaks` keeps the
+/// reproduction's break inside its item.
+#[test]
+fn breaks_issue_572_cli_keeps_the_break_in_the_item() {
+    let input = include_str!("data/issue_572_break_in_item_input.txt");
+    let expected = input.replace("   ***", &indented_break("   "));
+    Command::cargo_bin("mdtablefix")
+        .expect("Failed to create cargo command for mdtablefix")
+        .arg("--breaks")
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(expected);
+}
