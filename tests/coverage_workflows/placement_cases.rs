@@ -3,7 +3,7 @@
 //!
 //! A check parametrized over this repository's own correct workflow passes
 //! whether or not it discriminates anything, so the judgement is driven
-//! directly in both directions first: the estate expression must pass, and
+//! directly in both directions first: the runner-selection expression must pass, and
 //! each way of misplacing a lane must fail.
 
 use anyhow::{Result, ensure};
@@ -34,7 +34,7 @@ const PLACEMENTS: [(&str, &str, &str, u64); 2] = [
     ),
 ];
 
-/// Scenario: the estate expression is evaluated for each kind of run.
+/// Scenario: the runner-selection expression is evaluated for each kind of run.
 ///
 /// Invariant: a push, a dispatch and a same-repository pull request select
 /// Ubicloud, and only a fork's pull request selects the hosted pool.
@@ -52,7 +52,7 @@ fn the_estate_expression_places_each_run(#[case] origin: Origin, #[case] wanted:
 /// Scenario: an expression misplaces a lane in one of the ways a careless
 /// edit would.
 ///
-/// Invariant: each is reported, and the estate expression is not.
+/// Invariant: each is reported, and the runner-selection expression is not.
 #[rstest]
 #[case::estate(ESTATE, 0)]
 #[case::always_hosted("ubuntu-latest", 3)]
@@ -116,7 +116,7 @@ fn a_ceiling_is_read_only_when_it_is_a_number(
 /// Scenario: the repository's own workflows are read.
 ///
 /// Invariant: exactly the inventoried jobs can land on Ubicloud, each states
-/// its ceiling, and each selects its runner by the estate expression.
+/// its ceiling, and each selects its runner by the runner-selection expression.
 #[test]
 fn every_ubicloud_lane_is_placed_by_the_estate_expression_and_states_a_ceiling() -> Result<()> {
     let all = reader::workflows()?;
@@ -147,7 +147,7 @@ fn every_ubicloud_lane_is_placed_by_the_estate_expression_and_states_a_ceiling()
 /// than as a string.
 ///
 /// Invariant: it is inventoried and judged, and the judgement rejects it, so
-/// no shape of `runs-on` places a lane outside the estate expression.
+/// no shape of `runs-on` places a lane outside the runner-selection expression.
 #[rstest]
 #[case::sequence("[ubicloud-standard-2]")]
 #[case::mapping("{ group: ubicloud-standard-2 }")]

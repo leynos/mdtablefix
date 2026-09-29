@@ -77,7 +77,7 @@ pub fn placement_faults(runs_on: &str, label: &str) -> Vec<String> {
 ///
 /// A string is itself. A sequence or a mapping (`[ubicloud-standard-2]`,
 /// `{ group: ... }`) is rendered as YAML, so a label hidden in one still reads
-/// as Ubicloud, and the judgement then rejects it: only the estate expression
+/// as Ubicloud, and the judgement then rejects it: only the runner-selection expression
 /// places a lane.
 fn runs_on_text(job: &Mapping) -> Option<String> {
     match reader::get(job, "runs-on")? {

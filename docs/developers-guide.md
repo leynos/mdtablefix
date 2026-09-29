@@ -1770,7 +1770,7 @@ by comparison with reachability computed on the adjacency matrix. Run it with
 
 `ci.yml`'s `build-test` and `coverage-main.yml`'s `coverage-upload`, main's
 only cache writer, run on `ubicloud-standard-4`. `runs-on` selects it with the
-estate expression:
+runner-selection expression:
 
 ```yaml
 runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-4' }}
