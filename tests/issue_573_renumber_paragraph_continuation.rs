@@ -22,6 +22,9 @@ mod common;
 #[rstest]
 #[case::wrapped_sentence(include_lines!("data/issue_573_paragraph_continuation_input.txt"))]
 #[case::inside_an_item(lines_vec!["1. First", "   continues here and ends with section", "   8. Work item text"])]
+// A bullet item ends the list above it, but a numbered line directly below is
+// still lazy paragraph text, not a new list.
+#[case::below_a_bullet_item(lines_vec!["1. a", "- bullet", "3. c"])]
 #[case::after_an_item_line(lines_vec!["1. a", "   2. b"])]
 // Paragraph text indented four or more columns inside an item is still text.
 #[case::deep_in_an_item(lines_vec!["  1. Snapshots store", "     wrapped text", "     12. Evidence"])]

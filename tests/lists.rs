@@ -362,9 +362,12 @@ fn renumber_issue_563_block_at_marker_column_ends_the_list(#[case] input: Vec<St
         "   1. Inner again", "2. Outer again",
     ]
 )]
+// The bullet ends the list without a blank line above it, so the list after
+// the blank line restarts. (A `3. c` directly below the bullet is not a list
+// item at all: it lazily continues the bullet's paragraph, see #573.)
 #[case::bullet_interrupts_without_blank(
-    lines_vec!["1. a", "2. b", "- bullet", "3. c"],
-    lines_vec!["1. a", "2. b", "- bullet", "1. c"]
+    lines_vec!["1. a", "2. b", "- bullet", "", "3. c"],
+    lines_vec!["1. a", "2. b", "- bullet", "", "1. c"]
 )]
 #[case::lazy_paragraph_continues(
     lines_vec!["1. a", "[lazy](u) continuation", "3. b"],
