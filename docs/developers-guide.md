@@ -1673,16 +1673,24 @@ run the lint target and the test suite carry a condition. A step keeps its
 
 ### Stub scripts in subprocess tests
 
-A test that writes a stub script, such as the fake prover-tools runner in
-`tests/verus_harness.rs` or the ripgrep stubs in `tests/static_regex_lint.rs`,
-runs it through its interpreter (`bash <path>`, `sh <path>`) and never executes
-the file directly. Tests in one binary run as threads of one process. A thread
-that forks while another thread's stub is still open for writing leaves the
-child holding a write descriptor until it execs, and executing the stub in that
-window fails with `ETXTBSY` (#586). The interpreter only reads the file, so the
-race cannot arise.
-`verus_harness_issue_586_runner_survives_an_open_write_descriptor` holds the
-stub open while the target runs, so a direct execution fails deterministically.
+A test that writes a stub script runs it through its interpreter (`bash <path>`,
+`sh <path>`) and never executes the file directly. Tests in one binary run as
+threads of one process. A thread that forks while another thread's stub is
+still open for writing leaves the child holding a write descriptor until it
+execs, and executing the stub in that window fails with `ETXTBSY` (#586). The
+interpreter only reads the file, so the race cannot arise.
+
+The helpers live in `tests/support/`. `fake_prover_tools.rs` writes the fake
+prover-tools runner the Verus harness drives `make` with, and single-quotes its
+path, because Make hands the value to a shell. `script_stubs.rs` writes ripgrep
+stubs and names each as `./<name>` relative to the guard's working directory,
+because the static-regex guard splits `RG` on whitespace.
+`static_regex_guard.rs` stages fixtures for that guard and runs it with the
+scan directory as its working directory. The regression tests
+`verus_harness_issue_586_runner_survives_an_open_write_descriptor` and
+`static_regex_issue_586_stub_survives_an_open_write_descriptor` hold a stub
+open for writing while it runs, so direct execution fails them
+deterministically.
 
 ## Coverage publication belongs to `main`
 

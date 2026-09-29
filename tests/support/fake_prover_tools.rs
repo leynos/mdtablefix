@@ -64,8 +64,11 @@ fi
 /// forks while the file is open for writing leaves a child holding a write
 /// descriptor until it execs. Executing the file directly in that window
 /// fails with `ETXTBSY` (#586), so the harness runs `bash` and lets it read
-/// the script instead of executing a file it has just written.
-fn runner_command(runner: &FakeProverTools) -> String { format!("bash {}", runner.path) }
+/// the script instead of executing a file it has just written. The path is
+/// single-quoted, because Make hands the value to a shell.
+fn runner_command(runner: &FakeProverTools) -> String {
+    format!("bash '{}'", runner.path.as_str().replace('\'', r"'\''"))
+}
 
 /// Builds a `make` invocation of `target` that uses the fake runner.
 pub fn make_command(target: &str, runner: &FakeProverTools) -> Command {

@@ -11,7 +11,12 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 /// The stub is written by this process; a test thread that forks while it is
 /// open for writing leaves a child holding a write descriptor until it
 /// execs, and executing the file in that window fails with `ETXTBSY` (#586).
-pub fn stub_command(stub: &Utf8Path) -> String { format!("sh {stub}") }
+/// The stub is named relative to the guard's working directory, the scan
+/// directory it lives in, because the guard splits `RG` on whitespace and an
+/// absolute temporary path may contain some.
+pub fn stub_command(stub: &Utf8Path) -> String {
+    format!("sh ./{}", stub.file_name().unwrap_or(stub.as_str()))
+}
 
 /// Write `script` to `<dir>/<name>`, mark it executable, and return its path.
 ///
