@@ -16,6 +16,10 @@
   Re-running `make fmt` after upgrading may rejoin lines that 0.6.0 split at
   these seams; the rendered text of such a file becomes the source's again.
   ([#561](https://github.com/leynos/mdtablefix/issues/561))
+- Fixed: `--wrap` keeps both lines of a Setext heading. It joined a `===`
+  underline onto its text as one paragraph, so `Arc Gambit` over `==========`
+  became `Arc Gambit ==========`. The `--breaks` half was fixed earlier on main.
+  ([#562](https://github.com/leynos/mdtablefix/issues/562))
 - Fixed: `--breaks` keeps the indentation of a thematic break indented to a
   list item's content column. It had written a list item's break at column 0
   since `--breaks` was introduced in #57, which took the break and the rest of
