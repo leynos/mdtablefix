@@ -97,25 +97,46 @@ fn is_bullet_with_content(text: &str) -> bool {
 
 /// Reports whether text opens an HTML block of type 1 to 6.
 fn starts_html_block(text: &str) -> bool {
-    let Some(rest) = text.strip_prefix('<') else {
-        return false;
+    text.strip_prefix('<')
+        .is_some_and(|rest| starts_declaration(rest) || starts_tag_block(rest))
+}
+
+/// Reports whether text after `<` opens a comment, processing instruction,
+/// declaration or CDATA section (types 2 to 5).
+fn starts_declaration(rest: &str) -> bool {
+    let is_marked = ["!--", "?", "![CDATA["]
+        .iter()
+        .any(|marker| rest.starts_with(marker));
+    let is_declaration = rest
+        .strip_prefix('!')
+        .is_some_and(|name| name.starts_with(|ch: char| ch.is_ascii_alphabetic()));
+    is_marked || is_declaration
+}
+
+/// Reports whether text after `<` opens a raw-text or block-level tag (types 1 and 6).
+///
+/// A closing tag starts a block only for the block-level names; the raw-text
+/// names start one only when they open.
+fn starts_tag_block(rest: &str) -> bool {
+    let (is_closing, tag) = match rest.strip_prefix('/') {
+        Some(tag) => (true, tag),
+        None => (false, rest),
     };
-    if rest.starts_with("!--") || rest.starts_with('?') || rest.starts_with("![CDATA[") {
-        return true;
-    }
-    if let Some(declaration) = rest.strip_prefix('!') {
-        return declaration.starts_with(|ch: char| ch.is_ascii_alphabetic());
-    }
-    let name_part = rest.strip_prefix('/').unwrap_or(rest);
-    let name_end = name_part
+    let name_end = tag
         .find(|ch: char| !ch.is_ascii_alphanumeric())
-        .unwrap_or(name_part.len());
-    let name = name_part[..name_end].to_ascii_lowercase();
-    let after = &name_part[name_end..];
-    let ends_name =
-        after.is_empty() || after.starts_with([' ', '\t', '>']) || after.starts_with("/>");
-    let is_raw = !rest.starts_with('/') && RAW_TAGS.contains(&name.as_str());
-    ends_name && (is_raw || BLOCK_TAGS.contains(&name.as_str()))
+        .unwrap_or(tag.len());
+    let name = tag[..name_end].to_ascii_lowercase();
+    ends_tag_name(&tag[name_end..]) && is_block_name(&name, is_closing)
+}
+
+/// Reports whether the text after a tag name ends the name.
+fn ends_tag_name(after: &str) -> bool {
+    after.is_empty() || after.starts_with([' ', '\t', '>']) || after.starts_with("/>")
+}
+
+/// Reports whether a tag name starts an HTML block, given whether the tag closes.
+fn is_block_name(name: &str, is_closing: bool) -> bool {
+    BLOCK_TAGS.contains(&name) || (!is_closing && RAW_TAGS.contains(&name))
 }
 
 #[cfg(test)]
