@@ -3901,12 +3901,12 @@ is the durable record, and EP-M3 reconciles this log into it.
   reading and writing arms are unreachable rather than merely unentered; what
   it leaves to review is that the `&Dir` is still held. The alternatives were
   to split `analyse` into a read-only half and a write half (a larger change to
-  #464's composition than this milestone is for) or to build the listing payload
-  in `src/main.rs` (which would put the meaning of listing in two places).
-  Cost: one plan sentence softened from "by type" to "by construction, with the
-  capability held but unused", recorded in Table 1 and in the composition
-  section rather than left as a claim a reader would have to falsify.
-  Date/Author: 2026-09-12, implementation.
+  #464's composition than this milestone is for) or to build the listing
+  payload in `src/main.rs` (which would put the meaning of listing in two
+  places). Cost: one plan sentence softened from "by type" to "by construction,
+  with the capability held but unused", recorded in Table 1 and in the
+  composition section rather than left as a claim a reader would have to
+  falsify. Date/Author: 2026-09-12, implementation.
 
 - Decision: `git_inputs::resolve` takes `Mode` and returns
   `GitSelection { inputs, guard }` rather than returning `Inputs` alone.
