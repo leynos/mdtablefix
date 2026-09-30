@@ -27,8 +27,9 @@ const ESTATE: &str =
 ///
 /// The inventory is exact, so a new Ubicloud lane without a ceiling, or a class
 /// or ceiling changed, fails here until the change is reviewed.
-const PLACEMENTS: [(&str, &str, &str, u64); 2] = [
+const PLACEMENTS: [(&str, &str, &str, u64); 3] = [
     ("ci.yml", "build-test", "ubicloud-standard-4", 15),
+    ("ci.yml", "binstall-packaging", "ubicloud-standard-2", 10),
     (
         "coverage-main.yml",
         "coverage-upload",
@@ -135,13 +136,21 @@ fn every_ubicloud_lane_is_placed_by_the_estate_expression_and_states_a_ceiling()
         .collect();
     ensure!(found == expected, "found {found:?}, expected {expected:?}");
     let expressions = placement::placement_expressions(&all);
-    ensure!(
-        expressions.len() == PLACEMENTS.len(),
-        "read {expressions:?}"
-    );
-    for ((lane, runs_on), (_, _, label, _)) in expressions.iter().zip(PLACEMENTS) {
-        let faults = placement::placement_faults(runs_on, label);
+    for (lane, runs_on) in &expressions {
+        let label = PLACEMENTS
+            .iter()
+            .find(|(workflow, job, ..)| format!("{workflow}: {job}") == *lane)
+            .map(|(_, _, label, _)| *label);
+        ensure!(label.is_some(), "{lane} is not in the inventory");
+        let faults = placement::placement_faults(runs_on, label.unwrap_or_default());
         ensure!(faults.is_empty(), "{lane} is misplaced: {faults:?}");
+    }
+    let lanes: Vec<&String> = expressions.iter().map(|(lane, _)| lane).collect();
+    for (workflow, job, ..) in PLACEMENTS {
+        ensure!(
+            lanes.contains(&&format!("{workflow}: {job}")),
+            "{workflow}: {job} names no Ubicloud runner"
+        );
     }
     Ok(())
 }
@@ -180,4 +189,101 @@ fn a_non_scalar_ubicloud_runner_is_inventoried_and_rejected(#[case] runs_on: &st
 fn a_lane_on_another_runner_class_is_reported(#[case] label: &str, #[case] expected: usize) {
     let four = ESTATE.replace("standard-2", "standard-4");
     assert_eq!(placement::placement_faults(&four, label).len(), expected);
+}
+
+/// A job whose `runs-on` reads a matrix value, with one row placed by the given
+/// runner value and the others hosted or native.
+fn matrix_job(reference: &str, ubicloud_row: &str) -> String {
+    format!(
+        concat!(
+            "on: push\njobs:\n  lane:\n    runs-on: {reference}\n",
+            "    strategy:\n      matrix:\n        include:\n",
+            "          - runner: {row}\n            os: linux\n",
+            "          - runner: macos-15\n            os: macos\n",
+        ),
+        reference = reference,
+        row = ubicloud_row,
+    )
+}
+
+/// Scenario: a matrix job places its Linux row on Ubicloud through a runner
+/// value, and reads that value as `matrix.runner` or `matrix['runner']`.
+///
+/// Invariant: the row is inventoried and judged on its own expression, the
+/// hosted macOS row is left alone, and the judgement passes the runner-selection
+/// expression and rejects a literal Ubicloud label, an inverted pair and another
+/// class, in both access forms.
+#[rstest]
+#[case::dotted_estate("${{ matrix.runner }}", ESTATE, 0)]
+#[case::indexed_estate("${{ matrix['runner'] }}", ESTATE, 0)]
+#[case::literal_label("${{ matrix.runner }}", "ubicloud-standard-2", 3)]
+#[case::inverted(
+    "${{ matrix.runner }}",
+    "${{ github.event.pull_request.head.repo.fork && 'ubicloud-standard-2' || 'ubuntu-latest' }}",
+    3
+)]
+#[case::another_class(
+    "${{ matrix.runner }}",
+    "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-4' }}",
+    2
+)]
+fn a_matrix_row_is_judged_on_its_own_expression(
+    #[case] reference: &str,
+    #[case] row: &str,
+    #[case] expected: usize,
+) -> Result<()> {
+    let source = matrix_job(reference, &format!("\"{row}\""));
+    let all: reader::Workflows = [("x.yml".to_owned(), parse(&source)?)].into();
+    ensure!(placement::placed_jobs(&all).len() == 1, "not inventoried");
+    let expressions = placement::placement_expressions(&all);
+    ensure!(
+        expressions.len() == 1,
+        "expected the one Ubicloud row: {expressions:?}"
+    );
+    let faults = placement::placement_faults(&expressions[0].1, "ubicloud-standard-2");
+    ensure!(
+        faults.len() == expected,
+        "expected {expected}, saw {faults:?}"
+    );
+    Ok(())
+}
+
+/// Scenario: a matrix job with only hosted and native rows.
+///
+/// Invariant: it is not inventoried, so a matrix that never names Ubicloud
+/// needs no ceiling.
+#[test]
+fn a_matrix_of_hosted_rows_is_not_inventoried() -> Result<()> {
+    let source = matrix_job("${{ matrix.runner }}", "ubuntu-latest");
+    let all: reader::Workflows = [("x.yml".to_owned(), parse(&source)?)].into();
+    ensure!(
+        placement::placed_jobs(&all).is_empty(),
+        "a hosted matrix was inventoried"
+    );
+    Ok(())
+}
+
+/// Scenario: the matrix names Ubicloud under a key the `runs-on` does not read.
+///
+/// Invariant: the job is inventoried and its `runs-on` text is rejected, since
+/// no runner-selection expression places it.
+#[test]
+fn a_matrix_naming_ubicloud_elsewhere_is_inventoried_and_rejected() -> Result<()> {
+    let source = concat!(
+        "on: push\njobs:\n  lane:\n    runs-on: ${{ matrix.os }}\n",
+        "    strategy:\n      matrix:\n        include:\n",
+        "          - os: ubuntu-latest\n            runner: ubicloud-standard-2\n",
+    );
+    let all: reader::Workflows = [("x.yml".to_owned(), parse(source)?)].into();
+    ensure!(placement::placed_jobs(&all).len() == 1, "not inventoried");
+    let expressions = placement::placement_expressions(&all);
+    ensure!(
+        expressions.len() == 1,
+        "expected one entry: {expressions:?}"
+    );
+    ensure!(
+        !placement::placement_faults(&expressions[0].1, "ubicloud-standard-2").is_empty(),
+        "not rejected: {expressions:?}"
+    );
+    Ok(())
 }
