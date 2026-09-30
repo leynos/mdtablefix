@@ -1717,54 +1717,47 @@ Three details of the publisher are load-bearing:
   the running one and replaces any run still pending rather than queueing
   behind it, so the newest baseline wins. The pull-request cancellation above
   deliberately does not reach this workflow.
-- **Only the upload step holds the token.** The secret sits in that step's
-  `env` and nowhere wider, so no other step, and no step added later, receives
-  it by inheritance. A job calling a reusable workflow has no steps for that
-  rule to see, so the contract also refuses one that forwards the token through
-  `with:`, a named `secrets:` entry or `secrets: inherit`. An upload through
-  the CLI is recognised as the shell reads it, across a backslash-newline
-  continuation.
+- **The token is bound in no `env`, and only the upload receives it.** A
+  `Check CodeScene token` step (id `codescene-token`) runs exactly
+  `echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"`,
+  with no `if:` and no `env`; GitHub evaluates the expression before the shell
+  runs, so the shell receives only `true` or `false`. The upload runs only when
+  that output is `true` and the ref is `main`, and takes the secret directly as
+  its `access-token` input, because the upload action is composite and hands
+  its step's `env` to the nested steps it runs.
 
 ### The coverage publication contract
 
-`tests/coverage_workflows.rs` holds all of this, with its readers and rules in
-`tests/coverage_workflows/`. Every pull-request clause runs over the closure of
-workflows a pull request can reach: the ones it triggers, plus every local
-workflow they call through a job-level `uses:`, followed transitively. A
-workflow declaring only `workflow_call` names no pull request, yet a
-pull-request job can call it with `secrets: inherit`, so enumerating triggers
-alone would leave it outside every clause. Within that closure the contract
-refuses the token by any reference, a secret reached by a computed name
-(`secrets[...]`) or the whole context (`toJSON(secrets)`), a blanket
-`secrets: inherit`, the upload action, a direct `cs-coverage` call, the
-`codescene.io` host, and a coverage step that does not ratchet or that
-publishes its report. A local call to a workflow file that is not there is
-reported too, since the closure cannot follow it.
+`make test-workflow-contracts` holds all of this by running
+`cv005-contracts check`, the shared contract library in `leynos/shared-actions`
+(`packages/cv005-contracts`), from a full commit named by `CV005_CONTRACTS_REF`
+in the Makefile; CI runs it in a "Check the CV-005 contracts" step. A fix to
+the rules is therefore a pin bump. The target needs `uv`, which fetches the
+Python 3.13 the library runs under. The repository's only parameter is
+`repository` in `.github/cv005.toml`. The library's own suite proves each rule
+refuses the shape it exists to refuse, so this repository keeps no copy of the
+readers or the refusal cases.
 
-The readers err towards seeing more: both extensions in either case, the `on`
-key as a string or as the boolean YAML 1.1 makes of it, a trigger written as a
-scalar, a sequence or a mapping, and a local call written with `./`, with
-GitHub's documented `$/`, or bare. A local-shaped call carrying an `@ref` or
-naming a subdirectory resolves to no file the contract can read, so it is
-refused rather than treated as a call into another repository, where whatever
-it ran would escape the closure. Every workflow is parsed through one reader
-that refuses a mapping declaring a key twice, since a parser keeping the last
-duplicate would let a lane say one thing in the file and another in the parse.
-The publisher's upload condition is split on `&&` and refused outright if it
-contains an unquoted `||`, because `&&` binds tighter and a leading disjunct
-would upload a dispatch from any branch while the ref check still appeared as a
-conjunct.
+Every pull-request clause runs over the closure of workflows a pull request can
+reach: the ones it triggers, plus every local workflow they call through a
+job-level `uses:`, followed transitively. A workflow declaring only
+`workflow_call` names no pull request, yet a pull-request job can call it with
+`secrets: inherit`, so enumerating triggers alone would leave it outside every
+clause. Within that closure the library refuses the token by any reference, a
+secret reached by a computed name (`secrets[...]`) or the whole context
+(`toJSON(secrets)`), a blanket `secrets: inherit`, the upload action, a direct
+`cs-coverage` call, the `codescene.io` host, and a coverage step that does not
+ratchet or that publishes its report. The publisher's upload condition is split
+on `&&` and refused outright if it contains an unquoted `||`, because `&&`
+binds tighter and a leading disjunct would upload a dispatch from any branch
+while the ref check still appeared as a conjunct. Workflows are read strictly:
+a duplicate key, or a workflow declaring both a quoted and an unquoted `on`
+key, is refused rather than silently resolved, and a reading failure exits 2
+rather than passing.
 
-The publisher's upload must also read the file and format its coverage step
-writes, and pass the token its step holds as `access-token`; either mistake
-leaves every per-step clause passing while CodeScene receives nothing useful.
-
-The rules are driven directly against complying and breaching fixtures, because
-every real workflow here complies and a rule exercised only over correct
-sources passes whether or not it detects anything. The closure is also checked
-against generated call graphs, with branches, cycles and every call spelling,
-by comparison with reachability computed on the adjacency matrix. Run it with
-`make test`.
+The uploader's own pin and its retired inputs stay in
+`tests/codescene_uploader_contract.rs`: the library holds that the coverage
+actions share one commit, not which commit is approved.
 
 ## The build standard
 
@@ -1850,7 +1843,7 @@ fork's pull request restores a hosted cache that main no longer refreshes; fork
 pull requests are rare here, and a second hosted writer would pay double on
 every main push.
 
-`tests/coverage_workflows/placement_cases.rs` holds this to the files. It
+`tests/runner_placement/placement_cases.rs` holds this to the files. It
 evaluates the expression for a push or dispatch, a same-repository pull request
 and a fork, rejects a literal label, inverted arms, another label and another
 condition, and asserts an exact inventory of the jobs that can land on Ubicloud
