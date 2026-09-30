@@ -29,7 +29,7 @@ const ESTATE: &str =
 /// or ceiling changed, fails here until the change is reviewed.
 const PLACEMENTS: [(&str, &str, &str, u64); 3] = [
     ("ci.yml", "build-test", "ubicloud-standard-4", 15),
-    ("ci.yml", "binstall-packaging", "ubicloud-standard-2", 10),
+    ("ci.yml", "binstall-packaging", "ubicloud-standard-2", 5),
     (
         "coverage-main.yml",
         "coverage-upload",
