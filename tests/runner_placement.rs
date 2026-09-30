@@ -11,6 +11,8 @@
 //! The CV-005 `CodeScene` contract is not here: `make test-workflow-contracts`
 //! runs it from the shared `cv005-contracts` library.
 
+#[path = "runner_placement/matrix.rs"]
+mod matrix;
 #[path = "runner_placement/placement.rs"]
 mod placement;
 #[path = "runner_placement/placement_cases.rs"]

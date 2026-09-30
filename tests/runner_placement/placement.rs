@@ -9,7 +9,7 @@
 
 use serde_yaml::{Mapping, Value};
 
-use super::reader;
+use super::{matrix, reader};
 
 /// The hosted runner a fork's pull request falls back to.
 pub const HOSTED_LABEL: &str = "ubuntu-latest";
@@ -73,102 +73,26 @@ pub fn placement_faults(runs_on: &str, label: &str) -> Vec<String> {
     .collect()
 }
 
-/// Returns a job's `runs-on` as text, whatever shape it is written in.
-///
-/// A string is itself. A sequence or a mapping (`[ubicloud-standard-2]`,
-/// `{ group: ... }`) is rendered as YAML, so a label hidden in one still reads
-/// as Ubicloud, and the judgement then rejects it: only the runner-selection expression
-/// places a lane.
-fn runs_on_text(job: &Mapping) -> Option<String> {
-    match reader::get(job, "runs-on")? {
-        Value::String(text) => Some(text.clone()),
-        other => serde_yaml::to_string(other).ok(),
-    }
-}
-
-/// Returns the key a `runs-on` reads from the matrix, for `${{ matrix.key }}`
-/// and `${{ matrix['key'] }}`, or `None` when it reads something else.
-fn matrix_key(runs_on: &str) -> Option<String> {
-    let body = runs_on
-        .trim()
-        .strip_prefix("${{")?
-        .strip_suffix("}}")?
-        .trim();
-    let rest = body.strip_prefix("matrix")?;
-    let key = match rest.strip_prefix('.') {
-        Some(dotted) => dotted,
-        None => rest.strip_prefix("['")?.strip_suffix("']")?,
-    };
-    let is_name = !key.is_empty()
-        && key
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-    is_name.then(|| key.to_owned())
-}
-
-/// Renders a matrix value as text: a string is itself, anything else is YAML.
-fn value_text(value: &Value) -> String {
-    match value {
-        Value::String(text) => text.clone(),
-        other => serde_yaml::to_string(other).unwrap_or_default(),
-    }
-}
-
-/// Returns every value a job's matrix gives `key`, from its `include` rows and
-/// from a top-level list under that key.
-fn matrix_values(job: &Mapping, key: &str) -> Vec<String> {
-    let Some(matrix) = reader::get(job, "strategy")
-        .and_then(Value::as_mapping)
-        .and_then(|strategy| reader::get(strategy, "matrix"))
-        .and_then(Value::as_mapping)
-    else {
-        return Vec::new();
-    };
-    let rows = reader::get(matrix, "include")
-        .and_then(Value::as_sequence)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_mapping)
-        .filter_map(|row| reader::get(row, key));
-    let listed = reader::get(matrix, key)
-        .and_then(Value::as_sequence)
-        .into_iter()
-        .flatten();
-    rows.chain(listed).map(value_text).collect()
-}
-
 /// Returns the runner text of each place a job can land on Ubicloud, or an
 /// empty list when it cannot.
 ///
-/// A `runs-on` that names Ubicloud is itself. One that reads a matrix value
-/// (`${{ matrix.runner }}`) stands for each of the matrix's values that names
-/// Ubicloud, so a placement taken from a matrix row is judged on the row's own
-/// runner-selection expression, and the hosted rows are left alone. When the
-/// matrix names Ubicloud somewhere the `runs-on` does not read, the `runs-on`
-/// text itself is returned, and the judgement rejects it: only a runner-selection
-/// expression places a lane.
+/// A `runs-on` that reads the matrix is judged through its rows (see
+/// [`matrix::matrix_placements`]); any other `runs-on` that names Ubicloud,
+/// whatever its shape, stands for itself, and the judgement rejects it unless
+/// it is the runner-selection expression.
 fn runner_texts(job: &Mapping) -> Vec<String> {
-    let Some(text) = runs_on_text(job) else {
+    let Some(runs_on) = reader::get(job, "runs-on") else {
         return Vec::new();
     };
-    let Some(key) = matrix_key(&text) else {
-        return if text.contains("ubicloud") {
-            vec![text]
-        } else {
-            Vec::new()
-        };
-    };
-    let placed: Vec<String> = matrix_values(job, &key)
-        .into_iter()
-        .filter(|value| value.contains("ubicloud"))
-        .collect();
-    let strategy_names_ubicloud = reader::get(job, "strategy")
-        .map(value_text)
-        .is_some_and(|strategy| strategy.contains("ubicloud"));
-    match (placed.is_empty(), strategy_names_ubicloud) {
-        (false, _) => placed,
-        (true, true) => vec![text],
-        (true, false) => Vec::new(),
+    let through_matrix = matrix::matrix_placements(job, runs_on);
+    if !through_matrix.is_empty() {
+        return through_matrix;
+    }
+    let text = matrix::value_text(runs_on);
+    if text.contains("ubicloud") {
+        vec![text]
+    } else {
+        Vec::new()
     }
 }
 

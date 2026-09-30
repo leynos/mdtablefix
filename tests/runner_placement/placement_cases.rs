@@ -216,6 +216,8 @@ fn matrix_job(reference: &str, ubicloud_row: &str) -> String {
 #[rstest]
 #[case::dotted_estate("${{ matrix.runner }}", ESTATE, 0)]
 #[case::indexed_estate("${{ matrix['runner'] }}", ESTATE, 0)]
+#[case::listed_estate("[\"${{ matrix.runner }}\"]", ESTATE, 0)]
+#[case::listed_literal("[\"${{ matrix.runner }}\"]", "ubicloud-standard-2", 3)]
 #[case::literal_label("${{ matrix.runner }}", "ubicloud-standard-2", 3)]
 #[case::inverted(
     "${{ matrix.runner }}",
