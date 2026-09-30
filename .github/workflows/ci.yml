@@ -36,6 +36,8 @@ jobs:
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@6dea5677a84fec60ca51b07202570e3af12ffdb4
       - name: Install ripgrep
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: cargo binstall --no-confirm --locked ripgrep@15.2.0
       - name: Install mdtablefix
         # `make check-fmt` runs `mdtablefix --check --git`; 0.6.0 is the
