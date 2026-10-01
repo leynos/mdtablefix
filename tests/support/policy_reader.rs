@@ -10,6 +10,11 @@ use toml::{Table, Value};
 
 use crate::make_reader::{RecipeCommand, make_assignment};
 
+#[path = "leading_assignments.rs"]
+mod leading_assignments;
+
+use leading_assignments::LeadingAssignments;
+
 /// Return the `path` field of every `disallowed-methods` entry in `clippy.toml`.
 pub fn disallowed_method_paths(configuration: &str) -> Result<Vec<String>> {
     let configuration: Table = configuration
@@ -150,7 +155,7 @@ fn value_names_cargo(value: &str) -> bool {
 /// and `clippy` must be the subcommand rather than a later argument. A leading
 /// `+toolchain` override is skipped, since Cargo accepts one there.
 pub fn is_cargo_clippy_invocation(makefile: &str, command: &str) -> bool {
-    let mut words = command.split_whitespace();
+    let mut words = LeadingAssignments(command).skipped().split_whitespace();
     let Some(executable) = words.next() else {
         return false;
     };

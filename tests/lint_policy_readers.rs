@@ -121,7 +121,9 @@ fn reads_only_the_targets_own_uncommented_commands() -> Result<()> {
 /// Invariant: only a command whose first word names Cargo and whose subcommand
 /// is `clippy` counts. A command that merely mentions Clippy carries every flag
 /// and manifest path the contract looks for while linting nothing, so a
-/// substring search would accept a gate that has been switched off.
+/// substring search would accept a gate that has been switched off. Leading
+/// `NAME=value` assignments, which a recipe uses to compose `RUSTFLAGS`, are
+/// skipped; the word after them is judged the same way.
 #[rstest]
 #[case::variable_reference("$(CARGO) clippy $(CLIPPY_FLAGS)", true)]
 #[case::bare_cargo("cargo clippy --all-targets", true)]
@@ -133,6 +135,15 @@ fn reads_only_the_targets_own_uncommented_commands() -> Result<()> {
 #[case::another_subcommand("$(CARGO) build --all-targets", false)]
 #[case::unrelated_executable("$(MDLINT) clippy", false)]
 #[case::unknown_variable("$(NOT_DEFINED) clippy", false)]
+#[case::env_assignment_quoted(
+    "RUSTFLAGS=\"$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(STD)\" $(CARGO) clippy $(CLIPPY_FLAGS)",
+    true
+)]
+#[case::env_assignment_bare("RUSTFLAGS=-Dwarnings cargo clippy --all-targets", true)]
+#[case::two_env_assignments("A=1 B='x y' $(CARGO) clippy", true)]
+#[case::env_assignment_then_echo("RUSTFLAGS=\"-D warnings\" echo $(CARGO) clippy", false)]
+#[case::env_assignment_only("RUSTFLAGS=\"-D warnings\"", false)]
+#[case::env_assignment_unterminated("RUSTFLAGS=\"-D warnings $(CARGO) clippy", false)]
 #[case::empty("", false)]
 fn recognizes_only_executable_clippy_invocations(#[case] command: &str, #[case] expected: bool) {
     let makefile = concat!(
