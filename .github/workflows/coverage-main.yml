@@ -58,7 +58,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@8a83824b29dfe8f861714b544dc85fb925ed010c
+        uses: leynos/shared-actions/.github/actions/setup-rust@c4ed5ffaf0640b1907d5359a87fd1677034eec27
         with:
           install-mold: 'true'
       - name: Install ripgrep
@@ -66,6 +66,8 @@ jobs:
         # without it, so the instrumented run needs the same tool the merge
         # gate installs and at the same pin: a baseline measured with a
         # different ripgrep is not comparable with what the ratchet checks.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: cargo binstall --no-confirm --locked ripgrep@15.2.0
       - name: Test and Measure Coverage
         # The same action, format and output path as the pull-request lane, and
