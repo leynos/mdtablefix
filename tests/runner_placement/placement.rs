@@ -76,17 +76,17 @@ pub fn placement_faults(runs_on: &str, label: &str) -> Vec<String> {
 /// Returns the runner text of each place a job can land on Ubicloud, or an
 /// empty list when it cannot.
 ///
-/// A `runs-on` that reads the matrix is judged through its rows (see
-/// [`matrix::matrix_placements`]); any other `runs-on` that names Ubicloud,
+/// A `runs-on` that reads the matrix is judged through its rows alone (see
+/// [`matrix::matrix_placements`]), so a matrix property whose name mentions
+/// Ubicloud places nothing by its name; any other `runs-on` that names Ubicloud,
 /// whatever its shape, stands for itself, and the judgement rejects it unless
 /// it is the runner-selection expression.
 fn runner_texts(job: &Mapping) -> Vec<String> {
     let Some(runs_on) = reader::get(job, "runs-on") else {
         return Vec::new();
     };
-    let through_matrix = matrix::matrix_placements(job, runs_on);
-    if !through_matrix.is_empty() {
-        return through_matrix;
+    if matrix::reads_matrix(runs_on) {
+        return matrix::matrix_placements(job, runs_on);
     }
     let text = matrix::value_text(runs_on);
     if text.contains("ubicloud") {

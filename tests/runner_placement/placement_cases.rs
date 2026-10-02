@@ -289,3 +289,78 @@ fn a_matrix_naming_ubicloud_elsewhere_is_inventoried_and_rejected() -> Result<()
     );
     Ok(())
 }
+
+/// Scenario: a matrix gives the runner as a top-level list instead of through
+/// `include` rows.
+///
+/// Invariant: each Ubicloud entry of the list is inventoried and judged on its
+/// own expression, hosted entries are left alone, and a literal Ubicloud entry
+/// is rejected.
+#[rstest]
+#[case::estate_entry(ESTATE, 0)]
+#[case::literal_entry("ubicloud-standard-2", 3)]
+fn a_top_level_matrix_list_is_judged_entry_by_entry(
+    #[case] entry: &str,
+    #[case] expected: usize,
+) -> Result<()> {
+    let source = format!(
+        concat!(
+            "on: push\njobs:\n  lane:\n    runs-on: ${{{{ matrix.runner }}}}\n",
+            "    strategy:\n      matrix:\n        runner:\n",
+            "          - \"{entry}\"\n          - macos-15\n",
+        ),
+        entry = entry,
+    );
+    let all: reader::Workflows = [("x.yml".to_owned(), parse(&source)?)].into();
+    let expressions = placement::placement_expressions(&all);
+    ensure!(
+        expressions.len() == 1,
+        "expected the one Ubicloud entry: {expressions:?}"
+    );
+    let faults = placement::placement_faults(&expressions[0].1, "ubicloud-standard-2");
+    ensure!(
+        faults.len() == expected,
+        "expected {expected}, saw {faults:?}"
+    );
+    Ok(())
+}
+
+/// Scenario: the `runs-on` reads a matrix property in a different case from
+/// the one the row defines, which GitHub resolves.
+///
+/// Invariant: the row is still found and judged, so a valid runner-selection
+/// expression is not rejected for the spelling of its property.
+#[test]
+fn a_matrix_property_is_matched_without_regard_to_case() -> Result<()> {
+    let source = matrix_job("${{ matrix.Runner }}", &format!("\"{ESTATE}\""));
+    let all: reader::Workflows = [("x.yml".to_owned(), parse(&source)?)].into();
+    let expressions = placement::placement_expressions(&all);
+    ensure!(
+        expressions.len() == 1,
+        "the row was not found: {expressions:?}"
+    );
+    ensure!(
+        placement::placement_faults(&expressions[0].1, "ubicloud-standard-2").is_empty(),
+        "a valid expression was rejected"
+    );
+    Ok(())
+}
+
+/// Scenario: a matrix property is *named* for Ubicloud but every value of it is
+/// hosted.
+///
+/// Invariant: the job is not inventoried, because only a value places a job.
+#[test]
+fn a_property_name_is_not_a_runner_label() -> Result<()> {
+    let source = concat!(
+        "on: push\njobs:\n  lane:\n    runs-on: ${{ matrix.ubicloud_runner }}\n",
+        "    strategy:\n      matrix:\n        include:\n",
+        "          - ubicloud_runner: ubuntu-latest\n",
+    );
+    let all: reader::Workflows = [("x.yml".to_owned(), parse(source)?)].into();
+    ensure!(
+        placement::placed_jobs(&all).is_empty(),
+        "a hosted matrix was inventoried"
+    );
+    Ok(())
+}

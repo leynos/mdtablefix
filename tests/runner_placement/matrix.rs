@@ -28,11 +28,41 @@ impl MatrixKey {
     }
 }
 
-/// Renders a YAML value as text: a string is itself, anything else is YAML.
+/// Renders a YAML value as text: a string is itself, anything else is its
+/// debug form.
+///
+/// The text is only searched for a runner label and judged against the
+/// runner-selection shape, which a non-string value can never match, so the
+/// debug form carries everything needed and, unlike a YAML rendering, cannot
+/// fail and have its failure read as an empty value.
 pub fn value_text(value: &Value) -> String {
     match value {
         Value::String(text) => text.clone(),
-        other => serde_yaml::to_string(other).unwrap_or_default(),
+        other => format!("{other:?}"),
+    }
+}
+
+/// Returns the value under `key`, matching the name without regard to case, as
+/// GitHub does for matrix properties.
+fn get_ci<'a>(mapping: &'a Mapping, key: &MatrixKey) -> Option<&'a Value> {
+    mapping
+        .iter()
+        .find(|(name, _)| {
+            name.as_str()
+                .is_some_and(|n| n.eq_ignore_ascii_case(&key.0))
+        })
+        .map(|(_, value)| value)
+}
+
+/// Returns whether any value under `value`, at any depth, is a string naming
+/// Ubicloud. Property names are not values: a matrix property called
+/// `ubicloud_runner` over hosted labels does not place a job on Ubicloud.
+fn values_name_ubicloud(value: &Value) -> bool {
+    match value {
+        Value::String(text) => text.contains("ubicloud"),
+        Value::Sequence(items) => items.iter().any(values_name_ubicloud),
+        Value::Mapping(entries) => entries.values().any(values_name_ubicloud),
+        _ => false,
     }
 }
 
@@ -50,6 +80,9 @@ fn referenced_keys(runs_on: &Value) -> Vec<MatrixKey> {
     }
 }
 
+/// Returns whether a `runs-on` value reads any key from the matrix.
+pub fn reads_matrix(runs_on: &Value) -> bool { !referenced_keys(runs_on).is_empty() }
+
 /// Returns every value a job's matrix gives `key`, from its `include` rows and
 /// from a top-level list under that key.
 fn values_for(job: &Mapping, key: &MatrixKey) -> Vec<String> {
@@ -65,8 +98,8 @@ fn values_for(job: &Mapping, key: &MatrixKey) -> Vec<String> {
         .into_iter()
         .flatten()
         .filter_map(Value::as_mapping)
-        .filter_map(|row| reader::get(row, &key.0));
-    let listed = reader::get(matrix, &key.0)
+        .filter_map(|row| get_ci(row, key));
+    let listed = get_ci(matrix, key)
         .and_then(Value::as_sequence)
         .into_iter()
         .flatten();
@@ -93,9 +126,7 @@ pub fn matrix_placements(job: &Mapping, runs_on: &Value) -> Vec<String> {
         .flat_map(|key| values_for(job, key))
         .filter(|value| value.contains("ubicloud"))
         .collect();
-    let names_elsewhere = reader::get(job, "strategy")
-        .map(value_text)
-        .is_some_and(|strategy| strategy.contains("ubicloud"));
+    let names_elsewhere = reader::get(job, "strategy").is_some_and(values_name_ubicloud);
     match (placed.is_empty(), names_elsewhere) {
         (false, _) => placed,
         (true, true) => vec![value_text(runs_on)],
