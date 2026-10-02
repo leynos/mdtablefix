@@ -74,7 +74,7 @@ jobs:
         # both sides for that reason: this lane is the writer and the
         # pull-request lane the reader, and the action decides which by the
         # event rather than by an input.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/generate-coverage@ff1dd759dfffc0db3459e30e833f52437ee62b57
         with:
           output-path: lcov.info
           format: lcov
