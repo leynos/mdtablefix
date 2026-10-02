@@ -58,7 +58,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@ff1dd759dfffc0db3459e30e833f52437ee62b57
       - name: Install ripgrep
         # The suite shells out to `rg`, and `make check-ripgrep` refuses to run
         # without it, so the instrumented run needs the same tool the merge
