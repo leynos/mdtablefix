@@ -221,6 +221,27 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       documentation-only commit had narrowed which gates applied but not removed
       the obligation to run the one that did. Fixed and recorded in `044abca`;
       `make markdownlint` reports 0 errors across 41 files.
+- [x] M5 Rebase onto the PR's target branch. The branch was rebased onto
+      `origin/main` (`60eb907d`) from `f9e332bb`, replaying 34 commits. Two
+      conflicts were resolved from the Git stages rather than by driver label:
+      `src/wrap.rs`, where the commit's two edits were applied onto the upstream
+      state, and `Makefile`, which keeps both this branch's
+      `verus-fence-mutation` target and main's `test-workflow-contracts` target
+      with its `CV005_CONTRACTS_REF` pin. `range-diff` reported only the
+      `Makefile` `.PHONY` line as differing, `git diff --check` was clean, and
+      the force-push was leased to the previously recorded remote head. Result:
+      `NEW_HEAD` `820adf49`.
+- [x] M5 Post-rebase gates. Seven gates were run against the rebased tree.
+      `check-fmt` (41 files unchanged), `lint` (clippy clean under `-D
+      warnings`), `typecheck`, `markdownlint` (0 issues in 41 files), `verus`
+      (81 verified, 0 errors), and `verus-fence-mutation` (mutation applied and
+      rejected, naming `postcondition not satisfied` against
+      `result == crate::spec_closes(state, line)`) all pass. `make test` failed
+      in the trybuild `compile` target only, with a moving victim and an
+      invariant cause — see Surprises. Its two recipes were then run directly:
+      the `compile` target passes 10/10 with `--test-threads=1`, and the doctest
+      recipe (`--doc`) passes 41 tests with 22 ignored. The default `make test`
+      remains red for an environment reason, not a code one.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -496,6 +517,25 @@ See the decision log.
   branch's* formatting rules, but only one of them runs the current classifier.
   When a local self-format check disagrees with CI's Format step, check the
   binary's mtime against the commit before believing the local result.
+- **The post-rebase `make test` failure is file-descriptor exhaustion, not a
+  code defect.** The gate failed in the trybuild `compile` target on both runs,
+  but on a *different* case each time — `footnote_stages_public_api_compiles`
+  in 199s, then `line_ending_const_api_compiles` in 80s — and every other
+  target passed. The invariant across both is the cause printed by the compiler
+  wrapper:
+  `build-limits: cannot start /home/leynos/.cargo/bin/sccache: [Errno
+  24] Too many open files`,
+  which aborted the nested cargo build and cascaded into `could not compile`
+  for the dependency crates. No trybuild `wip/` directory or `MISMATCH` block
+  was ever produced, so no case's *correctness* was falsified. File descriptors
+  are per-process, and trybuild runs all ten of its cases concurrently, each
+  spawning its own nested cargo tree — the most fd-hungry gate on a machine
+  already holding 12 compiles at the queued ceiling. Running the same target
+  with `--test-threads=1` passes 10/10 in 19.69s. Recorded as an environment
+  limitation of the shared host; the deterministic evidence for the target is
+  the serialised run, and CI (a quieter, per-job machine) remains the authority
+  for the default invocation. Do not read a moving trybuild victim as a flaky
+  test in this repository.
 
 ## Decision log
 
