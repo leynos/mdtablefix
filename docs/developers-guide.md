@@ -1811,6 +1811,22 @@ and a fork, rejects a literal label, inverted arms, another label and another
 condition, and asserts an exact inventory of the jobs that can land on Ubicloud
 with their ceilings. A change that adds, removes or re-times such a job fails
 it until the inventory is updated in the same commit.
+`tests/runner_placement/matrix_cases.rs` holds the matrix reading to several
+Ubicloud rows at once, as `include` rows and as a top-level list, and generates
+matrices: the placements must be exactly the Ubicloud rows under the key the
+`runs-on` reads, in order, each judged on its own value, with hosted rows
+excluded and rows under an unread key refused.
+
+Queue wait and outcome for a moved lane come from GitHub, so the repository
+keeps no metric of its own. The workflow-jobs API
+(`GET /repos/leynos/mdtablefix/actions/runs/{run_id}/jobs`) gives each job's
+`created_at`, `started_at` and `completed_at`, its `conclusion` and the
+`runner_name` and `labels` of the pool that ran it. Queue wait is `started_at`
+minus `created_at`, and the labels tell an Ubicloud run from a hosted fork
+fallback. A queued or degraded Ubicloud lane shows as a long wait or a missing
+`runner_name`, and the five-minute `timeout-minutes` on `binstall-packaging`
+bounds a stuck one. A step-level metric would add a step to a job that lasts
+two minutes in order to restate what the API already records.
 
 ## 1. Stateful pipeline helpers
 

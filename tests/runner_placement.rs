@@ -13,6 +13,8 @@
 
 #[path = "runner_placement/matrix.rs"]
 mod matrix;
+#[path = "runner_placement/matrix_cases.rs"]
+mod matrix_cases;
 #[path = "runner_placement/placement.rs"]
 mod placement;
 #[path = "runner_placement/placement_cases.rs"]
