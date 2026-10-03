@@ -9,7 +9,7 @@
 
 use serde_yaml::{Mapping, Value};
 
-use super::reader;
+use super::{matrix, reader};
 
 /// The hosted runner a fork's pull request falls back to.
 pub const HOSTED_LABEL: &str = "ubuntu-latest";
@@ -73,23 +73,31 @@ pub fn placement_faults(runs_on: &str, label: &str) -> Vec<String> {
     .collect()
 }
 
-/// Returns a job's `runs-on` as text, whatever shape it is written in.
+/// Returns the runner text of each place a job can land on Ubicloud, or an
+/// empty list when it cannot.
 ///
-/// A string is itself. A sequence or a mapping (`[ubicloud-standard-2]`,
-/// `{ group: ... }`) is rendered as YAML, so a label hidden in one still reads
-/// as Ubicloud, and the judgement then rejects it: only the runner-selection expression
-/// places a lane.
-fn runs_on_text(job: &Mapping) -> Option<String> {
-    match reader::get(job, "runs-on")? {
-        Value::String(text) => Some(text.clone()),
-        other => serde_yaml::to_string(other).ok(),
+/// A `runs-on` that reads the matrix is judged through its rows alone (see
+/// [`matrix::matrix_placements`]), so a matrix property whose name mentions
+/// Ubicloud places nothing by its name; any other `runs-on` that names Ubicloud,
+/// whatever its shape, stands for itself, and the judgement rejects it unless
+/// it is the runner-selection expression.
+fn runner_texts(job: &Mapping) -> Vec<String> {
+    let Some(runs_on) = reader::get(job, "runs-on") else {
+        return Vec::new();
+    };
+    if matrix::reads_matrix(runs_on) {
+        return matrix::matrix_placements(job, runs_on);
+    }
+    let text = matrix::value_text(runs_on);
+    if text.contains("ubicloud") {
+        vec![text]
+    } else {
+        Vec::new()
     }
 }
 
-/// Returns whether a job's `runs-on`, in any shape, names an Ubicloud runner.
-fn names_ubicloud(job: &Mapping) -> bool {
-    runs_on_text(job).is_some_and(|text| text.contains("ubicloud"))
-}
+/// Returns whether a job can run on an Ubicloud runner, however it says so.
+fn names_ubicloud(job: &Mapping) -> bool { !runner_texts(job).is_empty() }
 
 /// One lane whose runner can be an Ubicloud one.
 #[derive(Debug, PartialEq, Eq)]
@@ -120,15 +128,18 @@ pub fn placed_jobs(all: &reader::Workflows) -> Vec<Placed> {
         .collect()
 }
 
-/// Returns the `runs-on` text of every placed job, with its name.
+/// Returns the runner text of every place a job can land on Ubicloud, each
+/// with its `workflow: job` name; a job placed through several matrix rows
+/// appears once per row.
 pub fn placement_expressions(all: &reader::Workflows) -> Vec<(String, String)> {
     all.iter()
         .flat_map(|(workflow, document)| {
             reader::jobs(document)
                 .into_iter()
-                .filter(|(_, job)| names_ubicloud(job))
-                .filter_map(move |(job, mapping)| {
-                    Some((format!("{workflow}: {job}"), runs_on_text(mapping)?))
+                .flat_map(move |(job, mapping)| {
+                    runner_texts(mapping)
+                        .into_iter()
+                        .map(move |text| (format!("{workflow}: {job}"), text))
                 })
         })
         .collect()

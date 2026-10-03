@@ -125,7 +125,14 @@ jobs:
     # builds on each release platform and that the staged assets match the
     # cargo-binstall templates in Cargo.toml before a tag depends on it.
     name: binstall packaging (${{ matrix.target }})
+    # The Linux row is on Ubicloud, to avoid the hosted queue; its runner is
+    # taken from the matrix row, which falls back to the hosted pool for a pull
+    # request from a fork, as every Ubicloud lane here does. The macOS and
+    # Windows rows are unchanged. The ceiling is one for the job, so it covers
+    # the slowest row: twice the 2.3 min the Windows row took (run 36727689552),
+    # rounded up to 5. The Linux row on Ubicloud took 1.4 min.
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
     permissions:
       contents: read
     defaults:
@@ -135,7 +142,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runner: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}
             os: linux
             arch: x86_64
             target: x86_64-unknown-linux-gnu
