@@ -563,38 +563,48 @@ Obligations, and how each is discharged.
    proofs in `verus/lib.rs`; executable witnesses in `tests/fences.rs` or
    `src/wrap/tests/fence_tracker.rs`.
 
-3. **LEM-REWRITE-PRESERVES-CLOSER-RELATION.** Stated one-sidedly, as the proof
-   turned out to require. For a guarded interior line — one that does not close
-   the original opener and that `spec_rewrite_permitted` admits — the line
-   closes the rewritten opener no more than it closed the original, and both
-   runs classify it as `Literal`. Method:
-   `proof fn lemma_rewrite_preserves_closer_relation` over parsed
-   `LineFeatures` and the pure `spec_compressed` / `spec_rewrite_permitted`
-   predicates. The symmetric biconditional is *false*, and the Surprises entry
-   records why: a tilde line closes a tilde opener but not the three-backtick
-   opener the pass writes. Non-vacuity: the mutation gate drops the
-   marker-character check and must report `postcondition not satisfied` naming
-   the `spec_closes` contract; the doc comment on the lemma states why that
-   check is what makes it true.
+3. **LEM-REWRITE-PRESERVES-CLOSER-RELATION**, the guarded-interior lemma,
+   stated one-sidedly over pre-parsed `LineFeatures`. For a line inside a
+   block's interior — one at or below the opener's depth that does not close
+   the original opener and that `spec_rewrite_permitted` admits — the line does
+   not close the rewritten opener either, and *both* runs classify it as
+   `Literal`. The conclusion is a non-closing relation over parsed features,
+   not a statement about delimiter identity, because the two runs may
+   legitimately disagree there: a tilde line closes a tilde opener but cannot
+   close the three-backtick opener the pass writes in its place. Method:
+   `proof fn lemma_rewrite_preserves_closer_relation` over the pure
+   `spec_compressed` / `spec_rewrite_permitted` predicates. Non-vacuity: the
+   mutation gate drops the marker-character comparison from `closes_fence` and
+   must report a failed obligation naming that function's contract against
+   `spec_closes`; the doc comment on the lemma states why that check is what
+   makes it true, and `lemma_witness_conflict_is_rejected` pins the issue #480
+   shape the guard exists for.
 
-4. **LEM-FENCE-NORMALIZATION-PRESERVES-REGIONS**, for one pre-parsed block
-   interior. For a body whose lines each satisfy the compression guard, the
-   original and compressed seeded states produce equal region sequences at
-   every prefix — proved by `lemma_normalization_preserves_regions` (the
-   induction, via `lemma_state_preserved`) over `LineFeatures`, not over
-   `compress_fences`. Non-vacuity: `lemma_witness_interior_is_literal` and
-   `lemma_witness_conflict_is_rejected` supply both directions, and the guard
-   is load-bearing rather than decorative — without it a rewritten opener is
-   closed by an interior line that did not close the original, which is issue
-   #480.
+4. **LEM-FENCE-NORMALIZATION-PRESERVES-REGIONS**, scoped to one pre-parsed
+   block interior whose lines each satisfy the compression guard. For such a
+   body the original and compressed seeded states produce equal region
+   sequences at every prefix — proved by
+   `lemma_normalization_preserves_regions` (the induction, via
+   `lemma_state_preserved`) over `LineFeatures`, not over `compress_fences`.
+   The guard is load-bearing rather than decorative: without it a rewritten
+   opener is closed by an interior line that did not close the original, every
+   later line leaves the literal region, and the conclusion fails. Non-vacuity:
+   `lemma_witness_interior_is_literal` exhibits a body satisfying every
+   hypothesis and pins the region both runs agree on, so the conclusion is not
+   an empty sequence; `lemma_witness_conflict_is_rejected` proves the guard
+   fires on the issue #480 shape.
 
-   Whole-pass equality is *not* claimed as a Verus theorem, because
-   `compress_fences` buffers, caches, and has two flush paths that the proof
-   does not model. What discharges it is executable corpus evidence: the sweep
-   in `tests/fence_regions.rs` asserts
+   Complete-pass equality is *executable corpus evidence*, not a general Verus
+   theorem: `compress_fences` buffers, accumulates a conflict flag, and has
+   three flush paths (matched, unmatched, original-verbatim) that the block
+   lemmas do not model. The sweep in `tests/fence_regions.rs` therefore asserts
    `regions(compress_fences(lines)) == regions(lines)` for every fixture under
-   `tests/data/` plus the `UNCLOSED_DOCUMENTS` reproducer, and the issue #480
-   shape is pinned as a required case. Subject to the first tolerance.
+   `tests/data/` plus the four `UNCLOSED_DOCUMENTS` reproducers, with
+   `tests/data/footnotes_fence_toggle_input.txt` pinned as a must-cover case
+   and each sweep asserting a minimum checked count so it cannot pass over an
+   empty corpus. Closing the gap between the block lemmas and the flush paths
+   is recorded as remaining work in the Progress and Outcomes sections; it is
+   not claimed as proved.
 
 5. **Cross-pass agreement.** Every pass that skips fenced content consumes the
    same classifier. Method: the passes already construct `FenceTracker`; M1
@@ -848,6 +858,15 @@ via `docs/contents.md`, then run all gates through `scrutineer`, request
 PR titled with `(#486)` containing a `## References` section linking the Lody
 session.
 
+Completed in full. `docs/verification.md` gained the fence-kernel section and
+six ledger rows; `docs/developers-guide.md` gained the fence-kernel paragraph
+and the corrected `verified_kernel_macros.rs` path; `docs/users-guide.md`
+gained the batch-classification section. The gates listed in Progress ran
+locally or in CI as recorded there, `coderabbit review --agent` was requested
+and every concern cleared across four rounds, and draft PR
+[#588](https://github.com/leynos/mdtablefix/pull/588) was opened and then
+marked ready for review.
+
 ## Revision note
 
 - 2026-09-28: Initial draft. Reconnaissance found both prerequisite defects
@@ -856,3 +875,17 @@ session.
   the kernel extraction.
 - 2026-09-28: M0 completed with reproduction evidence, and M4 resequenced ahead
   of M3 to protect the deliverable against the proof tolerance.
+- 2026-10-04: Rebased onto `main` at `60eb907` (34 commits replayed, one
+  conflict each in `Makefile` and `src/wrap.rs`, both resolved by keeping the
+  branch's change and `main`'s `test-workflow-contracts` addition). Audited with
+  `range-diff` (only the `Makefile` hunk differs from the pre-rebase commit,
+  and only by `main`'s own addition) and `git diff --check` (clean). The
+  hosted-review remediation the ExecPlan recorded as in-flight is confirmed
+  present in the rebased tree: `data_files` already returns `Result`, and the
+  literal-line sweep already walks the two literal subsequences in step.
+- 2026-10-04: M5 section brought into agreement with Progress, and the
+  verification plan's obligations 3 and 4 restated to match the proofs actually
+  delivered: obligation 3 is the one-sided guarded-interior lemma, and
+  obligation 4 is scoped to pre-parsed block bodies meeting the compression
+  guard, with whole-pass equality recorded as corpus evidence rather than a
+  Verus theorem.
