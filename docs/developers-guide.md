@@ -1824,9 +1824,11 @@ keeps no metric of its own. The workflow-jobs API
 `runner_name` and `labels` of the pool that ran it. Queue wait is `started_at`
 minus `created_at`, and the labels tell an Ubicloud run from a hosted fork
 fallback. A queued or degraded Ubicloud lane shows as a long wait or a missing
-`runner_name`, and the five-minute `timeout-minutes` on `binstall-packaging`
-bounds a stuck one. A step-level metric would add a step to a job that lasts
-two minutes in order to restate what the API already records.
+`runner_name`. The five-minute `timeout-minutes` on `binstall-packaging` bounds
+a stuck job's execution, not the time it waits for a runner: if no matching
+Ubicloud runner is available the job stays queued past five minutes, and only
+the queue-wait reading above shows it. A step-level metric would add a step to
+a job that lasts two minutes in order to restate what the API already records.
 
 ## 1. Stateful pipeline helpers
 
