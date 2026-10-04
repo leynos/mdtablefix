@@ -1793,12 +1793,42 @@ fork's pull request restores a hosted cache that main no longer refreshes; fork
 pull requests are rare here, and a second hosted writer would pay double on
 every main push.
 
+`binstall-packaging` places only its Linux row on Ubicloud, on
+`ubicloud-standard-2`: the release build there is small and needs no more. Its
+`runs-on` reads `${{ matrix.runner }}`, and the Linux row's `runner` value is
+the runner-selection expression itself, with `ubuntu-latest` as the fork arm.
+The macOS and Windows rows are unchanged, and so are the job name and the
+required check names, which carry the target and not the runner. The job's one
+ceiling covers its slowest row: 5 minutes, twice the 2.3 the Windows row took
+(run 36727689552). The contract reads a matrix-placed job through its rows:
+each row that names Ubicloud is judged as a runner-selection expression, the
+hosted rows are left alone, and Ubicloud named under a key the `runs-on` does
+not read is refused.
+
 `tests/runner_placement/placement_cases.rs` holds this to the files. It
 evaluates the expression for a push or dispatch, a same-repository pull request
 and a fork, rejects a literal label, inverted arms, another label and another
 condition, and asserts an exact inventory of the jobs that can land on Ubicloud
 with their ceilings. A change that adds, removes or re-times such a job fails
 it until the inventory is updated in the same commit.
+`tests/runner_placement/matrix_cases.rs` holds the matrix reading to several
+Ubicloud rows at once, as `include` rows and as a top-level list, and generates
+matrices: the placements must be exactly the Ubicloud rows under the key the
+`runs-on` reads, in order, each judged on its own value, with hosted rows
+excluded and rows under an unread key refused.
+
+Queue wait and outcome for a moved lane come from GitHub, so the repository
+keeps no metric of its own. The workflow-jobs API
+(`GET /repos/leynos/mdtablefix/actions/runs/{run_id}/jobs`) gives each job's
+`created_at`, `started_at` and `completed_at`, its `conclusion` and the
+`runner_name` and `labels` of the pool that ran it. Queue wait is `started_at`
+minus `created_at`, and the labels tell an Ubicloud run from a hosted fork
+fallback. A queued or degraded Ubicloud lane shows as a long wait or a missing
+`runner_name`. The five-minute `timeout-minutes` on `binstall-packaging` bounds
+a stuck job's execution, not the time it waits for a runner: if no matching
+Ubicloud runner is available the job stays queued past five minutes, and only
+the queue-wait reading above shows it. A step-level metric would add a step to
+a job that lasts two minutes in order to restate what the API already records.
 
 ## 1. Stateful pipeline helpers
 
