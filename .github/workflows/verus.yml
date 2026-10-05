@@ -27,7 +27,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@7d751eded578e48dacf43ab173d5820e6437c474
       - name: Cache Verus
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
