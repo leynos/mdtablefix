@@ -80,6 +80,42 @@ fn depth_decrease_logs_content_free_implicit_closure() {
     assert!(!logs_contain(shallower_line));
 }
 
+/// A depth drop followed by a fresh opener on one line is a replacement, not
+/// an unchanged state, and the event has to say so.
+///
+/// The line falls below the deeper fence's opening depth and then opens a
+/// shallower one, so the state before and after are both `Some` but differ.
+/// Without a dedicated arm the event reads as `transition = "unchanged"` with
+/// reason `incompatible_active_opener`, and a subscriber filtering for state
+/// changes misses both the implicit close and the new open.
+#[traced_test]
+#[test]
+fn depth_drop_replacement_logs_content_free_state_change() {
+    let opening = "````private-opening-info";
+    let replacement = "```private-replacement-info";
+    let mut tracker = FenceTracker::new();
+
+    assert!(tracker.observe(opening, 2));
+    assert!(tracker.in_fence(2));
+
+    assert!(tracker.observe(replacement, 1));
+
+    assert!(logs_contain("transition=\"replaced\""));
+    assert!(logs_contain(
+        "reason=\"depth_dropped_below_open_then_opened\""
+    ));
+    assert!(logs_contain("open_depth=2"));
+    assert!(logs_contain("new_open_depth=1"));
+    assert!(logs_contain("open_marker_len=4"));
+    assert!(logs_contain("new_marker_len=3"));
+    // The defect this pins is the event claiming nothing happened.
+    assert!(!logs_contain("incompatible_active_opener"));
+    assert!(!logs_contain(opening));
+    assert!(!logs_contain(replacement));
+    assert!(!logs_contain("private-opening-info"));
+    assert!(!logs_contain("private-replacement-info"));
+}
+
 #[traced_test]
 #[test]
 fn incompatible_marker_logs_content_free_unchanged_transition() {
