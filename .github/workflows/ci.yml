@@ -44,12 +44,12 @@ jobs:
       - name: Install mdtablefix
         # `make check-fmt` runs `mdtablefix --check --git`; 0.6.0 is the
         # first release with `--check` and `--git`.
-        uses: leynos/shared-actions/.github/actions/install-mdtablefix@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@7d751eded578e48dacf43ab173d5820e6437c474
         with:
           version: "0.6.1"
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@bcf05803b55ef01a5ec6368521ee1b42f97bc438
+        uses: astral-sh/setup-uv@b06acff4b6a41bdd9cdac56507ead0bd7734e757
       - name: Check the CV-005 contracts
         run: make test-workflow-contracts
       - name: Format
@@ -81,7 +81,7 @@ jobs:
           # linker. Assigning RUSTFLAGS displaces every `rustflags` table in
           # .cargo/config.toml.
           RUSTFLAGS: -D warnings
-        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           output-path: lcov.info
           format: lcov
@@ -113,7 +113,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@c4ed5ffaf0640b1907d5359a87fd1677034eec27
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           install-mold: 'true'
           install-binstall: false
@@ -137,7 +137,14 @@ jobs:
     # builds on each release platform and that the staged assets match the
     # cargo-binstall templates in Cargo.toml before a tag depends on it.
     name: binstall packaging (${{ matrix.target }})
+    # The Linux row is on Ubicloud, to avoid the hosted queue; its runner is
+    # taken from the matrix row, which falls back to the hosted pool for a pull
+    # request from a fork, as every Ubicloud lane here does. The macOS and
+    # Windows rows are unchanged. The ceiling is one for the job, so it covers
+    # the slowest row: twice the 2.3 min the Windows row took (run 36727689552),
+    # rounded up to 5. The Linux row on Ubicloud took 1.4 min.
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
     permissions:
       contents: read
     defaults:
@@ -147,7 +154,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runner: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}
             os: linux
             arch: x86_64
             target: x86_64-unknown-linux-gnu
@@ -169,7 +176,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@c4ed5ffaf0640b1907d5359a87fd1677034eec27
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           install-mold: 'true'
           toolchain: 1.89.0

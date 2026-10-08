@@ -375,10 +375,13 @@ fn archives_are_reproducible_for_a_fixed_timestamp() -> Result<()> {
 fn continuous_integration_runs_the_packaging_dry_run_on_every_platform() -> Result<()> {
     let workflow = parse(CI_WORKFLOW)?;
     let rows = matrix_rows(&workflow, "binstall-packaging")?;
+    // The Linux row is placed by the runner-selection expression, whose hosted
+    // fallback names the ubuntu image, so the family is looked for in the text
+    // of the runner value and not only at its start.
     for family in ["ubuntu", "macos", "windows"] {
         ensure!(
             rows.iter().any(|row| {
-                get_string(row, "runner").is_some_and(|runner| runner.starts_with(family))
+                get_string(row, "runner").is_some_and(|runner| runner.contains(family))
             }),
             "the packaging dry run should cover a {family} runner"
         );

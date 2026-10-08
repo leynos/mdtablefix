@@ -26,7 +26,7 @@ use anyhow::{Context, Result, ensure};
 /// cannot be computed from a checkout, so naming the approved revision is what
 /// keeps the contract hermetic; it fails closed on any other value, including
 /// a tag or a branch name.
-const APPROVED_PIN: &str = "a5765019912a8ab6882b12db049c7cde635f3a85";
+const APPROVED_PIN: &str = "6cec89bac47a21cf756d68d638a9a510998e57f8";
 
 /// The uploader reference, without its revision. The `@` separator is part of
 /// the marker so a differently owned action whose path merely starts with the
