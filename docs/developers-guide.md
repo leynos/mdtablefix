@@ -1787,9 +1787,16 @@ development target on a Linux host and a macOS host (each keeping the caller's
 own `RUSTFLAGS`) and for each coverage and release target on a Linux host, and
 the `setup-rust` steps of the CI workflows (each must pass `install-mold`), so
 a flag lost through a recipe or workflow edit fails there. The decision is
-recorded in [ADR 001](adr-001-rust-build-standard.md). The contract runs
+recorded in [ADR 0013](adrs/0013-rust-build-standard.md). The contract runs
 `make -n`, so a direct `cargo test` needs GNU make on the `PATH`. It fails when
 `make` is missing instead of skipping, so a missing tool cannot read as a pass.
+`tests/ci_rustflags_contract.rs` holds the workflow places that assign
+`RUSTFLAGS` themselves: the Windows atomic-write job restates the parallel
+frontend beside the warning deny at job level, the two coverage steps take the
+deny alone, and the two stable release-build steps state the deny alone in
+their own `env:` block so they never see the nightly-only `-Zthreads`. A step
+is judged by its own `env:` block and a job by its own, so a sibling's, a
+comment or a job-level assignment does not stand in.
 
 ### Cold-cache allowance for the trybuild tests
 

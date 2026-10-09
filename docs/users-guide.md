@@ -1142,4 +1142,4 @@ different: it takes the configuration's flags unless you assign `RUSTFLAGS`
 yourself, for example `RUSTFLAGS="" cargo build --release`.
 
 Cranelift is not adopted; the developers' guide records the measurement and the
-reason. See [ADR 001](adr-001-rust-build-standard.md) for the reasoning.
+reason. See [ADR 0013](adrs/0013-rust-build-standard.md) for the reasoning.

@@ -66,3 +66,94 @@ impl<'a> LeadingAssignments<'a> {
         (quote.is_none() && depth == 0).then_some(text.len())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! Generated checks of the assignment scanner: valid assignment prefixes are
+    //! removed whole whatever their quoting, and an assignment that never
+    //! closes leaves nothing to run.
+
+    use proptest::prelude::*;
+
+    use super::LeadingAssignments;
+
+    /// A shell variable name.
+    fn name() -> impl Strategy<Value = String> { "[A-Za-z_][A-Za-z0-9_]{0,6}" }
+
+    /// An assignment value in any of the spellings a recipe uses: bare, double
+    /// quoted with spaces and an escaped quote followed by a space, single quoted with a backslash,
+    /// or a `$(...)` reference holding spaces and a nested reference.
+    fn value() -> impl Strategy<Value = String> {
+        prop_oneof![
+            "[a-z0-9./-]{0,8}".prop_map(|word| word),
+            "[a-z0-9 :+-]{0,10}".prop_map(|words| format!("\"{words}\\\" tail\"")),
+            "[a-z0-9 \\\\-]{0,8}".prop_map(|words| format!("'{words}'")),
+            "[a-z]{1,5}".prop_map(|word| format!("$({word} $(inner arg) tail)")),
+        ]
+    }
+
+    /// An assignment `NAME=value`.
+    fn assignment() -> impl Strategy<Value = String> {
+        (name(), value()).prop_map(|(name, value)| format!("{name}={value}"))
+    }
+
+    /// The command that follows the prefix; its first word is never an assignment.
+    fn command() -> impl Strategy<Value = String> {
+        prop_oneof![
+            Just("cargo clippy --all-targets".to_owned()),
+            Just("$(CARGO) clippy".to_owned()),
+            Just("echo A=b".to_owned()),
+            Just(": cargo".to_owned()),
+        ]
+    }
+
+    proptest! {
+        #[test]
+        fn a_prefix_of_assignments_is_removed_whole(
+            assignments in proptest::collection::vec(assignment(), 0..4),
+            command in command(),
+            gap in "[ \t]{1,3}",
+        ) {
+            let prefix = assignments.join(&gap);
+            let text = if assignments.is_empty() {
+                command.clone()
+            } else {
+                format!("{prefix}{gap}{command}")
+            };
+
+            prop_assert_eq!(LeadingAssignments(&text).skipped(), command);
+        }
+
+        #[test]
+        fn a_command_with_no_prefix_is_returned_trimmed_at_the_front(
+            command in command(),
+            lead in "[ \t]{0,3}",
+        ) {
+            let text = format!("{lead}{command}");
+
+            prop_assert_eq!(LeadingAssignments(&text).skipped(), command);
+        }
+
+        #[test]
+        fn a_word_that_does_not_start_like_a_name_is_not_an_assignment(
+            digit in "[0-9]",
+            rest in "[A-Z0-9_]{0,4}",
+            value in "[a-z]{1,4}",
+        ) {
+            let text = format!("{digit}{rest}={value} cargo clippy");
+
+            prop_assert_eq!(LeadingAssignments(&text).skipped(), text.as_str());
+        }
+
+        #[test]
+        fn an_assignment_that_never_closes_leaves_nothing_to_run(
+            name in name(),
+            open in prop_oneof![Just("\""), Just("'"), Just("$(")],
+            tail in "[a-z ]{0,8}",
+        ) {
+            let text = format!("{name}={open}{tail} cargo clippy");
+
+            prop_assert_eq!(LeadingAssignments(&text).skipped(), "");
+        }
+    }
+}
