@@ -27,16 +27,16 @@ struct Workflow {
 #[derive(Clone, Copy)]
 enum Scope {
     /// The `env:` block of the step with this `name:`.
-    Step(&'static str),
+    Step(Name),
     /// The job-level `env:` block of the job with this id.
-    Job(&'static str),
+    Job(Name),
 }
 
 /// What one place must assign.
 struct Expected {
     workflow: Workflow,
     scope: Scope,
-    rustflags: &'static str,
+    rustflags: Name,
 }
 
 const CI: Workflow = Workflow {
@@ -66,38 +66,82 @@ const RELEASE: Workflow = Workflow {
 const EXPECTED: &[Expected] = &[
     Expected {
         workflow: CI,
-        scope: Scope::Job("windows-atomic-contract"),
-        rustflags: "-D warnings -Zthreads=8",
+        scope: Scope::Job(Name("windows-atomic-contract")),
+        rustflags: Name("-D warnings -Zthreads=8"),
     },
     Expected {
         workflow: CI,
-        scope: Scope::Step("Test and Measure Coverage"),
-        rustflags: "-D warnings",
+        scope: Scope::Step(Name("Test and Measure Coverage")),
+        rustflags: Name("-D warnings"),
     },
     Expected {
         workflow: CI,
-        scope: Scope::Step("Build the release binary"),
-        rustflags: "-D warnings",
+        scope: Scope::Step(Name("Build the release binary")),
+        rustflags: Name("-D warnings"),
     },
     Expected {
         workflow: COVERAGE_MAIN,
-        scope: Scope::Step("Test and Measure Coverage"),
-        rustflags: "-D warnings",
+        scope: Scope::Step(Name("Test and Measure Coverage")),
+        rustflags: Name("-D warnings"),
     },
     Expected {
         workflow: RELEASE,
-        scope: Scope::Step("Build release binary"),
-        rustflags: "-D warnings",
+        scope: Scope::Step(Name("Build release binary")),
+        rustflags: Name("-D warnings"),
     },
 ];
 
-/// Returns the number of leading spaces on a line.
-fn indent(line: &str) -> usize { line.len() - line.trim_start().len() }
+/// A line of a workflow file, with the questions the readers ask of it.
+#[derive(Clone, Copy)]
+struct Line<'a>(&'a str);
 
-/// Returns whether a line carries nothing a block is judged by.
-fn is_blank_or_comment(line: &str) -> bool {
-    let trimmed = line.trim();
-    trimmed.is_empty() || trimmed.starts_with('#')
+impl Line<'_> {
+    /// Returns the number of leading spaces.
+    fn indent(self) -> usize { self.0.len() - self.0.trim_start().len() }
+
+    /// Returns whether the line carries nothing a block is judged by.
+    fn is_blank_or_comment(self) -> bool {
+        let trimmed = self.0.trim();
+        trimmed.is_empty() || trimmed.starts_with('#')
+    }
+}
+
+/// A name a place is found by: a step's `name:` or a job's id.
+#[derive(Clone, Copy)]
+struct Name(&'static str);
+
+/// The lines of a block of a workflow: a step or a job.
+struct Block<'a>(Vec<&'a str>);
+
+impl Block<'_> {
+    /// Returns the entries of the `env:` block whose key sits `key_indent` spaces in.
+    fn env_entries(&self, key_indent: usize) -> Vec<(String, String)> {
+        let Some(at) = self
+            .0
+            .iter()
+            .position(|line| line.trim() == "env:" && Line(line).indent() == key_indent)
+        else {
+            return Vec::new();
+        };
+        self.0
+            .iter()
+            .skip(at + 1)
+            .take_while(|line| Line(line).is_blank_or_comment() || Line(line).indent() > key_indent)
+            .filter(|line| !Line(line).is_blank_or_comment())
+            .filter_map(|line| line.trim().split_once(':'))
+            .map(|(key, value)| (key.trim().to_owned(), plain(value).to_owned()))
+            .collect()
+    }
+
+    /// Returns the `RUSTFLAGS` the block assigns in its own `env:` block, the last assignment
+    /// winning.
+    fn rustflags(&self, key_indent: usize) -> Option<String> {
+        self.env_entries(key_indent)
+            .into_iter()
+            .rev()
+            .find(|(key, _)| key == "RUSTFLAGS")
+            .map(|(_, value)| value)
+    }
 }
 
 /// Returns a value without any inline YAML comment or quotes.
@@ -110,123 +154,101 @@ fn plain(value: &str) -> &str {
         .trim_matches(['"', '\''])
 }
 
-/// Returns the lines of every step with the given `name:`: from its list item to
-/// the line before the next item at the same indentation or a dedent.
-fn steps_named<'a>(text: &'a str, name: &str) -> Vec<Vec<&'a str>> {
-    let lines: Vec<&str> = text.lines().collect();
-    let opens = |line: &str| {
-        let item = line.trim_start().strip_prefix("- ").unwrap_or_default();
-        item.strip_prefix("name:")
-            .is_some_and(|rest| rest.trim().trim_matches(['"', '\'']) == name)
-    };
-    let ends_at = |item_indent: usize, from: usize| {
+impl Workflow {
+    /// Returns the lines of every step with the given `name:`: from its list item to the line
+    /// before the next item at the same indentation or a dedent.
+    fn steps_named(&self, name: Name) -> Vec<Block<'_>> {
+        let lines: Vec<&str> = self.text.lines().collect();
+        let opens = |line: &str| {
+            let item = line.trim_start().strip_prefix("- ").unwrap_or_default();
+            item.strip_prefix("name:")
+                .is_some_and(|rest| rest.trim().trim_matches(['"', '\'']) == name.0)
+        };
+        let ends_at = |item_indent: usize, from: usize| {
+            lines
+                .iter()
+                .enumerate()
+                .skip(from)
+                .find(|(_, next)| {
+                    !Line(next).is_blank_or_comment()
+                        && (Line(next).indent() < item_indent
+                            || (Line(next).indent() == item_indent
+                                && next.trim_start().starts_with("- ")))
+                })
+                .map_or(lines.len(), |(index, _)| index)
+        };
         lines
             .iter()
             .enumerate()
-            .skip(from)
-            .find(|(_, next)| {
-                !is_blank_or_comment(next)
-                    && (indent(next) < item_indent
-                        || (indent(next) == item_indent && next.trim_start().starts_with("- ")))
+            .filter(|(_, line)| opens(line))
+            .map(|(at, line)| {
+                let end = ends_at(Line(line).indent(), at + 1);
+                Block(lines.get(at..end).unwrap_or_default().to_vec())
             })
-            .map_or(lines.len(), |(index, _)| index)
-    };
-    lines
-        .iter()
-        .enumerate()
-        .filter(|(_, line)| opens(line))
-        .map(|(at, line)| {
-            let end = ends_at(indent(line), at + 1);
-            lines.get(at..end).unwrap_or_default().to_vec()
-        })
-        .collect()
-}
+            .collect()
+    }
 
-/// Returns the lines of the job with the given id: from its key to the line
-/// before the next key at the same indentation or a dedent.
-fn job_lines<'a>(text: &'a str, id: &str) -> Vec<&'a str> {
-    let lines: Vec<&str> = text.lines().collect();
-    let key = format!("{id}:");
-    let Some(at) = lines
-        .iter()
-        .position(|line| indent(line) == 2 && line.trim() == key)
-    else {
-        return Vec::new();
-    };
-    let end = lines
-        .iter()
-        .enumerate()
-        .skip(at + 1)
-        .find(|(_, next)| !is_blank_or_comment(next) && indent(next) <= 2)
-        .map_or(lines.len(), |(index, _)| index);
-    lines.get(at..end).unwrap_or_default().to_vec()
-}
+    /// Returns the lines of the job with the given id: from its key to the line before the next key
+    /// at the same indentation or a dedent.
+    fn job_block(&self, id: Name) -> Block<'_> {
+        let lines: Vec<&str> = self.text.lines().collect();
+        let key = format!("{}:", id.0);
+        let Some(at) = lines
+            .iter()
+            .position(|line| Line(line).indent() == 2 && line.trim() == key)
+        else {
+            return Block(Vec::new());
+        };
+        let end = lines
+            .iter()
+            .enumerate()
+            .skip(at + 1)
+            .find(|(_, next)| !Line(next).is_blank_or_comment() && Line(next).indent() <= 2)
+            .map_or(lines.len(), |(index, _)| index);
+        Block(lines.get(at..end).unwrap_or_default().to_vec())
+    }
 
-/// Returns the entries of the `env:` block that sits `depth` spaces in from the
-/// start of the given lines' first line: for a step, the block under its keys;
-/// for a job, the block directly under the job.
-fn env_of(block: &[&str], key_indent: usize) -> Vec<(String, String)> {
-    let Some(at) = block
-        .iter()
-        .position(|line| line.trim() == "env:" && indent(line) == key_indent)
-    else {
-        return Vec::new();
-    };
-    block
-        .iter()
-        .skip(at + 1)
-        .take_while(|line| is_blank_or_comment(line) || indent(line) > key_indent)
-        .filter(|line| !is_blank_or_comment(line))
-        .filter_map(|line| line.trim().split_once(':'))
-        .map(|(key, value)| (key.trim().to_owned(), plain(value).to_owned()))
-        .collect()
-}
-
-/// Returns the `RUSTFLAGS` a scope assigns in its own `env:` block, or the
-/// complaint when the scope is absent or repeated.
-fn assigned(workflow: Workflow, scope: Scope) -> Result<Option<String>, String> {
-    let (block, key_indent) = match scope {
-        Scope::Step(name) => {
-            let named = steps_named(workflow.text, name);
-            let [step] = named.as_slice() else {
-                return Err(format!(
-                    "{}: expected one step named {name:?}, found {}",
-                    workflow.file,
-                    named.len()
-                ));
-            };
-            // A step's own keys sit two spaces in from its `- ` item.
-            let item_indent = step.first().map_or(0, |line| indent(line));
-            (step.clone(), item_indent + 2)
-        }
-        Scope::Job(id) => {
-            let job = job_lines(workflow.text, id);
-            if job.is_empty() {
-                return Err(format!("{}: no job {id:?}", workflow.file));
+    /// Returns the `RUSTFLAGS` a scope assigns in its own `env:` block, or the complaint when the
+    /// scope is absent or repeated.
+    fn assigned(&self, scope: Scope) -> Result<Option<String>, String> {
+        match scope {
+            Scope::Step(name) => {
+                let named = self.steps_named(name);
+                let [step] = named.as_slice() else {
+                    return Err(format!(
+                        "{}: expected one step named {:?}, found {}",
+                        self.file,
+                        name.0,
+                        named.len()
+                    ));
+                };
+                // A step's own keys sit two spaces in from its `- ` item.
+                let item_indent = step.0.first().map_or(0, |line| Line(line).indent());
+                Ok(step.rustflags(item_indent + 2))
             }
-            (job, 4)
+            Scope::Job(id) => {
+                let job = self.job_block(id);
+                if job.0.is_empty() {
+                    return Err(format!("{}: no job {:?}", self.file, id.0));
+                }
+                Ok(job.rustflags(4))
+            }
         }
-    };
-    let env = env_of(&block, key_indent);
-    Ok(env
-        .into_iter()
-        .rev()
-        .find(|(key, _)| key == "RUSTFLAGS")
-        .map(|(_, value)| value))
+    }
 }
 
 /// Returns the complaint about one expectation against a workflow text, if any.
 fn problem(expected: &Expected) -> Option<String> {
     let place = match expected.scope {
-        Scope::Step(name) => format!("step {name:?}"),
-        Scope::Job(id) => format!("job {id:?}"),
+        Scope::Step(name) => format!("step {:?}", name.0),
+        Scope::Job(id) => format!("job {:?}", id.0),
     };
-    match assigned(expected.workflow, expected.scope) {
+    match expected.workflow.assigned(expected.scope) {
         Err(reason) => Some(reason),
-        Ok(Some(found)) if found == expected.rustflags => None,
+        Ok(Some(found)) if found == expected.rustflags.0 => None,
         Ok(found) => Some(format!(
             "{}: {place} has RUSTFLAGS={found:?}, not {:?}",
-            expected.workflow.file, expected.rustflags
+            expected.workflow.file, expected.rustflags.0
         )),
     }
 }
@@ -245,12 +267,16 @@ fn none_of(found: &[String]) -> Result<(), String> {
     }
 }
 
+/// Fixture text standing in for a workflow file.
+#[derive(Clone, Copy)]
+struct Text(&'static str);
+
 /// A one-place expectation over a fixture text.
-fn on(text: &'static str, scope: Scope, rustflags: &'static str) -> Expected {
+fn on(text: Text, scope: Scope, rustflags: Name) -> Expected {
     Expected {
         workflow: Workflow {
             file: "fixture.yml",
-            text,
+            text: text.0,
         },
         scope,
         rustflags,
@@ -364,18 +390,18 @@ fn the_real_workflows_hold_their_assignments() -> Result<(), String> {
 #[test]
 fn a_step_that_assigns_the_value_is_accepted() -> Result<(), String> {
     none_of(&problems(&[on(
-        STEP_OK,
-        Scope::Step("Build"),
-        "-D warnings",
+        Text(STEP_OK),
+        Scope::Step(Name("Build")),
+        Name("-D warnings"),
     )]))
 }
 
 #[test]
 fn a_job_that_assigns_the_value_is_accepted() -> Result<(), String> {
     none_of(&problems(&[on(
-        JOB_OK,
-        Scope::Job("windows"),
-        "-D warnings -Zthreads=8",
+        Text(JOB_OK),
+        Scope::Job(Name("windows")),
+        Name("-D warnings -Zthreads=8"),
     )]))
 }
 
@@ -389,7 +415,12 @@ fn a_step_that_loses_or_changes_its_value_is_refused() {
         ("a job-level assignment", STEP_UNDER_A_JOB_ENV),
     ] {
         assert_eq!(
-            problems(&[on(text, Scope::Step("Build"), "-D warnings")]).len(),
+            problems(&[on(
+                Text(text),
+                Scope::Step(Name("Build")),
+                Name("-D warnings")
+            )])
+            .len(),
             1,
             "{label}"
         );
@@ -403,7 +434,12 @@ fn a_job_that_loses_or_changes_its_value_is_refused() {
         ("the frontend flag dropped", JOB_LOSES_FRONTEND),
     ] {
         assert_eq!(
-            problems(&[on(text, Scope::Job("windows"), "-D warnings -Zthreads=8")]).len(),
+            problems(&[on(
+                Text(text),
+                Scope::Job(Name("windows")),
+                Name("-D warnings -Zthreads=8")
+            )])
+            .len(),
             1,
             "{label}"
         );
@@ -413,15 +449,30 @@ fn a_job_that_loses_or_changes_its_value_is_refused() {
 #[test]
 fn a_place_that_is_absent_or_repeated_proves_nothing() {
     assert_eq!(
-        problems(&[on("jobs: {}\n", Scope::Step("Build"), "-D warnings")]).len(),
+        problems(&[on(
+            Text("jobs: {}\n"),
+            Scope::Step(Name("Build")),
+            Name("-D warnings")
+        )])
+        .len(),
         1
     );
     assert_eq!(
-        problems(&[on(STEP_TWICE, Scope::Step("Build"), "-D warnings")]).len(),
+        problems(&[on(
+            Text(STEP_TWICE),
+            Scope::Step(Name("Build")),
+            Name("-D warnings")
+        )])
+        .len(),
         1
     );
     assert_eq!(
-        problems(&[on("jobs: {}\n", Scope::Job("windows"), "-D warnings")]).len(),
+        problems(&[on(
+            Text("jobs: {}\n"),
+            Scope::Job(Name("windows")),
+            Name("-D warnings")
+        )])
+        .len(),
         1
     );
 }
