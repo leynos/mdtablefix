@@ -1133,13 +1133,13 @@ ships for Linux only.
 The flags live in `.cargo/config.toml`, but Cargo applies exactly one
 `rustflags` source and an assigned `RUSTFLAGS` replaces every configuration
 source. The Makefile therefore restates the flags in each recipe and keeps any
-`RUSTFLAGS` you set, appending the standard flags after yours. Two builds are
-held out on purpose: the coverage build assigns its own flags, because a
-measurement should not depend on the fast flags, and the release build.
-`make release` keeps your `RUSTFLAGS` and names neither fast flag, so a shipped
-artefact links with the platform linker. A bare `cargo build --release` is
-different: it takes the configuration's flags unless you assign `RUSTFLAGS`
-yourself, for example `RUSTFLAGS="" cargo build --release`.
+`RUSTFLAGS` already in the environment, appending the standard flags after it.
+Two builds are held out deliberately. The coverage build assigns its own flags,
+because a measurement should not depend on the fast flags. `make release` keeps
+the environment's `RUSTFLAGS` and names neither fast flag, so a shipped
+artefact links with the platform linker. A bare `cargo build --release` takes
+the configuration's flags unless `RUSTFLAGS` is assigned, for example
+`RUSTFLAGS="" cargo build --release`.
 
-Cranelift is not adopted; the developers' guide records the measurement and the
-reason. See [ADR 0013](adrs/0013-rust-build-standard.md) for the reasoning.
+Cranelift is not adopted; the developers' guide records the reason. See
+[ADR 0013](adrs/0013-rust-build-standard.md) for the reasoning.
