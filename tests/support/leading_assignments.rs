@@ -45,26 +45,77 @@ impl<'a> LeadingAssignments<'a> {
 
     /// Return the length of the assignment value at the start of the text, or
     /// `None` when a quote or `$(` is still open at the end of the input.
+    ///
+    /// Quotes and parentheses nest: inside `$(...)` a quote opens its own string, so the `"` that
+    /// starts `"$(printf " %s")"`'s inner argument does not close the outer one.
     fn value_len(&self) -> Option<usize> {
         let text = self.0;
-        let mut quote: Option<char> = None;
-        let mut depth = 0_usize;
-        let mut chars = text.char_indices();
+        let mut open: Vec<Open> = Vec::new();
+        let mut chars = text.char_indices().peekable();
         while let Some((index, c)) = chars.next() {
-            match (quote, c) {
-                (_, '\\') if quote != Some('\'') => {
-                    chars.next();
-                }
-                (Some(open), _) if c == open => quote = None,
-                (None, '"' | '\'') => quote = Some(c),
-                (None, '(') => depth += 1,
-                (None, ')') => depth = depth.saturating_sub(1),
-                (None, _) if c.is_whitespace() && depth == 0 => return Some(index),
-                _ => {}
+            if open.is_empty() && c.is_whitespace() {
+                return Some(index);
+            }
+            let next = chars.peek().map(|&(_, following)| following);
+            if step(&mut open, c, next) {
+                chars.next();
             }
         }
-        (quote.is_none() && depth == 0).then_some(text.len())
+        open.is_empty().then_some(text.len())
     }
+}
+
+/// A construct still open while a value is scanned.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Open {
+    Single,
+    Double,
+    Paren,
+}
+
+/// Apply one character to the stack of open constructs. Returns whether the next character was
+/// consumed too (an escaped character, or the `(` of `$(`).
+fn step(open: &mut Vec<Open>, c: char, next: Option<char>) -> bool {
+    match open.last().copied() {
+        Some(Open::Single) => {
+            if c == '\'' {
+                open.pop();
+            }
+            false
+        }
+        _ if c == '\\' => true,
+        Some(Open::Double) => in_double(open, c, next),
+        _ => outside_quotes(open, c),
+    }
+}
+
+/// Handle a character inside double quotes: the closing quote, or the start of `$(...)`.
+fn in_double(open: &mut Vec<Open>, c: char, next: Option<char>) -> bool {
+    match c {
+        '"' => {
+            open.pop();
+            false
+        }
+        '$' if next == Some('(') => {
+            open.push(Open::Paren);
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Handle a character outside quotes: an opening quote or parenthesis, or the closing parenthesis.
+fn outside_quotes(open: &mut Vec<Open>, c: char) -> bool {
+    match c {
+        ')' if open.last() == Some(&Open::Paren) => {
+            open.pop();
+        }
+        '"' => open.push(Open::Double),
+        '\'' => open.push(Open::Single),
+        '(' => open.push(Open::Paren),
+        _ => {}
+    }
+    false
 }
 
 #[cfg(test)]
@@ -82,13 +133,16 @@ mod tests {
 
     /// An assignment value in any of the spellings a recipe uses: bare, double
     /// quoted with spaces and an escaped quote followed by a space, single quoted with a backslash,
-    /// or a `$(...)` reference holding spaces and a nested reference.
+    /// a `$(...)` reference holding spaces and a nested reference, or a double-quoted `$(...)`
+    /// whose own arguments are quoted.
     fn value() -> impl Strategy<Value = String> {
         prop_oneof![
             "[a-z0-9./-]{0,8}".prop_map(|word| word),
             "[a-z0-9 :+-]{0,10}".prop_map(|words| format!("\"{words}\\\" tail\"")),
             "[a-z0-9 \\\\-]{0,8}".prop_map(|words| format!("'{words}'")),
             "[a-z]{1,5}".prop_map(|word| format!("$({word} $(inner arg) tail)")),
+            "[a-z]{1,5}".prop_map(|word| format!("\"$({word} \" %s\" \"$X\")\"")),
+            "[a-z]{1,5}".prop_map(|word| format!("\"$({word} ')' \"nested ( quote\")\"")),
         ]
     }
 

@@ -144,6 +144,15 @@ fn reads_only_the_targets_own_uncommented_commands() -> Result<()> {
 #[case::env_assignment_then_echo("RUSTFLAGS=\"-D warnings\" echo $(CARGO) clippy", false)]
 #[case::env_assignment_only("RUSTFLAGS=\"-D warnings\"", false)]
 #[case::env_assignment_unterminated("RUSTFLAGS=\"-D warnings $(CARGO) clippy", false)]
+#[case::quote_inside_a_substitution(
+    "RUSTFLAGS=\"$(printf \" %s\" \"$FLAGS\")\" cargo clippy --all-targets",
+    true
+)]
+#[case::command_text_inside_a_substitution_is_not_the_command(
+    "A=\"$(printf \" cargo clippy \")\" echo ok",
+    false
+)]
+#[case::paren_inside_a_nested_quote("A=\"$(echo ')' \"x ( y\")\" cargo clippy", true)]
 #[case::empty("", false)]
 fn recognizes_only_executable_clippy_invocations(#[case] command: &str, #[case] expected: bool) {
     let makefile = concat!(
