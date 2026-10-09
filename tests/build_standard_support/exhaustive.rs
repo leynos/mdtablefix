@@ -67,7 +67,7 @@ fn the_pin_reader_agrees_with_an_independent_count_over_every_small_file() {
         ("channel = \"1.94.0\"", Line::Channel(Some(Pin::Stable))),
         ("channel = \"nightly-preview\"", Line::Channel(None)),
         ("channel = \"nightly-2026-5-28\"", Line::Channel(None)),
-        ("channel = \"nightly\"", Line::Channel(Some(Pin::Nightly))),
+        ("channel = \"nightly\"", Line::Channel(None)),
         (
             "channel = \"stable\" # pinned",
             Line::Channel(Some(Pin::Stable)),

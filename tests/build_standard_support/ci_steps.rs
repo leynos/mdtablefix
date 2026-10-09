@@ -3,8 +3,10 @@
 //! Linux jobs have the linker the configuration names, and every coverage step
 //! assigns `RUSTFLAGS` itself, without a standard flag.
 //!
-//! The workflows are read as text, one step at a time. Release workflows are not
-//! listed: a release stays on the platform linker and never uses mold.
+//! The workflows are read as text, one step at a time. A release workflow is not
+//! listed: a release stays on the platform linker, and its build steps assign
+//! `RUSTFLAGS`, so mold never reaches a release link. A release build inside a
+//! listed workflow is judged like any other step there.
 
 use super::config::{Flags, Problems, THREADS_FLAG};
 
@@ -47,6 +49,7 @@ pub struct Workflow<'a> {
 enum Action {
     SetupRust,
     GenerateCoverage,
+    InstallWhitaker,
 }
 
 impl Action {
@@ -55,6 +58,7 @@ impl Action {
         match self {
             Self::SetupRust => "setup-rust@",
             Self::GenerateCoverage => "generate-coverage@",
+            Self::InstallWhitaker => "install-whitaker@",
         }
     }
 }
@@ -64,6 +68,11 @@ impl Action {
 /// `true`, and a step that starts denying them is drift where a repository deliberately assigns
 /// other flags (an alternative linker, a different frontend flag) and this is `false`.
 pub const COVERAGE_DENIES_WARNINGS: bool = true;
+
+/// How many coverage steps the listed workflows hold. Pinned both ways, so removing a coverage step
+/// (and with it the assertions about its `RUSTFLAGS`) fails the contract instead of reading as
+/// success, and adding one is a deliberate edit of this number.
+pub const COVERAGE_STEP_COUNT: usize = 2;
 
 /// A step of a workflow file, found by the action it uses.
 struct Step<'a> {
@@ -89,6 +98,24 @@ impl Step<'_> {
             .iter()
             .find_map(|line| line.trim().strip_prefix("RUSTFLAGS:"))
             .map(str::trim)
+    }
+
+    /// Returns whether the step passes `cranelift: 'true'` (quoted or bare).
+    fn passes_the_cranelift_input(&self) -> bool {
+        self.lines
+            .iter()
+            .any(|line| squeezed(line) == "cranelift:true")
+    }
+
+    /// Returns the complaint about an `install-whitaker` step that provisions no Cranelift
+    /// component.
+    fn cranelift_problem(&self) -> Option<String> {
+        (!self.passes_the_cranelift_input()).then(|| {
+            format!(
+                "{}: an install-whitaker step does not pass `cranelift: 'true'`",
+                self.location()
+            )
+        })
     }
 
     /// Returns the complaint about a `setup-rust` step that installs no linker.
@@ -245,10 +272,51 @@ fn listed_problems(workflow: &Workflow) -> Problems {
 
 /// Returns every complaint about the listed workflows.
 pub fn workflow_problems() -> Problems {
-    let listed = WORKFLOWS
-        .iter()
-        .map(|&(file, text)| Workflow { file, text });
-    listed
+    let listed = || {
+        WORKFLOWS
+            .iter()
+            .map(|&(file, text)| Workflow { file, text })
+    };
+    let found = listed()
+        .map(|workflow| steps_using(&workflow, Action::GenerateCoverage).len())
+        .sum();
+    let mut problems: Problems = listed()
         .flat_map(|workflow| listed_problems(&workflow))
+        .collect();
+    problems.extend(coverage_presence_problem(found, COVERAGE_STEP_COUNT));
+    problems
+}
+
+/// Returns the complaint when the listed workflows hold a number of coverage steps other than the
+/// one recorded, so a removed step cannot take its own assertions with it.
+pub fn coverage_presence_problem(found: usize, recorded: usize) -> Option<String> {
+    (found != recorded).then(|| {
+        format!(
+            "the listed workflows hold {found} coverage step(s), but the contract records \
+             {recorded}"
+        )
+    })
+}
+
+/// Returns the complaint about each `install-whitaker` step in one workflow that does not pass
+/// `cranelift: 'true'`, for a repository whose lint suite builds with the Cranelift backend.
+///
+/// ```text
+/// - uses: org/shared-actions/.github/actions/install-whitaker@<sha>
+///   with:
+///     cranelift: 'true'      -> no complaint
+/// ```
+pub fn whitaker_cranelift_problems(workflow: &Workflow) -> Problems {
+    steps_using(workflow, Action::InstallWhitaker)
+        .iter()
+        .filter_map(Step::cranelift_problem)
+        .collect()
+}
+
+/// Returns the complaints about every listed workflow's `install-whitaker` steps.
+pub fn cranelift_workflow_problems() -> Problems {
+    WORKFLOWS
+        .iter()
+        .flat_map(|&(file, text)| whitaker_cranelift_problems(&Workflow { file, text }))
         .collect()
 }
