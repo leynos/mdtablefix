@@ -17,6 +17,8 @@ mod ci_steps;
 mod command_reader;
 #[path = "build_standard_support/config.rs"]
 mod config;
+#[path = "build_standard_support/coverage_env.rs"]
+mod coverage_env;
 #[path = "build_standard_support/cranelift.rs"]
 mod cranelift;
 #[path = "build_standard_support/development.rs"]
@@ -43,6 +45,7 @@ mod shell;
 mod workflow_exhaustive;
 use ci_steps::workflow_problems;
 use config::{CONFIG, Pin, Problems, TOOLCHAIN, config_problems};
+use coverage_env::coverage_recipe_problems;
 use development::development_problems;
 use make::{Host, held_out_problems, held_out_target_count};
 use process::real_make;
@@ -97,4 +100,12 @@ fn coverage_and_release_take_neither_flag() -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+/// The coverage recipe assigns what it recorded besides `RUSTFLAGS`: the LLVM backend, the linker
+/// and the link arguments a measurement needs. A repository with no local coverage recipe records
+/// nothing.
+#[test]
+fn the_coverage_recipe_assigns_its_recorded_environment() -> Result<(), String> {
+    none_of(&coverage_recipe_problems(real_make)?)
 }
