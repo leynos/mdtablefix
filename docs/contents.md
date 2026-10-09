@@ -59,6 +59,9 @@
 
 ## Reference material
 
+- [Rust build standard](adrs/0013-rust-build-standard.md): Accepted decision to
+  build with the parallel frontend and mold while coverage and release stay off
+  them.
 - [Rust doctest dry guide](rust-doctest-dry-guide.md): Guidance for writing
   Rust documentation tests that avoid brittle or misleading examples.
 - [Rust testing with rstest fixtures](rust-testing-with-rstest-fixtures.md):
