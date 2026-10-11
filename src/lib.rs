@@ -58,7 +58,7 @@ pub mod wrap;
 /// # Examples
 ///
 /// ```
-/// # #![allow(deprecated)]
+/// # #![expect(deprecated, reason = "this example exercises the legacy wrapper")]
 /// use mdtablefix::html_table_to_markdown;
 ///
 /// let html = vec![
