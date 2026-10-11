@@ -131,10 +131,11 @@ rendering and renumbering retain their own state.
 - The repository is a Cargo workspace containing the root `mdtablefix` package
   and the `test-macros` proc-macro package. It uses resolver 3 so Cargo applies
   the current feature-resolution rules across both packages.
-- The shared Clippy policy enables `pedantic` at warning level and denies
-  `missing_docs_in_private_items`. Both packages inherit that policy through
-  `[lints] workspace = true`, so private parsing, layout, test-support, and
-  macro-expansion contracts remain documented as the workspace grows.
+- The shared lint policy enables Clippy's `pedantic` at warning level, denies
+  `clippy::missing_docs_in_private_items`, and denies rustc's `missing_docs`.
+  Both packages inherit it through `[lints] workspace = true`, so public items
+  and private parsing, layout, test-support, and macro-expansion contracts
+  remain documented as the workspace grows.
 
 `Makefile`:
 

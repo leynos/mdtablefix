@@ -85,6 +85,9 @@ allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
 
 [workspace.lints.rust]
+# Deny undocumented public items, as the documentation-presence rule (DG-003)
+# requires; the clippy table above already covers private ones.
+missing_docs = "deny"
 # Production kernels select Verus contracts only while the pinned verifier
 # compiles their shared source. Cargo must recognise that verifier cfg.
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(verus_keep_ghost)"] }

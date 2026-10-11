@@ -16,6 +16,11 @@
 //! - `report` for line-delta reporting.
 //! - `io` for file helpers, the document boundary, and line-ending preservation.
 
+/// Create a lazily initialized regular expression.
+///
+/// The pattern is compiled on first access. If it is invalid, initialization
+/// panics with the supplied message and the regex error. The expansion names
+/// `regex::Regex`, so the calling crate must depend on `regex` directly.
 #[macro_export]
 macro_rules! lazy_regex {
     ($re:expr, $msg:expr $(,)?) => {
@@ -45,6 +50,26 @@ pub mod table;
 pub mod textproc;
 pub mod wrap;
 
+/// Convert HTML tables in `lines` to Markdown tables.
+///
+/// Legacy entry point kept for compatibility; use [`convert_html_tables`] in new
+/// code.
+///
+/// # Examples
+///
+/// ```
+/// # #![expect(deprecated, reason = "this example exercises the legacy wrapper")]
+/// use mdtablefix::html_table_to_markdown;
+///
+/// let html = vec![
+///     "<table>".to_string(),
+///     "<tr><th>A</th></tr>".to_string(),
+///     "<tr><td>1</td></tr>".to_string(),
+///     "</table>".to_string(),
+/// ];
+/// let markdown = html_table_to_markdown(&html);
+/// assert!(markdown.iter().any(|line| line.contains('A')));
+/// ```
 #[deprecated(note = "this function is legacy; use `convert_html_tables` instead")]
 #[must_use]
 pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {

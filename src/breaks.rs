@@ -19,6 +19,7 @@ use crate::{
 mod item_stack;
 use item_stack::{ItemStack, Placement};
 
+/// Number of underscores in the canonical replacement for a thematic break.
 pub const THEMATIC_BREAK_LEN: usize = 70;
 
 /// Shared replacement line so every thematic break can be returned without allocation.

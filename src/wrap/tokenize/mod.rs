@@ -43,8 +43,12 @@ pub enum Token<'a> {
     Fence(&'a str),
     /// Inline code span carrying the original fenced substring.
     Code {
+        /// The span as written: its fences, the code, and any inflectional suffix
+        /// attached to the closing fence (`` `Name`s ``).
         raw: &'a str,
+        /// The backtick fence that opens and closes the span.
         fence: &'a str,
+        /// The text between the fences.
         code: &'a str,
     },
     /// Plain text outside code regions.
