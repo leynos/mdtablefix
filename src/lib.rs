@@ -16,6 +16,11 @@
 //! - `report` for line-delta reporting.
 //! - `io` for file helpers, the document boundary, and line-ending preservation.
 
+/// Create a lazily initialised regular expression.
+///
+/// The pattern is compiled on first access and `expect`s the message if it is
+/// invalid. The expansion names `regex::Regex`, so the calling crate must depend
+/// on `regex` directly.
 #[macro_export]
 macro_rules! lazy_regex {
     ($re:expr, $msg:expr $(,)?) => {
@@ -45,6 +50,10 @@ pub mod table;
 pub mod textproc;
 pub mod wrap;
 
+/// Convert HTML tables in `lines` to Markdown tables.
+///
+/// Legacy entry point kept for compatibility; use [`convert_html_tables`] in new
+/// code.
 #[deprecated(note = "this function is legacy; use `convert_html_tables` instead")]
 #[must_use]
 pub fn html_table_to_markdown(lines: &[String]) -> Vec<String> {
