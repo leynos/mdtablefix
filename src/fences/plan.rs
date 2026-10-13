@@ -32,13 +32,12 @@ include!("../verified_kernel_macros.rs");
 // than reimplementing it.
 #[cfg(verus_keep_ghost)]
 use crate::production_fence::{
-    FenceState,
     FenceState as KernelState,
     LineFeatures,
     compression_changes_region,
 };
 #[cfg(not(verus_keep_ghost))]
-use crate::wrap::{FenceState, KernelState, LineFeatures, compression_changes_region};
+use crate::wrap::{KernelState, LineFeatures, compression_changes_region};
 
 /// The buffering state of the block the pass currently holds open.
 ///
@@ -234,7 +233,7 @@ verified_kernel_function! {
 /// whatever state the tracker carries, because a shallower line ends the fence
 /// before it is read.
 #[must_use]
-pub fn fenced(state: Option<FenceState>, depth: usize) -> bool;
+pub fn fenced(state: Option<KernelState>, depth: usize) -> bool;
 ensures(result => result == crate::spec_fenced(state@, depth));
 {
     matches!(state, Some(open) if depth >= open.open_depth)
