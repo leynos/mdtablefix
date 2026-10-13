@@ -278,9 +278,33 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       `docs/adrs/0006-single-pass-idempotence.md` references were verified
       accurate and left alone. Item 2 (`Linked Issues`) is the outstanding one
       and is the subject of M6 item 5.
-- [ ] M6 Item 2 — the document-level fence-compression preservation proof.
-      Outstanding. The full specification is recorded in the M6 section below
-      and in CodeRabbit's AI-agent prompt of 2026-10-13.
+- [x] M6 Item 5a — extract the compression planner and prove the document
+      theorem. Committed as `3846774`. `src/fences/plan.rs` is new: a pure,
+      regex-free planner owning `Block`, `Release`, `Agendum`, `LineFacts`,
+      `Step`, and six `verified_kernel_function!` kernels plus one
+      `verified_loop_function!`. `src/fences/compress.rs` was rewritten to
+      consume it, keeping only parsing, the two delimiter respellings, and
+      buffering. `verus/plan_spec.rs` states the document theorem. `make verus`
+      reports 108 verified and 0 errors (up from 81); `cargo test --workspace`
+      reports 2819 passed, 0 failed; `cargo clippy --workspace --all-targets
+      --all-features -- -D warnings` and `cargo fmt --all --check` are clean.
+      The parked WIP ref `wip/486-plan-kernel` is superseded and can be deleted.
+- [x] M6 Item 6 — the compression mutation gate, wired into the Makefile as
+      `verus-compression-mutation` and added to `.PHONY`. It confirms the gate
+      fails for the intended reason.
+- [ ] M6 Item 5b — the driver composition. `plan_step`'s routing relation
+      already models every release the pass can name, but the emitted readings
+      are related to the source readings by the external emission contract
+      rather than by a composition lemma over the buffered-bucket fold. This is
+      the last gap between the block-level proofs and the pass, and the full
+      specification is recorded in the M6 section below and in CodeRabbit's
+      AI-agent prompt of 2026-10-13. **Do not mark issue #486 fully addressed
+      while this remains open.**
+- [ ] M6 Item 2 — the document-level fence-compression preservation proof as
+      a whole. Partially delivered: the block-interior and compressed-block
+      lemmas, the non-vacuity witnesses, and the mutation gate are in; the
+      driver composition above is not. The full specification is recorded in the
+      M6 section below and in CodeRabbit's AI-agent prompt of 2026-10-13.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -606,6 +630,73 @@ See the decision log.
   reading the *diff* rather than the conflict markers gives the whole picture:
   git presents it as a disagreement about one hunk, not as two independent
   additions to preserve.
+- **Clippy's preferred spelling of an `Option` chain is one Verus cannot
+  compile, so the kernel bodies must be written in the form the prover accepts
+  and the lint is asked to accept it there.** `open_block` reduces a
+  `LineFacts` to its opening state through two `Option` projections, which
+  `clippy::manual_map` reports as a nested `match` and would rewrite as
+  `.and_then(..)`. `and_then` is a call to an `impl` block's method on a
+  reference, and the pinned Verus release rejects it outright:
+  `error: core::option::impl&%0::and_then is not supported`. The fix is not to
+  silence the lint — the file stays clean under `-D warnings` — but to write
+  the projection with two `let Some(..) = .. else { return None; };`
+  statements, which is idiomatic Rust, needs no `match`, and is the form the
+  kernel already used elsewhere. The general lesson for this codebase is that
+  Clippy's suggestion is not automatically applicable inside an `include!`d
+  kernel body: a lint-clean rewrite of a kernel is only safe once Verus has
+  verified it.
+- **A base case that reaches the bottom of a recursive specification needs
+  more than `reveal`.** `reveal(f)` supplies one unfolding, which is exactly
+  enough for an inductive step that the induction hypothesis already carries
+  the rest of. A base case is different: it asserts a *closed* statement about
+  a one- or two-element sequence, and the solver must unfold the recursion all
+  the way to the `upto <= 0` arm before the assertion is even meaningful. The
+  three base-case failures in this session (`lemma_compressed_prefix` at a
+  prefix of one line, and `lemma_witness_compressed_block_is_live` at three),
+  were all fixed by `reveal_with_fuel(f, n)` with `n` set slightly above the
+  number of nested unfoldings the assertion needs — 2 for a two-deep chain, 4
+  for a three-element one. The heuristic that worked is to count the sequence
+  elements the assertion mentions and add one, rather than to add fuel until
+  the solver stops complaining.
+- **Region equality for the whole document does not need a per-line transition
+  proof, because a non-rewriting write reads back identically.** The obvious
+  route — induct over the driver, carrying a region for every emitted line —
+  needs the emitted reading of each line to be related to its source reading by
+  a transition argument, which is a large composition problem. The route that
+  worked is to note that only `Agendum::Compressed` changes what the classifier
+  reads: a `Normalized` write preserves marker family, run length, depth and
+  the blank-tag decision, so dropping a null language specifier is invisible to
+  `fence_step`. Every other position is written verbatim. So the document
+  theorem follows from a *pointwise reading agreement* — for each emitted line,
+  its region under the emitted prefix equals its region under the source prefix
+  — and the pointwise claim is one case split, with the single interesting case
+  discharged by the guarded-interior lemma that was already proved for the
+  block interior. This is the design insight that made the document theorem
+  tractable, and it is worth restating before any future attempt to strengthen
+  the result: the hard part is not the driver, it is finding the reading that
+  is preserved by the writes the driver performs.
+- **The fence-skipping consumers are all adapters over the shared kernel; the
+  one independent reimplementation is currently unreachable.** A sweep of every
+  decision site that skips fenced content found seventeen `FenceTracker`
+  constructions in `src/`, one per pass that needs to know whether a line is
+  inside a fence, and every one of them routes through `fence_step` — the
+  streaming passes through `observe_source_line` or `observe_inner`, and
+  `compress_fences` additionally through the kernel predicate
+  `compression_changes_region`. Two qualifications belong on the record rather
+  than being smoothed over. First, `src/classify_kernel_predicates.rs` does
+  contain a genuinely independent fence recognizer — `is_fence_marker` and
+  `is_closing_fence`, the latter without any blockquote-depth rule, and with an
+  `OpenFence` that carries only a marker and a run length. It cannot currently
+  disagree with the kernel in production because its `is_in_fence` field is
+  only ever set true under `#[cfg(test)]`, and `LineClass::FenceMarker` has no
+  production consumer; it is a drift hazard rather than an active
+  inconsistency. Second, there are two distinct fence regexes —
+  `src/wrap/fence.rs` and `src/fences.rs` — whose info-string and
+  trailing-whitespace grammars differ; the second never decides literal-ness,
+  only delimiter spelling and attachment eligibility, and its results are gated
+  through the planner and the kernel predicate. Both qualifications are
+  recorded as remaining external contracts in `docs/verification.md` rather
+  than as discharged obligations.
 
 ## Decision log
 
@@ -649,6 +740,47 @@ See the decision log.
   the stale ref reported a 255-file, 34,245-insertion diff; against
   `origin/main` it is the 17 files this work touched, which is the diff a
   reviewer needs. Date 2026-09-28.
+- Decision: extract the planner into `src/fences/plan.rs` as a set of
+  `verified_kernel_function!` / `verified_loop_function!` kernels, included by
+  `verus/lib.rs` through a `#[path]` attribute, rather than proving a separate
+  model of the pass. Rationale: ADR 0011's pattern is that the proof build
+  compiles the production body, so the postconditions constrain the decisions
+  the formatter actually makes. A parallel model would be free to drift from
+  the pass it claims to describe, which is precisely the failure this issue
+  exists to prevent. Date 2026-10-05.
+- Decision: state the planner's postconditions against `crate::spec_*`
+  functions resolved through a `pub use plan_spec::*;` glob in `verus/lib.rs`.
+  Rationale: `src/fences/plan.rs` is compiled twice — once as an ordinary
+  production module, once as a module included by the proof entry point — and
+  the second form has only the entry point's exports to reach the
+  specifications through, so a `crate::` path that resolves in neither build is
+  the only spelling that works in both. The glob is load-bearing; removing it
+  produces eight `E0425` errors pointing into the production file. Date
+  2026-10-05.
+- Decision: prove full Region-sequence equality, not merely region preservation
+  on payload lines. Rationale: the pointwise reading-agreement argument (see
+  Surprises) is no harder than the weaker statement once the reading is chosen
+  correctly, and the full equality is the property whose executable counterpart
+  `tests/fence_regions.rs` already asserts corpus-wide — so the theorem and the
+  sweep now agree on a statement rather than on a weakened version of one. Date
+  2026-10-05.
+- Decision: keep the driver composition (M6 item 5b) open rather than closing
+  issue #486 on the strength of the block-level result. Rationale: the user's
+  specification requires that block buffering, conflict accumulation and
+  emission not be connected to the specification only by tests, and the
+  emission step is currently related to the specification by the external
+  emission contract plus the corpus sweep. The block-level theorem is complete
+  and is the larger half of the work, but marking the issue addressed while a
+  required obligation is open would misreport the state of the proof. Date
+  2026-10-05.
+- Decision: audit the fence-skipping consumers by inspection and record the
+  result as evidence rather than attempting to prove each adapter. Rationale:
+  the obligation is that every pass which skips fenced content consumes the
+  same classifier, which is a property of the call graph rather than of any one
+  pass's arithmetic; the audit found seventeen tracker constructions all
+  routing through `fence_step`, and the two qualifications it raised are
+  recorded as external contracts precisely because they are not provable from
+  what is currently extracted. Date 2026-10-13.
 
 ## Verification plan
 
@@ -704,17 +836,42 @@ Obligations, and how each is discharged.
    an empty sequence; `lemma_witness_conflict_is_rejected` proves the guard
    fires on the issue #480 shape.
 
-   Complete-pass equality is *executable corpus evidence*, not a general Verus
-   theorem: `compress_fences` buffers, accumulates a conflict flag, and has
-   three flush paths (matched, unmatched, original-verbatim) that the block
-   lemmas do not model. The sweep in `tests/fence_regions.rs` therefore asserts
+   The document-level result is now a Verus theorem, not only corpus evidence.
+   `verus/plan_spec.rs` states it over readings: a delimiter the planner
+   respells conservatively is written in its source marker family and run with
+   only a null language specifier dropped, and dropping a null specifier
+   changes no field the transition reads, so the line reads back as itself and
+   region equality follows from a pointwise reading agreement
+   (`lemma_agreement_preserves_prefix`) with no block-level reasoning at all.
+   That covers every abandoned block, every matched block whose endpoints are
+   not both rewrite candidates, and every conflict-bearing block. Only a
+   compressed write changes the reading, and there the written opener is exactly
+   `spec_compressed` of the source opener — the second state
+   `lemma_normalization_preserves_regions` already compares against. The two
+   files meet exactly, and `lemma_no_conflict_all_clear` is where the planner's
+   own conflict fold supplies that lemma's guard. `lemma_compressed_prefix`
+   extends the block result over a compressed block's interior and
+   `lemma_compressed_block_regions` over its closing delimiter, and
+   `lemma_block_agenda_length` supplies the line-count half. Non-vacuity:
+   `lemma_witness_compressed_block_is_live` pins the three regions of a four-
+   backtick/three-backtick block to the concrete sequence
+   `[Delim, Literal, Delim]`, and `lemma_witness_conflict_moves_region` states
+   the issue #480 defect as a pair of region values, showing the hypothesis is
+   not vacuous. `make verus-compression-mutation` rewrites `delimiter_agendum`
+   to compress every delimiter it is handed, discarding the argument that
+   carries the block's compression answer, and must fail.
+
+   The remaining boundary is the pass's *driver*: the loop that calls
+   `plan_step` and dispatches the flush paths. `plan_step`'s routing relation
+   already models every release the pass can name, but the emitted readings are
+   related to the source readings by the external emission contract rather than
+   by a composition lemma. The sweep in `tests/fence_regions.rs` asserts
    `regions(compress_fences(lines)) == regions(lines)` for every fixture under
    `tests/data/` plus the four `UNCLOSED_DOCUMENTS` reproducers, with
    `tests/data/footnotes_fence_toggle_input.txt` pinned as a must-cover case
    and each sweep asserting a minimum checked count so it cannot pass over an
-   empty corpus. Closing the gap between the block lemmas and the flush paths
-   is recorded as remaining work in the Progress and Outcomes sections; it is
-   not claimed as proved.
+   empty corpus. That sweep is executable evidence for the driver, and the
+   composition lemma that would replace it is recorded as remaining work below.
 
 5. **Cross-pass agreement.** Every pass that skips fenced content consumes the
    same classifier. Method: the passes already construct `FenceTracker`; M1

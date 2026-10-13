@@ -56,12 +56,14 @@ cp "${repo_root}/src/classify_kernel_predicates.rs" "${proof_dir}/src/classify_k
 cp "${repo_root}/src/classify_kernel_consumers.rs" "${proof_dir}/src/classify_kernel_consumers.rs"
 cp "${repo_root}/src/wrap/fence/kernel.rs" "${proof_dir}/src/wrap/fence/kernel.rs"
 
-# The mutation: the `compressible` argument stops constraining the answer, so
-# every delimiter is written compressed. The binding stays used and the shape of
-# the branch stays intact, so the mutated kernel compiles cleanly and the only
-# change is that the conflict flag no longer reaches the emission decision.
-sed -e 's@^    } else if compressible {@    } else if true {@' \
-    -e 's@^        Agendum::Normalized@        Agendum::Compressed@' \
+# The mutation: the `compressible` guard becomes `true`, so every delimiter is
+# written compressed. The argument stays in the signature and the shape of the
+# branch stays intact, so the mutated kernel compiles cleanly and the only
+# change is that the conflict flag no longer reaches the emission decision. That
+# the detection is targeted rather than global is part of the gate's value: the
+# mutated run reports exactly one failed obligation, the body that no longer
+# realises its contract, and every other proof still verifies.
+sed 's@    } else if compressible {@    } else if true {@' \
     "${repo_root}/src/fences/plan.rs" \
     > "${proof_dir}/src/fences/plan.rs"
 if cmp -s "${repo_root}/src/fences/plan.rs" \
