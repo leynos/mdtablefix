@@ -4,7 +4,7 @@ use tracing::trace;
 
 use super::{FENCE_RE, is_null_lang};
 use crate::{
-    classify::{ClassifyCtx, LineClass, classify_line},
+    classify::{ClassifyCtx, can_be_orphan_specifier},
     wrap::FenceTracker,
 };
 
@@ -111,9 +111,7 @@ where
 /// declining a line here does not imply that pass will rewrite it. Lines
 /// indented by four columns or more are indented code and retain their
 /// specifier behaviour.
-fn is_thematic_break(line: &str) -> bool {
-    classify_line(line, &ClassifyCtx::default()) == LineClass::ThematicBreak
-}
+fn is_thematic_break(line: &str) -> bool { !can_be_orphan_specifier(line, &ClassifyCtx::default()) }
 
 /// Emit `line` verbatim when it is a thematic break rather than a specifier.
 ///

@@ -18,8 +18,7 @@ use crate::{
         ListContinuationState,
         classify_line_with_body,
         is_atx_heading_line,
-        is_setext_text_line,
-        is_setext_underline_line,
+        is_setext_pair,
         quote_depth,
     },
     wrap::{
@@ -30,6 +29,18 @@ use crate::{
         leading_indent,
     },
 };
+
+/// The parsed input values and context admitted by the production pair detector.
+struct ParsedSetextHeading {
+    /// ATX level selected from the admitted underline's `=` or `-` marker.
+    level: usize,
+    /// Byte length of the character-aligned source prefix retained in output.
+    prefix_len: usize,
+    /// Candidate suffix after the production parser removes surrounding whitespace.
+    text: String,
+    /// The actual preceding-paragraph and prefix-agreement state used for admission.
+    underline_context: ClassifyCtx,
+}
 
 /// Convert Setext-style headings into ATX (`#`) headings.
 ///
@@ -111,16 +122,19 @@ pub(crate) fn setext_text_lines(lines: &[String]) -> Vec<bool> {
     setext_text_lines
 }
 
-/// Builds a Setext replacement only when the verified classifier sees ATX output.
+/// Constructs a Setext replacement and independently checks its runtime ATX class.
+///
+/// For example, `Title` followed by `===` returns `Some("# Title")`.
+/// The sequence kernel proves construction; this guard checks the emitted line.
 fn detect_verified_setext_heading(
     line: &str,
     underline: Option<&str>,
     link_matcher: LinkReferenceMatcher,
     continuation_indent: Option<usize>,
 ) -> Option<String> {
-    let (level, prefix_len, text) =
-        detect_setext_heading(line, underline, link_matcher, continuation_indent)?;
-    let emitted = convert_setext(&line[..prefix_len], level, &text);
+    let underline = underline?;
+    let heading = detect_setext_heading(line, Some(underline), link_matcher, continuation_indent)?;
+    let emitted = convert_setext(&heading, line, underline)?;
     is_atx_heading_line(&emitted, &ClassifyCtx::default()).then_some(emitted)
 }
 
@@ -142,18 +156,60 @@ pub(crate) fn setext_heading_lines(lines: &[String]) -> Vec<bool> {
     heading
 }
 
-/// Parses a Setext heading pair and returns its level, shared prefix length, and text.
+/// Parses a Setext pair into its level, retained prefix, text, and actual underline context.
 ///
 /// The candidate is rejected when the underline prefix differs, the text is a block start, or
 /// either line belongs to an indented code block; those checks prevent structural lines from being
 /// consumed as heading text.
+/// For example, `> Title` followed by `> ===` yields level one, prefix length two,
+/// text `Title`, and an agreeing preceding-paragraph context.
 fn detect_setext_heading(
     line: &str,
     underline: Option<&str>,
     link_matcher: LinkReferenceMatcher,
     continuation_indent: Option<usize>,
-) -> Option<(usize, usize, String)> {
+) -> Option<ParsedSetextHeading> {
     let underline = underline?;
+    let (prefix_len, underline_context) =
+        validated_setext_prefix_context(line, underline, continuation_indent)?;
+    if !is_setext_pair(line, &ClassifyCtx::default(), underline, &underline_context) {
+        return None;
+    }
+    let text = line[prefix_len..].trim();
+    if text.is_empty() {
+        return None;
+    }
+    if !is_setext_text(text, true, link_matcher) {
+        return None;
+    }
+    if !crate::classify_kernel::setext::valid_setext_prefix(
+        &line[..prefix_len].chars().collect::<Vec<_>>(),
+    ) {
+        trace!(
+            prefix_len,
+            "refusing a Setext pair with an invalid retained prefix"
+        );
+        return None;
+    }
+
+    let marker = underline[prefix_len..].trim().chars().next()?;
+    let level = if marker == '=' { 1 } else { 2 };
+    Some(ParsedSetextHeading {
+        level,
+        prefix_len,
+        text: text.to_string(),
+        underline_context,
+    })
+}
+
+/// Validates native prefix and container admission before structural pair matching.
+/// For example, `> Title`/`> ===` with no continuation yields prefix length two
+/// and the actual agreeing preceding-paragraph context.
+fn validated_setext_prefix_context(
+    line: &str,
+    underline: &str,
+    continuation_indent: Option<usize>,
+) -> Option<(usize, ClassifyCtx)> {
     if line.trim().is_empty() {
         return None;
     }
@@ -166,10 +222,9 @@ fn detect_setext_heading(
     if continuation_indent.is_some_and(|indent| content_indent_width(underline) < indent) {
         return None;
     }
-    if prefix_len > 0
-        && !line[..prefix_len]
-            .chars()
-            .all(|c| c.is_whitespace() || c == '>')
+    if !line[..prefix_len]
+        .chars()
+        .all(|c| c.is_whitespace() || c == '>')
     {
         return None;
     }
@@ -186,25 +241,8 @@ fn detect_setext_heading(
         return None;
     }
 
-    let candidate_is_paragraph = is_setext_text_line(line, &ClassifyCtx::default());
-    let text = line[prefix_len..].trim();
-    if text.is_empty() {
-        return None;
-    }
-    if !is_setext_text(text, candidate_is_paragraph, link_matcher) {
-        return None;
-    }
-
-    if !is_setext_underline_line(
-        underline,
-        &ClassifyCtx::following(LineClass::ParagraphText, prefixes_agree),
-    ) {
-        return None;
-    }
-
-    let marker = underline[prefix_len..].trim().chars().next()?;
-    let level = if marker == '=' { 1 } else { 2 };
-    Some((level, prefix_len, text.to_string()))
+    let underline_context = ClassifyCtx::following(LineClass::ParagraphText, prefixes_agree);
+    Some((prefix_len, underline_context))
 }
 
 /// Determine whether a stripped candidate is paragraph text.
@@ -336,24 +374,23 @@ fn prefix_of_indent_or_quote(text: &str) -> usize {
 /// Builds an ATX heading while retaining the source indentation or blockquote prefix.
 ///
 /// The structural conversion decision and emitted ATX class are checked
-/// through the production classifier. String assembly stays at this boundary.
-fn convert_setext(prefix: &str, level: usize, text: &str) -> String {
-    let mut heading = String::new();
-    heading.push_str(prefix);
-    if needs_space_after(prefix) {
-        heading.push(' ');
-    }
-    heading.push_str(&"#".repeat(level));
-    if !text.is_empty() {
-        heading.push(' ');
-        heading.push_str(text);
-    }
-    heading
-}
-
-/// Reports whether an ATX marker needs a separator after a non-whitespace prefix.
-fn needs_space_after(prefix: &str) -> bool {
-    !prefix.is_empty() && !prefix.chars().last().is_some_and(char::is_whitespace)
+/// through the production classifier. The complete scalar assembly is verified.
+/// For example, prefix `>>`, level two, and text `Title` produce `>> ## Title`.
+fn convert_setext(
+    heading: &ParsedSetextHeading,
+    candidate: &str,
+    underline: &str,
+) -> Option<String> {
+    crate::classify_kernel::setext::convert_accepted_setext_seq(
+        &candidate.chars().collect::<Vec<_>>(),
+        &ClassifyCtx::default(),
+        &underline.chars().collect::<Vec<_>>(),
+        &heading.underline_context,
+        &candidate[..heading.prefix_len].chars().collect::<Vec<_>>(),
+        heading.level,
+        &heading.text.chars().collect::<Vec<_>>(),
+    )
+    .map(|heading| heading.into_iter().collect())
 }
 
 #[cfg(test)]

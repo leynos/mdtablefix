@@ -20,6 +20,9 @@ use tempfile::TempDir;
 mod fake_prover_tools;
 use fake_prover_tools::{fake_prover_tools, make_command, runner_log};
 
+#[path = "support/verus_mutation_checks.rs"]
+mod verus_mutation_checks;
+
 const VERUS_WORKFLOW: &str = include_str!("../.github/workflows/verus.yml");
 const VERUS_VERSION: &str = include_str!("../tools/verus/VERSION");
 const MAKEFILE: &str = include_str!("../Makefile");
@@ -202,6 +205,7 @@ fn workflow_runs_the_proof_and_non_vacuity_targets() -> Result<()> {
 
     ensure!(commands.contains(&"make verus"));
     ensure!(commands.contains(&"make verus-selftest"));
+    ensure!(commands.contains(&"make verus-mutation"));
     ensure!(checkout_does_not_persist_credentials(&workflow)?);
     ensure!(workflow_has_required_pull_request_triggers(&workflow)?);
     ensure!(workflow_has_read_only_contents_permission(&workflow)?);

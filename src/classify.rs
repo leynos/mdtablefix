@@ -147,16 +147,28 @@ pub fn classify_line(line: &str, ctx: &ClassifyCtx) -> LineClass {
 
 /// Tests whether a Setext candidate is paragraph text through the verified kernel.
 #[must_use]
+#[cfg(test)]
 pub(crate) fn is_setext_text_line(line: &str, ctx: &ClassifyCtx) -> bool {
     let chars = line.chars().collect::<Vec<_>>();
     crate::classify_kernel::consumers::is_setext_text_seq(&chars, ctx)
 }
 
-/// Tests whether a Setext underline follows compatible paragraph text.
+/// Tests the two structural roles required for a Setext conversion.
 #[must_use]
-pub(crate) fn is_setext_underline_line(line: &str, ctx: &ClassifyCtx) -> bool {
-    let chars = line.chars().collect::<Vec<_>>();
-    crate::classify_kernel::consumers::is_setext_underline_seq(&chars, ctx)
+pub(crate) fn is_setext_pair(
+    candidate: &str,
+    candidate_ctx: &ClassifyCtx,
+    underline: &str,
+    underline_ctx: &ClassifyCtx,
+) -> bool {
+    let candidate = candidate.chars().collect::<Vec<_>>();
+    let underline = underline.chars().collect::<Vec<_>>();
+    crate::classify_kernel::consumers::is_setext_pair_seq(
+        &candidate,
+        candidate_ctx,
+        &underline,
+        underline_ctx,
+    )
 }
 
 /// Tests whether a line should become the canonical thematic break.
@@ -171,6 +183,26 @@ pub(crate) fn is_canonical_break_line(line: &str, ctx: &ClassifyCtx) -> bool {
 pub(crate) fn is_atx_heading_line(line: &str, ctx: &ClassifyCtx) -> bool {
     let chars = line.chars().collect::<Vec<_>>();
     crate::classify_kernel::consumers::is_atx_heading_seq(&chars, ctx)
+}
+
+/// Returns the shared structural boundary used by the wrapping path.
+#[must_use]
+pub(crate) fn wrapping_boundary(line: &str, ctx: &ClassifyCtx) -> Option<LineClass> {
+    let chars = line.chars().collect::<Vec<_>>();
+    crate::classify_kernel::consumers::wrapping_boundary_seq(&chars, ctx)
+}
+
+/// Tests the structural precondition for orphan-specifier attachment.
+#[must_use]
+pub(crate) fn can_be_orphan_specifier(line: &str, ctx: &ClassifyCtx) -> bool {
+    let chars = line.chars().collect::<Vec<_>>();
+    let accepted = crate::classify_kernel::consumers::can_be_orphan_specifier_seq(&chars, ctx);
+    debug_assert_eq!(
+        accepted,
+        classify_line(line, ctx) != LineClass::ThematicBreak,
+        "the orphan adapter and production classifier must agree",
+    );
+    accepted
 }
 
 /// Classifies a source line and maps the kernel's scalar offset to UTF-8.
@@ -196,6 +228,10 @@ fn byte_offset_at_char_index(line: &str, CharIndex(target): CharIndex) -> usize 
         .nth(target)
         .map_or(line.len(), |(byte_offset, _)| byte_offset)
 }
+
+#[cfg(test)]
+#[path = "classify_fixture_tests.rs"]
+mod fixture_tests;
 
 #[cfg(test)]
 mod tests {

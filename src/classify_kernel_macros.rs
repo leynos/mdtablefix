@@ -11,6 +11,23 @@ macro_rules! verified_kernel_function {
     (
         $(#[doc = $doc:expr])*
         $(#[must_use])?
+        $visibility:vis fn $name:ident($($arguments:tt)*) -> $result:ty;
+        $(requires($($precondition:tt)*);)?
+        ensures($result_name:ident => $($postcondition:tt)*);
+        before { $($before:tt)* }
+        proof_after { $($proof_after:tt)* }
+        after { $($after:tt)* }
+    ) => {
+        $(#[doc = $doc])*
+        #[must_use]
+        $visibility fn $name($($arguments)*) -> $result {
+            $($before)*
+            $($after)*
+        }
+    };
+    (
+        $(#[doc = $doc:expr])*
+        $(#[must_use])?
         #[cfg_attr(verus_keep_ghost, verifier::external_body)]
         $visibility:vis fn $name:ident($($arguments:tt)*) -> $result:ty;
         $(requires($($precondition:tt)*);)?
@@ -47,7 +64,9 @@ macro_rules! verified_loop_function {
         $(requires($($precondition:tt)*);)?
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
-        while ($condition:expr) invariant($($invariant:tt)*) $loop_body:block
+        $(ghost_before { $($ghost_before:tt)* })?
+        while ($condition:expr) invariant($($invariant:tt)*) { $($loop_body:tt)* }
+        $(proof_loop { $($proof_loop:tt)* })?
         $(proof_after { $($proof_after:tt)* })?
         after { $($after:tt)* }
     ) => {
@@ -56,7 +75,7 @@ macro_rules! verified_loop_function {
         #[cfg_attr(verus_keep_ghost, verifier::external_body)]
         $visibility fn $name($($arguments)*) -> $result {
             $($before)*
-            while $condition $loop_body
+            while $condition { $($loop_body)* }
             $($after)*
         }
     };
@@ -67,7 +86,9 @@ macro_rules! verified_loop_function {
         $(requires($($precondition:tt)*);)?
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
-        while ($condition:expr) invariant($($invariant:tt)*) $loop_body:block
+        $(ghost_before { $($ghost_before:tt)* })?
+        while ($condition:expr) invariant($($invariant:tt)*) { $($loop_body:tt)* }
+        $(proof_loop { $($proof_loop:tt)* })?
         $(proof_after { $($proof_after:tt)* })?
         after { $($after:tt)* }
     ) => {
@@ -75,7 +96,7 @@ macro_rules! verified_loop_function {
         #[must_use]
         $visibility fn $name($($arguments)*) -> $result {
             $($before)*
-            while $condition $loop_body
+            while $condition { $($loop_body)* }
             $($after)*
         }
     };
@@ -92,7 +113,9 @@ macro_rules! verified_loop_function {
         $(requires($($precondition:tt)*);)?
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
-        while ($condition:expr) invariant($($invariant:tt)*) $loop_body:block
+        $(ghost_before { $($ghost_before:tt)* })?
+        while ($condition:expr) invariant($($invariant:tt)*) { $($loop_body:tt)* }
+        $(proof_loop { $($proof_loop:tt)* })?
         $(proof_after { $($proof_after:tt)* })?
         after { $($after:tt)* }
     ) => {
@@ -105,9 +128,13 @@ macro_rules! verified_loop_function {
                 ensures $($postcondition)*
             {
                 $($before)*
+                $($($ghost_before)*)?
                 while $condition
                     invariant $($invariant)*
-                    $loop_body
+                    {
+                        $($loop_body)*
+                        $(proof { $($proof_loop)* })?
+                    }
                 $(proof { $($proof_after)* })?
                 $($after)*
             }
@@ -120,7 +147,9 @@ macro_rules! verified_loop_function {
         $(requires($($precondition:tt)*);)?
         ensures($result_name:ident => $($postcondition:tt)*);
         before { $($before:tt)* }
-        while ($condition:expr) invariant($($invariant:tt)*) $loop_body:block
+        $(ghost_before { $($ghost_before:tt)* })?
+        while ($condition:expr) invariant($($invariant:tt)*) { $($loop_body:tt)* }
+        $(proof_loop { $($proof_loop:tt)* })?
         $(proof_after { $($proof_after:tt)* })?
         after { $($after:tt)* }
     ) => {
@@ -132,9 +161,13 @@ macro_rules! verified_loop_function {
                 ensures $($postcondition)*
             {
                 $($before)*
+                $($($ghost_before)*)?
                 while $condition
                     invariant $($invariant)*
-                    $loop_body
+                    {
+                        $($loop_body)*
+                        $(proof { $($proof_loop)* })?
+                    }
                 $(proof { $($proof_after)* })?
                 $($after)*
             }
@@ -145,6 +178,29 @@ macro_rules! verified_loop_function {
 /// Emits the contracted Verus form of the same kernel function body.
 #[cfg(verus_keep_ghost)]
 macro_rules! verified_kernel_function {
+    (
+        $(#[doc = $doc:expr])*
+        $(#[must_use])?
+        $visibility:vis fn $name:ident($($arguments:tt)*) -> $result:ty;
+        $(requires($($precondition:tt)*);)?
+        ensures($result_name:ident => $($postcondition:tt)*);
+        before { $($before:tt)* }
+        proof_after { $($proof_after:tt)* }
+        after { $($after:tt)* }
+    ) => {
+        verus! {
+            $(#[doc = $doc])*
+            #[must_use]
+            $visibility fn $name($($arguments)*) -> ($result_name: $result)
+                $(requires $($precondition)*)?
+                ensures $($postcondition)*
+            {
+                $($before)*
+                proof { $($proof_after)* }
+                $($after)*
+            }
+        }
+    };
     (
         $(#[doc = $doc:expr])*
         $(#[must_use])?

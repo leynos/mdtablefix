@@ -12,7 +12,7 @@ pub open spec fn spec_is_markdown_whitespace(character: char) -> bool {
 
 /// Whether the suffix beginning at `start` contains only indentation whitespace.
 pub open spec fn spec_is_blank_from(s: Seq<char>, start: int) -> bool {
-    forall|i: int| start <= i < s.len() ==> spec_is_markdown_whitespace(s[i])
+    forall|i: int| start <= i < s.len() ==> #[trigger] spec_is_markdown_whitespace(s[i])
 }
 
 /// Whether a bounded scalar range contains the requested marker.

@@ -91,30 +91,97 @@ deliberately false assertion must be rejected; it also fails when the runner
 does not reach Verus, so a skipped verifier cannot pass the check.
 
 `make verus-mutation` runs `scripts/check-classifier-mutation.sh`. It changes
-the production Setext-text predicate to accept an ATX heading, then confirms
-Verus rejects its refinement postcondition. The mutation target is local.
+the production `convert_setext_seq` assembly kernel by removing its mandatory
+space, then confirms Verus rejects the complete output-classification
+postcondition. The script distinguishes a proof rejection from a runner
+failure, so a missing or skipped verifier cannot pass. The same target runs in
+the pull-request workflow.
 
-The pull-request workflow runs `make verus` and `make verus-selftest` on
-Ubuntu. It caches the version-specific `.verus` directory using the runner
-operating system, architecture, and pinned Verus version, then executes the
-same Makefile targets used locally. The [verification ledger](verification.md)
-records each claim and its trusted boundary;
-[ADR 0011](adrs/0011-verified-normalization-core.md) documents why the proof
-scope remains a narrow production-used core.
+The pull-request workflow runs `make verus`, `make verus-selftest`, and
+`make verus-mutation` on Ubuntu. It caches the version-specific `.verus`
+directory using the runner operating system, architecture, and pinned Verus
+version, then executes the same Makefile targets used locally. The
+[verification ledger](verification.md) records each claim and its trusted
+boundary; [ADR 0011](adrs/0011-verified-normalization-core.md) documents why
+the proof scope remains a narrow production-used core.
 
 The `verified_kernel_function!` and `verified_loop_function!` macros live in
 `src/classify_kernel_macros.rs`, included by `src/classify_kernel.rs`. They
 emit one shared executable body for Cargo and Verus, adding contracts and loop
 invariants only in the proof build. Their accepted attributes are limited to
 documentation, `must_use`, and the verifier's external-body marker, so macro
-callers cannot forward a lint-suppressing attribute. Use them only in the
-classifier kernel, its predicate module, and its consumer module; callers use
-the `&str` boundary in `src/classify.rs`. The consumer predicates for Setext
-and thematic-break decisions call `classify_seq` directly. Setext conversion
-also checks the assembled replacement with the verified ATX predicate before
-emitting it. A new scanner predicate should carry a narrow contract about its
-characters and cursor, then be proved from the same body before the top-level
-classifier refinement relies on it.
+callers cannot forward a lint-suppressing attribute. The classifier kernel, its
+predicate module, and `src/classify_kernel_consumers.rs` own production
+structural gates and verified builders. Other callers use the `&str` adapters in
+`src/classify.rs`; do not add another scanner or repeat structural matching in
+a pass. The classifier-consumer kernels below own those shared decisions. A new
+scanner predicate should carry a narrow contract about its characters and
+cursor, then be proved from the same body before the top-level classifier
+refinement relies on it.
+
+### Shared classifier consumer kernels
+
+These functions are the verified decision boundary for structural consumers. The
+`*_seq` entry points accept Unicode scalar slices plus classifier context;
+their production adapters must continue to call the same bodies.
+
+| Kernel                        | Production caller                                   | Contract                                                                                                                                                                                                                                                                                          |
+| ----------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `classify_seq`                | `classify::classify_line`; all structural consumers | Returns the class and body offset selected by the shared precedence for its line and full context.                                                                                                                                                                                                |
+| `wrapping_boundary_seq`       | `wrap::classify_block` and paragraph wrapping       | Returns `AtxHeading`, `ThematicBreak`, or `ListItem` as a wrapping boundary; returns `None` for other classes.                                                                                                                                                                                    |
+| `is_table_class`              | `process::buffer::handle_table_line`                | Accepts only `TableDelimiter` and `TableRow`.                                                                                                                                                                                                                                                     |
+| `can_be_orphan_specifier_seq` | `fences::attachment`                                | Returns false for `ThematicBreak`, which must stay available to thematic-break preservation.                                                                                                                                                                                                      |
+| `is_setext_pair_seq`          | `headings::detect_setext_heading`                   | Accepts only a `ParagraphText` candidate paired with a `SetextUnderline` in its classifier context.                                                                                                                                                                                               |
+| `needs_space_after_seq`       | Setext assembly                                     | Reports whether a retained prefix needs a separator after its final scalar.                                                                                                                                                                                                                       |
+| `separated_prefix`            | Setext assembly                                     | Retains the prefix and inserts a separator when required.                                                                                                                                                                                                                                         |
+| `valid_setext_prefix`         | `headings::detect_setext_heading`                   | Admits indentation and quote prefixes whose paragraph probe begins after the retained prefix.                                                                                                                                                                                                     |
+| `convert_setext_seq`          | `headings::convert_setext`                          | Given a valid prefix, level one or two, arbitrary supplied text, and `prefix.len() + text.len() + 4 <= usize::MAX`, constructs the complete heading and proves it is `AtxHeading` in every outside-fence context and not `ParagraphText`.                                                         |
+| `convert_accepted_setext_seq` | `headings::convert_setext`                          | Checks candidate and underline roles under their passed contexts plus prefix admission, then returns `Some` exactly when all hold; the value is the exact assembly and is `AtxHeading` in every outside-fence context. Its input capacity bound is `prefix.len() + text.len() + 4 <= usize::MAX`. |
+| `is_atx_heading_seq`          | `headings::detect_verified_setext_heading`          | Checks an already assembled line using the classifier; the runtime guard remains in place.                                                                                                                                                                                                        |
+| `canonical_break_chars`       | `breaks::canonical_break`                           | Constructs exactly seventy underscore scalars. `lemma_canonical_break_remains_structural` proves that the exact unprefixed output is `ThematicBreak` in every outside-fence context and for every previous class and prefix-agreement value.                                                      |
+
+`lemma_complete_heading_classifies` proves construction for a valid prefix,
+either supported level and arbitrary supplied text.
+`lemma_setext_prefix_exists` shows the admitted-prefix domain is inhabited with
+an empty prefix, three-space indentation, a single quote and a nested quote,
+and invokes construction at both levels. The accepted wrapper is on the
+production conversion path and proves the class of the exact output it
+assembles. Native `String` parsing and the extraction of candidate text from
+the source line remain outside this scalar proof boundary; regressions assert
+that the expected source text is retained for both levels and all four prefix
+shapes. The runtime classifier guard remains a checked-output safeguard. The
+canonical-break consumer lemmas also cover every outside-fence classifier
+context. Prefix and enclosing-container break preservation remains a separate
+domain under [issue #580](https://github.com/leynos/mdtablefix/issues/580).
+
+`validated_setext_prefix_context` owns native prefix and container admission
+within the heading parser. It groups prefix agreement, continuation
+indentation, permitted prefix characters and code-block indentation checks,
+preserving their order and trace events. The detector uses its retained prefix
+offset and actual underline context when calling the verified pair gate. This
+native parsing helper belongs only to the heading parser and remains covered by
+regressions.
+
+The classification compatibility test compares every line under `tests/data`
+against an independent regex reference and a checked-in snapshot, carrying
+fence, preceding-class and prefix state through each fixture. The reference in
+`src/classify_reference_tests.rs` adapts the expressions from revision
+`5c3b18e` (the parent of the shared-classifier introduction `01b5a2a`) to the
+unified contract. It implements its own prefix and contextual state and shares
+only `LineClass` with production; the hashed snapshot is a reviewed regression
+oracle, not the independent baseline. Named tests document the deliberate
+deltas: stricter ATX separators and six-hash limit; ordered markers limited to
+nine ASCII digits and Markdown whitespace; narrower whitespace recognition;
+quoted body classification; stricter delimiter cells; contextual Setext
+underlines; and tab-prefixed thematic-break text remaining `Literal` and
+unchanged by the formatter. Review both the differential result and snapshot
+when updating fixtures or classification behaviour.
+
+The reference's private `ReferenceBody` wraps its space/tab-trimmed input.
+`reference_block_start` and `is_setext_body` compose within `ReferenceState` in
+the documented precedence order. `assert_classification` combines the
+independent and production assertions in reference regressions. These helpers
+belong solely to the reference test module.
 
 `ListContinuationState` in `src/classify.rs` belongs only to the Setext and
 thematic-break consumers. It remembers the content indentation of an active

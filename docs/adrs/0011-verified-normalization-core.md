@@ -112,17 +112,62 @@ specification is written against the same source the binary compiles.
 precedence the kernel must implement, and its postcondition also bounds the
 returned body offset within the input sequence.
 
-The consumer decisions are verified separately over that same kernel:
-`is_setext_text_seq`, `is_setext_underline_seq`, `is_canonical_break_seq`, and
-`is_atx_heading_seq` in `src/classify_kernel_consumers.rs` each prove their
-boolean equals whether `spec_classify` returns the corresponding structural
-class. `make verus-mutation` changes a production Setext consumer decision and
-requires Verus to reject the proof, so the refinement is shown to be
-load-bearing rather than vacuous.
+The consumer decisions are verified separately over that same kernel.
+`is_setext_pair_seq` composes the paragraph-text and underline checks used by
+the production Setext detector. `convert_setext_seq` proves construction and
+classification of the complete line for a valid retained prefix, level one or
+two, arbitrary supplied text, and the scalar capacity bound
+`prefix.len() + text.len() + 4 <= usize::MAX`. Its output is `AtxHeading` in
+every outside-fence context and is not `ParagraphText` in canonical context.
+`convert_accepted_setext_seq` is the production conversion wrapper: it checks
+the actual candidate and underline classes under their supplied contexts, and
+prefix admission, then returns `Some` exactly when those conditions hold. Its
+result is the exact assembled line with the same outside-fence classification
+guarantee. `lemma_setext_prefix_exists` witnesses empty, three-space, single
+quote and nested-quote prefixes and applies construction at both levels. Native
+`String` parsing and candidate-text extraction are not refined to scalar
+sequences; regressions check the exact retained content and output
+classification. `detect_verified_setext_heading` keeps a runtime classifier
+check as a checked-output safeguard. The break pass builds its shared
+`canonical_break()` value from `canonical_break_chars`, whose loop contract
+fixes its length and contents. `lemma_canonical_break_remains_structural`
+proves that the exact unprefixed seventy-underscore sequence is `ThematicBreak`
+under every outside-fence context, for any preceding class or prefix-agreement
+value. The four consumer lemmas `lemma_canonical_break_ends_wrapping`,
+`lemma_canonical_break_is_not_setext_text`,
+`lemma_canonical_break_is_not_table_input`, and
+`lemma_canonical_break_is_not_orphan_specifier` cover the corresponding
+wrapping, heading, table and orphan-specifier decisions. Concrete witness
+lemmas assert paragraph text, a table delimiter and the canonical break.
 
-Three matcher contracts remain trusted: `#[verifier::external_body]` covers the
-table-delimiter grammar `is_table_delimiter` with its
-`table_cells_are_delimiters` and `is_table_delimiter_cell` helpers, the
-thematic-break grammar `is_thematic_break`, and the ordered-list marker grammar
-`ordered_list_item`. They are listed as unverified external contracts in the
-claim ledger in `docs/verification.md`, and none of them is claimed as verified.
+Fixture compatibility has two distinct records. The checked-in snapshot pins
+each `tests/data` line's class with its relative path, line number and source
+hash. An independent regex reference in `src/classify_reference_tests.rs`
+derives its expressions from revision `5c3b18e`, the parent of the
+shared-classifier introduction `01b5a2a`, then adapts them to the unified
+contract. It carries its own prefix, fence and preceding-class state and shares
+only `LineClass` with production. Named regressions document deliberate
+differences from historical callers, including ATX separators and levels,
+ordered-list digit and whitespace limits, Markdown whitespace, quoted-body
+roles, malformed table delimiters, contextual Setext underlines and
+tab-prefixed thematic-break spellings.
+
+The Setext and break consumer lemmas establish class-based rejection in the
+specified outside-fence contexts. Prefix and enclosing-container break
+preservation is outside this domain and tracked by issue #580. Separate
+executable regressions send the exact canonical break through wrapping, heading
+detection, table buffering, and orphan attachment; the ledger distinguishes
+these cross-pass checks from local kernel correctness. `make verus-mutation`
+removes the mandatory separator from the production `convert_setext_seq` kernel
+and requires Verus to reject its complete output-classification postcondition.
+The mutation guards full assembly, rather than only the separator's character
+and length.
+
+Five matcher bodies across three grammar groups remain trusted:
+`is_table_delimiter`, `table_cells_are_delimiters`, `is_table_delimiter_cell`,
+`is_thematic_break` and `ordered_list_item`. They are listed as unverified
+external contracts in the claim ledger in `docs/verification.md` and tracked by
+[issue #567](https://github.com/leynos/mdtablefix/issues/567);
+none is claimed as verified. Broader preservation of breaks inside enclosing
+containers is tracked separately by
+[issue #580](https://github.com/leynos/mdtablefix/issues/580).

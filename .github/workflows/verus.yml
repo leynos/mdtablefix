@@ -39,3 +39,5 @@ jobs:
         run: make verus
       - name: Verify the harness rejects false proofs
         run: make verus-selftest
+      - name: Verify complete Setext assembly rejects a missing separator
+        run: make verus-mutation

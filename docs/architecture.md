@@ -1145,10 +1145,35 @@ unbounded invariants. `verus/lib.rs` includes `classify_kernel.rs` by `#[path]`
 so the spec is written against the same source the binary compiles.
 `classify_seq` then proves its result against `spec_classify`, which is the
 structural precedence that kernel is required to implement. The consumer
-decisions are proved over that same kernel: `is_setext_text_seq`,
-`is_setext_underline_seq`, `is_canonical_break_seq`, and `is_atx_heading_seq` in
-`src/classify_kernel_consumers.rs` each prove their boolean equals whether
-`spec_classify` returns the class that consumer stands for. The ledger symbol
-names are enforced rather than merely documented:
+decisions are proved over that same kernel. `is_setext_pair_seq` checks both
+the candidate and underline classes used by `detect_setext_heading`.
+`convert_setext_seq` is the production assembly kernel: for a valid retained
+prefix, either supported level and arbitrary text, it proves the complete
+prefix, marker, separator and text classify as `AtxHeading` and not
+`ParagraphText`. `convert_accepted_setext_seq` receives the actual candidate,
+underline and their contexts, checks those structural roles and the retained
+prefix, then calls the constructor. It guarantees `Some` exactly for an
+accepted pair with a valid prefix and returns the exact assembled output,
+classified as `AtxHeading` in every outside-fence context. This makes later
+Setext candidate acceptance false through the `ParagraphText` role check. Native
+`String` parsing and content extraction remain outside the scalar proof
+boundary; regressions check exact output and classification for both levels,
+plain, indented, quoted and nested-quoted prefixes. The
+`detect_verified_setext_heading` runtime classifier guard remains a
+checked-output safeguard. `lemma_setext_prefix_exists` provides concrete valid
+prefix witnesses at both levels. The canonical-break lemma proves that the
+production classifier assigns `ThematicBreak` to the exact unprefixed
+seventy-underscore sequence in every outside-fence context, regardless of
+preceding class or prefix-agreement state. Four consumer lemmas prove the
+wrapping boundary and rejection by Setext candidate, table-input and orphan
+specifier gates in that domain. Executable regressions exercise the exact line
+through wrapping, heading detection, table buffering and orphan attachment.
+Preservation after adding a prefix or placing the line inside an enclosing
+container is tracked by
+[issue #580](https://github.com/leynos/mdtablefix/issues/580). The five trusted
+matcher bodies are tracked by
+[issue #567](https://github.com/leynos/mdtablefix/issues/567). The ledger
+records cross-pass checks separately from local kernel correctness, and its
+symbol names are enforced rather than merely documented:
 `scripts/check-verification-ledger.sh` runs under `make lint`, so renaming a
 claimed symbol fails the build instead of silently orphaning its row.

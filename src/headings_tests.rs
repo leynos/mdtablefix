@@ -32,6 +32,44 @@ fn converts_setext_headings(#[case] input: Vec<String>, #[case] expected: Vec<St
     assert_eq!(convert_setext_headings(&input), expected);
 }
 
+/// Production output retains its prefix and reparses as an ATX heading.
+#[rstest]
+#[case(vec!["Heading".into(), "===".into()], "# Heading")]
+#[case(vec!["Heading".into(), "---".into()], "## Heading")]
+#[case(vec!["   Heading".into(), "   ====".into()], "   # Heading")]
+#[case(vec!["   Heading".into(), "   ---".into()], "   ## Heading")]
+#[case(vec!["> Quote".into(), "> ====".into()], "> # Quote")]
+#[case(vec!["> Quote".into(), "> ----".into()], "> ## Quote")]
+#[case(vec![">>Title".into(), ">>====".into()], ">> # Title")]
+#[case(vec![">>Title".into(), ">>----".into()], ">> ## Title")]
+#[case(vec![" > > Title".into(), " > > ====".into()], " > > # Title")]
+#[case(vec![" > > Title".into(), " > > ----".into()], " > > ## Title")]
+#[case(vec!["  Heading".into(), " ---".into()], " ## Heading")]
+#[case(vec![" Heading".into(), "  ====".into()], " # Heading")]
+fn emitted_setext_heading_is_atx(#[case] input: Vec<String>, #[case] expected: &str) {
+    let output = convert_setext_headings(&input);
+
+    assert_eq!(output, vec![expected.to_string()]);
+    assert_eq!(
+        crate::classify::classify_line(&output[0], &ClassifyCtx::default()),
+        LineClass::AtxHeading,
+    );
+    let next_pass = vec![output[0].clone(), input[1].clone()];
+    assert_eq!(convert_setext_headings(&next_pass), next_pass);
+}
+
+/// The extracted separator preserves Rust's whitespace result for every Unicode scalar.
+#[test]
+fn prefix_separator_preserves_unicode_whitespace() {
+    for character in (0..=0x0010_ffff).filter_map(char::from_u32) {
+        assert_eq!(
+            crate::classify_kernel::setext::needs_space_after_seq(&[character]),
+            !character.is_whitespace(),
+            "prefix scalar {character:?}",
+        );
+    }
+}
+
 #[rstest]
 #[case(vec!["```".into(), "Heading".into(), "---".into(), "```".into()])]
 #[case(vec!["Not a heading".into(), "--".into()])]
@@ -39,6 +77,8 @@ fn converts_setext_headings(#[case] input: Vec<String>, #[case] expected: Vec<St
 #[case(vec!["- Bar".into(), "  ---".into()])]
 #[case(vec![String::new(), "---".into()])]
 #[case(vec!["> Quote".into(), "-----".into()])]
+#[case(vec!["\u{00a0}Heading".into(), "\u{00a0}===".into()])]
+#[case(vec![">\u{00a0}Heading".into(), ">\u{00a0}---".into()])]
 #[case(vec!["- item".into(), "  continuation".into(), "---".into()])]
 #[case(vec!["- item".into(), "lazy continuation".into(), "---".into()])]
 #[case(vec!["  1. item".into(), "     wrapped".into(), "lazy continuation".into(), "-----".into()])]
@@ -174,7 +214,7 @@ fn classifies_setext_text(#[case] payload: &str, #[case] expected: bool) {
     assert_eq!(
         is_setext_text(
             payload,
-            is_setext_text_line(payload, &ClassifyCtx::default()),
+            crate::classify::is_setext_text_line(payload, &ClassifyCtx::default()),
             matcher,
         ),
         expected
@@ -186,4 +226,13 @@ fn classifies_setext_text(#[case] payload: &str, #[case] expected: bool) {
 #[case(vec!["2024 revenue".into(), "===".into()], vec!["# 2024 revenue".into()])]
 fn converts_digit_prefixed_paragraphs(#[case] input: Vec<String>, #[case] expected: Vec<String>) {
     assert_eq!(convert_setext_headings(&input), expected);
+}
+
+/// The canonical break is structural and cannot become Setext candidate text.
+#[test]
+fn canonical_break_is_not_consumed_as_setext_text() {
+    let break_line = crate::breaks::canonical_break().to_string();
+    let input = vec![break_line, "---".to_string()];
+
+    assert_eq!(convert_setext_headings(&input), input);
 }
