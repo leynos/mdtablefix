@@ -106,6 +106,11 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
 
 ## Progress
 
+- [x] Rebase onto `origin/main` (`bf6c46b`) from the recorded boundary
+      `425cd2f`. Seven conflicts resolved, 61 commits replayed, `range-diff`
+      clean, all ten gates green on the rebased head. Committed as the replay
+      itself plus `a0864e1` (formatter), `1b2d3fb` (mutation-gate evidence),
+      and the ExecPlan record. Date 2026-10-13.
 - [x] Reconnaissance: kernel pattern, consumers, corpus, harness.
 - [x] Rename branch and push with upstream tracking.
 - [x] Set the Lody session title.
@@ -337,6 +342,26 @@ See the decision log.
 
 ## Surprises & discoveries
 
+- **The rebase onto `origin/main` replayed 61 commits and completed cleanly.**
+  The recorded boundary was `OLD_BASE=425cd2f`, `OLD_HEAD=2df4c4a`, target
+  `bf6c46b`; `bf6c46b` turned out to be a single squash commit directly on
+  `425cd2f`, so the replay range was linear with no merge commits and no
+  squash-boundary recovery was needed. Seven conflicts arose, in `verus/lib.rs`,
+  `src/verified_kernel_macros.rs`, `scripts/check-classifier-mutation.sh`,
+  `tests/verus_harness.rs`, `.github/workflows/verus.yml`,
+  `docs/verification.md`, and `docs/developers-guide.md`; each was a pair of
+  descriptions of one artefact, and `git range-diff` over `425cd2f..2df4c4a`
+  against `bf6c46b..NEW_HEAD` shows twelve changed commits and no dropped work.
+  The one apparent deletion, `src/classify_kernel_macros.rs`, is the branch's
+  rename to `src/verified_kernel_macros.rs`, and the renamed file's body is
+  `main`'s byte for byte. Date 2026-10-13.
+- **`make check-fmt` resolves its formatter through `PATH`, not through the
+  branch's build.** `$(MDTABLEFIX) ?= mdtablefix` resolves to
+  `/home/leynos/.cargo/bin/mdtablefix` 0.6.1, which predates every `src/`
+  commit on this branch, so the gate validates the branch's documents with a
+  formatter the branch does not contain. `main` sets the same default, and both
+  binaries agree exactly on the current tree, so this is an environment hazard
+  to record rather than a defect in the branch. Date 2026-10-13.
 - **The host has not been reconciled to the Weave estate baseline, so the
   rebase onto `origin/main` runs with the driver bypassed.** The skill
   governing this operation expects global registration *not* to select Weave
@@ -898,6 +923,35 @@ See the decision log.
   routing through `fence_step`, and the two qualifications it raised are
   recorded as external contracts precisely because they are not provable from
   what is currently extracted. Date 2026-10-13.
+- Decision: resolve the rebase conflicts toward `main` wherever the two sides
+  described the same fact, and toward the branch only where the branch's
+  subject was absent from `main`. Concretely: `main`'s new braced macro grammar
+  replaced the branch's unbraced loop-body form in the renamed
+  `src/verified_kernel_macros.rs`; `main`'s ATX-separator mutation and its
+  `awk`-based output matcher replaced the branch's classifier copies, with the
+  branch's shared mirror builder routed underneath; and `main`'s descriptive CI
+  step name for the classifier gate replaced the branch's shorter one. The
+  branch contributed the fence kernel, the compression planner, the two new
+  mutation gates, and the mirror builder, none of which `main` has. Rationale:
+  every conflict was two descriptions of one artefact, so the newer description
+  won and the branch's additions were kept alongside. Date 2026-10-13.
+- Decision: bypass the Weave driver for the replay with a command-scoped
+  override rather than reconciling the host configuration. Rationale: the skill
+  names a host that still selects Weave from the global attributes file as
+  unreconciled; this host has an Ansible-managed `*.rs merge=weave` entry and
+  the repository's own `.gitattributes` contains only `* text=auto eol=lf`, so
+  Weave is selected by ambient configuration and not by repository consent. A
+  multi-commit replay across substantial target history is the case the skill
+  says to bypass. Date 2026-10-13.
+- Decision: record the `mdtablefix` PATH shadowing as an environment finding
+  rather than changing the Makefile in this branch. Rationale: `make check-fmt`
+  resolves `mdtablefix` through `$(MDTABLEFIX) ?= mdtablefix`, which lands on
+  `/home/leynos/.cargo/bin/mdtablefix` (0.6.1) built before this branch's
+  `src/` commits, so the gate's formatter is not the binary the branch builds.
+  The two binaries agree exactly on the current tree (both report
+  `42 files left unchanged`, exit 0), and the default is unchanged from `main`,
+  so retargeting it is a repository-wide build-hygiene change rather than part
+  of this proof's scope. Date 2026-10-13.
 
 ## Verification plan
 
