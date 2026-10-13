@@ -242,6 +242,30 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       the `compile` target passes 10/10 with `--test-threads=1`, and the doctest
       recipe (`--doc`) passes 41 tests with 22 ignored. The default `make test`
       remains red for an environment reason, not a code one.
+- [x] M5 Rebase onto current `origin/main`. The branch was rebased again, onto
+      `origin/main` at `425cd2f`, from `f561055`, replaying 36 commits over the
+      exclusive boundary `60eb907` — the parent of the branch's first own
+      commit, confirmed as an ancestor of `origin/main` with zero merges in the
+      range. One conflict arose, in `docs/users-guide.md`: main had appended a
+      new section where the branch appended one, so the resolution keeps both,
+      the branch's `Batch fence classification` first and main's `Build
+      standard` second. Both sides' content is retained; nothing was dropped
+      from either. `git range-diff` reports 35 of 36 commits identical, with
+      only that doc commit different, matching the union resolution exactly,
+      and `git diff --check` against the target is clean. `NEW_HEAD` `972eb7d`.
+- [x] M5 Post-rebase gates, second run. All four requested gates pass on
+      `972eb7d`, run sequentially by `scrutineer` with each gate's output
+      captured to a log under `/tmp`: `check-fmt` (exit 0, 5 s, 42 files
+      unchanged), `typecheck` (exit 0, 785 s), `lint` (exit 0, 161 s, with the
+      `check-ripgrep`, `check-static-regexes`, and `check-verification-ledger`
+      prerequisites passing), and `make test` (exit 0, 3577 s). The test gate
+      ran 69 suites green — 2819 passed, 0 failed, 22 ignored — and the
+      trybuild `compile` target passed all 10 cases. **The descriptor
+      exhaustion recorded in the previous entry did not recur**, so the
+      serialised fallback was not needed and `make test` is green by its
+      default recipe. No compiler, Clippy, or test warnings were emitted. The
+      run took 59.6 minutes because build admission is shared and was saturated
+      while this worktree compiled cold, not because of any gate defect.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -536,6 +560,37 @@ See the decision log.
   the serialised run, and CI (a quieter, per-job machine) remains the authority
   for the default invocation. Do not read a moving trybuild victim as a flaky
   test in this repository.
+
+- **The descriptor exhaustion did not recur, so it was environmental after
+  all.** The second post-rebase run of `make test`, on a quieter machine and
+  with admission at capacity 4 rather than at the queued ceiling, passed the
+  trybuild `compile` target 10/10 on the *default* invocation — no
+  `--test-threads=1`, no `Too many open files`, and no moving victim. That
+  confirms the diagnosis recorded above rather than overturning it: the failure
+  tracks the machine's descriptor pressure, not the repository. The practical
+  consequence is that the serialised fallback is a workaround for a contended
+  host, not the target's deterministic evidence, and a future red trybuild run
+  on a busy host should be re-run on a quieter one before it is believed.
+- **A stale remote-tracking ref looked exactly like a diverged branch, and
+  nearly caused a false alarm about lost work.** The local
+  `refs/remotes/origin/<branch>` said `f9e332b` while `gh pr view` reported the
+  PR head as `820adf4`, and the two appeared to share no ancestry below the old
+  merge base — which would have meant a competing push had landed work this
+  worktree never saw. Re-fetching with an explicit refspec
+  (`+refs/heads/<branch>:refs/remotes/origin/<branch>`) reported a forced
+  update and resolved it: `820adf4` was an ancestor of the local tip all along,
+  and the tracking ref was merely stale. The lesson is that the tracking ref is
+  not the remote — `gh pr view --json headRefOid` and an explicit-refspec fetch
+  are the authorities — and that a scare of this shape should be settled by
+  fetching, never by resetting to the ref that raised it.
+- **The rebase's only conflict was an append-append, and the union is the
+  correct resolution.** Main and this branch both added a section to
+  `docs/users-guide.md` at the same position, so a resolution that took either
+  side alone would have silently deleted the other's documentation. The seam is
+  also a useful reminder that an append-append conflict is the one case where
+  reading the *diff* rather than the conflict markers gives the whole picture:
+  git presents it as a disagreement about one hunk, not as two independent
+  additions to preserve.
 
 ## Decision log
 
@@ -929,3 +984,14 @@ marked ready for review.
   obligation 4 is scoped to pre-parsed block bodies meeting the compression
   guard, with whole-pass equality recorded as corpus evidence rather than a
   Verus theorem.
+- 2026-10-13: Rebased a second time, onto `origin/main` at `425cd2f` from
+  `f561055`, replaying 36 commits over the exclusive boundary `60eb907` (the
+  parent of the branch's first own commit, confirmed an ancestor of
+  `origin/main`, with zero merges in range). One conflict, in
+  `docs/users-guide.md`, from main and this branch both appending a section at
+  the same point; resolved as a union, branch section first. `range-diff` shows
+  35 of 36 commits byte-identical with only that doc commit differing, and
+  `git diff --check` against the target is clean. `NEW_HEAD` `972eb7d`. All
+  four requested gates pass on the rebased tree (`check-fmt`, `typecheck`,
+  `lint`, `test`), and `make test` is green on its default recipe — the
+  descriptor exhaustion from 2026-10-04 did not recur.
