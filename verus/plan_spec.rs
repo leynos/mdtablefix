@@ -1662,6 +1662,161 @@ proof fn lemma_released_block_reads_back(
         lemma_compressed_block_regions(seed, source, emitted, len, opener, false);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Composing blocks into a document
+// ---------------------------------------------------------------------------
+
+/// The regions of the lines in `[start, end)`, read from the state at `start`.
+///
+/// [`spec_regions_seeded`] reads a *prefix* from a seed, which is what every
+/// induction above wants but not what a document-level argument needs: a document
+/// is emitted in segments — a run of directly written lines, then a released block,
+/// then another run — and each segment is read from the state the previous one left
+/// behind. This specification names a segment directly, so the composition can be
+/// a statement about segments rather than about the fold that produced them.
+///
+/// The state at `start` is *not* recomputed here. Passing it in is deliberate: a
+/// caller composing two adjacent segments has to show they agree at the join, and
+/// taking the state as a parameter is what makes that obligation visible rather
+/// than hidden inside a recursion.
+pub open spec fn spec_regions_from(
+    features: Seq<LineFeatures>,
+    start: int,
+    end: int,
+    seed: Option<FenceState>,
+) -> Seq<Region>
+    decreases end - start
+{
+    if end <= start {
+        Seq::empty()
+    } else {
+        spec_regions_from(features, start, end - 1, seed).push(
+            spec_fence_region(spec_state_from(features, start, end - 1, seed), features[end - 1]),
+        )
+    }
+}
+
+/// The fence state after the lines in `[start, end)` have been read.
+pub open spec fn spec_state_from(
+    features: Seq<LineFeatures>,
+    start: int,
+    end: int,
+    seed: Option<FenceState>,
+) -> Option<FenceState>
+    decreases end - start
+{
+    if end <= start {
+        seed
+    } else {
+        spec_fence_next(
+            spec_state_from(features, start, end - 1, seed),
+            features[end - 1],
+        )
+    }
+}
+
+/// `LEM-REGIONS-FROM-APPENDS` — a segment is its first part then its second.
+///
+/// This is the law that makes segmentation possible: reading `[start, end)` in one
+/// go is the same as reading `[start, mid)` and then `[mid, end)` from the state the
+/// first part left, for both the regions and the state. Without it, a document
+/// argument would have to unfold the whole recursion at every join.
+proof fn lemma_regions_from_appends(
+    features: Seq<LineFeatures>,
+    start: int,
+    mid: int,
+    end: int,
+    seed: Option<FenceState>,
+)
+    requires
+        start <= mid <= end,
+        end <= features.len(),
+    ensures
+        spec_state_from(features, start, end, seed) == spec_state_from(
+            features,
+            mid,
+            end,
+            spec_state_from(features, start, mid, seed),
+        ),
+        spec_regions_from(features, start, end, seed) == spec_regions_from(
+            features,
+            start,
+            mid,
+            seed,
+        ).add(spec_regions_from(
+            features,
+            mid,
+            end,
+            spec_state_from(features, start, mid, seed),
+        )),
+    decreases end - mid,
+{
+    reveal(spec_regions_from);
+    reveal(spec_state_from);
+    if mid < end {
+        lemma_regions_from_appends(features, start, mid, end - 1, seed);
+        // The induction is on the *tail*'s length, so both segments lose their last
+        // line together and the shorter hypothesis is about exactly the two prefixes
+        // this step needs. Naming the state each side ends in is what lets the last
+        // region of either be written against the same state.
+        let outer = spec_state_from(features, start, end - 1, seed);
+        let inner = spec_state_from(
+            features,
+            mid,
+            end - 1,
+            spec_state_from(features, start, mid, seed),
+        );
+        let head = spec_regions_from(features, start, mid, seed);
+        assert(outer == inner);
+        assert(spec_regions_from(features, start, end, seed) == head.add(
+            spec_regions_from(features, mid, end - 1, spec_state_from(features, start, mid, seed)),
+        ).push(spec_fence_region(outer, features[end - 1])));
+        assert(spec_regions_from(
+            features,
+            mid,
+            end,
+            spec_state_from(features, start, mid, seed),
+        ) == spec_regions_from(
+            features,
+            mid,
+            end - 1,
+            spec_state_from(features, start, mid, seed),
+        ).push(spec_fence_region(inner, features[end - 1])));
+        // The appendix moves across the concatenation: the last region belongs after
+        // both parts, not after the first.
+        Seq::push_distributes_over_add(
+            head,
+            spec_regions_from(features, mid, end - 1, spec_state_from(features, start, mid, seed)),
+            spec_fence_region(outer, features[end - 1]),
+        );
+    }
+}
+
+/// `LEM-CLASSIFY-FROM-IS-THE-SEEDED-PREFIX` — the two specifications agree at `0`.
+///
+/// [`spec_regions_seeded`] is the prefix form every earlier lemma is stated over,
+/// and [`spec_regions_from`] is the segment form the composition needs. Naming
+/// their agreement at the document start is what lets the block lemmas above, which
+/// are all in the prefix form, discharge obligations in the segment form.
+pub proof fn lemma_classify_from_is_prefix(
+    features: Seq<LineFeatures>,
+    end: int,
+    seed: Option<FenceState>,
+)
+    requires end <= features.len(),
+    ensures
+        spec_state_from(features, 0, end, seed) == spec_state_seeded(features, end, seed),
+        spec_regions_from(features, 0, end, seed) == spec_regions_seeded(features, end, seed),
+    decreases end,
+{
+    reveal(spec_regions_from);
+    reveal(spec_state_from);
+    if end > 0 {
+        lemma_classify_from_is_prefix(features, end - 1, seed);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Non-vacuity witnesses
 // ---------------------------------------------------------------------------
