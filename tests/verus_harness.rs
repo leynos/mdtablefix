@@ -205,7 +205,14 @@ fn workflow_runs_the_proof_and_non_vacuity_targets() -> Result<()> {
 
     ensure!(commands.contains(&"make verus"));
     ensure!(commands.contains(&"make verus-selftest"));
+    // The mutation gates are negative controls: each mutates one production
+    // module and requires the run to fail with that module's own contract
+    // named. A gate that is only in the Makefile is run by nothing that could
+    // notice it stopping, so continuous integration has to name every one of
+    // them.
     ensure!(commands.contains(&"make verus-mutation"));
+    ensure!(commands.contains(&"make verus-fence-mutation"));
+    ensure!(commands.contains(&"make verus-compression-mutation"));
     ensure!(checkout_does_not_persist_credentials(&workflow)?);
     ensure!(workflow_has_required_pull_request_triggers(&workflow)?);
     ensure!(workflow_has_read_only_contents_permission(&workflow)?);

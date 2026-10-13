@@ -176,6 +176,54 @@ issue #567.
   behind -- it still tests depth, run length, and trailing whitespace -- so a
   gate that accepted it would show the fence proofs rested on something other
   than the closing rule they claim to establish.
+- `make verus-compression-mutation` makes `delimiter_agendum` compress every
+  delimiter it is handed, discarding the `compressible` argument that carries
+  the block's answer, and requires the run to fail with that kernel's own
+  postcondition named. The mutation is a single-line change that still compiles
+  and writes a three-backtick delimiter exactly where the correct body writes
+  one, so it differs only for the blocks the conflict flag was protecting; the
+  mutated run reports exactly one failed obligation and every other proof still
+  verifies. `LEM-NO-CONFLICT-ALL-CLEAR` and the compressed-block induction both
+  depend on that flag, so a gate that still verified would mean those lemmas
+  were proved from something other than the property they claim.
+
+## Remaining external contracts
+
+The rows above record what is proved; this section records what each proof
+still takes on trust, so a boundary is a named contract rather than an
+unexamined assumption.
+
+- **Fence recognition and blockquote parsing.** Every obligation is stated over
+  already-reduced `LineFeatures`, so none depends on the reduction being
+  correct. The kernel body itself runs no regex; the reduction happens in
+  `src/wrap/fence.rs`, whose entry points are `#[cfg(not(verus_keep_ghost))]`.
+- **The emission read-back contract.** `spec_emission_reads_back` states what
+  the parser reads off the bytes the emitter writes. It is a claim a
+  counterexample could falsify at the frontier, and the property tests over the
+  regex and the emitter are its evidence.
+- **The driver composition is open.** When a released block is emitted, the
+  relation between each written line's reading and its source line's reading is
+  established per agendum by the contract above and corpus-wide by
+  `tests/fence_regions.rs`, not yet by a composition lemma over the pass's
+  buffered-block fold. The block-level theorem is complete; this is the step
+  that would join it to the loop.
+- **The classifier kernel's fence recognizer cannot currently disagree, but is
+  not tied to the fence kernel by any proof.**
+  `src/classify_kernel_predicates.rs` implements `is_fence_marker` and
+  `is_closing_fence` independently of `FENCE_RE` and of `LineFeatures`;
+  `is_closing_fence` has no blockquote-depth rule, and `OpenFence` carries only
+  a marker and a run length. It cannot disagree with the shared kernel in
+  production today because `ClassifyCtxKernel::in_fence` is `#[cfg(test)]`-only
+  and `LineClass::FenceMarker` has no production consumer. It is a drift
+  hazard, not an active inconsistency.
+- **Two fence regexes exist.** `src/wrap/fence.rs` and `src/fences.rs` differ in
+  info-string grammar and in trailing-whitespace handling -- the second uses
+  Unicode-aware `\s`, while the first's `trailing_blank` is deliberately
+  ASCII-only. The second never decides literal-ness: it supplies delimiter
+  spelling and attachment eligibility, and its result is gated through the
+  planner and `compression_changes_region`. No reachable case was found where
+  it alone changes which lines are literal, but the asymmetry deserves a
+  targeted test before the claim is relied on.
 
 The ledger check invoked by `make lint` rejects a claim whose executable
 function name does not occur in `src/`.

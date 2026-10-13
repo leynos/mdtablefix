@@ -1150,7 +1150,7 @@ is not lost.
 Delivered since that request: the rebase itself, the four gates, and this
 record.
 
-Still outstanding, in the order the request gave it:
+Each item below, in the order the request gave it, with its current state.
 
 1. A failed hosted-advisory check table names four checks. The
    `Unit Architecture` error was reported against `tests/fence_regions.rs`'s
@@ -1158,10 +1158,26 @@ Still outstanding, in the order the request gave it:
    already returns `Result<Vec<PathBuf>, Box<dyn Error>>` at the tip, so the
    finding is either stale or about a different revision, and it needs
    re-checking against the check's own evidence rather than assumed fixed.
+   **Not re-checked.** The advisory runs on the hosted service, so this needs
+   the check's own output rather than a local re-run.
 2. `Linked Issues` (warning): extend the formal result to the
    `compress_fences` boundary, or record an explicit accepted proof boundary in
    issue #486 and establish cross-pass agreement for every fence-skipping
-   consumer.
+   consumer. **Partly done.** The formal result now reaches every emission
+   decision `compress_fences` makes, because the planner it calls is the module
+   `verus/lib.rs` proves and the emitter writes what the planner's agenda names.
+   The cross-pass agreement was audited by inspection: seventeen `FenceTracker`
+   constructions in `src/`, one per pass that needs to know whether a line is
+   inside a fence, every one routing through `fence_step`. The audit raised two
+   qualifications, recorded in `docs/verification.md` as remaining external
+   contracts rather than as discharged obligations: the classifier kernel's own
+   `is_fence_marker` / `is_closing_fence` pair is a genuinely independent fence
+   recognizer that cannot currently disagree in production only because its
+   `is_in_fence` field is set true solely under `#[cfg(test)]`; and there are
+   two fence regexes whose info-string and trailing-whitespace grammars differ,
+   with the second never deciding literal-ness. The remaining gap is the
+   driver: emitted readings are related to source readings by the external
+   emission contract plus the corpus sweep, not yet by a composition lemma.
 3. `User-Facing Documentation` (warning): document `classify_regions` and
    `Region` in `docs/users-guide.md`. The section landed in the rebase and
    auto-merged, but the advisory has not been re-run against it.
@@ -1179,27 +1195,41 @@ Still outstanding, in the order the request gave it:
    `docs/adrs/0006-single-pass-idempotence.md:322` and `:397` were checked:
    `fences::flush_unmatched_block` still exists and still rewrites the opener
    while emitting the interior verbatim, so those references are accurate and
-   were left alone.
+   were left alone. The planner extraction superseded that description in part
+   — `opening_rewrite` and `flush_completed_block` no longer exist, because
+   `plan_step` names the release and `flush_block` writes the agenda — so the
+   section needs a second pass against the current tree.
 5. The document-level fence-compression preservation proof: extract a
    Verus-compatible compression planner and emitter that `compress_fences`
    actually calls, so block buffering, conflict accumulation, and emission are
-   connected to the proof by refinement rather than only by tests. An
-   incomplete extraction is parked on ref `wip/486-plan-kernel` (`8c022dc`):
-   `src/fences/plan.rs` with `Release`, `Agendum`, and five
-   `verified_kernel_function!` kernels, plus `verus/plan_spec.rs` and the
-   `verus/lib.rs` wiring. The parked `plan_spec.rs` is stale — it still
-   specifies the superseded `spec_standard_agendum` /
-   `spec_delim_agendum(closing, eligible, compressed)` surface and lacks
-   `spec_outer_delimiters_written`, `spec_is_outer_delimiter`, and
-   `spec_delimiter_agendum` — and `compress.rs` was left half-refactored, so
-   the parked commit does not compile. Nothing from it is in the published tree.
+   connected to the proof by refinement rather than only by tests. **Done for
+   the block level; the driver composition remains.** Commit `3846774` landed
+   `src/fences/plan.rs` (the six planner kernels), `verus/plan_spec.rs` (the
+   document theorem, its conflict bridge, the compressed-block induction, and
+   the non-vacuity witnesses), the `verus/lib.rs` wiring, and the
+   `compress_fences` refactor onto the planner. `make verus` reports 108
+   verified, 0 errors. The parked WIP ref `wip/486-plan-kernel` (`8c022dc`) is
+   superseded by that commit and can be deleted. **M6 item 5b, the driver
+   composition, is open**: the emitted readings are related to the source
+   readings by the external emission contract and the corpus sweep rather than
+   by a composition lemma over the pass's buffered-block fold, and the user's
+   specification requires that block buffering, conflict accumulation and
+   emission not be connected to the specification only by tests.
 6. The compression mutation gate, wired into the Makefile and CI.
+   **Makefile done, CI open.** `make verus-compression-mutation` runs
+   `scripts/check-compression-mutation.sh`, which mutates the
+   `compressible` guard to `true` and requires the run to fail with the
+   `delimiter_agendum` postcondition named; verified locally at commit
+   `3846774`. The `Verus` workflow runs `make verus` and `make verus-selftest`
+   only, so neither mutation gate is reached there — the classifier and fence
+   mutations are unwired today as well.
 7. A new `/comenq-coderabbit` review.
 
-Issue #486 stays open until its original acceptance criteria are met; the
-current state proves the block-interior lemma and provides corpus-wide
-executable evidence, which is not the same as the document-level result the
-request specifies.
+Issue #486 stays open until its original acceptance criteria are met. The
+current state proves the block-interior lemma, the document theorem up to the
+driver, and provides corpus-wide executable evidence; the driver composition
+in item 5b is the part the request specifies that remains open, and item 1's
+advisory check has not been re-read.
 
 ## Revision note
 
