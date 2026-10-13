@@ -19,12 +19,9 @@ use tracing::debug;
 use super::{
     FENCE_RE,
     is_null_lang,
-    plan::{self, Agendum, LineFacts, Release, Step},
+    plan::{self, Agendum, DriverState, LineFacts, Release},
 };
 use crate::wrap::FenceTracker;
-
-/// The planner state of the block the pass is holding, if any.
-type PendingState = Option<plan::Block>;
 
 /// Selects how a recognised fence marker is normalised.
 ///
@@ -77,16 +74,36 @@ impl CachedLine {
     }
 }
 
-/// One pending block: the planner's buffering state plus the lines it holds.
+/// The lines the pass is holding, in document order.
 ///
-/// The planner owns `block`; this struct only stores what it is handed. The
-/// lines are kept rendered rather than borrowed because a block outlives the
-/// borrow of each source line.
-struct PendingBlock {
-    /// Opening-fence state and accumulated conflict flag, owned by the planner.
-    block: plan::Block,
-    /// Source lines and their cached rewrites, in document order.
-    lines: Vec<CachedLine>,
+/// The planner's buffering state lives in [`DriverState`] and is never stored
+/// here; this is only the text, kept rendered rather than borrowed because a
+/// block outlives the borrow of each source line.
+type PendingLines = Vec<CachedLine>;
+
+/// Append the agenda the driver returned to the document.
+///
+/// The buffer and the agenda are two renderings of the same lines, and this is
+/// where they meet: the planner said what to write for each of them, and the
+/// cached line says what those words spell. Nothing here decides anything — no
+/// branch reads a flag or a length to choose a spelling — which is what the
+/// proof requires of the emitter and what the pass now cannot violate.
+///
+/// The buffer is drained from the front because the agenda covers its leading
+/// entries: [`plan::drive_step`] returns one agendum per line the step accounted
+/// for, so the caller's obligations are to have buffered those lines first and
+/// to append this agenda once.
+fn drain_agenda(lines: &mut PendingLines, agenda: Vec<Agendum>, out: &mut Vec<String>) {
+    debug_assert!(
+        agenda.len() <= lines.len(),
+        "the planner's agenda cannot name more lines than the pass has buffered",
+    );
+    out.extend(
+        lines
+            .drain(..agenda.len().min(lines.len()))
+            .zip(agenda)
+            .map(|(line, agendum)| line.emitted(agendum)),
+    );
 }
 
 /// Rewrites a parsed fence marker according to the selected compression strategy.
@@ -161,106 +178,37 @@ impl<'a> ParsedLine<'a> {
     }
 }
 
-/// Whether the block's opening line carries a rewrite the emitter could write.
-fn opener_rewritable(lines: &[CachedLine]) -> bool {
-    lines.first().is_some_and(|line| line.compressed.is_some())
-}
-
-/// Whether the block's last line carries a rewrite the emitter could write.
-fn closer_rewritable(lines: &[CachedLine]) -> bool {
-    lines.last().is_some_and(|line| line.compressed.is_some())
-}
-
-/// Emit a released block by looking up the planner's agenda for every position.
+/// Emit the block a document ended inside, if it did.
 ///
-/// This is the whole of the pass's emission for all three releases. The planner
-/// fixes which positions are delimiters, whether either is loose enough to
-/// respell, and what the block's one compression answer is; this function only
-/// writes the bytes those answers name, and emits the lines it did not rewrite
-/// from their source, so interior payload cannot change.
-fn flush_block(pending: PendingBlock, release: Release, out: &mut Vec<String>) {
-    let PendingBlock { block, lines } = pending;
-    let len = lines.len();
-    if release == Release::Unmatched {
-        debug!(
-            block_lines = len,
-            has_conflicting_interior_fence = block.conflicts,
-            "preserving an unclosed fence block"
-        );
-    }
-
-    let written = plan::delimiters_eligible(
-        release,
-        opener_rewritable(&lines),
-        closer_rewritable(&lines),
+/// The document's own end is the fourth flush path: the driver's last call was a
+/// buffer, so the lines it accounted for are still in the pass's hands and the
+/// planner has not written them. The tail is the release `Unmatched`, the one
+/// release no line produces, and it is named here rather than by the driver
+/// because the driver has no line left to plan.
+///
+/// The diagnostic is the decision read out, not a second opinion about it: the
+/// two reported values are the buffered line count and the conflict flag the
+/// planner accumulated, both taken from what the driver returned.
+fn flush_unclosed(state: DriverState, lines: &mut PendingLines, out: &mut Vec<String>) {
+    let Some(block) = state.pending else {
+        return;
+    };
+    debug!(
+        block_lines = lines.len(),
+        has_conflicting_interior_fence = block.conflicts,
+        "preserving an unclosed fence block"
     );
-    let agenda = plan::block_agenda(len, release, written, !block.conflicts);
-    out.extend(
-        lines
-            .into_iter()
-            .zip(agenda)
-            .map(|(line, agendum)| line.emitted(agendum)),
+    drain_agenda(
+        lines,
+        plan::released_agenda(
+            block,
+            lines.len(),
+            state.opener_rewritable,
+            false,
+            Release::Unmatched,
+        ),
+        out,
     );
-}
-
-/// Emit a block left pending when a later line arrived outside it.
-///
-/// A block ends this way when the blockquote depth drops below its opener, or
-/// when the document's fence state was already lost. The lines it buffered were
-/// never bounded by a closing delimiter the pass read, so the planner names the
-/// release and writes all of them as they were written.
-fn flush_abandoned(pending: Option<PendingBlock>, out: &mut Vec<String>) {
-    if let Some(block) = pending {
-        flush_block(block, Release::Abandoned, out);
-    }
-}
-
-/// Apply one planner step to the pending block and the output.
-///
-/// Every branch that ends a block names a release and hands the block to
-/// [`flush_block`]; none of them inspects a line or a flag to decide what to
-/// write, so the pass cannot spell a delimiter the planner did not choose.
-fn apply_step(
-    pending: &mut Option<PendingBlock>,
-    step: Step,
-    parsed: ParsedLine<'_>,
-    out: &mut Vec<String>,
-) {
-    match step {
-        Step::Restart(block) => {
-            flush_abandoned(pending.take(), out);
-            *pending = Some(PendingBlock {
-                block,
-                lines: vec![parsed.into_cached()],
-            });
-        }
-        Step::Skip => {
-            flush_abandoned(pending.take(), out);
-            // The planner opened nothing here and has nothing to buffer, so the
-            // line reaches the document as written.
-            out.push(parsed.line.to_owned());
-        }
-        Step::Extend(block) => {
-            let Some(mut open) = pending.take() else {
-                out.push(parsed.line.to_owned());
-                return;
-            };
-            open.block = block;
-            open.lines.push(parsed.into_cached());
-            *pending = Some(open);
-        }
-        Step::Close(block, release) => {
-            let Some(mut open) = pending.take() else {
-                out.push(parsed.line.to_owned());
-                return;
-            };
-            open.block = block;
-            // The closing line is part of the block the planner just wrote: its
-            // own answer is what released them together.
-            open.lines.push(parsed.into_cached());
-            flush_block(open, release, out);
-        }
-    }
 }
 
 /// Normalize safe outer fence delimiters to exactly three backticks.
@@ -288,23 +236,31 @@ fn apply_step(
 #[must_use]
 pub fn compress_fences(lines: &[String]) -> Vec<String> {
     let mut tracker = FenceTracker::new();
-    let mut pending_block = None;
+    let mut state = DriverState::new();
+    let mut buffered: PendingLines = Vec::new();
     let mut out = Vec::with_capacity(lines.len());
 
-    for line in lines {
+    for (index, line) in lines.iter().enumerate() {
         // Parse each source line once: the tracker supplies the blockquote depth
         // and structural fence marker, and the planner decides from those facts
         // what the pass does with the line and with the block it is holding.
         let parsed = ParsedLine::observe(&mut tracker, line);
-        let held: PendingState = pending_block.as_ref().map(|open: &PendingBlock| open.block);
-        let step = plan::plan_step(held, parsed.facts);
-        apply_step(&mut pending_block, step, parsed, &mut out);
+        let facts = parsed.facts;
+        // The line joins the buffer before the step is taken, because the driver
+        // returns an agenda for the buffer as it then stands: a step that ends the
+        // block writes lines the pass has already appended, and a step that opens
+        // one leaves the new line as the sole entry the next step can reach.
+        buffered.push(parsed.into_cached());
+        let (next, agenda) = plan::drive_step(state, facts, index);
+        state = next;
+        // Whatever the step did not account for stays buffered. The agenda names
+        // the leading entries and no others, so draining by its length leaves
+        // exactly the block the driver is still holding.
+        drain_agenda(&mut buffered, agenda, &mut out);
     }
 
     // A block the document ended inside has no closing delimiter to rewrite.
-    if let Some(block) = pending_block {
-        flush_block(block, Release::Unmatched, &mut out);
-    }
+    flush_unclosed(state, &mut buffered, &mut out);
 
     out
 }

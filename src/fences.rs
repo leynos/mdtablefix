@@ -17,7 +17,7 @@ use crate::wrap::FenceTracker;
 
 mod attachment;
 mod compress;
-mod plan;
+pub(crate) mod plan;
 
 #[cfg(test)]
 #[path = "fences_properties.rs"]

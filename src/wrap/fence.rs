@@ -421,10 +421,15 @@ impl FenceTracker {
     }
 
     /// Check whether the tracker is currently inside a fenced block.
+    ///
+    /// The answer is [`plan::fenced`]'s, not a restatement of it. The planner is
+    /// proved against `spec_fenced`, and the driver's two routing answers are
+    /// that specification read at the depths before and after a line — so routing
+    /// a line through this function is what makes the specification's claim about
+    /// the tracker true by construction rather than by inspection.
     #[must_use]
     pub fn in_fence(&self, current_depth: usize) -> bool {
-        self.state
-            .is_some_and(|open| current_depth >= open.open_depth)
+        crate::fences::plan::fenced(self.state, current_depth)
     }
 
     /// Check fence state at the blockquote depth represented by a source line.

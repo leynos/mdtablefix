@@ -410,6 +410,13 @@ verified_kernel_function! {
 /// append every returned agendum exactly once. Both obligations are discharged by
 /// [`crate::lemma_drive_length`], which is stated over [`crate::spec_drive`] — the
 /// fold this kernel computes one step of — rather than over a copy of it.
+///
+/// The agenda is not accompanied by a description of which lines it covers, and the
+/// caller does not need one: the step's agenda holds one agendum for every line the
+/// step accounts for and no more, so a caller that appends the line to its buffer
+/// before writing the agenda finds the buffer's first entries are exactly the ones
+/// the agenda names. That is [`lemma_step_agenda_length`] read forward, and it is
+/// what lets the adapter write lines without branching on the route.
 #[must_use]
 pub fn drive_step(
     state: DriverState,
