@@ -312,6 +312,33 @@ See the decision log.
 
 ## Surprises & discoveries
 
+- **The prefix-carried fold invariant is not inductive, and this is now the
+  precise residue of M6 item 5b.** The composition law is proved
+  (`lemma_spans_compose_regions`), every block-level obligation is proved, and
+  the translation layers that make block results usable at any offset are proved
+  (`lemma_walk_at_offset`, `lemma_segment_equals_its_subrange`,
+  `lemma_released_span_reads_back`, `lemma_released_span_composes`). What is
+  *not* proved is an induction over `spec_drive` carrying the emitted-reading
+  correspondence in its own hypothesis. The attempt was made and defeated by a
+  real obstruction rather than by effort: **the emitted sequence is not a
+  one-line-per-step extension of the fold.** The natural `decreases i`
+  recursion appends one line per step, but on a `Close` step the agenda grew by
+  a *release* — several agendum at once — so the fold's step has no one-line
+  emitted analogue and the recursion has no well-founded measure in the agenda
+  index. A well-founded version needs the fold to recurse with the emitted
+  sequence in an accumulator, so that one step's several agendum are consumed
+  against the one line the step accounts for; that is a restructuring of the
+  specification rather than a proof-only change.
+
+  What was added instead is the honest decomposition below the induction: the
+  released-span translation, the route contract that names which conclusion
+  each release discharges, the walk-at-offset translation, and
+  `LEM-INSIDE-OPEN-MEANS-FENCE-SHAPED`, which is the side condition the
+  induction's `Extend` case needs. Every one of those is a genuine obligation
+  discharged rather than a restatement, and each is a prerequisite the
+  induction would consume. **Recorded as a reduction, not as a completion:** M6
+  items 2 and 5b remain open, and issue #486 must not be closed while they are.
+
 - The CodeRabbit finding asking the literal-line sweep to compare whole output
   lines rather than substrings was not cosmetic: the stricter assertion failed
   in CI on `tests/data/document/mixed_in_fence.dat`, in both `build-test` and
@@ -1165,19 +1192,28 @@ Each item below, in the order the request gave it, with its current state.
    issue #486 and establish cross-pass agreement for every fence-skipping
    consumer. **Partly done.** The formal result now reaches every emission
    decision `compress_fences` makes, because the planner it calls is the module
-   `verus/lib.rs` proves and the emitter writes what the planner's agenda names.
-   The cross-pass agreement was audited by inspection: seventeen `FenceTracker`
-   constructions in `src/`, one per pass that needs to know whether a line is
-   inside a fence, every one routing through `fence_step`. The audit raised two
-   qualifications, recorded in `docs/verification.md` as remaining external
-   contracts rather than as discharged obligations: the classifier kernel's own
-   `is_fence_marker` / `is_closing_fence` pair is a genuinely independent fence
-   recognizer that cannot currently disagree in production only because its
-   `is_in_fence` field is set true solely under `#[cfg(test)]`; and there are
-   two fence regexes whose info-string and trailing-whitespace grammars differ,
-   with the second never deciding literal-ness. The remaining gap is the
-   driver: emitted readings are related to source readings by the external
-   emission contract plus the corpus sweep, not yet by a composition lemma.
+   `verus/lib.rs` proves and the emitter writes what the planner's agenda
+   names. The cross-pass agreement was audited by inspection: seventeen
+   `FenceTracker` constructions in `src/`, one per pass that needs to know
+   whether a line is inside a fence, every one routing through `fence_step`.
+   The audit raised two qualifications, recorded in `docs/verification.md` as
+   remaining external contracts rather than as discharged obligations: the
+   classifier kernel's own `is_fence_marker` / `is_closing_fence` pair is a
+   genuinely independent fence recognizer that cannot currently disagree in
+   production only because its `is_in_fence` field is set true solely under
+   `#[cfg(test)]`; and there are two fence regexes whose info-string and
+   trailing-whitespace grammars differ, with the second never deciding
+   literal-ness. **The composition law itself now exists**
+   (`lemma_spans_compose_regions`), together with the translations that make
+   block-level results usable at any offset, so the per-span obligation is
+   proved and each release route's is named by `lemma_released_span_composes`.
+   The remaining gap is narrower than it was and precisely stated: the
+   induction over `spec_drive` that would instantiate the law at the fold is
+   not proved, because the emitted sequence is not a one-line-per-step
+   extension of the fold — see the new entry under *Surprises & discoveries*.
+   Emitted readings are therefore still related to source readings by the
+   external emission contract plus the corpus sweep, and **this item stays
+   open**.
 3. `User-Facing Documentation` (warning): document `classify_regions` and
    `Region` in `docs/users-guide.md`. The section landed in the rebase and
    auto-merged, but the advisory has not been re-run against it.
@@ -1195,8 +1231,8 @@ Each item below, in the order the request gave it, with its current state.
    `docs/adrs/0006-single-pass-idempotence.md:322` and `:397` were checked:
    `fences::flush_unmatched_block` still exists and still rewrites the opener
    while emitting the interior verbatim, so those references are accurate and
-   were left alone. The planner extraction superseded that description in part
-   — `opening_rewrite` and `flush_completed_block` no longer exist, because
+   were left alone. The planner extraction superseded that description in part —
+   `opening_rewrite` and `flush_completed_block` no longer exist, because
    `plan_step` names the release and `flush_block` writes the agenda — so the
    section needs a second pass against the current tree.
 5. The document-level fence-compression preservation proof: extract a
@@ -1217,18 +1253,18 @@ Each item below, in the order the request gave it, with its current state.
    emission not be connected to the specification only by tests.
 6. The compression mutation gate, wired into the Makefile and CI.
    **Makefile done, CI open.** `make verus-compression-mutation` runs
-   `scripts/check-compression-mutation.sh`, which mutates the
-   `compressible` guard to `true` and requires the run to fail with the
-   `delimiter_agendum` postcondition named; verified locally at commit
-   `3846774`. The `Verus` workflow runs `make verus` and `make verus-selftest`
-   only, so neither mutation gate is reached there — the classifier and fence
-   mutations are unwired today as well.
+   `scripts/check-compression-mutation.sh`, which mutates the `compressible`
+   guard to `true` and requires the run to fail with the `delimiter_agendum`
+   postcondition named; verified locally at commit `3846774`. The `Verus`
+   workflow runs `make verus` and `make verus-selftest` only, so neither
+   mutation gate is reached there — the classifier and fence mutations are
+   unwired today as well.
 7. A new `/comenq-coderabbit` review.
 
 Issue #486 stays open until its original acceptance criteria are met. The
 current state proves the block-interior lemma, the document theorem up to the
-driver, and provides corpus-wide executable evidence; the driver composition
-in item 5b is the part the request specifies that remains open, and item 1's
+driver, and provides corpus-wide executable evidence; the driver composition in
+item 5b is the part the request specifies that remains open, and item 1's
 advisory check has not been re-read.
 
 ## Revision note
