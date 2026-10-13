@@ -483,16 +483,24 @@ See the decision log.
   (`lemma_walk_at_offset`, `lemma_segment_equals_its_subrange`,
   `lemma_released_span_reads_back`, `lemma_released_span_composes`). What is
   *not* proved is an induction over `spec_drive` carrying the emitted-reading
-  correspondence in its own hypothesis. The attempt was made and defeated by a
-  real obstruction rather than by effort: **the emitted sequence is not a
-  one-line-per-step extension of the fold.** The natural `decreases i`
-  recursion appends one line per step, but on a `Close` step the agenda grew by
-  a *release* — several agendum at once — so the fold's step has no one-line
-  emitted analogue and the recursion has no well-founded measure in the agenda
-  index. A well-founded version needs the fold to recurse with the emitted
-  sequence in an accumulator, so that one step's several agendum are consumed
-  against the one line the step accounts for; that is a restructuring of the
-  specification rather than a proof-only change.
+  correspondence in its own hypothesis. Earlier revisions of this entry
+  recorded the obstruction as **the emitted sequence not being a one-line-per-
+  step extension of the fold**, on the grounds that a `Close` step grows the
+  agenda by a whole release at once. That characterisation is wrong, and
+  `lemma_step_agenda_length` is what disproves it: each step's contribution is
+  pinned to exactly the span of source lines the step accounts for, and
+  `spec_balanced` — proved by `lemma_drive_length` and completed by
+  `lemma_finish_total` — gives the agenda's length as the whole document. The
+  lengths correspond line for line; there is no measure problem and no
+  accumulator restructuring to do. What is actually missing is the per-index
+  *content* correspondence and the reduction that feeds the contract:
+  `spec_emission_reads_back` consumes a `SpecLine` whose `verbatim`,
+  `normalizable`, and `rewritable` flags describe the emitter's bytes, and no
+  specification computes those flags from the agendum the fold chose. Closing
+  the gap therefore means either proving the flags follow from the agendum, or
+  restating the contract over the agendum alone — a smaller change than the one
+  previously recorded, and a proof-and-specification change rather than a
+  restructuring.
 
   What was added instead is the honest decomposition below the induction: the
   released-span translation, the route contract that names which conclusion
@@ -1443,11 +1451,15 @@ Each item below, in the order the request gave it, with its current state.
    proved and each release route's is named by `lemma_released_span_composes`.
    The remaining gap is narrower than it was and precisely stated: the
    induction over `spec_drive` that would instantiate the law at the fold is
-   not proved, because the emitted sequence is not a one-line-per-step
-   extension of the fold — see the new entry under *Surprises & discoveries*.
-   Emitted readings are therefore still related to source readings by the
-   external emission contract plus the corpus sweep, and **this item stays
-   open**.
+   not proved. The agenda's lengths already correspond to source lines one for
+   one — `lemma_step_agenda_length` and `spec_balanced` establish that, and the
+   earlier "not a one-line-per-step extension" characterisation is retracted
+   under *Surprises & discoveries* — so what the induction still lacks is the
+   per-index content correspondence and a `SpecLine` the emission contract can
+   consume, its three delivery flags being emitter facts no specification
+   currently computes. Emitted readings are therefore still related to source
+   readings by the external emission contract plus the corpus sweep, and **this
+   item stays open**.
 3. `User-Facing Documentation` (warning): document `classify_regions` and
    `Region` in `docs/users-guide.md`. The section landed in the rebase and
    auto-merged, at `docs/users-guide.md:1124` ("Batch fence classification"),
@@ -1556,6 +1568,19 @@ rather than by proof.
   rewriting the `### Strategy enum` section; the two
   `docs/adrs/0006-single-pass-idempotence.md` references were checked and are
   accurate. M6 item 2 is the outstanding one.
+- 2026-10-14: Retracted the recorded characterisation of the M6 item 5b
+  obstruction. A re-read of `lemma_step_agenda_length`, `spec_balanced`,
+  `lemma_drive_length`, and `lemma_finish_total` shows the agenda grows by
+  exactly the span of source lines each step accounts for, so the lengths
+  correspond one for one and the previously recorded "not a one-line-per-step
+  extension … needs the emitted sequence carried in an accumulator" is false as
+  an obstruction: there is no measure problem and no restructuring to plan. The
+  corrected statement of the gap is the per-index content correspondence plus
+  the missing `SpecLine` construction, since `spec_emission_reads_back`
+  consumes three delivery flags that describe the emitter's bytes and no
+  specification computes them. Recorded as a correction in place rather than as
+  a new obstruction, because the earlier text would have sent the next attempt
+  after the wrong target. M6 item 5b and issue #486 stay open.
 - 2026-10-13: Rebased a third time, onto `origin/main` at `bf6c46b` from
   `2df4c4a`, replaying 61 commits over the exclusive boundary `425cd2f` (the
   parent of `main`'s single squash commit, confirmed linear with zero merges in

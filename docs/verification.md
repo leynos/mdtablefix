@@ -259,16 +259,25 @@ unexamined assumption.
   chain of cuts into equality of the whole document's region sequence, and
   `lemma_released_span_composes` names which obligation each release route
   discharges. What is not proved is the induction over `spec_drive` that would
-  supply those cuts and states from the fold's own agenda. The obstruction is
-  structural rather than one of effort: the emitted sequence is not a
-  one-line-per-step extension of the fold, because a close step's agenda grows
-  by a whole release at once, so the natural recursion has no well-founded
-  measure in the agenda index and a well-founded version needs the emitted
-  sequence carried in an accumulator. Until that is written, the relation
-  between each written line's reading and its source line's reading is
-  established per agendum by the contract above and corpus-wide by
-  `tests/fence_regions.rs`. **This is the residual gap; it is recorded here
-  rather than presented as closed.**
+  supply those cuts and states from the fold's own agenda, together with the
+  per-position facts that induction consumes. The gap is narrower than earlier
+  revisions of this section claimed, and it is not a well-foundedness problem:
+  a close step does grow the agenda by a whole release at once, but
+  `lemma_step_agenda_length` pins each step's contribution to exactly the span
+  of source lines that step accounts for, and `spec_balanced` (proved by
+  `lemma_drive_length`, and completed by `lemma_finish_total`) gives the
+  agenda's length as the whole document. What is missing is the per-index
+  correspondence that turns those lengths into the statement that agenda
+  position `j` is the emission of source line `j`, and the instantiation of the
+  read-back contract above at each of those positions:
+  `spec_emission_reads_back` is stated over a `SpecLine` — a source reading, an
+  emitted reading, and the three delivery flags — and nothing yet constructs a
+  `SpecLine` from an agendum the fold produced, because the flags describe the
+  emitter's bytes and no specification computes them. Until that reduction
+  exists, the relation between each written line's reading and its source
+  line's reading is established per agendum by the contract above and
+  corpus-wide by `tests/fence_regions.rs`. **This is the residual gap; it is
+  recorded here rather than presented as closed.**
 - **The classifier kernel's fence recognizer cannot currently disagree, but is
   not tied to the fence kernel by any proof.**
   `src/classify_kernel_predicates.rs` implements `is_fence_marker` and
