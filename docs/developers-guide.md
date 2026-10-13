@@ -1447,23 +1447,27 @@ have the following effects:
   interior fence would otherwise become structural, with the same null-language
   rule.
 
-`opening_rewrite` picks the strategy for a whole block from
-`has_conflicting_interior_fence` alone. That flag is set by the kernel's
-`compression_changes_region`, so the block-level decision and the per-line
-proof obligation are the same function, not two rules that have to agree.
+The block-level decision is not a separate rule at all: `plan::plan_step`
+routes each line, `plan::absorb` accumulates the block's one whole-block
+question, and `plan::block_agenda` decides which positions of a released block
+are rewritten from `compression_changes_region` — the same kernel predicate the
+per-line proof obligation is stated over. The block decision and the per-line
+obligation are therefore the same function, not two rules that have to agree.
 
-Three flush paths finish a block, and `flush_completed_block` chooses between
-them. It rewrites both endpoints when each carries a cached compressed rewrite,
-and otherwise falls back to `flush_original_block`. `rewrite_fence_line`
-dispatches the chosen strategy for a single line and returns the original line
-in place of a `None` rewrite. A block the document ends inside never reaches
-`flush_completed_block`; `flush_unmatched_block` takes it directly.
+A block is released on one of four routes: `Step::Close` for a matched close,
+`Step::Skip` and `Step::Restart` for the abandoned release, and
+`flush_unclosed` for the block the document ends inside — the one route no line
+produces, which calls `plan::released_agenda` with `Release::Unmatched`
+directly. Every route hands an `Agendum` sequence to `drain_agenda`, which
+writes it through `CachedLine::emitted`: a delimiter position consults the
+cached rewrite through `rewrite_marker` and falls back to the source line, and
+every other position is written verbatim or normalized.
 
 `ParsedLine::observe` is where the compression pass meets the shared kernel: it
 calls `FenceTracker::observe_source_fence` once and keeps the returned
 `FenceObservation`, `LineFeatures`, and marker components together, so the
 block decision and the recorded transition cannot read the line differently.
-Every flush path consumes lines captured through that single parse.
+Every release route consumes lines captured through that single parse.
 
 ### Architecture
 

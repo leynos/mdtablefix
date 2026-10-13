@@ -7,10 +7,12 @@
 //!
 //! Two sweeps cover it, both over every fixture under `tests/data/`:
 //!
-//! 1. `compress_fences` is a one-line-in, one-line-out map, so its theorem is an exact line-by-line
-//!    equality: `regions(compress(lines))` must equal `regions(lines)` at every index. This is the
-//!    theorem itself, and it fails the moment a rewrite moves a payload line out of the literal
-//!    region.
+//! 1. `compress_fences` is a one-line-in, one-line-out map, so the theorem takes the shape of an
+//!    exact line-by-line equality: `regions(compress(lines))` must equal `regions(lines)` at every
+//!    index. This sweep checks that shape over the corpus and fails the moment a rewrite moves a
+//!    payload line out of the literal region. It is evidence, not the theorem: a corpus says
+//!    nothing about a document no fixture holds, and the driver induction that would generalize it
+//!    is still owed (`docs/verification.md`).
 //! 2. Through the real binary, every line the classifier calls literal must survive the full flag
 //!    set byte-for-byte. This is what a user observes: fenced code is not rewritten.
 //!
@@ -43,7 +45,8 @@ const MUST_COVER: &str = "footnotes_fence_toggle_input.txt";
 /// Documents that reach the unclosed-fence path, which `tests/data/` does not.
 ///
 /// Every fixture under `tests/data/` closes its fences, so the corpus alone
-/// cannot exercise `flush_unmatched_block`. That path is where issue #480
+/// cannot exercise the unclosed-flush path, `flush_unclosed`. That is where
+/// issue #480
 /// lived, and leaving it uncovered would make the sweep vacuous for the
 /// theorem's most delicate case: with no document ending inside a fence, the
 /// rewrite rule for an unclosed block is never applied and any error in it goes

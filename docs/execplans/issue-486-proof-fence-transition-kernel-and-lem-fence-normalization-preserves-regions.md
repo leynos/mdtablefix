@@ -26,9 +26,16 @@ Both are fixed, but by inspection rather than by construction.
 After this work, the classification is a small pure function, the compression
 rewrite decision is a pure function of `(opening state, line)`, and a Verus
 proof establishes that delimiter *spelling* may change while payload *regions*
-may not. A reader can then observe the guarantee by running `make verus`, and
-by running the corpus-wide `regions` equality test over every file in
-`tests/data/`.
+may not. The proof is *one-sided* and scoped: it holds over already-reduced
+`LineFeatures`, so it does not cover the recognition that produces them, and it
+instantiates the document-level composition over a caller-supplied chain of
+preserved spans rather than deriving that chain from the pass's own fold. Those
+two boundaries are named in
+[the verification ledger](../../verification.md#remaining-external-contracts)
+rather than left implicit; closing the second is M6 item 5b, and issue #486
+stays open until it is met. A reader can observe what *is* proved by running
+`make verus`, and the corpus-wide `regions` equality test over every file in
+`tests/data/` as executable evidence for the driver in the meantime.
 
 ## Conformance basis
 
@@ -284,12 +291,16 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       accurate and left alone. Item 2 (`Linked Issues`) is the outstanding one
       and is the subject of M6 item 5.
 - [x] M6 Item 5a — extract the compression planner and prove the document
-      theorem. Committed as `3846774`. `src/fences/plan.rs` is new: a pure,
+      theorem *up to the driver instantiation*. Committed as `3846774`.
+      `src/fences/plan.rs` is new: a pure,
       regex-free planner owning `Block`, `Release`, `Agendum`, `LineFacts`,
       `Step`, and six `verified_kernel_function!` kernels plus one
       `verified_loop_function!`. `src/fences/compress.rs` was rewritten to
       consume it, keeping only parsing, the two delimiter respellings, and
-      buffering. `verus/plan_spec.rs` states the document theorem. `make verus`
+      buffering. `verus/plan_spec.rs` states the document theorem and proves
+      the composition law over a caller-supplied chain of preserved spans; the
+      driver induction that would build that chain from the fold's own agenda
+      is item 5b below and is **not** part of this tick. `make verus`
       reports 108 verified and 0 errors (up from 81); `cargo test --workspace`
       reports 2819 passed, 0 failed; `cargo clippy --workspace --all-targets
       --all-features -- -D warnings` and `cargo fmt --all --check` are clean.
@@ -322,6 +333,16 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       true: removing the transition's depth check makes the run fail. `make
       verus` reports 146 verified, 0 errors. Committed as `478befd`, recorded
       in the ledger prose as `2242fd9`.
+- [x] M6 Item 6 (witnesses over the fold) — four witnesses whose subject is
+      `spec_drive` itself, one per route a document can take through it: a
+      matched close, the unmatched fourth flush path, the issue-#480 conflict
+      fallback, and the empty document. Every witness before these pinned a
+      *rule*; none exercised the fold, so nothing would have failed had the fold
+      wired those rules together wrongly. Checked falsifiable rather than merely
+      true: rewriting the conflict witness's expected agenda to `Compressed`
+      makes the run report that postcondition as failed (175 verified, 1 error).
+      `make verus` reports 176 verified, 0 errors (was 172). Committed as
+      `9c160fa`.
 - [ ] M6 Item 5b — the driver composition. `plan_step`'s routing relation
       already models every release the pass can name, but the emitted readings
       are related to the source readings by the external emission contract
@@ -342,6 +363,34 @@ See the decision log.
 
 ## Surprises & discoveries
 
+- **A documentation audit found the prose overstating what the proof covers,
+  in the exact way the user's specification warned against.** The audit swept
+  the six documentation files against the proof tree and reported five classes
+  of finding, all of which were fixed in the same change. The substantive ones
+  were: `docs/execplans/...:1282` and `tests/fence_regions.rs`'s module doc
+  both called the fixture sweep "the theorem itself", presenting corpus
+  evidence as the general result; the big-picture paragraph claimed a Verus
+  proof that delimiter spelling may change while payload regions may not
+  without naming that it holds over pre-parsed `LineFeatures` and up to a
+  caller-supplied span chain; the M6 item 5a tick said "prove the document
+  theorem" while item 5b in the same list records that same theorem's driver
+  induction as open; the M4 cross-pass entry said the obligation "holds without
+  new machinery" from an inspection, which the same document's own later entry
+  supersedes; and the ledger's "Document region preservation under compression"
+  row gave its input domain as "Every planner-routed document" when
+  `lemma_spans_compose_regions` takes its cuts and states as parameters and
+  requires `spec_chain_preserved` as a hypothesis. A second, separate class was
+  **stale symbol names rather than overclaims**:
+  `docs/developers-guide.md:1450-1460` documented `opening_rewrite`,
+  `flush_completed_block`, `flush_original_block` and `rewrite_fence_line`,
+  none of which survived the planner extraction, and the ExecPlan's M0 and M2
+  sections cited the same names as verified against the tree. Two test
+  doc-comments named `flush_unmatched_block`. The audit also confirmed the
+  *stale* half of the `Unit Architecture` finding: `data_files` and
+  `read_fixture` in `tests/fence_regions.rs` are already fully fallible
+  (`Result<Vec<PathBuf>, Box<dyn std::error::Error>>`, `read_dir` and per-entry
+  errors propagated), so that finding is about an older revision. Date
+  2026-10-13.
 - **The rebase onto `origin/main` replayed 61 commits and completed cleanly.**
   The recorded boundary was `OLD_BASE=425cd2f`, `OLD_HEAD=2df4c4a`, target
   `bf6c46b`; `bf6c46b` turned out to be a single squash commit directly on
@@ -842,6 +891,26 @@ See the decision log.
 
 ## Decision log
 
+- Decision: correct the documentation's scoping first, before attempting the
+  driver composition, and record the corrections as findings rather than
+  applying them silently. Rationale: the user's specification says "Correct the
+  documentation first. State that the existing theorem covers guarded block
+  interiors over LineFeatures. Identify the unverified production
+  transformation, recognition, and emission boundaries. **Do not describe
+  corpus evidence as a general proof.**" A future reader who takes the fixture
+  sweep for the theorem will not know the driver induction is missing, which is
+  precisely how the gap survived this long. The stale symbol names were fixed
+  in the same pass because a developer guide that names functions which do not
+  exist is wrong in a way that misleads immediately, not merely in scope. Date
+  2026-10-13.
+- Decision: for the two ledger rows whose input domain overstated the
+  obligation, widen the "Unverified external contracts" column rather than
+  narrowing the Conclusion column. Rationale: the conclusion text was already
+  honest ("over any chain of preserved spans", "where a state conclusion
+  exists"); the defect was that the trusted-boundary list omitted the driver
+  induction that would supply those hypotheses, so a reader checking what was
+  assumed would not find it there. Naming it in the column it belongs to keeps
+  both halves accurate. Date 2026-10-13.
 - Decision: place the kernel at `src/wrap/fence/kernel.rs`, declared as a child
   module of the existing `src/wrap/fence.rs`. Rationale: colocation with the
   feature (`AGENTS.md` "Group by feature, not layer"), and the parent file must
@@ -1083,11 +1152,15 @@ the user rather than a defect in this work.
 
 The formatter now classifies every line of a document through one pure
 transition kernel, and the region-preservation theorem is machine-checked
-against that same production body. `make verus` reports 81 verified functions
-with no errors, `make verus-fence-mutation` confirms the proof fails for the
-intended reason when the closing rule is weakened, and `tests/fence_regions.rs`
-replays the argument over every fixture in `tests/data/` plus four whole-file
-documents that reach the unclosed-fence path.
+against that same production body — over pre-parsed `LineFeatures`, and with
+the document-level composition instantiated from a caller-supplied chain of
+preserved spans rather than from the pass's own fold. The driver induction that
+would remove that last hypothesis is M6 item 5b and remains open. `make verus`
+reports 176 verified functions with no errors, `make verus-fence-mutation`
+confirms the proof fails for the intended reason when the closing rule is
+weakened, and `tests/fence_regions.rs` replays the argument over every fixture
+in `tests/data/` plus four whole-file documents that reach the unclosed-fence
+path.
 
 Three lessons are worth keeping.
 
@@ -1134,11 +1207,14 @@ non-existent function fails lint.
 
 ### M0 — Record the prerequisite fixes (complete)
 
-Confirmed on the branch tip. `flush_unmatched_block` derives its strategy from
-`opening_rewrite(block.has_conflicting_interior_fence)`
-(`src/fences/compress.rs:126`) and `flush_matched_block` does the same
-(`:140`); both emit delimiter lines through `rewrite_fence_line`. The footnote
-passes each construct a fresh `FenceTracker` and scan from line zero
+Confirmed on the branch tip at the time of this milestone, when the flush
+helpers were `flush_unmatched_block` and `flush_matched_block`, deriving their
+strategy from `opening_rewrite(block.has_conflicting_interior_fence)`
+(`src/fences/compress.rs:126` and `:140`). The planner extraction later
+replaced both with `plan::plan_step` / `plan::release_agenda` and
+`flush_unclosed`, so those symbol names describe the tree as it stood, not as
+it stands; the behavioural finding is unchanged. The footnote passes each
+construct a fresh `FenceTracker` and scan from line zero
 (`src/footnotes/renumber.rs:140`, `:218`; `src/footnotes/lists.rs:54`;
 `src/footnotes/renumber/definitions.rs:215`, `:337`), all gating on
 `is_fence_marker || is_in_fence`. All five `FenceTracker` constructions in the
@@ -1223,19 +1299,26 @@ assert the two `regions` vectors from obligation 2.
 ### M2 — Make the rewrite decision pure (complete)
 
 `compression_changes_region` in the kernel is now the whole rewrite decision,
-and `ParsedLine::observe` (`src/fences/compress.rs:188`) computes each line's
-kernel features from the same single parse that produces the structural marker,
-so the decision and the transition cannot disagree about what a line is.
-`advance_fence_block` consults the predicate directly rather than accumulating
-a regex-derived flag. `opening_rewrite` maps the block-level guard onto a
-`Strategy`, and both flush paths take their `Strategy` from it:
-`flush_unmatched_block` rewrites only the opening delimiter,
+and `ParsedLine::observe` (`src/fences/compress.rs:155` at the tip) computes
+each line's kernel features from the same single parse that produces the
+structural marker, so the decision and the transition cannot disagree about
+what a line is. `advance_fence_block` consults the predicate directly rather
+than accumulating a regex-derived flag. At this milestone `opening_rewrite`
+mapped the block-level guard onto a `Strategy`, and both flush paths took their
+`Strategy` from it: `flush_unmatched_block` rewrote only the opening delimiter,
 `flush_matched_block` both delimiters, `flush_original_block` neither — chosen
-by `flush_completed_block` from the cached rewrites. Committed as `fbd31de`.
+by `flush_completed_block` from the cached rewrites. The planner extraction
+replaced that machinery: `plan::plan_step` names the release,
+`plan::release_agenda` decides which positions are rewrite candidates, and
+`CachedLine::emitted` consults `rewrite_marker` per position. Committed as
+`fbd31de`.
 
-Acceptance met: `make test` passes including every existing fence test; both
-flush paths call `opening_rewrite`, and all four emit delimiter lines through
-the shared `rewrite_fence_line`.
+Acceptance met at the time: `make test` passes including every existing fence
+test; both flush paths call `opening_rewrite`, and all four emit delimiter
+lines through the shared `rewrite_fence_line`. Those four names are historical;
+the current equivalents are `plan::plan_step`, `plan::release_agenda`,
+`CachedLine::emitted`, and `rewrite_marker`, and the acceptance is now carried
+by `make verus` plus the compression mutation gate.
 
 ### M3 — Verus proofs and ledger rows (complete)
 
@@ -1269,21 +1352,28 @@ accepts the new rows; the mutation gate fails for the intended reason.
 `tests/fence_regions.rs` (271 lines) holds two sweeps over every fixture under
 `tests/data/`. The first asserts
 `regions(compress_fences(lines)) == regions(lines)` at every index — the
-theorem itself, as a line-by-line equality, since `compress_fences` is a
-one-line-in, one-line-out map. The second drives the real binary with the full
-flag set and asserts that every line the classifier calls literal survives
-byte-for-byte. Both self-guard on corpus size and pin
-`tests/data/footnotes_fence_toggle_input.txt` as must-cover.
+theorem's *shape*, as a line-by-line equality, since `compress_fences` is a
+one-line-in, one-line-out map. It is executable evidence over the corpus, not a
+substitute for the proof: it says nothing about a document no fixture holds,
+and the driver instantiation the proof still owes is exactly what it stands in
+for. The second drives the real binary with the full flag set and asserts that
+every line the classifier calls literal survives byte-for-byte. Both self-guard
+on corpus size and pin `tests/data/footnotes_fence_toggle_input.txt` as
+must-cover.
 
 Because no `tests/data/` fixture is unbalanced, `UNCLOSED_DOCUMENTS` adds four
-whole-file documents that reach `flush_unmatched_block`, the first being the
-issue #480 reproduction. Committed as `480b3ef`.
+whole-file documents that reach `flush_unclosed`, the first being the
+reproduction for issue #480. Committed as `480b3ef`.
 
-Cross-pass agreement (obligation 5) holds without new machinery: all 29
-`FenceTracker::new` sites in `src/` route through `observe_parsed`, every
-skipping pass gates on `is_fence_marker || is_in_fence`, and `compress_fences`
-consults the kernel predicate. No private classifier remains, so no equivalence
-test or "assumed equivalent" ledger row was needed.
+Cross-pass agreement (obligation 5) was audited by inspection rather than
+proved: every `FenceTracker::new` site in `src/` routes through
+`observe_parsed`, every skipping pass gates on
+`is_fence_marker || is_in_fence`, and `compress_fences` consults the kernel
+predicate. No private classifier remains, so no equivalence test was needed on
+that account — but the at-the-time claim that this discharges the obligation
+was too strong, and the two qualifications the same audit raised (the
+classifier kernel's independent fence recognizer, and the two fence regexes)
+are recorded in `docs/verification.md` as remaining external contracts.
 
 Acceptance met: the new tests pass; their guards fail on an empty corpus;
 `make test` and `make lint` pass.
@@ -1360,25 +1450,31 @@ Each item below, in the order the request gave it, with its current state.
    open**.
 3. `User-Facing Documentation` (warning): document `classify_regions` and
    `Region` in `docs/users-guide.md`. The section landed in the rebase and
-   auto-merged, but the advisory has not been re-run against it.
+   auto-merged, at `docs/users-guide.md:1124` ("Batch fence classification"),
+   covering both `classify_regions` and `Region` with a worked example. The
+   advisory has not been re-run against it, so this is recorded as
+   delivered-but-unrechecked rather than as verified.
 4. `Developer Documentation` (warning): update `docs/developers-guide.md` for
    the fence kernel, the `LineFeatures` boundary, `FenceTracker` routing,
    compression decisions, and `make verus-fence-mutation`, and correct stale
    references. **Done.** The `### Strategy enum` section was rewritten to state
    that `rewrite_marker` returns an `Option` rather than falling back
-   internally, that `opening_rewrite` derives the block strategy from
-   `compression_changes_region`, that `flush_completed_block` chooses between
-   the matched and original flushes and `flush_unmatched_block` takes an
-   unclosed block directly, and that `ParsedLine::observe` is the single parse
-   every flush path consumes. The `src/classify_kernel_macros.rs` path was
-   already corrected to `src/verified_kernel_macros.rs`, and
+   internally, that the block decision is `plan::plan_step` / `plan::absorb` /
+   `plan::block_agenda` taking their answer from `compression_changes_region`
+   rather than from a separate block-level rule, that all four release routes
+   hand an `Agendum` sequence to `drain_agenda` (with `flush_unclosed` taking
+   the document-ended-inside route directly), and that `ParsedLine::observe` is
+   the single parse every release route consumes. The
+   `src/classify_kernel_macros.rs` path was already corrected to
+   `src/verified_kernel_macros.rs`, and
    `docs/adrs/0006-single-pass-idempotence.md:322` and `:397` were checked:
-   `fences::flush_unmatched_block` still exists and still rewrites the opener
-   while emitting the interior verbatim, so those references are accurate and
-   were left alone. The planner extraction superseded that description in part —
-   `opening_rewrite` and `flush_completed_block` no longer exist, because
-   `plan_step` names the release and `flush_block` writes the agenda — so the
-   section needs a second pass against the current tree.
+   `fences::flush_unmatched_block` was accurate when written, and the same
+   flush now lives in `flush_unclosed`, which still rewrites the opener while
+   emitting the interior verbatim; the ADR's *behavioural* claim is unchanged,
+   though the symbol name it cites is now historical. An earlier revision of
+   this section named `opening_rewrite` and `flush_completed_block`, neither of
+   which survived the planner extraction. A documentation audit caught that,
+   and the section now describes the tree as it stands.
 5. The document-level fence-compression preservation proof: extract a
    Verus-compatible compression planner and emitter that `compress_fences`
    actually calls, so block buffering, conflict accumulation, and emission are
