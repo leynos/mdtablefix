@@ -20,6 +20,17 @@ pub mod production_classify;
 #[path = "../src/wrap/fence/kernel.rs"]
 pub mod production_fence;
 
+/// The production compression planner, included for the same reason as the
+/// kernel above.
+///
+/// The planner is the whole of the compression pass's decision-making: which
+/// block is open, whether it may be compressed, which positions of a released
+/// block are rewritten, and what the agenda is. The pass keeps only the parsing
+/// and the text rendering, so proving this module is proving the pass's
+/// behaviour rather than a model of it.
+#[path = "../src/fences/plan.rs"]
+pub mod production_plan;
+
 use production_classify::LineClass;
 
 /// State relevant to a structural decision after source scanning.
@@ -54,6 +65,14 @@ pub mod setext_spec;
 pub mod fence_spec;
 pub use fence_spec::*;
 
+#[path = "plan_spec.rs"]
+pub mod plan_spec;
+// The planner names its specification functions through the crate root, because
+// `src/fences/plan.rs` is compiled both as a production module and as an
+// included proof module, and the second form has only this file's exports to
+// reach them through.
+pub use plan_spec::*;
+
 /// The fence kernel's view is itself.
 ///
 /// Every field is a plain `Copy` value — a depth, an optional marker character,
@@ -82,6 +101,61 @@ impl View for production_fence::Region {
     type V = production_fence::Region;
 
     open spec fn view(&self) -> production_fence::Region {
+        *self
+    }
+}
+
+/// The planner's buffering state views as itself.
+///
+/// `Block` holds a [`FenceState`] and a `bool`, and both of those already view
+/// as themselves, so the record needs no projection: the specification reads the
+/// same opener and the same flag the planner carries, and a specification clause
+/// can name `block.opening` directly rather than destructuring a pair.
+impl View for production_plan::Block {
+    type V = production_plan::Block;
+
+    open spec fn view(&self) -> production_plan::Block {
+        *self
+    }
+}
+
+/// A release's view is itself: three names for three ways a block ends.
+impl View for production_plan::Release {
+    type V = production_plan::Release;
+
+    open spec fn view(&self) -> production_plan::Release {
+        *self
+    }
+}
+
+/// An agendum's view is itself: three names for three ways a line is written.
+impl View for production_plan::Agendum {
+    type V = production_plan::Agendum;
+
+    open spec fn view(&self) -> production_plan::Agendum {
+        *self
+    }
+}
+
+/// A step's view is itself. Each variant carries planner values whose own views
+/// are stated above, so a step needs no projection of its own.
+impl View for production_plan::Step {
+    type V = production_plan::Step;
+
+    open spec fn view(&self) -> production_plan::Step {
+        *self
+    }
+}
+
+/// What the caller learned about a line views as the planner's own input.
+///
+/// The features and the rewrite flag are the two grammar-dependent facts the
+/// caller supplies, and the two routing answers are the tracker's. None of them
+/// is derived, so the view is the record itself.
+impl View for production_plan::LineFacts {
+    type V = production_plan::LineFacts;
+
+    open spec fn view(&self) -> production_plan::LineFacts {
         *self
     }
 }

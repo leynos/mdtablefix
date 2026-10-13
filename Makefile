@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest verus-mutation verus-fence-mutation markdownlint nixie mutants test-workflow-contracts
+.PHONY: help all clean test build release lint typecheck fmt check-fmt check-ripgrep check-static-regexes check-verification-ledger check-prover-tools verus-install verus verus-selftest verus-mutation verus-fence-mutation verus-compression-mutation markdownlint nixie mutants test-workflow-contracts
 
 APP ?= mdtablefix
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
@@ -122,6 +122,9 @@ verus-mutation: verus-install ## Confirm a wrong production classifier decision 
 
 verus-fence-mutation: verus-install ## Confirm a wrong production fence closing rule is rejected
 	VERUS_RUN='$(VERUS_RUN)' scripts/check-fence-mutation.sh .
+
+verus-compression-mutation: verus-install ## Confirm a wrong fence-compression emission decision is rejected
+	VERUS_RUN='$(VERUS_RUN)' scripts/check-compression-mutation.sh .
 
 markdownlint: ## Lint Markdown files
 	$(MDLINT) "**/*.md"

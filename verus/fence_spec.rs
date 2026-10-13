@@ -212,7 +212,11 @@ pub open spec fn spec_rewrite_permitted(state: FenceState, line: LineFeatures) -
 /// The marker-character check is what makes this true: without it a tilde line
 /// would appear to close a backtick opener, and the mutation gate is the
 /// evidence.
-proof fn lemma_rewrite_preserves_closer_relation(
+///
+/// Public because `verus/plan_spec.rs` applies it at the opener a compressed
+/// block was written from, which is how the document theorem reuses this result
+/// rather than restating it.
+pub proof fn lemma_rewrite_preserves_closer_relation(
     state: FenceState,
     line: LineFeatures,
 )
@@ -237,7 +241,11 @@ proof fn lemma_rewrite_preserves_closer_relation(
 ///
 /// Both the original and the rewritten opener survive the line unchanged, so
 /// the relation the induction needs is re-established by the step itself.
-proof fn lemma_block_stays_open(
+///
+/// Public for the same reason as the lemma it calls: the document theorem's
+/// compressed-block induction is this rule applied to the opener the written
+/// delimiter established.
+pub proof fn lemma_block_stays_open(
     state: FenceState,
     line: LineFeatures,
 )
@@ -336,8 +344,14 @@ proof fn lemma_normalization_preserves_regions(
     }
 }
 
-/// The opener used by the non-vacuity witnesses below.
-pub open spec fn spec_witness_opener() -> FenceState {
+/// The opener used by this file's non-vacuity witnesses.
+///
+/// Named for the block rather than for the witnesses, because
+/// `verus/plan_spec.rs` has a witness opener of its own and the two must not be
+/// conflated: this one is a four-tilde opener, and that one is four backticks
+/// chosen so the compressed form it produces is a *different* delimiter rather
+/// than the same characters again.
+pub open spec fn spec_guard_witness_opener() -> FenceState {
     FenceState { marker: '~', marker_len: 4, open_depth: 0 }
 }
 
@@ -348,7 +362,7 @@ pub open spec fn spec_witness_opener() -> FenceState {
 /// from `Seq::empty` and `push` rather than the `seq!` macro so that its length
 /// and contents follow from the sequence axioms directly, without the array
 /// view machinery the macro introduces.
-pub open spec fn spec_witness_body() -> Seq<LineFeatures> {
+pub open spec fn spec_guard_witness_body() -> Seq<LineFeatures> {
     Seq::<LineFeatures>::empty().push(
         LineFeatures { depth: 0, marker: None, marker_len: 0, trailing_blank: false },
     )
@@ -365,17 +379,17 @@ pub open spec fn spec_witness_body() -> Seq<LineFeatures> {
 /// same witness end to end.
 proof fn lemma_witness_interior_is_literal()
     ensures
-        spec_regions_seeded(spec_witness_body(), 1, Some(spec_witness_opener()))
+        spec_regions_seeded(spec_guard_witness_body(), 1, Some(spec_guard_witness_opener()))
             == spec_regions_seeded(
-                spec_witness_body(),
+                spec_guard_witness_body(),
                 1,
-                Some(spec_compressed(spec_witness_opener())),
+                Some(spec_compressed(spec_guard_witness_opener())),
             ),
-        spec_regions_seeded(spec_witness_body(), 1, Some(spec_witness_opener()))
+        spec_regions_seeded(spec_guard_witness_body(), 1, Some(spec_guard_witness_opener()))
             == Seq::<Region>::empty().push(Region::Literal),
 {
-    let body = spec_witness_body();
-    lemma_normalization_preserves_regions(body, 1, spec_witness_opener());
+    let body = spec_guard_witness_body();
+    lemma_normalization_preserves_regions(body, 1, spec_guard_witness_opener());
     // Unfold the definitions at the witness: one prose line under an open fence
     // is literal content, and the second postcondition pins that rather than
     // leaving the theorem's conclusion free to be an empty sequence. Recursive
@@ -383,13 +397,13 @@ proof fn lemma_witness_interior_is_literal()
     reveal(spec_regions_seeded);
     reveal(spec_state_seeded);
     reveal(spec_fence_region);
-    assert(spec_state_seeded(body, 0, Some(spec_witness_opener()))
-        == Some(spec_witness_opener()));
-    assert(spec_fence_region(Some(spec_witness_opener()), body[0]) == Region::Literal);
-    assert(spec_regions_seeded(body, 1, Some(spec_witness_opener()))
-        == spec_regions_seeded(body, 0, Some(spec_witness_opener())).push(
+    assert(spec_state_seeded(body, 0, Some(spec_guard_witness_opener()))
+        == Some(spec_guard_witness_opener()));
+    assert(spec_fence_region(Some(spec_guard_witness_opener()), body[0]) == Region::Literal);
+    assert(spec_regions_seeded(body, 1, Some(spec_guard_witness_opener()))
+        == spec_regions_seeded(body, 0, Some(spec_guard_witness_opener())).push(
             spec_fence_region(
-                spec_state_seeded(body, 0, Some(spec_witness_opener())),
+                spec_state_seeded(body, 0, Some(spec_guard_witness_opener())),
                 body[0],
             ),
         ));

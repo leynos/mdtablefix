@@ -52,21 +52,13 @@ fn assert_transition(
     assert_eq!(step.is_in_fence, is_in_fence, "the exit fence state");
 }
 
-/// Asserts a line's marker components and kernel view in one step.
+/// Asserts that one source line yields exactly the expected kernel view.
 ///
-/// `observe_source_fence` reports three parallel things about a line: the
-/// transition, the parsed `(indent, marker, info)` components, and the kernel's
-/// own view of the line. Asserting them together keeps callers to one line per
-/// observed step and makes the expected shape of each field explicit.
-fn assert_fenced_line(
-    observed: &ObservedFence<'_>,
-    expected_fence: Option<(&str, &str, &str)>,
-    expected_features: Option<LineFeatures>,
-) {
-    assert_eq!(
-        observed.fence, expected_fence,
-        "the parsed marker components"
-    );
+/// `observe_source_fence` reports the transition alongside the kernel's own
+/// view of the line, which is the same value the batch `classify_regions` path
+/// derives from an independent parse. Asserting it here is what keeps the two
+/// paths from drifting.
+fn assert_fenced_line(observed: &ObservedFence, expected_features: Option<LineFeatures>) {
     assert_eq!(observed.features, expected_features, "the kernel line view");
 }
 
@@ -248,21 +240,20 @@ fn source_line_observation_reports_transition_and_resulting_state() {
 fn observe_source_fence_exposes_structural_marker_with_prefix_indent() {
     let mut tracker = FenceTracker::new();
 
+    // A marker nested behind a blockquote prefix reports the quote's depth,
+    // not zero, and the info string of the source line is what decides that it
+    // is not a closing fence.
     let opening = tracker.observe_source_fence("> > ```rust");
     assert!(opening.observation.is_fence_marker);
     assert!(opening.observation.is_in_fence);
-    assert_fenced_line(
-        &opening,
-        Some(("> > ", "```", "rust")),
-        Some(LineFeatures::fence(2, '`', 3, false)),
-    );
+    assert_fenced_line(&opening, Some(LineFeatures::fence(2, '`', 3, false)));
 
-    // A non-marker line inside the block carries no marker components and no
-    // kernel view, but it is still inside the fence.
+    // A non-marker line inside the block carries no kernel view, but it is
+    // still inside the fence.
     let content = tracker.observe_source_fence("> > code");
     assert!(!content.observation.is_fence_marker);
     assert!(content.observation.is_in_fence);
-    assert_fenced_line(&content, None, None);
+    assert_fenced_line(&content, None);
 
     // The closing line reuses the opener's prefix and marker but carries no
     // info string, and its trailing-blank flag is set because nothing follows
@@ -270,11 +261,7 @@ fn observe_source_fence_exposes_structural_marker_with_prefix_indent() {
     let closing = tracker.observe_source_fence("> > ```");
     assert!(closing.observation.is_fence_marker);
     assert!(!closing.observation.is_in_fence);
-    assert_fenced_line(
-        &closing,
-        Some(("> > ", "```", "")),
-        Some(LineFeatures::fence(2, '`', 3, true)),
-    );
+    assert_fenced_line(&closing, Some(LineFeatures::fence(2, '`', 3, true)));
 }
 
 #[test]

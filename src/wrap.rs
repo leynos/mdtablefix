@@ -26,14 +26,17 @@ pub(crate) mod tracing_snapshot_support;
 pub(crate) use block::{BlockKind, classify_block, classify_residual_block, leading_indent};
 pub use blockquote::BlockquotePrefix;
 use continuation::apply_continuation_chunk;
-pub(crate) use fence::{
-    FenceObservation,
-    KernelState,
-    LineFeatures,
-    ObservedFence,
-    compression_changes_region,
-    opener,
-};
+// The paired view of one source line is what the fence tests assert against;
+// the passes themselves consume the transition and the kernel features
+// separately, each from the call that produced it.
+#[cfg(test)]
+pub(crate) use fence::ObservedFence;
+// The opener constructor is only the kernel's own spelling of a state a caller
+// already has: `FenceTracker` builds one internally, and the fence tests build
+// their expected states with it directly.
+#[cfg(test)]
+pub(crate) use fence::opener;
+pub(crate) use fence::{FenceObservation, KernelState, LineFeatures, compression_changes_region};
 /// Fence-detection utilities re-exported for downstream callers.
 ///
 /// [`FenceTracker`] maintains fenced code-block state across lines, which is

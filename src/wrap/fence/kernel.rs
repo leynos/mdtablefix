@@ -164,6 +164,10 @@ ensures(result => result == crate::spec_compressed(state));
 }
 
 /// The opening-fence state a source line establishes once it opens a block.
+///
+/// Production callers take an opener from the transition that produced it, so
+/// only the fence tests need to spell one by hand.
+#[cfg(test)]
 #[must_use]
 pub const fn opener(depth: usize, marker: char, marker_len: usize) -> FenceState {
     FenceState {

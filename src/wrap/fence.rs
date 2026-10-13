@@ -12,13 +12,16 @@
 
 mod kernel;
 
+// Only the fence tests build an expected state by hand; production callers take
+// one from the transition that produced it.
+#[cfg(test)]
+pub(crate) use kernel::opener;
 pub(crate) use kernel::{
     FenceState as KernelState,
     LineFeatures,
     agrees_with_opener,
     compression_changes_region,
     fence_step,
-    opener,
 };
 pub use kernel::{Region, classify_regions};
 use regex::Regex;
@@ -64,7 +67,11 @@ pub(super) static FENCE_RE: std::sync::LazyLock<Regex> =
 pub fn is_fence(line: &str) -> Option<(&str, &str, &str)> {
     let context = FenceLine::parse(line);
     is_inner_fence(context.inner).map(|(inner_indent, fence, info)| {
-        let indent = &line[..context.prefix_len + inner_indent.len()];
+        // `inner` is always a suffix of `line`, so the difference of their
+        // lengths is the prefix's byte length. Deriving it keeps the two views
+        // from drifting apart, which a stored copy could not guarantee.
+        let prefix_len = line.len() - context.inner.len();
+        let indent = &line[..prefix_len + inner_indent.len()];
         (indent, fence, info)
     })
 }
@@ -127,31 +134,24 @@ fn features_of(line: &str) -> LineFeatures {
 }
 
 /// The prefix-stripped view needed while classifying a source fence line.
-///
-/// `prefix_len` lets the caller rebuild an indentation slice spanning both
-/// blockquote and inner indentation without allocating a new prefix.
 struct FenceLine<'a> {
     /// Content after the optional blockquote prefix.
     inner: &'a str,
     /// Blockquote nesting depth at which this line appears.
     depth: usize,
-    /// Byte length of the source blockquote prefix.
-    prefix_len: usize,
 }
 
 impl<'a> FenceLine<'a> {
-    /// Parse the optional blockquote prefix while preserving source offsets.
+    /// Parse the optional blockquote prefix.
     fn parse(line: &'a str) -> Self {
         BlockquotePrefix::parse(line).map_or(
             Self {
                 inner: line,
                 depth: 0,
-                prefix_len: 0,
             },
             |prefix| Self {
                 inner: prefix.inner(),
                 depth: prefix.depth(),
-                prefix_len: prefix.raw_prefix().len(),
             },
         )
     }
@@ -197,7 +197,7 @@ pub(crate) struct FenceObservation {
 /// re-deriving it from a second parse. Keeping both alongside the transition
 /// makes [`FenceTracker`] the single authority for the line's classification.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ObservedFence<'a> {
+pub(crate) struct ObservedFence {
     /// The tracker transition for the complete source line.
     pub(crate) observation: FenceObservation,
     /// The kernel's view of the line, already stepped over by the transition.
@@ -206,9 +206,6 @@ pub(crate) struct ObservedFence<'a> {
     /// path derives, computed here from the tracker's one regex match instead
     /// of a second one.
     pub(crate) features: Option<LineFeatures>,
-    /// The `(indent, marker, info)` components when the line is a fence marker,
-    /// with `indent` spanning any blockquote prefix, as [`is_fence`] returns.
-    pub(crate) fence: Option<(&'a str, &'a str, &'a str)>,
 }
 
 /// Tracks Markdown fenced code block state across lines.
@@ -400,25 +397,19 @@ impl FenceTracker {
     }
 
     /// Observe a source line, returning the fence-state transition together with
-    /// both the structural fence parse and the kernel features of the line.
+    /// the kernel's view of the line.
     ///
     /// The line's blockquote prefix and fence marker are parsed exactly once and
-    /// reused for the tracker update, the returned `fence` components, and the
-    /// returned kernel `features`, so callers need not parse the line again.
-    /// `features` is absent only when the line is not fence-shaped, which is
-    /// exactly the case where a caller that wants [`LineFeatures::prose`] must
-    /// supply the depth itself.
-    pub(crate) fn observe_source_fence<'a>(&mut self, line: &'a str) -> ObservedFence<'a> {
+    /// reused for the tracker update and for the returned kernel `features`, so
+    /// callers need not parse the line again. `features` is absent only when the
+    /// line is not fence-shaped, which is exactly the case where a caller that
+    /// wants [`LineFeatures::prose`] must supply the depth itself.
+    pub(crate) fn observe_source_fence(&mut self, line: &str) -> ObservedFence {
         let context = FenceLine::parse(line);
-        let parsed_inner = is_inner_fence(context.inner);
-        let features = line_features(context.depth, parsed_inner);
+        let features = line_features(context.depth, is_inner_fence(context.inner));
         let was_in_fence = self.in_fence(context.depth);
         let is_fence_marker = self.observe_step(features, context.depth);
         let is_in_fence = self.in_fence(context.depth);
-        let fence = parsed_inner.map(|(inner_indent, marker, info)| {
-            let indent = &line[..context.prefix_len + inner_indent.len()];
-            (indent, marker, info)
-        });
         ObservedFence {
             observation: FenceObservation {
                 was_in_fence,
@@ -426,7 +417,6 @@ impl FenceTracker {
                 is_in_fence,
             },
             features,
-            fence,
         }
     }
 
