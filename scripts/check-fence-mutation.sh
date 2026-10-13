@@ -77,3 +77,6 @@ if ! grep -Fq "verification results::" "${output_file}" || \
     echo "Fence mutation did not falsify the closing rule's contract" >&2
     exit 1
 fi
+
+cat "${output_file}"
+echo "Fence mutation confirmed the expected closing-rule rejection"

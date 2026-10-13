@@ -85,3 +85,6 @@ if ! grep -Fq "verification results::" "${output_file}" || \
     echo "Compression mutation did not falsify the delimiter agendum's contract" >&2
     exit 1
 fi
+
+cat "${output_file}"
+echo "Compression mutation confirmed the expected delimiter-agendum rejection"
