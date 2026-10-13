@@ -136,6 +136,17 @@ over every fixture.
 | Fence transition and line region                  | `fence_step`              | All opener states and parsed line features           | Fence recognition and blockquote parsing                                     | Exact next state and `Region`                                        |
 | Whole-document region classification              | `regions`                 | Every `LineFeatures` slice                          | Fence recognition and blockquote parsing                                     | Exact `Region` sequence, element for element                        |
 | Region preservation under delimiter compression   | `regions`                 | A block interior meeting the compression guard       | Fence recognition and blockquote parsing                                     | Equal region sequences under the original and compressed openers     |
+| Block-opener construction                         | `open_block`                 | Every `LineFacts` value                              | Fence recognition and blockquote parsing                                     | Exact `Option<Block>`; `None` iff the line has no marker                 |
+| Conflict accumulation                             | `absorb`                     | Every block and optional line features               | Fence recognition and blockquote parsing                                     | Exact block; opener fixed, flag a disjunction over the lines             |
+| Planner routing                                   | `plan_step`                  | Every planner state and `LineFacts` value            | Fence recognition and blockquote parsing                                     | Exact `Step`; the pass's only source of a release                        |
+| Delimiter rewrite eligibility                     | `delimiters_eligible`        | Every release and rewrite-candidate pair             | Fence recognition and blockquote parsing                                     | Exact boolean; opener alone, both ends, or neither                       |
+| Outer-delimiter position decision                 | `is_outer_delimiter`         | Every position, block length, release, and flag      | None                                                                         | Exact boolean; position 0, or the last position of a matched block       |
+| Per-position emission decision                    | `delimiter_agendum`          | Every position classification and compression answer | None                                                                         | Exact `Agendum`; compressed, normalized, or verbatim                     |
+| Released-block agenda                             | `block_agenda`               | Every block length, release, and answers             | Fence recognition and blockquote parsing                                     | Exact `Agendum` sequence of the block's own length                       |
+| Document region preservation under compression    | `block_agenda`               | Every planner-routed document                        | Fence recognition, blockquote parsing, and the emission read-back contract   | Full `Region`-sequence equality over any chain of preserved spans        |
+| Segment walked at a document offset               | `regions`                    | Every span and every offset                          | Fence recognition and blockquote parsing                                     | Equal states and equal region sequences over the span's own lines        |
+| Released block read at a document offset          | `block_agenda`               | Every released block at every offset                 | Fence recognition, blockquote parsing, and the emission read-back contract   | The route's obligation: `ends_at` where a state conclusion exists        |
+| Line inside an open block                         | `fence_step`                 | Every opener state and non-fence-shaped line         | Fence recognition and blockquote parsing                                     | The line still leaves the fence open; it cannot route as buffer-or-close |
 
 _Table 1: The verification claim ledger._
 
@@ -201,12 +212,21 @@ unexamined assumption.
   the parser reads off the bytes the emitter writes. It is a claim a
   counterexample could falsify at the frontier, and the property tests over the
   regex and the emitter are its evidence.
-- **The driver composition is open.** When a released block is emitted, the
-  relation between each written line's reading and its source line's reading is
+- **The driver instantiation is open.** The composition law itself is proved:
+  `lemma_spans_compose_regions` turns per-span `ends_at` obligations over a
+  chain of cuts into equality of the whole document's region sequence, and
+  `lemma_released_span_composes` names which obligation each release route
+  discharges. What is not proved is the induction over `spec_drive` that would
+  supply those cuts and states from the fold's own agenda. The obstruction is
+  structural rather than one of effort: the emitted sequence is not a
+  one-line-per-step extension of the fold, because a close step's agenda grows
+  by a whole release at once, so the natural recursion has no well-founded
+  measure in the agenda index and a well-founded version needs the emitted
+  sequence carried in an accumulator. Until that is written, the relation
+  between each written line's reading and its source line's reading is
   established per agendum by the contract above and corpus-wide by
-  `tests/fence_regions.rs`, not yet by a composition lemma over the pass's
-  buffered-block fold. The block-level theorem is complete; this is the step
-  that would join it to the loop.
+  `tests/fence_regions.rs`. **This is the residual gap; it is recorded here
+  rather than presented as closed.**
 - **The classifier kernel's fence recognizer cannot currently disagree, but is
   not tied to the fence kernel by any proof.**
   `src/classify_kernel_predicates.rs` implements `is_fence_marker` and
