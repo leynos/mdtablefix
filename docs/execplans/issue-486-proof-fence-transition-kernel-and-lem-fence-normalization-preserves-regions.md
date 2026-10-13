@@ -1395,21 +1395,29 @@ Each item below, in the order the request gave it, with its current state.
    by a composition lemma over the pass's buffered-block fold, and the user's
    specification requires that block buffering, conflict accumulation and
    emission not be connected to the specification only by tests.
-6. The compression mutation gate, wired into the Makefile and CI.
-   **Makefile done, CI open.** `make verus-compression-mutation` runs
+6. The compression mutation gate, wired into the Makefile and CI. **Done.**
+   `make verus-compression-mutation` runs
    `scripts/check-compression-mutation.sh`, which mutates the `compressible`
    guard to `true` and requires the run to fail with the `delimiter_agendum`
-   postcondition named; verified locally at commit `3846774`. The `Verus`
-   workflow runs `make verus` and `make verus-selftest` only, so neither
-   mutation gate is reached there — the classifier and fence mutations are
-   unwired today as well.
-7. A new `/comenq-coderabbit` review.
+   postcondition named. Commit `3d176e2` added all three mutation gates to
+   `.github/workflows/verus.yml`, so the classifier, fence, and compression
+   negative controls all run on every pull request, and
+   `tests/verus_harness.rs` asserts each target is named there so a gate cannot
+   be dropped from CI unnoticed. The gate reports its evidence: the mutated
+   body, the failed postcondition, and a confirmation line naming the
+   rejection. Commit `1b2d3fb` added the same echo to the fence and compression
+   gates, which had checked the same three conditions and then fallen silent on
+   success.
+7. A new `/comenq-coderabbit` review. **Requested** against the rebased head;
+   see the revision note.
 
 Issue #486 stays open until its original acceptance criteria are met. The
 current state proves the block-interior lemma, the document theorem up to the
 driver, and provides corpus-wide executable evidence; the driver composition in
-item 5b is the part the request specifies that remains open, and item 1's
-advisory check has not been re-read.
+item 5b is the part the request specifies that remains open. Items 1, 3, and 4
+are confirmed satisfied against the published tip. Item 2's cross-pass
+obligation is discharged by inspection plus the recorded external contracts
+rather than by proof.
 
 ## Revision note
 
@@ -1452,3 +1460,25 @@ advisory check has not been re-read.
   rewriting the `### Strategy enum` section; the two
   `docs/adrs/0006-single-pass-idempotence.md` references were checked and are
   accurate. M6 item 2 is the outstanding one.
+- 2026-10-13: Rebased a third time, onto `origin/main` at `bf6c46b` from
+  `2df4c4a`, replaying 61 commits over the exclusive boundary `425cd2f` (the
+  parent of `main`'s single squash commit, confirmed linear with zero merges in
+  range). Seven conflicts, in `verus/lib.rs`, `src/verified_kernel_macros.rs`,
+  `scripts/check-classifier-mutation.sh`, `tests/verus_harness.rs`,
+  `.github/workflows/verus.yml`, `docs/verification.md`, and
+  `docs/developers-guide.md`; every one was two descriptions of a single
+  artefact, resolved toward `main` where `main`'s wording was newer and toward
+  the branch only where the branch's subject was absent from `main`.
+  `range-diff` shows twelve changed commits and no dropped work; the sole
+  apparent deletion is the branch's rename of `src/classify_kernel_macros.rs` to
+  `src/verified_kernel_macros.rs`, whose body is `main`'s byte for byte. The
+  replay bypassed the Weave driver with a command-scoped override because this
+  host still selects Weave from a global attributes block; see the surprises
+  entry. `NEW_HEAD` `2965b52`, force pushed with a lease bound to the recorded
+  remote head `2df4c4a`. All ten gates pass on the rebased candidate:
+  `make verus` reports 172 verified, 0 errors; `verus-selftest` rejects the
+  false proof as designed; each of the three mutation gates fails verification
+  with its own named postcondition; and `check-fmt`, `markdownlint`,
+  `typecheck`, `lint`, and `test` are green (`test` ran 69 suites). Post-rebase
+  fixes landed as `a0864e1` (formatter re-wrap after the hand splices),
+  `1b2d3fb` (mutation-gate evidence), and the ExecPlan record.
