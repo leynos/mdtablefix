@@ -90,17 +90,39 @@ production-used kernels. `make verus-selftest` runs `verus/smoke.rs`, whose
 deliberately false assertion must be rejected; it also fails when the runner
 does not reach Verus, so a skipped verifier cannot pass the check.
 
-`make verus-mutation` runs `scripts/check-classifier-mutation.sh`. It changes
-the production `convert_setext_seq` assembly kernel by removing its mandatory
-space, then confirms Verus rejects the complete output-classification
-postcondition. The script distinguishes a proof rejection from a runner
-failure, so a missing or skipped verifier cannot pass. The same target runs in
-the pull-request workflow.
+Three mutation gates are the negative controls for the proofs, and each is run
+by its own Makefile target. `make verus-mutation` runs
+`scripts/check-classifier-mutation.sh`, which removes the mandatory separator
+from the production ATX assembly kernel and confirms Verus rejects the complete
+output-classification postcondition. `make verus-fence-mutation` runs
+`scripts/check-fence-mutation.sh`, which drops the marker-character comparison
+from `closes_fence` and requires the failed obligation to name that function's
+contract against `spec_closes`. `make verus-compression-mutation` runs
+`scripts/check-compression-mutation.sh`, which makes `delimiter_agendum` ignore
+its `compressible` argument and requires the run to fail with that kernel's own
+postcondition named. Each gate mutates one production module, leaves every
+other proof in place, and demands a named postcondition rather than a bare "did
+not verify", so a gate cannot pass on a parse error or an unrelated obligation.
 
-The pull-request workflow runs `make verus`, `make verus-selftest`, and
-`make verus-mutation` on Ubuntu. It caches the version-specific `.verus`
-directory using the runner operating system, architecture, and pinned Verus
-version, then executes the same Makefile targets used locally. The
+Every gate needs a self-contained proof tree, because it supplies a mutated
+copy of a production module and must not touch the working tree. That tree is
+built by `scripts/verus-mutation-mirror.sh`, sourced by all three gates.
+`verus/lib.rs` names its production modules through `#[path]` attributes, so
+the builder mirrors the whole `src/` tree and rewrites that one prefix; each
+`#[path]` and `include!` inside a production module is already relative to its
+own directory and resolves unchanged. Mirroring the tree rather than a list of
+kernels is deliberate: a hand-maintained list previously left two gates copying
+a stale subset of the module list, and adding the compression planner to
+`verus/lib.rs` made those gates die with "couldn't read …/src/fences/plan.rs".
+That is an infrastructure failure, not a proof result, and the gates correctly
+refused to count it. Adding a production module to `verus/lib.rs` now needs no
+change to any gate.
+
+The pull-request workflow runs `make verus`, `make verus-selftest`,
+`make verus-mutation`, `make verus-fence-mutation`, and
+`make verus-compression-mutation` on Ubuntu. It caches the version-specific
+`.verus` directory using the runner operating system, architecture, and pinned
+Verus version, then executes the same Makefile targets used locally. The
 [verification ledger](verification.md) records each claim and its trusted
 boundary; [ADR 0011](adrs/0011-verified-normalization-core.md) documents why
 the proof scope remains a narrow production-used core.

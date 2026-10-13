@@ -19,6 +19,13 @@
 # property they claim.
 set -euo pipefail
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# The mirror builder is the one place that knows how a proof tree is laid out,
+# so a change to `verus/lib.rs`'s module list cannot leave this gate copying a
+# stale subset of it.
+# shellcheck source=scripts/verus-mutation-mirror.sh
+. "${script_dir}/verus-mutation-mirror.sh"
+
 # Absolute, because `VERUS_RUN` names its repository root as `.`. The runner
 # reads that relative to the working directory, so the script moves to the
 # repository root and keeps every path it builds independent of the caller's
@@ -35,26 +42,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "${proof_dir}/src/wrap/fence"
-
-# Every production kernel the proof entry point includes has to be reproduced at
-# the path its `#[path]` attribute names: the classifier and the planner at
-# `src/`, the fence kernel at `src/wrap/fence/`. Each `include!` and `#[path]`
-# inside those modules is relative to its own directory, so these copies resolve
-# without further rewriting.
-sed -e 's@../src/classify_kernel.rs@src/classify_kernel.rs@' \
-    -e 's@../src/wrap/fence/kernel.rs@src/wrap/fence/kernel.rs@' \
-    -e 's@../src/fences/plan.rs@src/fences/plan.rs@' \
-    "${repo_root}/verus/lib.rs" > "${proof_file}"
-mkdir -p "${proof_dir}/src/fences"
-cp "${repo_root}/verus/classify_spec.rs" "${proof_dir}/classify_spec.rs"
-cp "${repo_root}/verus/fence_spec.rs" "${proof_dir}/fence_spec.rs"
-cp "${repo_root}/verus/plan_spec.rs" "${proof_dir}/plan_spec.rs"
-cp "${repo_root}/src/classify_kernel.rs" "${proof_dir}/src/classify_kernel.rs"
-cp "${repo_root}/src/verified_kernel_macros.rs" "${proof_dir}/src/verified_kernel_macros.rs"
-cp "${repo_root}/src/classify_kernel_predicates.rs" "${proof_dir}/src/classify_kernel_predicates.rs"
-cp "${repo_root}/src/classify_kernel_consumers.rs" "${proof_dir}/src/classify_kernel_consumers.rs"
-cp "${repo_root}/src/wrap/fence/kernel.rs" "${proof_dir}/src/wrap/fence/kernel.rs"
+mirror_verus_proof_tree "${repo_root}" "${proof_dir}"
 
 # The mutation: the `compressible` guard becomes `true`, so every delimiter is
 # written compressed. The argument stays in the signature and the shape of the

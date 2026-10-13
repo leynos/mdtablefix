@@ -2,6 +2,13 @@
 # Confirm that Verus rejects a production ATX marker without its separator.
 set -euo pipefail
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# The mirror builder is the one place that knows how a proof tree is laid out,
+# so a change to `verus/lib.rs`'s module list cannot leave this gate copying a
+# stale subset of it.
+# shellcheck source=scripts/verus-mutation-mirror.sh
+. "${script_dir}/verus-mutation-mirror.sh"
+
 # Absolute, because `VERUS_RUN` names its repository root as `.`. The runner
 # reads that relative to the working directory, so the script moves to the
 # repository root and keeps every path it builds independent of the caller's
@@ -18,27 +25,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "${proof_dir}/src/wrap/fence"
+# The mirror carries every production kernel unmodified except the classifier
+# consumer written below, because the proofs in `fence_spec.rs` and
+# `plan_spec.rs` are part of what this gate has to re-verify.
+mirror_verus_proof_tree "${repo_root}" "${proof_dir}"
 
-# Both production kernels are included by the proof entry point, so both tree
-# layouts have to be reproduced: the classifier at `src/`, the fence kernel at
-# `src/wrap/fence/`. Each `include!` and `#[path]` inside those modules is
-# relative to its own directory, so these copies resolve without further
-# rewriting. Only the classifier is mutated here; the fence kernel and its
-# specification travel unmodified, because the proofs in `fence_spec.rs` are
-# part of what this gate has to re-verify.
-sed -e 's@../src/classify_kernel.rs@src/classify_kernel.rs@' \
-    -e 's@../src/wrap/fence/kernel.rs@src/wrap/fence/kernel.rs@' \
-    "${repo_root}/verus/lib.rs" > "${proof_file}"
-cp "${repo_root}/verus/classify_spec.rs" "${proof_dir}/classify_spec.rs"
-cp "${repo_root}/verus/setext_spec.rs" "${proof_dir}/setext_spec.rs"
-cp "${repo_root}/verus/fence_spec.rs" "${proof_dir}/fence_spec.rs"
-cp "${repo_root}/src/classify_kernel.rs" "${proof_dir}/src/classify_kernel.rs"
-cp "${repo_root}/src/verified_kernel_macros.rs" "${proof_dir}/src/verified_kernel_macros.rs"
-cp "${repo_root}/src/classify_kernel_predicates.rs" "${proof_dir}/src/classify_kernel_predicates.rs"
-# The fence kernel travels unmodified; `fence_spec.rs` re-verifies it here.
-cp "${repo_root}/src/wrap/fence/kernel.rs" "${proof_dir}/src/wrap/fence/kernel.rs"
-cp "${repo_root}/src/classify_kernel_consumers.rs" "${proof_dir}/src/classify_kernel_consumers.rs"
 sed "/^[[:space:]]*result\.push(' '); \/\/ Mandatory ATX separator\.[[:space:]]*$/d" \
     "${repo_root}/src/classify_kernel_setext.rs" \
     > "${proof_dir}/src/classify_kernel_setext.rs"
