@@ -781,6 +781,774 @@ proof fn lemma_compressed_block_regions(
 }
 
 // ---------------------------------------------------------------------------
+// The driver
+// ---------------------------------------------------------------------------
+
+/// Whether a tracker state holds a fence open at `depth`.
+///
+/// This is the tracker's own `in_fence` test, and it is what turns a state into
+/// the two routing answers the planner is handed. A line at or below the open
+/// fence's depth is inside it; a line shallower than that is not, whatever state
+/// the tracker is carrying, because a shallower line ends the fence before it is
+/// read.
+pub open spec fn spec_fenced(state: Option<FenceState>, depth: usize) -> bool {
+    match state {
+        Some(open) => depth >= open.open_depth,
+        None => false,
+    }
+}
+
+/// The planner's view of a line's features.
+///
+/// The caller hands the planner the parsed features only when the line is
+/// fence-shaped, and the planner derives its own fencing test from that one
+/// value. The reduction is sound because the two producers cannot overlap: a
+/// parsed fence run always yields a marker, and the prose fallback never does.
+/// The marker's presence is therefore exactly the recognition answer the caller
+/// would have given, and the driver can recover that answer from the line alone.
+pub open spec fn spec_planner_features(line: LineFeatures) -> Option<LineFeatures> {
+    if line.marker.is_some() {
+        Some(line)
+    } else {
+        None
+    }
+}
+
+/// Everything the caller learned about one line, as the specification computes it.
+///
+/// This is the join between the tracker's state machine and the planner's input.
+/// The two routing answers are read off the fence state before and after the
+/// line is stepped; the features are the recognition answer above; and the
+/// rewrite flag is the one fact the caller must supply, because it depends on
+/// the delimiter grammar rather than on the fence transition.
+///
+/// Reading the routing answers here rather than trusting a caller's copy is what
+/// makes the driver provable: the two answers are functions of the same state
+/// recurrence the driver already maintains, so a caller cannot supply answers
+/// that disagree with the document it is planning.
+pub open spec fn spec_line_facts(
+    state: Option<FenceState>,
+    line: LineFeatures,
+    rewritable: bool,
+) -> LineFacts {
+    LineFacts {
+        was_in_fence: spec_fenced(state, line.depth),
+        is_in_fence: spec_fenced(spec_fence_next(state, line), line.depth),
+        features: spec_planner_features(line),
+        rewritable,
+    }
+}
+/// The agenda a release contributes, given the span of lines it covers.
+///
+/// The span — not a start and an end — is the parameter because it is what the
+/// emitter actually has. A release writes the lines the pass buffered for the
+/// block, and the number of those lines is a length the caller already holds; a
+/// start and an end would only be two values from which that length is recovered.
+/// Naming the length is also what keeps the kernel free of subtraction, which is
+/// the one place an underflow could hide.
+///
+/// The two rewrite flags are the ones the emitter will consult: the opener's was
+/// recorded when the block was opened, and the closer's is the releasing line's
+/// own. An unterminated block ignores the second flag, which is why the pass can
+/// hand that path a value it never reads.
+///
+/// The block is a parameter rather than being read from the driver state because
+/// of exactly one release: a close buffers its line before the block is released,
+/// so that line's conflict answer is part of the block being emitted. Every other
+/// release leaves the flag alone, because [`spec_absorb`] preserves it.
+pub open spec fn spec_released_agenda(
+    block: PlanBlock,
+    span: int,
+    opener_rewritable: bool,
+    closer_rewritable: bool,
+    release: Release,
+) -> Seq<Agendum> {
+    spec_block_agenda(
+        span,
+        release,
+        spec_delimiters_eligible(release, opener_rewritable, closer_rewritable),
+        !block.conflicts,
+    )
+}
+
+/// The buffered block after a step, or `None` when nothing is buffered.
+pub open spec fn spec_step_pending(step: Step) -> Option<PlanBlock> {
+    match step {
+        Step::Restart(fresh) => Some(fresh),
+        Step::Skip => None,
+        Step::Extend(block) => Some(block),
+        Step::Close(_, _) => None,
+    }
+}
+
+/// The rewrite flag a step records for the block it leaves buffered.
+///
+/// Only an opening delimiter supplies the flag, because only an opening delimiter
+/// is ever consulted as one: the eligibility rule reads the block's first line and
+/// the line that releases it, and never an interior line. The flag is taken from
+/// the line's own facts — the same value the `Restart` that buffered it carried —
+/// so a caller cannot record one answer while the planner acted on another.
+pub open spec fn spec_step_opener_rewritable(
+    opener_rewritable: bool,
+    line_rewritable: bool,
+    step: Step,
+) -> bool {
+    match step {
+        Step::Restart(_) => line_rewritable,
+        Step::Skip => opener_rewritable,
+        Step::Extend(_) => opener_rewritable,
+        Step::Close(_, _) => opener_rewritable,
+    }
+}
+
+/// The index a step records for the block it leaves buffered.
+///
+/// A fresh block begins at the line that opened it, so the step needs the index of
+/// the line being planned; every other step carries the previous value through,
+/// whether or not a block is buffered, so that the field is total and so that the
+/// balance below is an equation about the fold rather than about a case split.
+pub open spec fn spec_step_start(start: int, prev_len: int, step: Step) -> int {
+    match step {
+        Step::Restart(_) => prev_len,
+        Step::Skip => start,
+        Step::Extend(_) => start,
+        Step::Close(_, _) => start,
+    }
+}
+
+/// The agenda a step contributes for the block it releases, before the line being
+/// planned is itself accounted for.
+///
+/// A step that releases the block the pass was holding writes that block's lines
+/// here. The span is `prev_len - start` for the two implicit releases — a restart
+/// and a skip both flush the block and then deal with the current line separately,
+/// so that line is never part of the block they release — and one more than that
+/// for a close, whose line is the block's own closing delimiter.
+pub open spec fn spec_step_release(
+    pending: Option<PlanBlock>,
+    start: int,
+    opener_rewritable: bool,
+    facts: LineFacts,
+    prev_len: int,
+    step: Step,
+) -> Seq<Agendum> {
+    match pending {
+        Some(block) => match step {
+            Step::Restart(_) => spec_released_agenda(
+                block,
+                prev_len - start,
+                opener_rewritable,
+                false,
+                Release::Abandoned,
+            ),
+            Step::Skip => spec_released_agenda(
+                block,
+                prev_len - start,
+                opener_rewritable,
+                false,
+                Release::Abandoned,
+            ),
+            Step::Extend(_) => Seq::empty(),
+            Step::Close(extended, release) => spec_released_agenda(
+                extended,
+                prev_len + 1 - start,
+                opener_rewritable,
+                facts.rewritable,
+                release,
+            ),
+        },
+        None => Seq::empty(),
+    }
+}
+
+/// Whether a step writes the line it is planning, beyond any release.
+///
+/// A line a close or a restart deals with is already accounted for — by the
+/// release that ends the old block, and by the start of the new one — so only a
+/// skip writes an agendum here. Between them the release and this flag write every
+/// line of the prefix exactly once, which is the whole content of the length
+/// theorem below.
+pub open spec fn spec_step_writes_line(step: Step) -> bool {
+    match step {
+        Step::Restart(_) => false,
+        Step::Skip => true,
+        Step::Extend(_) => false,
+        Step::Close(_, _) => false,
+    }
+}
+
+/// The lines a pending block accounts for when the prefix has reached `i`.
+///
+/// This is the quantity the length theorem balances: every line of the prefix is
+/// either already in the agenda or still inside the block the pass is holding, and
+/// the two must add up to the prefix however the fold is stepped. The `end` is not
+/// the block's last line but the prefix's, which is why a block one line old
+/// accounts for exactly one line only once that line has been stepped.
+pub open spec fn spec_pending_lines(pending: Option<PlanBlock>, start: int, end: int) -> int {
+    match pending {
+        Some(_) => end - start,
+        None => 0,
+    }
+}
+
+/// The buffering half of the driver's state: the three fields a step changes.
+///
+/// This is the part the production kernel carries, and splitting it out is what
+/// makes the kernel's postcondition statable: the kernel neither receives nor
+/// returns the accumulated agenda, because the emitter appends to the document
+/// itself. The specification's step and agenda functions are stated over this
+/// record, and the fold below adds the agenda, so the two halves are joined in the
+/// specification rather than in the kernel's argument list.
+pub struct DriveState {
+    /// The block being buffered, or `None` between blocks.
+    pub pending: Option<PlanBlock>,
+    /// Index of the pending block's opening line.
+    pub start: int,
+    /// Whether the pending block's opening line was a rewrite candidate.
+    pub opener_rewritable: bool,
+}
+
+/// The driver's state after some prefix of a document.
+///
+/// The pass's loop is a fold over four values, and the whole document theorem
+/// needs all four to say what the emitted sequence is: the three buffering fields
+/// above, and the agenda accumulated so far. The fence state is deliberately *not*
+/// a field: it is [`spec_state_seeded`] of the same prefix, which is what lets the
+/// driver reuse the transition kernel's own specification rather than restating
+/// it.
+pub struct Drive {
+    /// The buffering state, which the production kernel computes.
+    pub state: DriveState,
+    /// The agenda for every line the fold has accounted for so far.
+    pub out: Seq<Agendum>,
+}
+
+/// The buffering state a step leaves behind.
+///
+/// The step is the planner's own routing relation applied to the line's facts, so
+/// the branch taken here is the branch the production driver takes and not a model
+/// of it. The three fields are the whole of what a step changes: which block is
+/// buffered, where that block began, and whether its opener was a rewrite
+/// candidate.
+///
+/// Taking the line's [`LineFacts`] rather than the fence state the line was read
+/// against is deliberate. A production caller has already parsed the line and holds
+/// exactly these facts; asking for them keeps the kernel's argument list equal to
+/// the value the emitter already possesses, and moves the question of whether those
+/// facts are the ones the document implies to the loop that produces them.
+pub open spec fn spec_step_state(prev: DriveState, facts: LineFacts, prev_len: int) -> DriveState {
+    let step = spec_plan_step(prev.pending, facts);
+    DriveState {
+        pending: spec_step_pending(step),
+        start: spec_step_start(prev.start, prev_len, step),
+        opener_rewritable: spec_step_opener_rewritable(
+            prev.opener_rewritable,
+            facts.rewritable,
+            step,
+        ),
+    }
+}
+
+/// The agenda a step contributes.
+///
+/// This is the whole of what the pass writes for the lines a step accounts for, and
+/// it is what the production kernel returns for the emitter to append: the release
+/// of the block the step ends, plus the line itself when the line is written
+/// directly rather than buffered. The length theorem below is the statement that
+/// these contributions sum to the document.
+pub open spec fn spec_step_agenda(prev: DriveState, facts: LineFacts, prev_len: int) -> Seq<Agendum> {
+    let step = spec_plan_step(prev.pending, facts);
+    let released = spec_step_release(
+        prev.pending,
+        prev.start,
+        prev.opener_rewritable,
+        facts,
+        prev_len,
+        step,
+    );
+    if spec_step_writes_line(step) {
+        released.push(Agendum::Verbatim)
+    } else {
+        released
+    }
+}
+
+/// The driver fold advanced by one line.
+pub open spec fn spec_drive_step(prev: Drive, facts: LineFacts, prev_len: int) -> Drive {
+    Drive {
+        state: spec_step_state(prev.state, facts, prev_len),
+        out: prev.out.add(spec_step_agenda(prev.state, facts, prev_len)),
+    }
+}
+
+/// The driver fold, stated as a recursion over the prefix length.
+///
+/// This is the pass's whole decision procedure with the text stripped out. The
+/// line the fold is extending by is read against [`spec_state_seeded`] of the
+/// shorter prefix, which is the tracker state after that many lines, and the step
+/// it takes is [`spec_drive_step`] — so the fold and the production loop differ
+/// only in whether the tracker supplies that state or a recursion recomputes it.
+///
+/// The four cases of the planner step are exactly the pass's four dispositions of
+/// a line: it opens a block, it is emitted directly, it is buffered into the open
+/// block, or it closes the block and is released with it. Every flush path the
+/// pass has is one of them. Two of the four release a pending block: a skip and a
+/// restart both end it implicitly, which is the pass's abandoned release, and a
+/// close ends it at a delimiter. The document's own end inside a block is the
+/// fourth flush path, and [`spec_finish`] adds it once the fold is complete.
+pub open spec fn spec_drive(
+    source: Seq<LineFeatures>,
+    rewritable: Seq<bool>,
+    i: int,
+) -> Drive
+    decreases i
+{
+    if i <= 0 {
+        Drive {
+            state: DriveState { pending: None, start: 0, opener_rewritable: false },
+            out: Seq::empty(),
+        }
+    } else {
+        spec_drive_step(
+            spec_drive(source, rewritable, i - 1),
+            spec_line_facts(
+                spec_state_seeded(source, i - 1, None),
+                source[i - 1],
+                rewritable[i - 1],
+            ),
+            i - 1,
+        )
+    }
+}
+
+/// `INV-DRIVER-BALANCE` — the fold's agenda and its pending block cover the prefix.
+///
+/// The invariant the length theorem establishes, in its three parts. Every line of
+/// the prefix is accounted for exactly once — by an agendum the fold has recorded or
+/// by the span of the block it is still holding — so the two add up to the prefix.
+/// The block's opening index is never beyond the prefix. And while a block is
+/// buffered no outside line has been released after it, which is why the agenda's
+/// length is exactly the opening index; that third part is what makes the induction
+/// below arithmetic rather than an accumulating argument.
+pub open spec fn spec_balanced(drive: Drive, i: int) -> bool {
+    drive.state.start <= i
+        && drive.out.len() + spec_pending_lines(drive.state.pending, drive.state.start, i) == i
+        && (drive.state.pending.is_some() ==> drive.out.len() == drive.state.start)
+}
+
+/// `LEM-RELEASE-ACCOUNTS-FOR-THE-BLOCK`.
+///
+/// A release contributes exactly as many agenda as the span it covers. This is
+/// [`lemma_block_agenda_length`] read through the driver: it is the step that makes
+/// the whole-prefix balance an equation about the fold rather than about the agenda
+/// constructor, and it is stated once so that neither the step lemma below nor the
+/// induction has to re-derive the block's length from the emission rule.
+proof fn lemma_released_agenda_length(
+    block: PlanBlock,
+    span: int,
+    opener_rewritable: bool,
+    closer_rewritable: bool,
+    release: Release,
+)
+    requires span >= 0,
+    ensures spec_released_agenda(
+        block,
+        span,
+        opener_rewritable,
+        closer_rewritable,
+        release,
+    ).len() == span,
+{
+    reveal(spec_released_agenda);
+    reveal(spec_delimiters_eligible);
+    lemma_block_agenda_length(
+        span,
+        release,
+        spec_delimiters_eligible(release, opener_rewritable, closer_rewritable),
+        !block.conflicts,
+        span,
+    );
+}
+
+/// The release a step contributes holds as many agenda as the block it flushes.
+///
+/// The three releases that write a block each contribute its own span, and the step
+/// that merely buffers contributes nothing. Naming the count per case here is what
+/// lets the balance below be arithmetic rather than a case analysis repeated at every
+/// induction step — the case split is discharged once, here, and the induction only
+/// has to know which branch of the route it is in.
+proof fn lemma_step_release_length(
+    pending: Option<PlanBlock>,
+    start: int,
+    opener_rewritable: bool,
+    facts: LineFacts,
+    prev_len: int,
+    step: Step,
+)
+    requires prev_len >= start,
+    ensures
+        spec_step_release(
+            pending,
+            start,
+            opener_rewritable,
+            facts,
+            prev_len,
+            step,
+        ).len() == match pending {
+            Some(_) => match step {
+                Step::Restart(_) => prev_len - start,
+                Step::Skip => prev_len - start,
+                Step::Extend(_) => 0,
+                Step::Close(_, _) => prev_len + 1 - start,
+            },
+            None => 0,
+        },
+{
+    reveal(spec_step_release);
+    match pending {
+        Some(block) => match step {
+            Step::Restart(_) => {
+                lemma_released_agenda_length(
+                    block,
+                    prev_len - start,
+                    opener_rewritable,
+                    false,
+                    Release::Abandoned,
+                );
+            },
+            Step::Skip => {
+                lemma_released_agenda_length(
+                    block,
+                    prev_len - start,
+                    opener_rewritable,
+                    false,
+                    Release::Abandoned,
+                );
+            },
+            Step::Extend(_) => {},
+            Step::Close(extended, release) => {
+                lemma_released_agenda_length(
+                    extended,
+                    prev_len + 1 - start,
+                    opener_rewritable,
+                    facts.rewritable,
+                    release,
+                );
+            },
+        },
+        None => {},
+    }
+}
+
+/// How many agenda one step contributes.
+///
+/// This is the length of [`spec_step_agenda`] spelled out per branch of the route,
+/// so the induction below can add up the two halves — the block a step releases and
+/// the line it writes — without unfolding either constructor again.
+proof fn lemma_step_agenda_length(
+    state: DriveState,
+    facts: LineFacts,
+    prev_len: int,
+    step: Step,
+)
+    requires step == spec_plan_step(state.pending, facts), prev_len >= state.start,
+    ensures
+        spec_step_agenda(state, facts, prev_len).len() == match state.pending {
+            Some(_) => match step {
+                Step::Restart(_) => prev_len - state.start,
+                Step::Skip => prev_len - state.start + 1,
+                Step::Extend(_) => 0,
+                Step::Close(_, _) => prev_len + 1 - state.start,
+            },
+            None => match step {
+                Step::Skip => 1,
+                _ => 0,
+            },
+        },
+{
+    reveal(spec_step_agenda);
+    reveal(spec_step_writes_line);
+    lemma_step_release_length(
+        state.pending,
+        state.start,
+        state.opener_rewritable,
+        facts,
+        prev_len,
+        step,
+    );
+}
+
+/// The route a planner takes with nothing buffered.
+///
+/// A step with `None` buffered can only be an opening or a direct write: buffering
+/// into a block presupposes a block, and closing one presupposes a delimiter that
+/// ended it. Naming the fact here lets the induction below discharge those two
+/// branches without unfolding the planner again.
+proof fn lemma_no_block_cannot_buffer_or_close(pending: Option<PlanBlock>, facts: LineFacts)
+    requires pending.is_none(),
+    ensures !matches!(spec_plan_step(pending, facts), Step::Extend(_) | Step::Close(_, _)),
+{
+    reveal(spec_plan_step);
+}
+
+/// `LEM-DRIVE-LENGTH` — the fold's agenda and its pending block cover the prefix.
+///
+/// The line-count half of the document theorem, established on the decision itself
+/// rather than on the loop that computes it. Each of the four dispositions accounts
+/// for exactly the lines it consumes — a buffered line joins the pending span, an
+/// opening line joins the new block's span, a line emitted directly becomes one
+/// agendum, and a close turns the whole block into agenda of its own length — so the
+/// agenda's length and the pending block's span always sum to the prefix, whatever
+/// route the planner took.
+///
+/// The empty prefix is the base case and satisfies the balance outright: no block is
+/// buffered and no line is claimed. That is not a degenerate case to be waved away —
+/// it is the document consisting of no lines, and it is one of the inputs the
+/// witnesses below name.
+proof fn lemma_drive_length(source: Seq<LineFeatures>, rewritable: Seq<bool>, i: int)
+    requires
+        0 <= i,
+        i <= source.len(),
+        i <= rewritable.len(),
+    ensures spec_balanced(spec_drive(source, rewritable, i), i),
+    decreases i,
+{
+    if i > 0 {
+        lemma_drive_length(source, rewritable, i - 1);
+        let prev = spec_drive(source, rewritable, i - 1);
+        let line = source[i - 1];
+        let facts = spec_line_facts(
+            spec_state_seeded(source, i - 1, None),
+            line,
+            rewritable[i - 1],
+        );
+        let step = spec_plan_step(prev.state.pending, facts);
+        let next = spec_drive_step(prev, facts, i - 1);
+        let added = spec_step_agenda(prev.state, facts, i - 1).len();
+        reveal(spec_drive);
+        reveal(spec_drive_step);
+        reveal(spec_step_state);
+        reveal(spec_balanced);
+        reveal(spec_step_pending);
+        reveal(spec_step_start);
+        assert(spec_drive(source, rewritable, i) == next) by {
+            reveal_with_fuel(spec_drive, 2);
+        };
+        assert(prev.state.start <= i - 1);
+        assert(prev.out.len() + added == next.out.len()) by {
+            reveal(spec_step_agenda);
+        };
+        lemma_step_agenda_length(prev.state, facts, i - 1, step);
+
+        // Everything below is which route was taken: the two halves of the balance
+        // are named by the step-agenda lemma, so each branch only has to say where
+        // the new block's span starts and how long the new agenda is.
+
+        match prev.state.pending {
+            Some(block) => {
+                assert(prev.out.len() == prev.state.start);
+                match step {
+                    Step::Restart(_) => {
+                        assert(added == i - 1 - prev.state.start) by (nonlinear_arith)
+                            requires added == i - 1 - prev.state.start;
+                        assert(next.state.start == i - 1);
+                        assert(next.out.len() == i - 1) by (nonlinear_arith)
+                            requires next.out.len() == prev.state.start + (i - 1 - prev.state.start),
+                                prev.state.start <= i - 1;
+                        assert(spec_pending_lines(next.state.pending, next.state.start, i) == 1) by {
+                            reveal(spec_pending_lines);
+                        };
+                        assert(spec_balanced(next, i)) by { reveal(spec_balanced); };
+                    },
+                    Step::Skip => {
+                        assert(added == i - 1 - prev.state.start + 1);
+                        assert(next.state.start == prev.state.start);
+                        assert(next.state.pending.is_none());
+                        assert(next.out.len() == i) by (nonlinear_arith)
+                            requires next.out.len() == prev.state.start + (i - 1 - prev.state.start + 1),
+                                prev.state.start <= i - 1;
+                        assert(spec_pending_lines(next.state.pending, next.state.start, i) == 0) by {
+                            reveal(spec_pending_lines);
+                        };
+                        assert(spec_balanced(next, i)) by { reveal(spec_balanced); };
+                    },
+                    Step::Extend(_) => {
+                        assert(added == 0);
+                        assert(next.state.start == prev.state.start);
+                        assert(next.out.len() == prev.state.start);
+                        assert(spec_pending_lines(next.state.pending, next.state.start, i) == i
+                            - prev.state.start) by {
+                            reveal(spec_pending_lines);
+                        };
+                        assert(spec_balanced(next, i)) by { reveal(spec_balanced); };
+                    },
+                    Step::Close(_, _) => {
+                        assert(added == i - 1 + 1 - prev.state.start);
+                        assert(next.state.start == prev.state.start);
+                        assert(next.state.pending.is_none());
+                        assert(next.out.len() == i) by (nonlinear_arith)
+                            requires next.out.len() == prev.state.start + (i - 1 + 1 - prev.state.start);
+                        assert(spec_pending_lines(next.state.pending, next.state.start, i) == 0) by {
+                            reveal(spec_pending_lines);
+                        };
+                        assert(spec_balanced(next, i)) by { reveal(spec_balanced); };
+                    },
+                }
+            },
+            None => {
+                assert(prev.out.len() == i - 1) by {
+                    reveal(spec_pending_lines);
+                };
+                lemma_no_block_cannot_buffer_or_close(prev.state.pending, facts);
+                match step {
+                    Step::Restart(_) => {
+                        assert(added == 0);
+                        assert(next.state.start == i - 1) by {
+                            reveal(spec_step_start);
+                        };
+                        assert(next.out.len() == i - 1);
+                        assert(spec_pending_lines(next.state.pending, next.state.start, i) == 1) by {
+                            reveal(spec_pending_lines);
+                        };
+                        assert(spec_balanced(next, i)) by { reveal(spec_balanced); };
+                    },
+                    Step::Skip => {
+                        assert(added == 1) by {
+                            reveal(spec_step_writes_line);
+                        };
+                        assert(next.state.start == prev.state.start);
+                        assert(next.state.pending.is_none());
+                        assert(next.out.len() == i) by {
+                            reveal(spec_step_agenda);
+                            reveal(spec_step_writes_line);
+                        };
+                        assert(spec_pending_lines(next.state.pending, next.state.start, i) == 0) by {
+                            reveal(spec_pending_lines);
+                        };
+                        assert(spec_balanced(next, i)) by { reveal(spec_balanced); };
+                    },
+                    Step::Extend(_) => {
+                        assert(false);
+                    },
+                    Step::Close(_, _) => {
+                        assert(false);
+                    },
+                }
+            },
+        }
+    }
+}
+
+/// The pass's whole decision for a document.
+///
+/// The agenda is one agendum per input line, which is the line-count half of the
+/// document theorem: the driver records a single agendum for every line it writes
+/// directly and a block's whole agenda for every line it buffers, so the emitted
+/// document is exactly as long as the source.
+///
+/// The other two fields are the block the document ended inside, if it did, and
+/// that block's line count. They are not decoration: the pass reports exactly
+/// these two values when it preserves an unterminated block, so stating them here
+/// is what makes the diagnostic a consequence of the decision rather than a
+/// separate observation the adapter makes for itself.
+pub struct Plan {
+    /// What the pass writes, one agendum per source line.
+    pub agenda: Seq<Agendum>,
+    /// The block left open at end of input, or `None`.
+    pub unclosed: Option<PlanBlock>,
+    /// That block's line count, zero when there is none.
+    pub unclosed_lines: int,
+}
+
+/// The block a completed fold leaves unclosed, read out as the plan's tail.
+///
+/// A fold that stops inside a block is not a failure: the document ended with a
+/// delimiter still open, and the pass writes that block's lines exactly as a close
+/// would have, with the one difference that there is no closing delimiter to
+/// rewrite. This is the fourth flush path, and it is the only place the release
+/// `Unmatched` is produced — which is why the pass can write `false` for a closer
+/// flag it never consults.
+pub open spec fn spec_finish(drive: Drive, len: int) -> Plan {
+    match drive.state.pending {
+        Some(block) => Plan {
+            agenda: drive.out.add(spec_released_agenda(
+                block,
+                len - drive.state.start,
+                drive.state.opener_rewritable,
+                false,
+                Release::Unmatched,
+            )),
+            unclosed: Some(block),
+            unclosed_lines: len - drive.state.start,
+        },
+        None => Plan { agenda: drive.out, unclosed: None, unclosed_lines: 0 },
+    }
+}
+
+/// The pass's whole decision for a document.
+///
+/// Stated as the fold followed by the tail, which is how the pass is written. The
+/// two halves are proved separately — [`lemma_drive_length`] for the fold and
+/// [`lemma_finish_total`] for the tail — because they are separate obligations: the
+/// fold is where every buffering and release decision is made, and the tail is the
+/// one flush path that has no releasing line to decide anything about.
+pub open spec fn spec_document_plan(
+    source: Seq<LineFeatures>,
+    rewritable: Seq<bool>,
+) -> Plan {
+    spec_finish(spec_drive(source, rewritable, source.len() as int), source.len() as int)
+}
+
+/// `LEM-FINISH-TOTAL` — the tail adds the remaining lines and nothing else.
+///
+/// The fold's balance says the prefix is covered by the agenda plus the pending
+/// block. The tail releases exactly that block, over the span the balance measured,
+/// so the agenda after the tail holds one agendum per source line — the total length
+/// equation the emitter relies on. A fold that stopped between blocks adds nothing
+/// at all, which is the `None` arm and the reason the equation holds for documents
+/// that end outside a fence as well as inside one.
+proof fn lemma_finish_total(drive: Drive, len: int)
+    requires spec_balanced(drive, len),
+    ensures
+        spec_finish(drive, len).agenda.len() == len,
+        spec_finish(drive, len).unclosed_lines <= len,
+{
+    reveal(spec_finish);
+    reveal(spec_balanced);
+    reveal(spec_pending_lines);
+    match drive.state.pending {
+        Some(block) => {
+            lemma_released_agenda_length(
+                block,
+                len - drive.state.start,
+                drive.state.opener_rewritable,
+                false,
+                Release::Unmatched,
+            );
+        },
+        None => {},
+    }
+}
+
+/// `LEM-DOCUMENT-PLAN-TOTAL` — the decision is defined and complete on every input.
+///
+/// The fold reads each line at the index the plan's own sequence gives it and takes
+/// every routing answer from the sequence's prefix, so nothing in the decision can
+/// fail to find what it needs. The conclusion is the length equation the emitter
+/// relies on, including for the empty document, whose fold is the base case and
+/// whose plan has no unclosed block.
+proof fn lemma_document_plan_total(source: Seq<LineFeatures>, rewritable: Seq<bool>)
+    requires source.len() == rewritable.len(),
+    ensures
+        spec_document_plan(source, rewritable).agenda.len() == source.len(),
+        spec_document_plan(source, rewritable).unclosed_lines <= source.len(),
+{
+    let i = source.len() as int;
+    lemma_drive_length(source, rewritable, i);
+    reveal(spec_document_plan);
+    lemma_finish_total(spec_drive(source, rewritable, i), i);
+}
+// ---------------------------------------------------------------------------
 // Non-vacuity witnesses
 // ---------------------------------------------------------------------------
 

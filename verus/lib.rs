@@ -160,6 +160,27 @@ impl View for production_plan::LineFacts {
     }
 }
 
+/// The driver's buffering state views as itself.
+///
+/// Both fields are plain `Copy` values the planner chose on lines it has already
+/// buffered, so the specification reads the same block, the same starting index
+/// and the same rewrite flag the kernel carries, with no projection that could
+/// disagree.
+impl View for production_plan::DriverState {
+    type V = plan_spec::DriveState;
+
+    open spec fn view(&self) -> plan_spec::DriveState {
+        plan_spec::DriveState {
+            pending: match self.pending {
+                Some(block) => Some(block),
+                None => None,
+            },
+            start: self.start as int,
+            opener_rewritable: self.opener_rewritable,
+        }
+    }
+}
+
 /// A leading tab occupies four columns and leaves the line literal.
 proof fn lemma_leading_tab_is_literal(s: Seq<char>)
     requires s.len() > 0, s[0] == '\t'

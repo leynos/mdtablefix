@@ -32,12 +32,13 @@ include!("../verified_kernel_macros.rs");
 // than reimplementing it.
 #[cfg(verus_keep_ghost)]
 use crate::production_fence::{
+    FenceState,
     FenceState as KernelState,
     LineFeatures,
     compression_changes_region,
 };
 #[cfg(not(verus_keep_ghost))]
-use crate::wrap::{KernelState, LineFeatures, compression_changes_region};
+use crate::wrap::{FenceState, KernelState, LineFeatures, compression_changes_region};
 
 /// The buffering state of the block the pass currently holds open.
 ///
@@ -224,6 +225,23 @@ ensures(result => result == crate::spec_plan_step(block@, line@));
 }
 
 verified_kernel_function! {
+/// The tracker's own answer to whether a fence is in force at `depth`.
+///
+/// This is the single routing test the planner is driven by, stated as a
+/// function of the tracker's state so that the driver's two answers and the
+/// driver's own bookkeeping cannot be derived twice and disagree. A line at or
+/// below the open fence's depth is inside it; a line shallower than that is not,
+/// whatever state the tracker carries, because a shallower line ends the fence
+/// before it is read.
+#[must_use]
+pub fn fenced(state: Option<FenceState>, depth: usize) -> bool;
+ensures(result => result == crate::spec_fenced(state@, depth));
+{
+    matches!(state, Some(open) if depth >= open.open_depth)
+}
+}
+
+verified_kernel_function! {
 /// Whether a release may respell the delimiters it writes.
 ///
 /// The answer is the caller's recognition that every delimiter the release puts
@@ -339,4 +357,184 @@ while (index < len) invariant(
     index += 1;
 }
 after { out }
+}
+
+/// The buffering state of the pass's driver loop, after some prefix of a document.
+///
+/// This is [`spec_drive`](crate::spec_drive)'s four fields with the two the kernel
+/// does not need removed: the emitter holds the lines and derives them from the
+/// span it is given, and the accumulated agenda is what the kernel returns rather
+/// than what it is handed. What remains is exactly the bookkeeping a caller cannot
+/// recompute — which block is open, where it began, and whether its opener was a
+/// rewrite candidate — because all three are answers the planner made on lines the
+/// caller has already buffered.
+#[derive(Clone, Copy)]
+#[cfg_attr(not(verus_keep_ghost), derive(Debug, PartialEq, Eq))]
+pub struct DriverState {
+    /// The block being buffered, or `None` between blocks.
+    pub pending: Option<Block>,
+    /// Index of the pending block's opening line.
+    pub start: usize,
+    /// Whether the pending block's opening line was a rewrite candidate.
+    pub opener_rewritable: bool,
+}
+
+impl DriverState {
+    /// The state a document begins in: no block buffered, no opening line.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { pending: None, start: 0, opener_rewritable: false }
+    }
+}
+
+impl Default for DriverState {
+    fn default() -> Self { Self::new() }
+}
+
+verified_kernel_function! {
+/// Advance the driver's buffering state by one line, and name what to emit.
+///
+/// The line arrives already parsed, exactly as the production loop has it, and the
+/// step is the planner's own routing relation — so the kernel and the pass cannot
+/// route a line differently. What the kernel returns is the pair the pass acts on:
+/// the state to carry into the next call, and the agenda for the lines this step
+/// accounts for, which is the release of any block the step ends plus the line
+/// itself when the line is written directly.
+///
+/// The state is returned rather than mutated because the pass holds it as one
+/// value, and the agenda is returned rather than appended because the pass appends
+/// it to the document. Splitting the two would let a caller update the state and
+/// drop the agenda, which is a way of losing a line that the length theorem would
+/// then be unable to see.
+///
+/// The caller must carry this state's successor into the next call, and must
+/// append every returned agendum exactly once. Both obligations are discharged by
+/// [`crate::lemma_drive_length`], which is stated over [`crate::spec_drive`] — the
+/// fold this kernel computes one step of — rather than over a copy of it.
+#[must_use]
+pub fn drive_step(
+    state: DriverState,
+    facts: LineFacts,
+    index: usize,
+) -> (DriverState, Vec<Agendum>);
+requires(state.start <= index, index < usize::MAX);
+ensures(result => result.0@ == crate::spec_step_state(state@, facts@, index as int)
+&& result.1@ == crate::spec_step_agenda(state@, facts@, index as int));
+{
+    let held: Option<Block> = state.pending;
+    let step = plan_step(held, facts);
+    let pending = match step {
+        Step::Restart(fresh) => Some(fresh),
+        Step::Skip => None,
+        Step::Extend(block) => Some(block),
+        Step::Close(_, _) => None,
+    };
+    let start = match step {
+        Step::Restart(_) => index,
+        Step::Skip => state.start,
+        Step::Extend(_) => state.start,
+        Step::Close(_, _) => state.start,
+    };
+    let opener_rewritable = match step {
+        Step::Restart(_) => facts.rewritable,
+        Step::Skip => state.opener_rewritable,
+        Step::Extend(_) => state.opener_rewritable,
+        Step::Close(_, _) => state.opener_rewritable,
+    };
+    let agenda = release_agenda(held, state.start, state.opener_rewritable, facts, index, step);
+    let mut out: Vec<Agendum> = agenda;
+    if let Step::Skip = step {
+        out.push(Agendum::Verbatim);
+    }
+    (DriverState { pending, start, opener_rewritable }, out)
+}
+}
+
+verified_kernel_function! {
+/// The agenda a step contributes for the block it releases.
+///
+/// A step that ends the block the pass was holding writes that block's lines here,
+/// and a step that does not writes nothing. The span is the block's own — from the
+/// opening line up to the line before the current one for the two implicit
+/// releases, and up to and including the current line for a close, whose line is
+/// the block's own closing delimiter.
+///
+/// The block released is not always the block the caller held. A close buffers its
+/// line before releasing the block, and a closing delimiter can carry a conflict of
+/// its own, so the extended block is what must be emitted; every other step leaves
+/// the conflict flag alone, which is why the caller can pass the held block through
+/// unchanged.
+#[must_use]
+pub fn release_agenda(
+    held: Option<Block>,
+    start: usize,
+    opener_rewritable: bool,
+    facts: LineFacts,
+    index: usize,
+    step: Step,
+) -> Vec<Agendum>;
+requires(start <= index, index < usize::MAX);
+ensures(result => result@ == crate::spec_step_release(
+    held@,
+    start as int,
+    opener_rewritable,
+    facts@,
+    index as int,
+    step,
+));
+{
+    let Some(block) = held else {
+        return Vec::new();
+    };
+    match step {
+        Step::Restart(_) | Step::Skip => released_agenda(
+            block,
+            index - start,
+            opener_rewritable,
+            false,
+            Release::Abandoned,
+        ),
+        Step::Extend(_) => Vec::new(),
+        Step::Close(extended, release) => released_agenda(
+            extended,
+            index - start + 1,
+            opener_rewritable,
+            facts.rewritable,
+            release,
+        ),
+    }
+}
+}
+
+verified_kernel_function! {
+/// The agenda for a released block, given the span it covers.
+///
+/// This is the emitter's whole decision, and it is shared by every flush path: the
+/// pass writes a block's lines verbatim except at the delimiters the release puts
+/// in play, and those take the compressed spelling only when the block has no
+/// conflicting interior line. Naming the span rather than the block's length is
+/// what lets a close pass a span that includes the line it just buffered.
+#[must_use]
+pub fn released_agenda(
+    block: Block,
+    span: usize,
+    opener_rewritable: bool,
+    closer_rewritable: bool,
+    release: Release,
+) -> Vec<Agendum>;
+ensures(result => result@ == crate::spec_released_agenda(
+    block@,
+    span as int,
+    opener_rewritable,
+    closer_rewritable,
+    release,
+));
+{
+    block_agenda(
+        span,
+        release,
+        delimiters_eligible(release, opener_rewritable, closer_rewritable),
+        !block.conflicts,
+    )
+}
 }
