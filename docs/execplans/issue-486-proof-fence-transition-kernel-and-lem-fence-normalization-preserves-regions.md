@@ -337,6 +337,46 @@ See the decision log.
 
 ## Surprises & discoveries
 
+- **The host has not been reconciled to the Weave estate baseline, so the
+  rebase onto `origin/main` runs with the driver bypassed.** The skill governing
+  this operation expects global registration *not* to select Weave for an
+  ordinary path: "No global attributes rule selects Weave. The legacy managed
+  block in `~/.config/git/attributes` is removed. Global registration alone
+  must not select Weave for an ordinary path… A host that still selects Weave
+  from the global attributes file, or that reports `0.3.6`, has not been
+  reconciled; record that as an environment finding and apply the unattended
+  bypass below rather than assuming the baseline."
+
+  This host still selects it. `git config --show-origin --get
+  merge.weave.driver` resolves to an `ANSIBLE MANAGED BLOCK` in
+  `~/.gitconfig` running `weave-driver` 0.5.1, and `~/.config/git/attributes`
+  carries a second managed block, "weave user-wide enrolment", containing
+  `*.rs merge=weave` (plus `*.py`, `*.ts`, `*.tsx`). The repository's tracked
+  `.gitattributes` holds only `* text=auto eol=lf` — no merge rules at all — so
+  `git check-attr merge -- src/lib.rs` reporting `merge: weave` is ambient
+  configuration rather than repository consent. The skill's condition for
+  bypassing is therefore met twice over: selection is global-only, **and** this
+  is a multi-commit replay across substantial target history.
+
+  The driver is bypassed for the replay with a command-scoped override, which
+  replaces the named driver for those commands only and edits no attribute
+  file:
+
+  ```bash
+  git -c merge.conflictStyle=zdiff3 \
+      -c merge.weave.driver='git merge-file --zdiff3 --marker-size=%L %A %O %B' \
+      -c merge.weave.recursive=text \
+      rebase …
+  ```
+
+  The same `-c` overrides must be repeated on every `git rebase --continue`,
+  because Git reads driver configuration again for each replayed commit. Two
+  independent reasons make this the safer choice rather than merely the
+  compliant one: the 0.5.1 baseline is explicitly "a containment change, not
+  evidence that those defects are fixed", and the semantic corruption it
+  contains parses, compiles, and passes tests — so a clean driver exit is not
+  by itself evidence of a correct merge.
+
 - **Two mutation gates had stopped exercising their proofs, and reported the
   fact as an infrastructure error rather than a pass.** `make verus-mutation`
   and `make verus-fence-mutation` both failed with
