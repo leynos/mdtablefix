@@ -60,6 +60,9 @@ use crate::fence_spec::{
 // a model of the planner rather than the planner itself.
 use crate::production_plan::{Agendum, Block as PlanBlock, LineFacts, Release, Step};
 use vstd::prelude::*;
+// The two subrange facts the translation lemmas need: what a subrange's `i`-th
+// element is, and how a subrange of a subrange relates to the original.
+use vstd::seq::axiom_seq_subrange_index;
 
 verus! {
 
@@ -1667,6 +1670,102 @@ proof fn lemma_released_block_reads_back(
 // Composing blocks into a document
 // ---------------------------------------------------------------------------
 
+/// `LEM-SEGMENT-EQUALS-ITS-SUBRANGE` — a span is a document of its own.
+///
+/// This is the lemma that makes every prefix-stated block result usable at any
+/// offset, and it is the cheapest possible form of that translation: take the
+/// lines the span covers as a sequence in their own right, and the two folds
+/// agree on it, because a fold from `start` walking up to `end` visits exactly the
+/// lines a fold from `0` walking up to `end - start` visits — the same line at each
+/// step, by `axiom_seq_subrange_index`, and therefore the same region and the same
+/// state.
+///
+/// With this, a block lemma stated over `[0, len)` — and all of them are, because
+/// the pass's first block starts at zero — applies to a block beginning anywhere,
+/// by reading the block's lines as the subrange they are. That is what the
+/// composition needs and it costs one induction rather than a second copy of the
+/// compressed-block argument at every offset.
+pub proof fn lemma_segment_equals_its_subrange(
+    features: Seq<LineFeatures>,
+    start: int,
+    end: int,
+    seed: Option<FenceState>,
+)
+    requires 0 <= start <= end <= features.len(),
+    ensures
+        spec_state_from(features, start, end, seed) == spec_state_seeded(
+            features.subrange(start, end),
+            end - start,
+            seed,
+        ),
+        spec_regions_from(features, start, end, seed) == spec_regions_seeded(
+            features.subrange(start, end),
+            end - start,
+            seed,
+        ),
+    decreases end - start,
+{
+    reveal(spec_regions_from);
+    reveal(spec_state_from);
+    reveal(spec_state_seeded);
+    reveal(spec_regions_seeded);
+    let sub = features.subrange(start, end);
+    // The hypothesis the walk lemma takes as given, discharged here from the one
+    // vstd axiom that relates a subrange's elements to the original's. This is the
+    // only place subrange arithmetic is needed, and it is where the copy is made.
+    assert forall|i: int| #![trigger sub[i]] 0 <= i < end - start implies sub[i]
+        == features[start + i] by {
+        axiom_seq_subrange_index(features, start, end, i);
+    };
+    lemma_walk_at_offset(features, sub, start, end - start, seed);
+}
+
+/// `LEM-WALK-AT-OFFSET` — a walk from an offset is the same walk over a copy.
+///
+/// The line correspondence is a hypothesis rather than a subrange equation, and
+/// that is the whole point: the two folds agree for the plainest possible reason,
+/// since at each step they read the same line and apply the same transition. By
+/// taking the correspondence as given, this lemma carries no subrange arithmetic of
+/// its own — a caller that holds the copy as a genuine subrange discharges the
+/// hypothesis with `axiom_seq_subrange_index` and nothing else.
+///
+/// Stating it this way also keeps the induction honest about what it assumes:
+/// `upto` lines of `sub` are related to the `upto` lines of `features` that begin
+/// at `start`, and every step peels one pair off that correspondence.
+pub proof fn lemma_walk_at_offset(
+    features: Seq<LineFeatures>,
+    sub: Seq<LineFeatures>,
+    start: int,
+    upto: int,
+    seed: Option<FenceState>,
+)
+    requires
+        0 <= start,
+        0 <= upto,
+        start + upto <= features.len(),
+        upto <= sub.len(),
+        forall|i: int| #![trigger sub[i]] 0 <= i < upto ==> sub[i] == features[start + i],
+    ensures
+        spec_state_from(features, start, start + upto, seed) == spec_state_seeded(sub, upto, seed),
+        spec_regions_from(features, start, start + upto, seed) == spec_regions_seeded(
+            sub,
+            upto,
+            seed,
+        ),
+    decreases upto,
+{
+    reveal(spec_state_from);
+    reveal(spec_regions_from);
+    reveal(spec_state_seeded);
+    reveal(spec_regions_seeded);
+    if upto > 0 {
+        // The shorter hypothesis is about the same correspondence, one pair
+        // shorter, so the step never has to reconstruct an index relation.
+        lemma_walk_at_offset(features, sub, start, upto - 1, seed);
+        assert(sub[upto - 1] == features[start + upto - 1]);
+    }
+}
+
 /// `LEM-SEGMENT-READS-FROM-ITS-OWN-SEED` — a span from its own start is the same walk.
 ///
 /// Every block lemma is stated from the document's start, because that is where
@@ -1713,7 +1812,12 @@ pub proof fn lemma_segment_reads_from_its_own_seed(
     // subrange form the conclusion uses rather than with `skip`, because the two
     // are the same operation written two ways.
     assert(head.add(seg).subrange(head.len() as int, head.add(seg).len() as int) =~= seg) by {
-        assert forall|i: int| 0 <= i < seg.len() implies head.add(seg).subrange(
+        assert forall|i: int|
+            #![trigger head.add(seg).subrange(
+                head.len() as int,
+                head.add(seg).len() as int,
+            )[i]]
+            0 <= i < seg.len() implies head.add(seg).subrange(
             head.len() as int,
             head.add(seg).len() as int,
         )[i] == seg[i] by {
