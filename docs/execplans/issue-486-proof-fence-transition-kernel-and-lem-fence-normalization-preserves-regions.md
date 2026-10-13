@@ -292,6 +292,31 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
 - [x] M6 Item 6 — the compression mutation gate, wired into the Makefile as
       `verus-compression-mutation` and added to `.PHONY`. It confirms the gate
       fails for the intended reason.
+- [x] M6 Item 6 (second half) — the two older mutation gates were repaired and
+      all three are now wired into CI. `check-classifier-mutation.sh` and
+      `check-fence-mutation.sh` each hand-listed which production files to copy
+      into their temporary proof tree, and adding `production_plan` to
+      `verus/lib.rs` left both copying a stale subset, so each died with
+      `couldn't read .../src/fences/plan.rs` before checking any obligation.
+      Both gates refused that as mutation detection, which is the behaviour the
+      specification demands, but it meant neither had been exercising its proof
+      since the planner landed. `scripts/verus-mutation-mirror.sh` now builds
+      the tree for all three by mirroring `src/` whole, so a new production
+      module in `verus/lib.rs` needs no gate change. Verified each gate still
+      detects its intended mutation and nothing else: fence 142 verified with 1
+      error naming `result == crate::spec_closes(state, line)`, classifier 142
+      with 1 error, compression 142 with 1 error naming
+      `result == crate::spec_delimiter_agendum(is_delimiter, compressible)`.
+      Committed as `11935a3`, with `.github/workflows/verus.yml` running all
+      three as `c6b315f`.
+- [x] M6 Item 2 (witness half) — three further non-vacuity witnesses pin rules
+      the proof leans on and that had no witness behind them: the marker-family
+      comparison the fence mutation drops, the depth check that ends a block
+      before its line is read, and the eligibility rule refusing a rewrite when
+      only one end may be respelled. Checked falsifiable rather than merely
+      true: removing the transition's depth check makes the run fail. `make
+      verus` reports 146 verified, 0 errors. Committed as `478befd`, recorded
+      in the ledger prose as `2242fd9`.
 - [ ] M6 Item 5b — the driver composition. `plan_step`'s routing relation
       already models every release the pass can name, but the emitted readings
       are related to the source readings by the external emission contract
@@ -311,6 +336,31 @@ proof that breaches its tolerance leaves a complete, useful deliverable behind.
 See the decision log.
 
 ## Surprises & discoveries
+
+- **Two mutation gates had stopped exercising their proofs, and reported the
+  fact as an infrastructure error rather than a pass.** `make verus-mutation`
+  and `make verus-fence-mutation` both failed with
+  `error: couldn't read .../verus/.fence-mutation-XXXXXX/../src/fences/plan.rs`.
+  The cause was not the proofs: each gate hand-listed which production files
+  to copy into its temporary proof tree, and M6 item 5a added `production_plan`
+  to `verus/lib.rs` without either gate's list being updated. The copied entry
+  point therefore declared a module whose source was never placed beside it,
+  and Cargo aborted before any obligation was checked. The compression gate,
+  written after the planner landed, listed all three modules and kept working —
+  which is exactly why the drift went unnoticed: one green gate implied the
+  family was healthy.
+
+  The gates *refused* the infrastructure failure rather than counting it. Each
+  demands a named postcondition in the output, so a parse error cannot satisfy
+  it; `check-fence-mutation.sh` printed "Fence mutation did not falsify the
+  closing rule's contract" and exited 1, and `check-classifier-mutation.sh`
+  printed "Setext mutation did not reach a failed proof assertion". That guard
+  is what turned a silent hole into a visible failure, and it is the reason the
+  specification's instruction to reject infrastructure failures is worth having
+  in the harness rather than only in the review policy. The durable fix is
+  `scripts/verus-mutation-mirror.sh`, which mirrors `src/` whole so no gate
+  holds a list that can go stale; all three gates now build from it and all
+  three are in CI.
 
 - **The prefix-carried fold invariant is not inductive, and this is now the
   precise residue of M6 item 5b.** The composition law is proved
