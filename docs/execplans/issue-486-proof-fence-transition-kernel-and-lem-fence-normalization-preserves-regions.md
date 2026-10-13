@@ -962,6 +962,67 @@ and every concern cleared across four rounds, and draft PR
 [#588](https://github.com/leynos/mdtablefix/pull/588) was opened and then
 marked ready for review.
 
+Rebased twice since (see Progress), most recently onto `origin/main` at
+`425cd2f`, and published as `NEW_HEAD` `860a166` with the force-push leased to
+the previously recorded remote head `820adf4`. The remote-tracking ref was
+refreshed with an explicit refspec and its head confirmed equal to local
+`HEAD`; the branch upstream now points at `origin` and no commits are unpushed.
+The branch is 36 commits ahead of `origin/main`.
+
+### M6 — Outstanding work from the review round (in progress)
+
+The request that carried the second rebase also listed work that is **not yet
+done**, and none of it is recorded as complete. It is tracked here so the gap
+is not lost.
+
+Delivered since that request: the rebase itself, the four gates, and this
+record.
+
+Still outstanding, in the order the request gave it:
+
+1. A failed hosted-advisory check table names four checks. The
+   `Unit Architecture` error was reported against `tests/fence_regions.rs`'s
+   `data_files` returning an empty or partial corpus on failure; that function
+   already returns `Result<Vec<PathBuf>, Box<dyn Error>>` at the tip, so the
+   finding is either stale or about a different revision, and it needs
+   re-checking against the check's own evidence rather than assumed fixed.
+2. `Linked Issues` (warning): extend the formal result to the
+   `compress_fences` boundary, or record an explicit accepted proof boundary in
+   issue #486 and establish cross-pass agreement for every fence-skipping
+   consumer.
+3. `User-Facing Documentation` (warning): document `classify_regions` and
+   `Region` in `docs/users-guide.md`. The section landed in the rebase and
+   auto-merged, but the advisory has not been re-run against it.
+4. `Developer Documentation` (warning): update `docs/developers-guide.md` for
+   the fence kernel, the `LineFeatures` boundary, `FenceTracker` routing,
+   compression decisions, and `make verus-fence-mutation`, and correct stale
+   references. **This is known to be incomplete**: the `### Strategy enum`
+   section at `docs/developers-guide.md:1346` still describes the pre-refactor
+   `Strategy` enum, `rewrite_marker`, `flush_matched_block`,
+   `flush_unmatched_block`, and `rewrite_fence_line`, which no longer match the
+   compression pass's shape. `docs/adrs/0006-single-pass-idempotence.md:322` and
+   `:397` also name `fences::flush_unmatched_block`.
+5. The document-level fence-compression preservation proof: extract a
+   Verus-compatible compression planner and emitter that `compress_fences`
+   actually calls, so block buffering, conflict accumulation, and emission are
+   connected to the proof by refinement rather than only by tests. An
+   incomplete extraction is parked on ref `wip/486-plan-kernel` (`8c022dc`):
+   `src/fences/plan.rs` with `Release`, `Agendum`, and five
+   `verified_kernel_function!` kernels, plus `verus/plan_spec.rs` and the
+   `verus/lib.rs` wiring. The parked `plan_spec.rs` is stale — it still
+   specifies the superseded `spec_standard_agendum` /
+   `spec_delim_agendum(closing, eligible, compressed)` surface and lacks
+   `spec_outer_delimiters_written`, `spec_is_outer_delimiter`, and
+   `spec_delimiter_agendum` — and `compress.rs` was left half-refactored, so
+   the parked commit does not compile. Nothing from it is in the published tree.
+6. The compression mutation gate, wired into the Makefile and CI.
+7. A new `/comenq-coderabbit` review.
+
+Issue #486 stays open until its original acceptance criteria are met; the
+current state proves the block-interior lemma and provides corpus-wide
+executable evidence, which is not the same as the document-level result the
+request specifies.
+
 ## Revision note
 
 - 2026-09-28: Initial draft. Reconnaissance found both prerequisite defects
