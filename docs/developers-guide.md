@@ -128,12 +128,12 @@ boundary; [ADR 0011](adrs/0011-verified-normalization-core.md) documents why
 the proof scope remains a narrow production-used core.
 
 The `verified_kernel_function!` and `verified_loop_function!` macros live in
-`src/verified_kernel_macros.rs`, included by `src/classify_kernel.rs` and by the
-fence kernel. They emit one shared executable body for Cargo and Verus, adding
-contracts and loop invariants only in the proof build. Their accepted attributes
-are limited to documentation, `must_use`, and the verifier's external-body
-marker, so macro callers cannot forward a lint-suppressing attribute. The
-classifier kernel, its predicate module, and
+`src/verified_kernel_macros.rs`, included by `src/classify_kernel.rs` and by
+the fence kernel. They emit one shared executable body for Cargo and Verus,
+adding contracts and loop invariants only in the proof build. Their accepted
+attributes are limited to documentation, `must_use`, and the verifier's
+external-body marker, so macro callers cannot forward a lint-suppressing
+attribute. The classifier kernel, its predicate module, and
 `src/classify_kernel_consumers.rs` own production structural gates and verified
 builders. Use them only in the classifier kernel, its predicate and consumer
 modules, and the fence kernel; other callers use the `&str` adapters in
