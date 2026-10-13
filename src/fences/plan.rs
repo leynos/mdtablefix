@@ -382,7 +382,11 @@ impl DriverState {
     /// The state a document begins in: no block buffered, no opening line.
     #[must_use]
     pub const fn new() -> Self {
-        Self { pending: None, start: 0, opener_rewritable: false }
+        Self {
+            pending: None,
+            start: 0,
+            opener_rewritable: false,
+        }
     }
 }
 
