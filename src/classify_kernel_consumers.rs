@@ -33,6 +33,8 @@ ensures(result => result == match crate::spec_classify(chars@, ctx@) {
 
 verified_kernel_function! {
 /// Reports whether table buffering may treat a line as structural table input.
+///
+/// For example, `is_table_class(LineClass::TableDelimiter)` returns `true`.
 #[must_use]
 pub(crate) fn is_table_class(class: LineClass) -> bool;
 ensures(result => result == (
@@ -45,6 +47,9 @@ ensures(result => result == (
 
 verified_kernel_function! {
 /// Refuses thematic breaks before orphan-specifier syntax is considered.
+///
+/// For example, `can_be_orphan_specifier_seq(&['*', '*', '*'],
+/// &ClassifyCtxKernel::default())` returns `false`.
 #[must_use]
 pub(crate) fn can_be_orphan_specifier_seq(
     chars: &[char],
@@ -60,6 +65,11 @@ ensures(result => result == (
 
 verified_kernel_function! {
 /// Accepts a Setext pair only when both structural roles match.
+///
+/// For example, `is_setext_pair_seq(&['T', 'i', 't', 'l', 'e'],
+/// &ClassifyCtxKernel::default(), &['-', '-', '-'],
+/// &ClassifyCtxKernel::following(LineClass::ParagraphText, true))` returns
+/// `true`.
 #[must_use]
 pub(crate) fn is_setext_pair_seq(
     candidate: &[char],
@@ -79,6 +89,9 @@ ensures(result => result == (
 
 verified_kernel_function! {
 /// Accepts Setext text only when the shared classifier sees paragraph text.
+///
+/// For example, `is_setext_text_seq(&['T', 'i', 't', 'l', 'e'],
+/// &ClassifyCtxKernel::default())` returns `true`.
 #[must_use]
 pub(crate) fn is_setext_text_seq(chars: &[char], ctx: &ClassifyCtxKernel) -> bool;
 ensures(result => result == (crate::spec_classify(chars@, ctx@) == LineClass::ParagraphText));
@@ -89,6 +102,10 @@ ensures(result => result == (crate::spec_classify(chars@, ctx@) == LineClass::Pa
 
 verified_kernel_function! {
 /// Accepts a Setext underline only under its preceding-paragraph context.
+///
+/// For example, `is_setext_underline_seq(&['-', '-', '-'],
+/// &ClassifyCtxKernel::following(LineClass::ParagraphText, true))` returns
+/// `true`.
 #[must_use]
 pub(crate) fn is_setext_underline_seq(chars: &[char], ctx: &ClassifyCtxKernel) -> bool;
 ensures(result => result == (crate::spec_classify(chars@, ctx@) == LineClass::SetextUnderline));
@@ -99,6 +116,9 @@ ensures(result => result == (crate::spec_classify(chars@, ctx@) == LineClass::Se
 
 verified_kernel_function! {
 /// Selects only structural thematic breaks for canonicalization.
+///
+/// For example, `is_canonical_break_seq(&['*', '*', '*'],
+/// &ClassifyCtxKernel::default())` returns `true`.
 #[must_use]
 pub(crate) fn is_canonical_break_seq(chars: &[char], ctx: &ClassifyCtxKernel) -> bool;
 ensures(result => result == (crate::spec_classify(chars@, ctx@) == LineClass::ThematicBreak));
@@ -109,6 +129,9 @@ ensures(result => result == (crate::spec_classify(chars@, ctx@) == LineClass::Th
 
 verified_kernel_function! {
 /// Confirms that emitted Setext replacement is structurally an ATX heading.
+///
+/// For example, `is_atx_heading_seq(&['#', ' ', 'T'],
+/// &ClassifyCtxKernel::default())` returns `true`.
 #[must_use]
 pub(crate) fn is_atx_heading_seq(chars: &[char], ctx: &ClassifyCtxKernel) -> bool;
 ensures(result => result == (crate::spec_classify(chars@, ctx@) == LineClass::AtxHeading));
@@ -117,29 +140,11 @@ ensures(result => result == (crate::spec_classify(chars@, ctx@) == LineClass::At
 }
 }
 
-verified_kernel_function! {
-/// Builds the production ATX marker for a level-one or level-two Setext heading.
-#[must_use]
-pub(crate) fn setext_atx_marker(level: usize) -> Vec<char>;
-requires(level == 1 || level == 2);
-ensures(result =>
-    result@.len() == level + 1,
-    result@[level as int] == ' ',
-    forall|i: int| 0 <= i < level ==> result@[i] == '#',
-);
-{
-    let mut marker = Vec::new();
-    marker.push('#');
-    if level == 2 {
-        marker.push('#');
-    }
-    marker.push(' ');
-    marker
-}
-}
-
 verified_loop_function! {
 /// Builds the exact seventy-underscore sequence emitted for thematic breaks.
+///
+/// For example, `canonical_break_chars()` returns seventy underscore
+/// characters.
 #[must_use]
 pub(crate) fn canonical_break_chars() -> Vec<char>;
 ensures(result =>

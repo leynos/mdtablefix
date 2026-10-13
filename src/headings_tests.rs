@@ -35,8 +35,17 @@ fn converts_setext_headings(#[case] input: Vec<String>, #[case] expected: Vec<St
 /// Production output retains its prefix and reparses as an ATX heading.
 #[rstest]
 #[case(vec!["Heading".into(), "===".into()], "# Heading")]
+#[case(vec!["Heading".into(), "---".into()], "## Heading")]
 #[case(vec!["   Heading".into(), "   ====".into()], "   # Heading")]
+#[case(vec!["   Heading".into(), "   ---".into()], "   ## Heading")]
+#[case(vec!["> Quote".into(), "> ====".into()], "> # Quote")]
 #[case(vec!["> Quote".into(), "> ----".into()], "> ## Quote")]
+#[case(vec![">>Title".into(), ">>====".into()], ">> # Title")]
+#[case(vec![">>Title".into(), ">>----".into()], ">> ## Title")]
+#[case(vec![" > > Title".into(), " > > ====".into()], " > > # Title")]
+#[case(vec![" > > Title".into(), " > > ----".into()], " > > ## Title")]
+#[case(vec!["  Heading".into(), " ---".into()], " ## Heading")]
+#[case(vec![" Heading".into(), "  ====".into()], " # Heading")]
 fn emitted_setext_heading_is_atx(#[case] input: Vec<String>, #[case] expected: &str) {
     let output = convert_setext_headings(&input);
 
@@ -45,6 +54,20 @@ fn emitted_setext_heading_is_atx(#[case] input: Vec<String>, #[case] expected: &
         crate::classify::classify_line(&output[0], &ClassifyCtx::default()),
         LineClass::AtxHeading,
     );
+    let next_pass = vec![output[0].clone(), input[1].clone()];
+    assert_eq!(convert_setext_headings(&next_pass), next_pass);
+}
+
+/// The extracted separator preserves Rust's whitespace result for every Unicode scalar.
+#[test]
+fn prefix_separator_preserves_unicode_whitespace() {
+    for character in (0..=0x0010_ffff).filter_map(char::from_u32) {
+        assert_eq!(
+            crate::classify_kernel::setext::needs_space_after_seq(&[character]),
+            !character.is_whitespace(),
+            "prefix scalar {character:?}",
+        );
+    }
 }
 
 #[rstest]
@@ -54,6 +77,8 @@ fn emitted_setext_heading_is_atx(#[case] input: Vec<String>, #[case] expected: &
 #[case(vec!["- Bar".into(), "  ---".into()])]
 #[case(vec![String::new(), "---".into()])]
 #[case(vec!["> Quote".into(), "-----".into()])]
+#[case(vec!["\u{00a0}Heading".into(), "\u{00a0}===".into()])]
+#[case(vec![">\u{00a0}Heading".into(), ">\u{00a0}---".into()])]
 #[case(vec!["- item".into(), "  continuation".into(), "---".into()])]
 #[case(vec!["- item".into(), "lazy continuation".into(), "---".into()])]
 #[case(vec!["  1. item".into(), "     wrapped".into(), "lazy continuation".into(), "-----".into()])]

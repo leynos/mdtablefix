@@ -35,7 +35,7 @@ before {
 while (cursor < chars.len()) invariant(
     start <= cursor,
     cursor <= chars@.len() || cursor == start,
-    forall|i: int| start <= i < cursor ==> crate::spec_is_markdown_whitespace(chars@[i]),
+    forall|i: int| start <= i < cursor ==> crate::spec_is_markdown_whitespace(#[trigger] chars@[i]),
 ) {
         if !is_markdown_whitespace(chars[cursor]) {
             return false;

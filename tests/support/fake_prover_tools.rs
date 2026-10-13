@@ -30,6 +30,29 @@ pub fn fake_prover_tools(smoke_mode: &'static str) -> Result<FakeProverTools> {
     let script = r#"#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "${FAKE_PROVER_TOOLS_LOG:?}"
+if [[ "$*" == *".atx-mutation-"* ]]; then
+    case "${FAKE_PROVER_TOOLS_SMOKE_MODE:?}" in
+        mutation_accepted) exit 0 ;;
+        mutation_runner_failure)
+            echo "runner unavailable"
+            exit 1
+            ;;
+        mutation_class_rejected)
+            echo "error: postcondition not satisfied"
+            echo "crate::spec_classify(result@, crate::canonical_context()) == LineClass::AtxHeading"
+            ;;
+        mutation_equality_only)
+            echo "error: postcondition not satisfied"
+            echo "result@ == crate::setext_spec::assembled_heading(prefix@, level as int, text@)"
+            ;;
+        mutation_invariant_only)
+            echo "note: spec_classify(result@, ctx) == LineClass::AtxHeading"
+            echo "error: invariant not satisfied at loop entry"
+            ;;
+    esac
+    echo "verification results:: 70 verified, 1 errors"
+    exit 1
+fi
 if [[ "$*" == "verus run --repo-root . --proof-file verus/smoke.rs" ]]; then
     case "${FAKE_PROVER_TOOLS_SMOKE_MODE:?}" in
         rejected)

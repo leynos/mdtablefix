@@ -38,6 +38,9 @@ impl View for production_classify::ClassifyCtxKernel {
 pub mod classify_spec;
 pub use classify_spec::*;
 
+#[path = "setext_spec.rs"]
+pub mod setext_spec;
+
 /// A leading tab occupies four columns and leaves the line literal.
 proof fn lemma_leading_tab_is_literal(s: Seq<char>)
     requires s.len() > 0, s[0] == '\t'
@@ -108,41 +111,6 @@ pub open spec fn spec_classify(s: Seq<char>, ctx: ClassifyCtxView) -> LineClass 
     }
 }
 
-/// Trimming trailing whitespace cannot erase a non-whitespace first scalar.
-proof fn lemma_trim_preserves_first(s: Seq<char>, end: int)
-    requires 0 < end <= s.len(), !spec_is_markdown_whitespace(s[0])
-    ensures 1 <= spec_trim_end(s, 0, end) <= end
-    decreases end
-{
-    if end > 1 && spec_is_markdown_whitespace(s[end - 1]) {
-        lemma_trim_preserves_first(s, end - 1);
-    }
-}
-
-/// Adding an ATX prefix produces an ATX heading for any candidate text.
-proof fn lemma_atx_prefix_classifies(candidate: Seq<char>) -> (result: Seq<char>)
-    ensures
-        result == Seq::<char>::empty().push('#').push(' ').add(candidate),
-        spec_classify(result, canonical_context()) == LineClass::AtxHeading,
-        spec_classify(result, canonical_context()) != LineClass::ParagraphText,
-{
-    let emitted = Seq::<char>::empty().push('#').push(' ').add(candidate);
-    assert(emitted[0] == '#');
-    assert(emitted[1] == ' ');
-    assert(spec_line_parts(emitted) == (0int, false));
-    lemma_trim_preserves_first(emitted, emitted.len() as int);
-    assert(spec_trim_start(emitted, 0, emitted.len() as int) == 0);
-    let trimmed_end = spec_trim_end(emitted, 0, emitted.len() as int);
-    assert(1 <= trimmed_end <= emitted.len());
-    if trimmed_end > 1 {
-        assert(emitted[1] == ' ');
-        assert(spec_marker_run_len(emitted, 1, trimmed_end, '#') == 0);
-    }
-    assert(spec_marker_run_len(emitted, 0, trimmed_end, '#') == 1);
-    assert(spec_atx_heading(emitted, 0));
-    emitted
-}
-
 pub open spec fn canonical_context() -> ClassifyCtxView {
     ClassifyCtxView { is_in_fence: false, open_fence: None, previous: None, prefix_agrees: false }
 }
@@ -166,7 +134,10 @@ proof fn lemma_canonical_suffix(s: Seq<char>, start: int)
 
 /// The emitted canonical break remains structural in the exact classifier.
 proof fn lemma_canonical_break_remains_structural()
-    ensures spec_classify(canonical_break(), canonical_context()) == LineClass::ThematicBreak
+    ensures
+        spec_classify(canonical_break(), canonical_context()) == LineClass::ThematicBreak,
+        forall|ctx: ClassifyCtxView| !ctx.is_in_fence ==>
+            #[trigger] spec_classify(canonical_break(), ctx) == LineClass::ThematicBreak,
 {
     let s = canonical_break();
     assert(s.len() == 70);
@@ -176,7 +147,11 @@ proof fn lemma_canonical_break_remains_structural()
     assert(!spec_is_blank_from(s, 0));
     assert(!spec_contains(s, 0, 70, '|'));
     assert(!spec_table_delimiter(s, 0));
+    assert(!spec_setext_underline(s, 0));
     assert(spec_thematic_break(s, 0));
+    assert forall|ctx: ClassifyCtxView| !ctx.is_in_fence implies
+        #[trigger] spec_classify(s, ctx) == LineClass::ThematicBreak by {
+    }
 }
 
 /// Concrete witness that ordinary digit-leading text remains paragraph text.
@@ -262,14 +237,19 @@ proof fn lemma_canonical_break_ends_wrapping()
         LineClass::ThematicBreak => Some(LineClass::ThematicBreak),
         LineClass::ListItem => Some(LineClass::ListItem),
         _ => None,
-    } == Some(LineClass::ThematicBreak)
+    } == Some(LineClass::ThematicBreak),
+    forall|ctx: ClassifyCtxView| !ctx.is_in_fence ==>
+        #[trigger] spec_classify(canonical_break(), ctx) == LineClass::ThematicBreak,
 {
     lemma_canonical_break_remains_structural();
 }
 
 /// Setext conversion cannot accept the canonical break as candidate text.
 proof fn lemma_canonical_break_is_not_setext_text()
-    ensures spec_classify(canonical_break(), canonical_context()) != LineClass::ParagraphText
+    ensures
+        spec_classify(canonical_break(), canonical_context()) != LineClass::ParagraphText,
+        forall|ctx: ClassifyCtxView| !ctx.is_in_fence ==>
+            #[trigger] spec_classify(canonical_break(), ctx) != LineClass::ParagraphText,
 {
     lemma_canonical_break_remains_structural();
 }
@@ -279,15 +259,19 @@ proof fn lemma_canonical_break_is_not_table_input()
     ensures
         spec_classify(canonical_break(), canonical_context()) != LineClass::TableDelimiter,
         spec_classify(canonical_break(), canonical_context()) != LineClass::TableRow,
+        forall|ctx: ClassifyCtxView| !ctx.is_in_fence ==>
+            #[trigger] spec_classify(canonical_break(), ctx) != LineClass::TableDelimiter
+            && spec_classify(canonical_break(), ctx) != LineClass::TableRow,
 {
     lemma_canonical_break_remains_structural();
 }
 
 /// Orphan attachment rejects the canonical break before matching specifier syntax.
 proof fn lemma_canonical_break_is_not_orphan_specifier()
-    ensures !(
-        spec_classify(canonical_break(), canonical_context()) != LineClass::ThematicBreak
-    )
+    ensures
+        !(spec_classify(canonical_break(), canonical_context()) != LineClass::ThematicBreak),
+        forall|ctx: ClassifyCtxView| !ctx.is_in_fence ==>
+            #[trigger] spec_classify(canonical_break(), ctx) == LineClass::ThematicBreak,
 {
     lemma_canonical_break_remains_structural();
 }

@@ -13,6 +13,8 @@ include!("classify_kernel_macros.rs");
 pub(crate) mod consumers;
 #[path = "classify_kernel_predicates.rs"]
 mod predicates;
+#[path = "classify_kernel_setext.rs"]
+pub(crate) mod setext;
 use predicates::{
     body_starts_with_pipe,
     is_atx_heading,
