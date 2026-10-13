@@ -104,6 +104,25 @@ empty sequence, and `lemma_witness_conflict_is_rejected` proves the guard fires
 on the issue #480 shape. `tests/fence_regions.rs` replays the same reasoning
 over every fixture.
 
+Non-vacuity is otherwise carried by the witness lemmas beside each obligation,
+which state their conclusions as values rather than as equalities between two
+unknowns. In `verus/plan_spec.rs`, `lemma_witness_agreement_is_live` shows the
+reading-agreement hypothesis is satisfiable,
+`lemma_witness_compressed_block_is_live` pins a compressed block's three
+regions one by one, and `lemma_witness_conflict_moves_region` is issue #480 as
+a pair of region values. Three further witnesses pin rules the proof leans on
+without which it would be silently weaker:
+`lemma_witness_marker_family_holds_the_region` fixes what the marker comparison
+the fence mutation gate drops actually decides,
+`lemma_witness_depth_drop_releases_the_block` fixes the depth check that ends a
+block before its line is read, and
+`lemma_witness_incompatible_endpoints_forbid_rewrite` fixes the eligibility
+rule that refuses a rewrite when only one end of a block may be respelled. Each
+was checked to be falsifiable rather than merely true: removing the
+transition's depth check from `verus/fence_spec.rs` makes the run fail. These
+lemmas live under `verus/` and so appear in the prose above rather than in the
+claim table, whose rows must name a symbol that occurs in `src/`.
+
 ## Claim ledger
 
 | Claim                                             | Executable function                             | Input domain                                                                                                           | Unverified external contracts                                                                                           | Result class                                                                                                                                            |
