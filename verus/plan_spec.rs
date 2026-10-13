@@ -1667,6 +1667,61 @@ proof fn lemma_released_block_reads_back(
 // Composing blocks into a document
 // ---------------------------------------------------------------------------
 
+/// `LEM-SEGMENT-READS-FROM-ITS-OWN-SEED` — a span from its own start is the same walk.
+///
+/// Every block lemma is stated from the document's start, because that is where
+/// the pass begins. A block in the middle of a document is not a prefix: the lines
+/// before it are already accounted for and the lines after it have not been read.
+/// What the composition needs is the licence to read that span *from its own first
+/// line*, seeded with the state the lines before it left — which is precisely what
+/// the pass does, since it buffers each block's lines and reads them against the
+/// tracker state at the block's opener.
+///
+/// The result is the split law read at both ends rather than a fresh induction.
+/// Reading `[0, end)` in one go is the same as reading `[0, start)` and then
+/// `[start, end)` from where the first part ended, so the middle segment's regions
+/// are the tail of the whole prefix's — and by the bridge above, the three states
+/// involved are the seeded ones.
+pub proof fn lemma_segment_reads_from_its_own_seed(
+    features: Seq<LineFeatures>,
+    start: int,
+    end: int,
+    seed: Option<FenceState>,
+)
+    requires 0 <= start <= end <= features.len(),
+    ensures
+        spec_state_from(features, start, end, spec_state_seeded(features, start, seed))
+            == spec_state_seeded(features, end, seed),
+        spec_regions_from(features, start, end, spec_state_seeded(features, start, seed))
+            == spec_regions_seeded(features, end, seed).subrange(
+                spec_regions_seeded(features, start, seed).len() as int,
+                spec_regions_seeded(features, end, seed).len() as int,
+            ),
+{
+    lemma_classify_from_is_prefix(features, start, seed);
+    lemma_classify_from_is_prefix(features, end, seed);
+    lemma_regions_from_appends(features, 0, start, end, seed);
+    let head = spec_regions_seeded(features, start, seed);
+    let full = spec_regions_seeded(features, end, seed);
+    let seg = spec_regions_from(features, start, end, spec_state_seeded(features, start, seed));
+    // The split law, in the segment form, is about the region sequence cut at the
+    // state the first part left. Both conversions are the bridge above: the
+    // zero-indexed folds are the seeded ones, and the middle seed is the seeded
+    // state at `start`.
+    assert(full == head.add(seg));
+    // Cutting a concatenation at the joint leaves the second part. Stated with the
+    // subrange form the conclusion uses rather than with `skip`, because the two
+    // are the same operation written two ways.
+    assert(head.add(seg).subrange(head.len() as int, head.add(seg).len() as int) =~= seg) by {
+        assert forall|i: int| 0 <= i < seg.len() implies head.add(seg).subrange(
+            head.len() as int,
+            head.add(seg).len() as int,
+        )[i] == seg[i] by {
+            assert(head.add(seg)[i + head.len() as int] == seg[i]);
+        }
+    };
+}
+
 /// The regions of the lines in `[start, end)`, read from the state at `start`.
 ///
 /// [`spec_regions_seeded`] reads a *prefix* from a seed, which is what every
@@ -1814,6 +1869,58 @@ pub proof fn lemma_classify_from_is_prefix(
     reveal(spec_state_from);
     if end > 0 {
         lemma_classify_from_is_prefix(features, end - 1, seed);
+    }
+}
+
+/// `LEM-AGREEMENT-OVER-A-SEGMENT` — pointwise agreement carries a span.
+///
+/// [`lemma_agreement_preserves_prefix`] states this for a prefix of the whole
+/// document. The composition below needs it for an arbitrary `[start, end)`,
+/// because that is the shape a released block has: the lines before the block
+/// have already been accounted for, so its argument begins from the state those
+/// lines left rather than from the document's seed.
+///
+/// Nothing in the argument changes with the offset. Each line of the span reads
+/// back as itself, so each contributes the same region and leaves the same state,
+/// and the two folds therefore end together. The prefix form cannot supply this:
+/// it is indexed from zero, and a caller holding a span cannot recover the offset
+/// from a statement about the whole document.
+///
+/// This is the whole argument for every release that writes no compressed
+/// delimiter — an abandoned block, and a matched block whose endpoints are not
+/// both rewrite candidates, which includes every conflict-bearing block, because
+/// a conflict is exactly what makes the pass fall back to the source spelling.
+pub proof fn lemma_agreement_from_segment(
+    source: Seq<LineFeatures>,
+    emitted: Seq<LineFeatures>,
+    start: int,
+    end: int,
+    seed: Option<FenceState>,
+)
+    requires
+        emitted.len() == source.len(),
+        0 <= start <= end <= source.len(),
+        forall|i: int|
+            #![trigger source[i]]
+            start <= i < end ==> spec_same_reading(source[i], #[trigger] emitted[i]),
+    ensures
+        spec_state_from(source, start, end, seed) == spec_state_from(emitted, start, end, seed),
+        spec_regions_from(source, start, end, seed) == spec_regions_from(
+            emitted,
+            start,
+            end,
+            seed,
+        ),
+    decreases end - start,
+{
+    reveal(spec_regions_from);
+    reveal(spec_state_from);
+    if start < end {
+        lemma_agreement_from_segment(source, emitted, start, end - 1, seed);
+        let before = spec_state_from(source, start, end - 1, seed);
+        assert(spec_same_reading(source[end - 1], emitted[end - 1]));
+        lemma_same_reading_preserves_region(before, source[end - 1], emitted[end - 1]);
+        lemma_same_reading_preserves_next(before, source[end - 1], emitted[end - 1]);
     }
 }
 
