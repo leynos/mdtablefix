@@ -310,6 +310,41 @@ pub open spec fn spec_plan_step(block: Option<PlanBlock>, line: LineFacts) -> St
     }
 }
 
+/// `LEM-INSIDE-OPEN-MEANS-FENCE-SHAPED` — a line inside a block is fence-shaped.
+///
+/// A line the tracker read as already inside the fence, at the depth of a block the
+/// planner is holding, cannot be a line the grammar failed to read as a delimiter.
+/// The two routing answers come from the same transition: `was_in_fence` says the
+/// state already held a fence open at this depth, so the depth is not below the
+/// opener's, and a non-fence-shaped line would leave it open — which is a `Skip`,
+/// not the `Extend` or `Close` the planner is about to choose between.
+///
+/// This is the side condition the fold invariant's step needs when it decides what
+/// to record for a buffered block's opening line. Without it, the `Restart` case
+/// and the `Extend`/`Close` cases would have to be argued separately at every step
+/// of the induction.
+pub proof fn lemma_inside_open_means_fence_shaped(
+    state: Option<FenceState>,
+    line: LineFeatures,
+)
+    requires
+        spec_fenced(state, line.depth),
+        line.marker.is_none(),
+    ensures
+        spec_fenced(spec_fence_next(state, line), line.depth),
+{
+    reveal(spec_fenced);
+    reveal(spec_fence_next);
+    match state {
+        Some(open) => {
+            if line.depth < open.open_depth {
+            } else {
+            }
+        },
+        None => {},
+    }
+}
+
 /// Whether a release may respell the delimiters it writes.
 ///
 /// This is the pass's recognition that every delimiter the release puts in play
