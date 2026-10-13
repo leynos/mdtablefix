@@ -145,12 +145,8 @@ verified_kernel_function! {
 pub fn open_block(line: LineFacts) -> Option<Block>;
 ensures(result => result@ == crate::spec_open_block(line@));
 {
-    let Some(features) = line.features else {
-        return None;
-    };
-    let Some(marker) = features.marker else {
-        return None;
-    };
+    let features = line.features?;
+    let marker = features.marker?;
     Some(Block {
         opening: KernelState {
             marker,
@@ -433,23 +429,23 @@ ensures(result => result.0@ == crate::spec_step_state(state@, facts@, index as i
 {
     let held: Option<Block> = state.pending;
     let step = plan_step(held, facts);
+    // Every field a step carries through is named for the whole family that
+    // carries it, so the arms that agree read as one rule rather than as three
+    // that happen to coincide. The specification states these field by field; the
+    // or-patterns here are the same function, and `spec_step_pending` and its
+    // siblings remain the authority on what the values are.
     let pending = match step {
         Step::Restart(fresh) => Some(fresh),
-        Step::Skip => None,
         Step::Extend(block) => Some(block),
-        Step::Close(_, _) => None,
+        Step::Skip | Step::Close(_, _) => None,
     };
     let start = match step {
         Step::Restart(_) => index,
-        Step::Skip => state.start,
-        Step::Extend(_) => state.start,
-        Step::Close(_, _) => state.start,
+        Step::Skip | Step::Extend(_) | Step::Close(_, _) => state.start,
     };
     let opener_rewritable = match step {
         Step::Restart(_) => facts.rewritable,
-        Step::Skip => state.opener_rewritable,
-        Step::Extend(_) => state.opener_rewritable,
-        Step::Close(_, _) => state.opener_rewritable,
+        Step::Skip | Step::Extend(_) | Step::Close(_, _) => state.opener_rewritable,
     };
     let agenda = release_agenda(held, state.start, state.opener_rewritable, facts, index, step);
     let mut out: Vec<Agendum> = agenda;
