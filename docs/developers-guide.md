@@ -154,6 +154,14 @@ canonical-break consumer lemmas also cover every outside-fence classifier
 context. Prefix and enclosing-container break preservation remains a separate
 domain under [issue #580](https://github.com/leynos/mdtablefix/issues/580).
 
+`validated_setext_prefix_context` owns native prefix and container admission
+within the heading parser. It groups prefix agreement, continuation
+indentation, permitted prefix characters and code-block indentation checks,
+preserving their order and trace events. The detector uses its retained prefix
+offset and actual underline context when calling the verified pair gate. This
+native parsing helper belongs only to the heading parser and remains covered by
+regressions.
+
 The classification compatibility test compares every line under `tests/data`
 against an independent regex reference and a checked-in snapshot, carrying
 fence, preceding-class and prefix state through each fixture. The reference in

@@ -170,39 +170,8 @@ fn detect_setext_heading(
     continuation_indent: Option<usize>,
 ) -> Option<ParsedSetextHeading> {
     let underline = underline?;
-    if line.trim().is_empty() {
-        return None;
-    }
-
-    let prefix_len = shared_prefix_len(line, underline);
-    let prefixes_agree = !has_unmatched_prefix(line, underline);
-    if !prefixes_agree {
-        return None;
-    }
-    if continuation_indent.is_some_and(|indent| content_indent_width(underline) < indent) {
-        return None;
-    }
-    if prefix_len > 0
-        && !line[..prefix_len]
-            .chars()
-            .all(|c| c.is_whitespace() || c == '>')
-    {
-        return None;
-    }
-    // Four columns of indentation make the pair an indented code block, where
-    // the second line is code rather than an underline. The width is measured
-    // on the whole line, before `prefix_len` is removed: the shared prefix
-    // swallows the very columns that mark the code block.
-    let indent_width = content_indent_width(line);
-    if indent_width >= 4 {
-        trace!(
-            indent_width,
-            "refusing a Setext candidate indented as an indented code block"
-        );
-        return None;
-    }
-
-    let underline_context = ClassifyCtx::following(LineClass::ParagraphText, prefixes_agree);
+    let (prefix_len, underline_context) =
+        validated_setext_prefix_context(line, underline, continuation_indent)?;
     if !is_setext_pair(line, &ClassifyCtx::default(), underline, &underline_context) {
         return None;
     }
@@ -231,6 +200,49 @@ fn detect_setext_heading(
         text: text.to_string(),
         underline_context,
     })
+}
+
+/// Validates native prefix and container admission before structural pair matching.
+/// For example, `> Title`/`> ===` with no continuation yields prefix length two
+/// and the actual agreeing preceding-paragraph context.
+fn validated_setext_prefix_context(
+    line: &str,
+    underline: &str,
+    continuation_indent: Option<usize>,
+) -> Option<(usize, ClassifyCtx)> {
+    if line.trim().is_empty() {
+        return None;
+    }
+
+    let prefix_len = shared_prefix_len(line, underline);
+    let prefixes_agree = !has_unmatched_prefix(line, underline);
+    if !prefixes_agree {
+        return None;
+    }
+    if continuation_indent.is_some_and(|indent| content_indent_width(underline) < indent) {
+        return None;
+    }
+    if !line[..prefix_len]
+        .chars()
+        .all(|c| c.is_whitespace() || c == '>')
+    {
+        return None;
+    }
+    // Four columns of indentation make the pair an indented code block, where
+    // the second line is code rather than an underline. The width is measured
+    // on the whole line, before `prefix_len` is removed: the shared prefix
+    // swallows the very columns that mark the code block.
+    let indent_width = content_indent_width(line);
+    if indent_width >= 4 {
+        trace!(
+            indent_width,
+            "refusing a Setext candidate indented as an indented code block"
+        );
+        return None;
+    }
+
+    let underline_context = ClassifyCtx::following(LineClass::ParagraphText, prefixes_agree);
+    Some((prefix_len, underline_context))
 }
 
 /// Determine whether a stripped candidate is paragraph text.
