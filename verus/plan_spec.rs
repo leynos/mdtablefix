@@ -2685,4 +2685,80 @@ proof fn lemma_witness_conflict_moves_region()
 {
 }
 
+/// `LEM-WITNESS-MARKER-FAMILY-IS-LOAD-BEARING`.
+///
+/// A tilde line against a backtick opener is the shape the fence mutation gate
+/// drops, and this witness pins what the correct rule says about it: the line
+/// does not close the block, so it stays literal, and the opener is still open
+/// afterwards. The whole region conclusion would flip if the marker comparison
+/// were removed, which is why the mutation is detectable at all.
+proof fn lemma_witness_marker_family_holds_the_region()
+    ensures
+        !spec_closes(spec_witness_opener(), spec_witness_tildes(4)),
+        spec_fence_region(Some(spec_witness_opener()), spec_witness_tildes(4)) == Region::Literal,
+        spec_fence_next(Some(spec_witness_opener()), spec_witness_tildes(4))
+            == Some(spec_witness_opener()),
+{
+}
+
+/// A four-tilde delimiter at depth zero.
+///
+/// The marker family the backtick opener above must refuse, so the two
+/// witnesses together exercise the closing rule's comparison in the direction
+/// the compression pass relies on.
+pub open spec fn spec_witness_tildes(len: usize) -> LineFeatures {
+    LineFeatures { depth: 0, marker: Some('~'), marker_len: len, trailing_blank: true }
+}
+
+/// `LEM-WITNESS-DEPTH-DROP-RELEASES-THE-BLOCK`.
+///
+/// A line shallower than the opener cannot be content inside it: `CommonMark`
+/// ends the block when the blockquote prefix shortens, and the transition
+/// checks the depth before it reads the line. The witness pins the three
+/// consequences together — the block is gone, the line is prose rather than
+/// literal, and it opens a new block of its own depth — which is also why the
+/// interior lemma can exclude these lines by hypothesis without losing any
+/// line the tracker would actually read as interior.
+proof fn lemma_witness_depth_drop_releases_the_block()
+    ensures
+        spec_fence_next(Some(spec_witness_depth_drop()), spec_witness_shallow_marker())
+            == Some(
+                FenceState { marker: '`', marker_len: 3, open_depth: 0 },
+            ),
+        spec_fence_region(Some(spec_witness_depth_drop()), spec_witness_shallow_marker())
+            == Region::Delim,
+        !spec_fenced(Some(spec_witness_depth_drop()), spec_witness_shallow_marker().depth),
+{
+}
+
+/// A backtick opener at depth one.
+///
+/// Paired with the depth-zero marker line below, it exhibits the depth drop that
+/// ends the block before the line is read.
+pub open spec fn spec_witness_depth_drop() -> FenceState {
+    FenceState { marker: '`', marker_len: 3, open_depth: 1 }
+}
+
+/// A three-backtick marker at depth zero — the line that drops the blockquote.
+pub open spec fn spec_witness_shallow_marker() -> LineFeatures {
+    LineFeatures { depth: 0, marker: Some('`'), marker_len: 3, trailing_blank: true }
+}
+
+/// `LEM-WITNESS-INCOMPATIBLE-ENDPOINTS-FORBID-REWRITE`.
+///
+/// An opener that may be respelled together with a closer that may not is the
+/// pair `delimiters_eligible` must refuse, and the witness pins the refusal:
+/// rewriting only the opener would leave a backtick block facing a tilde closer
+/// that no longer closes it. This is the shape that makes the eligibility rule
+/// load-bearing rather than a formality, and it is the mixed-family case the
+/// fixture corpus does not otherwise reach.
+proof fn lemma_witness_incompatible_endpoints_forbid_rewrite()
+    ensures
+        !spec_delimiters_eligible(Release::Matched, true, false),
+        !spec_delimiters_eligible(Release::Matched, false, true),
+        spec_delimiters_eligible(Release::Matched, true, true),
+        !spec_delimiters_eligible(Release::Abandoned, true, true),
+{
+}
+
 } // verus!
