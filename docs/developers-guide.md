@@ -169,6 +169,12 @@ underlines; and tab-prefixed thematic-break text remaining `Literal` and
 unchanged by the formatter. Review both the differential result and snapshot
 when updating fixtures or classification behaviour.
 
+The reference's private `ReferenceBody` wraps its space/tab-trimmed input.
+`reference_block_start` and `is_setext_body` compose within `ReferenceState` in
+the documented precedence order. `assert_classification` combines the
+independent and production assertions in reference regressions. These helpers
+belong solely to the reference test module.
+
 `ListContinuationState` in `src/classify.rs` belongs only to the Setext and
 thematic-break consumers. It remembers the content indentation of an active
 list marker, then retains it through indented literal and lazy paragraph

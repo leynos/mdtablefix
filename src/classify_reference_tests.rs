@@ -45,12 +45,16 @@ pub(super) struct ReferenceState {
     prefix: String,
 }
 
+/// A body already trimmed to the reference grammar's space/tab boundaries.
+#[derive(Clone, Copy)]
+struct ReferenceBody<'line>(&'line str);
+
 impl ReferenceState {
     /// Classifies and advances one reference line; `***` starts a thematic break.
     pub(super) fn observe(&mut self, line: &str) -> LineClass {
         let (prefix, body, literal) = reference_parts(line);
         let trimmed = body.trim_matches([' ', '\t']);
-        let class = self.classify(trimmed, literal, prefix == self.prefix);
+        let class = self.classify(ReferenceBody(trimmed), literal, prefix == self.prefix);
         if class == LineClass::FenceMarker {
             self.open = if self.open.is_some() {
                 None
@@ -64,11 +68,12 @@ impl ReferenceState {
     }
 
     /// Resolves precedence; a matching closing run ends an existing fence.
-    fn classify(&self, body: &str, literal: bool, prefix_agrees: bool) -> LineClass {
+    fn classify(&self, body: ReferenceBody<'_>, literal: bool, prefix_agrees: bool) -> LineClass {
         if let Some(open) = &self.open {
             let closes = !literal
-                && body.len() >= open.len()
+                && body.0.len() >= open.len()
                 && body
+                    .0
                     .bytes()
                     .all(|byte| Some(&byte) == open.as_bytes().first());
             return if closes {
@@ -77,7 +82,7 @@ impl ReferenceState {
                 LineClass::Literal
             };
         }
-        if body.is_empty() {
+        if body.0.is_empty() {
             return LineClass::Blank;
         }
         if literal {
@@ -87,28 +92,48 @@ impl ReferenceState {
     }
 
     /// Applies regex grammar; `|---|` is a delimiter rather than a table row.
-    fn classify_body(&self, body: &str, prefix_agrees: bool) -> LineClass {
-        if FENCE.is_match(body) {
-            LineClass::FenceMarker
-        } else if ATX.is_match(body) {
-            LineClass::AtxHeading
-        } else if body.contains('|') && TABLE.is_match(body) {
-            LineClass::TableDelimiter
-        } else if body.starts_with('|') {
-            LineClass::TableRow
-        } else if self.previous == Some(LineClass::ParagraphText)
-            && prefix_agrees
-            && SETEXT.is_match(body)
-        {
+    fn classify_body(&self, body: ReferenceBody<'_>, prefix_agrees: bool) -> LineClass {
+        if let Some(class) = reference_block_start(body) {
+            class
+        } else if self.is_setext_body(body, prefix_agrees) {
             LineClass::SetextUnderline
-        } else if BREAK.is_match(body) {
+        } else if BREAK.is_match(body.0) {
             LineClass::ThematicBreak
-        } else if LIST.is_match(body) {
+        } else if LIST.is_match(body.0) {
             LineClass::ListItem
         } else {
             LineClass::ParagraphText
         }
     }
+
+    /// Requires matching prose context; `---` after matching `text` is Setext.
+    fn is_setext_body(&self, body: ReferenceBody<'_>, prefix_agrees: bool) -> bool {
+        self.previous == Some(LineClass::ParagraphText) && prefix_agrees && SETEXT.is_match(body.0)
+    }
+}
+
+/// Resolves unconditional structural starts; `|---|` is a table delimiter.
+fn reference_block_start(body: ReferenceBody<'_>) -> Option<LineClass> {
+    if FENCE.is_match(body.0) {
+        Some(LineClass::FenceMarker)
+    } else if ATX.is_match(body.0) {
+        Some(LineClass::AtxHeading)
+    } else if body.0.contains('|') && TABLE.is_match(body.0) {
+        Some(LineClass::TableDelimiter)
+    } else if body.0.starts_with('|') {
+        Some(LineClass::TableRow)
+    } else {
+        None
+    }
+}
+
+/// Compares both implementations; plain `text` agrees as paragraph text.
+fn assert_classification(line: &str, expected: LineClass) {
+    assert_eq!(ReferenceState::default().observe(line), expected);
+    assert_eq!(
+        super::classify_line(line, &super::ClassifyCtx::default()),
+        expected
+    );
 }
 
 /// Measures independent indentation; a tab after one space adds three columns.
@@ -177,11 +202,7 @@ fn deliberate_historical_grammar_changes(
 ) {
     assert_eq!(historical_heading(line), was_heading);
     assert_eq!(historical_list(line), was_list);
-    assert_eq!(ReferenceState::default().observe(line), expected);
-    assert_eq!(
-        super::classify_line(line, &super::ClassifyCtx::default()),
-        expected
-    );
+    assert_classification(line, expected);
 }
 
 #[rstest::rstest]
@@ -240,11 +261,7 @@ fn quoted_body_replaces_historical_container_role(#[case] line: &str, #[case] ex
         "historical quote regex should compile",
     );
     assert!(HISTORICAL_QUOTE.is_match(line));
-    assert_eq!(ReferenceState::default().observe(line), expected);
-    assert_eq!(
-        super::classify_line(line, &super::ClassifyCtx::default()),
-        expected
-    );
+    assert_classification(line, expected);
 }
 
 #[rstest::rstest]
@@ -276,11 +293,7 @@ fn delimiter_cells_are_stricter_than_the_historical_character_sieve(
         "historical table separator regex should compile",
     );
     assert!(line.contains('|') && HISTORICAL_SEPARATOR.is_match(line));
-    assert_eq!(ReferenceState::default().observe(line), expected);
-    assert_eq!(
-        super::classify_line(line, &super::ClassifyCtx::default()),
-        expected
-    );
+    assert_classification(line, expected);
 }
 
 #[test]
