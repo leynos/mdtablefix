@@ -266,6 +266,21 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       default recipe. No compiler, Clippy, or test warnings were emitted. The
       run took 59.6 minutes because build admission is shared and was saturated
       while this worktree compiled cold, not because of any gate defect.
+- [x] M6 Advisory triage. The four advisory checks were traced to their source:
+      they are the pre-merge check table in CodeRabbit comment `5863179912`
+      (2026-09-28), re-summarised in the 2026-10-13 reply. Items 1
+      (`Unit Architecture`) and 3 (`User-Facing Documentation`) were re-checked
+      against the published tip and are already satisfied — `data_files` and
+      `read_fixture` both return `Result` with both sweeps propagating, and
+      `docs/users-guide.md:1126` documents `classify_regions` and all three
+      `Region` variants. Item 4 (`Developer Documentation`) was completed by
+      rewriting the `### Strategy enum` section; the two
+      `docs/adrs/0006-single-pass-idempotence.md` references were verified
+      accurate and left alone. Item 2 (`Linked Issues`) is the outstanding one
+      and is the subject of M6 item 5.
+- [ ] M6 Item 2 — the document-level fence-compression preservation proof.
+      Outstanding. The full specification is recorded in the M6 section below
+      and in CodeRabbit's AI-agent prompt of 2026-10-13.
 
 Milestones M4 and M3 are sequenced ahead of M3's riskier proof work, so that a
 proof that breaches its tolerance leaves a complete, useful deliverable behind.
@@ -996,12 +1011,18 @@ Still outstanding, in the order the request gave it:
 4. `Developer Documentation` (warning): update `docs/developers-guide.md` for
    the fence kernel, the `LineFeatures` boundary, `FenceTracker` routing,
    compression decisions, and `make verus-fence-mutation`, and correct stale
-   references. **This is known to be incomplete**: the `### Strategy enum`
-   section at `docs/developers-guide.md:1346` still describes the pre-refactor
-   `Strategy` enum, `rewrite_marker`, `flush_matched_block`,
-   `flush_unmatched_block`, and `rewrite_fence_line`, which no longer match the
-   compression pass's shape. `docs/adrs/0006-single-pass-idempotence.md:322` and
-   `:397` also name `fences::flush_unmatched_block`.
+   references. **Done.** The `### Strategy enum` section was rewritten to state
+   that `rewrite_marker` returns an `Option` rather than falling back
+   internally, that `opening_rewrite` derives the block strategy from
+   `compression_changes_region`, that `flush_completed_block` chooses between
+   the matched and original flushes and `flush_unmatched_block` takes an
+   unclosed block directly, and that `ParsedLine::observe` is the single parse
+   every flush path consumes. The `src/classify_kernel_macros.rs` path was
+   already corrected to `src/verified_kernel_macros.rs`, and
+   `docs/adrs/0006-single-pass-idempotence.md:322` and `:397` were checked:
+   `fences::flush_unmatched_block` still exists and still rewrites the opener
+   while emitting the interior verbatim, so those references are accurate and
+   were left alone.
 5. The document-level fence-compression preservation proof: extract a
    Verus-compatible compression planner and emitter that `compress_fences`
    actually calls, so block buffering, conflict accumulation, and emission are
@@ -1056,3 +1077,11 @@ request specifies.
   four requested gates pass on the rebased tree (`check-fmt`, `typecheck`,
   `lint`, `test`), and `make test` is green on its default recipe — the
   descriptor exhaustion from 2026-10-04 did not recur.
+- 2026-10-13: M6 items 1 and 3 re-checked against the published tip and their
+  advisories are satisfied without further change: `data_files` and
+  `read_fixture` in `tests/fence_regions.rs` both return `Result` and both
+  sweeps propagate with `?`, and `docs/users-guide.md` documents
+  `classify_regions` and all three `Region` variants. M6 item 4 completed by
+  rewriting the `### Strategy enum` section; the two
+  `docs/adrs/0006-single-pass-idempotence.md` references were checked and are
+  accurate. M6 item 2 is the outstanding one.

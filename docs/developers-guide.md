@@ -1413,19 +1413,35 @@ specifier lines.
 
 ### Strategy enum
 
-`Strategy` is the canonical private choice for fence-marker rewriting. Its
-variants have the following effects:
+`Strategy` is the canonical private choice for fence-marker rewriting, and
+`rewrite_marker` is the only place a marker is respelt. `rewrite_marker` returns
+`None` when the line is not a normalization-compatible delimiter, so the type
+states the failure rather than making the caller trust a fallback. Its variants
+have the following effects:
 
 - `Compress` rewrites the marker to exactly three backticks while preserving
-  indentation and the language specifier.
+  indentation, dropping a null language specifier.
 - `Preserve` retains the original marker character and run length when an
-  interior fence would otherwise become structural.
+  interior fence would otherwise become structural, with the same null-language
+  rule.
 
-All fence-marker rewriting must dispatch on `Strategy` through
-`rewrite_marker`. Both `flush_matched_block` and `flush_unmatched_block` select
-the strategy from whether the block has a conflicting interior fence, while
-`rewrite_fence_line` only dispatches the chosen strategy and falls back to the
-original line when the line is not a normalization-compatible delimiter.
+`opening_rewrite` picks the strategy for a whole block from
+`has_conflicting_interior_fence` alone. That flag is set by the kernel's
+`compression_changes_region`, so the block-level decision and the per-line
+proof obligation are the same function, not two rules that have to agree.
+
+Three flush paths finish a block, and `flush_completed_block` chooses between
+them. It rewrites both endpoints when each carries a cached compressed rewrite,
+and otherwise falls back to `flush_original_block`. `rewrite_fence_line`
+dispatches the chosen strategy for a single line and returns the original line
+in place of a `None` rewrite. A block the document ends inside never reaches
+`flush_completed_block`; `flush_unmatched_block` takes it directly.
+
+`ParsedLine::observe` is where the compression pass meets the shared kernel: it
+calls `FenceTracker::observe_source_fence` once and keeps the returned
+`FenceObservation`, `LineFeatures`, and marker components together, so the
+block decision and the recorded transition cannot read the line differently.
+Every flush path consumes lines captured through that single parse.
 
 ### Architecture
 
