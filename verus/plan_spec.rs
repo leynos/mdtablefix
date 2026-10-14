@@ -185,9 +185,6 @@ pub use compose::*;
 /// `AGENTS.md` sets, and declared here rather than in `verus/lib.rs` so the
 /// mirror the mutation gates build carries the file without a second list to
 /// keep in step, and so the witnesses travel with the theorem they protect.
-///
-/// The witness file is itself over the ceiling; the remaining reduction is
-/// recorded as outstanding work in the ExecPlan.
 #[path = "plan_spec_witnesses.rs"]
 mod witnesses;
 pub use witnesses::*;
