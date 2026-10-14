@@ -2682,10 +2682,13 @@ pub proof fn lemma_agreement_from_segment(
 
 /// Non-vacuity witnesses for the lemmas above.
 ///
-/// Extracted so that neither file grows past the repository's 400-line ceiling
-/// (`AGENTS.md`). Declared here rather than in `verus/lib.rs` so the mirror the
-/// mutation gates build carries it without a second list to keep in step, and
-/// so the witnesses travel with the theorem they protect.
+/// Extracted to bring this specification back under the 400-line ceiling
+/// `AGENTS.md` sets, and declared here rather than in `verus/lib.rs` so the
+/// mirror the mutation gates build carries the file without a second list to
+/// keep in step, and so the witnesses travel with the theorem they protect.
+///
+/// The witness file is itself over the ceiling; the remaining reduction is
+/// recorded as outstanding work in the ExecPlan.
 #[path = "plan_spec_witnesses.rs"]
 mod witnesses;
 pub use witnesses::*;

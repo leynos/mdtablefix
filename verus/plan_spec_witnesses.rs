@@ -3,8 +3,12 @@
 //! `verus/plan_spec.rs` states the document-level result; this file supplies the
 //! evidence that its hypotheses are satisfiable and its conclusions have
 //! content. Extracted so that the specification reads as a statement rather
-//! than as a statement plus its evidence, and so that each file stays inside the
-//! repository's 400-line ceiling (`AGENTS.md`).
+//! than as a statement plus its evidence, and so that the specification itself
+//! comes back under the 400-line ceiling `AGENTS.md` sets.
+//!
+//! This file is not itself under that ceiling. It is 510 lines, and the
+//! remaining reduction is recorded as outstanding work in the ExecPlan rather
+//! than claimed here.
 //!
 //! # Why the fold witnesses assert their unfoldings
 //!

@@ -1704,7 +1704,7 @@ Each item below, in the order the request gave it, with its current state.
    existing `#[path]` declarations, so the mutation-gate mirrors pick them up
    with no second list to maintain. `verus/plan_spec.rs` moved its own
    non-vacuity witnesses to `verus/plan_spec_witnesses.rs` (3,095 → 2,694, new
-   file 483 lines) with the same declaration pattern and the same gate result.
+   file 510 lines) with the same declaration pattern and the same gate result.
    The three fold-level witnesses needed one explicit unfolding `assert` each
    to survive the move; the mechanism and the experiment that isolated it are
    analysed under *Surprises & discoveries*, and the assertions are documented
@@ -1717,7 +1717,7 @@ Each item below, in the order the request gave it, with its current state.
    section banners ("The driver", 769 lines, and "Composing blocks into a
    document", 864) need internal seams, which is the work the review directed
    after accepting that its own banner-split method is arithmetically incapable
-   of reaching 400. `verus/plan_spec_witnesses.rs` at 483 lines and
+   of reaching 400. `verus/plan_spec_witnesses.rs` at 510 lines and
    `verus/lib.rs` at 421 also exceed the ceiling; the reviewer extended the
    finding to `lib.rs` explicitly, with no exemption for its role as the proof
    entry point. The repository's actual practice is context for this backlog,
@@ -1898,7 +1898,7 @@ rather than by proof.
   and `mergeStateStatus` is `CLEAN`. The sole remaining block is the stale
   `CHANGES_REQUESTED` on review `5334535333`.
 - 2026-10-14 (later still): Split `verus/plan_spec.rs`'s non-vacuity witnesses
-  into `verus/plan_spec_witnesses.rs` (3,095 → 2,694 lines; new file 483),
+  into `verus/plan_spec_witnesses.rs` (3,095 → 2,694 lines; new file 510),
   declared from the parent through `#[path]` so the mutation mirror carries it
   with no second list. Doing so required three explicit unfolding `assert`s,
   one in each fold-level witness, and a decisive probe established that the
@@ -1910,6 +1910,6 @@ rather than by proof.
   three mutation gates confirm their expected rejection against the split tree.
   `plan_spec.rs` remains over the ceiling with 88 top-level declarations whose
   largest is 146 lines, so the review's remaining request — internal seams
-  inside the 769- and 864-line sections, plus `plan_spec_witnesses.rs` (483)
+  inside the 769- and 864-line sections, plus `plan_spec_witnesses.rs` (510)
   and `verus/lib.rs` (421) — is real decomposition work that this change does
   not complete. M6 item 5b and issue #486 stay open.
