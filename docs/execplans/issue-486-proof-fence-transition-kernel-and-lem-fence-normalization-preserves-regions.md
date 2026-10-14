@@ -344,6 +344,20 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
       makes the run report that postcondition as failed (175 verified, 1 error).
       `make verus` reports 176 verified, 0 errors (was 172). Committed as
       `9c160fa`.
+- [x] M6 Item 8 — the decompositions the review directed, carried out against
+      the sizes actually measured rather than the sizes assumed. The
+      composition moved to `plan_spec_compose.rs` at `22dc7df` and was itself
+      split into `span`/`release`/`chain` children at `e87b3d0`; the driver
+      induction moved to `plan_spec_drive_induction.rs` at `961f28a`; the rest
+      of `plan_spec.rs` moved to six children at `e015453`, leaving a 195-line
+      facade. Every file in `verus/` is now under the 400-line ceiling,
+      `lib.rs` included. The review's method requirement was honoured: the
+      splits are at declaration seams, each child owning whole items with their
+      doc comments and proofs, so no item spans two files, and the explicit
+      unfolding assertions moved with the lemmas they serve. The published
+      surface is measured at 44 names at the crate root before and after, with
+      nothing lost or gained. `make verus` reports 178 verified, 0 errors with
+      no warnings, and all ten commit gates pass.
 - [ ] M6 Item 5b — the driver composition. `plan_step`'s routing relation
       already models every release the pass can name, but the emitted readings
       are related to the source readings by the external emission contract
@@ -998,6 +1012,75 @@ See the decision log.
   largest is 557 lines), so the remaining overlong files here are part of a
   corpus-wide backlog rather than a regression this branch introduced. Date
   2026-10-14.
+
+- **The extraction generator's losslessness checks were themselves the least
+  trustworthy part of the work — three separate ways, each found only after a
+  measurement contradicted a confident expectation.**
+
+  The declaration-counting check compared item spans against themselves, so
+  truncating a span shortened both sides equally and it passed cleanly while the
+  `compose` and `witnesses` module declarations — a whole 24-lemma verified
+  subtree — had been dropped from the generated tree. The symptom was
+  `make verus` reporting 154 verified where 178 was expected, at exit 0, with
+  four unused-import warnings. A check that cannot fail when the artifact is
+  wrong is worse than no check, because it converts a silent loss into an
+  apparently verified one. Its replacement compares the finished output's
+  `#[path]`/`mod`/`use` lines for the externally declared modules against the
+  original's — and that replacement's first version *also* fired spuriously,
+  because its scan began at the item's doc comment rather than at the
+  declaration and so walked past the lines it was meant to capture.
+
+  Visibility reasoning failed the same way, twice in opposite directions.
+  `decl.startswith("pub")` reads `pub(super)` as `pub`, which is wrong in the
+  one way that matters — a `pub(super)` item cannot be re-exported by
+  `pub use`, so conflating them produced E0364 at the facade. The correction
+  then over-corrected: it kept the four `pub(super)` lemmas at `pub(super)`
+  inside their children on the theory that they were private to `plan_spec`,
+  which is false. `verus/lib.rs:69` declares `pub mod plan_spec;`, so
+  `plan_spec`'s parent is the *crate root* and a `pub(super)` item is reachable
+  there as `plan_spec::x`; keeping the narrower visibility both silently
+  narrowed the published surface and made the `pub use` illegal. The correct
+  rule — `pub(super)` widens to `pub` in the child and is re-exported, because
+  the original parent and the facade's parent are the same module — was
+  established by reading the declaration in `lib.rs` rather than by reasoning
+  about what `pub(super)` "obviously" means.
+
+  Two further losses were silent rather than loud. The generator read its
+  *output* as its input on a re-run, so measurements of "what the original
+  contains" were measuring the already-generated facade; and the
+  foot-declaration capture stopped at the first `pub use` line, which would
+  have carried one third of `compose`'s re-export list — a truncated list that
+  still parses. Both were caught only by comparing against the preserved
+  original at `/tmp/plan_spec-original-full.rs`.
+
+  The general shape, recorded because it recurred five times in one task: line
+  arithmetic for extraction boundaries and visibility reasoning both fail by
+  inspection and succeed by measurement, and a measurement built on a wrong
+  assumption fails just as confidently as an eyeball. When a measurement
+  contradicts a reasoned expectation, suspect the measurement first. Date
+  2026-10-14.
+
+- **A name collision between two children was a real finding, not a nuisance.**
+  The facade's own fold child and `plan_spec_witnesses.rs`'s `pub mod fold`
+  (over `plan_spec_witnesses_fold.rs`) collided at the facade as E0659 — a
+  glob-imported name and a local module of the same name. The fix renames the
+  facade's local declaration to `fold_plan` while keeping the `#[path]`
+  attribute's file name and re-exporting under the item names, so no item name
+  and no file name moves. Worth recording because the tempting alternatives —
+  renaming the witness child's module or globbing the fold privately — would
+  each have changed a name that something else already depends on. Date
+  2026-10-14.
+
+- **The finding's file lengths identified a specific revision, and the first
+  reading of them was wrong in both directions.** The numbers 2,694 / 510 / 421
+  match `6d0cd3b` exactly, so the review measured this branch's own tip as it
+  stood on 2026-10-13 — `verus/plan_spec.rs` does not exist on `main` at all,
+  being this branch's work. An earlier revision of the item read the finding as
+  stale because the *tip* files were under the ceiling, which was wrong for a
+  different reason: the sizes were re-measured against a later revision than
+  the one the review read. Neither a file's absence on `main` nor a small
+  branch diff says anything about the revision a reviewer actually measured.
+  Date 2026-10-14.
 
 ## Decision log
 
@@ -1697,43 +1780,80 @@ Each item below, in the order the request gave it, with its current state.
 7. A new `/comenq-coderabbit` review. **Requested** against the rebased head;
    see the revision note.
 8. A further review round asked for the three files over the 400-line ceiling
-   to be decomposed. **Two of the three splits have landed; the third's first
-   split has landed too, and it still needs further internal seams.**
-   `src/fences/plan.rs` moved its driver loop to `src/fences/plan_driver.rs`
-   (546 → 367, new file 224 lines) and `verus/fence_spec.rs` moved its
-   non-vacuity witnesses to `verus/fence_spec_witnesses.rs` (433 → 357, new
-   file 117 lines); both re-verify at 178 / 0 and both travel through the
-   existing `#[path]` declarations, so the mutation-gate mirrors pick them up
-   with no second list to maintain. `verus/plan_spec.rs` moved its own
-   non-vacuity witnesses to `verus/plan_spec_witnesses.rs` (3,095 → 2,694, new
-   file 510 lines) with the same declaration pattern and the same gate result.
-   The three fold-level witnesses needed one explicit unfolding `assert` each
-   to survive the move; the mechanism and the experiment that isolated it are
-   analysed under *Surprises & discoveries*, and the assertions are documented
-   in the new file's module comment because removing them silently restores the
-   failures.
+   to be decomposed, at declaration-level seams within the large sections
+   rather than at section banners alone. **Done.** `src/fences/plan.rs` moved
+   its driver loop to `src/fences/plan_driver.rs` (546 → 367, new file 224
+   lines) and `verus/fence_spec.rs` moved its non-vacuity witnesses to
+   `verus/fence_spec_witnesses.rs` (433 → 357, new file 117 lines); both
+   re-verify at 178 / 0 and both travel through the existing `#[path]`
+   declarations, so the mutation-gate mirrors pick them up with no second list
+   to maintain. `verus/plan_spec.rs` moved its own non-vacuity witnesses to
+   `verus/plan_spec_witnesses.rs` (3,095 → 2,694, new file 510 lines) with the
+   same declaration pattern and the same gate result. The three fold-level
+   witnesses needed one explicit unfolding `assert` each to survive the move;
+   the mechanism and the experiment that isolated it are analysed under
+   *Surprises & discoveries*, and the assertions are documented in the new
+   file's module comment because removing them silently restores the failures.
 
-   What remains is genuine decomposition rather than relocation. `plan_spec.rs`
-   is still 2,694 lines with 88 top-level declarations, the largest 146 lines,
-   so the bulk is breadth rather than monolithic functions; its two largest
-   section banners ("The driver", 769 lines, and "Composing blocks into a
-   document", 864) need internal seams, which is the work the review directed
-   after accepting that its own banner-split method is arithmetically incapable
-   of reaching 400. `verus/plan_spec_witnesses.rs` at 510 lines and
-   `verus/lib.rs` at 421 also exceed the ceiling; the reviewer extended the
-   finding to `lib.rs` explicitly, with no exemption for its role as the proof
-   entry point. The repository's actual practice is context for this backlog,
-   not a discharge of it: no gate enforces the 400-line rule and fifteen
-   non-vendored files on `main` already exceed it.
+   `verus/plan_spec.rs` then moved its composition lemmas to
+   `verus/plan_spec_compose.rs` and itself became a facade over six children,
+   each owning whole declarations: `plan_spec_agreement.rs` (280 lines),
+   `plan_spec_planner.rs` (326), `plan_spec_compression.rs` (322),
+   `plan_spec_steps.rs` (215), `plan_spec_fold.rs` (268), and
+   `plan_spec_document.rs` (141), leaving the parent at 195. The explicit
+   unfolding assertions moved with the lemmas they serve; none was dropped.
+   `verus/plan_spec_witnesses.rs` is now 251 lines over
+   `plan_spec_witnesses_fold.rs` (316) and `verus/lib.rs` is 253, so every file
+   in `verus/` is under the ceiling. Measured: 44 names reach the crate root
+   from `plan_spec` before and after the split, with nothing lost and nothing
+   gained. `make verus` reports 178 verified, 0 errors with no warnings.
+
+   The repository's actual practice was context for this backlog, not a
+   discharge of it: no gate enforces the 400-line rule and fifteen non-vendored
+   files on `main` already exceeded it. The Verus tree is now entirely inside
+   the rule rather than relying on that context.
 9. The new ExecPlan was added to `docs/contents.md` under `## Execution plans`,
    which is the disposition for the review's Developer Documentation warning
    about the documentation index.
 
+Two corrections to item 8's earlier revisions, recorded because an earlier
+answer in each direction was wrong.
+
+The finding's three lengths — `plan_spec.rs` 2,694, `plan_spec_witnesses.rs`
+510, `lib.rs` 421 — match revision `6d0cd3b` exactly, so the review measured
+this branch's own tip as it stood on 2026-10-13 rather than `main`. `verus/`
+has no `plan_spec.rs` on `main` at all; the module is this branch's work, so
+any reading of the finding as "about a file that already existed upstream" is
+misplaced.
+
+The decompositions after `6d0cd3b` were made against those measured sizes, and
+the two earlier files named in the finding were already inside the ceiling by
+then — `verus/fence_spec.rs` was 357 lines at `6d0cd3b` (its witnesses had
+moved out at `87f8912`) and `src/fences/plan.rs` was 366 (its driver had moved
+out at the same commit), so neither figure in an earlier revision of this item
+should be read as work done in this round. What this round did:
+
+- `verus/plan_spec.rs` 2,694 → 1,564 → 195: the composition lemmas moved to
+  `plan_spec_compose.rs` at `22dc7df`, the driver induction to
+  `plan_spec_drive_induction.rs` at `961f28a`, and the remaining declarations
+  to six children at `e015453`, leaving a facade.
+- `verus/plan_spec_witnesses.rs` 510 → 251 by moving its fold witnesses to
+  `plan_spec_witnesses_fold.rs`.
+- `verus/lib.rs` 421 → 253 at `ddc0776`, by moving its classifier and
+  fold-level witnesses into the already-declared
+  `verus/classify_spec_witnesses.rs` and `verus/plan_spec_witnesses.rs`
+  children rather than creating new files.
+
+Every file in `verus/` and in `src/fences/` is now under the ceiling; the
+largest are `verus/fence_spec.rs` and `src/fences/plan.rs`, both at 357 and 366
+respectively, neither touched in this round. Item 8 is discharged on the
+current tip.
+
 Issue #486 stays open until its original acceptance criteria are met. The
 current state proves the block-interior lemma, the document theorem up to the
 driver, and provides corpus-wide executable evidence; the driver composition in
-item 5b is the part the request specifies that remains open. Items 1, 3, and 4
-are confirmed satisfied against the published tip. Item 2's cross-pass
+item 5b is the part the request specifies that remains open. Items 1, 3, 4, and
+8 are confirmed satisfied against the published tip. Item 2's cross-pass
 obligation is discharged by inspection plus the recorded external contracts
 rather than by proof.
 
@@ -1915,3 +2035,20 @@ rather than by proof.
   inside the 769- and 864-line sections, plus `plan_spec_witnesses.rs` (510) and
   `verus/lib.rs` (421) — is real decomposition work that this change does not
   complete. M6 item 5b and issue #486 stay open.
+- 2026-10-14 (latest): The three decompositions the review directed have been
+  carried out against the sizes actually measured. The finding's lengths match
+  `6d0cd3b`, so the review read this branch's tip of 2026-10-13, not `main`.
+  `verus/plan_spec.rs` went 2,694 → 1,564 → 195 through three commits
+  (`22dc7df` composition to `plan_spec_compose.rs`, itself split into
+  `span`/`release`/`chain` at `e87b3d0`; `961f28a` driver induction; `e015453`
+  the remaining six children and a facade), and `verus/plan_spec_witnesses.rs`
+  510 → 251 and `verus/lib.rs` 421 → 253 by the earlier witness moves. Every
+  file in `verus/` is now under the ceiling. The splits are at declaration
+  seams with the explicit unfolding assertions carried along, as the review
+  required. The published surface is measured at 44 crate-root names before and
+  after with `LOST: []` and `GAINED: []`. `make verus` reports 178 verified, 0
+  errors with no warnings, and all ten commit gates pass — `make test` 69
+  suites with 0 failures, `make lint` and `make typecheck` clean,
+  `make check-fmt` and `make markdownlint` clean, and the three mutation gates
+  plus `verus-selftest` each rejecting as designed. M6 item 8 is discharged;
+  items 5b, and item 2 with it, remain open, and issue #486 with them.
