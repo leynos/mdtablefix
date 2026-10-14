@@ -388,8 +388,10 @@ impl FenceTracker {
 
     /// Observe a complete source line and return only its state transition.
     ///
-    /// This is the compact adapter used by callers that do not need the parsed
-    /// marker components returned by [`Self::observe_source_fence`].
+    /// This is the compact adapter for callers that need the transition but not
+    /// the kernel's view of the line: [`Self::observe_source_fence`] returns an
+    /// [`ObservedFence`], and this method discards its `features` field and
+    /// keeps the [`FenceObservation`].
     pub(crate) fn observe_source_line(&mut self, line: &str) -> FenceObservation {
         self.observe_source_fence(line).observation
     }

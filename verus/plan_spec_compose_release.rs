@@ -49,9 +49,21 @@ verus! {
 /// The two conclusions are stated separately because a single `ends_at` could not
 /// admit both of the pass's release routes honestly:
 ///
-/// * A release whose emitted span lands where the source span does — every block
-///   written in its source spelling, and every matched compressed block, whose
-///   closer reads back as a delimiter — satisfies `ends_at` outright.
+/// * A release whose emitted span lands where the source span does satisfies
+///   `ends_at` outright. "Lands where the source span does" is not free: the
+///   source-spelling route carries [`spec_same_reading`] at its opener, its
+///   interior positions, and its closer, which is definitional equality of the
+///   whole [`LineFeatures`] record rather than of a class here. A matched
+///   compressed block is admitted too, but through the other half of the route:
+///   its closer is a bare three-backtick delimiter, not a re-reading of the
+///   source line. The `null`-specifier case is what the equality excludes. When
+///   a conflict-bearing block's delimiter drops its `null` language tag, the
+///   emitted line has `trailing_blank` raised where the source's is false, so
+///   no `spec_same_reading` holds for that position and this route cannot admit
+///   it. That case is reachable in production — the pass takes the `Normalized`
+///   route for it, and `tests/fences.rs::preserves_null_language_during_interior_conflict`
+///   pins it — so the composition theorem is silent there and only the corpus
+///   sweep covers it in fact. `docs/verification.md` records that boundary.
 /// * A **compressible unterminated** block satisfies the region conclusion only.
 ///   Its emitted run ends with the three-backtick opener still open while the
 ///   source run ends open too but in the source's marker family, so the two end

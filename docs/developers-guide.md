@@ -1464,8 +1464,11 @@ cached rewrite through `rewrite_marker` and falls back to the source line, and
 every other position is written verbatim or normalized.
 
 `ParsedLine::observe` is where the compression pass meets the shared kernel: it
-calls `FenceTracker::observe_source_fence` once and keeps the returned
-`LineFacts` — the transition booleans, `LineFeatures`, and the rewrite flag —
+calls `FenceTracker::observe_source_fence` once, which returns an
+`ObservedFence` holding the transition and the kernel's optional
+`LineFeatures`. From that single parse it constructs the `LineFacts` the
+planner consumes — the transition booleans, the `LineFeatures`, and the rewrite
+flag taken from whether the compressed spelling exists — and keeps them
 alongside the two cached `rewrite_marker` spellings, so the block decision and
 the recorded transition cannot read the line differently. Every release route
 consumes lines captured through that single parse.
