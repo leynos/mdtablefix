@@ -250,27 +250,45 @@ unexamined assumption.
   already-reduced `LineFeatures`, so none depends on the reduction being
   correct. The kernel body itself runs no regex; the reduction happens in
   `src/wrap/fence.rs`, whose entry points are `#[cfg(not(verus_keep_ghost))]`.
-- **The emission read-back contract.** `spec_emission_reads_back` states what
-  the parser reads off the bytes the emitter writes. It is a claim a
-  counterexample could falsify at the frontier, and the property tests over the
-  regex and the emitter are its evidence. It has already been corrected once by
-  a counterexample, and the correction is worth knowing about: the `Normalized`
-  clause originally claimed that a delimiter re-spelled in its own marker
-  family reads back as the source line. It does not. Dropping a `null` language
-  specifier — which `src/fences.rs::is_null_lang` does, and which
+- **The emission read-back contract is stated but not enforced.**
+  `spec_emission_reads_back` states what the parser reads off the bytes the
+  emitter writes. **Nothing verifies it.** A seeded fault was run to establish
+  this rather than to assume it: replacing the whole `Agendum::Normalized` arm
+  with `true` in a mirrored proof tree verifies cleanly at 178 verified / 0
+  errors, byte-identical to the unmutated control. Its input type is also
+  uninhabited — `pub struct SpecLine` is never constructed anywhere in the
+  tree, so the contract has no subject a caller could supply. Its real evidence
+  is the property tests over the regex and the emitter, and it should be read
+  as a specification the proofs are written _against_ rather than one they
+  check. The clause has already been corrected once by a counterexample. The
+  `Normalized` clause originally claimed that a delimiter re-spelled in its own
+  marker family reads back as the source line. It does not: dropping a `null`
+  language specifier — which `src/fences.rs::is_null_lang` does, and which
   `tests/fences.rs::preserves_null_language_during_interior_conflict` pins —
   raises `trailing_blank` from false to true, and `spec_closes` consults
   exactly that flag. So a `null`-tagged delimiter is a _non_-closer where the
   emitted bare line is a closer, and the two readings genuinely classify
   differently whenever a matching fence is open at the delimiter's own depth.
   The clause is now stated over `spec_delimiter_reads_back`, which keeps
-  family, run, and depth and admits only the raised blank tag; it is discarded
-  without loss at a written outer delimiter, where no fence is in force at the
-  line's own depth and the transition never reads the tag. That reduction, and
-  the necessity of its guard, are proved as
+  family, run, and depth and admits only the raised blank tag. That reduction,
+  and the necessity of its guard, are stated as
   `lemma_delimiter_reads_back_preserves` and
-  `lemma_blank_tag_flip_needs_the_guard`, and the production behaviour is
-  pinned by `tests/fences.rs::dropped_null_specifier_raises_the_blank_tag`.
+  `lemma_blank_tag_flip_needs_the_guard` — but neither is a load-bearing
+  obligation either: deleting the `spec_blank_tag_raised` disjunct also
+  verifies cleanly, because the lemma's conclusion never mentions the relation
+  it assumes. The production behaviour is pinned by
+  `tests/fences.rs::dropped_null_specifier_raises_the_blank_tag`, which is the
+  evidence that does hold. **The counterexample reaches the main proof, not
+  just this contract.** The block lemma's hypotheses require full agreement at
+  a delimiter (`!compressible ==> spec_same_reading(source[0], emitted[0])`),
+  and `spec_same_reading` compares `trailing_blank`. A conflict-bearing block
+  whose delimiter carries a `null` tag takes the `Normalized` route _and_ drops
+  the specifier, so that hypothesis is unsatisfiable for a document the pinned
+  test proves is reachable through `compress_fences`. The composition theorems
+  therefore do not apply to that document, and the corpus sweep is what covers
+  it in fact. Closing this means restating the block lemma's non-compressible
+  hypotheses over `spec_delimiter_reads_back`, which is why that relation was
+  introduced.
 - **The driver instantiation is open.** The composition law itself is proved:
   `lemma_spans_compose_regions` turns per-span `ends_at` obligations over a
   chain of cuts into equality of the whole document's region sequence, and

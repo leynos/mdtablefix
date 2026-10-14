@@ -886,17 +886,34 @@ See the decision log.
   needs the emitted reading of each line to be related to its source reading by
   a transition argument, which is a large composition problem. The route that
   worked is to note that only `Agendum::Compressed` changes what the classifier
-  reads: a `Normalized` write preserves marker family, run length, depth and
-  the blank-tag decision, so dropping a null language specifier is invisible to
-  `fence_step`. Every other position is written verbatim. So the document
-  theorem follows from a *pointwise reading agreement* — for each emitted line,
-  its region under the emitted prefix equals its region under the source prefix
-  — and the pointwise claim is one case split, with the single interesting case
-  discharged by the guarded-interior lemma that was already proved for the
-  block interior. This is the design insight that made the document theorem
-  tractable, and it is worth restating before any future attempt to strengthen
-  the result: the hard part is not the driver, it is finding the reading that
-  is preserved by the writes the driver performs.
+  reads, so every other position can be related by *pointwise reading
+  agreement* — for each emitted line, its region under the emitted prefix
+  equals its region under the source prefix. The pointwise claim is one case
+  split, with the single interesting case discharged by the guarded-interior
+  lemma already proved for the block interior. This is the design insight that
+  made the document theorem tractable, and it is worth restating before any
+  future attempt to strengthen the result: the hard part is not the driver, it
+  is finding the reading that is preserved by the writes the driver performs.
+- **The `Normalized` write is not read-back-identical, and the theorem's
+  hypotheses say it is.** The insight above was first recorded as "a
+  `Normalized` write preserves marker family, run length, depth and the
+  blank-tag decision, so dropping a null language specifier is invisible to
+  `fence_step`". That is false, and the seeding experiment is what showed it:
+  the blank-tag decision is exactly what the drop changes, `spec_closes`
+  consults that flag, and `tests/fences.rs` pins both the drop and the
+  resulting classification divergence. The consequence is not confined to the
+  prose. The block lemma's non-compressible hypotheses require
+  `spec_same_reading`, which compares `trailing_blank`, so for a
+  conflict-bearing block whose delimiter carries a `null` tag the hypothesis is
+  unsatisfiable and the composition theorems simply do not reach that document.
+  The contract introduced to widen that hypothesis
+  (`spec_delimiter_reads_back`) is itself unenforced: seeding the
+  `spec_emission_reads_back` `Normalized` arm to `true`, and separately
+  deleting the `spec_blank_tag_raised` disjunct, each verify cleanly at 178 / 0
+  against an unmutated control. So the honest statement of the current position
+  is that the theorem holds over a domain the prose did not previously name,
+  that the corpus sweep is the evidence for the excluded documents, and that
+  giving the relation a real consumer is the work that would close the gap.
 - **The fence-skipping consumers are all adapters over the shared kernel; the
   one independent reimplementation is currently unreachable.** A sweep of every
   decision site that skips fenced content found seventeen `FenceTracker`
@@ -1131,23 +1148,38 @@ Obligations, and how each is discharged.
    an empty sequence; `lemma_witness_conflict_is_rejected` proves the guard
    fires on the issue #480 shape.
 
-   The document-level result is now a Verus theorem, not only corpus evidence.
-   `verus/plan_spec.rs` states it over readings: a delimiter the planner
-   respells conservatively is written in its source marker family and run with
-   only a null language specifier dropped, and dropping a null specifier
-   changes no field the transition reads, so the line reads back as itself and
-   region equality follows from a pointwise reading agreement
-   (`lemma_agreement_preserves_prefix`) with no block-level reasoning at all.
-   That covers every abandoned block, every matched block whose endpoints are
-   not both rewrite candidates, and every conflict-bearing block. Only a
-   compressed write changes the reading, and there the written opener is exactly
-   `spec_compressed` of the source opener — the second state
-   `lemma_normalization_preserves_regions` already compares against. The two
-   files meet exactly, and `lemma_no_conflict_all_clear` is where the planner's
-   own conflict fold supplies that lemma's guard. `lemma_compressed_prefix`
-   extends the block result over a compressed block's interior and
-   `lemma_compressed_block_regions` over its closing delimiter, and
-   `lemma_block_agenda_length` supplies the line-count half. Non-vacuity:
+   The document-level result is now a Verus theorem over a stated domain, not
+   only corpus evidence. `verus/plan_spec.rs` states it over readings: a
+   delimiter the planner respells conservatively is written in its source
+   marker family and run, and region equality follows from a pointwise reading
+   agreement (`lemma_agreement_preserves_prefix`). That covers every abandoned
+   block, every matched block whose endpoints are not both rewrite candidates,
+   and every conflict-bearing block whose delimiters carry no dropped
+   specifier. Only a compressed write changes the reading, and there the
+   written opener is exactly `spec_compressed` of the source opener — the
+   second state `lemma_normalization_preserves_regions` already compares
+   against. The two files meet exactly, and `lemma_no_conflict_all_clear` is
+   where the planner's own conflict fold supplies that lemma's guard.
+   `lemma_compressed_prefix` extends the block result over a compressed block's
+   interior and `lemma_compressed_block_regions` over its closing delimiter, and
+   `lemma_block_agenda_length` supplies the line-count half.
+
+   **A seeded fault shows the domain is narrower than it reads.** The block
+   lemma requires full agreement at a non-compressible delimiter
+   (`!compressible ==> spec_same_reading(source[0], emitted[0])`), and
+   `spec_same_reading` compares `trailing_blank`. A conflict-bearing block
+   whose delimiter carries a `null` tag takes the `Normalized` route *and*
+   drops the specifier, raising `trailing_blank`, so that hypothesis is
+   unsatisfiable for a document
+   `tests/fences.rs::preserves_null_language_during_interior_conflict` proves
+   is reachable through `compress_fences`. The composition theorems therefore
+   do not cover it; `tests/fence_regions.rs` covers it in fact. Worse, the
+   contract that was introduced to widen exactly this hypothesis is itself
+   unenforced: replacing `spec_emission_reads_back`'s `Normalized` arm with
+   `true` verifies cleanly at 178 / 0, as does deleting the
+   `spec_blank_tag_raised` disjunct from `spec_delimiter_reads_back`. Closing
+   this means restating the block lemma's non-compressible hypotheses over
+   `spec_delimiter_reads_back` so the relation has a real consumer. Non-vacuity:
    `lemma_witness_compressed_block_is_live` pins the three regions of a four-
    backtick/three-backtick block to the concrete sequence
    `[Delim, Literal, Delim]`, and `lemma_witness_conflict_moves_region` states
@@ -1645,20 +1677,55 @@ rather than by proof.
   reads back as the source line; the read-back relation is now
   `spec_delimiter_reads_back`, which keeps family, run, and depth and admits
   only a raised blank tag, because production drops a `null` language specifier
-  and `spec_closes` reads the tag the drop raises. Both the reduction and the
-  necessity of its guard are proved (`lemma_delimiter_reads_back_preserves`,
-  `lemma_blank_tag_flip_needs_the_guard`) and the production behaviour is
+  and `spec_closes` reads the tag the drop raises. The production behaviour is
   pinned by `tests/fences.rs::dropped_null_specifier_raises_the_blank_tag`. The
   agendum-alone restatement then verifies, so the emitted reading is a function
   of the agendum and the source reading and no `SpecLine` need be reconstructed
-  from emitter bytes. Chose to correct the contract rather than to narrow the
-  specification's input domain, because the `null` case is reachable through
-  the public `&[String]` entry point and a narrowing would have excluded
-  documents the pass genuinely rewrites. Four focused iterations were spent on
-  M6 item 5b in this pass against a tolerance of five, so the per-index content
-  correspondence is left as the one remaining obligation with this reduction
-  recorded rather than a further attempt started. M6 item 5b and issue #486
-  stay open.
+  from emitter bytes. **Recorded in error at the time:** this entry and the
+  commit message that carried it described
+  `lemma_delimiter_reads_back_preserves` as proving the reduction and
+  `lemma_blank_tag_flip_needs_the_guard` as proving the guard's necessity, and
+  claimed the relation was "verified falsifiable rather than merely true". A
+  seeding experiment disproved both halves; see the entry below. Chose to
+  correct the contract rather than to narrow the specification's input domain,
+  because the `null` case is reachable through the public `&[String]` entry
+  point and a narrowing would have excluded documents the pass genuinely
+  rewrites. Four focused iterations were spent on M6 item 5b in this pass
+  against a tolerance of five, so the per-index content correspondence is left
+  as the one remaining obligation with this reduction recorded rather than a
+  further attempt started. M6 item 5b and issue #486 stay open.
+- 2026-10-14 (later): Ran a seeding experiment against the correction above,
+  and it **disproved two claims this plan had already made**. Four focused
+  Verus runs against mirrored proof trees, an unmutated control for a
+  like-for-like baseline, and a positive control to show the harness was live:
+  - Setting `spec_emission_reads_back`'s `Normalized` arm to `true`: **not
+    detected**, 178 verified / 0 errors, identical to control. The contract
+    has no consumer — its only occurrence is its own definition — and its
+    input type `pub struct SpecLine` is never constructed anywhere in the tree.
+  - Narrowing `spec_delimiter_reads_back` to plain agreement (deleting the
+    `spec_blank_tag_raised` disjunct): **not detected**, 178 / 0. The lemma
+    that names it concludes over `spec_fence_next`/`spec_fence_region` and
+    never mentions the relation it assumes, so a stronger hypothesis cannot
+    invalidate it. "Verified falsifiable rather than merely true" was false.
+  - Positive control, dropping the `spec_masked` requirement from
+    `lemma_delimiter_reads_back_preserves`: **detected**, 177 verified /
+    1 error, both postconditions failing. This rules out the explanation that
+    the mirror was ignored, so the two non-detections are real properties of
+    the proof tree rather than an artefact of the method.
+
+  The finding is larger than the two claims. `spec_same_reading` is `a == b`,
+  so it compares `trailing_blank`; the block lemma's non-compressible
+  hypotheses require it at a delimiter; and a conflict-bearing block whose
+  delimiter carries a `null` tag both takes that route and drops the specifier.
+  So those hypotheses are **unsatisfiable** for a document that
+  `tests/fences.rs::preserves_null_language_during_interior_conflict` proves is
+  reachable through `compress_fences`, and the document theorems do not reach
+  it. `docs/verification.md`'s external-contracts section now states this
+  rather than the earlier "proved" wording, and the Surprise entry that
+  recorded the read-back insight is corrected in place. Giving
+  `spec_delimiter_reads_back` a real consumer by restating the block lemma's
+  non-compressible hypotheses over it is now the concrete form of the remaining
+  work; M6 item 5b and issue #486 stay open.
 - 2026-10-13: Rebased a third time, onto `origin/main` at `bf6c46b` from
   `2df4c4a`, replaying 61 commits over the exclusive boundary `425cd2f` (the
   parent of `main`'s single squash commit, confirmed linear with zero merges in
