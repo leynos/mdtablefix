@@ -39,5 +39,13 @@ jobs:
         run: make verus
       - name: Verify the harness rejects false proofs
         run: make verus-selftest
+      # The three negative controls. Each mutates one production module and
+      # requires the run to fail with that module's own postcondition named, so
+      # a proof that still verified would be proved from something other than
+      # the property it claims. They reuse the cache restored above.
       - name: Verify complete Setext assembly rejects a missing separator
         run: make verus-mutation
+      - name: Verify the fence mutation is rejected
+        run: make verus-fence-mutation
+      - name: Verify the compression mutation is rejected
+        run: make verus-compression-mutation

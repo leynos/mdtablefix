@@ -90,34 +90,76 @@ production-used kernels. `make verus-selftest` runs `verus/smoke.rs`, whose
 deliberately false assertion must be rejected; it also fails when the runner
 does not reach Verus, so a skipped verifier cannot pass the check.
 
-`make verus-mutation` runs `scripts/check-classifier-mutation.sh`. It changes
-the production `convert_setext_seq` assembly kernel by removing its mandatory
-space, then confirms Verus rejects the complete output-classification
-postcondition. The script distinguishes a proof rejection from a runner
-failure, so a missing or skipped verifier cannot pass. The same target runs in
-the pull-request workflow.
+Three mutation gates are the negative controls for the proofs, and each is run
+by its own Makefile target. `make verus-mutation` runs
+`scripts/check-classifier-mutation.sh`, which removes the mandatory separator
+from the production ATX assembly kernel and confirms Verus rejects the complete
+output-classification postcondition. `make verus-fence-mutation` runs
+`scripts/check-fence-mutation.sh`, which drops the marker-character comparison
+from `closes_fence` and requires the failed obligation to name that function's
+contract against `spec_closes`. `make verus-compression-mutation` runs
+`scripts/check-compression-mutation.sh`, which makes `delimiter_agendum` ignore
+its `compressible` argument and requires the run to fail with that kernel's own
+postcondition named. Each gate mutates one production module, leaves every
+other proof in place, and demands a named postcondition rather than a bare "did
+not verify", so a gate cannot pass on a parse error or an unrelated obligation.
 
-The pull-request workflow runs `make verus`, `make verus-selftest`, and
-`make verus-mutation` on Ubuntu. It caches the version-specific `.verus`
-directory using the runner operating system, architecture, and pinned Verus
-version, then executes the same Makefile targets used locally. The
+Every gate needs a self-contained proof tree, because it supplies a mutated
+copy of a production module and must not touch the working tree. That tree is
+built by `scripts/verus-mutation-mirror.sh`, sourced by all three gates.
+`verus/lib.rs` names its production modules through `#[path]` attributes, so
+the builder mirrors the whole `src/` tree and rewrites that one prefix; each
+`#[path]` and `include!` inside a production module is already relative to its
+own directory and resolves unchanged. Mirroring the tree rather than a list of
+kernels is deliberate: a hand-maintained list previously left two gates copying
+a stale subset of the module list, and adding the compression planner to
+`verus/lib.rs` made those gates die with "couldn't read …/src/fences/plan.rs".
+That is an infrastructure failure, not a proof result, and the gates correctly
+refused to count it. Adding a production module to `verus/lib.rs` now needs no
+change to any gate.
+
+The pull-request workflow runs `make verus`, `make verus-selftest`,
+`make verus-mutation`, `make verus-fence-mutation`, and
+`make verus-compression-mutation` on Ubuntu. It caches the version-specific
+`.verus` directory using the runner operating system, architecture, and pinned
+Verus version, then executes the same Makefile targets used locally. The
 [verification ledger](verification.md) records each claim and its trusted
 boundary; [ADR 0011](adrs/0011-verified-normalization-core.md) documents why
 the proof scope remains a narrow production-used core.
 
 The `verified_kernel_function!` and `verified_loop_function!` macros live in
-`src/classify_kernel_macros.rs`, included by `src/classify_kernel.rs`. They
-emit one shared executable body for Cargo and Verus, adding contracts and loop
-invariants only in the proof build. Their accepted attributes are limited to
-documentation, `must_use`, and the verifier's external-body marker, so macro
-callers cannot forward a lint-suppressing attribute. The classifier kernel, its
-predicate module, and `src/classify_kernel_consumers.rs` own production
-structural gates and verified builders. Other callers use the `&str` adapters in
+`src/verified_kernel_macros.rs`, included by `src/classify_kernel.rs` and by
+the fence kernel. They emit one shared executable body for Cargo and Verus,
+adding contracts and loop invariants only in the proof build. Their accepted
+attributes are limited to documentation, `must_use`, and the verifier's
+external-body marker, so macro callers cannot forward a lint-suppressing
+attribute. The classifier kernel, its predicate module, and
+`src/classify_kernel_consumers.rs` own production structural gates and verified
+builders. Use them only in the classifier kernel, its predicate and consumer
+modules, and the fence kernel; other callers use the `&str` adapters in
 `src/classify.rs`; do not add another scanner or repeat structural matching in
 a pass. The classifier-consumer kernels below own those shared decisions. A new
 scanner predicate should carry a narrow contract about its characters and
 cursor, then be proved from the same body before the top-level classifier
 refinement relies on it.
+
+The fence transition kernel in `src/wrap/fence/kernel.rs` follows the same
+pattern. `verus/lib.rs` includes it through `#[path]`, and its regex-facing
+entry point is `#[cfg(not(verus_keep_ghost))]`, so the proof build sees a
+`LineFeatures` value that has already been parsed and never the regex that
+produces one. Recognition therefore stays outside the proof, as the
+verification ledger records. `FenceTracker` routes each observed line through
+`fence_step`, and `compression_changes_region`, the guard `compress_fences`
+consults before it rewrites a delimiter, is stated and proved over that same
+transition. Callers that hold a whole document rather than a streaming pass use
+the public `mdtablefix::wrap::{classify_regions, Region}` re-exports, the batch
+counterpart of the tracker. That pair returns one `Region` per input line, in
+order: `Delim` where the line opens or closes a fence, `Literal` for the
+content a fence holds verbatim, and `Prose` for the ordinary Markdown a pass
+may rewrite. `make verus-fence-mutation` is the negative control. It drops the
+marker-character comparison from `closes_fence` and requires the failed
+obligation to name that function's contract against `spec_closes`, so the fence
+proofs are shown to rest on the closing rule they claim to establish.
 
 ### Shared classifier consumer kernels
 
@@ -1393,19 +1435,43 @@ specifier lines.
 
 ### Strategy enum
 
-`Strategy` is the canonical private choice for fence-marker rewriting. Its
-variants have the following effects:
+`Strategy` is the canonical private choice for fence-marker rewriting, and
+`rewrite_marker` is the only place a marker is respelt. `rewrite_marker` returns
+`None` when the line is not a normalization-compatible delimiter, so the type
+states the failure rather than making the caller trust a fallback. Its variants
+have the following effects:
 
 - `Compress` rewrites the marker to exactly three backticks while preserving
-  indentation and the language specifier.
+  indentation, dropping a null language specifier.
 - `Preserve` retains the original marker character and run length when an
-  interior fence would otherwise become structural.
+  interior fence would otherwise become structural, with the same null-language
+  rule.
 
-All fence-marker rewriting must dispatch on `Strategy` through
-`rewrite_marker`. Both `flush_matched_block` and `flush_unmatched_block` select
-the strategy from whether the block has a conflicting interior fence, while
-`rewrite_fence_line` only dispatches the chosen strategy and falls back to the
-original line when the line is not a normalization-compatible delimiter.
+The block-level decision is not a separate rule at all: `plan::plan_step`
+routes each line, `plan::absorb` accumulates the block's one whole-block
+question, and `plan::block_agenda` decides which positions of a released block
+are rewritten from `compression_changes_region` — the same kernel predicate the
+per-line proof obligation is stated over. The block decision and the per-line
+obligation are therefore the same function, not two rules that have to agree.
+
+A block is released on one of four routes: `Step::Close` for a matched close,
+`Step::Skip` and `Step::Restart` for the abandoned release, and
+`flush_unclosed` for the block the document ends inside — the one route no line
+produces, which calls `plan::released_agenda` with `Release::Unmatched`
+directly. Every route hands an `Agendum` sequence to `drain_agenda`, which
+writes it through `CachedLine::emitted`: a delimiter position consults the
+cached rewrite through `rewrite_marker` and falls back to the source line, and
+every other position is written verbatim or normalized.
+
+`ParsedLine::observe` is where the compression pass meets the shared kernel: it
+calls `FenceTracker::observe_source_fence` once, which returns an
+`ObservedFence` holding the transition and the kernel's optional
+`LineFeatures`. From that single parse it constructs the `LineFacts` the
+planner consumes — the transition booleans, the `LineFeatures`, and the rewrite
+flag taken from whether the compressed spelling exists — and keeps them
+alongside the two cached `rewrite_marker` spellings, so the block decision and
+the recorded transition cannot read the line differently. Every release route
+consumes lines captured through that single parse.
 
 ### Architecture
 

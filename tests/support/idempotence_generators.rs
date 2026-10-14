@@ -211,8 +211,8 @@ fn fence_interior_strategy(shape: FenceShape) -> impl Strategy<Value = String> {
 /// five markers, and either a matching closer or none at all.
 ///
 /// An unmatched block leaves the document inside the fence, which is the path
-/// `flush_unmatched_block` serves. Both paths have to keep the opener long
-/// enough that an interior shorter run stays literal content.
+/// `flush_unclosed` serves. Both paths have to keep the opener long enough that
+/// an interior shorter run stays literal content.
 pub fn fenced_block_strategy() -> impl Strategy<Value = String> {
     (fence_shape_strategy(), any::<bool>()).prop_flat_map(|(shape, is_unmatched)| {
         let interior = prop::collection::vec(fence_interior_strategy(shape), 1..=4);

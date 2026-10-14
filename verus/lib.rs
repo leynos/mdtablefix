@@ -11,6 +11,26 @@ verus! {
 #[path = "../src/classify_kernel.rs"]
 pub mod production_classify;
 
+/// The production fence transition kernel, included so the specification in
+/// `verus/fence_spec.rs` constrains the body the formatter actually runs.
+///
+/// The kernel is included rather than reimplemented for the same reason the
+/// classifier is: a parallel model would be free to drift, and a proof about a
+/// model that is not the production code proves nothing about the formatter.
+#[path = "../src/wrap/fence/kernel.rs"]
+pub mod production_fence;
+
+/// The production compression planner, included for the same reason as the
+/// kernel above.
+///
+/// The planner is the whole of the compression pass's decision-making: which
+/// block is open, whether it may be compressed, which positions of a released
+/// block are rewritten, and what the agenda is. The pass keeps only the parsing
+/// and the text rendering, so proving this module is proving the pass's
+/// behaviour rather than a model of it.
+#[path = "../src/fences/plan.rs"]
+pub mod production_plan;
+
 use production_classify::LineClass;
 
 /// State relevant to a structural decision after source scanning.
@@ -41,26 +61,124 @@ pub use classify_spec::*;
 #[path = "setext_spec.rs"]
 pub mod setext_spec;
 
-/// A leading tab occupies four columns and leaves the line literal.
-proof fn lemma_leading_tab_is_literal(s: Seq<char>)
-    requires s.len() > 0, s[0] == '\t'
-    ensures spec_line_parts(s) == (0int, true)
-{
-    assert(spec_indentation_at(s, 1, 0, 4) == (4int, 1int));
-    assert(spec_indentation_at(s, 0, 0, 0) == (4int, 1int));
+#[path = "fence_spec.rs"]
+pub mod fence_spec;
+pub use fence_spec::*;
+
+#[path = "plan_spec.rs"]
+pub mod plan_spec;
+// The planner names its specification functions through the crate root, because
+// `src/fences/plan.rs` is compiled both as a production module and as an
+// included proof module, and the second form has only this file's exports to
+// reach them through.
+pub use plan_spec::*;
+
+/// The fence kernel's view is itself.
+///
+/// Every field is a plain `Copy` value — a depth, an optional marker character,
+/// a run length, and a trailing-blankness flag — so the mathematical form of a
+/// [`LineFeatures`] is the struct itself: the specification reasons about the
+/// same values the kernel carries, with no abstraction that could disagree.
+impl View for production_fence::LineFeatures {
+    type V = production_fence::LineFeatures;
+
+    open spec fn view(&self) -> production_fence::LineFeatures {
+        *self
+    }
 }
 
-/// Four leading spaces likewise preclude structural classification.
-proof fn lemma_four_spaces_are_literal(s: Seq<char>)
-    requires s.len() >= 4,
-        s[0] == ' ', s[1] == ' ', s[2] == ' ', s[3] == ' '
-    ensures spec_line_parts(s) == (0int, true)
-{
-    assert(spec_indentation_at(s, 4, 0, 4).0 == 4);
-    assert(spec_indentation_at(s, 3, 0, 3).0 == 4);
-    assert(spec_indentation_at(s, 2, 0, 2).0 == 4);
-    assert(spec_indentation_at(s, 1, 0, 1).0 == 4);
-    assert(spec_indentation_at(s, 0, 0, 0).0 == 4);
+/// A fence opener's view is likewise itself.
+impl View for production_fence::FenceState {
+    type V = production_fence::FenceState;
+
+    open spec fn view(&self) -> production_fence::FenceState {
+        *self
+    }
+}
+
+/// A region's view is itself.
+impl View for production_fence::Region {
+    type V = production_fence::Region;
+
+    open spec fn view(&self) -> production_fence::Region {
+        *self
+    }
+}
+
+/// The planner's buffering state views as itself.
+///
+/// `Block` holds a [`FenceState`] and a `bool`, and both of those already view
+/// as themselves, so the record needs no projection: the specification reads the
+/// same opener and the same flag the planner carries, and a specification clause
+/// can name `block.opening` directly rather than destructuring a pair.
+impl View for production_plan::Block {
+    type V = production_plan::Block;
+
+    open spec fn view(&self) -> production_plan::Block {
+        *self
+    }
+}
+
+/// A release's view is itself: three names for three ways a block ends.
+impl View for production_plan::Release {
+    type V = production_plan::Release;
+
+    open spec fn view(&self) -> production_plan::Release {
+        *self
+    }
+}
+
+/// An agendum's view is itself: three names for three ways a line is written.
+impl View for production_plan::Agendum {
+    type V = production_plan::Agendum;
+
+    open spec fn view(&self) -> production_plan::Agendum {
+        *self
+    }
+}
+
+/// A step's view is itself. Each variant carries planner values whose own views
+/// are stated above, so a step needs no projection of its own.
+impl View for production_plan::Step {
+    type V = production_plan::Step;
+
+    open spec fn view(&self) -> production_plan::Step {
+        *self
+    }
+}
+
+/// What the caller learned about a line views as the planner's own input.
+///
+/// The features and the rewrite flag are the two grammar-dependent facts the
+/// caller supplies, and the two routing answers are the tracker's. None of them
+/// is derived, so the view is the record itself.
+impl View for production_plan::LineFacts {
+    type V = production_plan::LineFacts;
+
+    open spec fn view(&self) -> production_plan::LineFacts {
+        *self
+    }
+}
+
+/// The driver's buffering state views as itself.
+///
+/// Both fields are plain `Copy` values the planner chose on lines it has already
+/// buffered, so the specification reads the same block, the same starting index
+/// and the same rewrite flag the kernel carries, with no projection that could
+/// disagree.
+impl View for production_plan::DriverState {
+    type V = plan_spec::DriveState;
+
+    open spec fn view(&self) -> plan_spec::DriveState {
+        plan_spec::DriveState {
+            pending: match self.pending {
+                Some(block) => Some(block),
+                None => None,
+            },
+            start: self.start as int,
+            opener_rewritable: self.opener_rewritable,
+        }
+    }
 }
 
 /// Structural precedence over the exact body and context supplied to the kernel.
@@ -117,164 +235,18 @@ pub open spec fn canonical_context() -> ClassifyCtxView {
 
 pub open spec fn canonical_break() -> Seq<char> { Seq::<char>::new(70, |i: int| '_') }
 
-/// Each suffix of the canonical break contains only underscores.
-proof fn lemma_canonical_suffix(s: Seq<char>, start: int)
-    requires s.len() == 70,
-        forall|i: int| 0 <= i < 70 ==> s[i] == '_',
-        0 <= start <= 70
-    ensures
-        spec_marker_count(s, start, 70, '_') == 70 - start,
-        spec_thematic_valid(s, start, 70, '_')
-    decreases 70 - start
-{
-    if start < 70 {
-        lemma_canonical_suffix(s, start + 1);
-    }
-}
-
-/// The emitted canonical break remains structural in the exact classifier.
-proof fn lemma_canonical_break_remains_structural()
-    ensures
-        spec_classify(canonical_break(), canonical_context()) == LineClass::ThematicBreak,
-        forall|ctx: ClassifyCtxView| !ctx.is_in_fence ==>
-            #[trigger] spec_classify(canonical_break(), ctx) == LineClass::ThematicBreak,
-{
-    let s = canonical_break();
-    assert(s.len() == 70);
-    assert(forall|i: int| 0 <= i < 70 ==> s[i] == '_');
-    lemma_canonical_suffix(s, 0);
-    assert(spec_line_parts(s) == (0int, false));
-    assert(!spec_is_blank_from(s, 0));
-    assert(!spec_contains(s, 0, 70, '|'));
-    assert(!spec_table_delimiter(s, 0));
-    assert(!spec_setext_underline(s, 0));
-    assert(spec_thematic_break(s, 0));
-    assert forall|ctx: ClassifyCtxView| !ctx.is_in_fence implies
-        #[trigger] spec_classify(s, ctx) == LineClass::ThematicBreak by {
-    }
-}
-
-/// Concrete witness that ordinary digit-leading text remains paragraph text.
-proof fn lemma_paragraph_exists()
-    ensures spec_classify(
-        seq!['2', '0', '2', '4', ' ', 'r', 'e', 'v', 'e', 'n', 'u', 'e'],
-        canonical_context(),
-    ) == LineClass::ParagraphText
-{
-    let s = seq!['2', '0', '2', '4', ' ', 'r', 'e', 'v', 'e', 'n', 'u', 'e'];
-    assert(spec_indentation_at(s, 0, 0, 0) == (0int, 0int));
-    assert(spec_line_parts_from(s, 0, 0, 12) == (0int, false));
-    assert(spec_line_parts(s) == (0int, false));
-    assert(!spec_is_blank_from(s, 0)) by {
-        assert(!spec_is_markdown_whitespace(s[0]));
-    }
-    assert(spec_trimmed_range(s, 0) == (0int, 12int));
-    assert(!spec_fence_marker(s, 0));
-    assert(!spec_atx_heading(s, 0));
-    assert(forall|i: int| 0 <= i < s.len() ==> s[i] != '|');
-    assert(!spec_contains(s, 0, 12, '|'));
-    assert(!spec_table_delimiter(s, 0));
-    assert(!spec_body_starts_with_pipe(s, 0));
-    assert(!spec_thematic_break(s, 0));
-    assert(!spec_ordered_list_item(s, 4, 12, 4));
-    assert(!spec_ordered_list_item(s, 3, 12, 3));
-    assert(!spec_ordered_list_item(s, 2, 12, 2));
-    assert(!spec_ordered_list_item(s, 1, 12, 1));
-    assert(!spec_list_item(s, 0));
-    assert(spec_classify(s, canonical_context()) == LineClass::ParagraphText);
-}
-
-/// Concrete witness that a pipe-delimited dash row is a table delimiter.
-proof fn lemma_delimiter_exists()
-    ensures spec_classify(
-        seq!['|', '-', '-', '-', '|', '-', '-', '-', '|'],
-        canonical_context(),
-    ) == LineClass::TableDelimiter
-{
-    let s = seq!['|', '-', '-', '-', '|', '-', '-', '-', '|'];
-    assert(spec_indentation_at(s, 0, 0, 0) == (0int, 0int));
-    assert(spec_line_parts_from(s, 0, 0, 9) == (0int, false));
-    assert(spec_line_parts(s) == (0int, false));
-    assert(!spec_is_blank_from(s, 0)) by {
-        assert(!spec_is_markdown_whitespace(s[0]));
-    }
-    assert(spec_trimmed_range(s, 0) == (0int, 9int));
-    assert(!spec_fence_marker(s, 0));
-    assert(!spec_atx_heading(s, 0));
-    assert(spec_skip_pipes(s, 1, 9) == 1);
-    assert(spec_skip_pipes(s, 0, 9) == 1);
-    assert(spec_contains(s, 0, 9, '|')) by {
-        assert(s[0] == '|');
-    }
-    assert(forall|i: int| 1 <= i < 4 ==> s[i] == '-');
-    assert(forall|i: int| 5 <= i < 8 ==> s[i] == '-');
-    assert(spec_table_cell(s, 1, 4));
-    assert(spec_table_cell(s, 5, 8));
-    assert(spec_table_cells(s, 5, 8, 8));
-    assert(spec_table_cells(s, 5, 7, 8));
-    assert(spec_table_cells(s, 5, 6, 8));
-    assert(spec_table_cells(s, 5, 5, 8));
-    assert(spec_table_cells(s, 1, 4, 8));
-    assert(spec_table_cells(s, 1, 3, 8));
-    assert(spec_table_cells(s, 1, 2, 8));
-    assert(spec_table_cells(s, 1, 1, 8));
-    assert(spec_table_delimiter(s, 0));
-    assert(spec_classify(s, canonical_context()) == LineClass::TableDelimiter);
-}
-
-/// Concrete witness that the emitted seventy-underscore line is structural.
-proof fn lemma_break_exists()
-    ensures spec_classify(canonical_break(), canonical_context()) == LineClass::ThematicBreak
-{
-    lemma_canonical_break_remains_structural();
-    assert(spec_classify(canonical_break(), canonical_context()) == LineClass::ThematicBreak);
-}
-
-/// Wrapping observes the canonical break as a paragraph boundary.
-proof fn lemma_canonical_break_ends_wrapping()
-    ensures match spec_classify(canonical_break(), canonical_context()) {
-        LineClass::AtxHeading => Some(LineClass::AtxHeading),
-        LineClass::ThematicBreak => Some(LineClass::ThematicBreak),
-        LineClass::ListItem => Some(LineClass::ListItem),
-        _ => None,
-    } == Some(LineClass::ThematicBreak),
-    forall|ctx: ClassifyCtxView| !ctx.is_in_fence ==>
-        #[trigger] spec_classify(canonical_break(), ctx) == LineClass::ThematicBreak,
-{
-    lemma_canonical_break_remains_structural();
-}
-
-/// Setext conversion cannot accept the canonical break as candidate text.
-proof fn lemma_canonical_break_is_not_setext_text()
-    ensures
-        spec_classify(canonical_break(), canonical_context()) != LineClass::ParagraphText,
-        forall|ctx: ClassifyCtxView| !ctx.is_in_fence ==>
-            #[trigger] spec_classify(canonical_break(), ctx) != LineClass::ParagraphText,
-{
-    lemma_canonical_break_remains_structural();
-}
-
-/// Table buffering cannot accept the canonical break as a structural table line.
-proof fn lemma_canonical_break_is_not_table_input()
-    ensures
-        spec_classify(canonical_break(), canonical_context()) != LineClass::TableDelimiter,
-        spec_classify(canonical_break(), canonical_context()) != LineClass::TableRow,
-        forall|ctx: ClassifyCtxView| !ctx.is_in_fence ==>
-            #[trigger] spec_classify(canonical_break(), ctx) != LineClass::TableDelimiter
-            && spec_classify(canonical_break(), ctx) != LineClass::TableRow,
-{
-    lemma_canonical_break_remains_structural();
-}
-
-/// Orphan attachment rejects the canonical break before matching specifier syntax.
-proof fn lemma_canonical_break_is_not_orphan_specifier()
-    ensures
-        !(spec_classify(canonical_break(), canonical_context()) != LineClass::ThematicBreak),
-        forall|ctx: ClassifyCtxView| !ctx.is_in_fence ==>
-            #[trigger] spec_classify(canonical_break(), ctx) == LineClass::ThematicBreak,
-{
-    lemma_canonical_break_remains_structural();
-}
+/// Non-vacuity witnesses for the classifier above, and their shared step.
+///
+/// The classifier's own definitions stay in this file because the
+/// production modules reach them through the crate root; only the evidence
+/// that they are not vacuous moves out. Declaring the witnesses here rather
+/// than in this file's body keeps the specification readable as a statement
+/// and brings this file under the 400-line ceiling `AGENTS.md` sets.
+///
+/// The child module needs `spec_classify`, `canonical_break` and
+/// `canonical_context`, so it is declared after all three are defined.
+#[path = "classify_spec_witnesses.rs"]
+mod classify_witnesses;
 
 } // verus!
 

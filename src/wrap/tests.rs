@@ -5,8 +5,10 @@
 
 mod blockquote;
 mod classify_block;
+mod fence_kernel_tests;
 mod fence_tracker;
 mod fence_tracker_logging;
+mod fence_tracker_props;
 mod inline_wrapping;
 mod link_ref_regex;
 mod link_reference_definitions;

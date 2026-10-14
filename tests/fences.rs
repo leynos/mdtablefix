@@ -4,7 +4,11 @@
 #[path = "common/mod.rs"]
 mod common;
 
-use mdtablefix::{attach_orphan_specifiers, compress_fences};
+use mdtablefix::{
+    attach_orphan_specifiers,
+    compress_fences,
+    wrap::{Region, classify_regions},
+};
 use rstest::rstest;
 
 fn assert_fence_snapshot(name: &str, input: &[String]) {
@@ -61,6 +65,64 @@ fn preserves_null_language_during_interior_conflict() {
     assert_eq!(
         out,
         lines_vec!["````", "```rust", "fn main() {}", "```", "````"]
+    );
+}
+
+/// Dropping a null specifier raises the blank tag, and the fence transition
+/// reads it.
+///
+/// This is the counterexample the proof's `Normalized` read-back relation was
+/// widened to admit. Preserving a delimiter's own marker family and run is not
+/// the same as writing it byte for byte when the line carried a `null` info
+/// string: the emitted line is bare, so `trailing_blank` goes from false to
+/// true while the family, the run, and the depth stay put.
+///
+/// The difference is load-bearing rather than cosmetic. A blank tag is what
+/// lets a same-marker run *close* a fence, so the two readings classify
+/// differently whenever a matching fence is open at the delimiter's own depth.
+/// The first case pins that divergence; the second pins the guard that makes it
+/// harmless — an outer delimiter is read with no fence in force, where the
+/// transition never consults the blank tag, so both spellings open the same
+/// block. The proof states exactly this pair as
+/// `lemma_blank_tag_flip_needs_the_guard` and `lemma_delimiter_reads_back_preserves`.
+#[test]
+fn dropped_null_specifier_raises_the_blank_tag() {
+    // Under an open three-backtick fence, the bare four-backtick line closes it
+    // while the `null`-carrying line is still interior content.
+    assert_eq!(
+        classify_regions(lines_vec!["```", "````"]),
+        vec![Region::Delim, Region::Delim],
+        "the emitted line should close the open fence",
+    );
+    assert_eq!(
+        classify_regions(lines_vec!["```", "````null"]),
+        vec![Region::Delim, Region::Literal],
+        "the source line should stay interior content",
+    );
+
+    // At a block's *opening* delimiter no fence is in force yet, so the two
+    // readings agree: a marker line under no fence opens a block from its own
+    // family and run alone, and the blank tag is never consulted.
+    assert_eq!(
+        classify_regions(lines_vec!["````"]),
+        classify_regions(lines_vec!["````null"]),
+        "an opening delimiter's blank tag is not read",
+    );
+
+    // A closer is different, and the difference is the whole reason the read-back
+    // relation cannot claim agreement. The blank tag is exactly what makes a
+    // same-marker run close, so a `null`-carrying closer does not close: the
+    // block stays open and its payload stays literal. The bare spelling, which
+    // compression writes, does close.
+    assert_eq!(
+        classify_regions(lines_vec!["````", "code", "````"]),
+        vec![Region::Delim, Region::Literal, Region::Delim],
+        "a bare closer closes the block",
+    );
+    assert_eq!(
+        classify_regions(lines_vec!["````", "code", "````null"]),
+        vec![Region::Delim, Region::Literal, Region::Literal],
+        "a null-tagged closer does not close the block",
     );
 }
 #[rstest]

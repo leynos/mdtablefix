@@ -2,6 +2,13 @@
 # Confirm that Verus rejects a production ATX marker without its separator.
 set -euo pipefail
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# The mirror builder is the one place that knows how a proof tree is laid out,
+# so a change to `verus/lib.rs`'s module list cannot leave this gate copying a
+# stale subset of it.
+# shellcheck source=scripts/verus-mutation-mirror.sh
+. "${script_dir}/verus-mutation-mirror.sh"
+
 # Absolute, because `VERUS_RUN` names its repository root as `.`. The runner
 # reads that relative to the working directory, so the script moves to the
 # repository root and keeps every path it builds independent of the caller's
@@ -18,15 +25,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir "${proof_dir}/src"
-sed 's@../src/classify_kernel.rs@src/classify_kernel.rs@' \
-    "${repo_root}/verus/lib.rs" > "${proof_file}"
-cp "${repo_root}/verus/classify_spec.rs" "${proof_dir}/classify_spec.rs"
-cp "${repo_root}/verus/setext_spec.rs" "${proof_dir}/setext_spec.rs"
-cp "${repo_root}/src/classify_kernel.rs" "${proof_dir}/src/classify_kernel.rs"
-cp "${repo_root}/src/classify_kernel_macros.rs" "${proof_dir}/src/classify_kernel_macros.rs"
-cp "${repo_root}/src/classify_kernel_predicates.rs" "${proof_dir}/src/classify_kernel_predicates.rs"
-cp "${repo_root}/src/classify_kernel_consumers.rs" "${proof_dir}/src/classify_kernel_consumers.rs"
+# The mirror carries every production kernel unmodified except the classifier
+# consumer written below, because the proofs in `fence_spec.rs` and
+# `plan_spec.rs` are part of what this gate has to re-verify.
+mirror_verus_proof_tree "${repo_root}" "${proof_dir}"
+
 sed "/^[[:space:]]*result\.push(' '); \/\/ Mandatory ATX separator\.[[:space:]]*$/d" \
     "${repo_root}/src/classify_kernel_setext.rs" \
     > "${proof_dir}/src/classify_kernel_setext.rs"
@@ -43,7 +46,7 @@ fi
 # shellcheck disable=SC2086
 if ${VERUS_RUN:?VERUS_RUN must be set} \
     --proof-file "${proof_file}" > "${output_file}" 2>&1; then
-    cat "${output_file}"
+    show_mutation_output "${output_file}"
     echo "ATX separator mutation unexpectedly verified" >&2
     exit 1
 fi
@@ -54,10 +57,10 @@ if ! grep -Fq "verification results::" "${output_file}" || \
         active && /spec_classify\(result@,.*LineClass::AtxHeading/ { found = 1 }
         END { exit !found }
     ' "${output_file}"; then
-    cat "${output_file}"
+    show_mutation_output "${output_file}"
     echo "ATX separator mutation did not fail the executable output-classification postcondition" >&2
     exit 1
 fi
 
-cat "${output_file}"
+show_mutation_output "${output_file}"
 echo "ATX separator mutation confirmed the expected executable output-classification rejection"
