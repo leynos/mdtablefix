@@ -21,7 +21,16 @@
 #[cfg(verus_keep_ghost)]
 use vstd::prelude::*;
 
-use super::{Agendum, Block, LineFacts, Release, Step, block_agenda, delimiters_eligible, plan_step};
+use super::{
+    Agendum,
+    Block,
+    LineFacts,
+    Release,
+    Step,
+    block_agenda,
+    delimiters_eligible,
+    plan_step,
+};
 
 /// The buffering state of the pass's driver loop, after some prefix of a document.
 ///

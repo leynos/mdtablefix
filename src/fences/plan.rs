@@ -364,4 +364,3 @@ while (index < len) invariant(
 }
 after { out }
 }
-
