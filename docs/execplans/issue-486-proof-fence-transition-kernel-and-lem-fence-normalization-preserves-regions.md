@@ -948,16 +948,16 @@ See the decision log.
   boundary, and the failure is silent in the count — but explicit unfolding
   assertions restore it, and the repair is three short assertions.** The
   witnesses now live in `verus/plan_spec_witnesses.rs`, declared from
-  `plan_spec.rs` through `#[path]` so the mutation mirror carries them without a
-  second list; `plan_spec.rs` fell from 3,095 to 2,694 lines and the gate is
+  `plan_spec.rs` through `#[path]` so the mutation mirror carries them without
+  a second list; `plan_spec.rs` fell from 3,095 to 2,694 lines and the gate is
   back at `178 verified, 0 errors`.
 
   The mechanism, isolated by experiment rather than inferred. Moving the ten
   `lemma_witness_*` items out dropped the gate from `178 verified, 0 errors` to
   `175 verified, 3 errors`, and the three were exactly the fold-level witnesses
   (`matched_block_plan`, `unmatched_block_plan`, `conflict_fallback_plan`). The
-  decisive probe put the *unmodified* body of `unmatched_block_plan` back in the
-  parent module beside the sibling copy: the parent copy verified and the
+  decisive probe put the *unmodified* body of `unmatched_block_plan` back in
+  the parent module beside the sibling copy: the parent copy verified and the
   sibling copy did not, so the boundary itself — not the imports, the fuel, the
   host module, or the helper placement — is the cause. The failing field is
   always `agenda` and never `unclosed`/`unclosed_lines`. That asymmetry is the
@@ -982,20 +982,22 @@ See the decision log.
   `crate::` re-export route for `super::`, both behaved identically to the
   original. Fuel was not the cause: replacing `reveal_with_fuel(spec_drive, 6)`
   with a bare `reveal(spec_drive)` changed nothing. Visibility was a real but
-  separate defect — the two private helper lemmas (`lemma_compressed_block_regions`,
-  `lemma_document_plan_total`) did have to be widened to `pub`, which cleared
-  the two import errors and left the three proof failures. `include!` is not an
-  escape: Verus items textually included that way bypass the macro and fail to
-  parse (`visibility pub is not followed by an item`).
+  separate defect — the two private helper lemmas
+  (`lemma_compressed_block_regions`, `lemma_document_plan_total`) did have to
+  be widened to `pub`, which cleared the two import errors and left the three
+  proof failures. `include!` is not an escape: Verus items textually included
+  that way bypass the macro and fail to parse
+  (`visibility pub is not followed by an item`).
 
   Two qualifications stay on the record. The splits that did cross without
   assertions are the seven single-transition witnesses and the two completed
   production-file splits recorded under M6. And `AGENTS.md`'s 400-line rule is
-  unenforced by any gate — `grep -rn "wc -l\|400" Makefile scripts/
-  .github/workflows/` returns nothing — with fifteen non-vendored files on
-  `origin/main` already over it (the largest is 557 lines), so the remaining
-  overlong files here are part of a corpus-wide backlog rather than a
-  regression this branch introduced. Date 2026-10-14.
+  unenforced by any gate —
+  `grep -rn "wc -l\|400" Makefile scripts/ .github/workflows/` returns nothing
+  — with fifteen non-vendored files on `origin/main` already over it (the
+  largest is 557 lines), so the remaining overlong files here are part of a
+  corpus-wide backlog rather than a regression this branch introduced. Date
+  2026-10-14.
 
 ## Decision log
 
@@ -1910,6 +1912,6 @@ rather than by proof.
   three mutation gates confirm their expected rejection against the split tree.
   `plan_spec.rs` remains over the ceiling with 88 top-level declarations whose
   largest is 146 lines, so the review's remaining request — internal seams
-  inside the 769- and 864-line sections, plus `plan_spec_witnesses.rs` (510)
-  and `verus/lib.rs` (421) — is real decomposition work that this change does
-  not complete. M6 item 5b and issue #486 stay open.
+  inside the 769- and 864-line sections, plus `plan_spec_witnesses.rs` (510) and
+  `verus/lib.rs` (421) — is real decomposition work that this change does not
+  complete. M6 item 5b and issue #486 stay open.
