@@ -511,6 +511,29 @@ See the decision log.
   induction would consume. **Recorded as a reduction, not as a completion:** M6
   items 2 and 5b remain open, and issue #486 must not be closed while they are.
 
+  The reduction has since been carried further, and the contract itself has
+  been corrected. The restatement over the agendum alone was attempted and the
+  attempt found a counterexample in the contract rather than in the planner. The
+  `Normalized` clause of `spec_emission_reads_back` claimed that a delimiter
+  re-spelled in its own marker family reads back as the source line. Production
+  drops a language specifier that trims to `null`, and a `null` tag is a
+  *non-blank* info string, so the emitted line's `trailing_blank` is true where
+  the source line's is false. That flag is precisely the grammar's blank-tag
+  test — `spec_closes` consults it — so the two readings disagree about whether
+  such a line closes a matching fence at its own depth. The contract is now
+  stated over `spec_delimiter_reads_back`, which keeps family, run, and depth
+  and admits only the raised blank tag; it is discarded harmlessly at a written
+  outer delimiter, where no fence is in force and the transition never reads
+  the tag. The reduction and the necessity of its guard are both proved, and
+  the production behaviour is pinned by a regression test. With that correction
+  in hand the agendum-alone restatement verifies, which retires the half of the
+  gap that concerned the flags: the emitted reading is a function of the
+  agendum and the source reading, so no `SpecLine` need ever be built from
+  emitter bytes. **The remaining half — the per-index content correspondence —
+  is still open.** The claim that a specification need not compute the flags
+  from the agendum is now proved; the claim that agenda position `j` is the
+  emission of source line `j` is not.
+
 - The CodeRabbit finding asking the literal-line sweep to compare whole output
   lines rather than substrings was not cosmetic: the stricter assertion failed
   in CI on `tests/data/document/mixed_in_fence.dat`, in both `build-test` and
@@ -899,6 +922,30 @@ See the decision log.
 
 ## Decision log
 
+- Decision: correct `spec_emission_reads_back`'s `Normalized` clause rather than
+  narrow its input domain, and prove the guard's necessity. Rationale: the
+  falsifying case is a `null` language specifier, which
+  `src/fences.rs::is_null_lang` drops and which
+  `tests/fences.rs::preserves_null_language_during_interior_conflict` already
+  pinned. That case is reachable through the public `&[String]` entry point, so
+  narrowing the domain would have excluded documents the pass really rewrites —
+  the specification would have been made true by declining to talk about them.
+  Dropping the specifier raises `trailing_blank`, and `spec_closes` reads
+  exactly that flag, so the emitted bare line closes a fence the `null`-tagged
+  source line leaves open. The clause is now `spec_delimiter_reads_back`
+  (agreement *or* blank tag raised, never lowered),
+  `lemma_delimiter_reads_back_preserves` carries it through both transitions
+  under the `spec_masked` guard, and `lemma_blank_tag_flip_needs_the_guard`
+  exhibits the guarded case to show the hypothesis cannot be dropped. Date
+  2026-10-14.
+- Decision: run `mdtablefix --in-place` with explicit file arguments rather than
+  `make fmt` to clear the `check-fmt` failure. Rationale: `make fmt` runs
+  `mdformat-all` repo-wide and would have rewritten unrelated documents,
+  burying a two-file wrapping fix in a large diff. The binary accepts
+  `[FILES]...`, so the correction could be scoped to exactly the two files the
+  gate named. The result was checked to be wrapping-only by comparing each file
+  against a backup with all whitespace removed — byte-identical text, so no
+  word was added or dropped. Date 2026-10-14.
 - Decision: correct the documentation's scoping first, before attempting the
   driver composition, and record the corrections as findings rather than
   applying them silently. Rationale: the user's specification says "Correct the
@@ -1427,8 +1474,17 @@ Each item below, in the order the request gave it, with its current state.
    already returns `Result<Vec<PathBuf>, Box<dyn Error>>` at the tip, so the
    finding is either stale or about a different revision, and it needs
    re-checking against the check's own evidence rather than assumed fixed.
-   **Not re-checked.** The advisory runs on the hosted service, so this needs
-   the check's own output rather than a local re-run.
+   **Re-checked and confirmed stale.** The check's own resolution text asks for
+   the `Result<Vec<PathBuf>, io::Error>` signature and for `read_dir` / entry
+   errors to be propagated instead of `else { return }` and
+   `entries.flatten()`. At both `5d5d9ec` and `e2c054d`,
+   `tests/fence_regions.rs` already declares
+   `fn data_files(root: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>>`
+   with a fallible inner `walk` propagating both error sites through
+   `map_err(...)?`; neither forbidden construct is present, and the three
+   corpus assertions return `Result` and consume fixtures with `?`. The concern
+   was sound when written and has since been fixed in the diff; the disposition
+   was posted to the PR with the evidence rather than left as a local re-run.
 2. `Linked Issues` (warning): extend the formal result to the
    `compress_fences` boundary, or record an explicit accepted proof boundary in
    issue #486 and establish cross-pass agreement for every fence-skipping
@@ -1463,9 +1519,11 @@ Each item below, in the order the request gave it, with its current state.
 3. `User-Facing Documentation` (warning): document `classify_regions` and
    `Region` in `docs/users-guide.md`. The section landed in the rebase and
    auto-merged, at `docs/users-guide.md:1124` ("Batch fence classification"),
-   covering both `classify_regions` and `Region` with a worked example. The
-   advisory has not been re-run against it, so this is recorded as
-   delivered-but-unrechecked rather than as verified.
+   covering both `classify_regions` and `Region` with a worked example. **Now
+   verified against the pushed head**, not merely delivered:
+   `git show 5d5d9ec:docs/users-guide.md` carries the API at line 1126 and the
+   worked example at 1142-1151, so the row is satisfied on the branch as
+   published rather than only in this worktree.
 4. `Developer Documentation` (warning): update `docs/developers-guide.md` for
    the fence kernel, the `LineFeatures` boundary, `FenceTracker` routing,
    compression decisions, and `make verus-fence-mutation`, and correct stale
@@ -1581,6 +1639,26 @@ rather than by proof.
   specification computes them. Recorded as a correction in place rather than as
   a new obstruction, because the earlier text would have sent the next attempt
   after the wrong target. M6 item 5b and issue #486 stay open.
+- 2026-10-14: Corrected `spec_emission_reads_back`'s `Normalized` clause, which
+  was false, and closed the half of M6 item 5b that concerned the delivery
+  flags. The clause claimed a delimiter re-spelled in its own marker family
+  reads back as the source line; the read-back relation is now
+  `spec_delimiter_reads_back`, which keeps family, run, and depth and admits
+  only a raised blank tag, because production drops a `null` language specifier
+  and `spec_closes` reads the tag the drop raises. Both the reduction and the
+  necessity of its guard are proved (`lemma_delimiter_reads_back_preserves`,
+  `lemma_blank_tag_flip_needs_the_guard`) and the production behaviour is
+  pinned by `tests/fences.rs::dropped_null_specifier_raises_the_blank_tag`. The
+  agendum-alone restatement then verifies, so the emitted reading is a function
+  of the agendum and the source reading and no `SpecLine` need be reconstructed
+  from emitter bytes. Chose to correct the contract rather than to narrow the
+  specification's input domain, because the `null` case is reachable through
+  the public `&[String]` entry point and a narrowing would have excluded
+  documents the pass genuinely rewrites. Four focused iterations were spent on
+  M6 item 5b in this pass against a tolerance of five, so the per-index content
+  correspondence is left as the one remaining obligation with this reduction
+  recorded rather than a further attempt started. M6 item 5b and issue #486
+  stay open.
 - 2026-10-13: Rebased a third time, onto `origin/main` at `bf6c46b` from
   `2df4c4a`, replaying 61 commits over the exclusive boundary `425cd2f` (the
   parent of `main`'s single squash commit, confirmed linear with zero merges in

@@ -253,7 +253,24 @@ unexamined assumption.
 - **The emission read-back contract.** `spec_emission_reads_back` states what
   the parser reads off the bytes the emitter writes. It is a claim a
   counterexample could falsify at the frontier, and the property tests over the
-  regex and the emitter are its evidence.
+  regex and the emitter are its evidence. It has already been corrected once by
+  a counterexample, and the correction is worth knowing about: the `Normalized`
+  clause originally claimed that a delimiter re-spelled in its own marker
+  family reads back as the source line. It does not. Dropping a `null` language
+  specifier — which `src/fences.rs::is_null_lang` does, and which
+  `tests/fences.rs::preserves_null_language_during_interior_conflict` pins —
+  raises `trailing_blank` from false to true, and `spec_closes` consults
+  exactly that flag. So a `null`-tagged delimiter is a _non_-closer where the
+  emitted bare line is a closer, and the two readings genuinely classify
+  differently whenever a matching fence is open at the delimiter's own depth.
+  The clause is now stated over `spec_delimiter_reads_back`, which keeps
+  family, run, and depth and admits only the raised blank tag; it is discarded
+  without loss at a written outer delimiter, where no fence is in force at the
+  line's own depth and the transition never reads the tag. That reduction, and
+  the necessity of its guard, are proved as
+  `lemma_delimiter_reads_back_preserves` and
+  `lemma_blank_tag_flip_needs_the_guard`, and the production behaviour is
+  pinned by `tests/fences.rs::dropped_null_specifier_raises_the_blank_tag`.
 - **The driver instantiation is open.** The composition law itself is proved:
   `lemma_spans_compose_regions` turns per-span `ends_at` obligations over a
   chain of cuts into equality of the whole document's region sequence, and
@@ -266,18 +283,18 @@ unexamined assumption.
   `lemma_step_agenda_length` pins each step's contribution to exactly the span
   of source lines that step accounts for, and `spec_balanced` (proved by
   `lemma_drive_length`, and completed by `lemma_finish_total`) gives the
-  agenda's length as the whole document. What is missing is the per-index
-  correspondence that turns those lengths into the statement that agenda
-  position `j` is the emission of source line `j`, and the instantiation of the
-  read-back contract above at each of those positions:
-  `spec_emission_reads_back` is stated over a `SpecLine` — a source reading, an
-  emitted reading, and the three delivery flags — and nothing yet constructs a
-  `SpecLine` from an agendum the fold produced, because the flags describe the
-  emitter's bytes and no specification computes them. Until that reduction
-  exists, the relation between each written line's reading and its source
-  line's reading is established per agendum by the contract above and
-  corpus-wide by `tests/fence_regions.rs`. **This is the residual gap; it is
-  recorded here rather than presented as closed.**
+  agenda's length as the whole document. One half of the remaining gap has
+  since closed: the per-position facts are now stated over the agendum alone.
+  Nothing in the document theorem needs a `SpecLine` built from the emitter's
+  bytes, because the emitted reading is a function of the agendum and the
+  source reading, and the three delivery flags are conditions on the agendum
+  the fold chose rather than facts about bytes no specification computes. What
+  remains is the other half: the per-index correspondence that turns those
+  equal lengths into the statement that agenda position `j` is the emission of
+  source line `j`. Until it exists, the relation between each written line's
+  reading and its source line's reading is established per agendum by the
+  contract above and corpus-wide by `tests/fence_regions.rs`. **This is the
+  residual gap; it is recorded here rather than presented as closed.**
 - **The classifier kernel's fence recognizer cannot currently disagree, but is
   not tied to the fence kernel by any proof.**
   `src/classify_kernel_predicates.rs` implements `is_fence_marker` and

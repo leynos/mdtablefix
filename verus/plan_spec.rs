@@ -106,6 +106,36 @@ pub open spec fn spec_line_agrees(line: SpecLine) -> bool {
     spec_same_reading(line.source, line.emitted)
 }
 
+/// What re-spelling a delimiter in its own marker family and run guarantees.
+///
+/// This is the relation the `Preserve` spelling establishes, and it is strictly
+/// weaker than agreement: the marker family, the run length, and the depth are
+/// kept, and the one change the spelling may make is to drop a language
+/// specifier that trims to `null`. Dropping it turns a non-blank tag blank, so
+/// the emitted reading is the source reading with `trailing_blank` possibly
+/// raised — never lowered, because a specifier is only ever removed.
+///
+/// The weakening is not a convenience. A null tag is a non-blank info string,
+/// and `trailing_blank` *is* the grammar's blank-tag test: `spec_closes`
+/// consults it, so the two readings disagree about whether such a line closes a
+/// matching fence at its own depth. Stating plain agreement here would assert
+/// something production does not do — `tests::fences::preserves_null_language_during_interior_conflict`
+/// pins the rewrite `"````null"` to `"````"`.
+pub open spec fn spec_delimiter_reads_back(source: LineFeatures, emitted: LineFeatures) -> bool {
+    spec_same_reading(source, emitted) || spec_blank_tag_raised(source, emitted)
+}
+
+/// Whether `emitted` is `source` with nothing changed but the blank tag.
+///
+/// The tag may only be raised, never lowered: the spelling removes a specifier,
+/// and a line with no specifier is not one this rewrite is applied to. Family,
+/// run, and depth are carried across unchanged, which is what lets the region
+/// and state lemmas below read the two lines as the same delimiter.
+pub open spec fn spec_blank_tag_raised(source: LineFeatures, emitted: LineFeatures) -> bool {
+    emitted.depth == source.depth && emitted.marker == source.marker && emitted.marker_len
+        == source.marker_len && !source.trailing_blank && emitted.trailing_blank
+}
+
 /// The fence state a line is read against once a depth drop has been applied.
 ///
 /// Both `spec_fence_next` and `spec_fence_region` begin with this test: a line
@@ -141,11 +171,13 @@ pub open spec fn spec_emission_reads_back(agendum: Agendum, line: SpecLine) -> b
         // Written byte for byte, so it reads back as itself.
         Agendum::Verbatim => line.verbatim ==> spec_line_agrees(line),
         // Written with the source marker family and run, and with only a null
-        // language specifier dropped. A null specifier contributes nothing the
-        // transition reads: both the blank-tag decision and the run length are
-        // decided by the marker characters and by the remaining text, neither of
-        // which dropping it can change.
-        Agendum::Normalized => line.normalizable ==> spec_line_agrees(line),
+        // language specifier dropped. Dropping one raises the blank tag and
+        // changes nothing else — `spec_delimiter_reads_back` is that relation,
+        // and it is deliberately not plain agreement, which this spelling does
+        // not establish.
+        Agendum::Normalized => {
+            line.normalizable ==> spec_delimiter_reads_back(line.source, line.emitted)
+        },
         // Written as three backticks at the line's own depth. The pass rewrites
         // only a line the fence grammar read as a delimiter, so the written
         // bytes are read back as a delimiter of the target family and run.
@@ -187,6 +219,52 @@ proof fn lemma_same_reading_preserves_next(
     requires spec_same_reading(source, emitted),
     ensures spec_fence_next(state, source) == spec_fence_next(state, emitted),
 {
+}
+
+/// A delimiter re-spelled in its own family preserves region and state, provided
+/// no fence is in force at its own depth.
+///
+/// The guard is exactly the state a written outer delimiter is read in, and it
+/// is what makes the blank-tag weakening harmless: with no fence in force the
+/// transition takes its "None" branch, where a marker line opens a fence from
+/// its own family and run alone. The blank tag is consulted only on the "Some"
+/// branch, by `spec_closes`, and the guard is what excludes it.
+proof fn lemma_delimiter_reads_back_preserves(
+    seed: Option<FenceState>,
+    source: LineFeatures,
+    emitted: LineFeatures,
+)
+    requires
+        spec_delimiter_reads_back(source, emitted),
+        spec_masked(seed, source.depth).is_none(),
+    ensures
+        spec_fence_region(seed, source) == spec_fence_region(seed, emitted),
+        spec_fence_next(seed, source) == spec_fence_next(seed, emitted),
+{
+    reveal(spec_delimiter_reads_back);
+    reveal(spec_blank_tag_raised);
+}
+
+/// The guard above is necessary, not decorative.
+///
+/// Under a matching fence at the delimiter's own depth the raised blank tag is a
+/// closer where the source line was interior content. Without the guard the
+/// previous lemma would be false, so the hypothesis cannot be dropped.
+proof fn lemma_blank_tag_flip_needs_the_guard()
+    ensures
+        spec_masked(Some(FenceState { marker: '`', marker_len: 3, open_depth: 0 }), 0).is_some(),
+        spec_fence_region(
+            Some(FenceState { marker: '`', marker_len: 3, open_depth: 0 }),
+            LineFeatures { depth: 0, marker: Some('`'), marker_len: 4, trailing_blank: true },
+        ) != spec_fence_region(
+            Some(FenceState { marker: '`', marker_len: 3, open_depth: 0 }),
+            LineFeatures { depth: 0, marker: Some('`'), marker_len: 4, trailing_blank: false },
+        ),
+{
+    reveal(spec_fence_region);
+    reveal(spec_fence_next);
+    reveal(spec_closes);
+    reveal(spec_masked);
 }
 
 /// `LEM-DOCUMENT-REGIONS-PRESERVED-BY-AGREEMENT`.
