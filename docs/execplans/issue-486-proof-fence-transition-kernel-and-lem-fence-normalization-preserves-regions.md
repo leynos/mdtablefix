@@ -1748,3 +1748,34 @@ rather than by proof.
   `typecheck`, `lint`, and `test` are green (`test` ran 69 suites). Post-rebase
   fixes landed as `a0864e1` (formatter re-wrap after the hand splices),
   `1b2d3fb` (mutation-gate evidence), and the ExecPlan record.
+
+- 2026-10-14 (later): Published the correction as `3954e4d` and reconciled the
+  review surfaces against the tree rather than against thread state. The head
+  was pushed over SSH in a scrubbed environment — worth recording, because the
+  first attempt was **silently rerouted to HTTPS**: this host injects
+  `url.https://github.com/.insteadof git@github.com:` on the git command line,
+  so a push that reads as an SSH push can go over the credential helper
+  instead. The rewrite is absent only in a clean environment, and
+  `git config --show-origin --get-regexp '^url\.'` exiting non-zero with no
+  output is the check that the route is actually SSH. The remote head was then
+  confirmed equal to local `HEAD` by `git ls-remote`, the tracking ref
+  refreshed with an explicit refspec, and the upstream set to `origin`.
+
+  All three CodeRabbit findings and all three pre-merge rows were re-verified
+  against the live tree rather than trusted from thread resolution. The
+  `Unit Architecture` error and the two documentation warnings are satisfied;
+  the `Linked Issues` warning is satisfied in its accepted-boundary form, and
+  the boundary comment (issue comment `6156948854`) was **corrected** (issue
+  comment `6158476309`) because the seeding experiment had disproved two of its
+  claims: that the emission read-back contract is enforced, and that the
+  blank-tag guard's necessity is proved. Neither holds. The follow-up is posted
+  under the pool comment route and read back.
+
+  The pre-merge reconciliation was posted to the PR as a focused top-level
+  comment rather than a review request, since the table is stale by 19 commits.
+  A full review was then queued (`comenq` id `38de5bdc`) because the branch's
+  automatic reviews are paused and `3954e4d` had never been inspected. Hosted
+  CI on `3954e4d` is green: `verify`, `build-test`, all four `binstall` jobs,
+  `atomic write contract (windows)`, CodeScene, and Gecko all report success,
+  and `mergeStateStatus` is `CLEAN`. The sole remaining block is the stale
+  `CHANGES_REQUESTED` on review `5334535333`.
