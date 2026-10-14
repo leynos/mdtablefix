@@ -2118,3 +2118,39 @@ rather than by proof.
   issue #614 and is out of scope here; the affected reference was rewritten as
   an inline link, matching the precedent already in that file, and verified to
   be a fixpoint before being applied.
+- 2026-10-14: Second documentation-correction round, at `2b48035`. CodeRabbit's
+  re-review of `356e066` confirmed the payload-rewrite qualification and the
+  witness-module attribution as resolved, but its walkthrough reply of 08:27:51
+  left three items open, one of which was a defect introduced by the first
+  round itself. Corrected here, documentation only:
+
+  - `src/wrap/fence.rs`: the `observe_source_line` comment still said the
+    compact adapter returned "the parsed marker components" from
+    `observe_source_fence`. That function returns an `ObservedFence`, whose
+    fields are the transition and an optional `LineFeatures`; the adapter
+    discards `features` and keeps the `FenceObservation`. The comment now says
+    that.
+  - `docs/developers-guide.md`: the paragraph written in the first round had
+    the tracker returning `LineFacts`. It returns `ObservedFence`;
+    `ParsedLine::observe` constructs the `LineFacts` the planner consumes from
+    that observation, its optional `LineFeatures`, and the rewrite eligibility
+    derived locally. The paragraph now names the two types and which is which.
+  - `verus/plan_spec_compose_release.rs`: the source-spelling route bullet
+    claimed any release "written in its source spelling" satisfies `ends_at`
+    outright. That route carries `spec_same_reading` at opener, interior, and
+    closer, and `spec_same_reading` is definitional equality of the whole
+    `LineFeatures` record. A conflict-bearing block whose delimiter drops its
+    `null` tag cannot satisfy it, because the drop raises `trailing_blank`
+    where the source's is false; the pass takes the `Normalized` route for that
+    case and
+    `tests/fences.rs::preserves_null_language_during_interior_conflict` pins
+    it, so the composition theorem is silent there and the corpus sweep is the
+    evidence in fact. The bullet now states the hypothesis, names the
+    exclusion, and points at `docs/verification.md`; it claims no discharge of
+    `spec_emission_reads_back` or `spec_delimiter_reads_back`, and no
+    completion of the document theorem.
+
+  No proof term changed, and `make verus` stayed at 178 verified / 0 errors.
+  The re-flowed developers-guide paragraph is the form `make fmt` restores,
+  which was confirmed by applying `mdtablefix` to that one file alone rather
+  than through the repo-wide `make fmt` target.
