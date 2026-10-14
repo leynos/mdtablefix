@@ -1,37 +1,22 @@
-//! Non-vacuity witnesses for the planner's document theorem.
+//! Block-level non-vacuity witnesses for the planner's lemma library.
 //!
-//! `verus/plan_spec.rs` states the document-level result; this file supplies the
-//! evidence that its hypotheses are satisfiable and its conclusions have
+//! `verus/plan_spec.rs` states the planner's results; this file supplies the
+//! evidence that their hypotheses are satisfiable and their conclusions have
 //! content. Extracted so that the specification reads as a statement rather
 //! than as a statement plus its evidence, and so that the specification itself
 //! comes back under the 400-line ceiling `AGENTS.md` sets.
 //!
-//! This file is not itself under that ceiling. It is 510 lines, and the
-//! remaining reduction is recorded as outstanding work in the ExecPlan rather
-//! than claimed here.
+//! The witnesses here are the *block-level* ones: each reads the single line
+//! pair or the single block its lemma is about, so the fixtures at the top are
+//! the snippets those lemmas quantify over. The document-level witnesses, which
+//! run the whole fold over a source sequence, live in the [`fold`] child module
+//! declared at the foot of this file.
 //!
-//! # Why the fold witnesses assert their unfoldings
-//!
-//! The three document-plan witnesses each end with an explicit `assert` naming
-//! the fold's step at the last index, and then re-state the plan's fields
-//! through a local binding. Those assertions are not redundant with the
-//! `reveal` calls above them, and removing them breaks this file's verification
-//! while the identical bodies verified when they lived in `plan_spec.rs`.
-//!
-//! The reason is that `spec_document_plan` is a composition of two functions
-//! (`spec_finish` of `spec_drive`) whose unfolding is decided by the *solver's*
-//! E-matching rather than by `reveal`. Across a module boundary `spec_drive`'s
-//! recursive branch no longer unifies with the literal sequence the conclusion
-//! names, so the solver stops one step short: it can establish the `unclosed`
-//! and `unclosed_lines` fields, which the `if i <= 0` branch decides at once,
-//! but not the `agenda`, which needs the recursion to close. Writing the final
-//! step as an equality gives the solver that instance directly rather than
-//! asking it to synthesize it, which is the same technique that makes
-//! `verus/fence_spec_witnesses.rs` verify from a sibling module.
-//!
-//! A witness that quietly lost its conclusion to an unfolding gap would still
-//! compile and would still be counted as verified evidence, so the assertions
-//! are load-bearing rather than stylistic.
+//! The split between the two is by what the witness quantifies over rather than
+//! by which lemma it protects, because that is what decides the fixtures it
+//! needs: the block-level file reuses a handful of small `LineFeatures` values,
+//! while the fold witnesses each build their own source sequence and rewrite
+//! vector and read back an agenda.
 
 use crate::fence_spec::{
     spec_closes, spec_compressed, spec_fence_next, spec_fence_region, spec_regions_seeded,
@@ -42,16 +27,9 @@ use crate::fence_spec::{
 // routes are interchangeable here — both were measured — but naming the
 // definition's own module keeps the dependency visible in the source rather
 // than routed through `lib.rs`'s glob.
-use super::{
-    lemma_compressed_block_regions, lemma_document_plan_total, spec_absorb, spec_block_agenda,
-    spec_block_agenda_seeded, spec_delimiter_agendum, spec_delimiters_eligible,
-    spec_document_plan, spec_drive, spec_drive_step, spec_fenced, spec_finish,
-    spec_is_outer_delimiter, spec_line_facts, spec_masked, spec_open_block, spec_plan_step,
-    spec_planner_features, spec_released_agenda, spec_step_agenda, spec_step_opener_rewritable,
-    spec_step_pending, spec_step_release, spec_step_start, spec_step_state,
-};
+use super::{lemma_compressed_block_regions, spec_delimiters_eligible, spec_fenced, spec_masked};
 use crate::production_fence::{FenceState, LineFeatures, Region};
-use crate::production_plan::{Agendum, Block as PlanBlock, Release};
+use crate::production_plan::Release;
 use vstd::prelude::*;
 
 verus! {
@@ -259,256 +237,15 @@ proof fn lemma_witness_incompatible_endpoints_forbid_rewrite()
 // Witnesses over the fold
 // ---------------------------------------------------------------------------
 
-/// The fold's own decision, pinned as values rather than as an equation.
+/// Non-vacuity witnesses for the document-level fold.
 ///
-/// The witnesses above are all about the *rules* — a transition, a guard, an
-/// eligibility predicate. None of them exercises [`spec_drive`], so nothing in
-/// the block above would fail if the fold wired those rules together wrongly.
-/// The four below close that gap by naming the fold's whole output for the four
-/// routes a document can take, which is the smallest evidence that the
-/// composition's subject is non-empty: a document the fold drives to a close, a
-/// document that ends inside a block, a document the fold abandons at a depth
-/// change, and the empty document.
+/// Declared here rather than in `verus/plan_spec.rs` so that the two witness
+/// files stand as siblings and neither is reached through the specification's
+/// own module, and so the mutation mirror carries both without a second list.
 ///
-/// Each is stated as an equality between the plan and a literal sequence, not as
-/// an equality between two unknowns, so the witness fails if *either* side moves.
-
-/// The document the fold drives to a matched close.
-///
-/// The shortest matched block there is: a four-backtick opener and its own close.
-/// The whole plan is pinned, so a fold that mis-routed the closer, mis-counted
-/// the span, or lost a line would change one of these three values. The agenda is
-/// all `Compressed` and not `Normalized` because the block has no interior line at
-/// all, so its conflict flag is still false when it is released and the pass takes
-/// the compression route — which is what makes this witness the compressed half's
-/// concrete instance rather than a second copy of the agreement case.
-proof fn lemma_witness_matched_block_plan_is_live()
-    ensures
-        spec_document_plan(
-            Seq::<LineFeatures>::empty()
-                .push(spec_witness_bare_backticks(4))
-                .push(spec_witness_bare_backticks(4)),
-            Seq::<bool>::empty().push(true).push(true),
-        ).agenda == Seq::<Agendum>::empty()
-            .push(Agendum::Compressed)
-            .push(Agendum::Compressed),
-        spec_document_plan(
-            Seq::<LineFeatures>::empty()
-                .push(spec_witness_bare_backticks(4))
-                .push(spec_witness_bare_backticks(4)),
-            Seq::<bool>::empty().push(true).push(true),
-        ).unclosed.is_none(),
-        spec_document_plan(
-            Seq::<LineFeatures>::empty()
-                .push(spec_witness_bare_backticks(4))
-                .push(spec_witness_bare_backticks(4)),
-            Seq::<bool>::empty().push(true).push(true),
-        ).unclosed_lines == 0,
-{
-    let source = Seq::<LineFeatures>::empty()
-        .push(spec_witness_bare_backticks(4))
-        .push(spec_witness_bare_backticks(4));
-    let rewritable = Seq::<bool>::empty().push(true).push(true);
-    reveal_with_fuel(spec_drive, 6);
-    reveal_with_fuel(spec_block_agenda_seeded, 8);
-    reveal_with_fuel(spec_state_seeded, 8);
-    reveal(spec_document_plan);
-    reveal(spec_finish);
-    reveal(spec_drive_step);
-    reveal(spec_step_agenda);
-    reveal(spec_step_release);
-    reveal(spec_released_agenda);
-    reveal(spec_block_agenda);
-    reveal(spec_delimiter_agendum);
-    reveal(spec_is_outer_delimiter);
-    reveal(spec_delimiters_eligible);
-    reveal(spec_plan_step);
-    reveal(spec_absorb);
-    reveal(spec_open_block);
-    reveal(spec_step_state);
-    reveal(spec_step_pending);
-    reveal(spec_line_facts);
-    reveal(spec_fenced);
-    reveal(spec_planner_features);
-    reveal(spec_closes);
-    reveal(spec_fence_next);
-    // The fold's own step at the final index; see the module comment.
-    assert(spec_drive(source, rewritable, 2) == spec_drive_step(
-        spec_drive(source, rewritable, 1),
-        spec_line_facts(spec_state_seeded(source, 1, None), source[1], rewritable[1]),
-        1,
-    ));
-    let d = spec_drive(source, rewritable, 2);
-    assert(spec_finish(d, 2).agenda == Seq::<Agendum>::empty()
-        .push(Agendum::Compressed)
-        .push(Agendum::Compressed));
-    assert(spec_finish(d, 2).unclosed.is_none());
-    assert(spec_finish(d, 2).unclosed_lines == 0);
-}
-
-/// The document the fold leaves inside an unmatched block.
-///
-/// This is the fourth flush path, and it is the one the corpus cannot reach:
-/// every fixture under `tests/data/` closes its fences, so no fixture exercises
-/// `Release::Unmatched`. The witness is the shortest document that does — a lone
-/// opener — and it pins all three of the plan's fields, including the diagnostic
-/// the adapter reports, so a fold that failed to record the unclosed block would
-/// fail here rather than only in the corpus sweep whose documents supply one by
-/// hand.
-proof fn lemma_witness_unmatched_block_plan_is_live()
-    ensures
-        spec_document_plan(
-            Seq::<LineFeatures>::empty().push(spec_witness_bare_backticks(4)),
-            Seq::<bool>::empty().push(true),
-        ).agenda == Seq::<Agendum>::empty().push(Agendum::Compressed),
-        spec_document_plan(
-            Seq::<LineFeatures>::empty().push(spec_witness_bare_backticks(4)),
-            Seq::<bool>::empty().push(true),
-        ).unclosed_lines == 1,
-        spec_document_plan(
-            Seq::<LineFeatures>::empty().push(spec_witness_bare_backticks(4)),
-            Seq::<bool>::empty().push(true),
-        ).unclosed == Some(
-            PlanBlock {
-                opening: FenceState { marker: '`', marker_len: 4, open_depth: 0 },
-                conflicts: false,
-            },
-        ),
-{
-    let source = Seq::<LineFeatures>::empty().push(spec_witness_bare_backticks(4));
-    let rewritable = Seq::<bool>::empty().push(true);
-    reveal_with_fuel(spec_drive, 6);
-    reveal_with_fuel(spec_block_agenda_seeded, 8);
-    reveal_with_fuel(spec_state_seeded, 8);
-    reveal(spec_document_plan);
-    reveal(spec_finish);
-    reveal(spec_drive_step);
-    reveal(spec_step_agenda);
-    reveal(spec_step_release);
-    reveal(spec_released_agenda);
-    reveal(spec_block_agenda);
-    reveal(spec_delimiter_agendum);
-    reveal(spec_is_outer_delimiter);
-    reveal(spec_delimiters_eligible);
-    reveal(spec_plan_step);
-    reveal(spec_absorb);
-    reveal(spec_open_block);
-    reveal(spec_step_state);
-    reveal(spec_step_pending);
-    reveal(spec_step_start);
-    reveal(spec_step_opener_rewritable);
-    reveal(spec_line_facts);
-    reveal(spec_fenced);
-    reveal(spec_planner_features);
-    reveal(spec_closes);
-    reveal(spec_fence_next);
-    // The fold's own step at the final index; see the module comment.
-    assert(spec_drive(source, rewritable, 1) == spec_drive_step(
-        spec_drive(source, rewritable, 0),
-        spec_line_facts(spec_state_seeded(source, 0, None), source[0], rewritable[0]),
-        0,
-    ));
-    let d1 = spec_drive(source, rewritable, 1);
-    assert(d1.out == Seq::<Agendum>::empty());
-    assert(d1.state.pending.is_some());
-    assert(spec_finish(d1, 1).agenda == Seq::<Agendum>::empty().push(Agendum::Compressed));
-}
-
-/// The document the fold drives to the conflict fallback.
-///
-/// A four-backtick opener, an interior three-backtick line, and a payload line.
-/// The interior line is the issue #480 shape: under the source opener it is
-/// literal content, and under the compressed opener the pass would write it is a
-/// closing delimiter, so compressing the block would move the payload line out of
-/// the literal region. The planner therefore records a conflict and the release
-/// writes `Normalized` rather than `Compressed` — and the two later lines are
-/// `Verbatim`, because the release covers them without rewriting either.
-///
-/// The three agenda together are the fallback's whole observable effect: the
-/// opener keeps its source spelling, and the two lines that follow it are written
-/// byte for byte. A planner whose conflict fold missed this interior line would
-/// emit `Compressed` here, which is exactly the defect the compression mutation
-/// gate injects.
-proof fn lemma_witness_conflict_fallback_plan_is_live()
-    ensures
-        spec_document_plan(
-            Seq::<LineFeatures>::empty()
-                .push(spec_witness_bare_backticks(4))
-                .push(spec_witness_bare_backticks(3))
-                .push(spec_witness_prose()),
-            Seq::<bool>::empty().push(true).push(true).push(true),
-        ).agenda == Seq::<Agendum>::empty()
-            .push(Agendum::Normalized)
-            .push(Agendum::Verbatim)
-            .push(Agendum::Verbatim),
-        spec_document_plan(
-            Seq::<LineFeatures>::empty()
-                .push(spec_witness_bare_backticks(4))
-                .push(spec_witness_bare_backticks(3))
-                .push(spec_witness_prose()),
-            Seq::<bool>::empty().push(true).push(true).push(true),
-        ).unclosed_lines == 3,
-{
-    let source = Seq::<LineFeatures>::empty()
-        .push(spec_witness_bare_backticks(4))
-        .push(spec_witness_bare_backticks(3))
-        .push(spec_witness_prose());
-    let rewritable = Seq::<bool>::empty().push(true).push(true).push(true);
-    reveal_with_fuel(spec_drive, 5);
-    reveal_with_fuel(spec_block_agenda_seeded, 5);
-    reveal_with_fuel(spec_state_seeded, 5);
-    reveal(spec_document_plan);
-    reveal(spec_finish);
-    reveal(spec_drive_step);
-    reveal(spec_step_agenda);
-    reveal(spec_step_release);
-    reveal(spec_released_agenda);
-    reveal(spec_block_agenda);
-    reveal(spec_delimiter_agendum);
-    reveal(spec_is_outer_delimiter);
-    reveal(spec_delimiters_eligible);
-    reveal(spec_plan_step);
-    reveal(spec_absorb);
-    reveal(spec_open_block);
-    reveal(spec_step_state);
-    reveal(spec_step_pending);
-    reveal(spec_line_facts);
-    reveal(spec_fenced);
-    reveal(spec_planner_features);
-    reveal(spec_closes);
-    reveal(spec_fence_next);
-    // The fold's own step at the final index; see the module comment.
-    assert(spec_drive(source, rewritable, 3) == spec_drive_step(
-        spec_drive(source, rewritable, 2),
-        spec_line_facts(spec_state_seeded(source, 2, None), source[2], rewritable[2]),
-        2,
-    ));
-    let d = spec_drive(source, rewritable, 3);
-    assert(spec_finish(d, 3).agenda == Seq::<Agendum>::empty()
-        .push(Agendum::Normalized)
-        .push(Agendum::Verbatim)
-        .push(Agendum::Verbatim));
-    assert(spec_finish(d, 3).unclosed_lines == 3);
-}
-
-/// The empty document's plan, which is the fold's base case.
-///
-/// The base case is not decoration: it is the document consisting of no lines,
-/// it is one of the inputs the length theorem claims, and it is the only input on
-/// which the fold's own definition is reached rather than its step. Pinning it as
-/// a value keeps the fold's totality from resting on an unexamined arm — a plan
-/// with no agenda, no unclosed block, and no reported lines.
-proof fn lemma_witness_empty_document_plan_is_live()
-    ensures
-        spec_document_plan(Seq::<LineFeatures>::empty(), Seq::<bool>::empty()).agenda
-            == Seq::<Agendum>::empty(),
-        spec_document_plan(Seq::<LineFeatures>::empty(), Seq::<bool>::empty()).unclosed.is_none(),
-        spec_document_plan(Seq::<LineFeatures>::empty(), Seq::<bool>::empty()).unclosed_lines == 0,
-{
-    lemma_document_plan_total(Seq::<LineFeatures>::empty(), Seq::<bool>::empty());
-    reveal(spec_document_plan);
-    reveal(spec_drive);
-    reveal(spec_finish);
-}
+/// The child reuses `spec_witness_prose` and `spec_witness_bare_backticks`
+/// above, so it is declared after them.
+#[path = "plan_spec_witnesses_fold.rs"]
+pub mod fold;
 
 } // verus!
