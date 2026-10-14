@@ -945,41 +945,57 @@ See the decision log.
   recorded as remaining external contracts in `docs/verification.md` rather
   than as discharged obligations.
 - **A proof that verifies inline can stop verifying when it crosses a module
-  boundary, and the failure is silent in the count.** `verus/plan_spec.rs` was
-  3,095 lines, so the review finding asked for it to be split along its
-  existing section banners into sibling modules re-exported from
-  `verus/lib.rs`. Splitting the non-vacuity witnesses out was attempted five
-  ways, and every variant that moved the ten `lemma_witness_*` items out of the
-  file dropped the gate from `178 verified, 0 errors` to
-  `175 verified, 3 errors` — three postconditions on the fold-level witnesses
-  (`matched_block_plan`, `unmatched_block_plan`, `conflict_fallback_plan`) stop
-  being proved. Four candidate causes were eliminated as follows. Imports were
-  not the cause: resolving every `cannot find` diagnostic to explicit `use`
-  paths, and widening the two private helper lemmas to `pub`, both left the
-  three failures unchanged. Fuel was not the cause: raising `reveal_with_fuel`
-  to 20 changed nothing. The host module was not the cause: a nested
-  `#[path] mod witnesses;` child and a `lib.rs` sibling behaved identically.
-  Helper placement was not the cause: leaving
-  `spec_witness_prose`/`opener`/`bare_backticks` in the parent and moving only
-  the ten witnesses reproduced the same three failures. `include!` is not an
+  boundary, and the failure is silent in the count — but explicit unfolding
+  assertions restore it, and the repair is three short assertions.** The
+  witnesses now live in `verus/plan_spec_witnesses.rs`, declared from
+  `plan_spec.rs` through `#[path]` so the mutation mirror carries them without a
+  second list; `plan_spec.rs` fell from 3,095 to 2,694 lines and the gate is
+  back at `178 verified, 0 errors`.
+
+  The mechanism, isolated by experiment rather than inferred. Moving the ten
+  `lemma_witness_*` items out dropped the gate from `178 verified, 0 errors` to
+  `175 verified, 3 errors`, and the three were exactly the fold-level witnesses
+  (`matched_block_plan`, `unmatched_block_plan`, `conflict_fallback_plan`). The
+  decisive probe put the *unmodified* body of `unmatched_block_plan` back in the
+  parent module beside the sibling copy: the parent copy verified and the
+  sibling copy did not, so the boundary itself — not the imports, the fuel, the
+  host module, or the helper placement — is the cause. The failing field is
+  always `agenda` and never `unclosed`/`unclosed_lines`. That asymmetry is the
+  explanation: `spec_document_plan` is `spec_finish` of `spec_drive`, and
+  `spec_drive`'s `if i <= 0` branch decides the two `unclosed` fields at once,
+  so they survive the boundary, while the `agenda` needs the recursion to close
+  and the solver's E-matching no longer unifies `spec_drive`'s recursive branch
+  with the literal sequence the conclusion names.
+
+  The repair is one `assert` per failing witness naming the fold's step at the
+  final index, plus local re-statements of the three plan fields. Writing the
+  step as an equality hands the solver the instance instead of asking it to
+  synthesize it, which is the technique `verus/fence_spec_witnesses.rs` already
+  uses to cross the same boundary. The asserts are load-bearing rather than
+  stylistic — deleting them reproduces all three failures — and the module
+  comment in `plan_spec_witnesses.rs` records why, because a witness that
+  quietly lost its conclusion to an unfolding gap would still compile and would
+  still be counted as verified evidence.
+
+  Four earlier hypotheses were eliminated on the way. Imports were not the
+  cause: resolving every diagnostic to explicit `use` paths, and switching the
+  `crate::` re-export route for `super::`, both behaved identically to the
+  original. Fuel was not the cause: replacing `reveal_with_fuel(spec_drive, 6)`
+  with a bare `reveal(spec_drive)` changed nothing. Visibility was a real but
+  separate defect — the two private helper lemmas (`lemma_compressed_block_regions`,
+  `lemma_document_plan_total`) did have to be widened to `pub`, which cleared
+  the two import errors and left the three proof failures. `include!` is not an
   escape: Verus items textually included that way bypass the macro and fail to
-  parse (`visibility pub is not followed by an item`). The one structural
-  difference that does correlate is depth of unfolding: the three failing
-  witnesses are exactly the ones that pin the whole `spec_document_plan` fold,
-  and the seven that pass reach only one transition or one guard. The
-  codebase's own working precedent confirms the mechanism rather than
-  contradicting it — `verus/fence_spec_witnesses.rs` crosses the same boundary
-  successfully, but it unfolds a single-step lemma and writes explicit
-  `assert`-equalities for each unfolding instead of relying on bare `reveal`
-  (see its body at the `lemma_witness_interior_is_literal` witness). The
-  repairs for the three, then, are additional unfolding assertions inside the
-  moved bodies; the split is achievable but is not the mechanical cut the
-  finding assumed. Until those assertions are written, the witnesses stay
-  inline and the file stays over the ceiling; `AGENTS.md`'s 400-line rule is
-  unenforced by any gate, and thirteen files on `main` already exceed it (the
-  largest is 557 lines), so this is a corpus-wide backlog rather than a
-  regression that only this branch introduced. The two splits that did cross
-  cleanly are recorded under M6.
+  parse (`visibility pub is not followed by an item`).
+
+  Two qualifications stay on the record. The splits that did cross without
+  assertions are the seven single-transition witnesses and the two completed
+  production-file splits recorded under M6. And `AGENTS.md`'s 400-line rule is
+  unenforced by any gate — `grep -rn "wc -l\|400" Makefile scripts/
+  .github/workflows/` returns nothing — with fifteen non-vendored files on
+  `origin/main` already over it (the largest is 557 lines), so the remaining
+  overlong files here are part of a corpus-wide backlog rather than a
+  regression this branch introduced. Date 2026-10-14.
 
 ## Decision log
 
@@ -1679,19 +1695,34 @@ Each item below, in the order the request gave it, with its current state.
 7. A new `/comenq-coderabbit` review. **Requested** against the rebased head;
    see the revision note.
 8. A further review round asked for the three files over the 400-line ceiling
-   to be decomposed. **Two of the three splits landed, one is blocked with
-   evidence.** `src/fences/plan.rs` moved its driver loop to
-   `src/fences/plan_driver.rs` (546 → 367, new file 215 lines) and
-   `verus/fence_spec.rs` moved its non-vacuity witnesses to
-   `verus/fence_spec_witnesses.rs` (433 → 357, new file 117 lines); both
-   re-verify at 178 / 0 and both travel through the existing `#[path]`
-   declarations, so the mutation-gate mirrors pick them up with no second list
-   to maintain. The third, `verus/plan_spec.rs`, could not be split: five
-   placements each cost three proofs, and the cause is analysed under
-   *Surprises & discoveries*. It stays at 3,095 lines. That is consistent with
-   the repository's actual practice — no gate enforces the 400-line rule and
-   thirteen files on `main` already exceed it — but it is recorded here as an
-   unresolved divergence rather than presented as compliance.
+   to be decomposed. **Two of the three splits have landed; the third's first
+   split has landed too, and it still needs further internal seams.**
+   `src/fences/plan.rs` moved its driver loop to `src/fences/plan_driver.rs`
+   (546 → 367, new file 224 lines) and `verus/fence_spec.rs` moved its
+   non-vacuity witnesses to `verus/fence_spec_witnesses.rs` (433 → 357, new
+   file 117 lines); both re-verify at 178 / 0 and both travel through the
+   existing `#[path]` declarations, so the mutation-gate mirrors pick them up
+   with no second list to maintain. `verus/plan_spec.rs` moved its own
+   non-vacuity witnesses to `verus/plan_spec_witnesses.rs` (3,095 → 2,694, new
+   file 483 lines) with the same declaration pattern and the same gate result.
+   The three fold-level witnesses needed one explicit unfolding `assert` each
+   to survive the move; the mechanism and the experiment that isolated it are
+   analysed under *Surprises & discoveries*, and the assertions are documented
+   in the new file's module comment because removing them silently restores the
+   failures.
+
+   What remains is genuine decomposition rather than relocation. `plan_spec.rs`
+   is still 2,694 lines with 88 top-level declarations, the largest 146 lines,
+   so the bulk is breadth rather than monolithic functions; its two largest
+   section banners ("The driver", 769 lines, and "Composing blocks into a
+   document", 864) need internal seams, which is the work the review directed
+   after accepting that its own banner-split method is arithmetically incapable
+   of reaching 400. `verus/plan_spec_witnesses.rs` at 483 lines and
+   `verus/lib.rs` at 421 also exceed the ceiling; the reviewer extended the
+   finding to `lib.rs` explicitly, with no exemption for its role as the proof
+   entry point. The repository's actual practice is context for this backlog,
+   not a discharge of it: no gate enforces the 400-line rule and fifteen
+   non-vendored files on `main` already exceed it.
 9. The new ExecPlan was added to `docs/contents.md` under `## Execution plans`,
    which is the disposition for the review's Developer Documentation warning
    about the documentation index.
@@ -1866,3 +1897,19 @@ rather than by proof.
   `atomic write contract (windows)`, CodeScene, and Gecko all report success,
   and `mergeStateStatus` is `CLEAN`. The sole remaining block is the stale
   `CHANGES_REQUESTED` on review `5334535333`.
+- 2026-10-14 (later still): Split `verus/plan_spec.rs`'s non-vacuity witnesses
+  into `verus/plan_spec_witnesses.rs` (3,095 → 2,694 lines; new file 483),
+  declared from the parent through `#[path]` so the mutation mirror carries it
+  with no second list. Doing so required three explicit unfolding `assert`s,
+  one in each fold-level witness, and a decisive probe established that the
+  module boundary — not the imports, the fuel, the host module, or the helper
+  placement — was the cause: the same body verifies in the parent and fails in
+  the sibling. Two private helper lemmas were widened to `pub`
+  (`lemma_compressed_block_regions`, `lemma_document_plan_total`) to clear the
+  import errors. `make verus` is back to `178 verified, 0 errors`, and all
+  three mutation gates confirm their expected rejection against the split tree.
+  `plan_spec.rs` remains over the ceiling with 88 top-level declarations whose
+  largest is 146 lines, so the review's remaining request — internal seams
+  inside the 769- and 864-line sections, plus `plan_spec_witnesses.rs` (483)
+  and `verus/lib.rs` (421) — is real decomposition work that this change does
+  not complete. M6 item 5b and issue #486 stay open.
