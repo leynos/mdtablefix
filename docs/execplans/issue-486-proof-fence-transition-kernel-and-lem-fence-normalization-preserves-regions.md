@@ -195,7 +195,8 @@ issue-486 -> M4 (corpus regions equality) -> tests/fence_regions.rs
 - [x] M5 CodeScene regression. The hosted CodeScene check failed on
       `src/wrap/tests/fence_tracker.rs` with `8.03 → 7.79` and the Large
       Assertion Blocks biomarker, while `main` passes the same check at 8.03.
-      The decline was mine: three `assert_eq!` on `.features`, added mid-run to
+      The decline came from this branch: three `assert_eq!` on `.features`,
+      added mid-run to
       `observe_source_fence_exposes_structural_marker_with_prefix_indent`,
       pushed three consecutive-assert runs from 3 to 4 and took the count of
       flagged test cases from 7 (main) to 8 (branch). CodeScene's own wording
@@ -524,15 +525,21 @@ See the decision log.
   stated over `spec_delimiter_reads_back`, which keeps family, run, and depth
   and admits only the raised blank tag; it is discarded harmlessly at a written
   outer delimiter, where no fence is in force and the transition never reads
-  the tag. The reduction and the necessity of its guard are both proved, and
-  the production behaviour is pinned by a regression test. With that correction
-  in hand the agendum-alone restatement verifies, which retires the half of the
-  gap that concerned the flags: the emitted reading is a function of the
-  agendum and the source reading, so no `SpecLine` need ever be built from
-  emitter bytes. **The remaining half — the per-index content correspondence —
-  is still open.** The claim that a specification need not compute the flags
-  from the agendum is now proved; the claim that agenda position `j` is the
-  emission of source line `j` is not.
+  the tag. The production behaviour is pinned by a regression test, and the
+  necessity of the guard is exhibited by
+  `lemma_blank_tag_flip_needs_the_guard`. The seeding experiment below then
+  showed the reduction is **not enforced**: the lemma naming the relation never
+  mentions it, so reducing it to plain agreement still verifies at 178, 0.
+  Recording the correction was right; the claim that proves it is not yet in
+  place. With the correction in hand the agendum-alone restatement verifies,
+  which retires the half of the gap that concerned the flags: the emitted
+  reading is a function of the agendum and the source reading, so no `SpecLine`
+  need ever be built from emitter bytes. **The remaining half — the per-index
+  content correspondence — is still open.** The claim that a specification need
+  not compute the flags from the agendum is now stated; the claim that agenda
+  position `j` is the emission of source line `j` is not, and
+  `spec_emission_reads_back` — the contract that would connect them — has no
+  consumer, so the flags half is not discharged by a checked obligation either.
 
 - The CodeRabbit finding asking the literal-line sweep to compare whole output
   lines rather than substrings was not cosmetic: the stricter assertion failed
@@ -571,7 +578,7 @@ See the decision log.
   "wrapped" means. Prose wrapped by hand to look right passed
   `make markdownlint` and still failed, because the gate compares against
   mdtablefix's own reflow and not against a line-length rule. The fix is to run
-  the file through the tool rather than to match your own idea of the width.
+  the file through the tool rather than to match a hand estimate of the width.
   Two standing traps make this easy to hit: `--in-place` without the rule flags
   does nothing, so a command that looks like it formatted the file may have
   left it untouched; and `docs/execplans/check-option.md` and
@@ -580,20 +587,21 @@ See the decision log.
   must not be confused with regressions.
 
 - **A green advisory check on `main` says nothing about the same check on this
-  branch, and the failing one was mine.** The hosted CodeScene check was read
-  as a standing, pre-existing condition and left alone through several rounds.
-  It is not: `main` passes it at 8.03, and this branch fails it at 7.79. The
-  decline traces to three assertions I added to one test function, which pushed
-  its consecutive-assert runs from 3 to 4 and its file over the threshold. The
-  general lesson is to compare a failing advisory check against the base branch
-  before deciding whose it is: "this check has always been red" is a claim that
-  has to be checked, and `gh api .../commits/<ref>/check-runs` answers it in
-  one call. Two specifics were worth learning too. The biomarker counts
-  *consecutive* assertions per test case, not assertions per file, so splitting
-  a file without touching the offending functions changes nothing — my earlier
-  `fence_kernel_tests.rs` split was inert for exactly that reason. And the
-  count of flagged cases is 7 on `main` and 8 on this branch, which is the
-  number that actually moved; the score itself is only its shadow.
+  branch, and this branch caused the failure.** The hosted CodeScene check was
+  read as a standing, pre-existing condition and left alone through several
+  rounds. It is not: `main` passes it at 8.03, and this branch fails it at
+  7.79. The decline traces to three assertions added to one test function,
+  which pushed its consecutive-assert runs from 3 to 4 and its file over the
+  threshold. The general lesson is to compare a failing advisory check against
+  the base branch before deciding which side owns it: "this check has always
+  been red" is a claim that has to be checked, and
+  `gh api .../commits/<ref>/check-runs` answers it in one call. Two specifics
+  were worth learning too. The biomarker counts *consecutive* assertions per
+  test case, not assertions per file, so splitting a file without touching the
+  offending functions changes nothing — the earlier `fence_kernel_tests.rs`
+  split was inert for exactly that reason. And the count of flagged cases is 7
+  on `main` and 8 on this branch, which is the number that actually moved; the
+  score itself is only its shadow.
 
 - **A refactor that passes `cargo fmt` has been parsed, not verified.** The
   helpers here replaced 24 assertion sites, and formatting proves only that the
@@ -626,11 +634,11 @@ See the decision log.
   obtained by pushing and watching the run: `gh run watch <id> --exit-status`
   foregrounded in the background, with `--log-failed` to extract the failure and
   `--log` plus `grep 'test result:'` to confirm the suite actually ran rather
-  than trusting a green job badge. The last step matters. "Job passed" and "my
-  tests passed" are different claims, and only the second is the one worth
-  making: the individual `wrap::tests::fence_tracker_props::*` lines were read
-  out of the log to confirm the moved module compiled and its four property
-  cases executed.
+  than trusting a green job badge. The last step matters. "Job passed" and "the
+  tests in question passed" are different claims, and only the second is the
+  one worth making: the individual `wrap::tests::fence_tracker_props::*` lines
+  were read out of the log to confirm the moved module compiled and its four
+  property cases executed.
 
 - Acting on the CodeRabbit finding about `ObservedFence` removed a parse rather
   than adding a field. `ParsedLine::observe` was calling
@@ -936,9 +944,60 @@ See the decision log.
   through the planner and the kernel predicate. Both qualifications are
   recorded as remaining external contracts in `docs/verification.md` rather
   than as discharged obligations.
+- **A proof that verifies inline can stop verifying when it crosses a module
+  boundary, and the failure is silent in the count.** `verus/plan_spec.rs` was
+  3,095 lines, so the review finding asked for it to be split along its
+  existing section banners into sibling modules re-exported from
+  `verus/lib.rs`. Splitting the non-vacuity witnesses out was attempted five
+  ways, and every variant that moved the ten `lemma_witness_*` items out of the
+  file dropped the gate from `178 verified, 0 errors` to
+  `175 verified, 3 errors` — three postconditions on the fold-level witnesses
+  (`matched_block_plan`, `unmatched_block_plan`, `conflict_fallback_plan`) stop
+  being proved. Four candidate causes were eliminated as follows. Imports were
+  not the cause: resolving every `cannot find` diagnostic to explicit `use`
+  paths, and widening the two private helper lemmas to `pub`, both left the
+  three failures unchanged. Fuel was not the cause: raising `reveal_with_fuel`
+  to 20 changed nothing. The host module was not the cause: a nested
+  `#[path] mod witnesses;` child and a `lib.rs` sibling behaved identically.
+  Helper placement was not the cause: leaving
+  `spec_witness_prose`/`opener`/`bare_backticks` in the parent and moving only
+  the ten witnesses reproduced the same three failures. `include!` is not an
+  escape: Verus items textually included that way bypass the macro and fail to
+  parse (`visibility pub is not followed by an item`). The one structural
+  difference that does correlate is depth of unfolding: the three failing
+  witnesses are exactly the ones that pin the whole `spec_document_plan` fold,
+  and the seven that pass reach only one transition or one guard. The
+  codebase's own working precedent confirms the mechanism rather than
+  contradicting it — `verus/fence_spec_witnesses.rs` crosses the same boundary
+  successfully, but it unfolds a single-step lemma and writes explicit
+  `assert`-equalities for each unfolding instead of relying on bare `reveal`
+  (see its body at the `lemma_witness_interior_is_literal` witness). The
+  repairs for the three, then, are additional unfolding assertions inside the
+  moved bodies; the split is achievable but is not the mechanical cut the
+  finding assumed. Until those assertions are written, the witnesses stay
+  inline and the file stays over the ceiling; `AGENTS.md`'s 400-line rule is
+  unenforced by any gate, and thirteen files on `main` already exceed it (the
+  largest is 557 lines), so this is a corpus-wide backlog rather than a
+  regression that only this branch introduced. The two splits that did cross
+  cleanly are recorded under M6.
 
 ## Decision log
 
+- Decision: apply the two clean file splits from the review's decomposition
+  finding, and record the third as attempted-and-blocked rather than forcing
+  it. Rationale: `src/fences/plan.rs` (546 lines) sheds its driver loop to
+  `src/fences/plan_driver.rs` (215) and `verus/fence_spec.rs` (433) sheds its
+  non-vacuity witnesses to `verus/fence_spec_witnesses.rs` (117); both splits
+  re-verify at 178 / 0 and both are reached by the existing `#[path]` wiring,
+  so the mutation gates' mirrors carry the new children without a second list
+  to keep in step. The third split, `verus/plan_spec.rs`, does not survive the
+  boundary: five independent placements each cost three verified proofs, so the
+  file stays at 3,095 lines with the evidence recorded under Surprises rather
+  than being made to fit by weakening a proof. The 400-line rule is a stated
+  `AGENTS.md` constraint but no gate enforces it and thirteen files on `main`
+  already exceed it, so leaving this one over the line is consistent with the
+  repository as it actually stands rather than a new divergence. Date
+  2026-10-14.
 - Decision: correct `spec_emission_reads_back`'s `Normalized` clause rather than
   narrow its input domain, and prove the guard's necessity. Rationale: the
   falsifying case is a `null` language specifier, which
@@ -953,7 +1012,18 @@ See the decision log.
   (agreement *or* blank tag raised, never lowered),
   `lemma_delimiter_reads_back_preserves` carries it through both transitions
   under the `spec_masked` guard, and `lemma_blank_tag_flip_needs_the_guard`
-  exhibits the guarded case to show the hypothesis cannot be dropped. Date
+  exhibits the guarded case to show the hypothesis cannot be dropped.
+
+  **What this decision did not achieve is as important as what it did.** The
+  seeding experiment recorded in the entry below showed that neither of those
+  two lemmas is load-bearing: `spec_emission_reads_back` has no consumer, and
+  `lemma_delimiter_reads_back_preserves` concludes over `spec_fence_next` and
+  `spec_fence_region` without ever mentioning the relation it names, so
+  reducing that relation to plain agreement verifies cleanly. The two lemmas
+  therefore do **not** carry or prove the guard in any sense that a theorem
+  rests on; they state it, and seeding shows they do not enforce it. The
+  correction above is still the right statement of the frontier, but it is a
+  statement awaiting a consumer rather than a discharged obligation. Date
   2026-10-14.
 - Decision: run `mdtablefix --in-place` with explicit file arguments rather than
   `make fmt` to clear the `check-fmt` failure. Rationale: `make fmt` runs
@@ -1608,6 +1678,23 @@ Each item below, in the order the request gave it, with its current state.
    success.
 7. A new `/comenq-coderabbit` review. **Requested** against the rebased head;
    see the revision note.
+8. A further review round asked for the three files over the 400-line ceiling
+   to be decomposed. **Two of the three splits landed, one is blocked with
+   evidence.** `src/fences/plan.rs` moved its driver loop to
+   `src/fences/plan_driver.rs` (546 → 367, new file 215 lines) and
+   `verus/fence_spec.rs` moved its non-vacuity witnesses to
+   `verus/fence_spec_witnesses.rs` (433 → 357, new file 117 lines); both
+   re-verify at 178 / 0 and both travel through the existing `#[path]`
+   declarations, so the mutation-gate mirrors pick them up with no second list
+   to maintain. The third, `verus/plan_spec.rs`, could not be split: five
+   placements each cost three proofs, and the cause is analysed under
+   *Surprises & discoveries*. It stays at 3,095 lines. That is consistent with
+   the repository's actual practice — no gate enforces the 400-line rule and
+   thirteen files on `main` already exceed it — but it is recorded here as an
+   unresolved divergence rather than presented as compliance.
+9. The new ExecPlan was added to `docs/contents.md` under `## Execution plans`,
+   which is the disposition for the review's Developer Documentation warning
+   about the documentation index.
 
 Issue #486 stays open until its original acceptance criteria are met. The
 current state proves the block-interior lemma, the document theorem up to the

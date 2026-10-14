@@ -46,7 +46,7 @@ fi
 # shellcheck disable=SC2086
 if ${VERUS_RUN:?VERUS_RUN must be set} \
     --proof-file "${proof_file}" > "${output_file}" 2>&1; then
-    cat "${output_file}"
+    show_mutation_output "${output_file}"
     echo "ATX separator mutation unexpectedly verified" >&2
     exit 1
 fi
@@ -57,10 +57,10 @@ if ! grep -Fq "verification results::" "${output_file}" || \
         active && /spec_classify\(result@,.*LineClass::AtxHeading/ { found = 1 }
         END { exit !found }
     ' "${output_file}"; then
-    cat "${output_file}"
+    show_mutation_output "${output_file}"
     echo "ATX separator mutation did not fail the executable output-classification postcondition" >&2
     exit 1
 fi
 
-cat "${output_file}"
+show_mutation_output "${output_file}"
 echo "ATX separator mutation confirmed the expected executable output-classification rejection"

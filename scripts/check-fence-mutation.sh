@@ -60,7 +60,7 @@ fi
 # shellcheck disable=SC2086
 if ${VERUS_RUN:?VERUS_RUN must be set} \
     --proof-file "${proof_file}" > "${output_file}" 2>&1; then
-    cat "${output_file}"
+    show_mutation_output "${output_file}"
     echo "Fence closing-rule mutation unexpectedly verified" >&2
     exit 1
 fi
@@ -73,10 +73,10 @@ fi
 if ! grep -Fq "verification results::" "${output_file}" || \
     ! grep -Fq "postcondition not satisfied" "${output_file}" || \
     ! grep -Fq "result == crate::spec_closes(state, line)" "${output_file}"; then
-    cat "${output_file}"
+    show_mutation_output "${output_file}"
     echo "Fence mutation did not falsify the closing rule's contract" >&2
     exit 1
 fi
 
-cat "${output_file}"
+show_mutation_output "${output_file}"
 echo "Fence mutation confirmed the expected closing-rule rejection"

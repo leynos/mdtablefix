@@ -67,7 +67,7 @@ fi
 # shellcheck disable=SC2086
 if ${VERUS_RUN:?VERUS_RUN must be set} \
     --proof-file "${proof_file}" > "${output_file}" 2>&1; then
-    cat "${output_file}"
+    show_mutation_output "${output_file}"
     echo "Compression-flag mutation unexpectedly verified" >&2
     exit 1
 fi
@@ -81,10 +81,10 @@ if ! grep -Fq "verification results::" "${output_file}" || \
     ! grep -Fq "postcondition not satisfied" "${output_file}" || \
     ! grep -Fq "result == crate::spec_delimiter_agendum(is_delimiter, compressible)" \
         "${output_file}"; then
-    cat "${output_file}"
+    show_mutation_output "${output_file}"
     echo "Compression mutation did not falsify the delimiter agendum's contract" >&2
     exit 1
 fi
 
-cat "${output_file}"
+show_mutation_output "${output_file}"
 echo "Compression mutation confirmed the expected delimiter-agendum rejection"

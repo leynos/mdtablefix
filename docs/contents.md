@@ -95,6 +95,9 @@
 - [State-machine abstractions roadmap](state-machine-abstractions-roadmap.md):
   Roadmap turning ADR 0004 into implementation work for the parser and wrapping
   state machines.
+- [Fence transition kernel and normalization](execplans/issue-486-proof-fence-transition-kernel-and-lem-fence-normalization-preserves-regions.md):
+  Plan for the fence transition kernel and the
+  `LEM-FENCE-NORMALIZATION-PRESERVES-REGIONS` proof.
 
 ## Debugging records
 

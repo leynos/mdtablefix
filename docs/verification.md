@@ -275,7 +275,7 @@ unexamined assumption.
   `lemma_delimiter_reads_back_preserves` and
   `lemma_blank_tag_flip_needs_the_guard` — but neither is a load-bearing
   obligation either: deleting the `spec_blank_tag_raised` disjunct also
-  verifies cleanly, because the lemma's conclusion never mentions the relation
+  verifies cleanly because the lemma's conclusion never mentions the relation
   it assumes. The production behaviour is pinned by
   `tests/fences.rs::dropped_null_specifier_raises_the_blank_tag`, which is the
   evidence that does hold. **The counterexample reaches the main proof, not
@@ -301,18 +301,38 @@ unexamined assumption.
   `lemma_step_agenda_length` pins each step's contribution to exactly the span
   of source lines that step accounts for, and `spec_balanced` (proved by
   `lemma_drive_length`, and completed by `lemma_finish_total`) gives the
-  agenda's length as the whole document. One half of the remaining gap has
-  since closed: the per-position facts are now stated over the agendum alone.
-  Nothing in the document theorem needs a `SpecLine` built from the emitter's
-  bytes, because the emitted reading is a function of the agendum and the
-  source reading, and the three delivery flags are conditions on the agendum
-  the fold chose rather than facts about bytes no specification computes. What
-  remains is the other half: the per-index correspondence that turns those
-  equal lengths into the statement that agenda position `j` is the emission of
-  source line `j`. Until it exists, the relation between each written line's
-  reading and its source line's reading is established per agendum by the
-  contract above and corpus-wide by `tests/fence_regions.rs`. **This is the
-  residual gap; it is recorded here rather than presented as closed.**
+  agenda's length as the whole document. The per-position facts are now stated
+  over the agendum alone. Nothing in the document theorem needs a `SpecLine`
+  built from the emitter's bytes because the emitted reading is a function of
+  the agendum and the source reading, and the three delivery flags are
+  conditions on the agendum the fold chose rather than facts about bytes no
+  specification computes. What remains is the per-index correspondence that
+  turns those equal lengths into the statement that agenda position `j` is the
+  emission of source line `j`.
+
+  No read-back specification stated over the agendum alone is consumed by
+  anything. `spec_emission_reads_back` is the only such contract, its sole
+  occurrence in the tree is its own definition, and its input type `SpecLine`
+  is never constructed, so there is no caller that could supply it a subject.
+  Seeding its `Normalized` arm to `true` verifies cleanly at 178 verified, 0
+  errors, byte-identical to the unmutated control. Its weaker companion,
+  `spec_delimiter_reads_back`, is not load-bearing either: the lemma that names
+  it concludes over `spec_fence_next` and `spec_fence_region` and never
+  mentions it, so deleting the `spec_blank_tag_raised` disjunct and reducing it
+  to plain agreement also verifies cleanly at 178, 0. Neither is evidence of
+  anything the document theorems reach.
+
+  The domain gap is the reason. `spec_line_agrees` is `spec_same_reading`,
+  which compares `trailing_blank`; the block lemma's non-compressible
+  hypotheses require it at a delimiter; and a conflict-bearing block whose
+  delimiter carries a `null` tag both takes that route and drops the specifier,
+  raising the tag. Those hypotheses are therefore unsatisfiable for a document
+  that `tests/fences.rs::preserves_null_language_during_interior_conflict`
+  proves is reachable through `compress_fences`. The document theorems do not
+  reach that case, and the corpus sweep is what covers it in fact. Restating
+  those hypotheses over `spec_delimiter_reads_back`, so that it acquires a real
+  consumer, is the concrete form of the remaining work. **This is the residual
+  gap; it is recorded here rather than presented as closed.**
 - **The classifier kernel's fence recognizer cannot currently disagree, but is
   not tied to the fence kernel by any proof.**
   `src/classify_kernel_predicates.rs` implements `is_fence_marker` and

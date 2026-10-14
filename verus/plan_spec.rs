@@ -12,13 +12,17 @@
 //! conservatively — [`spec_delimiter_agendum`] returning [`Agendum::Normalized`]
 //! — is written in its *source* marker family and run, with a language specifier
 //! dropped only when it was null or absent. Dropping a null specifier cannot
-//! change any field the transition reads, so a normalized delimiter is read back
-//! as a delimiter with the same marker, the same run, the same depth, and the
-//! same blank-tag decision. Region equality then follows from a *pointwise
-//! reading agreement*, stated once in [`lemma_agreement_preserves_prefix`] and
-//! applied to every line the planner leaves alone. That is why the planner needs
-//! only an eligibility predicate, and why those cases need no transition
-//! reasoning at all.
+//! change the marker, the run, or the depth the transition reads, but it does
+//! raise `trailing_blank`, which `spec_closes` consults. A normalized delimiter
+//! therefore keeps marker, run, and depth, and is not plain agreement with its
+//! source; `spec_delimiter_reads_back` is that relation. Region equality holds
+//! for the conflict-bearing blocks that take this route because the lemma
+//! guards on `spec_masked`, which excludes the one seed under which the raised
+//! tag would be read. Every other line the planner leaves alone follows from a
+//! *pointwise reading agreement*, stated once in
+//! [`lemma_agreement_preserves_prefix`] and applied to those lines. That is why
+//! the planner needs only an eligibility predicate, and why those cases need no
+//! transition reasoning at all.
 //!
 //! Compression — [`Agendum::Compressed`], which writes three backticks whatever
 //! the source used — does change the reading, so it does need transition
@@ -149,13 +153,21 @@ pub open spec fn spec_masked(state: Option<FenceState>, depth: usize) -> Option<
     }
 }
 
-/// The raw-text contract the document theorem is proved from.
+/// The raw-text contract the document theorem was intended to be proved from.
 ///
-/// The pass does not reason about text; it renders one of three agenda into
+/// The pass does not reason about text; it renders one of three agendas into
 /// bytes, and a separate regular expression reads those bytes back on the next
 /// pass. Verus cannot and should not reason about a compiled regular expression,
 /// so the relationship between the two is an external contract, recorded here as
 /// a predicate and in the verification ledger as an assumed boundary.
+///
+/// **This contract is not enforced and nothing consumes it.** Its only
+/// occurrence in the tree is this definition, and its input type `SpecLine` is
+/// never constructed, so no caller can supply it a subject. Seeding the
+/// `Normalized` arm below to `true` verifies cleanly at 178 verified, 0 errors,
+/// byte-identical to the unmutated control. Read the clauses as a statement of
+/// what the frontier *should* establish, not as an assumption any theorem below
+/// rests on; closing it means giving it a real consumer.
 ///
 /// The contract says what the parser *reads off* the bytes the emitter writes,
 /// and never that those bytes preserve a region, which is the thing being
@@ -276,9 +288,15 @@ proof fn lemma_blank_tag_flip_needs_the_guard()
 /// releases, or markers: agreement is enough on its own.
 ///
 /// This covers every document the pass writes without a compressed delimiter —
-/// including every abandoned block, every matched block whose endpoints are not
-/// both rewrite candidates, and every conflict-bearing block, because a conflict
-/// makes the pass write its delimiters in their source spelling.
+/// including every abandoned block, and every matched block whose endpoints are
+/// not both rewrite candidates. It does **not** reach a conflict-bearing block
+/// whose delimiter carries a `null` language specifier: such a block also takes
+/// the source spelling, but dropping the specifier raises `trailing_blank`, so
+/// its delimiter fails this lemma's `spec_same_reading` hypothesis. Those
+/// hypotheses are unsatisfiable for a document
+/// `tests::fences::preserves_null_language_during_interior_conflict` proves
+/// reachable through `compress_fences`; restating them over
+/// [`spec_delimiter_reads_back`] is what would bring that case inside.
 proof fn lemma_agreement_preserves_prefix(
     source: Seq<LineFeatures>,
     emitted: Seq<LineFeatures>,
@@ -458,8 +476,11 @@ pub open spec fn spec_is_outer_delimiter(
 /// region — intact. A delimiter the pass does write takes the compressed
 /// spelling when the block has no conflicting interior line, and the source
 /// spelling otherwise: the fallback is what keeps a conflict-bearing block's
-/// regions identical, because a normalized delimiter reads back as the very
-/// delimiter it was written from.
+/// regions identical, because a normalized delimiter keeps its source's marker,
+/// run, and depth. It may raise the blank tag by dropping a `null` specifier,
+/// which is why the relation that carries it is
+/// [`spec_delimiter_reads_back`] rather than plain agreement, and why
+/// [`lemma_delimiter_reads_back_preserves`] needs its `spec_masked` guard.
 pub open spec fn spec_delimiter_agendum(is_delimiter: bool, compressible: bool) -> Agendum {
     if !is_delimiter {
         Agendum::Verbatim
@@ -1679,13 +1700,20 @@ proof fn lemma_document_plan_total(source: Seq<LineFeatures>, rewritable: Seq<bo
 /// The hypothesis is the one the pass cannot prove about itself. The pass renders
 /// an agendum into bytes and a regular expression reads those bytes back; Verus
 /// cannot reason about a compiled regular expression, so what the emitted bytes
-/// read as is supplied. [`spec_emission_reads_back`] is the contract, and the
-/// hypotheses below are that contract instantiated at the three emission shapes a
-/// released block can produce: every line written verbatim reads back as itself,
-/// every line written in its source spelling reads back as itself, and the lines
-/// the pass compressed read back as three backticks at their source depth. Round
-/// two on a compressed line is the case worth naming: the bytes differ from the
-/// source line's, and the theorem is that the *region* does not.
+/// read as is supplied. The `requires` below supplies it directly, at the three
+/// emission shapes a released block can produce: every line written verbatim
+/// reads back as itself, every line written in its source spelling reads back as
+/// itself, and the lines the pass compressed read back as three backticks at
+/// their source depth. Round two on a compressed line is the case worth naming:
+/// the bytes differ from the source line's, and the theorem is that the *region*
+/// does not.
+///
+/// [`spec_emission_reads_back`] states the same three shapes in one predicate,
+/// but it is *not* what this call site consumes: no `SpecLine` is constructed
+/// anywhere in this file, so nothing can discharge that predicate, and the
+/// hypotheses here are the shapes written out rather than an instantiation of
+/// it. The two are kept in step by hand and the discrepancy is the reason the
+/// predicate reads as documentation rather than as an obligation.
 ///
 /// The conclusion names the whole block because the block is where the two
 /// induction principles above live: interior lines are covered by
@@ -2604,8 +2632,11 @@ pub proof fn lemma_classify_from_is_prefix(
 ///
 /// This is the whole argument for every release that writes no compressed
 /// delimiter — an abandoned block, and a matched block whose endpoints are not
-/// both rewrite candidates, which includes every conflict-bearing block, because
-/// a conflict is exactly what makes the pass fall back to the source spelling.
+/// both rewrite candidates. It excludes a conflict-bearing block whose delimiter
+/// carries a `null` language specifier: a conflict does make the pass fall back
+/// to the source spelling, but that spelling drops the specifier and so raises
+/// `trailing_blank`, which this lemma's `spec_same_reading` hypothesis does not
+/// admit. See [`lemma_agreement_preserves_prefix`] for the same boundary.
 pub proof fn lemma_agreement_from_segment(
     source: Seq<LineFeatures>,
     emitted: Seq<LineFeatures>,
@@ -2716,7 +2747,7 @@ proof fn lemma_witness_compressed_block_is_live()
     // time. Stating the sequence in full is what makes this a non-vacuity
     // witness: the theorem's conclusion is pinned to a value, not left as an
     // equality between two unknowns.
-    reveal_with_fuel(spec_state_seeded, 4);
+    reveal_with_fuel(spec_state_seeded, 8);
     reveal_with_fuel(spec_regions_seeded, 4);
     reveal(spec_fence_region);
     reveal(spec_fence_next);
@@ -2893,9 +2924,9 @@ proof fn lemma_witness_matched_block_plan_is_live()
         .push(spec_witness_bare_backticks(4))
         .push(spec_witness_bare_backticks(4));
     let rewritable = Seq::<bool>::empty().push(true).push(true);
-    reveal_with_fuel(spec_drive, 3);
-    reveal_with_fuel(spec_block_agenda_seeded, 4);
-    reveal_with_fuel(spec_state_seeded, 4);
+    reveal_with_fuel(spec_drive, 6);
+    reveal_with_fuel(spec_block_agenda_seeded, 8);
+    reveal_with_fuel(spec_state_seeded, 8);
     reveal(spec_document_plan);
     reveal(spec_finish);
     reveal(spec_drive_step);
@@ -2949,9 +2980,9 @@ proof fn lemma_witness_unmatched_block_plan_is_live()
 {
     let source = Seq::<LineFeatures>::empty().push(spec_witness_bare_backticks(4));
     let rewritable = Seq::<bool>::empty().push(true);
-    reveal_with_fuel(spec_drive, 3);
-    reveal_with_fuel(spec_block_agenda_seeded, 4);
-    reveal_with_fuel(spec_state_seeded, 4);
+    reveal_with_fuel(spec_drive, 6);
+    reveal_with_fuel(spec_block_agenda_seeded, 8);
+    reveal_with_fuel(spec_state_seeded, 8);
     reveal(spec_document_plan);
     reveal(spec_finish);
     reveal(spec_drive_step);
