@@ -63,9 +63,9 @@ verus! {
 ///   and this is the only place the divergence is admitted.
 ///
 /// `lemma_released_span_composes` is the route contract: it says which of the two
-/// conclusions applies, and it is also what discharges `spec_emission_reads_back`
-/// at a matched block's closer — a compressed closer reads back as a bare
-/// three-backtick delimiter, which is what the contract's third clause claims.
+/// conclusions applies, and it names the facts a matched block's closer must
+/// supply — a compressed closer reaches it as a bare three-backtick delimiter
+/// rather than as the source line.
 pub proof fn lemma_released_span_reads_back(
     source: Seq<LineFeatures>,
     emitted: Seq<LineFeatures>,

@@ -24,11 +24,12 @@ include!("../../verified_kernel_macros.rs");
 #[cfg_attr(not(verus_keep_ghost), derive(Debug, Eq, PartialEq))]
 pub enum Region {
     /// A line that opens or accepts a fence: the two transitions that change
-    /// which lines are literal.
+    /// which lines are literal. A delimiter-aware pass may respell it, which no
+    /// other region permits.
     Delim,
     /// Content inside a fenced region, which no pass may rewrite.
     Literal,
-    /// Ordinary Markdown outside any fence, which passes may rewrite.
+    /// Ordinary Markdown outside any fence, which payload passes may rewrite.
     Prose,
 }
 
@@ -282,7 +283,9 @@ verified_loop_function! {
 /// Classifies every line of a document, in order, by region.
 ///
 /// This is the classification every pass consumes: a line is [`Region::Prose`]
-/// exactly when the pipeline may rewrite it.
+/// exactly when the pipeline may rewrite it as payload. A [`Region::Delim`]
+/// line is also rewrite-eligible for a delimiter-aware pass such as `--fences`,
+/// which respells a delimiter in its own marker family or as three backticks.
 #[must_use]
 pub fn regions(features: &[LineFeatures]) -> Vec<Region>;
 ensures(result => result@ == crate::spec_regions(features@));

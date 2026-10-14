@@ -115,8 +115,8 @@ over every fixture.
 
 Non-vacuity is otherwise carried by the witness lemmas beside each obligation,
 which state their conclusions as values rather than as equalities between two
-unknowns. In `verus/plan_spec.rs`, `lemma_witness_agreement_is_live` shows the
-reading-agreement hypothesis is satisfiable,
+unknowns. In `verus/plan_spec_witnesses.rs`, `lemma_witness_agreement_is_live`
+shows the reading-agreement hypothesis is satisfiable,
 `lemma_witness_compressed_block_is_live` pins a compressed block's three
 regions one by one, and `lemma_witness_conflict_moves_region` is issue #480 as
 a pair of region values. Three further witnesses pin rules the proof leans on
@@ -130,18 +130,20 @@ rule that refuses a rewrite when only one end of a block may be respelled. Each
 was checked to be falsifiable rather than merely true: removing the
 transition's depth check from `verus/fence_spec.rs` makes the run fail.
 
-Four further witnesses have the driver fold itself as their subject, one per
-route a document can take through it. Until they were added no witness exercised
-`spec_drive` at all, so nothing in that block would have failed had the fold
-wired its rules together wrongly. They pin the whole plan — `agenda`,
-`unclosed`, and `unclosed_lines` — as values rather than as an equation between
-two unknowns: `lemma_witness_matched_block_plan_is_live` for a matched close,
-whose agenda is `Compressed` throughout because a block with no interior line
-never raises its conflict flag; `lemma_witness_unmatched_block_plan_is_live`
-for the fourth flush path, which no fixture under `tests/data/` reaches because
-every fixture closes its fences; `lemma_witness_conflict_fallback_plan_is_live`
-for the issue #480 shape driven to its fallback, whose observable effect is
-`Normalized` at the opener and `Verbatim` for the lines after it; and
+Four further witnesses, in `verus/plan_spec_witnesses_fold.rs`, have the driver
+fold itself as their subject, one per route a document can take through it.
+Until they were added no witness exercised `spec_drive` at all, so nothing in
+that block would have failed had the fold wired its rules together wrongly.
+They pin the whole plan — `agenda`, `unclosed`, and `unclosed_lines` — as
+values rather than as an equation between two unknowns:
+`lemma_witness_matched_block_plan_is_live` for a matched close, whose agenda is
+`Compressed` throughout because a block with no interior line never raises its
+conflict flag; `lemma_witness_unmatched_block_plan_is_live` for the fourth
+flush path, which no fixture under `tests/data/` reaches because every fixture
+closes its fences; `lemma_witness_conflict_fallback_plan_is_live` for the
+[issue #480](https://github.com/leynos/mdtablefix/issues/480) shape driven to
+its fallback, whose observable effect is `Normalized` at the opener and
+`Verbatim` for the lines after it; and
 `lemma_witness_empty_document_plan_is_live` for the fold's base case. These
 lemmas live under `verus/` and so appear in the prose above rather than in the
 claim table, whose rows must name a symbol that occurs in `src/`.

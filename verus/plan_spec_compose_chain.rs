@@ -33,9 +33,13 @@ verus! {
 ///
 /// This is how the composition discharges the spans the pass writes through without
 /// compressing anything: an abandoned block, the run of lines between two blocks, a
-/// matched block whose endpoints are not both rewrite candidates, and every
-/// conflict-bearing block, whose fallback writes the source spelling at both ends.
-/// Pointwise agreement is the only hypothesis any of them needs, and
+/// matched block whose endpoints are not both rewrite candidates, and a
+/// conflict-bearing block whose fallback writes the source spelling at both ends.
+/// That last route is the one case pointwise agreement cannot cover on its own:
+/// a fallback delimiter drops a `null` specifier, which raises `trailing_blank`,
+/// so the emitted line is not the same reading as its source and the relation
+/// needed there is [`spec_delimiter_reads_back`]. Pointwise agreement is the only
+/// hypothesis any of the other routes needs, and
 /// [`lemma_agreement_from_segment`] is the induction that supplies it.
 pub proof fn lemma_agreement_span_is_preserved(
     source: Seq<LineFeatures>,

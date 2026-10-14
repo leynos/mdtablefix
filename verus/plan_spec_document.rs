@@ -74,7 +74,12 @@ pub proof fn lemma_released_block_reads_back(
         spec_masked(seed, opener.open_depth).is_none(),
         // Every position after the opener reads back as the emitter wrote it: the
         // pass writes a non-delimiter position verbatim and a non-compressible
-        // delimiter in its source spelling, and both are the same reading.
+        // delimiter in its source spelling, and both are the same reading. The one
+        // non-compressible delimiter this does not cover is a fallback whose `null`
+        // specifier is dropped, since that raises `trailing_blank`; such a document
+        // is excluded by this hypothesis rather than discharged by it, and
+        // `docs/verification.md` records the exclusion and the relation
+        // (`spec_delimiter_reads_back`) that would bring it inside.
         forall|i: int|
             #![trigger source[i]]
             0 < i < len - 1 ==> spec_same_reading(source[i], #[trigger] emitted[i]),

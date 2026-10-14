@@ -1082,6 +1082,24 @@ See the decision log.
   branch diff says anything about the revision a reviewer actually measured.
   Date 2026-10-14.
 
+- **`--wrap` can create a heading out of a mid-sentence `#` token, and the
+  result is a fixpoint.** Stabilising the formatter for the documentation
+  corrections below turned up a production defect rather than a documentation
+  one. `mdtablefix --wrap` broke before a token starting with `#`, so the phrase
+  `issue #480` became `#480` at column 0, and Markdown reads that line as an
+  ATX heading. The first attempt to repair it was to re-word the paragraph;
+  `make fmt` re-broke it identically on the next run, which showed no
+  re-wrapping is stable. A direct reproducer then confirmed why: the wrapped
+  output is a fixpoint, so a second `--wrap` pass leaves it alone and only
+  `markdownlint` catches the damage. The defect is already tracked as issue
+  #614, whose own reproducer still reproduces and is likewise a fixpoint, so
+  the workaround here was to rewrite the one affected reference as an inline
+  link — the form already used elsewhere in that file — after confirming the
+  rewritten form is itself a fixpoint. Recorded rather than fixed: it is a
+  wrapping-pipeline defect with no relation to fence compression, and expanding
+  this change to repair it would put an unrelated and much larger surface under
+  review. Date 2026-10-14.
+
 ## Decision log
 
 - Decision: apply the two clean file splits from the review's decomposition
@@ -2052,3 +2070,51 @@ rather than by proof.
   `make check-fmt` and `make markdownlint` clean, and the three mutation gates
   plus `verus-selftest` each rejecting as designed. M6 item 8 is discharged;
   items 5b, and item 2 with it, remain open, and issue #486 with them.
+- 2026-10-14 (later): The `/comenq-coderabbit` review returned
+  `CHANGES_REQUESTED` on `9fbf433` with three findings, all documentation
+  accuracy claims. All three were verified against the tree before repair and
+  all three were valid, so all three are fixed:
+
+  - The witness paragraph named `verus/plan_spec.rs` as the home of the
+    block-level witnesses. That file is now a facade; the lemmas live in
+    `verus/plan_spec_witnesses.rs`, and the four fold witnesses in the
+    following paragraph live in `verus/plan_spec_witnesses_fold.rs`. Both are
+    now named, verified with `grep -rn "fn lemma_witness" verus/`, which also
+    confirms the two `verus/fence_spec_witnesses.rs` witnesses the prose
+    already scoped separately.
+  - `src/wrap/fence.rs` still described `ObservedFence` as carrying the
+    borrowed indentation, marker run, and info string, and
+    `docs/developers-guide.md` still described `ParsedLine::observe` as
+    keeping a `FenceObservation`. The struct holds the observation and the
+    kernel's `LineFeatures`; `ParsedLine::observe` keeps `LineFacts` (the two
+    transition booleans, `LineFeatures`, and `rewritable`) beside the two
+    cached `rewrite_marker` spellings. Both are corrected.
+  - Three proof doc comments claimed more than the recorded boundary allows:
+    `verus/plan_spec_compose_release.rs` said `lemma_released_span_composes`
+    discharges `spec_emission_reads_back`, `verus/plan_spec_compose_chain.rs`
+    listed "every conflict-bearing block" among the pointwise-agreement
+    routes, and `verus/plan_spec_document.rs` said both delimiter spellings
+    "are the same reading". The exclusion — a fallback delimiter drops a
+    `null` specifier, raising `trailing_blank` — is already recorded in
+    `docs/verification.md` as the residual gap; these comments now state it
+    and name `spec_delimiter_reads_back` as the closing relation, rather than
+    claiming past it.
+
+  A sweep for the same class of stale claim, which the review did not name,
+  found three more sites and fixed them: `src/wrap.rs`,
+  `src/wrap/fence/kernel.rs` (the `Region::Delim` and `Region::Prose` variant
+  docs plus the `regions()` doc), and `docs/users-guide.md`. All three said a
+  pass may rewrite only a `Region::Prose` line, when a delimiter-aware pass
+  (`--fences`) may also respell a `Region::Delim` line. The replacement text
+  was checked against `src/fences/compress.rs`, where `Strategy::Preserve`
+  writes `original_marker` and `Strategy::Compress` writes three backticks, and
+  against `src/fences/plan.rs`, where `LineFacts` is defined.
+
+  A production defect was found and reproduced while stabilising the formatter
+  run: `mdtablefix --wrap` breaks before a token starting with `#`, producing a
+  line Markdown reads as an ATX heading. `make fmt` re-broke
+  `docs/verification.md` identically on two consecutive runs, and the output is
+  a fixpoint, so only `markdownlint` catches it. This is already tracked as
+  issue #614 and is out of scope here; the affected reference was rewritten as
+  an inline link, matching the precedent already in that file, and verified to
+  be a fixpoint before being applied.

@@ -1131,7 +1131,10 @@ or an iterator of either — and each line is read as the document spells it,
 blockquote prefix and fence marker included. A line is `Region::Delim` when it
 opens or closes a fence, `Region::Literal` when it is content a fence holds
 verbatim, and `Region::Prose` when it is ordinary Markdown outside any fence. A
-pass may rewrite a line only while it is `Region::Prose`. This is the same
+pass may rewrite a payload line only while it is `Region::Prose`, and
+`Region::Literal` is never rewritten. Delimiter-aware passes are the one
+exception to that rule: `--fences` may respell a `Region::Delim` line, as
+described under [Fence normalization](#fence-normalization). This is the same
 classification the wrapping pipeline and the `--fences` pass derive from the
 tracker, so the three cannot disagree about which lines are code.
 

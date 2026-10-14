@@ -49,7 +49,7 @@ pub(crate) use fence::{FenceObservation, KernelState, LineFeatures, compression_
 /// [`classify_regions`] and receives one [`Region`] per line: [`Region::Delim`]
 /// for a line that opens or closes a fence, [`Region::Literal`] for content a
 /// fence holds verbatim, and [`Region::Prose`] for ordinary Markdown. The
-/// distinction is what lets a pass know which lines it may rewrite; it is the
+/// distinction is what lets a pass know which lines are payload; it is the
 /// same classification the wrapping pipeline and the fence-compression pass
 /// derive, so all three cannot disagree about which lines are code.
 pub use fence::{FenceTracker, Region, classify_regions, is_fence};

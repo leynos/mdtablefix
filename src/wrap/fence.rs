@@ -189,12 +189,10 @@ pub(crate) struct FenceObservation {
     pub(crate) is_in_fence: bool,
 }
 
-/// A source-line fence observation paired with both parses of that same line.
+/// A source-line fence observation paired with the kernel's view of that line.
 ///
-/// Callers that need the marker components (indentation, marker run, info
-/// string) obtain them here rather than re-running [`is_fence`], and callers
-/// that need the kernel's view of the line obtain that here rather than
-/// re-deriving it from a second parse. Keeping both alongside the transition
+/// Callers that need the kernel's [`LineFeatures`] obtain them here rather than
+/// re-deriving them from a second parse. Keeping both alongside the transition
 /// makes [`FenceTracker`] the single authority for the line's classification.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ObservedFence {

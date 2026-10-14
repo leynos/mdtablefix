@@ -1465,9 +1465,10 @@ every other position is written verbatim or normalized.
 
 `ParsedLine::observe` is where the compression pass meets the shared kernel: it
 calls `FenceTracker::observe_source_fence` once and keeps the returned
-`FenceObservation`, `LineFeatures`, and marker components together, so the
-block decision and the recorded transition cannot read the line differently.
-Every release route consumes lines captured through that single parse.
+`LineFacts` — the transition booleans, `LineFeatures`, and the rewrite flag —
+alongside the two cached `rewrite_marker` spellings, so the block decision and
+the recorded transition cannot read the line differently. Every release route
+consumes lines captured through that single parse.
 
 ### Architecture
 
