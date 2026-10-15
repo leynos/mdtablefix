@@ -1,0 +1,9 @@
+---
+source: tests/footnotes.rs
+expression: "convert_footnotes(input).join(\"\\n\")"
+---
+First reference.[^1]
+Second reference.[^2]
+
+> > [^1]: First
+> [^2]: Second
