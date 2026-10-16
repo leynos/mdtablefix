@@ -598,6 +598,28 @@ contract is exercised end to end through the built binary by
 `tests/cli_check.rs`, `tests/cli_diff.rs`, and the BDD scenarios in
 `tests/features/`.
 
+### Fallible shared driver-test helpers
+
+The private helpers in `src/driver_test_support.rs` return `anyhow::Result`
+values with filesystem context:
+
+- `fixture(name: &str, content: &str) -> anyhow::Result<(TempDir, Dir)>`
+  creates a temporary directory and opens its `Dir` capability, creates any
+  parent directory named by `name`, and writes the fixture file. It reports a
+  non-UTF-8 temporary path. It adds context to directory creation, capability
+  opening, parent creation, and fixture-writing errors. Keep the returned
+  `TempDir` alive while using `Dir`; dropping it removes the directory.
+- `read(directory: &Dir, name: &str) -> anyhow::Result<String>` reads through
+  the capability and adds the fixture name to read errors.
+- `readable(directory: &Dir) -> anyhow::Result<ReadOnlyDir>` clones the
+  capability and adds context if cloning fails.
+
+Tests that call these helpers return `Result<()>` and propagate helper errors
+with `?`. Fallible `rstest` fixtures are injected as `Result<T>` parameters,
+using `#[from(fixture_name)]` where specified, then propagated with `?` in the
+test body. This keeps fixture errors visible in the test result and retains each
+`TempDir` for the test's lifetime.
+
 ### File selection is a second private tree
 
 `--git` adds two more modules to the binary and no library surface.
