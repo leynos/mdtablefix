@@ -2267,6 +2267,23 @@ tracing-snapshot modules listed under
 keep their original paths (`io::tests::…`), and `super` still resolves to the
 owning module, so unqualified access to its items is unchanged.
 
+#### Fallible helpers in `src/main_tests.rs`
+
+The private filesystem helpers return contextual `anyhow::Result` values:
+
+- `as_utf8(path: &std::path::Path) -> anyhow::Result<&Utf8Path>` reports the
+  displayed path when it cannot be represented as UTF-8.
+- `entry_names(path: &std::path::Path) -> anyhow::Result<Vec<String>>` returns
+  sorted, lossy-UTF-8 entry names and adds context to directory-open and
+  entry-read failures.
+- On Unix, `set_mode(path: &std::path::Path, mode: u32) -> anyhow::Result<()>`
+  adds the path and octal mode to permission-change errors.
+
+Ordinary tests handle these results with `.expect(...)` and a purpose-specific
+message. Property tests that call `entry_names` use
+`.map_err(|error| TestCaseError::fail(error.to_string()))?`; `?` propagates the
+resulting property-case failure.
+
 ### 2.5. Platform portability of the test suite
 
 Every tracked file is LF in the repository and checks out as LF on every
