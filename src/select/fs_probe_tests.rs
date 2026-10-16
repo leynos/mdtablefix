@@ -173,46 +173,44 @@ fn a_candidate_behind_a_symlinked_directory_is_outside_the_root(
     Ok(())
 }
 
-/// The other side of the same rule: a link among a candidate's ancestors is not
-/// itself the problem, so a link that stays inside the tree selects as usual.
-///
-/// Confinement is what the rule tests, rather than the absence of links, which
-/// is why this case is not a link the probe may ignore.
+/// Confinement permits an in-tree link among a candidate's ancestors or at the
+/// root itself. Both sides must be canonicalized, rather than rejecting links
+/// or canonicalizing only the candidate.
 #[cfg(unix)]
 #[rstest]
-fn a_candidate_behind_an_in_tree_link_is_confined(
+#[case::a_candidate_behind_an_in_tree_link_is_confined(None)]
+#[case::a_root_reached_through_a_link_still_confines_its_candidates(Some("link"))]
+fn in_tree_links_preserve_candidate_confinement(
     #[from(temp_root)] temp_root_result: Result<TempDir>,
+    #[case] root_alias: Option<&str>,
 ) -> Result<()> {
     let temp_root = temp_root_result?;
     let root = as_path(&temp_root)?;
-    write(&root, "real/guide.md", "|A|B|\n")?;
-    std::os::unix::fs::symlink("real", root.join("docs")).expect("link the fixture directory");
-
-    assert!(
-        matches!(probe(&root, "docs/guide.md")?, PathKind::RegularFile(_)),
-        "a link to a directory inside the tree is still inside the tree"
-    );
-    Ok(())
-}
-
-/// A tree may itself be reached through a link, so both sides of the comparison
-/// are canonicalized rather than only the candidate.
-#[cfg(unix)]
-#[rstest]
-fn a_root_reached_through_a_link_still_confines_its_candidates(
-    #[from(temp_root)] temp_root_result: Result<TempDir>,
-) -> Result<()> {
-    let temp_root = temp_root_result?;
-    let root = as_path(&temp_root)?;
-    write(&root, "real/docs/guide.md", "|A|B|\n")?;
-    std::os::unix::fs::symlink("real", root.join("link")).expect("link the fixture root");
+    let (fixture_name, link_name, link_message, invariant_message) = match root_alias {
+        Some(alias) => (
+            "real/docs/guide.md",
+            alias,
+            "link the fixture root",
+            "a root named through a link is the same tree as the one it names",
+        ),
+        None => (
+            "real/guide.md",
+            "docs",
+            "link the fixture directory",
+            "a link to a directory inside the tree is still inside the tree",
+        ),
+    };
+    write(&root, fixture_name, "|A|B|\n")?;
+    std::os::unix::fs::symlink("real", root.join(link_name)).expect(link_message);
+    let aliased_root = root_alias.map(|alias| root.join(alias));
+    let probe_root = aliased_root.as_deref().unwrap_or(root.as_path());
 
     assert!(
         matches!(
-            probe(&root.join("link"), "docs/guide.md")?,
+            probe(probe_root, "docs/guide.md")?,
             PathKind::RegularFile(_)
         ),
-        "a root named through a link is the same tree as the one it names"
+        "{invariant_message}"
     );
     Ok(())
 }
