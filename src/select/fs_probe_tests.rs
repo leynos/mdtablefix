@@ -201,7 +201,9 @@ fn in_tree_links_preserve_candidate_confinement(
         ),
     };
     write(&root, fixture_name, "|A|B|\n")?;
-    std::os::unix::fs::symlink("real", root.join(link_name)).expect(link_message);
+    let link_path = root.join(link_name);
+    std::os::unix::fs::symlink("real", &link_path)
+        .with_context(|| format!("{link_message}: {link_path}"))?;
     let aliased_root = root_alias.map(|alias| root.join(alias));
     let probe_root = aliased_root.as_deref().unwrap_or(root.as_path());
 
