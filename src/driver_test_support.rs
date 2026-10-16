@@ -5,6 +5,7 @@
 //! without an ambient filesystem write apiece. Every item is `pub(super)`
 //! because the only modules that use them are `super`'s descendants.
 
+use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use mdtablefix::io::SourceDocument;
@@ -55,36 +56,37 @@ pub(super) fn align(document: &SourceDocument<'_>) -> String {
 /// test's only view of the file is the one every mode under test is handed.
 /// The [`TempDir`] is returned so the caller keeps it alive for the length of
 /// the test; dropping it would delete the directory the capability names.
-pub(super) fn fixture(name: &str, content: &str) -> (TempDir, Dir) {
-    let dir = tempdir().expect("create temporary directory");
+pub(super) fn fixture(name: &str, content: &str) -> Result<(TempDir, Dir)> {
+    let dir = tempdir().context("create temporary directory")?;
     let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
-        .expect("the temporary directory path is UTF-8");
+        .map_err(|path| anyhow::anyhow!("the temporary directory path is not UTF-8: {path:?}"))?;
     let directory =
-        Dir::open_ambient_dir(&path, ambient_authority()).expect("open directory capability");
+        Dir::open_ambient_dir(&path, ambient_authority()).context("open directory capability")?;
     let name = Utf8Path::new(name);
     if let Some(parent) = name.parent().filter(|parent| !parent.as_str().is_empty()) {
         directory
             .create_dir_all(parent)
-            .expect("create the fixture's parent directory");
+            .with_context(|| format!("create fixture parent directory {parent}"))?;
     }
-    directory.write(name, content).expect("write fixture");
+    directory
+        .write(name, content)
+        .with_context(|| format!("write fixture {name}"))?;
 
-    (dir, directory)
+    Ok((dir, directory))
 }
 
 /// Reads `name` through the capability, so a rewrite is observed as the
 /// capability sees it rather than through an ambient path.
-pub(super) fn read(directory: &Dir, name: &str) -> String {
+pub(super) fn read(directory: &Dir, name: &str) -> Result<String> {
     directory
         .read_to_string(Utf8Path::new(name))
-        .expect("read fixture")
+        .with_context(|| format!("read fixture {name}"))
 }
 
 /// A read-only view of `directory`.
-pub(super) fn readable(directory: &Dir) -> ReadOnlyDir {
-    ReadOnlyDir::new(
-        directory
-            .try_clone()
-            .expect("duplicate directory capability"),
-    )
+pub(super) fn readable(directory: &Dir) -> Result<ReadOnlyDir> {
+    directory
+        .try_clone()
+        .map(ReadOnlyDir::new)
+        .context("duplicate directory capability")
 }
