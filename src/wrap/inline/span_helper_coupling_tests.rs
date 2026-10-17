@@ -9,7 +9,7 @@ use rstest::rstest;
 use super::{SpanKind, try_couple_bracketed_reference};
 
 fn tokens(opener: &str, reference: &str) -> Vec<String> {
-    vec![opener.to_string(), reference.to_string()]
+    vec![opener.to_owned(), reference.to_owned()]
 }
 
 #[rstest]

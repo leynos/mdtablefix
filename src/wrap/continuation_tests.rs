@@ -10,8 +10,8 @@ fn pending_prefix(
     rest_width: usize,
 ) -> PendingPrefix {
     PendingPrefix {
-        prefix: "- ".to_string(),
-        rest: rest.to_string(),
+        prefix: "- ".to_owned(),
+        rest: rest.to_owned(),
         original_lines: vec![format!("- {rest}")],
         synthetic_join_spaces: Vec::new(),
         rest_width,
@@ -72,7 +72,7 @@ fn apply_continuation_chunk_preserves_original_lines_for_verbatim_flush() {
     let mut out = Vec::new();
     let mut writer = ParagraphWriter::new(&mut out, 80);
     let mut pending = pending_prefix(ContinuationMode::VerbatimFlush, "rewritten `a", 3);
-    pending.original_lines = vec!["- original `a".to_string()];
+    pending.original_lines = vec!["- original `a".to_owned()];
     let mut state = state_with_pending(pending);
 
     apply_continuation_chunk("b`", "  b`", false, &mut writer, &mut state);

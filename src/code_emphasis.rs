@@ -252,41 +252,41 @@ mod tests {
     #[test]
     fn merges_emphasis_and_code() {
         let input = vec![
-            "`StepContext`** Enhancement (in **`crates/rstest-bdd/src/context.rs`**)**".to_string(),
+            "`StepContext`** Enhancement (in **`crates/rstest-bdd/src/context.rs`**)**".to_owned(),
         ];
         let expected = vec![
-            "**`StepContext` Enhancement (in `crates/rstest-bdd/src/context.rs`)**".to_string(),
+            "**`StepContext` Enhancement (in `crates/rstest-bdd/src/context.rs`)**".to_owned(),
         ];
         assert_eq!(fix_code_emphasis(&input), expected);
     }
 
     #[test]
     fn ignores_simple_text() {
-        let input = vec!["nothing here".to_string()];
+        let input = vec!["nothing here".to_owned()];
         assert_eq!(fix_code_emphasis(&input), input);
     }
 
     #[test]
     fn preserves_emphasised_code_with_inflectional_suffix() {
-        let input = vec!["*`VarGuard`s*".to_string(), "**`fetch`ed**".to_string()];
+        let input = vec!["*`VarGuard`s*".to_owned(), "**`fetch`ed**".to_owned()];
         assert_eq!(fix_code_emphasis(&input), input);
     }
 
     #[test]
     fn preserves_emphasised_code_only() {
-        let input = vec!["**`code`**".to_string()];
+        let input = vec!["**`code`**".to_owned()];
         assert_eq!(fix_code_emphasis(&input), input);
     }
 
     #[test]
     fn preserves_inner_backticks_in_code() {
-        let input = vec!["``a`b``".to_string()];
+        let input = vec!["``a`b``".to_owned()];
         assert_eq!(fix_code_emphasis(&input), input);
     }
 
     #[test]
     fn preserves_standalone_code() {
-        let input = vec!["before `code` after".to_string()];
+        let input = vec!["before `code` after".to_owned()];
         assert_eq!(fix_code_emphasis(&input), input);
     }
 
@@ -304,7 +304,7 @@ mod tests {
     fn keeps_multibyte_text_adjacent_to_code() {
         // Splitting the leading text on a char boundary used to panic here:
         // the ellipsis is three bytes, and `index + 1` landed inside it.
-        let input = vec!["text…*`code`".to_string()];
+        let input = vec!["text…*`code`".to_owned()];
         assert_eq!(fix_code_emphasis(&input), input);
     }
 

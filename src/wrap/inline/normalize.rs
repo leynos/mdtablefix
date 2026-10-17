@@ -103,11 +103,11 @@ mod tests {
 
     fn whitespace_token_strategy() -> impl Strategy<Value = String> {
         prop_oneof![
-            Just(" ".to_string()),
-            Just("  ".to_string()),
-            Just("\n".to_string()),
-            Just("\n  ".to_string()),
-            Just("\t".to_string()),
+            Just(" ".to_owned()),
+            Just("  ".to_owned()),
+            Just("\n".to_owned()),
+            Just("\n  ".to_owned()),
+            Just("\t".to_owned()),
         ]
     }
 

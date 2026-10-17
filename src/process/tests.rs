@@ -5,10 +5,10 @@ use super::*;
 #[test]
 fn processes_html_and_tables() {
     let input = vec![
-        "<table><tr><td>A</td><td>B</td></tr></table>".to_string(),
-        "| X | Y |".to_string(),
-        "|---|---|".to_string(),
-        "| 1 | 2 |".to_string(),
+        "<table><tr><td>A</td><td>B</td></tr></table>".to_owned(),
+        "| X | Y |".to_owned(),
+        "|---|---|".to_owned(),
+        "| 1 | 2 |".to_owned(),
     ];
     let output = process_stream(&input);
     assert!(output.iter().any(|l| l.contains("| A   | B   |")));
@@ -17,14 +17,14 @@ fn processes_html_and_tables() {
 
 #[test]
 fn no_wrap_option() {
-    let input = vec!["| a | b |".to_string(), "| 1 | 2 |".to_string()];
+    let input = vec!["| a | b |".to_owned(), "| 1 | 2 |".to_owned()];
     let out = process_stream_no_wrap(&input);
     assert_eq!(out, vec!["| a | b |", "| 1 | 2 |"]);
 }
 
 #[test]
 fn integrates_code_emphasis_flag() {
-    let input = vec!["`X`** Y (in **`Z`**)**".to_string()];
+    let input = vec!["`X`** Y (in **`Z`**)**".to_owned()];
     let out = process_stream_inner(
         &input,
         Options {
@@ -38,9 +38,9 @@ fn integrates_code_emphasis_flag() {
 #[test]
 fn converts_headings_when_enabled() {
     let input = vec![
-        "Heading".to_string(),
-        "====".to_string(),
-        "Paragraph".to_string(),
+        "Heading".to_owned(),
+        "====".to_owned(),
+        "Paragraph".to_owned(),
     ];
     let disabled = process_stream_inner(
         &input,
@@ -60,7 +60,7 @@ fn converts_headings_when_enabled() {
     );
     assert_eq!(
         enabled,
-        vec!["# Heading".to_string(), "Paragraph".to_string()]
+        vec!["# Heading".to_owned(), "Paragraph".to_owned()]
     );
 }
 
@@ -71,10 +71,7 @@ fn converts_footnote_references_before_the_table_is_measured() {
     // afterwards left the delimiter row measured from the shorter text: ten
     // dashes on the first pass and thirteen on the second, and the two never
     // agreed.
-    let input = vec![
-        "| a | see docs.1 |".to_string(),
-        "| --- | --- |".to_string(),
-    ];
+    let input = vec!["| a | see docs.1 |".to_owned(), "| --- | --- |".to_owned()];
     let out = process_stream_inner(
         &input,
         Options {
@@ -86,8 +83,8 @@ fn converts_footnote_references_before_the_table_is_measured() {
     assert_eq!(
         out,
         vec![
-            "| a   | see docs.[^1] |".to_string(),
-            "| --- | ------------- |".to_string(),
+            "| a   | see docs.[^1] |".to_owned(),
+            "| --- | ------------- |".to_owned(),
         ]
     );
 }
@@ -118,9 +115,9 @@ fn renumbers_footnote_labels_before_the_wrap_measures_them() {
 #[test]
 fn process_stream_inner_applies_table_ellipsis_before_reflow() {
     let input = vec![
-        "| example | value |".to_string(),
-        "| ------- | ----- |".to_string(),
-        "| ... | tail |".to_string(),
+        "| example | value |".to_owned(),
+        "| ------- | ----- |".to_owned(),
+        "| ... | tail |".to_owned(),
     ];
 
     let with_ellipsis = process_stream_inner(

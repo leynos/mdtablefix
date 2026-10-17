@@ -44,8 +44,8 @@ fn arb_title_form() -> impl Strategy<Value = String> {
 /// Arbitrary title body containing an escaped quote or backslash.
 fn arb_escaped_title_body() -> impl Strategy<Value = String> {
     prop_oneof![
-        Just("\\\"".to_string()),
-        Just("\\\\".to_string()),
+        Just("\\\"".to_owned()),
+        Just("\\\\".to_owned()),
         "[A-Za-z0-9 ]{0,10}".prop_map(|s| format!("{s}\\\"tail")),
     ]
 }

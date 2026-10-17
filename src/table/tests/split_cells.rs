@@ -9,16 +9,16 @@ fn preserves_control_characters_escaped_pipes_and_backslashes() {
     assert_eq!(
         split_cells("| \u{1f} | middle \\| pipe | trailing\\ |"),
         vec![
-            "\u{1f}".to_string(),
-            "middle | pipe".to_string(),
-            "trailing\\".to_string(),
+            "\u{1f}".to_owned(),
+            "middle | pipe".to_owned(),
+            "trailing\\".to_owned(),
         ]
     );
 }
 
 #[test]
 fn preserves_an_escaped_terminal_pipe_before_a_closing_delimiter() {
-    assert_eq!(split_cells("| value\\||"), vec!["value|".to_string()]);
+    assert_eq!(split_cells("| value\\||"), vec!["value|".to_owned()]);
 }
 
 proptest! {
