@@ -179,14 +179,14 @@ pub fn in_argument_order<T>(results: Vec<(usize, T)>) -> Vec<T> {
 }
 
 #[cfg(test)]
-#[path = "driver_contract_tests.rs"]
+#[path = "../driver_contract_tests.rs"]
 mod contract_tests;
 #[cfg(test)]
-#[path = "driver_in_place_tests.rs"]
+#[path = "../driver_in_place_tests.rs"]
 mod in_place_tests;
 #[cfg(test)]
-#[path = "driver_report_tests.rs"]
+#[path = "../driver_report_tests.rs"]
 mod report_tests;
 #[cfg(test)]
-#[path = "driver_test_support.rs"]
+#[path = "../driver_test_support.rs"]
 mod test_support;

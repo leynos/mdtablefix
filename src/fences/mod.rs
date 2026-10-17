@@ -19,7 +19,7 @@ mod attachment;
 mod compress;
 
 #[cfg(test)]
-#[path = "fences_properties.rs"]
+#[path = "../fences_properties.rs"]
 mod properties;
 
 use attachment::attach_to_next_fence;

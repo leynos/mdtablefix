@@ -19,7 +19,8 @@
 ## Markdown stream processor
 
 `process_stream_inner` orchestrates line-by-line rewriting. The full
-implementation lives in [src/process.rs](../src/process.rs). Its signature is:
+implementation lives in [src/process/mod.rs](../src/process/mod.rs). Its
+signature is:
 
 ```rust
 pub fn process_stream_inner(lines: &[String], opts: Options) -> Vec<String>

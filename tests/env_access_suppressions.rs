@@ -172,7 +172,7 @@
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 
-#[path = "support/allow_scan.rs"]
+#[path = "support/allow_scan/mod.rs"]
 mod allow_scan;
 
 use allow_scan::{roots::SANCTIONED_ROOTS, rust_sources, suppressed_lints};

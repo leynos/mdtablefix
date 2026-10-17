@@ -218,9 +218,9 @@ one column short of the wrap width, which puts the wrap boundary before the
 reference, and a coverage test asserts the shape is actually generated so
 removing the strategy cannot leave the property vacuous. The wrap suites pin
 the break itself in `src/wrap/tests/inline_wrapping.rs`,
-`tests/wrap_unit/stream.rs` and `tests/wrap/lists.rs`, and `tests/wrap/cli.rs`
-formats twice through the CLI and compares the passes. Each of those cases
-fails against the parent commit.
+`tests/wrap_unit/stream.rs` and `tests/wrap/lists/mod.rs`, and
+`tests/wrap/cli/mod.rs` formats twice through the CLI and compares the passes.
+Each of those cases fails against the parent commit.
 
 The narrowing in the previous addendum therefore no longer applies to this
 shape, and `--git --check` is a sound one-pass drift check for documents that

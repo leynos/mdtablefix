@@ -26,7 +26,7 @@ pub(super) use pending::{
 };
 
 #[cfg(test)]
-#[path = "paragraph_tests.rs"]
+#[path = "../paragraph_tests.rs"]
 mod tests;
 
 /// Returns whether `text` spills past the first wrapped line.

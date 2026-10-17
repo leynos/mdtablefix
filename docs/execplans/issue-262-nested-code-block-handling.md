@@ -65,7 +65,7 @@ Use these skills while implementing the plan:
 ## Context and orientation
 
 The current fence preprocessing logic lives in
-[`src/fences.rs`](../../src/fences.rs). Two functions matter:
+[`src/fences/mod.rs`](../../src/fences/mod.rs). Two functions matter:
 `compress_fences(lines)` performs conditional outer-fence normalization, and
 `attach_orphan_specifiers(lines)` rewrites a lone language line such as `Rust`
 onto the following unlabelled fence.
@@ -77,10 +77,10 @@ the marker character matches and the closing run is at least as long as the
 opening run, and otherwise leaves the tracker inside the current fence. That is
 the exact behaviour needed for nested-fence handling.
 
-`process_stream_inner` in [`src/process.rs`](../../src/process.rs) runs fence
-normalization first when `Options { fences: true, .. }` is enabled. That means
-the bug is not in paragraph wrapping; it is in the preprocessing step that runs
-before the rest of the formatting pipeline sees the lines.
+`process_stream_inner` in [`src/process/mod.rs`](../../src/process/mod.rs) runs
+fence normalization first when `Options { fences: true, .. }` is enabled. That
+means the bug is not in paragraph wrapping; it is in the preprocessing step
+that runs before the rest of the formatting pipeline sees the lines.
 
 The active regression targets are:
 
