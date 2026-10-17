@@ -6,6 +6,16 @@ use regex::Regex;
 
 use crate::wrap::FenceTracker;
 
+/// Number of underscores in the canonical replacement for a thematic break.
+///
+/// # Examples
+///
+/// ```
+/// use mdtablefix::THEMATIC_BREAK_LEN;
+///
+/// let canonical_break = "_".repeat(THEMATIC_BREAK_LEN);
+/// assert_eq!(canonical_break.len(), 70);
+/// ```
 pub const THEMATIC_BREAK_LEN: usize = 70;
 
 /// Recognizes a Markdown thematic break while allowing up to three columns of indentation.

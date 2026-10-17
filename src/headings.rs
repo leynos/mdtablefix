@@ -6,8 +6,8 @@
 //! treat the headings consistently.
 //!
 //! A candidate line is converted only when it is paragraph text, so a line that
-//! is itself a block start keeps its underline instead of swallowing it. See
-//! [`is_setext_text`].
+//! is itself a block start keeps its underline instead of swallowing it. The
+//! private `is_setext_text` predicate applies the same block-start check.
 
 use tracing::trace;
 
