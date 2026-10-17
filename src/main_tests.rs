@@ -94,11 +94,7 @@ fn entry_names(path: &std::path::Path) -> anyhow::Result<Vec<String>> {
 }
 
 #[cfg(unix)]
-fn can_write_as_root() -> bool {
-    // SAFETY: `geteuid()` has no side effects and is safe to call in tests.
-    let uid = unsafe { libc::geteuid() };
-    uid == 0
-}
+fn can_write_as_root() -> bool { rustix::process::geteuid().is_root() }
 
 #[cfg(unix)]
 fn set_mode(path: &std::path::Path, mode: u32) -> anyhow::Result<()> {
