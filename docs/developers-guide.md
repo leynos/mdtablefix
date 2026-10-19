@@ -1995,8 +1995,8 @@ nothing on a public repository, and Dependabot opens many pull requests. The
 expression tests the pull request's author, not `github.actor`, because the
 actor is whoever triggered the run, so a person pushing to a Dependabot branch
 would flip the runner. A push and a dispatch have no pull request, so both
-values are null and they select Ubicloud; a Dependabot pull request therefore
-builds cold on the hosted pool.
+values are null and the expression selects Ubicloud; a Dependabot pull request
+therefore builds cold on the hosted pool.
 
 The lanes are `standard-4` rather than the estate's `standard-2` on a measured
 shortfall: on two vCPUs two trybuild compile tests in `tests/compile.rs` exceed
