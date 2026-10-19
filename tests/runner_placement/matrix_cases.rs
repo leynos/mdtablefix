@@ -13,8 +13,11 @@ use rstest::rstest;
 use super::{placement, reader};
 
 /// The estate's runner expression, as a lane writes it.
-const ESTATE: &str =
-    "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}";
+const ESTATE: &str = concat!(
+    "${{ (github.event.pull_request.head.repo.fork ",
+    "|| github.event.pull_request.user.login == 'dependabot[bot]') ",
+    "&& 'ubuntu-latest' || 'ubicloud-standard-2' }}"
+);
 /// A literal Ubicloud label, which no runner-selection expression places.
 const LITERAL: &str = "ubicloud-standard-2";
 /// A hosted label, which is not a placement.
@@ -118,7 +121,7 @@ proptest! {
         let wanted: Vec<(String, usize)> = rows
             .iter()
             .filter(|row| row.places())
-            .map(|row| (row.value().to_owned(), usize::from(matches!(row, Row::Literal)) * 3))
+            .map(|row| (row.value().to_owned(), usize::from(matches!(row, Row::Literal)) * 4))
             .collect();
         prop_assert_eq!(found, wanted);
     }

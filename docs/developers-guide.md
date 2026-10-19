@@ -1983,12 +1983,20 @@ only cache writer, run on `ubicloud-standard-4`. `runs-on` selects it with the
 runner-selection expression:
 
 ```yaml
-runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-4' }}
+runs-on: >-
+  ${{ (github.event.pull_request.head.repo.fork
+  || github.event.pull_request.user.login == 'dependabot[bot]')
+  && 'ubuntu-latest' || 'ubicloud-standard-4' }}
 ```
 
 A pull request from a fork cannot obtain an Ubicloud runner, so it falls back to
-`ubuntu-latest`; a push and a dispatch have no pull request, so the fork value
-is null and they select Ubicloud.
+`ubuntu-latest`. So does a pull request Dependabot opened: hosted minutes cost
+nothing on a public repository, and Dependabot opens many pull requests. The
+expression tests the pull request's author, not `github.actor`, because the
+actor is whoever triggered the run, so a person pushing to a Dependabot branch
+would flip the runner. A push and a dispatch have no pull request, so both
+values are empty strings (falsy) and the expression selects Ubicloud; a
+Dependabot pull request therefore builds cold on the hosted pool.
 
 The lanes are `standard-4` rather than the estate's `standard-2` on a measured
 shortfall: on two vCPUs two trybuild compile tests in `tests/compile.rs` exceed
@@ -2023,11 +2031,12 @@ hosted rows are left alone, and Ubicloud named under a key the `runs-on` does
 not read is refused.
 
 `tests/runner_placement/placement_cases.rs` holds this to the files. It
-evaluates the expression for a push or dispatch, a same-repository pull request
-and a fork, rejects a literal label, inverted arms, another label and another
-condition, and asserts an exact inventory of the jobs that can land on Ubicloud
-with their ceilings. A change that adds, removes or re-times such a job fails
-it until the inventory is updated in the same commit.
+evaluates the expression for a push or dispatch, a same-repository pull
+request, a fork and a Dependabot pull request, rejects a literal label,
+inverted arms, another label, another condition, a missing Dependabot arm and
+an actor test, and asserts an exact inventory of the jobs that can land on
+Ubicloud with their ceilings. A change that adds, removes or re-times such a
+job fails it until the inventory is updated in the same commit.
 `tests/runner_placement/matrix_cases.rs` holds the matrix reading to several
 Ubicloud rows at once, as `include` rows and as a top-level list, and generates
 matrices: the placements must be exactly the Ubicloud rows under the key the
