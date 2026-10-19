@@ -39,7 +39,13 @@ jobs:
     # standard-4, not standard-2: on two vCPUs two trybuild compile tests
     # (`compile.rs`) exceed nextest's 180 s allowance, cold and warm (runs
     # 36556931315 and 36558819122); on four they pass.
-    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-4' }}
+    # Dependabot pull requests run on the hosted pool too (free on a public
+    # repository). The author is tested, not the actor, which changes when
+    # someone else pushes to the branch.
+    runs-on: >-
+      ${{ (github.event.pull_request.head.repo.fork
+      || github.event.pull_request.user.login == 'dependabot[bot]')
+      && 'ubuntu-latest' || 'ubicloud-standard-4' }}
     # An Ubicloud runner is a self-hosted just-in-time runner with no
     # six-hour hosted cap, so the job states its own ceiling: twice the 4.6 min
     # of the first standard-4 main run (run 36568808595), rounded up to 10.

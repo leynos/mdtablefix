@@ -1,9 +1,11 @@
 //! The runner-placement judgement: where a lane runs, and for how long.
 //!
 //! Ubicloud's cache proxy is scoped by ref, and a pull request from a fork
-//! cannot obtain an Ubicloud runner at all. A lane that names an Ubicloud
-//! runner therefore selects it by an expression that falls back to the hosted
-//! pool for a fork, and states its own ceiling, because an Ubicloud runner is
+//! cannot obtain an Ubicloud runner at all. A Dependabot pull request is kept
+//! off Ubicloud too: hosted minutes cost nothing on a public repository. A
+//! lane that names an Ubicloud runner therefore selects it by an expression
+//! that falls back to the hosted pool for a fork or a Dependabot pull request,
+//! and states its own ceiling, because an Ubicloud runner is
 //! a self-hosted just-in-time runner that GitHub's six-hour cap for hosted
 //! jobs does not bound.
 
@@ -11,11 +13,19 @@ use serde_yaml::{Mapping, Value};
 
 use super::{matrix, reader};
 
-/// The hosted runner a fork's pull request falls back to.
+/// The hosted runner a fork's or Dependabot's pull request falls back to.
 pub const HOSTED_LABEL: &str = "ubuntu-latest";
 
 /// The context value that is true only for a pull request from a fork.
 const FORK_CONDITION: &str = "github.event.pull_request.head.repo.fork";
+
+/// The pull request's author, not `github.actor`: the actor is whoever
+/// triggered the run, so a person pushing to a Dependabot branch would flip
+/// the runner.
+const DEPENDABOT_CONDITION: &str = "github.event.pull_request.user.login == 'dependabot[bot]'";
+
+/// The condition under which a pull request falls back to the hosted pool.
+fn hosted_condition() -> String { format!("({FORK_CONDITION} || {DEPENDABOT_CONDITION})") }
 
 /// The origin of a run, as far as the runner expression can tell.
 #[derive(Clone, Copy, Debug)]
@@ -26,13 +36,16 @@ pub enum Origin {
     SameRepository,
     /// A pull request from a fork.
     Fork,
+    /// A pull request this repository's Dependabot opened.
+    Dependabot,
 }
 
 /// Removes one pair of single quotes, or returns `None` for an unquoted term.
 fn unquoted(term: &str) -> Option<&str> { term.trim().strip_prefix('\'')?.strip_suffix('\'') }
 
 /// Returns the label a `runs-on` expression selects for a run, or `None` when
-/// it is not the estate's `<fork> && '<hosted>' || '<label>'` shape.
+/// it is not the estate's `(<fork> || <dependabot>) && '<hosted>' || '<label>'`
+/// shape.
 ///
 /// A literal label is not the shape and returns `None`: a lane that never
 /// falls back cannot serve a fork, and a lane that never leaves the hosted
@@ -45,24 +58,25 @@ pub fn selected_runner(runs_on: &str, origin: Origin) -> Option<String> {
         .trim();
     let (condition, arms) = body.split_once(" && ")?;
     let (fork_arm, other_arm) = arms.split_once(" || ")?;
-    if condition.trim() != FORK_CONDITION {
+    if condition.trim() != hosted_condition() {
         return None;
     }
     let chosen = match origin {
-        Origin::Fork => fork_arm,
+        Origin::Fork | Origin::Dependabot => fork_arm,
         Origin::NoPullRequest | Origin::SameRepository => other_arm,
     };
     unquoted(chosen).map(str::to_owned)
 }
 
 /// Returns why an expression misplaces a lane, one entry per origin it gets
-/// wrong; empty when a fork falls back to hosted and every other run is on
-/// the Ubicloud runner class `label`.
+/// wrong; empty when a fork and a Dependabot pull request fall back to hosted and
+/// every other run is on the Ubicloud runner class `label`.
 pub fn placement_faults(runs_on: &str, label: &str) -> Vec<String> {
     [
         (Origin::NoPullRequest, label),
         (Origin::SameRepository, label),
         (Origin::Fork, HOSTED_LABEL),
+        (Origin::Dependabot, HOSTED_LABEL),
     ]
     .into_iter()
     .filter_map(|(origin, wanted)| {
