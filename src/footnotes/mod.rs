@@ -4,6 +4,8 @@
 //! footnote links and normalizes footnote numbering and ordering by
 //! orchestrating specialised submodules.
 
+#[cfg(test)]
+mod blockquote_tests;
 mod inline;
 mod lists;
 mod parsing;
@@ -15,6 +17,22 @@ use renumber::{renumber_labels, reorder_footnotes};
 use tracing::debug;
 
 use crate::textproc::{Token, push_original_token, tokenize_markdown};
+
+/// Removes leading blockquote markers and their surrounding whitespace.
+///
+/// The result is a borrowed suffix of `s`. Reapplying this function does not
+/// change that suffix, so callers can use it at every blockquote-prefix
+/// boundary without coordinating normalization state.
+pub(crate) fn strip_blockquote_markers(s: &str) -> &str {
+    let mut remaining = s;
+    loop {
+        let trimmed = remaining.trim_start_matches(char::is_whitespace);
+        let Some(stripped) = trimmed.strip_prefix('>') else {
+            return trimmed;
+        };
+        remaining = stripped;
+    }
+}
 
 /// Rewrite bare numeric references as Markdown footnote references.
 ///
