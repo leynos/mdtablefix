@@ -110,7 +110,7 @@ jobs:
       - name: Set reproducible release timestamp
         run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "${GITHUB_ENV}"
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@0606ca899ce2995a0c4bc78e660e80832e6e8855
+        uses: leynos/shared-actions/.github/actions/setup-rust@126d02e32a07c2b049e8b68fff09298526e5971a
         with:
           toolchain: ${{ env.RELEASE_RUST_VERSION }}
           install-binstall: false
