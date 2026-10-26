@@ -70,6 +70,12 @@
   breaks and other trailing-space-sensitive content.
 - [rstest-bdd user's guide](rstest-bdd-users-guide.md): Vendored guide to the
   `rstest-bdd` framework, whose scenarios drive the reporting tests.
+- [`ortho_config` user's guide](ortho-config-users-guide.md): Vendored v0.10.0
+  guide to the configuration framework the binary adopts.
+- [Migrating `ortho_config` to v0.10.0](ortho-config-v0-10-0-migration-guide.md):
+  Vendored v0.9.0-to-v0.10.0 migration guide.
+- [`ortho_config` provenance](ortho-config-v0-10-0-provenance.md): Tag, commit,
+  and checksums for the two vendored guides, and how to re-sync them.
 - [Reliable testing in Rust via dependency injection](reliable-testing-in-rust-via-dependency-injection.md):
   Vendored guide to making tests deterministic by injecting their dependencies.
 
