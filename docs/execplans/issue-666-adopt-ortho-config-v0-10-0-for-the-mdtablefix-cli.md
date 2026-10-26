@@ -255,9 +255,16 @@ actual current state of the work.
       `docs/ortho-config-v0-10-0-provenance.md`, so the copies stay
       byte-identical, and all three files are indexed from
       `docs/contents.md`.
-- [ ] EP-M2: write ADR 0014 and the design-document section; update
+- [x] EP-M2: write ADR 0014 and the design-document section; update
       `docs/contents.md` and the two stale sentences in
-      `docs/execplans/check-option.md`. Not started.
+      `docs/execplans/check-option.md`. Done 2026-10-27:
+      `docs/adrs/0014-configuration-layering.md` records the design,
+      `docs/architecture.md` gains a "Configuration layering" section with an
+      unnumbered `Figure:` caption, `docs/contents.md` lists the ADR, and both
+      `docs/execplans/check-option.md` passages now carry a dated later note
+      pointing at the adoption plan and the ADR. `make check-fmt` (scoped to
+      the four files), `make markdownlint` (47 files, 0 issues), and
+      `make nixie` all pass.
 - [ ] EP-M3: add the dependencies, the configuration module, and the wiring;
       keep the library and the pinned help snapshot untouched. Not started.
 - [ ] EP-M4: the test suite — precedence tiers, injected sources, unhappy
@@ -345,6 +352,51 @@ Document with evidence so future work benefits.
   `clippy.toml` copied verbatim. Impact: no lint exemption, no `#[expect]`, and
   no change to `Cargo.toml`'s lint table is needed for the derive itself;
   AXIOM-DERIVE-LINT is discharged.
+- Observation: `AutomaticMode::FirstWins` — the framework's default — cannot
+  express a working-directory file outranking a home file, because the flat
+  candidate list puts every user-level location first. Evidence:
+  `ConfigFilePolicy::from_builder` sets `automatic_mode: FirstWins` and
+  `scope_order: [System, User, Project]`; `resolve_layers` short-circuits into
+  `compose_scoped_layers_with_origins`, which for `FirstWins` returns
+  `(self.compose_layers(), Vec::new())`; and `candidate_set()` orders required,
+  explicit, selector, XDG, Windows, home, then project roots. Impact: the
+  design uses `stack_scopes`, which is a decision the ADR records with its two
+  accepted costs. This is also the only mode under which `origins()` is ever
+  non-empty.
+- Observation: the derive-generated parser gives every boolean switch a value
+  placeholder, so `--wrap=false` would parse where this tool today rejects
+  `--wrap=80`. Evidence: `tests/wrap/cli.rs` asserts the `--wrap=80` failure
+  today, and the generate-side extraction reads
+  `matches.value_source(...) == Some(ValueSource::CommandLine)`, which is a
+  parse of an explicitly valued argument. Impact: it strengthens the decision
+  to keep `Cli::parse_validated()` as the only argv parser; a `<BOOL>`
+  placeholder would also break the pinned `tests/snapshots/cli_git_help.snap`.
+- Observation: the generated `--config-path` flag is hidden from help by
+  default, not shown. Evidence:
+  `ortho_config_macros/src/derive/build/config_flag.rs` pushes `hide = true`
+  whenever `config_cli_visible` is absent or false, and adds a help string only
+  in the visible case. Impact: the argument for composing layers by hand rests
+  on the boolean placeholder change, not on a new help line; the ADR states the
+  hidden flag is accepted-but-undocumented.
+- Observation: the compiled-in empty configuration does not reach the
+  deserialiser as `Null`. Evidence: the derive's `finish_tokens` normalises a
+  `Null` accumulator to `{}` with a doc comment naming exactly this case — "A
+  layer list that supplied no values at all — which a prefixed, all-optional
+  struct reaches whenever no environment variable is set and no configuration
+  file exists". Impact: INV-NOCONFIG is preserved by the framework's own code
+  path rather than by an empty-layer special case of ours.
+- Observation: a malformed file and an environment-layer failure both surface
+  as `ConfigError::Merge`, not as a bespoke "invalid value" error. Evidence:
+  `from_value_merge` is
+  `serde_json::from_value(value).into_ortho_merge_json()`, and
+  `OrthoError::Merge { source: Box<FigmentError> }` is the variant it yields.
+  Impact: the plan's `InvalidValue` variant has no producer in this flow, and
+  `Settings::resolve` should not invent one.
+- Observation: `ExplicitMode::Optional` turns a malformed *selected* file into a
+  `reportable_errors` entry rather than a `selected_error`, and `drain_errors`
+  returns reportable errors even when layers loaded. Impact: choosing
+  `RequiredExclusive` for `MDTABLEFIX_CONFIG_PATH` is what makes a broken named
+  file fatal, and the ADR states that as the reason a user would name the file.
 
 ## Decision log
 
@@ -380,6 +432,29 @@ plan status to `BLOCKED` until the deviation is accepted.
   location a user can predict without reading documentation. An upward walk to
   a Git root was rejected because it makes behaviour depend on where inside a
   tree a command is typed. Date/Author: 2026-10-26, planning agent.
+- Correction to the entry above (2026-10-27): the intended precedence is not
+  what the framework's default mode delivers, and the mode has to be chosen
+  explicitly. `ConfigFilePolicy::from_builder` defaults to
+  `AutomaticMode::FirstWins`, and `compose_scoped_layers_with_origins`
+  implements it as `(self.compose_layers(), Vec::new())` — a flat scan of
+  `candidate_set()`, whose order puts `$XDG_CONFIG_HOME`, the XDG system
+  directories, and every home location ahead of the project root. A user with
+  `~/.mdtablefix.toml` would therefore never see a working-directory file at
+  all, and `origins()` would always be empty. The design therefore sets
+  `automatic_mode = "stack_scopes"` with
+  `scope_order = ["system", "user", "project"]`. `compose_scope` walks a
+  scope's candidates with `.enumerate().rev()` over
+  `.filter(|candidate| candidate.in_scope(scope))`, so within a scope the
+  least-preferred location applies first and the most preferred last, while
+  scopes apply system before user before project. The working-directory file
+  wins, and a project file still overrides a user file. Two accepted costs
+  follow: several files may contribute at once, and an automatic candidate that
+  fails to load is only reported when no layer loaded (`drain_errors` appends
+  `ignorable_errors` only when `layers.is_empty()`). Evidence:
+  `ortho_config/src/discovery/scoped.rs`, `.../policy.rs::drain_errors`,
+  `.../candidates/mod.rs::candidate_set`, and the vendored guide at lines
+  512-543, which states the same rationale upstream. Date/Author: 2026-10-27,
+  implementation agent.
 - Decision: the environment prefix is `MDTABLEFIX_`, with `__` for nesting and
   comma-separated lists for vector-valued keys such as `MDTABLEFIX_MD_EXTS`.
   Rationale: this is what
@@ -412,6 +487,36 @@ plan status to `BLOCKED` until the deviation is accepted.
   satisfies both: `sha256sum` of the copy matches the recorded upstream blob,
   and the re-sync procedure is a plain diff. Date/Author: 2026-10-26,
   implementation agent.
+- Decision: ADR 0014 mirrors ADR 0012's shape — a bare
+  `# Configuration layering` title, `Status`, `Date`, prose `Context`,
+  `Decision` with `###` subsections, bulleted `Consequences`, and bulleted
+  `References` — rather than the template
+  `docs/documentation-style-guide.md:355-455` prescribes, and it lives in
+  `docs/adrs/` with a four-digit prefix. Rationale: EP-M2 asks for ADR 0012's
+  sections, and all thirteen existing records follow the local form; a bare
+  title and a missing `## Context and problem statement` heading are the
+  established convention here. The deviation is recorded inside the ADR's
+  `## Context` rather than left silent, and changing the convention is a
+  repository-wide decision this plan does not take. Date/Author: 2026-10-27,
+  implementation agent.
+- Decision: the new `docs/architecture.md` section carries an unnumbered
+  `Figure:` caption, not `_Figure 6:_`. Rationale:
+  `docs/execplans/git-option.md` line 378 reads "…\"Atomic in-place writes\",
+  with Figure 6", so inserting a sixth numbered figure ahead of that section
+  would silently misname it. `docs/architecture.md` already has two unnumbered
+  `Figure:` precedents (the wrap-tokenizer flowchart and the `wrap_text`
+  sequence). Renumbering was the rejected alternative;
+  `docs/execplans/check-option.md:4641-4642` records an earlier renumbering as
+  the option not taken. Date/Author: 2026-10-27, implementation agent.
+- Decision: no `merge_strategy` attribute appears on the `md_exts` field of the
+  configuration schema. Rationale:
+  `ortho_config_macros/src/derive/build/override/mod.rs:76` rejects the
+  attribute on any field that is not `Vec<_>` or `BTreeMap<_, _>`, so
+  `Option<Vec<String>>` — which every schema field must be, so that an absent
+  key stays distinguishable from an empty list — cannot carry it. No attribute
+  is needed: `merge_value` replaces the whole value for any non-object, so a
+  higher layer's array replaces the lower layer's, which is the precedence rule
+  INV-PRECEDENCE requires. Date/Author: 2026-10-27, implementation agent.
 
 ## Outcomes & retrospective
 

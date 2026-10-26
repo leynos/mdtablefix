@@ -56,6 +56,9 @@
 - [Environment seam taxonomy](adrs/0012-environment-seam-taxonomy.md): Accepted
   decision prohibiting ambient process-environment access and naming the
   injection shapes that replace it.
+- [Configuration layering](adrs/0014-configuration-layering.md): Accepted
+  decision adopting `ortho_config` v0.10.0 for the command-line interface's
+  settings, file discovery, environment prefix, and precedence order.
 
 ## Reference material
 
