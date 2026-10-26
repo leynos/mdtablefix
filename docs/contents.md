@@ -98,6 +98,8 @@
 - [Fence transition kernel and normalization](execplans/issue-486-proof-fence-transition-kernel-and-lem-fence-normalization-preserves-regions.md):
   Plan for the fence transition kernel and the
   `LEM-FENCE-NORMALIZATION-PRESERVES-REGIONS` proof.
+- [Adopting `ortho_config` v0.10.0](execplans/issue-666-adopt-ortho-config-v0-10-0-for-the-mdtablefix-cli.md):
+  Plan for layered configuration in the command-line interface.
 
 ## Debugging records
 
