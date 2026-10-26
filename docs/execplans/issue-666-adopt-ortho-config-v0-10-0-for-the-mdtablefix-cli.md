@@ -9,9 +9,10 @@ proceeds.
 Status: IN PROGRESS — 2026-10-26, on branch
 `issue-666-adopt-ortho-config-v0-10-0-for-the-mdtablefix-cli`, whose base
 commit is `4a9bdf0e7b061d772ba4d11668e935e1c38e8300` ("Chore(deps): bump rstest
-from 0.27.0 to 0.28.0 (#667)"). Stage 1 (import the authoritative
-documentation) and Stage 2 (inventory and baseline) are discharged below; Stage
-3 (record the configuration design) is the next milestone, EP-M0.
+from 0.27.0 to 0.28.0 (#667)"). Stages 1 and 2 (import the authoritative
+documentation; inventory and baseline) are discharged below, and so are EP-M0
+(the lint spike) and EP-M1 (the document import). Stage 3 (record the
+configuration design) is the next milestone, EP-M2.
 
 The issue that governs this plan is
 [leynos/mdtablefix#666](https://github.com/leynos/mdtablefix/issues/666): adopt
@@ -169,10 +170,10 @@ mitigation or contingency.
   says "planned" or "not yet available". Copying such a statement into this
   repository's user's guide would document a feature that does not exist.
   Severity: low. Likelihood: medium. Mitigation: the imported guides are
-  reference material with a provenance paragraph, not user's-guide text, and
-  the version boundary is recorded in `Artefacts and notes`. This repository's
-  own user's-guide section is written against what is actually wired in and
-  proven by a test.
+  reference material with their provenance recorded in a separate note, not
+  user's-guide text, and the version boundary is recorded in
+  `Artefacts and notes`. This repository's own user's-guide section is written
+  against what is actually wired in and proven by a test.
 - Risk: the `ortho_config` crate's documented MSRV is Rust 1.89.0, and this
   repository declares `rust-version = "1.89"` already, but its pinned nightly is
   `nightly-2026-03-26`. Severity: low. Likelihood: low. Mitigation: no bump is
@@ -238,11 +239,22 @@ actual current state of the work.
       `/etc/xdg/mdtablefix`, no `.mdtablefix.toml` in the working tree, and no
       `MDTABLEFIX_*` variables other than `LODY_GITHUB_REPO_FULL_NAME`, which
       does not match the prefix.
-- [ ] EP-M0: compose the ExecPlan's design constraints into a throwaway
-      compile spike that proves the derive survives this workspace's lint
-      configuration and that `merge_from_layers` is reachable. Not started.
-- [ ] EP-M1: import the two guides, record their provenance, and add both to
-      `docs/contents.md`. Not started.
+- [x] (2026-10-26 14:05Z) EP-M0, the compile spike. A throwaway crate at
+      `/tmp/ortho-spike`, with `clippy.toml` and a lint table copied verbatim
+      from this workspace, derives `OrthoConfig` on a schema of `Option`
+      fields, composes three layers by hand, and merges them with
+      `ConfigFile::merge_from_layers`. `cargo clippy --all-targets -- -D
+      warnings` finished clean in 22.69s and the one unit test passed, so
+      AXIOM-DERIVE-LINT is discharged by evidence rather than assumed. The
+      spike was then deleted; nothing was copied into this repository.
+- [x] (2026-10-26 14:40Z) EP-M1, the document import. Both guides were read
+      from the immutable commit and written unmodified to
+      `docs/ortho-config-users-guide.md` and
+      `docs/ortho-config-v0-10-0-migration-guide.md`; their SHA-256 values
+      still match the tag blobs exactly. Provenance lives in a separate
+      `docs/ortho-config-v0-10-0-provenance.md`, so the copies stay
+      byte-identical, and all three files are indexed from
+      `docs/contents.md`.
 - [ ] EP-M2: write ADR 0014 and the design-document section; update
       `docs/contents.md` and the two stale sentences in
       `docs/execplans/check-option.md`. Not started.
@@ -312,6 +324,27 @@ Document with evidence so future work benefits.
   `MDTABLEFIX_*` variables. Impact: the baseline CLI gates can be re-run
   unchanged before and after discovery is wired in, and any failure is
   attributable to the change rather than to the host.
+- Observation: the derive's expansion names `clap` by absolute path, so a
+  crate that derives `OrthoConfig` needs `clap` as a *direct* dependency with
+  its `derive` feature, not merely a transitive one. Evidence: the EP-M0 spike
+  failed with twelve `E0432`/`E0433` errors, including
+  `cannot find attribute 'arg'`, until `clap` was added to its manifest.
+  Impact: none for this repository, whose binary already depends on `clap` with
+  `derive`; the requirement is recorded so the omission is not repeated if a
+  second crate ever derives the macro.
+- Observation: `ortho_config` re-exports `serde_json` (along with `figment`,
+  `toml`, `uncased`, and `xdg`). Evidence: `ortho_config/src/lib.rs`'s
+  `pub use` block, exercised by the spike's
+  `use ortho_config::serde_json::json;`. Impact: the manifest addition stays at
+  exactly two crates. Layer values are built with
+  `ortho_config::serde_json::json!`, and `serde_json` need not be declared.
+- Observation: macro-expanded `#[allow]` attributes do not trip
+  `clippy::allow_attributes` or `allow_attributes_without_reason`, so the
+  derive can be used under this workspace's lint table unchanged. Evidence: the
+  EP-M0 spike's clean `cargo clippy --all-targets -- -D warnings` run under a
+  `clippy.toml` copied verbatim. Impact: no lint exemption, no `#[expect]`, and
+  no change to `Cargo.toml`'s lint table is needed for the derive itself;
+  AXIOM-DERIVE-LINT is discharged.
 
 ## Decision log
 
@@ -369,6 +402,16 @@ plan status to `BLOCKED` until the deviation is accepted.
   a need this tool does not have; and the binary is not named
   `cargo-mdtablefix` and is not invoked through Cargo. Date/Author: 2026-10-26,
   planning agent.
+- Decision: the imported guides stay byte-identical to the tag blobs, and
+  their provenance lives in `docs/ortho-config-v0-10-0-provenance.md` rather
+  than in a header inside each guide, departing from the
+  `docs/rstest-bdd-users-guide.md` precedent. Rationale: the issue requires
+  provenance *and* an auditable identity for each imported file, and those two
+  requirements conflict the moment text is prepended, because the hash then
+  covers the added paragraph rather than upstream's document. A separate note
+  satisfies both: `sha256sum` of the copy matches the recorded upstream blob,
+  and the re-sync procedure is a plain diff. Date/Author: 2026-10-26,
+  implementation agent.
 
 ## Outcomes & retrospective
 
@@ -382,7 +425,18 @@ architectural change; or record a purely mechanical difference in
 `Decision log`. An upstream change or deviation must not remain unrecorded or
 unaccepted.
 
-Filled in at each milestone. At the time of writing no milestone is complete.
+Filled in at each milestone.
+
+EP-M0 and EP-M1 are complete. The spike settled the question it was built to
+settle — the derive is usable under this workspace's lints — and cost an hour
+rather than the days a design built on an unproven macro would have cost if the
+axiom had been false. It also produced two facts the design would otherwise
+have discovered the hard way: `clap` must be a direct dependency of any
+deriving crate, and `ortho_config` re-exports `serde_json`, so the manifest
+addition is exactly two crates. The one deviation from the plan as written is
+the location of the imported guides' provenance: a header inside each file
+would have broken the byte-identity the same plan demanded, so the note lives
+beside them. That is recorded in `Decision log`.
 
 ## Context and orientation
 
@@ -730,8 +784,10 @@ invariants to the required behaviour.
 - AXIOM-CLAP-SOURCE: `clap`'s `ArgMatches::value_source` reports
   `DefaultValue` exactly for values it filled from a default.
 - AXIOM-DERIVE-LINT: macro-expanded `#[allow]` attributes are not subject to
-  this workspace's `clippy::allow_attributes` restriction. Discharged or
-  falsified by EP-M0's compile spike rather than assumed.
+  this workspace's `clippy::allow_attributes` restriction. **Discharged**
+  2026-10-26 by EP-M0's compile spike, whose
+  `cargo clippy --all-targets -- -D warnings` run was clean under a verbatim
+  copy of `clippy.toml`.
 - AXIOM-FILESYSTEM: a file that exists and is readable can be read; a file
   that does not exist cannot.
 
@@ -789,12 +845,13 @@ repository.
 
 EP-M1, the document import. Add `docs/ortho-config-users-guide.md` and
 `docs/ortho-config-v0-10-0-migration-guide.md`, byte-identical to the blobs at
-commit `38812c563e3953a490e3efc202609f37e21a0517`, each with a provenance
-paragraph in the style `docs/rstest-bdd-users-guide.md` uses: the repository,
-the tag, the tag object, the commit, the upstream path, and the SHA-256. Record
-the same facts in a separate provenance note inside the plan's
-`Artefacts and notes` section so a re-sync is a plain diff against a recorded
-commit. Add both files to `docs/contents.md` under "Reference material".
+commit `38812c563e3953a490e3efc202609f37e21a0517`. Provenance goes in a third
+file, `docs/ortho-config-v0-10-0-provenance.md`, carrying the repository, the
+tag, the tag object, the commit, each upstream path, and each SHA-256, plus the
+re-sync recipe and the version boundary. Keeping it beside the copies rather
+than inside them is what preserves byte-identity: a prepended provenance
+paragraph changes the file, and so changes its hash. Add all three files to
+`docs/contents.md` under "Reference material".
 
 EP-M2, the design record. Add `docs/adrs/0014-configuration-layering.md` with
 the `Status`, `Date`, `Context`, `Decision`, `Consequences`, and `References`
@@ -867,7 +924,9 @@ interfaces. For each milestone record:
 - Requirements and gaps: TOR-GOAL-666-1 by way of AXIOM-DERIVE-LINT.
 - Acceptance evidence: the spike compiles clean under
   `cargo clippy --all-targets -- -D warnings` with this repository's
-  `clippy.toml`, or the plan turns `BLOCKED`.
+  `clippy.toml`, or the plan turns `BLOCKED`. Discharged on 2026-10-26:
+  `Finished dev profile in 22.69s` with no diagnostics, and the spike's one
+  unit test passed.
 - Conformance check:
   - Requirements satisfied: none beyond the axiom it discharges.
   - Design still followed: no repository file changes.
@@ -886,8 +945,10 @@ interfaces. For each milestone record:
 - Requirements and gaps: TOR-REQ-666-1.
 - Acceptance evidence: `sha256sum` over both files matches
   `84d1c97b77024224dc9220a12d4b749205d9bb2db54849185da21c969dda5575` and
-  `b5331aa6cfcc07b3dcd188c620db98d0a1a1f13b0c8ef96d88913d701bca25bf` apart from
-  the added provenance paragraph; `make markdownlint` passes.
+  `b5331aa6cfcc07b3dcd188c620db98d0a1a1f13b0c8ef96d88913d701bca25bf` exactly,
+  with no text added; `make markdownlint` passes. Discharged on 2026-10-26:
+  both hashes matched, and the commit `c63e18f` carries the two guides, the
+  provenance note, and the contents index.
 - Conformance check:
   - Requirements satisfied: TOR-REQ-666-1.
   - Design still followed: no design exists yet, and none is implied.
@@ -1011,17 +1072,20 @@ $ wc -l docs/ortho-config-users-guide.md docs/ortho-config-v0-10-0-migration-gui
    498 docs/ortho-config-v0-10-0-migration-guide.md
 ```
 
-The provenance paragraph is then prepended with an editor, and the checksum
-check is re-run over the remaining body:
+Nothing is then edited into either file: the checksum check re-runs and must
+produce the same hashes, and the provenance, re-sync recipe, and version
+boundary are written to `docs/ortho-config-v0-10-0-provenance.md` instead:
 
 ```console
-$ tail -n +11 docs/ortho-config-users-guide.md | sha256sum
-84d1c97b77024224dc9220a12d4b749205d9bb2db54849185da21c969dda5575  -
+$ sha256sum docs/ortho-config-users-guide.md \
+    docs/ortho-config-v0-10-0-migration-guide.md
+84d1c97b77024224dc9220a12d4b749205d9bb2db54849185da21c969dda5575  docs/ortho-config-users-guide.md
+b5331aa6cfcc07b3dcd188c620db98d0a1a1f13b0c8ef96d88913d701bca25bf  docs/ortho-config-v0-10-0-migration-guide.md
 ```
 
 Gates, each logged under a `/tmp` file named for the action and the branch, so
-the output can be reviewed after the run rather than scrolled through. The
-same recipe shape is repeated for `lint`, `test`, `markdownlint`, and `nixie`:
+the output can be reviewed after the run rather than scrolled through. The same
+recipe shape is repeated for `lint`, `test`, `markdownlint`, and `nixie`:
 
 ```console
 $ make check-fmt 2>&1 | tee /tmp/check-fmt-mdtablefix-issue-666.out
