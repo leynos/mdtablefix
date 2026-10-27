@@ -466,6 +466,22 @@ actual current state of the work.
       as a type exercise instead of as a case. They are advisory, `main` has no
       protection rule and `main-required-checks` requires only `build-test`, so
       they are recorded here as accepted rather than chased.
+- [x] (2026-10-27) CodeRabbit round eight on `899873d`, after two rate-limit
+      windows (the CLI reported `0 of 10` remaining and a rolling-hour reset).
+      Three findings, one of them reported twice, all documentation: the
+      "Interfaces and dependencies" section still declared a four-variant
+      `ConfigError` with an `Unreadable` member, a `Cli::typed` method, and
+      `select::ExtensionFilter`; the "Plan of work" EP-M3 paragraph repeated the
+      first two; and Table 2 of the users' guide wrapped three of its six rows
+      onto continuation rows with empty `Order` and `Scope` cells. All verified
+      against the code — `src/config.rs` has exactly `InvalidValue` and
+      `Merge`, the accessor is the private `typed_bool`/`is_typed` pair, and
+      `select.rs` declares `pub(crate) mod extensions;` with no re-export — and
+      fixed in `c6f4b43`. The declarations now state the built shape with an
+      "*As built*" note citing decisions `d` and `e`, and each location is one
+      table row with the two abbreviations it had relied on spelled out below.
+      Note for future edits to this file: markdownlint's MD049 requires
+      asterisks for emphasis, so `_As built_` is refused.
 
 - Decision (accepted): refuse a macro whose arguments write `mod`, rather than
   skip it. Rationale: the walker expands nothing, so an invocation emitting
