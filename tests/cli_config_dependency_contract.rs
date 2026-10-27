@@ -118,6 +118,36 @@ fn classify(entry: &std::fs::DirEntry) -> Step {
     Step::Ignore
 }
 
+/// The two things one directory contributes to the walk.
+///
+/// Separating them keeps [`rust_sources`] a loop over directories rather than a
+/// loop over directories containing a loop over entries containing a dispatch:
+/// each directory is read once, and the result says where the walk goes next.
+#[derive(Default)]
+struct Visit {
+    /// Subdirectories still to walk.
+    descend: Vec<PathBuf>,
+    /// Rust sources found directly in this directory.
+    sources: Vec<PathBuf>,
+}
+
+/// Reads one directory and classifies each of its entries.
+///
+/// The failure names the directory, because an unreadable one aborts the walk
+/// rather than shrinking it.
+fn visit_directory(directory: &Path) -> Result<Visit> {
+    let mut visit = Visit::default();
+    for entry in entries_of(directory)? {
+        match classify(&entry) {
+            Step::Descend(path) => visit.descend.push(path),
+            Step::Source(path) => visit.sources.push(path),
+            Step::Ignore => {}
+        }
+    }
+
+    Ok(visit)
+}
+
 /// Collects every Rust source beneath `root`, excluding `target` and dotfiles.
 ///
 /// A breadth-first walk written against `std::path`, so it behaves the same way
@@ -128,13 +158,9 @@ fn rust_sources(root: &Path) -> Result<Vec<PathBuf>> {
     let mut pending = vec![root.to_path_buf()];
     let mut found = Vec::new();
     while let Some(directory) = pending.pop() {
-        for entry in entries_of(&directory)? {
-            match classify(&entry) {
-                Step::Descend(path) => pending.push(path),
-                Step::Source(path) => found.push(path),
-                Step::Ignore => {}
-            }
-        }
+        let visit = visit_directory(&directory)?;
+        pending.extend(visit.descend);
+        found.extend(visit.sources);
     }
     found.sort();
 
