@@ -265,8 +265,23 @@ actual current state of the work.
       pointing at the adoption plan and the ADR. `make check-fmt` (scoped to
       the four files), `make markdownlint` (47 files, 0 issues), and
       `make nixie` all pass.
-- [ ] EP-M3: add the dependencies, the configuration module, and the wiring;
-      keep the library and the pinned help snapshot untouched. Not started.
+- [x] EP-M3: add the dependencies, the configuration module, and the wiring;
+      keep the library and the pinned help snapshot untouched. Done
+      2026-10-27. `Cargo.toml` gains `ortho_config = "0.10.0"` and
+      `serde = { version = "1", features = ["derive"] }`; `src/config.rs` is
+      the new binary-only module, at 394 lines against the 400-line cap, with
+      every unit test deferred to EP-M4 in a `#[path]` file for that reason.
+      `src/driver/run.rs` takes the execution half of `run()` so `src/main.rs`
+      stays at 219 lines. Gate evidence, all run in this worktree on the same
+      tree: `make typecheck` pass (48s), `make lint` pass (84s),
+      `make check-fmt` pass, `make markdownlint` 47 files 0 issues,
+      `make nixie` all diagrams validated, and `make test` exit 0 with
+      **2872 passed, 0 failed** (901s). Acceptance evidence beyond the gates:
+      `git diff --stat 4a9bdf0 -- tests/snapshots/` is empty, so the pinned
+      `--help` snapshot is byte-identical to the base commit, and
+      `cargo tree --invert ortho_config --depth 0` prints
+      `ortho_config v0.10.0` and nothing else, so the root package is its sole
+      consumer.
 - [ ] EP-M4: the test suite — precedence tiers, injected sources, unhappy
       paths, and the no-configuration regression proof. Not started.
 - [ ] EP-M5: user's and developer's guide updates, all gates green, draft pull
@@ -517,6 +532,77 @@ plan status to `BLOCKED` until the deviation is accepted.
   is needed: `merge_value` replaces the whole value for any non-object, so a
   higher layer's array replaces the lower layer's, which is the precedence rule
   INV-PRECEDENCE requires. Date/Author: 2026-10-27, implementation agent.
+- Decision (EP-M3 adjustment `a`): `Cli::parse_validated()` now returns
+  `(Self, clap::ArgMatches)` rather than `Self`. Rationale: `ArgMatches` is the
+  only record of where each value came from, and `Settings::resolve` needs it
+  to judge a flag by whether it was typed. The alternative — parsing twice —
+  would run clap twice and could report a parse error after configuration had
+  already been read. It remains the only parser,
+  `Self::command().get_matches()` is still called exactly once, and the four
+  `--git` requirement checks stay in the same place and in the same order, so
+  argv behaviour and the `--help` snapshot are unchanged. Date/Author:
+  2026-10-27, implementation agent.
+- Decision (EP-M3 adjustment `b`): `command::FormatOpts` gains `Debug`,
+  `PartialEq`, and `Eq`. Rationale: the plan's `Settings` shape derives
+  `Debug, Clone, PartialEq, Eq`, and `Settings` holds a `FormatOpts`. The three
+  derives are behaviour-neutral — `clap::Args` reads only field names, types,
+  and attributes — and they let a test compare resolved settings as values.
+  Date/Author: 2026-10-27, implementation agent.
+- Decision (EP-M3 adjustment `c`): the execution half of `run()` moves to a new
+  `src/driver/run.rs`, declared as `mod run` from `src/driver.rs`. Rationale:
+  `src/main.rs` was 390 lines against a 400-line cap, and the configuration
+  wiring adds an import, a resolution step, and error mapping. The plan
+  authorises exactly this move ("the `run()` decomposition moves to
+  `src/driver/`, not to a longer `main.rs`"). `src/main.rs` is now 219 lines
+  and holds only the composition root: `failed_run`, selection, `run`, and
+  `main`. `failed_run` stays at the crate root because
+  `src/metrics_tests.rs:254` names it as `crate::failed_run`;
+  `report_selection` stays because `src/main_git_selection_tests.rs` names it
+  through `super`; and the three document-boundary helpers are re-exported from
+  `driver` under `#[cfg(test)]` so `src/main_tests.rs` keeps its
+  `super::{format_stdin, open_file_parent, render_stdin_output}` imports
+  unmodified. Date/Author: 2026-10-27, implementation agent.
+- Decision (EP-M3 adjustment `d`): `ConfigError` has two variants,
+  `InvalidValue { key, message }` and `Merge(#[from] Arc<OrthoError>)`, rather
+  than the plan's four. Rationale: `OrthoError` has no unreadable-file or
+  invalid-value variant, and both a malformed file and a failed environment
+  extraction arrive as `OrthoError::File` or `OrthoError::Merge` after the
+  framework has already read the file; a `Unreadable` variant would have to
+  pre-read every candidate to earn its name, duplicating work the framework
+  does and inventing a distinction it does not promise to keep. `InvalidValue`
+  is kept because this module *does* have a producer for it: an `md_exts` value
+  from a file or the environment never passed through clap's `value_parser`, so
+  `extension_filter` parses it and reports the key. The path a selected file
+  error names is inside the wrapped error's own message, so the diagnostic
+  still says which file to fix. Date/Author: 2026-10-27, implementation agent.
+- Decision (EP-M3 adjustment `e`): the typed-flag accessor is a private
+  `typed_bool(matches, id, value)` plus `is_typed(matches, id)` in
+  `src/config.rs`, not a `Cli` method. Rationale: the plan offers
+  `typed(&self, flag: &str)`, `typed_flags()`, "or an equivalent"; the
+  provenance itself lives in `ArgMatches`, and `Cli` deliberately does not hold
+  it, so a `Cli` method would have to be handed the matches it was built from
+  and would add a field or a parameter to the command-line type for
+  configuration's benefit. The two helpers read
+  `matches.value_source(id) == Some(ValueSource::CommandLine)`, the same test
+  the framework's generated loader uses (`build_cli_push_tokens`). `Cli` keeps
+  its four accessors for what the command line *said*, and configuration is the
+  only reader of what the user *typed*. Date/Author: 2026-10-27, implementation
+  agent.
+- Decision: `Settings::resolve` is split into `resolve` and
+  `resolve_with_sources`. Rationale: EP-M4 must drive discovery, the selector,
+  and the merge layer from one fixed map without touching the process
+  environment, and ADR 0012 requires the sources to be injected rather than
+  read. `resolve` names `process_env_source()` and `process_scan_env_source()`
+  once, at the composition root; `resolve_with_sources` takes the two shared
+  traits, so a test passes one `MapEnv` twice. Date/Author: 2026-10-27,
+  implementation agent.
+- Decision: `Settings::resolve` clears `git` whenever positional arguments are
+  present. Rationale: ADR 0014's rule that "a typed path always means a file
+  run" needs a single place to live, and `Settings` is where both inputs are
+  known.
+  `git: config.git.unwrap_or(cli.selects_from_git()) && cli.files.is_empty()`
+  states it once, so `select_inputs` in `src/main.rs` has no second copy of the
+  rule to drift from. Date/Author: 2026-10-27, implementation agent.
 
 ## Outcomes & retrospective
 

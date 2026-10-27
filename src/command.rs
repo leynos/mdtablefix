@@ -119,11 +119,16 @@ impl Cli {
     /// sight. So each dependency is checked after parsing, and reported as a
     /// clap error, which keeps the exit status at 2 and the usage footer.
     ///
+    /// The matches are returned beside the parsed request because they are the
+    /// only record of where each value came from, and configuration needs that
+    /// provenance to tell a typed flag from a defaulted one. See
+    /// `crate::config::Settings::resolve`.
+    ///
     /// # Panics
     ///
     /// Terminates the process on a parse error, exactly as [`Cli::parse`] does:
     /// that is clap's contract for a command-line tool.
-    pub fn parse_validated() -> Self {
+    pub fn parse_validated() -> (Self, clap::ArgMatches) {
         let matches = Self::command().get_matches();
         let cli = Self::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
         for (name, present) in git_only_flags(&cli, &matches) {
@@ -137,7 +142,7 @@ impl Cli {
             }
         }
 
-        cli
+        (cli, matches)
     }
 
     /// The mode the flags select.
@@ -181,7 +186,7 @@ impl Cli {
 ///
 /// These flags are intentionally represented separately so the processing
 /// pipeline can apply its stable normalization order to any selected subset.
-#[derive(clap::Args, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::Args)]
 #[expect(
     clippy::struct_excessive_bools,
     reason = "CLI exposes independent flags via separate switches"
