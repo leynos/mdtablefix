@@ -219,6 +219,42 @@ fn the_walk_follows_both_declaration_spellings() -> Result<()> {
     Ok(())
 }
 
+/// The walk refuses a macro that could declare a module it cannot see.
+///
+/// The negative control for the gap `#[path]` resolution does not close: a
+/// macro invocation expands after parsing, so `sneak!()` emitting
+/// `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file while
+/// every file the walk reads stays clean. The walk must therefore report the
+/// invocation rather than skipping it, and must not report an ordinary call
+/// that merely mentions modules in a string.
+#[test]
+fn the_walk_refuses_an_unanalysable_module_declaration() {
+    let declaring = Utf8Path::new("src/example.rs");
+    let refusing = concat!(
+        "macro_rules! sneak {\n",
+        "    () => { #[path = \"config_schema.rs\"] mod settings; };\n",
+        "}\n",
+        "sneak!();\n",
+    );
+    let error = module_graph::declared_targets(refusing, declaring)
+        .expect_err("a macro that writes a module must be refused, not skipped");
+    assert!(
+        error.to_string().contains("sneak"),
+        "the diagnostic should name the macro, got: {error}"
+    );
+
+    let ordinary = concat!(
+        "fn check() {\n",
+        "    assert_eq!(anyhow!(\"no mod here\").to_string(), \"no mod here\");\n",
+        "}\n",
+    );
+    assert_eq!(
+        module_graph::declared_targets(ordinary, declaring)
+            .expect("an invocation mentioning no module is not an offence"),
+        Vec::<module_graph::Candidates>::new()
+    );
+}
+
 /// The manifest still declares the framework, so the contract is not vacuous.
 #[test]
 fn the_manifest_declares_the_framework() -> Result<()> {

@@ -19,6 +19,14 @@
 //! `rustc` compiles the target wherever it lives, so a library source that
 //! included a binary-only file would reach it exactly as a `mod` would.
 //!
+//! A macro invocation whose arguments write `mod` is refused rather than
+//! skipped, because the walker cannot expand it: a `sneak!()` emitting
+//! `#[path = "config_schema.rs"] mod settings;` reaches the binary-only schema
+//! while leaving no declaration, no attribute and no framework name in any file
+//! this module reads. Refusing the invocation is the only answer that keeps the
+//! contract's guarantee, and the test that drives the whole walk carries a
+//! negative control for it.
+//!
 //! Nothing is skipped silently. A declaration that names no existing file, and
 //! a construct the walker cannot read, are both errors: a reader that quietly
 //! dropped an edge would satisfy the contract by never reaching the file that
@@ -218,6 +226,33 @@ impl<'ast> Visit<'ast> for Declarations {
         self.bases = outer;
     }
 
+    /// Refuses a `macro_rules!` definition whose body writes a module.
+    ///
+    /// Handled here rather than in [`Self::visit_macro`] so the diagnostic can
+    /// name the macro a reader already knows. `syn::ItemMacro` is the only place
+    /// that name is written down: by the time the default visitor reaches the
+    /// inner `Macro`, the path is `macro_rules` and the defined identifier is
+    /// out of reach.
+    fn visit_item_macro(&mut self, item: &'ast syn::ItemMacro) {
+        let Some(name) = &item.ident else {
+            return syn::visit::visit_item_macro(self, item);
+        };
+        if !writes_a_module(&item.mac.tokens) {
+            return syn::visit::visit_item_macro(self, item);
+        }
+
+        // `concat!` expands the format string, which rules out an implicit
+        // capture, so the argument is named.
+        self.fail(format!(
+            concat!(
+                "`{name}!` defines a macro that writes a `mod` declaration, which ",
+                "this walk cannot follow: expanding it may reach a file the ",
+                "check never reads"
+            ),
+            name = name
+        ));
+    }
+
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
         if mac.path.is_ident("include") {
             match inclusion_target(&mac.tokens) {
@@ -227,9 +262,51 @@ impl<'ast> Visit<'ast> for Declarations {
                 }
                 Err(problem) => self.fail(problem.to_string()),
             }
+        } else if !mac.path.is_ident("macro_rules") && writes_a_module(&mac.tokens) {
+            // A `macro_rules!` invocation reaching here without the definition
+            // is one imported from elsewhere, so the path is all there is to
+            // name. Definitions are reported by `visit_item_macro`.
+            self.fail(format!(
+                concat!(
+                    "`{}!` writes a `mod` declaration, which this walk cannot ",
+                    "follow: expanding the macro may reach a file the check never reads"
+                ),
+                rendered(&mac.path)
+            ));
         }
         syn::visit::visit_macro(self, mac);
     }
+}
+
+/// Whether `tokens` writes the keyword that declares a module.
+///
+/// Only a token named `mod` is tested, and only inside a macro's arguments, so
+/// an ordinary call that mentions modules in a string or an identifier is
+/// never reported: `anyhow!("no mod here")` carries no `mod` token, because the
+/// literal is one `Literal`, and `module!` is one `Ident`. That narrowness is
+/// what keeps the rule usable — a walk that refused every macro would be
+/// switched off, and then the whole contract would report nothing.
+///
+/// The rule is deliberately conservative rather than clever. An invocation that
+/// writes `mod` is a construct the walker cannot analyse, and a checker that
+/// quietly skipped it would pass while a library source reached a binary-only
+/// file through the expansion. Treating the uncertainty as a failure is the
+/// only reading that keeps the boundary's guarantee.
+fn writes_a_module(tokens: &TokenStream) -> bool {
+    tokens.clone().into_iter().any(|tree| match tree {
+        proc_macro2::TokenTree::Ident(ident) => ident == "mod",
+        proc_macro2::TokenTree::Group(group) => writes_a_module(&group.stream()),
+        proc_macro2::TokenTree::Punct(_) | proc_macro2::TokenTree::Literal(_) => false,
+    })
+}
+
+/// A macro path as it was written, for a diagnostic a reader can act on.
+fn rendered(path: &syn::Path) -> String {
+    path.segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>()
+        .join("::")
 }
 
 /// The literal path an `include!` names.

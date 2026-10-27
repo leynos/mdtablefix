@@ -385,6 +385,62 @@ actual current state of the work.
       `adr-NNN` pattern, which repeats a round-two finding and is argued in
       `Decision log`. Remaining: the gates on the corrected tree, the commit,
       the push, and one further review round.
+- [~] (2026-10-27) CodeRabbit round five on `1f4fe71`, two findings, both
+      actioned in the working tree but **not yet compiled or gated**. Accepted:
+      the users' guide used second-person pronouns ("the files you merged"),
+      contrary to the documented style rule; now impersonal. Accepted: the
+      module-graph walk skipped a macro invocation that could emit an unseen
+      `#[path]` module. The walk now refuses a `macro_rules!` definition whose
+      body writes `mod`, naming the macro rather than `macro_rules`, and refuses
+      an invocation whose arguments carry a `mod` token. The rule was checked
+      against the tree with a token-aware scan that strips strings and comments:
+      zero invocations in `src/` carry a `mod` token, and zero `macro_rules!`
+      definitions mention `mod`, so it costs nothing today. A negative control
+      (`the_walk_refuses_an_unanalysable_module_declaration`) covers both the
+      refusal and the non-offence of `anyhow!("no mod here")`.
+      **Blocked:** compilation admission became unavailable mid-round.
+      `cargo test` fails with `build-limits: the supervisor refused:
+      launch-failed` even for `rustc --print`.
+- [~] (2026-10-27) Admission root cause found, and it is not this worktree.
+      `build-limits-status` alternates between `healthy` with slots free and
+      `held 4` with other agents' groups running, so the supervisor itself is
+      alive and admitting. The journal shows why a launch still fails: the
+      supervisor reports `group g82025: cannot create
+      buildlimits-2407454-g82025.scope: Call failed: Connection timed out`.
+      That repeats every ~25 s. The supervisor's `CreateScope` call goes to the
+      per-user systemd manager, which is hanging: `systemctl --user
+      is-system-running` answers `degraded` at once, but `systemctl --user show`
+      never returns. So each request is created, waits four 45-second
+      `0 ahead` intervals, and is refused `launch-failed` — the `0 ahead` is
+      honest, because the slot was free and it is the *launch* that failed, not
+      the queueing. Per the compile-admission policy this is reported to the
+      user, not worked around: no `RUSTC_WRAPPER` may be unset and no `rustc`
+      may be called directly, and recovering the manager or the supervisor is
+      the host operator's job.
+      **Unblocked work done meanwhile:** `make markdownlint` (0 issues, 47
+      files), `make nixie` (all diagrams valid), the Markdown half of
+      `check-fmt` (`47 files left unchanged`), and the Rust half
+      (`cargo fmt --all -- --check`, exact clean). The formatting check earned
+      its keep: it rejected the two backslash-continued string literals the
+      round-five edit introduced, which AGENTS.md forbids; both became
+      `concat!()` with a named format argument, and the file is
+      rustfmt-clean again. Remaining: `make lint`, `make test`, the commit,
+      the push, and a further review round — all of which compile Rust.
+
+- Decision (accepted): refuse a macro whose arguments write `mod`, rather than
+  skip it. Rationale: the walker expands nothing, so an invocation emitting
+  `#[path = "config_schema.rs"] mod settings;` reaches a binary-only file while
+  every file the walk reads stays clean — the same hole `#[path]` resolution
+  was added to close, one level deeper. The rule is a token test, not a name
+  list, so it needs no maintenance as macros come and go, and it is narrow
+  enough that `anyhow!("no mod here")` and `module!` are not offences. A
+  `macro_rules!` definition is reported by `visit_item_macro` so the diagnostic
+  names the macro instead of `macro_rules`. Residual gap, recorded rather than
+  hidden: an invocation with an empty or `mod`-free body cannot be
+  distinguished from any other by a walk that does not expand macros, so a
+  macro defined elsewhere and invoked as `sneak!()` remains undetectable;
+  closing it would need the compiler's own expansion, which this test cannot
+  obtain. Date/Author: 2026-10-27, implementation agent.
 
 ## Surprises & discoveries
 
@@ -1481,6 +1537,20 @@ The `clap` default-source axiom is third-party behaviour and is not verified
 here beyond the tests that depend on it. Windows path handling for
 `MDTABLEFIX_CONFIG_PATH` is exercised by the existing Windows CI job, not by a
 local test, because this host is Linux.
+
+The module-graph walk expands no macros, so a macro defined in another file and
+invoked with a body that writes no `mod` token remains invisible to it: the
+`#[path]` a `sneak!()` expands to is written at the definition, not the
+invocation, and a walk that read every `macro_rules!` body would still miss one
+compiled from a dependency. The walk refuses what it can see — a definition
+whose body writes `mod`, and an invocation whose arguments do — and its
+diagnostic says the construct is unanalysable rather than silently passing it.
+Closing the gap completely would require the compiler's own expansion list, as
+`cargo`'s dep-info provides for `include!` targets; the test suite has no
+supported way to read that during a unit test, so the residual risk is recorded
+here rather than claimed away. It is bounded: the library names no framework
+today, the textual half of the contract would catch an ordinary `use`, and the
+walk refuses every `mod`-writing macro it finds in the tree.
 
 ## Plan of work
 

@@ -263,9 +263,9 @@ on standard error and nothing on standard output:
   diagnostic reports the mismatch and nothing else,
   `invalid type: string "yes", expected a boolean`. It names neither the file
   nor the setting, because the value has already been merged by the time a type
-  is checked and its provenance is gone. To locate it, search the files you
-  merged and the `MDTABLEFIX_*` variables you set for the offending value — the
-  quoted `yes`, in this example.
+  is checked and its provenance is gone. To locate it, search the merged
+  configuration files and the `MDTABLEFIX_*` variables that were set for the
+  offending value — the quoted `yes`, in this example.
 - A configured `md_exts` holds an extension this tool rejects. These values did
   not pass through the command line's parser, so the diagnostic names the key:
   `invalid configuration value for md_exts: ...`.

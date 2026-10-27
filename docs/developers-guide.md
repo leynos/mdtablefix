@@ -1882,10 +1882,16 @@ attributes and `include!` alike, because text cannot see that
 `#[path = "config.rs"] mod settings;` reaches the same file under a name no
 literal check would recognise. A declaration naming no existing file is an
 error rather than a skipped edge, so a resolver that quietly stopped following
-one would fail rather than pass. A Cargo feature cannot express the boundary,
-because `ortho_config` is a normal dependency of the package and is therefore
-linked into the library as well as the binary; what keeps the library reusable
-is that no library source uses it.
+one would fail rather than pass. The walker expands no macros, so a macro whose
+body or arguments write `mod` is reported as unanalysable instead of skipped: a
+`sneak!()` emitting `#[path = "config_schema.rs"] mod settings;` would
+otherwise reach a binary-only file while every file the walk reads stayed
+clean. A macro invoked elsewhere with a body that writes no `mod` token remains
+undetectable, and that residual gap is recorded in the ExecPlan's
+`Residual gaps` rather than claimed away. A Cargo feature cannot express the
+boundary, because `ortho_config` is a normal dependency of the package and is
+therefore linked into the library as well as the binary; what keeps the library
+reusable is that no library source uses it.
 
 The module resolves settings in one pass and hands the driver a plain
 `Settings` struct with no configuration types in its signature, so the code
