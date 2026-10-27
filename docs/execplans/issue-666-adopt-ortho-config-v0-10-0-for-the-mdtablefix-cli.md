@@ -475,16 +475,17 @@ actual current state of the work.
       about named rules; the earlier wording mistook that one passing for a
       clean run. What is true is narrower: the only thing between this branch
       and a green CodeScene run is the string-heavy ratio in two test-support
-      modules.  Whether it can be cleared is a separate question from whether it
+      modules. Whether it can be cleared is a separate question from whether it
       was cleared, and the plan does not claim it was. The rule fires when more
       than 40 per cent of a module's function arguments are primitives, counted
-      across every function in the file, so clearing it means reshaping nearly
-      every signature in those two fixtures rather than editing the calls the
-      ratio happens to expose. Those fixtures exist to spell paths, file
-      contents and environment names; a newtype for each would put a conversion
-      step inside every test that uses them, which is the trade AGENTS.md warns
-      about when it asks for clarity over cleverness. They are **accepted, not
-      cleared**, and this plan does not claim CodeScene is green.  The merge
+      across every function in the file. Counted by hand on this head, the two
+      modules sit at 10 of 10 and 14 of 15 — 100 and 93 per cent — so clearing
+      it would mean reshaping nearly every signature in both, not editing the
+      calls the ratio happens to expose. That is too high a price for two
+      fixtures whose only job is to hand a test a path or a file's contents: a
+      newtype per parameter would put a conversion step inside every test that
+      uses them, which is the trade AGENTS.md warns about when it asks for
+      clarity over cleverness. They are **accepted, not cleared**. The merge
       consequence was re-verified on 2026-10-27 rather than carried over: `main`
       has no branch protection (`404 Branch not protected`), and the only active
       ruleset, `main-required-checks` (id 19842937, condition
