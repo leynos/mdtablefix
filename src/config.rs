@@ -81,8 +81,11 @@ impl Settings {
     ///
     /// Returns a [`ConfigError`] when a selected file cannot be read or parsed,
     /// when the environment layer cannot be merged, or when a configuration
-    /// source supplies a value the tool cannot use. Absent optional candidates
-    /// are not failures: only a selected file or an empty search reports one.
+    /// source supplies a value the tool cannot use. An automatically
+    /// discovered candidate that is simply absent is never a failure: a search
+    /// that finds nothing resolves against the defaults. A candidate that
+    /// exists but cannot be loaded is reported even when another file loaded,
+    /// which is what [`promoted_discovery_errors`] restores.
     pub fn resolve(cli: &Cli, matches: &ArgMatches) -> Result<Self, ConfigError> {
         Self::resolve_with_sources(
             cli,

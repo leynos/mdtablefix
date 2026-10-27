@@ -373,6 +373,18 @@ actual current state of the work.
       affected suites were re-run and the mutation proof re-applied to the
       refactored walker. Remaining: the re-run of `make lint` and `make test`
       on the fixed tree, then the commit.
+- [x] (2026-10-27) Gate set green on the fixed tree and committed as `afea508`.
+      `make lint` 0 warnings, `make test` 2956 passed, `make check-fmt`,
+      `make markdownlint` and `make nixie` all pass. Pushed over SSH from a
+      scrubbed environment; remote head verified equal to local (`afea508`).
+- [x] (2026-10-27) CodeRabbit round four on `afea508`, three findings. Accepted:
+      `Settings::resolve`'s rustdoc wrongly said only a selected file or an
+      empty search reports a discovery error, contradicting
+      `promoted_discovery_errors`; the same claim was reported twice and both
+      copies are corrected. Rejected: renaming ADR 0014 to the style guide's
+      `adr-NNN` pattern, which repeats a round-two finding and is argued in
+      `Decision log`. Remaining: the gates on the corrected tree, the commit,
+      the push, and one further review round.
 
 ## Surprises & discoveries
 
@@ -1010,6 +1022,33 @@ were the same defect reported twice and are closed by one change.
   `a_sanctioned_expect_is_not_an_offence::case_3_cli_config_fixture` with an
   index-out-of-bounds panic, because the case indexes the array it was removed
   from. Date/Author: 2026-10-27, implementation agent.
+
+### CodeRabbit round four
+
+Three findings, run against the head after round three landed. One was a real
+defect reported twice; the third repeats a round-two finding already rejected.
+
+- Decision (accepted, and the duplicate closed with it): correct
+  `Settings::resolve`'s rustdoc. It claimed that "only a selected file or an
+  empty search" reports a discovery error, but `promoted_discovery_errors`
+  deliberately promotes an existing-but-unloadable automatic candidate even
+  when another layer loaded — that promotion is the round-two fix, so the
+  sentence contradicted the code beneath it. It now says what the module does:
+  an absent candidate is never a failure, an unloadable one is reported. The
+  two findings are the same claim at two lengths. Date/Author: 2026-10-27,
+  implementation agent.
+- Decision (rejected, for the second time): do not rename
+  `docs/adrs/0014-configuration-layering.md` or move it into `docs/`. The same
+  finding was raised and rejected in round two; the reasoning has not changed.
+  `docs/documentation-style-guide.md` does prescribe
+  `adr-NNN-short-description.md` in `docs/`, but all fourteen records in
+  `docs/adrs/` use a four-digit prefix and a bare title, and ADR 0014 states
+  that deviation and its reason in its own Context section: following the local
+  form is the consistent choice, and changing the convention is a
+  repository-wide decision outside this issue's scope. Renaming one record
+  would leave it the only file in the directory spelled differently from its
+  thirteen siblings and would break every existing cross-reference to it.
+  Date/Author: 2026-10-27, implementation agent.
 
 ## Outcomes & retrospective
 
