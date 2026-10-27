@@ -82,6 +82,42 @@ fn entries_of(directory: &Path) -> Result<Vec<std::fs::DirEntry>> {
         .collect()
 }
 
+/// What the walk should do with one directory entry.
+///
+/// Naming the three outcomes lets [`rust_sources`] dispatch on a value instead
+/// of nesting its tests: the loop body stays one `match` however many rules a
+/// classification grows.
+enum Step {
+    /// A directory worth descending into.
+    Descend(PathBuf),
+    /// A Rust source to collect.
+    Source(PathBuf),
+    /// Something the walk ignores, such as build output or a non-source file.
+    Ignore,
+}
+
+/// Classifies one entry of the walk.
+///
+/// A directory the walk should not descend into is ignored rather than
+/// collected, and a file is collected only for its `.rs` suffix. The suffix
+/// test goes through the lossy name because a non-UTF-8 file name cannot end in
+/// `.rs` as this crate's sources do.
+fn classify(entry: &std::fs::DirEntry) -> Step {
+    let path = entry.path();
+    if path.is_dir() {
+        return if is_walkable(&path) {
+            Step::Descend(path)
+        } else {
+            Step::Ignore
+        };
+    }
+    if entry.file_name().to_string_lossy().ends_with(".rs") {
+        return Step::Source(path);
+    }
+
+    Step::Ignore
+}
+
 /// Collects every Rust source beneath `root`, excluding `target` and dotfiles.
 ///
 /// A breadth-first walk written against `std::path`, so it behaves the same way
@@ -93,13 +129,10 @@ fn rust_sources(root: &Path) -> Result<Vec<PathBuf>> {
     let mut found = Vec::new();
     while let Some(directory) = pending.pop() {
         for entry in entries_of(&directory)? {
-            let path = entry.path();
-            if path.is_dir() {
-                if is_walkable(&path) {
-                    pending.push(path);
-                }
-            } else if entry.file_name().to_string_lossy().ends_with(".rs") {
-                found.push(path);
+            match classify(&entry) {
+                Step::Descend(path) => pending.push(path),
+                Step::Source(path) => found.push(path),
+                Step::Ignore => {}
             }
         }
     }
