@@ -56,6 +56,32 @@ fn read(path: &Path) -> Result<String> {
     std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))
 }
 
+/// Whether `directory` is one the walk should descend into.
+///
+/// `target` holds build output and a dotfile directory holds editor or tooling
+/// state; neither can contain a source this crate compiles, and descending into
+/// `target` alone would dwarf the sources the check reads.
+fn is_walkable(directory: &Path) -> bool {
+    let name = directory
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
+    !name.starts_with('.') && name != "target"
+}
+
+/// The entries of `directory`, or a failure naming it.
+///
+/// Kept separate so [`rust_sources`] reads as a visit rather than as error
+/// plumbing, and so the diagnostic that names an unreadable directory is
+/// written once.
+fn entries_of(directory: &Path) -> Result<Vec<std::fs::DirEntry>> {
+    std::fs::read_dir(directory)
+        .with_context(|| format!("listing {}", directory.display()))?
+        .map(|entry| entry.with_context(|| format!("reading an entry of {}", directory.display())))
+        .collect()
+}
+
 /// Collects every Rust source beneath `root`, excluding `target` and dotfiles.
 ///
 /// A breadth-first walk written against `std::path`, so it behaves the same way
@@ -66,19 +92,13 @@ fn rust_sources(root: &Path) -> Result<Vec<PathBuf>> {
     let mut pending = vec![root.to_path_buf()];
     let mut found = Vec::new();
     while let Some(directory) = pending.pop() {
-        let entries = std::fs::read_dir(&directory)
-            .with_context(|| format!("listing {}", directory.display()))?;
-        for entry in entries {
-            let entry =
-                entry.with_context(|| format!("reading an entry of {}", directory.display()))?;
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
+        for entry in entries_of(&directory)? {
             let path = entry.path();
             if path.is_dir() {
-                if !name.starts_with('.') && name != "target" {
+                if is_walkable(&path) {
                     pending.push(path);
                 }
-            } else if name.ends_with(".rs") {
+            } else if entry.file_name().to_string_lossy().ends_with(".rs") {
                 found.push(path);
             }
         }

@@ -183,6 +183,89 @@ fn run_stdin(opts: FormatOpts) -> anyhow::Result<ExitStatus> {
 /// compromise between the parallel fan-out each chunk buys and that bound.
 const ANALYSIS_CHUNK: usize = 256;
 
+/// What a run found across the files it analysed.
+///
+/// Carried as one value rather than three locals so the summary line and the
+/// status are read from a single source, and so counting a result stays in one
+/// place that both the per-chunk loop and its tests can reach.
+#[derive(Default)]
+struct Tally {
+    /// Files whose content the mode would change.
+    changed: usize,
+    /// Files the mode found already correct.
+    unchanged: usize,
+    /// Files that could not be read, rewritten or reported.
+    errored: usize,
+}
+
+impl Tally {
+    /// Counts one analysed file, writing its payload when it has one.
+    ///
+    /// An error is reported here rather than returned, because one unreadable
+    /// file must not abandon the rest of the selection. The chain matters: the
+    /// outer context names the file, and the cause explains the failure, such
+    /// as a declined symlink or a refused conflicted file.
+    ///
+    /// The only error returned is a write to standard output. A closed pipe
+    /// surfaces here, and `execute` treats it as the early exit it is rather
+    /// than as a failure to report.
+    fn account(
+        &mut self,
+        result: anyhow::Result<(mdtablefix::report::FileReport, String)>,
+        stdout: &mut impl Write,
+    ) -> anyhow::Result<()> {
+        match result {
+            Ok((report, payload)) => {
+                if report.is_changed {
+                    self.changed += 1;
+                } else {
+                    self.unchanged += 1;
+                }
+                stdout.write_all(payload.as_bytes())?;
+            }
+            Err(error) => {
+                eprintln!("{error:?}");
+                self.errored += 1;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Analyses one chunk of files, in argument order.
+///
+/// `--in-place` rewrites the tree, so its files are analysed one at a time and
+/// each sees what the file before it wrote. Every other mode only reads, so the
+/// chunk is analysed in parallel and then sorted back into argument order: the
+/// output is argument order whichever path ran, which is what makes the
+/// chunking unobservable.
+fn analyse_chunk(
+    mode: Mode,
+    guard: &ConflictGuard,
+    chunk: &[Utf8PathBuf],
+    format: &Formatter,
+) -> Vec<anyhow::Result<(mdtablefix::report::FileReport, String)>> {
+    match mode {
+        Mode::InPlace => chunk
+            .iter()
+            .map(|path| record_analysis(mode, path, || analyse_one(mode, guard, path, format)))
+            .collect(),
+        Mode::Print | Mode::Check | Mode::Diff | Mode::ListFiles => in_argument_order(
+            chunk
+                .par_iter()
+                .enumerate()
+                .map(|(index, path)| {
+                    (
+                        index,
+                        record_analysis(mode, path, || analyse_one(mode, guard, path, format)),
+                    )
+                })
+                .collect(),
+        ),
+    }
+}
+
 /// Analyses the named files under `mode`, in argument order.
 ///
 /// The only errors returned here are writes to standard output; a file that
@@ -195,53 +278,14 @@ fn run_files(
     opts: FormatOpts,
 ) -> anyhow::Result<ExitStatus> {
     let format = formatting_closure(opts);
-    let mut changed = 0;
-    let mut unchanged = 0;
-    let mut errored = 0;
     // One lock and one buffer for the run, not one per file: the results are
     // already assembled in memory, so the only question is how many syscalls
     // they cost.
     let mut stdout = BufWriter::new(io::stdout().lock());
+    let mut tally = Tally::default();
     for chunk in files.chunks(ANALYSIS_CHUNK) {
-        let results = match mode {
-            Mode::InPlace => chunk
-                .iter()
-                .map(|path| record_analysis(mode, path, || analyse_one(mode, guard, path, &format)))
-                .collect(),
-            Mode::Print | Mode::Check | Mode::Diff | Mode::ListFiles => in_argument_order(
-                chunk
-                    .par_iter()
-                    .enumerate()
-                    .map(|(index, path)| {
-                        (
-                            index,
-                            record_analysis(mode, path, || analyse_one(mode, guard, path, &format)),
-                        )
-                    })
-                    .collect(),
-            ),
-        };
-
-        for result in results {
-            match result {
-                Ok((report, payload)) => {
-                    if report.is_changed {
-                        changed += 1;
-                    } else {
-                        unchanged += 1;
-                    }
-                    // A closed pipe surfaces here, and `execute` treats it as the
-                    // early exit it is rather than as a failure to report.
-                    stdout.write_all(payload.as_bytes())?;
-                }
-                Err(error) => {
-                    // The chain matters: the outer context names the file, and
-                    // the cause explains the failure, such as a declined
-                    // symlink or a refused conflicted file.
-                    eprintln!("{error:?}");
-                    errored += 1;
-                }
-            }
+        for result in analyse_chunk(mode, guard, chunk, &format) {
+            tally.account(result, &mut stdout)?;
         }
     }
     stdout.flush()?;
@@ -250,8 +294,11 @@ fn run_files(
     // report rather than print; the read-only modes keep standard output a
     // machine contract by putting it on standard error.
     if mode.reports() {
-        eprintln!("{}", render_summary(changed, unchanged, errored));
+        eprintln!(
+            "{}",
+            render_summary(tally.changed, tally.unchanged, tally.errored)
+        );
     }
 
-    Ok(exit_status(mode, changed > 0, errored > 0))
+    Ok(exit_status(mode, tally.changed > 0, tally.errored > 0))
 }
