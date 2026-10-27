@@ -1689,7 +1689,7 @@ turn the rest into a vacuous pass. Run it with `make test`.
 ## Environment access policy
 
 No production code in this repository reads or writes the process environment
-at run time, and the only run-time reads anywhere are the two sanctioned test
+at run time, and the only run-time reads anywhere are the three sanctioned test
 composition roots described under [Choosing a seam](#choosing-a-seam).
 `make lint` keeps it that way. `clippy.toml` lists `std::env::var`, `var_os`,
 `vars`, `vars_os`, `set_var`, and `remove_var` under `disallowed-methods`, and
@@ -1720,13 +1720,25 @@ not Cargo compiles it. An item-scoped `#[expect]` carrying a reason is left
 alone at a sanctioned composition root, and nowhere else. The scan matches the
 source path and the enclosing item against `SANCTIONED_ROOTS` in
 `tests/support/allow_scan/roots.rs`, which currently names
-`write_failure_child` in `tests/rewrite_atomic.rs` and `ambient_variable` in
-`tests/support/idempotence_harness.rs`. The same attribute on any other item is
+`write_failure_child` in `tests/rewrite_atomic.rs`, `ambient_variable` in
+`tests/support/idempotence_harness.rs`, and `command` in
+`tests/support/cli_config_fixture.rs`. The same attribute on any other item is
 an offence, because exempting every item-scoped `expect` would honour the
 attribute rather than the rule: a contributor could write it on any function
 and read the environment beneath it. Adding a root is a policy decision, so it
 goes in the allowlist, in ADR-0012 and in this section together, with the
 argument for why that site can have no seam.
+
+The third root is the one the configuration work added. `Fixture::command`
+builds each child process for the process-level configuration tests, and it
+must remove from that child every variable carrying the `mdtablefix_` prefix in
+any case, because OrthoConfig upper-cases a name before comparing it: measured
+on 2026-10-27, `MDTABLEFIX_ELLIPSIS=true`, `mdtablefix_ellipsis=true` and
+`MdTaBlEfIx_ElLiPsIs=true` each enabled the transformation. A fixed list of
+upper-case spellings would therefore leave the lower-case ones readable on
+Linux and macOS. The site has no seam because handing it a pre-scrubbed
+environment would remove exactly the ambient input the fixture exists to
+exclude.
 
 Two shapes are refused structurally, neither being a complete attribute where
 it is written. A `macro_rules!` arm that forwards the attribute's *path*
@@ -1863,11 +1875,17 @@ file under `src/` for the framework's name and allowing it only in those five
 files, so a new module that names the framework fails the suite until it is
 declared binary-only as well. The list is a constant in the test, and adding a
 file to it is a deliberate statement that the file cannot be reached from
-`src/lib.rs`; the second test asserts the reachability half directly rather
-than trusting the list. A Cargo feature cannot express the boundary, because
-`ortho_config` is a normal dependency of the package and is therefore linked
-into the library as well as the binary; what keeps the library reusable is that
-no library source uses it.
+`src/lib.rs`; the second test asserts the reachability half rather than
+trusting the list. It does so by walking the module graph from `src/lib.rs` with
+`tests/support/module_graph.rs`, which follows `mod` declarations, `#[path]`
+attributes and `include!` alike, because text cannot see that
+`#[path = "config.rs"] mod settings;` reaches the same file under a name no
+literal check would recognise. A declaration naming no existing file is an
+error rather than a skipped edge, so a resolver that quietly stopped following
+one would fail rather than pass. A Cargo feature cannot express the boundary,
+because `ortho_config` is a normal dependency of the package and is therefore
+linked into the library as well as the binary; what keeps the library reusable
+is that no library source uses it.
 
 The module resolves settings in one pass and hands the driver a plain
 `Settings` struct with no configuration types in its signature, so the code

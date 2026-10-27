@@ -347,6 +347,32 @@ actual current state of the work.
       files unchanged), `make markdownlint` 47 files 0 issues, `make nixie` all
       diagrams validated. Remaining: the full gate set on the final tree, the
       push, the draft pull request, and the CodeRabbit round.
+- [x] (2026-10-27) CodeRabbit round three, all five findings resolved in the
+      working tree. Fixed: the case-insensitive environment scrub in
+      `tests/support/cli_config_fixture.rs`; the reachability half of
+      `tests/cli_config_dependency_contract.rs`, now a module-graph walk in
+      `tests/support/module_graph.rs` following `mod`, `#[path]` and
+      `include!`. Documentation corrected: the users' guide's wrong-type
+      paragraph (the diagnostic names neither file nor setting), the
+      provenance note's re-sync check (both vendored files, separately), and
+      this plan. The new composition root was sanctioned in `SANCTIONED_ROOTS`,
+      `tests/env_access_suppressions.rs`, ADR-0012 and the developers guide in
+      the same change, per that policy. Evidence: `cargo test --test
+      env_access_suppressions --test cli_config_dependency_contract` gives 60
+      passed, 0 failed; two mutations recorded under `Surprises &
+      discoveries` prove the walker and the allowlist entry are load-bearing.
+      Remaining: the full deterministic gate set, the commit, the push from a
+      scrubbed environment, and CodeRabbit round four.
+- [~] (2026-10-27) Full deterministic gate set on the round-three tree. First
+      run: `cargo fmt --all` applied nothing, and `check-fmt`, `test` (2956
+      passed), `markdownlint` (47 files, 0 issues), `nixie`, and `typecheck`
+      all passed; `make lint` failed on two `-D warnings` errors in the new
+      test code — `clippy::single-match-else` at `tests/support/module_graph.rs`
+      and `clippy::needless-borrow` at `tests/cli_config_dependency_contract.rs`.
+      Both fixed (the `match` became a let-else, the borrow was dropped); the
+      affected suites were re-run and the mutation proof re-applied to the
+      refactored walker. Remaining: the re-run of `make lint` and `make test`
+      on the fixed tree, then the commit.
 
 ## Surprises & discoveries
 
@@ -554,11 +580,12 @@ Document with evidence so future work benefits.
   than a missing field: the provider reads and merges the file before serde
   checks a type, so by the time the mismatch is known the value is a plain JSON
   node and its provenance is gone. Impact: the users' guide states that this
-  one failure names no file and that the setting name is what a user should
-  search for. The first draft of that section said the diagnostic named the
-  file and the parse failure; measurement caught the error, and the bullet was
-  split in two so the TOML-parse failure — which *does* name the path and the
-  line and column — is not described in the same sentence as the type failure.
+  one failure names neither the file nor the setting, and tells a user to
+  search the merged files and variables for the offending value. The first
+  draft of that section said the diagnostic named the file and the parse
+  failure; measurement caught the error, and the bullet was split in two so the
+  TOML-parse failure — which *does* name the path and the line and column — is
+  not described in the same sentence as the type failure.
 - Observation: the ten discovery locations all behave as documented, but only
   when probed one at a time. A first sweep that wrote every location into a
   single tree proved nothing: the file left by an earlier case was still there
@@ -592,6 +619,41 @@ Document with evidence so future work benefits.
   outcome would pass whether or not the code under test were correct. Impact:
   the configured-extension test formats a standard input instead, and its
   documentation says why.
+- Observation (CodeRabbit round three): the environment scrub in
+  `tests/support/cli_config_fixture.rs` matched a fixed list of upper-case
+  names, but OrthoConfig upper-cases a name before comparing it. Measured on
+  2026-10-27: `MDTABLEFIX_ELLIPSIS=true`, `mdtablefix_ellipsis=true` and
+  `MdTaBlEfIx_ElLiPsIs=true` each enabled the transformation, and a lower-case
+  `mdtablefix_config_path` selected its file through the discovery path too.
+  Impact: the scrub now enumerates the process environment and removes every
+  name carrying the `mdtablefix_` prefix in any case, so a spelling the fixture
+  has never heard of is still removed; any future key is covered without
+  editing the fixture.
+- Observation (CodeRabbit round three): a `#[path = "config.rs"] mod settings;`
+  in `src/lib.rs` reaches a binary-only file without writing any text the
+  dependency contract's scan could recognise. Impact: the reachability half is
+  now a module-graph walk in `tests/support/module_graph.rs`, following `mod`,
+  `#[path]` and `include!`, with an unresolvable declaration treated as an
+  error rather than a skipped edge.
+- Observation: the first mutation tried for that walk — appending
+  `#[path = "config.rs"] mod settings;` to `src/lib.rs` — never reached the
+  test, because `src/config.rs` names `crate::command`, `crate::select` and
+  `crate::driver`, which only the binary root declares, so the *library target*
+  failed to compile with `E0432`/`E0433` first. That proves the bypass is
+  blocked but not that the walker fires. Re-running with
+  `#[path = "config_schema.rs"]`, which has no `crate::` paths, made the
+  library compile and the contract fail with
+  `src/lib.rs reaches src/config_schema.rs, which belongs to the binary` while
+  the textual half stayed green — so the structural half is load-bearing, not
+  decorative.
+- Observation (CodeRabbit round three): the wrong-type diagnostic names neither
+  the file nor the setting. `wrap = "yes"` gives
+  `invalid type: string "yes", expected a boolean` and exit 2, identically from
+  a selected file, from a discovered file, and from `MDTABLEFIX_WRAP=yes`,
+  because the merge precedes type checking and provenance is lost. Impact: the
+  users' guide and this plan now say so and tell the reader to search the
+  merged files and variables for the offending value, rather than promising a
+  location the framework cannot supply.
 
 ## Decision log
 
@@ -896,6 +958,58 @@ plan status to `BLOCKED` until the deviation is accepted.
   only consumer. The rule is stated in the fixture's module documentation so
   the next shared item is placed correctly. Date/Author: 2026-10-27,
   implementation agent.
+
+### CodeRabbit round three
+
+Five findings. Three were accepted and fixed after each was reproduced; two
+were the same defect reported twice and are closed by one change.
+
+- Decision (accepted): scrub the child environment by case-insensitive prefix
+  rather than by a list of spellings. Rationale: the provider upper-cases a
+  name before matching it, measured three ways, so a list can only cover the
+  readings it enumerates. A prefix scan also covers every key the schema gains
+  later. The cost is one `std::env::vars_os()` call at a genuine composition
+  root, which is why the site was added to `SANCTIONED_ROOTS` and argued in
+  ADR-0012 and the developers guide in the same change, as that policy
+  requires. Date/Author: 2026-10-27, implementation agent.
+- Decision (accepted, in a stronger form than reported): replace the textual
+  reachability check with a module-graph walk. Rationale: the finding named
+  `#[path]`, but `include!` reaches a file just as surely, and a walk that
+  ignored it would leave the same hole under another spelling. The walker
+  follows `mod`, `#[path]` and `include!`, resolves the two base directories
+  the Rust Reference distinguishes, and fails on a declaration whose candidates
+  all miss. Non-vacuity comes from a negative control asserting both spellings
+  resolve to the same target, and from the `config_schema.rs` mutation recorded
+  under Surprises. Date/Author: 2026-10-27, implementation agent.
+- Decision (accepted, documentation only): state that the wrong-type
+  diagnostic reports the mismatch and nothing else. Rationale: measured
+  identical text and exit status from a selected file, a discovered file and an
+  environment variable, so the framework cannot name the source. The users'
+  guide tells the reader how to locate the value rather than promising a
+  location the code cannot supply. Date/Author: 2026-10-27, implementation
+  agent.
+- Decision (accepted, documentation only): record the re-sync check for each
+  vendored file separately in `docs/ortho-config-v0-10-0-provenance.md`.
+  Rationale: the two copies come from different upstream files, so a matching
+  hash for one says nothing about the other, and a single combined check would
+  let the second drift unnoticed. Date/Author: 2026-10-27, implementation agent.
+- Decision (duplicate): the two findings about the reachability check describe
+  the same defect — one named the missing resolution rule, the other the
+  declaration form that hides it. Both are closed by the walk, and the negative
+  control covers each case the pair named. Date/Author: 2026-10-27,
+  implementation agent.
+- Decision (policy, recorded here because it changed the allowlist): add
+  `command` in `tests/support/cli_config_fixture.rs` to `SANCTIONED_ROOTS`.
+  Rationale: it is the composition root for each child process the
+  process-level configuration tests spawn, and it has no seam because the
+  property under test is that the ambient environment does not reach the child;
+  handing it a scrubbed copy would let the fixture stop testing exactly that.
+  ADR-0012, the developers guide and `tests/env_access_suppressions.rs` were
+  updated in the same change, as the policy text requires. Mutation proof:
+  removing the entry fails
+  `a_sanctioned_expect_is_not_an_offence::case_3_cli_config_fixture` with an
+  index-out-of-bounds panic, because the case indexes the array it was removed
+  from. Date/Author: 2026-10-27, implementation agent.
 
 ## Outcomes & retrospective
 

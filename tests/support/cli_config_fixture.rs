@@ -8,10 +8,20 @@
 //! Two boundaries keep the child environment honest. `MDTABLEFIX_CONFIG_PATH`
 //! short-circuits automatic discovery, so a case that wants no configuration at
 //! all names a free-standing empty file rather than relying on the host having
-//! none. And every `MDTABLEFIX_*` variable the schema can read is removed from
-//! the child, so a developer who exported one does not change what a test sees.
+//! none. And every variable the provider could read is removed from the child,
+//! so a developer who exported one does not change what a test sees.
 //!
-//! The environment is scrubbed variable by variable rather than with
+//! The second boundary is a prefix match rather than a list. The provider
+//! upper-cases a name before comparing it, so it reads any spelling of the
+//! prefix: measured on 2026-10-27, `MDTABLEFIX_ELLIPSIS=true`,
+//! `mdtablefix_ellipsis=true` and `MdTaBlEfIx_ElLiPsIs=true` each enabled the
+//! transformation, and a lower-case `mdtablefix_config_path` selected its file
+//! too. Removing one spelling of each key would therefore leave the others
+//! readable on any platform where names are case-sensitive, so the scrub
+//! enumerates the environment and removes every name that carries the prefix in
+//! any case.
+//!
+//! The environment is otherwise inherited rather than cleared with
 //! `env_clear`: Windows needs `SystemRoot` and `PATH` to create a process and to
 //! find `git`, and this suite runs on both platforms.
 //!
@@ -31,27 +41,24 @@ use tempfile::TempDir;
 /// use is dead code under `-D warnings`.
 pub const RAGGED: &str = "|A|B|\n|---|---|\n|1|2|\n";
 
-/// Every variable the configuration layer can read, removed from each child.
+/// The prefix every configuration variable shares, in lower case.
 ///
-/// The selector is listed first because it is the one variable that changes
-/// which file is read rather than what a file says. The rest mirror the twelve
-/// keys `ConfigFile` carries, spelled the way `CsvEnv` derives them: the
-/// `MDTABLEFIX_` prefix, then the schema key in upper case.
-const CONFIGURATION_VARIABLES: [&str; 13] = [
-    "MDTABLEFIX_CONFIG_PATH",
-    "MDTABLEFIX_WRAP",
-    "MDTABLEFIX_RENUMBER",
-    "MDTABLEFIX_BREAKS",
-    "MDTABLEFIX_ELLIPSIS",
-    "MDTABLEFIX_FENCES",
-    "MDTABLEFIX_FOOTNOTES",
-    "MDTABLEFIX_CODE_EMPHASIS",
-    "MDTABLEFIX_HEADINGS",
-    "MDTABLEFIX_MD_EXTS",
-    "MDTABLEFIX_GIT",
-    "MDTABLEFIX_INCLUDE_UNTRACKED",
-    "MDTABLEFIX_ALLOW_CONFLICTED",
-];
+/// Wide enough to cover the selector and each of the twelve keys
+/// `ConfigFile` carries, which is deliberate: the provider matches the prefix
+/// itself, so a match on a full name would miss a key the schema gains later.
+const CONFIGURATION_PREFIX: &str = "mdtablefix_";
+
+/// Whether `name` could be a configuration variable, in any spelling.
+///
+/// Compared in lower case because the provider upper-cases a name before
+/// matching it, so every spelling of the prefix reaches a setting. Only the
+/// prefix is tested, not a key, so a variable this fixture has never heard of
+/// is still removed.
+fn carries_configuration_prefix(name: &std::ffi::OsStr) -> bool {
+    name.to_string_lossy()
+        .to_lowercase()
+        .starts_with(CONFIGURATION_PREFIX)
+}
 
 /// What one child process produced.
 pub struct Run {
@@ -110,6 +117,18 @@ impl Fixture {
     /// which belongs to the host, so it is set rather than removed. `HOME` and
     /// `USERPROFILE` are both set because discovery prefers whichever is
     /// non-empty and treats the other as a fallback.
+    ///
+    /// The scrub removes a variable by name for every inherited name that could
+    /// be one, which is why it reads the process environment: the set is defined
+    /// by a prefix, so a fixed list of spellings cannot cover it on a platform
+    /// where names are case-sensitive. This is the composition root for the
+    /// child's environment, and it has no caller that could be handed the
+    /// parent's instead — the whole point is that a developer's exported
+    /// variable cannot change what a test observes.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the fixture is the composition root for its child's environment"
+    )]
     pub fn command(&self) -> Command {
         let mut command = Command::cargo_bin("mdtablefix").expect("cargo binary");
         command
@@ -120,8 +139,10 @@ impl Fixture {
             .env("XDG_CONFIG_DIRS", self.base("dirs"))
             .env("APPDATA", self.base("appdata"))
             .env("LOCALAPPDATA", self.base("local"));
-        for name in CONFIGURATION_VARIABLES {
-            command.env_remove(name);
+        for (name, _) in std::env::vars_os() {
+            if carries_configuration_prefix(&name) {
+                command.env_remove(name);
+            }
         }
 
         command

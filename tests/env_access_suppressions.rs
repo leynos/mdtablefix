@@ -273,6 +273,7 @@ fn no_source_allows_a_policy_lint() -> Result<()> {
 #[rstest::rstest]
 #[case::write_failure_child(0)]
 #[case::ambient_variable(1)]
+#[case::cli_config_fixture(2)]
 fn a_sanctioned_expect_is_not_an_offence(#[case] index: usize) -> Result<()> {
     let (file, item) = SANCTIONED_ROOTS[index];
     let sanctioned = format!(
@@ -297,7 +298,7 @@ fn a_sanctioned_expect_is_not_an_offence(#[case] index: usize) -> Result<()> {
 /// Mutation proof (2026-09-15), each applied alone and reverted: exempting
 /// every outer `expect`, as the scan did before, fails both cases with
 /// `expected an offence`; refusing every outer `expect` fails
-/// [`a_sanctioned_expect_is_not_an_offence`] on both roots.
+/// [`a_sanctioned_expect_is_not_an_offence`] on every root.
 ///
 /// A third mutation was applied and is recorded as not discriminating, because
 /// a mutation that survives proves nothing and saying so is the point.

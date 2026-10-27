@@ -12,8 +12,8 @@ Accepted.
 
 `mdtablefix`'s production code reads nothing from the process environment. An
 audit of `src/`, `tests/`, and `test-macros/` found no call to `std::env::var`,
-`var_os`, `vars`, `vars_os`, `set_var`, or `remove_var` outside two sanctioned
-test composition roots, described under
+`var_os`, `vars`, `vars_os`, `set_var`, or `remove_var` outside three
+sanctioned test composition roots, described under
 [Permit one exception, scoped to an item](#permit-one-exception-scoped-to-an-item);
 the only other environment references are the compile-time
 `env!("CARGO_PKG_VERSION")` and `env!("CARGO_MANIFEST_DIR")` macros, which read
@@ -102,7 +102,7 @@ arrangement, a per-package `[lints.clippy]` table in each manifest and a second
 `--manifest-path test-macros/Cargo.toml` invocation in the `lint` recipe. The
 wider lint baseline was aligned with `netsuke` in issue #438.
 
-The test suite has two composition roots of its own, each carrying the
+The test suite has three composition roots of its own, each carrying the
 item-scoped `expect`. `write_failure_child` in `tests/rewrite_atomic.rs` is the
 child half of a test that re-execs this binary under `ulimit -f`, so the
 environment its parent composed is the only channel into that process.
@@ -110,6 +110,20 @@ environment its parent composed is the only channel into that process.
 `PROPTEST_CASES`, which proptest's own configuration honours and whoever runs
 the suite sets; `case_count` takes the reader as an argument, so the parsing
 and the fallback are exercised without any read at all.
+
+`Fixture::command` in `tests/support/cli_config_fixture.rs` is the third. It
+builds the child for the process-level configuration tests, and it has to
+enumerate the *test process's* environment to remove from the child every name
+carrying the `mdtablefix_` prefix in any case, because OrthoConfig upper-cases
+a name before matching it, so a developer's exported `mdtablefix_ellipsis=true`
+would otherwise silently change what those tests observe. There is no caller to
+hand it a scrubbed environment: the property under test is that the ambient one
+does not reach the child, so taking the environment as an argument would let
+the fixture be passed an already-clean copy and stop testing the thing it
+exists for. It is deliberately a *read* that composes a child's environment
+rather than a mutation of the test process's own, which is the shape
+[Build child environments explicitly](#build-child-environments-explicitly)
+prescribes.
 
 ### Choose a seam by call-site count
 
@@ -137,7 +151,7 @@ variable or one precedence ladder.
 
 A direct read is permitted only at a genuine executable composition root: in
 the application, `main` or a function it calls directly to assemble the
-command-line tool; in the test suite, the two harness roots named under
+command-line tool; in the test suite, the three harness roots named under
 [Prohibit ambient access](#prohibit-ambient-access), each of which is a
 composition root for the same reason, having no caller in this repository to
 take the value as an argument from. Such a site carries

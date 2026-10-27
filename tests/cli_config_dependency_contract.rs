@@ -7,10 +7,16 @@
 //! name the framework. `src/config.rs` and its tests do, and `src/main.rs`
 //! declares them, so they belong to the binary alone.
 //!
-//! The check is textual rather than a module-graph walk, so it also covers an
-//! `include!` target or a path spelled inside a macro. A file that names the
-//! framework anywhere at all is reported, which is stricter than "uses" and
-//! cheap to keep true.
+//! The first check is textual, so it also covers an `include!` target or a path
+//! spelled inside a macro. A file that names the framework anywhere at all is
+//! reported, which is stricter than "uses" and cheap to keep true.
+//!
+//! The second check is structural, because text alone cannot see a module
+//! reached under another name. `#[path = "config.rs"] mod settings;` declares no
+//! `mod config;` and names no file, yet it links the framework into the library
+//! exactly as `mod config;` would. So the reachability half walks the module
+//! graph in `tests/support/module_graph.rs`, following `mod`, `#[path]` and
+//! `include!` from `src/lib.rs`.
 //!
 //! Non-vacuity has two halves. The scan must *find* the framework in the
 //! binary-only files, so a broken detector cannot pass by reporting nothing;
@@ -20,6 +26,11 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
+
+// The path is relative to this file's own directory, `tests/`.
+#[path = "support/module_graph.rs"]
+mod module_graph;
 
 /// The dependency whose absence from the library is the invariant.
 const FRAMEWORK: &str = "ortho_config";
@@ -138,22 +149,72 @@ fn no_library_source_names_the_framework() -> Result<()> {
     Ok(())
 }
 
-/// The library declares neither of the binary-only modules.
+/// No file reachable from the library is one of the binary-only sources.
 ///
 /// The textual scan above is only sound if `src/lib.rs` cannot reach those
-/// files, so the reachability half of the invariant is asserted directly rather
-/// than inferred from the allowlist.
+/// files, so the reachability half is asserted by walking the module graph
+/// rather than by matching a declaration's text. Text cannot see
+/// `#[path = "config.rs"] mod settings;`, which reaches the same file under a
+/// name no literal check would recognise, so the walk follows `mod`, `#[path]`
+/// and `include!` alike.
 #[test]
-fn the_library_declares_no_binary_only_module() -> Result<()> {
+fn the_library_reaches_no_binary_only_source() -> Result<()> {
     let root = repository_root();
-    let library = read(&root.join("src/lib.rs"))?;
+    let reached = module_graph::reachable(
+        Utf8Path::from_path(&root.join("src/lib.rs"))
+            .context("src/lib.rs is not representable as UTF-8, so the walk has nothing to read")?,
+    )?;
 
-    for module in ["config", "config_tests"] {
+    // The witness: the walk must reach the library's own sources, or an empty
+    // result would satisfy the assertion below for the wrong reason.
+    ensure!(
+        reached.len() > 20,
+        "the walk reached only {} sources, so it is not following declarations",
+        reached.len()
+    );
+    for path in &reached {
+        let relative = relative(&root, path.as_std_path());
         ensure!(
-            !library.contains(&format!("mod {module};")),
-            "src/lib.rs declares `mod {module};`, which would link {FRAMEWORK} into the library"
+            !BINARY_ONLY.contains(&relative.as_str()),
+            "src/lib.rs reaches {relative}, which belongs to the binary"
         );
     }
+
+    Ok(())
+}
+
+/// The walk sees a module reached both ways, so neither rule can rot alone.
+///
+/// The negative control for [`the_library_reaches_no_binary_only_source`]: a
+/// synthetic file states the two spellings a contributor could use, and the
+/// walk must name the same target for both. Without this, a resolver that
+/// silently dropped `#[path]` would pass every assertion above.
+#[test]
+fn the_walk_follows_both_declaration_spellings() -> Result<()> {
+    let declaring = Utf8Path::new("src/example.rs");
+    let source = concat!(
+        "mod config;\n",
+        "#[path = \"config.rs\"]\nmod settings;\n",
+        "mod inline {\n",
+        "    mod nested;\n",
+        "}\n",
+    );
+
+    assert_eq!(
+        module_graph::declared_targets(source, declaring)?,
+        vec![
+            vec![
+                Utf8PathBuf::from("src/example/config.rs"),
+                Utf8PathBuf::from("src/example/config/mod.rs")
+            ],
+            vec![Utf8PathBuf::from("src/config.rs")],
+            vec![
+                Utf8PathBuf::from("src/example/inline/nested.rs"),
+                Utf8PathBuf::from("src/example/inline/nested/mod.rs"),
+            ],
+        ],
+        "an implicit, a path-qualified and an inline-nested declaration must each resolve"
+    );
 
     Ok(())
 }

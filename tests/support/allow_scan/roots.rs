@@ -16,13 +16,18 @@ use camino::Utf8Path;
 
 /// The file and item of each sanctioned composition root.
 ///
-/// Both are executable roots that cannot be given a seam. `write_failure_child`
-/// is re-executed by its parent, so the child's environment is the only channel
-/// in; `ambient_variable` reads `PROPTEST_CASES`, proptest's own knob, set by
-/// whoever runs the suite rather than by any caller in this repository.
-pub const SANCTIONED_ROOTS: [(&str, &str); 2] = [
+/// All three are executable roots that cannot be given a seam.
+/// `write_failure_child` is re-executed by its parent, so the child's
+/// environment is the only channel in; `ambient_variable` reads
+/// `PROPTEST_CASES`, proptest's own knob, set by whoever runs the suite rather
+/// than by any caller in this repository; and `Fixture::command` enumerates
+/// the test process's environment to scrub it from the child it is about to
+/// spawn, which is what keeps a developer's exported
+/// `MDTABLEFIX_*` variable out of every process-level configuration test.
+pub const SANCTIONED_ROOTS: [(&str, &str); 3] = [
     ("tests/rewrite_atomic.rs", "write_failure_child"),
     ("tests/support/idempotence_harness.rs", "ambient_variable"),
+    ("tests/support/cli_config_fixture.rs", "command"),
 ];
 
 /// Return whether `path` is exactly `expected`, written with `/`.

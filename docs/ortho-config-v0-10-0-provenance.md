@@ -47,10 +47,18 @@ $ git -C /path/to/ortho-config show \
 84d1c97b77024224dc9220a12d4b749205d9bb2db54849185da21c969dda5575  -
 $ sha256sum docs/ortho-config-users-guide.md
 84d1c97b77024224dc9220a12d4b749205d9bb2db54849185da21c969dda5575  docs/ortho-config-users-guide.md
+$ git -C /path/to/ortho-config show \
+    "v0.10.0^{commit}:docs/v0-10-0-migration-guide.md" | sha256sum
+b5331aa6cfcc07b3dcd188c620db98d0a1a1f13b0c8ef96d88913d701bca25bf  -
+$ sha256sum docs/ortho-config-v0-10-0-migration-guide.md
+b5331aa6cfcc07b3dcd188c620db98d0a1a1f13b0c8ef96d88913d701bca25bf  \
+    docs/ortho-config-v0-10-0-migration-guide.md
 ```
 
-The two hashes matching is the whole check. If they differ, either the local
-copy drifted or the tag was moved; `git rev-parse` settles which.
+Each pair of hashes matching is the whole check, and both pairs are needed: the
+migration guide is a copy of a different upstream file, so re-syncing one says
+nothing about the other. If a pair differs, either that local copy drifted or
+the tag was moved; `git rev-parse` settles which.
 
 ## Version boundary
 
