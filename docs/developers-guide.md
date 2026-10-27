@@ -1689,7 +1689,7 @@ turn the rest into a vacuous pass. Run it with `make test`.
 ## Environment access policy
 
 No production code in this repository reads or writes the process environment
-at run time, and the only run-time reads anywhere are the two sanctioned test
+at run time, and the only run-time reads anywhere are the three sanctioned test
 composition roots described under [Choosing a seam](#choosing-a-seam).
 `make lint` keeps it that way. `clippy.toml` lists `std::env::var`, `var_os`,
 `vars`, `vars_os`, `set_var`, and `remove_var` under `disallowed-methods`, and
@@ -1720,13 +1720,25 @@ not Cargo compiles it. An item-scoped `#[expect]` carrying a reason is left
 alone at a sanctioned composition root, and nowhere else. The scan matches the
 source path and the enclosing item against `SANCTIONED_ROOTS` in
 `tests/support/allow_scan/roots.rs`, which currently names
-`write_failure_child` in `tests/rewrite_atomic.rs` and `ambient_variable` in
-`tests/support/idempotence_harness.rs`. The same attribute on any other item is
+`write_failure_child` in `tests/rewrite_atomic.rs`, `ambient_variable` in
+`tests/support/idempotence_harness.rs`, and `command` in
+`tests/support/cli_config_fixture.rs`. The same attribute on any other item is
 an offence, because exempting every item-scoped `expect` would honour the
 attribute rather than the rule: a contributor could write it on any function
 and read the environment beneath it. Adding a root is a policy decision, so it
 goes in the allowlist, in ADR-0012 and in this section together, with the
 argument for why that site can have no seam.
+
+The third root is the one the configuration work added. `Fixture::command`
+builds each child process for the process-level configuration tests, and it
+must remove from that child every variable carrying the `mdtablefix_` prefix in
+any case, because OrthoConfig upper-cases a name before comparing it: measured
+on 2026-10-27, `MDTABLEFIX_ELLIPSIS=true`, `mdtablefix_ellipsis=true` and
+`MdTaBlEfIx_ElLiPsIs=true` each enabled the transformation. A fixed list of
+upper-case spellings would therefore leave the lower-case ones readable on
+Linux and macOS. The site has no seam because handing it a pre-scrubbed
+environment would remove exactly the ambient input the fixture exists to
+exclude.
 
 Two shapes are refused structurally, neither being a complete attribute where
 it is written. A `macro_rules!` arm that forwards the attribute's *path*
@@ -1847,6 +1859,79 @@ scan directory as its working directory. The regression tests
 `static_regex_issue_586_stub_survives_an_open_write_descriptor` hold a stub
 open for writing while it runs, so direct execution fails them
 deterministically.
+
+## Configuration layering
+
+`src/config.rs` is a binary-only module: `src/main.rs` declares it and
+`src/lib.rs` does not, so the reusable library never names `ortho_config`. Four
+more files belong to it. `src/config_schema.rs` holds the schema and the
+constants, split out because the resolution logic and the type it folds over
+read better apart. Three `#[path]` modules follow their declaring file: the
+shared fixture `src/config_test_support.rs`, the resolution table in
+`src/config_tests.rs`, and the failure cases in `src/config_error_tests.rs`.
+
+`tests/cli_config_dependency_contract.rs` holds that boundary by scanning every
+file under `src/` for the framework's name and allowing it only in those five
+files, so a new module that names the framework fails the suite until it is
+declared binary-only as well. The list is a constant in the test, and adding a
+file to it is a deliberate statement that the file cannot be reached from
+`src/lib.rs`; the second test asserts the reachability half rather than
+trusting the list. It does so by walking the module graph from `src/lib.rs` with
+`tests/support/module_graph.rs`, which follows `mod` declarations, `#[path]`
+attributes and `include!` alike, because text cannot see that
+`#[path = "config.rs"] mod settings;` reaches the same file under a name no
+literal check would recognize. A declaration naming no existing file is an
+error rather than a skipped edge, so a resolver that quietly stopped following
+one would fail rather than pass. The walker expands no macros, so a macro whose
+body or arguments write `mod` is reported as unanalysable instead of skipped: a
+`sneak!()` emitting `#[path = "config_schema.rs"] mod settings;` would
+otherwise reach a binary-only file while every file the walk reads stayed
+clean. A macro invoked elsewhere with a body that writes no `mod` token remains
+undetectable, and that residual gap is recorded in the ExecPlan's
+`Residual gaps` rather than claimed away. A Cargo feature cannot express the
+boundary, because `ortho_config` is a normal dependency of the package and is
+therefore linked into the library as well as the binary; what keeps the library
+reusable is that no library source uses it.
+
+The module resolves settings in one pass and hands the driver a plain
+`Settings` struct with no configuration types in its signature, so the code
+that formats a file cannot tell where a setting came from. The layers are
+composed by hand rather than by the derive's generated loader, for the reason
+[ADR 0014](adrs/0014-configuration-layering.md) records: the generated parser
+renders every boolean switch with a value placeholder and accepts
+`--wrap=false`, and it adds a hidden `--config-path`, either of which would
+change the command line this tool already has. `Cli::parse_validated()` stays
+the only argument parser, and `ConfigFile` is used only as a merge target.
+
+`Settings::resolve` is the process-backed entry point; it names
+`process_env_source()` and `process_scan_env_source()` once, at the composition
+root, and delegates to `Settings::resolve_with_sources`, which takes the two
+shared traits. That split exists for
+[the environment seam taxonomy](adrs/0012-environment-seam-taxonomy.md):
+discovery only performs named lookups while the merge layer enumerates a
+prefix, so the two are separate traits, and a test supplies one `MapEnv` as
+both. Nothing in the module reads the process environment itself.
+
+Two rules decide which layer an argument reaches. A value counts as typed only
+when `ArgMatches::value_source` reports `ValueSource::CommandLine`, so a clap
+default never outranks a configured value and never counts as typing the flag
+that carries it — which is what keeps `--md-exts` from demanding `--git` when a
+file supplied the list. And a positional file argument outranks a configured
+`git`, because a path is the user's own statement of what to act on; `Settings`
+states that rule once, so no caller has a second copy to drift from.
+
+One dependency is worth knowing about. `ortho_config`'s discovery builder
+always resolves a Project root from the process working directory, and the
+method that would substitute one is crate-private upstream. A test asserting a
+compiled-in default therefore also relies on the repository root holding no
+`.mdtablefix.toml`; that dotfile is the Project scope's only candidate. A
+`mdtablefix/config.toml` at the root is not one, so it would change nothing.
+`src/config_tests.rs` states the dependency in its module documentation; if
+such a file ever appears at the root, the affected cells fail loudly rather
+than passing for the wrong reason. Because the root cannot be substituted,
+every claim about the Project scope — its precedence over the User scope, and
+the malformed-file diagnostic — is asserted from a child process whose working
+directory is the fixture root, not from the in-process tables.
 
 ## Coverage publication belongs to `main`
 

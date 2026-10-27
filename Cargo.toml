@@ -43,7 +43,14 @@ metrics = "0.24"
 thiserror = "2"
 tracing = "0.1"
 unicode-width = "0.2"
-
+# Layered configuration for the binary's settings. Default features carry the
+# TOML and `serde_json` providers, and the crate does not build without them
+# (leynos/ortho-config#627). It is reachable only from binary-only modules, so
+# `src/lib.rs` never sees it; see docs/adrs/0014-configuration-layering.md.
+ortho_config = "0.10.0"
+# The derive emits code naming `serde::Serialize` and `serde::de::DeserializeOwned`,
+# so the traits must come from a crate this package names directly.
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 rstest = "0.28"

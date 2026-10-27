@@ -10,6 +10,7 @@
 - [Concurrency with `rayon`](#concurrency-with-rayon)
 - [Check and diff reporting](#check-and-diff-reporting)
 - [Git file selection](#git-file-selection)
+- [Configuration layering](#configuration-layering)
 - [Atomic in-place writes](#atomic-in-place-writes)
 - [Unicode width handling](#unicode-width-handling)
 - [Link punctuation handling](#link-punctuation-handling)
@@ -992,6 +993,92 @@ reported before any file is analysed, because the run cannot then say which set
 it would have formatted. Only a run that can write resolves the Git directory
 for the conflict guard, and that directory is then consulted per written file.
 The paths join `run_files` exactly as positional paths do._
+
+## Configuration layering
+
+Every run resolves its settings through one composition root before it does
+anything else. `main::run` parses the argument vector with
+`Cli::parse_validated` as it always has, then hands the parsed `Cli` and the
+`clap::ArgMatches` to `Settings::resolve`, which returns a `Settings` value.
+Everything downstream — the `--git` branch and both of the file and stdin paths
+— reads that value rather than the raw `Cli`. The configuration module is
+declared from `src/main.rs` and is not reachable from `src/lib.rs`, so no
+library API depends on it. The decision, and the alternatives rejected in its
+favour, are recorded in [ADR 0014](adrs/0014-configuration-layering.md).
+
+The resolution walks four tiers in increasing precedence: compiled-in defaults,
+discovered configuration files, the `MDTABLEFIX_` environment, and the command
+line. Each tier becomes a value layer, and the layers are folded left to right
+by the `ortho_config` merge that the schema derives, so a later tier overrides
+an earlier one key by key. A tier that supplies nothing contributes nothing,
+and a run with no file and no variable therefore resolves to exactly the
+defaults the argument parser already produces. The configured settings are the
+eight transformation switches and the Git selection's extension list and
+switches. The mode and the positional paths are not configurable: a file may
+not turn a formatted run into an in-place rewrite, nor choose the files a run
+acts on.
+
+Discovery is scope-stacked rather than flat. Candidates are gathered from the
+explicit selector `MDTABLEFIX_CONFIG_PATH`, the XDG and Windows configuration
+directories, the home directory, and the working directory, then grouped by
+scope — system, user, project — and applied scope by scope. Within a scope the
+candidate list is walked from least to most preferred, so the location a flat
+scan would have chosen is the one that wins, while a project file still
+overrides a user file. The project scope is the working directory alone: there
+is no walk upward and no stop at a Git root, so a run from a subdirectory does
+not read the repository's file.
+
+Environment access is injected rather than ambient. The composition root names
+the process-backed sources that the framework reads through, and tests supply a
+`MapEnv` in their place, so neither the discovery lookups nor the prefixed
+enumeration is a call this repository's own code makes. That keeps the layering
+inside the seam [ADR 0012](adrs/0012-environment-seam-taxonomy.md) requires
+without needing an exception to it.
+
+Failures divide in two. A configuration failure — an unreadable or malformed
+selected file, an unreadable or malformed _discovered_ file, a value of the
+wrong type, an unreadable directory that makes a candidate unclassifiable — is
+reported on standard error as `mdtablefix: <message>` and ends the run with
+`ExitStatus::Error`, which is status 2, before any file is read. A discovered
+file that is absent is not a failure; it contributes nothing. A discovered file
+that exists and cannot be loaded is, even when another scope loaded: the
+framework classifies automatic candidates as optional and would otherwise
+withhold the failure, so the composition root promotes those errors rather than
+proceeding on a lower scope's settings. Help and version requests are not
+failures: they are display requests that the argument parser satisfies and the
+run reports as success. `Settings::resolve` returns a `Result` and neither
+prints nor exits, so the decision to write to a stream and to choose a status
+stays in `main`.
+
+For screen readers: The following flow traces one run from the argument vector
+to the driver, showing where the command-line tier is read, where each
+configuration tier enters, and where a configuration failure leaves the run.
+
+```mermaid
+flowchart TD
+    A["argv"] --> B["Cli::parse_validated"]
+    B -->|display request| C["clap writes help or version"]
+    C --> D["ExitStatus::Success"]
+    B -->|parsed| E["Settings::resolve(cli, matches)"]
+    F["compiled-in defaults"] --> E
+    G["discovered file layers: system, user, project"] --> E
+    H["MDTABLEFIX_ environment"] --> E
+    E --> I["command-line tier from the parsed Cli"]
+    I --> J["merge_from_layers"]
+    J -->|Ok| K["Settings"]
+    J -->|Err| L["eprintln mdtablefix: message"]
+    L --> M["ExitStatus::Error"]
+    K --> N["git_inputs::resolve or Inputs::resolve"]
+    N --> O["run_stdin or run_files"]
+```
+
+Figure: Configuration resolution. The parsed argument vector supplies the
+highest-precedence layer and the selection of which source to read; discovery
+contributes file layers in scope order; the environment contributes what the
+prefix names; and the merge folds all of it over the compiled-in defaults
+before the driver sees a single setting. A configuration failure is reported
+and the run stops ahead of any file access, while a display request is answered
+by the parser and counted as success.
 
 ## Atomic in-place writes
 

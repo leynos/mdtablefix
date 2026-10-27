@@ -15,7 +15,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::{
-    command::Cli,
+    config::Settings,
     driver::{Inputs, Mode},
     select::{
         ConflictGuard,
@@ -133,12 +133,12 @@ impl GitSelection {
 /// cannot be read is reported rather than skipped: the run would otherwise
 /// format a set it cannot describe.
 pub fn resolve(
-    cli: &Cli,
+    settings: &Settings,
     mode: Mode,
     working_directory: &Utf8Path,
 ) -> Result<GitSelection, GitInputsError> {
-    let extensions = cli.extensions();
-    let listing = GitLsFiles::new(cli.includes_untracked()).list_candidates(working_directory)?;
+    let extensions = settings.md_exts.clone();
+    let listing = GitLsFiles::new(settings.include_untracked).list_candidates(working_directory)?;
 
     let candidates: Vec<CandidatePath> = listing
         .paths
@@ -162,7 +162,7 @@ pub fn resolve(
                 .map(|candidate| Utf8PathBuf::from(candidate.as_str()))
                 .collect(),
         ),
-        guard: guard(cli, mode, working_directory)?,
+        guard: guard(settings, mode, working_directory)?,
         skipped_non_utf8: listing.skipped_non_utf8,
         selection,
     })
@@ -188,15 +188,15 @@ pub fn resolve(
 /// tool performs unguarded. The failure is reported like any other operational
 /// failure, per [`crate::driver::exit_status`].
 fn guard(
-    cli: &Cli,
+    settings: &Settings,
     mode: Mode,
     working_directory: &Utf8Path,
 ) -> Result<ConflictGuard, GitListError> {
-    if mode != Mode::InPlace || cli.allows_conflicted() {
+    if mode != Mode::InPlace || settings.allow_conflicted {
         return Ok(ConflictGuard::unguarded());
     }
 
-    let git_dir = GitLsFiles::new(cli.includes_untracked()).resolve_git_dir(working_directory)?;
+    let git_dir = GitLsFiles::new(settings.include_untracked).resolve_git_dir(working_directory)?;
 
     Ok(ConflictGuard::guarded(git_dir))
 }

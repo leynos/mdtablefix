@@ -56,6 +56,9 @@
 - [Environment seam taxonomy](adrs/0012-environment-seam-taxonomy.md): Accepted
   decision prohibiting ambient process-environment access and naming the
   injection shapes that replace it.
+- [Configuration layering](adrs/0014-configuration-layering.md): Accepted
+  decision adopting `ortho_config` v0.10.0 for the command-line interface's
+  settings, file discovery, environment prefix, and precedence order.
 
 ## Reference material
 
@@ -70,6 +73,12 @@
   breaks and other trailing-space-sensitive content.
 - [rstest-bdd user's guide](rstest-bdd-users-guide.md): Vendored guide to the
   `rstest-bdd` framework, whose scenarios drive the reporting tests.
+- [`ortho_config` user's guide](ortho-config-users-guide.md): Vendored v0.10.0
+  guide to the configuration framework the binary adopts.
+- [Migrating `ortho_config` to v0.10.0](ortho-config-v0-10-0-migration-guide.md):
+  Vendored v0.9.0-to-v0.10.0 migration guide.
+- [`ortho_config` provenance](ortho-config-v0-10-0-provenance.md): Tag, commit,
+  and checksums for the two vendored guides, and how to re-sync them.
 - [Reliable testing in Rust via dependency injection](reliable-testing-in-rust-via-dependency-injection.md):
   Vendored guide to making tests deterministic by injecting their dependencies.
 
@@ -98,6 +107,8 @@
 - [Fence transition kernel and normalization](execplans/issue-486-proof-fence-transition-kernel-and-lem-fence-normalization-preserves-regions.md):
   Plan for the fence transition kernel and the
   `LEM-FENCE-NORMALIZATION-PRESERVES-REGIONS` proof.
+- [Adopting `ortho_config` v0.10.0](execplans/issue-666-adopt-ortho-config-v0-10-0-for-the-mdtablefix-cli.md):
+  Plan for layered configuration in the command-line interface.
 
 ## Debugging records
 
