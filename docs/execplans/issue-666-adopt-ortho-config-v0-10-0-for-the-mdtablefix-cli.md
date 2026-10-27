@@ -470,7 +470,7 @@ actual current state of the work.
       whose `New code is healthy` gate requires **every** new or changed file to
       score at least 10.00; that gate is critical, and it is failing with the
       same two files listed under it. `Enforce advisory code health rules` fails
-      as well, for the same two findings. Six of the eight gates pass, among
+      as well, for the same two findings. Four of the six gates pass, among
       them `Enforce critical code health rules`, which is a *different* gate
       about named rules; the earlier wording mistook that one passing for a
       clean run. What is true is narrower: the only thing between this branch
