@@ -205,19 +205,21 @@ The file is TOML. Its name is `config.toml` inside a `mdtablefix` directory, or
 below. The scope column says which layer a location belongs to; within one
 scope, an earlier row is preferred to a later one.
 
-| Order | Scope    | Location                                                              |
-| ----- | -------- | --------------------------------------------------------------------- |
-| 1     | Selected | The path named by `MDTABLEFIX_CONFIG_PATH`, when set and non-empty.   |
-| 2     | User     | `$XDG_CONFIG_HOME/mdtablefix/config.toml`, then the dotfile beside    |
-|       |          | it.                                                                   |
-| 3     | System   | The same pair under each `XDG_CONFIG_DIRS` entry, or under `/etc/xdg` |
-|       |          | when the variable is unset or names no usable directory.              |
-| 4     | User     | The same pair under `%APPDATA%`, then under `%LOCALAPPDATA%`.         |
-| 5     | User     | `$HOME/.config/mdtablefix/config.toml`, then                          |
-|       |          | `$HOME/.config/.mdtablefix.toml`, then `$HOME/.mdtablefix.toml`.      |
-| 6     | Project  | `.mdtablefix.toml` in the working directory.                          |
+| Order | Scope    | Location                                                                                                      |
+| ----- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| 1     | Selected | The path named by `MDTABLEFIX_CONFIG_PATH`, when set and non-empty.                                           |
+| 2     | User     | `$XDG_CONFIG_HOME/mdtablefix/config.toml`, then the dotfile beside it.                                        |
+| 3     | System   | The same pair under each `XDG_CONFIG_DIRS` entry, or under `/etc/xdg`.                                        |
+| 4     | User     | The same pair under `%APPDATA%`, then under `%LOCALAPPDATA%`.                                                 |
+| 5     | User     | `$HOME/.config/mdtablefix/config.toml`, then `$HOME/.config/.mdtablefix.toml`, then `$HOME/.mdtablefix.toml`. |
+| 6     | Project  | `.mdtablefix.toml` in the working directory.                                                                  |
 
 _Table 2: Where a configuration file is found._
+
+Two cells are abbreviated. Row 3 reads `/etc/xdg` when `XDG_CONFIG_DIRS` is
+unset or names no usable directory. Row 5's three paths are the XDG directory
+spelled out, then the dotfile in the same directory, then the dotfile in the
+home directory itself.
 
 The working directory holds only the dotfile: a `mdtablefix/config.toml` beside
 a run's own files is not a candidate.

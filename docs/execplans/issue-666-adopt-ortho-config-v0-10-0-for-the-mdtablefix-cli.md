@@ -1675,14 +1675,20 @@ that the file already carries. The module holds:
   `ConfigFile::merge_from_layers`.
 - `ConfigError`, a `thiserror` enum with variants for an unreadable selected
   file, a malformed file, an invalid value, and an environment-layer failure,
-  each carrying the path or variable name that produced it.
+  each carrying the path or variable name that produced it. (As built, two
+  variants: `InvalidValue` and `Merge`. A malformed file and an unreadable one
+  both arrive as an `OrthoError` from the framework, so a separate variant per
+  cause would restate the framework's own taxonomy. Decision `d`.)
 
 `src/main.rs`'s `run()` changes from calling `Cli::parse_validated()` alone to
 calling it and then `Settings::resolve`, mapping a `ConfigError` to
 `eprintln!("mdtablefix: {}", error)` plus `ExitStatus::Error`. The rest of
 `run()` reads fields from `Settings` instead of from `Cli`. `Cli` gains one
 accessor, `typed_flags()`, returning the set of flags the user typed, so
-`Settings` can carry the "was it typed" bit for `--md-exts`.
+`Settings` can carry the "was it typed" bit for `--md-exts`. (As built, no
+accessor: `typed_bool` and `is_typed` in `src/config.rs` read the provenance
+from `ArgMatches` directly, because `Cli` does not hold the matches. Decision
+`e`.)
 
 This edit must keep `src/main.rs` under 400 lines. If it cannot, the `run()`
 decomposition moves to `src/driver/`, not to a longer `main.rs`.
@@ -2092,7 +2098,9 @@ because the derive emits code naming `serde::Serialize` and
 `serde::de::DeserializeOwned`; it is used only by the configuration module.
 
 In the new module `src/config.rs`, the following types must exist at the end of
-EP-M3:
+EP-M3. The declarations are followed by a note on where the built code differs
+from them; the note, not a silent edit, is what keeps a reader who follows the
+plan literally from reaching a design the Decision log rejects.
 
 ```rust
 /// The configuration file's schema, as the derive sees it.
@@ -2112,7 +2120,7 @@ pub struct Settings {
     /// The resolved formatting rule set.
     pub opts: command::FormatOpts,
     /// The resolved extension list for `--git` selection.
-    pub md_exts: select::ExtensionFilter,
+    pub md_exts: select::extensions::ExtensionFilter,
     /// Whether `--git` selection was requested.
     pub git: bool,
     /// Whether untracked files should be included.
@@ -2128,9 +2136,6 @@ pub struct Settings {
 /// Everything that can go wrong while resolving configuration.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
-    /// A selected configuration file could not be read.
-    #[error("cannot read configuration file {path}: {source}")]
-    Unreadable { path: camino::Utf8PathBuf, source: std::io::Error },
     /// A configuration source supplied a value that cannot be used.
     #[error("invalid configuration value for {key}: {message}")]
     InvalidValue { key: String, message: String },
@@ -2140,6 +2145,23 @@ pub enum ConfigError {
 }
 ```
 
+*As built.* The types above are the plan as executed, corrected to what the
+code actually declares. Three declarations changed during EP-M3 and the changes
+are recorded in the Decision log rather than left as drift:
+
+- `ConfigError` has two variants, not four. There is no `Unreadable`: the
+  framework reports a file it cannot read as `OrthoError::File`, so a variant
+  of this module's own would duplicate the framework's work and invent a
+  distinction it does not promise to keep. Decision `d`.
+- The typed-flag accessor is not a method on `Cli`. It is the private pair
+  `typed_bool(matches, id, value)` and `is_typed(matches, id)` in
+  `src/config.rs`, because `ArgMatches` is where provenance lives and `Cli`
+  deliberately does not hold it. Decision `e`.
+- `md_exts` is a `select::extensions::ExtensionFilter`. The module is
+  `pub(crate) mod extensions;` inside `select`, and nothing re-exports the
+  type. The path in the earlier draft, `select::ExtensionFilter`, does not
+  compile.
+
 `Settings::resolve` must take the parsed `Cli` and the `clap::ArgMatches` that
 produced it, because `ArgMatches` is the only place where "was this flag typed"
 is recorded, and must return `Result<Settings, ConfigError>` without printing
@@ -2147,7 +2169,7 @@ or exiting. The composition root in `src/main.rs` prints and exits, preserving
 the existing arrangement in which only `main.rs` and `command::parse_validated`
 touch the process boundary.
 
-`Cli` gains exactly one method:
+`Cli` was planned to gain exactly one method:
 
 ```rust
 /// Reports whether the user typed the given flag, as distinct from clap
@@ -2157,7 +2179,10 @@ pub fn typed(&self, flag: &str) -> bool
 ```
 
 or an equivalent that returns the set `Settings` needs, so the `--md-exts`
-requirement can be judged on what the user typed.
+requirement can be judged on what the user typed. *As built*, the equivalent
+chosen is the second alternative: `Cli` gains nothing, and the private
+`typed_bool` and `is_typed` helpers in `src/config.rs` read the provenance from
+the matches. Decision `e` records why.
 
 The library must not gain any reference to `ortho_config`, `serde`, or
 `src/config.rs`. `src/lib.rs` is unchanged by this plan.
