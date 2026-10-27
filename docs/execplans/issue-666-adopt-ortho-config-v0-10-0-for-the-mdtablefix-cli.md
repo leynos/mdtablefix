@@ -302,8 +302,20 @@ actual current state of the work.
       `cargo test --workspace` exit 0 with every suite green — the binary's
       1,173 tests, 280 integration tests, 42 doctests, and the remainder of
       the matrix.
-- [ ] EP-M5: user's and developer's guide updates, all gates green, draft pull
-      request. Not started.
+- [~] EP-M5: user's and developer's guide updates, all gates green, draft pull
+      request. Documentation half done 2026-10-27 in `0d12ec2`; delivery
+      outstanding. `docs/users-guide.md` gains a "Configuration" section
+      (+84 lines) between "Selecting files from Git" and "Exit status", and
+      `docs/developers-guide.md` gains a "Configuration layering" section
+      (+46 lines) before "Coverage publication belongs to `main`". The section
+      is longer than the plan's "three error cases" because measurement found
+      four, and because the discovery list is stated as an ordered table rather
+      than as prose: ten locations were probed one at a time in isolated trees,
+      and every one distinguishes a configured run from an unconfigured one. The
+      documentation gates on the committed tree: `make check-fmt` exit 0 (47
+      files unchanged), `make markdownlint` 47 files 0 issues, `make nixie` all
+      diagrams validated. Remaining: the full gate set on the final tree, the
+      push, the draft pull request, and the CodeRabbit round.
 
 ## Surprises & discoveries
 
@@ -497,6 +509,28 @@ Document with evidence so future work benefits.
   passed, 1 failed). Both edits were reverted and `git diff` confirmed clean.
   Impact: the suites are proved to detect the defects they exist for, which is
   the non-vacuity evidence the Verification plan asks for.
+- Observation: a wrong-typed value has no path in its diagnostic, unlike every
+  other configuration failure. Measured on 2026-10-27:
+  `mdtablefix: cannot resolve configuration: Failed to merge CLI with
+  configuration: invalid type: string "yes", expected a boolean`,
+  exit status 2, no path anywhere in the line. The reason is ordering rather
+  than a missing field: the provider reads and merges the file before serde
+  checks a type, so by the time the mismatch is known the value is a plain JSON
+  node and its provenance is gone. Impact: the users' guide states that this
+  one failure names no file and that the setting name is what a user should
+  search for. The first draft of that section said the diagnostic named the
+  file and the parse failure; measurement caught the error, and the bullet was
+  split in two so the TOML-parse failure — which *does* name the path and the
+  line and column — is not described in the same sentence as the type failure.
+- Observation: the ten discovery locations all behave as documented, but only
+  when probed one at a time. A first sweep that wrote every location into a
+  single tree proved nothing: the file left by an earlier case was still there
+  for the "no configuration" case, which then rendered a configured result.
+  Rewritten as a case function that removes and recreates the tree per case,
+  all ten discriminated correctly against the no-configuration output. Impact:
+  the users' guide's discovery table rests on measurement rather than on
+  reading the upstream candidate list, and the process suite's fixtures all
+  point every base directory into a temporary tree for the same reason.
 
 ## Decision log
 
@@ -942,10 +976,12 @@ TOR-REQ-666-6   Test every precedence tier with injected sources and prove the
 TOR-REQ-666-7   Document the user-facing configuration surface and the internal
                 integration boundary.
                 -> EP-M5 -> docs/users-guide.md; docs/developers-guide.md
+                             (written 2026-10-27, commit 0d12ec2)
 TOR-CON-666-1   No production process-environment reads (ADR 0012).
                 -> EP-M3, EP-M4 -> make lint (clippy::disallowed_methods)
 TOR-CON-666-2   No merge and no release publication.
-                -> EP-M5 -> the deliverable is a draft pull request
+                -> EP-M5 -> the deliverable is a draft pull request; the
+                             branch is never merged into main
 ```
 
 The governing standards inside this repository are
@@ -1144,7 +1180,10 @@ Structure as stages with explicit go/no-go points where appropriate:
   artefacts for the integration and are written before the wiring where
   practical.
 - Stage C: implementation developed together with its verification. EP-M3.
-- Stage D: refactor, documentation, and wider validation. EP-M5.
+- Stage D: refactor, documentation, and wider validation. EP-M5. The
+  documentation half landed in `0d12ec2`; the wider validation is the full gate
+  set run on the final tree, and the delivery is the push and the draft pull
+  request.
 
 ### Stage B detail
 
@@ -1231,14 +1270,28 @@ rather than to `tests/cli_config.rs`: `mod config` is binary-only, so a
 `tests/` target cannot reach `Settings::resolve_with_sources`. See
 `Decision log` deviation `a`.)
 
-EP-M5, the documentation and delivery. Add a "Configuration" section to
-`docs/users-guide.md`, placed after "Selecting files from Git" and before "Exit
-status", covering the file name, the discovery locations, the environment
-variables, the precedence order, and the three error cases. Add a
-"Configuration layering" section to `docs/developers-guide.md` near
-"Environment access policy", covering the integration boundary, the
-`merge_from_layers` seam, and the rule that the library never learns about
-configuration. Run every gate. Commit. Push. Open the draft pull request.
+EP-M5, the documentation and delivery. As built on 2026-10-27 (`0d12ec2`), the
+"Configuration" section of `docs/users-guide.md` sits after "Selecting files
+from Git" and before "Exit status" and covers what may be configured (settings,
+never the mode or the file arguments), a TOML example, an ordered discovery
+table, the precedence order with the layering rule, the twelve `MDTABLEFIX_*`
+variables, the value dialect, the four failures worth recognising, unknown-key
+tolerance, and the enable-but-not-disable asymmetry. It covers four failures
+rather than the three the plan named, because measurement found a fourth: a
+value of the wrong type is reported by the merge, after the file has been read,
+so its diagnostic does not repeat the path — the users' guide says so, and a
+user who reads only the quoted text should know which setting to look at. The
+discovery list became a table rather than prose because ten distinct locations
+are involved, and each was probed in an isolated tree before the table was
+written. The "Configuration layering" section of `docs/developers-guide.md`
+sits as the plan asked, immediately after the "Environment access policy"
+section and its "Environment variables in subprocess tests" and "Stub scripts
+in subprocess tests" subsections, and before "Coverage publication belongs to
+`main`"; it covers the binary-only module and the test that guards it, why a
+Cargo feature cannot express the boundary, the hand-composed layers, the
+`resolve` / `resolve_with_sources` split, the two provenance rules, and the
+residual dependency on the working directory. Run every gate. Commit. Push.
+Open the draft pull request. Do not merge.
 
 ## Milestones and plateaus
 
@@ -1356,7 +1409,21 @@ interfaces. For each milestone record:
 - Acceptance evidence: the user's guide and developer's guide describe the
   shipped behaviour; all gates pass on the pushed tip; a draft pull request
   exists with `(#666)` in the title, `Closes #666` in the body, and the Lody
-  session reference.
+  session reference. **Documentation lands first**, as its own commit, so the
+  guides can be reviewed on their own and the delivery commit carries only the
+  push and the pull request. Done 2026-10-27 in `0d12ec2`:
+  `docs/users-guide.md` gains a "Configuration" section between "Selecting
+  files from Git" and "Exit status", and `docs/developers-guide.md` gains
+  "Configuration layering" between the "Environment access policy" subsections
+  and "Coverage publication belongs to `main`". Documentation gates on that
+  commit: `make check-fmt` exit 0 (47 files unchanged), `make markdownlint` 47
+  files 0 issues, `make nixie` all diagrams validated. The four claims the
+  guides make about failure behaviour were each produced by running the binary,
+  and the two that needed more than one run — the typed-value diagnostic that
+  omits the path, and the discovery order, which needed an isolated tree per
+  location — are recorded under `Surprises & discoveries`. Remaining for this
+  milestone: the full gate set on the final tree, the push, and the draft pull
+  request.
 - Conformance check:
   - Requirements satisfied: TOR-REQ-666-7 and TOR-CON-666-2.
   - Design still followed: yes.
